@@ -1,3 +1,5 @@
+"""中文摘要：本文件负责构建底层地形图，并计算基地和任务点之间的最短路径及时间、能耗、成本聚合值。"""
+
 import heapq
 import math
 
@@ -112,4 +114,3 @@ def build_task_closure(instance, weight="cost"):
             pairwise[arc_key(i, j)] = shortest_path_with_aggregate(graph, source, target, weight=weight)
 
     return pairwise
-

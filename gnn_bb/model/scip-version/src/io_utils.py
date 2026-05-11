@@ -1,3 +1,5 @@
+"""中文摘要：本文件提供项目路径、目录创建、日志输出、JSON 读写和浮点数格式化等通用工具。"""
+
 import json
 import math
 from pathlib import Path
@@ -48,4 +50,3 @@ def round_float(value, digits=6):
     if value is None:
         return None
     return round(float(value), digits)
-

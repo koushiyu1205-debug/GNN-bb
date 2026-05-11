@@ -1,3 +1,5 @@
+"""中文摘要：本文件是路径生成版 SCIP 模型的主入口，负责串联实例生成、地形闭包、路径枚举、MILP 建模、求解、校验和结果输出。"""
+
 import argparse
 import time
 
@@ -11,7 +13,7 @@ from src.validation import validate_solution
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Path-based SCIP MILP for terrain CVRPTW instances.")
+    parser = argparse.ArgumentParser(description="地形 CVRPTW 的路径生成版 SCIP MILP。")
     parser.add_argument("--instance", default="very_small", choices=["very_small", "medium"])
     parser.add_argument("--time-limit", type=float, default=60.0)
     parser.add_argument("--max-route-tasks", type=int, default=4)
@@ -19,8 +21,8 @@ def parse_args():
     parser.add_argument("--max-routes", type=int, default=10000)
     parser.add_argument("--output-dir", default="outputs")
     verbosity = parser.add_mutually_exclusive_group()
-    verbosity.add_argument("--verbose", dest="verbose", action="store_true", default=True, help="show SCIP solver log (default)")
-    verbosity.add_argument("--quiet", dest="verbose", action="store_false", help="hide SCIP solver log")
+    verbosity.add_argument("--verbose", dest="verbose", action="store_true", default=True, help="显示 SCIP 求解日志（默认）")
+    verbosity.add_argument("--quiet", dest="verbose", action="store_false", help="隐藏 SCIP 求解日志")
     return parser.parse_args()
 
 

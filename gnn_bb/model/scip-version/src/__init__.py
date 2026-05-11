@@ -1,2 +1,1 @@
-"""Path-based SCIP model for terrain CVRPTW instances."""
-
+"""中文摘要：本包实现地形 CVRPTW 的路径生成版 SCIP 模型。"""

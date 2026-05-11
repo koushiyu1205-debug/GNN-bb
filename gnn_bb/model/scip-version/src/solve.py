@@ -1,3 +1,5 @@
+"""中文摘要：本文件负责设置 SCIP 求解参数、执行优化，并把求解器变量值整理成可写入 JSON 的解。"""
+
 from math import isfinite
 
 from .io_utils import round_float
@@ -89,4 +91,3 @@ def solve_path_model(model, variables, metadata, time_limit=None, verbose=True):
                 )
 
     return solution
-

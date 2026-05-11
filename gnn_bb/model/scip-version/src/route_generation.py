@@ -1,3 +1,5 @@
+"""中文摘要：本文件负责枚举可行 sortie 路径，并在路径生成阶段检查时间窗、载重、电池和回基地约束。"""
+
 from .io_utils import round_float
 from .terrain import arc_key
 
@@ -103,7 +105,7 @@ def generate_routes(instance, pairwise, max_route_tasks=5, successor_limit=8, ma
     for task_id in tasks:
         route = evaluate_route(instance, pairwise, [task_id])
         if route is None:
-            raise ValueError(f"Task {task_id} is not feasible as a singleton route")
+            raise ValueError(f"任务 {task_id} 无法作为单任务路径独立可行")
         add_route(route)
         singleton_count += 1
 
@@ -142,4 +144,3 @@ def generate_routes(instance, pairwise, max_route_tasks=5, successor_limit=8, ma
         "route_generation_truncated": len(route_order) >= max_routes,
     }
     return route_order, report
-

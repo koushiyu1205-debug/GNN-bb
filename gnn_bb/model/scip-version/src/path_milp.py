@@ -1,3 +1,5 @@
+"""中文摘要：本文件负责构建路径选择 MILP，用二进制变量选择可行路径并覆盖所有任务。"""
+
 def build_path_milp(instance, routes):
     from pyscipopt import Model, quicksum
 

@@ -1,3 +1,5 @@
+"""中文摘要：本文件负责生成 very_small 和 medium 测试实例，包括底层地形图、任务参数和车辆参数。"""
+
 import math
 import random
 
@@ -101,7 +103,7 @@ def build_very_small_instance():
     return {
         "name": "very_small",
         "seed": 7,
-        "description": "Small terrain CVRPTW benchmark.",
+        "description": "小规模地形 CVRPTW 测试实例。",
         "terrain": _demo_terrain(),
         "base": {"id": 0, "terrain_node": "p0"},
         "tasks": tasks,
@@ -147,7 +149,7 @@ def build_medium_instance():
     return {
         "name": "medium",
         "seed": 20260510,
-        "description": "100 terrain nodes and 20 task nodes.",
+        "description": "包含 100 个地形点和 20 个任务点的中规模测试实例。",
         "terrain": _medium_terrain(),
         "base": {"id": 0, "terrain_node": "p0"},
         "tasks": tasks,
@@ -160,5 +162,4 @@ def build_instance(name):
         return build_very_small_instance()
     if name == "medium":
         return build_medium_instance()
-    raise ValueError(f"Unknown instance name: {name}")
-
+    raise ValueError(f"未知实例名称：{name}")
