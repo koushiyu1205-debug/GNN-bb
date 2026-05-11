@@ -1,0 +1,207 @@
+{
+  "summary": {
+    "status": "OPTIMAL",
+    "status_code": "optimal",
+    "objective": 526.902419,
+    "runtime": 3.387171,
+    "best_bound": 526.902419,
+    "mip_gap": 0.0,
+    "node_count": 1.0,
+    "solution_count": 3
+  },
+  "vehicles": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.0,
+    "4": 0.0,
+    "5": 0.0
+  },
+  "sorties": [
+    {
+      "vehicle": 1,
+      "sortie": 1,
+      "route_id": 677,
+      "tasks": [
+        6,
+        10,
+        19
+      ],
+      "cost": 46.54674,
+      "load": 5.0,
+      "energy": 36.015976,
+      "return_time": 49.057856,
+      "cycle_time": 56.261051,
+      "service_start": {
+        "6": 9.836185,
+        "10": 14.4767,
+        "19": 25.528928
+      }
+    },
+    {
+      "vehicle": 1,
+      "sortie": 2,
+      "route_id": 867,
+      "tasks": [
+        11,
+        18,
+        7,
+        3
+      ],
+      "cost": 50.594856,
+      "load": 7.0,
+      "energy": 36.916368,
+      "return_time": 54.881202,
+      "cycle_time": 62.264476,
+      "service_start": {
+        "11": 12.840885,
+        "18": 25.529184,
+        "7": 40.996158,
+        "3": 48.610505
+      }
+    },
+    {
+      "vehicle": 1,
+      "sortie": 3,
+      "route_id": 326,
+      "tasks": [
+        1,
+        9
+      ],
+      "cost": 32.264414,
+      "load": 3.0,
+      "energy": 25.535368,
+      "return_time": 35.83782,
+      "cycle_time": 40.944894,
+      "service_start": {
+        "1": 6.670355,
+        "9": 18.41891
+      }
+    },
+    {
+      "vehicle": 1,
+      "sortie": 4,
+      "route_id": 1295,
+      "tasks": [
+        15,
+        8,
+        4,
+        2
+      ],
+      "cost": 54.287138,
+      "load": 9.0,
+      "energy": 39.621064,
+      "return_time": 60.582019,
+      "cycle_time": 68.506232,
+      "service_start": {
+        "15": 23.819417,
+        "8": 39.642734,
+        "4": 46.372526,
+        "2": 51.263924
+      }
+    },
+    {
+      "vehicle": 2,
+      "sortie": 1,
+      "route_id": 417,
+      "tasks": [
+        5,
+        12,
+        16,
+        14
+      ],
+      "cost": 53.305861,
+      "load": 9.0,
+      "energy": 37.111645,
+      "return_time": 57.612731,
+      "cycle_time": 65.03506,
+      "service_start": {
+        "5": 7.80208,
+        "12": 18.602775,
+        "16": 24.545917,
+        "14": 37.81147
+      }
+    },
+    {
+      "vehicle": 2,
+      "sortie": 2,
+      "route_id": 19,
+      "tasks": [
+        20
+      ],
+      "cost": 48.675776,
+      "load": 3.0,
+      "energy": 39.153238,
+      "return_time": 51.758552,
+      "cycle_time": 59.5892,
+      "service_start": {
+        "20": 23.879276
+      }
+    },
+    {
+      "vehicle": 2,
+      "sortie": 3,
+      "route_id": 1214,
+      "tasks": [
+        13,
+        17
+      ],
+      "cost": 41.227634,
+      "load": 5.0,
+      "energy": 31.056696,
+      "return_time": 44.348274,
+      "cycle_time": 50.559613,
+      "service_start": {
+        "13": 16.004405,
+        "17": 21.674137
+      }
+    }
+  ],
+  "selected_route_ids": [
+    677,
+    867,
+    326,
+    1295,
+    417,
+    19,
+    1214
+  ],
+  "route_generation": {
+    "task_count": 20,
+    "singleton_routes": 20,
+    "generated_routes": 1298,
+    "max_route_tasks": 4,
+    "successor_limit": 5,
+    "max_routes": 10000,
+    "route_generation_truncated": false
+  },
+  "validation": {
+    "is_valid": true,
+    "violations": [],
+    "covered_tasks": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1,
+      "5": 1,
+      "6": 1,
+      "7": 1,
+      "8": 1,
+      "9": 1,
+      "10": 1,
+      "11": 1,
+      "12": 1,
+      "13": 1,
+      "14": 1,
+      "15": 1,
+      "16": 1,
+      "17": 1,
+      "18": 1,
+      "19": 1,
+      "20": 1
+    },
+    "vehicle_cycle_time": {
+      "1": 227.976653,
+      "2": 175.183873
+    }
+  }
+}

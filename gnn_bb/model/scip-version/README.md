@@ -38,6 +38,8 @@ python3.12 main.py --instance medium --time-limit 60
 - `instance_<name>.json`：实例数据
 - `routes_<name>.json`：生成出的可行路径池
 - `solution_<name>.json`：SCIP 求解结果和校验结果
+- `task_routes_<name>.png`：任务层路径图（使用 `--plot` 时生成）
+- `terrain_routes_<name>.png`：底层地形路径图（使用 `--plot` 时生成）
 
 ## 常用参数
 
@@ -53,10 +55,15 @@ python3.12 main.py --instance medium --max-route-tasks 4 --successor-limit 6 --m
 python3.12 main.py --instance medium --time-limit 60 --quiet
 ```
 
+生成路径图：
+
+```bash
+python3.12 main.py --instance very_small --time-limit 30 --plot
+```
+
 ## 说明
 
 - 当前路径池是“生成出的路径集合”上的精确 MILP，不等价于枚举所有可行路径后的完整路径模型。
 - `successor-limit` 和 `max-routes` 越小，路径池越小，求解越快，但模型越偏启发式。
 - 单任务路径会始终优先生成，所以每个单独可行的任务都有兜底路径。
 - 默认 medium 参数大约生成 1.3k 条路径；在 5 辆车、每辆 4 个架次下，大约对应 2.6 万个路径-车辆-架次二进制变量。
-

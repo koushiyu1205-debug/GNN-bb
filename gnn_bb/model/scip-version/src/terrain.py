@@ -1,6 +1,5 @@
 """中文摘要：本文件负责构建底层地形图，并计算基地和任务点之间的最短路径及时间、能耗、成本聚合值。"""
 
-import heapq
 import math
 
 
@@ -43,53 +42,32 @@ def build_terrain(node_coords, edge_specs):
 
 
 def graph_from_terrain(terrain):
-    graph = {node: [] for node in terrain["positions"]}
+    import networkx as nx
+
+    graph = nx.Graph()
+    for node, pos in terrain["positions"].items():
+        graph.add_node(node, pos=(float(pos[0]), float(pos[1])))
     for edge in terrain["edges"]:
-        u = edge["u"]
-        v = edge["v"]
-        attrs = {
-            "distance": float(edge["distance"]),
-            "time": float(edge["time"]),
-            "energy": float(edge["energy"]),
-            "cost": float(edge["cost"]),
-        }
-        graph[u].append((v, attrs))
-        graph[v].append((u, attrs))
+        graph.add_edge(
+            edge["u"],
+            edge["v"],
+            distance=float(edge["distance"]),
+            time=float(edge["time"]),
+            energy=float(edge["energy"]),
+            cost=float(edge["cost"]),
+        )
     return graph
 
 
 def shortest_path_with_aggregate(graph, source, target, weight="cost"):
-    queue = [(0.0, source)]
-    distance = {source: 0.0}
-    previous = {}
+    import networkx as nx
 
-    while queue:
-        current_weight, node = heapq.heappop(queue)
-        if current_weight != distance[node]:
-            continue
-        if node == target:
-            break
-        for neighbor, attrs in graph[node]:
-            next_weight = current_weight + float(attrs[weight])
-            if next_weight < distance.get(neighbor, float("inf")):
-                distance[neighbor] = next_weight
-                previous[neighbor] = (node, attrs)
-                heapq.heappush(queue, (next_weight, neighbor))
-
-    if target not in distance:
-        raise ValueError(f"No terrain path from {source} to {target}")
-
-    path = []
+    path = nx.shortest_path(graph, source=source, target=target, weight=weight)
     totals = {"distance": 0.0, "time": 0.0, "energy": 0.0, "cost": 0.0}
-    node = target
-    while node != source:
-        path.append(node)
-        parent, attrs = previous[node]
+    for u, v in zip(path[:-1], path[1:]):
+        attrs = graph[u][v]
         for key in totals:
             totals[key] += float(attrs[key])
-        node = parent
-    path.append(source)
-    path.reverse()
 
     return {
         "path": path,

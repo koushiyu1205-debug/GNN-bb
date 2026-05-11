@@ -20,6 +20,7 @@ def parse_args():
     parser.add_argument("--successor-limit", type=int, default=5)
     parser.add_argument("--max-routes", type=int, default=10000)
     parser.add_argument("--output-dir", default="outputs")
+    parser.add_argument("--plot", action="store_true", help="求解后输出任务层路径图和底层地形路径图")
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument("--verbose", dest="verbose", action="store_true", default=True, help="显示 SCIP 求解日志（默认）")
     verbosity.add_argument("--quiet", dest="verbose", action="store_false", help="隐藏 SCIP 求解日志")
@@ -71,6 +72,17 @@ def main():
     solution_path = output_dir / f"solution_{args.instance}.json"
     write_json(solution_path, solution)
     log(f"Solution written to {solution_path}")
+
+    if args.plot and solution["summary"]["solution_count"] > 0:
+        from src.plotting import plot_task_routes, plot_terrain_routes
+
+        task_plot_path = output_dir / f"task_routes_{args.instance}.png"
+        terrain_plot_path = output_dir / f"terrain_routes_{args.instance}.png"
+        plot_task_routes(instance, routes, solution, task_plot_path)
+        plot_terrain_routes(instance, routes, solution, terrain_plot_path)
+        log(f"任务层路径图已写入 {task_plot_path}")
+        log(f"底层地形路径图已写入 {terrain_plot_path}")
+
     log(f"SCIP summary: {solution['summary']}")
     log(f"Validation: {validation}")
 
