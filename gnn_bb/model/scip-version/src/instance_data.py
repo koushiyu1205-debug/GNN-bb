@@ -1,4 +1,4 @@
-"""中文摘要：本文件负责生成 very_small 和 medium 测试实例，包括底层地形图、任务参数和车辆参数。"""
+"""中文摘要：本文件负责生成不同任务规模的测试实例，包括底层地形图、任务参数和车辆参数。"""
 
 import math
 import random
@@ -92,6 +92,45 @@ def _medium_terrain(seed=20260510):
     return build_terrain(node_coords, edge_specs)
 
 
+def _scaled_terrain(node_count, seed):
+    rng = random.Random(seed)
+    node_coords = {"p0": (0.0, 0.0)}
+    for idx in range(1, node_count):
+        angle = 0.61 * idx + 0.19 * (idx % 11)
+        radius = 2.0 + 0.12 * idx + 1.2 * rng.random()
+        x = radius * math.cos(angle) + 0.35 * rng.random()
+        y = radius * math.sin(angle) + 0.35 * rng.random()
+        node_coords[f"p{idx}"] = (round(x, 4), round(y, 4))
+
+    edge_pairs = set()
+    node_ids = list(node_coords.keys())
+    for idx in range(node_count - 1):
+        edge_pairs.add((f"p{idx}", f"p{idx + 1}"))
+    for u in node_ids:
+        ux, uy = node_coords[u]
+        neighbors = []
+        for v in node_ids:
+            if u == v:
+                continue
+            vx, vy = node_coords[v]
+            neighbors.append((math.hypot(ux - vx, uy - vy), v))
+        neighbors.sort()
+        for _, v in neighbors[:4]:
+            edge_pairs.add(tuple(sorted((u, v))))
+
+    edge_specs = []
+    for order, (u, v) in enumerate(sorted(edge_pairs)):
+        speed = 1.0 + 0.30 * ((order % 5) / 4.0)
+        energy_rate = 0.50 + 0.14 * ((order + 2) % 7) / 6.0
+        cost_rate = 0.70 + 0.18 * ((order + 3) % 6) / 5.0
+        time_factor = 1.0 + 0.08 * ((order + 1) % 4)
+        energy_factor = 1.0 + 0.06 * ((order + 2) % 5)
+        cost_factor = 1.0 + 0.05 * ((order + 3) % 5)
+        edge_specs.append(_edge(u, v, speed, energy_rate, cost_rate, time_factor, energy_factor, cost_factor))
+
+    return build_terrain(node_coords, edge_specs)
+
+
 def build_very_small_instance():
     tasks = {
         "1": {"terrain_node": "p2", "r": 0.0, "D": 34.0, "sigma": 2.0, "d": 2.0, "g": 1.0, "c_srv": 2.0},
@@ -157,9 +196,53 @@ def build_medium_instance():
     }
 
 
+def build_scaled_instance(task_count):
+    terrain_node_count = max(100, task_count * 3)
+    seed = 20260510 + task_count
+    terrain = _scaled_terrain(terrain_node_count, seed)
+
+    tasks = {}
+    for idx in range(1, task_count + 1):
+        terrain_idx = 1 + (idx * (terrain_node_count - 2)) // task_count
+        tasks[str(idx)] = {
+            "terrain_node": f"p{terrain_idx}",
+            "r": 0.0,
+            "D": 85.0 + 0.8 * idx,
+            "sigma": 1.0,
+            "d": 1.0,
+            "g": 0.5,
+            "c_srv": 1.0,
+        }
+
+    # 中文注释：大规模入口不再用载重人为限定每条 sortie 的任务数；
+    # Q 给得足够大，路径长度主要由时间窗、地形行驶时间和电池能耗自然限制。
+    vehicles = {
+        "R_bar": max(1, math.ceil(task_count / 4)),
+        "S_bar": 2,
+        "Q": float(task_count),
+        "B_max": 75.0,
+        "B_surv": 10.0,
+        "B_use": 65.0,
+        "rho": 10.0,
+        "F": 100.0,
+        "H": 110.0,
+    }
+    return {
+        "name": str(task_count),
+        "seed": seed,
+        "description": f"包含 {terrain_node_count} 个地形点和 {task_count} 个任务点的分支定价规模测试实例。",
+        "terrain": terrain,
+        "base": {"id": 0, "terrain_node": "p0"},
+        "tasks": tasks,
+        "vehicles": vehicles,
+    }
+
+
 def build_instance(name):
     if name == "very_small":
         return build_very_small_instance()
     if name == "medium":
         return build_medium_instance()
+    if name in {"30", "40", "50", "100"}:
+        return build_scaled_instance(int(name))
     raise ValueError(f"未知实例名称：{name}")

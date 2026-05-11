@@ -1,4 +1,4 @@
-"""中文摘要：本文件负责枚举可行 sortie 路径，并在路径生成阶段检查时间窗、载重、电池和回基地约束。"""
+"""中文摘要：本文件提供路径可行性评估工具，用于分支定价初始化单任务路径。"""
 
 from .io_utils import round_float
 from .terrain import arc_key
@@ -76,71 +76,3 @@ def evaluate_route(instance, pairwise, sequence):
         "service_start": {str(task): round_float(time) for task, time in service_start.items()},
         "physical_paths": physical_paths,
     }
-
-
-def _successor_ranking(pairwise, tasks):
-    ranking = {}
-    for node in [0, *tasks]:
-        candidates = [task for task in tasks if task != node]
-        candidates.sort(key=lambda task: float(pairwise[arc_key(node, task)]["cost"]))
-        ranking[node] = candidates
-    return ranking
-
-
-def generate_routes(instance, pairwise, max_route_tasks=5, successor_limit=8, max_routes=20000):
-    tasks = task_ids(instance)
-    ranking = _successor_ranking(pairwise, tasks)
-    route_by_signature = {}
-    route_order = []
-    singleton_count = 0
-
-    def add_route(route):
-        signature = tuple(route["tasks"])
-        if signature in route_by_signature:
-            return
-        route["id"] = len(route_order)
-        route_by_signature[signature] = route
-        route_order.append(route)
-
-    for task_id in tasks:
-        route = evaluate_route(instance, pairwise, [task_id])
-        if route is None:
-            raise ValueError(f"任务 {task_id} 无法作为单任务路径独立可行")
-        add_route(route)
-        singleton_count += 1
-
-    def dfs(sequence, remaining):
-        if len(route_order) >= max_routes:
-            return
-        if len(sequence) >= max_route_tasks:
-            return
-
-        current = sequence[-1] if sequence else 0
-        candidates = [task for task in ranking[current] if task in remaining]
-        if sequence and successor_limit is not None and successor_limit > 0:
-            candidates = candidates[:successor_limit]
-
-        for task_id in candidates:
-            next_sequence = [*sequence, task_id]
-            route = evaluate_route(instance, pairwise, next_sequence)
-            if route is None:
-                continue
-            add_route(route)
-            next_remaining = set(remaining)
-            next_remaining.remove(task_id)
-            dfs(next_sequence, next_remaining)
-            if len(route_order) >= max_routes:
-                return
-
-    dfs([], set(tasks))
-
-    report = {
-        "task_count": len(tasks),
-        "singleton_routes": singleton_count,
-        "generated_routes": len(route_order),
-        "max_route_tasks": max_route_tasks,
-        "successor_limit": successor_limit,
-        "max_routes": max_routes,
-        "route_generation_truncated": len(route_order) >= max_routes,
-    }
-    return route_order, report

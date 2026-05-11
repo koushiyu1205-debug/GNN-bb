@@ -15,6 +15,9 @@ def validate_solution(instance, routes, solution):
     vehicle_cycle_time = defaultdict(float)
     violations = []
 
+    for task_id in solution.get("artificial_tasks", []):
+        violations.append(f"任务 {task_id} 由 Phase-I 人工列覆盖，不能视为原问题可行覆盖")
+
     for sortie in solution.get("sorties", []):
         route = route_by_id.get(sortie["route_id"])
         if route is None:

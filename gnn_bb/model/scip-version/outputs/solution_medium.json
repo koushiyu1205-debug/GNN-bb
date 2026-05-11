@@ -3,11 +3,13 @@
     "status": "OPTIMAL",
     "status_code": "optimal",
     "objective": 526.902419,
-    "runtime": 3.387171,
+    "runtime": 97.423692,
     "best_bound": 526.902419,
     "mip_gap": 0.0,
-    "node_count": 1.0,
-    "solution_count": 3
+    "node_count": 1103.0,
+    "solution_count": 6,
+    "uses_artificial": false,
+    "artificial_task_count": 0
   },
   "vehicles": {
     "1": 1.0,
@@ -18,69 +20,25 @@
   },
   "sorties": [
     {
-      "vehicle": 1,
-      "sortie": 1,
-      "route_id": 677,
-      "tasks": [
-        6,
-        10,
-        19
-      ],
-      "cost": 46.54674,
-      "load": 5.0,
-      "energy": 36.015976,
-      "return_time": 49.057856,
-      "cycle_time": 56.261051,
-      "service_start": {
-        "6": 9.836185,
-        "10": 14.4767,
-        "19": 25.528928
-      }
-    },
-    {
-      "vehicle": 1,
+      "vehicle": 2,
       "sortie": 2,
-      "route_id": 867,
+      "route_id": 19,
       "tasks": [
-        11,
-        18,
-        7,
-        3
+        20
       ],
-      "cost": 50.594856,
-      "load": 7.0,
-      "energy": 36.916368,
-      "return_time": 54.881202,
-      "cycle_time": 62.264476,
-      "service_start": {
-        "11": 12.840885,
-        "18": 25.529184,
-        "7": 40.996158,
-        "3": 48.610505
-      }
-    },
-    {
-      "vehicle": 1,
-      "sortie": 3,
-      "route_id": 326,
-      "tasks": [
-        1,
-        9
-      ],
-      "cost": 32.264414,
+      "cost": 48.675776,
       "load": 3.0,
-      "energy": 25.535368,
-      "return_time": 35.83782,
-      "cycle_time": 40.944894,
+      "energy": 39.153238,
+      "return_time": 51.758552,
+      "cycle_time": 59.5892,
       "service_start": {
-        "1": 6.670355,
-        "9": 18.41891
+        "20": 23.879276
       }
     },
     {
       "vehicle": 1,
       "sortie": 4,
-      "route_id": 1295,
+      "route_id": 84,
       "tasks": [
         15,
         8,
@@ -100,50 +58,32 @@
       }
     },
     {
-      "vehicle": 2,
-      "sortie": 1,
-      "route_id": 417,
+      "vehicle": 1,
+      "sortie": 3,
+      "route_id": 85,
       "tasks": [
-        5,
-        12,
-        16,
-        14
+        19,
+        10,
+        6
       ],
-      "cost": 53.305861,
-      "load": 9.0,
-      "energy": 37.111645,
-      "return_time": 57.612731,
-      "cycle_time": 65.03506,
+      "cost": 46.54674,
+      "load": 5.0,
+      "energy": 36.015976,
+      "return_time": 49.057856,
+      "cycle_time": 56.261051,
       "service_start": {
-        "5": 7.80208,
-        "12": 18.602775,
-        "16": 24.545917,
-        "14": 37.81147
-      }
-    },
-    {
-      "vehicle": 2,
-      "sortie": 2,
-      "route_id": 19,
-      "tasks": [
-        20
-      ],
-      "cost": 48.675776,
-      "load": 3.0,
-      "energy": 39.153238,
-      "return_time": 51.758552,
-      "cycle_time": 59.5892,
-      "service_start": {
-        "20": 23.879276
+        "19": 20.528928,
+        "10": 31.581156,
+        "6": 37.221671
       }
     },
     {
       "vehicle": 2,
       "sortie": 3,
-      "route_id": 1214,
+      "route_id": 88,
       "tasks": [
-        13,
-        17
+        17,
+        13
       ],
       "cost": 41.227634,
       "load": 5.0,
@@ -151,28 +91,104 @@
       "return_time": 44.348274,
       "cycle_time": 50.559613,
       "service_start": {
-        "13": 16.004405,
-        "17": 21.674137
+        "17": 18.674137,
+        "13": 25.343869
+      }
+    },
+    {
+      "vehicle": 1,
+      "sortie": 2,
+      "route_id": 107,
+      "tasks": [
+        9,
+        1
+      ],
+      "cost": 32.264414,
+      "load": 3.0,
+      "energy": 25.535368,
+      "return_time": 35.83782,
+      "cycle_time": 40.944894,
+      "service_start": {
+        "9": 15.41891,
+        "1": 26.167465
+      }
+    },
+    {
+      "vehicle": 1,
+      "sortie": 1,
+      "route_id": 123,
+      "tasks": [
+        14,
+        16,
+        12,
+        5
+      ],
+      "cost": 53.305861,
+      "load": 9.0,
+      "energy": 37.111645,
+      "return_time": 57.612731,
+      "cycle_time": 65.03506,
+      "service_start": {
+        "14": 15.801261,
+        "16": 30.066814,
+        "12": 37.009956,
+        "5": 45.810651
+      }
+    },
+    {
+      "vehicle": 2,
+      "sortie": 1,
+      "route_id": 159,
+      "tasks": [
+        11,
+        18,
+        7,
+        3
+      ],
+      "cost": 50.594856,
+      "load": 7.0,
+      "energy": 36.916368,
+      "return_time": 54.881202,
+      "cycle_time": 62.264476,
+      "service_start": {
+        "11": 12.840885,
+        "18": 25.529184,
+        "7": 40.996158,
+        "3": 48.610505
       }
     }
   ],
   "selected_route_ids": [
-    677,
-    867,
-    326,
-    1295,
-    417,
     19,
-    1214
+    84,
+    85,
+    88,
+    107,
+    123,
+    159
   ],
+  "artificial_tasks": [],
   "route_generation": {
-    "task_count": 20,
-    "singleton_routes": 20,
-    "generated_routes": 1298,
-    "max_route_tasks": 4,
-    "successor_limit": 5,
-    "max_routes": 10000,
-    "route_generation_truncated": false
+    "mode": "branch_price",
+    "generated_routes": 337,
+    "generated_columns": 4849,
+    "priced_columns": 4444,
+    "redcost_columns": 4444,
+    "farkas_columns": 0,
+    "redcost_calls": 1466,
+    "farkas_calls": 12,
+    "early_pricing_returns": 363,
+    "dominated_labels": 937376,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "submitted": true,
+      "routes": 9,
+      "covered_tasks": 20,
+      "uncovered_tasks": []
+    },
+    "strict_pricing": true,
+    "eps": 1e-06
   },
   "validation": {
     "is_valid": true,
@@ -200,8 +216,8 @@
       "20": 1
     },
     "vehicle_cycle_time": {
-      "1": 227.976653,
-      "2": 175.183873
+      "1": 230.747237,
+      "2": 172.413289
     }
   }
 }
