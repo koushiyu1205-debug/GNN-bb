@@ -7,16 +7,15 @@
 1. 生成可复现实例，包括地形点、地形边、任务点和车辆参数。
 2. 在底层地形图上计算基地与任务点之间的最短路闭包。
 3. 用单任务路径和 Phase-I 人工列初始化主问题，避免根节点 restricted master 因列不足直接不可行。
-4. 用资源可行的贪心插入法生成一组真实路径列，并尝试向 SCIP 提交 warm start 初始解。
-5. SCIP 在分支定界过程中调用 Pricer。
-6. 如果某个节点的 restricted master LP 仍不可行，Pricer 用 Farkas pricing 搜索能恢复可行性的路径列。
-7. 如果 LP 可行，Pricer 用 reduced cost pricing 搜索负 reduced cost 的路径-槽位列。
-8. Pricing 子问题使用资源约束最短路标签算法搜索所有资源可行 elementary sortie 路径。
-9. Pricing 找到第一条能加列的真实路径后立即返回 SCIP，下一轮 LP 需要时会继续调用 Pricer。
-10. 标签搜索使用 parent pointer 保存路径，只在真正准备加列或输出时回溯完整路径。
-11. 标签搜索使用保守的安全 dominance，只剪掉当前位置和已访问任务集合完全相同且资源与成本都不更优的标签。
-12. 当 SCIP 返回 `OPTIMAL`、没有触发时间/节点/gap 限制，并且没有使用人工列时，得到完整路径列集合意义下的整数最优解。
-13. 输出解、生成列、校验结果，并可选画图。
+4. SCIP 在分支定界过程中调用 Pricer。
+5. 如果某个节点的 restricted master LP 仍不可行，Pricer 用 Farkas pricing 搜索能恢复可行性的路径列。
+6. 如果 LP 可行，Pricer 用 reduced cost pricing 搜索负 reduced cost 的路径-槽位列。
+7. Pricing 子问题使用资源约束最短路标签算法搜索所有资源可行 elementary sortie 路径。
+8. Pricing 找到第一条能加列的真实路径后立即返回 SCIP，下一轮 LP 需要时会继续调用 Pricer。
+9. 标签搜索使用 parent pointer 保存路径，只在真正准备加列或输出时回溯完整路径。
+10. 标签搜索使用保守的安全 dominance，只剪掉当前位置和已访问任务集合完全相同且资源与成本都不更优的标签。
+11. 当 SCIP 返回 `OPTIMAL`、没有触发时间/节点/gap 限制，并且没有使用人工列时，得到完整路径列集合意义下的整数最优解。
+12. 输出解、生成列、校验结果，并可选画图。
 
 ## 目录结构
 
@@ -44,12 +43,6 @@ python3.12 main.py --instance 100 --time-limit 3600
 ```
 
 如果不显式传入 `--time-limit`，默认时间限制也是 3600 秒。
-
-默认会启用 warm start。关闭 warm start：
-
-```bash
-python3.12 main.py --instance 30 --time-limit 3600 --no-warm-start
-```
 
 生成路径图：
 
@@ -84,8 +77,6 @@ sum_k u_k = 0
 ```
 
 如果输出中 `summary.uses_artificial = true`，说明仍有任务由人工列覆盖，该解不能视为原问题可行解。
-
-Warm start 只负责提供初始真实路径列和初始解，不限制后续 pricing，也不是固定路径池。即使 warm start 没覆盖全部任务，未覆盖任务也只会由 Phase-I 人工列临时补齐，最终仍必须满足 `summary.uses_artificial = false`。
 
 因此，当输出满足：
 
@@ -259,3 +250,12 @@ parent pointer
 ```
 
 只有当某个标签真的要生成列时，代码才沿 parent pointer 回溯完整路径。这样 pricing 过程中不会为每个中间标签复制整条路径对象。
+
+cd /home/kai/work/gnn_bb/model/scip-version
+python3.12 main.py --instance medium --plot
+
+cd /home/kai/work/gnn_bb/model/scip-version
+python3.12 main.py --instance medium --plot --no-warm-start
+
+cd /home/kai/work/gnn_bb/model/scip-version
+python3.12 main.py --instance 30 --time-limit 3600 --plot

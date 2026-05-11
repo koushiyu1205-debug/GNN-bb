@@ -12,13 +12,11 @@ from src.validation import validate_solution
 
 def parse_args():
     parser = argparse.ArgumentParser(description="地形 CVRPTW 的严格分支定价模型。")
-    parser.add_argument("--instance", default="very_small", choices=["very_small", "medium", "30", "40", "50", "100"])
-    parser.add_argument("--time-limit", type=float, default=3600.0)
+    parser.add_argument("--instance", default="very_small", choices=["very_small", "medium"])
+    parser.add_argument("--time-limit", type=float, default=60.0)
     parser.add_argument("--pricing-eps", type=float, default=1.0e-6, help="判断负 reduced cost 的容差")
     parser.add_argument("--output-dir", default="outputs")
     parser.add_argument("--plot", action="store_true", help="求解后输出任务层路径图和底层地形路径图")
-    parser.add_argument("--no-warm-start", dest="warm_start", action="store_false", help="关闭贪心 warm start 初始化")
-    parser.set_defaults(warm_start=True)
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument("--verbose", dest="verbose", action="store_true", default=True, help="显示 SCIP 求解日志（默认）")
     verbosity.add_argument("--quiet", dest="verbose", action="store_false", help="隐藏 SCIP 求解日志")
@@ -51,7 +49,6 @@ def main():
             time_limit=args.time_limit,
             verbose=args.verbose,
             eps=args.pricing_eps,
-            warm_start=args.warm_start,
         ),
     )
 
