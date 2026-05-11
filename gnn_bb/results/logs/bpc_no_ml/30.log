@@ -1,0 +1,75 @@
+{
+  "summary": {
+    "status": "OPTIMAL",
+    "status_code": "optimal",
+    "objective": 479.674912,
+    "runtime": 302.811855,
+    "best_bound": 479.674912,
+    "mip_gap": 0.0,
+    "node_count": 5,
+    "solution_count": 7,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "route_vehicle_branch_price_cut",
+    "generated_routes": 622,
+    "generated_columns": 2469,
+    "priced_columns": 2342,
+    "redcost_columns": 2342,
+    "farkas_columns": 0,
+    "redcost_calls": 592,
+    "farkas_calls": 0,
+    "pricing_calls": 592,
+    "early_pricing_returns": 586,
+    "dominated_labels": 3472607,
+    "schedule_cut_count": 1,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "submitted": true,
+      "routes": 7,
+      "covered_tasks": 30,
+      "uncovered_tasks": []
+    },
+    "strict_pricing": true,
+    "eps": 1e-06,
+    "cut_rounds": 2,
+    "schedule_cuts_added": 1,
+    "final_schedule_cut_count": 1,
+    "cut_kinds": {
+      "infeasible_route_set": 1,
+      "pairwise_incompatible": 0
+    },
+    "schedule_feasible_solution": true,
+    "schedule_cuts": [
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            10,
+            6,
+            7,
+            3,
+            1
+          ],
+          [
+            12,
+            15,
+            28,
+            25,
+            22,
+            9
+          ],
+          [
+            19,
+            20,
+            16,
+            4
+          ]
+        ]
+      }
+    ]
+  }
+}

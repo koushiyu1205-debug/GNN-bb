@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,cuts_added,root_relaxation,incumbent_node,log_path,instance_path,seed
+very_small,4,2,2,OPTIMAL,132.270984,132.270984,0.0,0.080528,1,4,3,3,10,20,0,132.270984,0,/home/kai/work/gnn_bb/results/smoke/logs/bpc_clean_route_move/very_small.jsonl,/home/kai/work/gnn_bb/json/instances/instance_very_small.json,20260511

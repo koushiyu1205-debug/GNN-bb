@@ -1,0 +1,27 @@
+# 中文摘要：clean BPC 默认配置。该主线使用根目录 bpc/，SCIP 只求解每个节点的 RMP LP。
+
+python: /home/kai/miniconda3/envs/ecole/bin/python
+instances: ["very_small"]
+time_limit: 3600
+random_seed: 20260511
+instance_dir: json/instances
+results_csv: results/bpc_clean.csv
+log_dir: results/logs/bpc_clean
+solution_dir: results/solutions/bpc_clean
+log_level: progress
+
+pricing_eps: 1.0e-6
+integer_tol: 1.0e-6
+max_nodes: 100000
+max_routes_per_pricing: 200
+# 0 表示 exact pricing 不设 label 上限；若设为正数，中断的 pricing 不能用于证明节点 bound。
+max_labels_per_pricing: 0
+
+rmp_params:
+  display/verblevel: 0
+  randomization/randomseedshift: 20260511
+  randomization/permutationseed: 20260511
+  randomization/lpseed: 20260511
+  parallel/maxnthreads: 1
+  presolving/maxrounds: 0
+  separating/maxrounds: 0

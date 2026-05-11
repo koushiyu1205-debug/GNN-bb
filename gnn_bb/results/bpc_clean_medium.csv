@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,cuts_added,root_relaxation,incumbent_node,log_path,instance_path,seed
+medium,20,3,17,BRANCH_FAILED,,,,37.118537,131,276,161,161,873,2619,15,490.283693,,/home/kai/work/gnn_bb/results/logs/bpc_clean/medium.jsonl,/home/kai/work/gnn_bb/json/instances/instance_medium.json,20260511

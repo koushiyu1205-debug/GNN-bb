@@ -1,0 +1,22 @@
+{"event": "incumbent", "node_id": 0, "objective": 232.270984, "source": "greedy_schedule", "time": 0.007918}
+{"event": "start", "initial_incumbent": 232.270984, "initial_routes": 6, "instance": "very_small", "tasks": 4, "time": 0.008209, "vehicles": 2}
+{"depth": 0, "event": "node_start", "node_id": 0, "node_lb": 0.0, "open_nodes": 0, "time": 0.008413}
+{"artificial_sum": 0.0, "cg_iter": 1, "constraint_count": 8, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 0.0, "phase": "phase1", "route_count": 6, "status": "OPTIMAL", "time": 0.076057, "variable_count": 18}
+{"artificial_sum": 0.0, "cg_iter": 2, "constraint_count": 9, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 132.270984, "phase": "phase2", "route_count": 6, "status": "OPTIMAL", "time": 0.080167, "variable_count": 14}
+{"added_routes": 2, "best_reduced_cost": -52.541578, "cg_iter": 2, "depth": 0, "event": "pricing", "exhausted": true, "generated_labels": 32, "label_pops": 34, "negative_routes": 2, "node_id": 0, "phase": "phase2", "time": 0.081228}
+{"artificial_sum": 0.0, "cg_iter": 3, "constraint_count": 9, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 132.270984, "phase": "phase2", "route_count": 8, "status": "OPTIMAL", "time": 0.084879, "variable_count": 18}
+{"added_routes": 2, "best_reduced_cost": -50.114096, "cg_iter": 3, "depth": 0, "event": "pricing", "exhausted": true, "generated_labels": 32, "label_pops": 34, "negative_routes": 2, "node_id": 0, "phase": "phase2", "time": 0.085669}
+{"artificial_sum": 0.0, "cg_iter": 4, "constraint_count": 9, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 132.270984, "phase": "phase2", "route_count": 10, "status": "OPTIMAL", "time": 0.088392, "variable_count": 22}
+{"added_routes": 0, "best_reduced_cost": -0.0, "cg_iter": 4, "depth": 0, "event": "pricing", "exhausted": true, "generated_labels": 32, "label_pops": 34, "negative_routes": 0, "node_id": 0, "phase": "phase2", "time": 0.090888}
+{"event": "branch", "left": "vehicle(1)=off", "lower_bound": 132.270984, "node_id": 0, "right": "vehicle(1)=on", "time": 0.091125}
+{"depth": 1, "event": "node_start", "node_id": 1, "node_lb": 132.270984, "open_nodes": 1, "time": 0.091246}
+{"artificial_sum": 4.0, "cg_iter": 1, "constraint_count": 8, "cut_count": 0, "depth": 1, "event": "rmp", "node_id": 1, "objective": 4.0, "phase": "phase1", "route_count": 10, "status": "OPTIMAL", "time": 0.093734, "variable_count": 16}
+{"added_routes": 0, "best_reduced_cost": 0.0, "cg_iter": 1, "depth": 1, "event": "pricing", "exhausted": true, "generated_labels": 16, "label_pops": 18, "negative_routes": 0, "node_id": 1, "phase": "phase1", "time": 0.094125}
+{"bound": null, "event": "fathom", "node_id": 1, "reason": "phase1_infeasible", "time": 0.09421}
+{"depth": 1, "event": "node_start", "node_id": 2, "node_lb": 132.270984, "open_nodes": 0, "time": 0.094248}
+{"artificial_sum": 0.0, "cg_iter": 1, "constraint_count": 8, "cut_count": 0, "depth": 1, "event": "rmp", "node_id": 2, "objective": 0.0, "phase": "phase1", "route_count": 10, "status": "OPTIMAL", "time": 0.097016, "variable_count": 26}
+{"artificial_sum": 0.0, "cg_iter": 2, "constraint_count": 8, "cut_count": 0, "depth": 1, "event": "rmp", "node_id": 2, "objective": 132.270984, "phase": "phase2", "route_count": 10, "status": "OPTIMAL", "time": 0.098965, "variable_count": 22}
+{"added_routes": 0, "best_reduced_cost": 0.0, "cg_iter": 2, "depth": 1, "event": "pricing", "exhausted": true, "generated_labels": 32, "label_pops": 34, "negative_routes": 0, "node_id": 2, "phase": "phase2", "time": 0.099313}
+{"event": "incumbent", "node_id": 2, "objective": 132.270984, "source": "route_assignment_repair", "time": 0.099517}
+{"bound": 132.270984, "event": "fathom", "node_id": 2, "reason": "integral", "time": 0.099592}
+{"cuts": 0, "dual_bound": 132.270984, "event": "finish", "gap": 0.0, "nodes": 3, "primal_bound": 132.270984, "routes": 10, "status": "OPTIMAL", "time": 0.099629}

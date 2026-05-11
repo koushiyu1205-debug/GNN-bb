@@ -1,0 +1,59 @@
+开始 route-vehicle BPC: instance=medium, tasks=20, time_limit=3600s, max_cut_rounds=20, memory_limit_mb=12000.0, log=/home/kai/work/gnn_bb/results/logs/bpc_no_ml_outer/medium.log
+1/1 feasible solution given by solution candidate storage, new primal bound 7.002369e+02
+
+permute transformed problem using random seed 20260511
+presolving:
+(round 1, exhaustive) 0 del vars, 0 del conss, 0 add conss, 0 chg bounds, 0 chg sides, 0 chg coeffs, 2 upgd conss, 0 impls, 2 clqs, 0 implints
+   (0.0s) probing: 73/88 (83.0%) - 0 fixings, 0 aggregations, 1 implications, 0 bound changes
+   (0.0s) probing aborted: 50/50 successive totally useless probings
+presolving (2 rounds: 2 fast, 2 medium, 2 exhaustive):
+ 0 deleted vars, 0 deleted constraints, 0 added constraints, 0 tightened bounds, 0 added holes, 0 changed sides, 0 changed coefficients
+ 0 implications, 3 cliques, 0 implied integral variables (0 bin, 0 int, 0 cont)
+presolved problem has 88 variables (88 bin, 0 int, 0 cont) and 28 constraints
+      2 constraints of type <setppc>
+     26 constraints of type <linear>
+Presolving Time: 0.00
+transformed 1/1 original solutions to the transformed problem space
+
+ time | node  | left  |LP iter|LP it/n|mem/heur|mdpt |vars |cons |rows |cuts |sepa|confs|strbr|  dualbound   | primalbound  |  gap   | compl. 
+  0.0s|     1 |     0 |    28 |     - |  1366k |   0 |  91 |  28 |  28 |   0 |  0 |   0 |   0 |      --      | 7.002369e+02 |    Inf | unknown
+  0.1s|     1 |     0 |   314 |     - |  2218k |   0 | 391 |  28 |  28 |   0 |  0 |   0 |   0 |      --      | 7.002369e+02 |    Inf | unknown
+  0.3s|     1 |     0 |   338 |     - |  2702k |   0 | 430 |  28 |  28 |   0 |  0 |   0 |   0 | 4.902837e+02 | 7.002369e+02 |  42.82%| unknown
+r 0.3s|     1 |     0 |   338 |     - |shifting|   0 | 430 |  28 |  28 |   0 |  0 |   0 |   0 | 4.902837e+02 | 6.321035e+02 |  28.93%| unknown
+o 0.3s|     1 |     0 |   360 |     - |feaspump|   0 | 430 |  28 |  28 |   0 |  0 |   0 |   0 | 4.902837e+02 | 6.269024e+02 |  27.87%| unknown
+d 0.3s|     1 |     0 |   477 |     - |farkasdi|   0 | 430 |  28 |  28 |   0 |  1 |   0 |   0 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+  0.4s|     1 |     0 |   477 |     - |  2969k |   0 | 430 |  28 |  28 |   0 |  1 |   0 |   0 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+  0.4s|     1 |     2 |   477 |     - |  3023k |   0 | 430 |  28 |  28 |   0 |  2 |   0 |  12 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+ 10.3s|   100 |     5 |  1745 |  14.0 |  3878k |  50 | 576 |  26 |  29 |   1 |  0 |   0 |  83 | 5.243407e+02 | 5.269024e+02 |   0.49%|  89.69%
+ 17.2s|   200 |     3 |  2992 |  13.2 |  4738k |  66 | 691 |  26 |  30 |   4 |  0 |   0 | 122 | 5.245324e+02 | 5.269024e+02 |   0.45%|  95.07%
+
+SCIP Status        : problem is solved [optimal solution found]
+Solving Time (sec) : 23.54
+Solving Nodes      : 287
+Primal Bound       : +5.26902419000000e+02 (40 solutions)
+Dual Bound         : +5.26902419000000e+02
+Gap                : 0.00 %
+1/1 feasible solution given by solution candidate storage, new primal bound 7.002369e+02
+
+permute transformed problem using random seed 20260511
+presolving:
+(round 1, exhaustive) 0 del vars, 0 del conss, 0 add conss, 0 chg bounds, 0 chg sides, 0 chg coeffs, 2 upgd conss, 0 impls, 2 clqs, 0 implints
+   (0.0s) probing: 73/88 (83.0%) - 0 fixings, 0 aggregations, 1 implications, 0 bound changes
+   (0.0s) probing aborted: 50/50 successive totally useless probings
+presolving (2 rounds: 2 fast, 2 medium, 2 exhaustive):
+ 0 deleted vars, 0 deleted constraints, 0 added constraints, 0 tightened bounds, 0 added holes, 0 changed sides, 0 changed coefficients
+ 0 implications, 3 cliques, 0 implied integral variables (0 bin, 0 int, 0 cont)
+presolved problem has 88 variables (88 bin, 0 int, 0 cont) and 34 constraints
+      2 constraints of type <setppc>
+     32 constraints of type <linear>
+Presolving Time: 0.00
+transformed 1/1 original solutions to the transformed problem space
+
+ time | node  | left  |LP iter|LP it/n|mem/heur|mdpt |vars |cons |rows |cuts |sepa|confs|strbr|  dualbound   | primalbound  |  gap   | compl. 
+  0.0s|     1 |     0 |    28 |     - |  1382k |   0 |  91 |  34 |  34 |   0 |  0 |   0 |   0 |      --      | 7.002369e+02 |    Inf | unknown
+  0.1s|     1 |     0 |   313 |     - |  2218k |   0 | 391 |  34 |  34 |   0 |  0 |   0 |   0 |      --      | 7.002369e+02 |    Inf | unknown
+  0.3s|     1 |     0 |   343 |     - |  2793k |   0 | 448 |  34 |  34 |   0 |  0 |   0 |   0 | 4.902837e+02 | 7.002369e+02 |  42.82%| unknown
+r 0.3s|     1 |     0 |   343 |     - |shifting|   0 | 448 |  34 |  34 |   0 |  0 |   0 |   0 | 4.902837e+02 | 6.321035e+02 |  28.93%| unknown
+d 0.3s|     1 |     0 |   529 |     - |farkasdi|   0 | 448 |  34 |  34 |   0 |  1 |   0 |   0 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+  0.4s|     1 |     0 |   530 |     - |  3120k |   0 | 448 |  34 |  34 |   0 |  1 |   0 |   0 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+  0.5s|     1 |     2 |   530 |     - |  3131k |   0 | 448 |  34 |  34 |   0 |  2 |   0 |   8 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown

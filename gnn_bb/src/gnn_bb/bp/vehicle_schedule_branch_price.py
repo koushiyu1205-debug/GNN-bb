@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 import heapq
 from math import isfinite
 from pathlib import Path
+import time
 from typing import Any
 
 from gnn_bb.bp.schedule_preprocessing import SchedulePreprocessResult, build_schedule_preprocess, build_trivial_schedule_preprocess
@@ -241,6 +242,7 @@ class VehicleSchedulePricer:
         stabilization_label_limit: int = 20000,
         stabilization_volatility_threshold: float = 0.25,
         pricing_preprocess: bool = True,
+        pricing_time_budget: float = 0.0,
     ):
         from pyscipopt import Pricer
 
@@ -278,6 +280,7 @@ class VehicleSchedulePricer:
         self.stabilization_max_alpha = float(stabilization_max_alpha)
         self.stabilization_label_limit = max(0, int(stabilization_label_limit))
         self.stabilization_volatility_threshold = float(stabilization_volatility_threshold)
+        self.pricing_time_budget = max(0.0, float(pricing_time_budget))
         self.dual_center_cover: dict[int, float] | None = None
         self.dual_center_vehicle: float | None = None
         self.last_dual_volatility = 0.0
@@ -286,6 +289,7 @@ class VehicleSchedulePricer:
         self.stabilized_columns_added = 0
         self.stabilized_fallbacks = 0
         self.exact_fallback_calls = 0
+        self.farkas_exact_calls = 0
         self.stabilized_label_pops = 0
         self.exact_label_pops = 0
         self.alpha_increases = 0
@@ -314,6 +318,61 @@ class VehicleSchedulePricer:
         self.preprocess_skip_depot_start = 0
         self.preprocess_skip_task_arc = 0
         self.preprocess_skip_return_to_depot = 0
+        self.pricing_budget_interrupts = 0
+        self.pricing_incomplete_due_to_budget = False
+        self.pricing_budget_incomplete_phase: str | None = None
+        self.pricing_phase_stats: dict[str, dict[str, float | int]] = {}
+
+    def _pricing_deadline(self) -> float | None:
+        if self.pricing_time_budget <= 0.0:
+            return None
+        return time.perf_counter() + self.pricing_time_budget
+
+    def _deadline_reached(self, deadline: float | None) -> bool:
+        return deadline is not None and time.perf_counter() >= deadline
+
+    def _record_phase(
+        self,
+        phase: str,
+        started_at: float,
+        *,
+        label_pops: int = 0,
+        columns_added: int = 0,
+        timed_out: bool = False,
+        exhausted: bool | None = None,
+    ) -> None:
+        stats = self.pricing_phase_stats.setdefault(
+            phase,
+            {
+                "calls": 0,
+                "seconds": 0.0,
+                "label_pops": 0,
+                "columns_added": 0,
+                "timeouts": 0,
+                "exhausted": 0,
+                "not_exhausted": 0,
+            },
+        )
+        stats["calls"] = int(stats["calls"]) + 1
+        stats["seconds"] = float(stats["seconds"]) + max(0.0, time.perf_counter() - started_at)
+        stats["label_pops"] = int(stats["label_pops"]) + int(label_pops)
+        stats["columns_added"] = int(stats["columns_added"]) + int(columns_added)
+        if timed_out:
+            stats["timeouts"] = int(stats["timeouts"]) + 1
+        if exhausted is True:
+            stats["exhausted"] = int(stats["exhausted"]) + 1
+        elif exhausted is False:
+            stats["not_exhausted"] = int(stats["not_exhausted"]) + 1
+
+    def _interrupt_for_pricing_budget(self, model, phase: str) -> None:
+        # 中文注释：exact pricing 未完成时不能声称无负列，因此直接中断 SCIP，保留下界正确性。
+        self.pricing_budget_interrupts += 1
+        self.pricing_incomplete_due_to_budget = True
+        self.pricing_budget_incomplete_phase = phase
+        try:
+            model.interruptSolve()
+        except Exception:
+            pass
 
     def on_pricer_init(self, model) -> None:
         self.data["cover_cons"] = {k: model.getTransformedCons(cons) for k, cons in self.data["cover_cons"].items()}
@@ -656,9 +715,9 @@ class VehicleSchedulePricer:
         true_cover_duals=None,
         true_vehicle_dual=None,
         max_label_pops: int | None = None,
+        deadline: float | None = None,
     ):
         vehicles = self.instance["vehicles"]
-        tasks = task_ids(self.instance)
         sortie_limit = int(vehicles["S_bar"])
         batch_limit = self.max_columns_per_pricing if max_schedules is None else max(1, int(max_schedules))
         score_cover_duals = cover_duals if true_cover_duals is None else true_cover_duals
@@ -670,12 +729,17 @@ class VehicleSchedulePricer:
         nondominated: dict[Any, list[SchedulePricingLabel]] = {("closed", frozenset()): [start]}
         popped_labels = 0
 
+        if self._deadline_reached(deadline):
+            return candidates, False, popped_labels, True
         while queue:
             label = heapq.heappop(queue)
             popped_labels += 1
+            if popped_labels % 512 == 0 and self._deadline_reached(deadline):
+                candidates.sort(key=lambda item: item[0])
+                return candidates, False, popped_labels, True
             if max_label_pops is not None and max_label_pops > 0 and popped_labels > max_label_pops:
                 candidates.sort(key=lambda item: item[0])
-                return candidates, False, popped_labels
+                return candidates, False, popped_labels, False
             if not label.is_open:
                 if label.routes:
                     schedule = evaluate_schedule(self.instance, self.pairwise, label.routes)
@@ -690,7 +754,7 @@ class VehicleSchedulePricer:
                                 self.early_pricing_returns += 1
                                 self.pricing_batch_cap_hits += 1
                                 candidates.sort(key=lambda item: item[0])
-                                return candidates, False, popped_labels
+                                return candidates, False, popped_labels, False
                         else:
                             self._pool_schedule(schedule, score=score)
                 if label.used_sorties >= sortie_limit:
@@ -728,75 +792,148 @@ class VehicleSchedulePricer:
                     self.dominated_labels += 1
 
         candidates.sort(key=lambda item: item[0])
-        return candidates, True, popped_labels
+        return candidates, True, popped_labels, False
 
     def on_pricer_redcost(self, model):
         from pyscipopt import SCIP_RESULT
 
+        redcost_started = time.perf_counter()
+        deadline = self._pricing_deadline()
         self.redcost_calls += 1
         cover_duals, vehicle_dual = self._duals(model)
         if self.stabilized_pricing:
             self._adapt_stabilization_before_pricing(cover_duals, vehicle_dual)
+        phase_started = time.perf_counter()
         pool_candidates = self._scan_column_pool(cover_duals, vehicle_dual, "redcost")
+        pool_added = 0
         if pool_candidates:
             for _, schedule in pool_candidates:
                 if self.add_column(model, schedule, priced_var=True, source="redcost"):
+                    pool_added += 1
                     self.pool_columns_added += 1
+            self._record_phase("redcost_pool", phase_started, columns_added=pool_added)
             if self.stabilized_pricing:
                 self._adapt_stabilization_after_pricing("pool_hit", cover_duals, vehicle_dual)
+            self._record_phase("redcost_total", redcost_started, columns_added=pool_added)
             return {"result": SCIP_RESULT.SUCCESS}
+        self._record_phase("redcost_pool", phase_started)
 
         if self.stabilized_pricing:
             stable_cover_duals, stable_vehicle_dual = self._stabilized_duals(cover_duals, vehicle_dual)
             self.stabilized_calls += 1
-            stabilized_candidates, _exhausted, label_pops = self._exact_pricing(
+            phase_started = time.perf_counter()
+            stabilized_candidates, stabilized_exhausted, label_pops, stabilized_timed_out = self._exact_pricing(
                 stable_cover_duals,
                 stable_vehicle_dual,
                 "redcost",
                 true_cover_duals=cover_duals,
                 true_vehicle_dual=vehicle_dual,
                 max_label_pops=self.stabilization_label_limit,
+                deadline=deadline,
             )
             self.stabilized_label_pops += label_pops
+            stabilized_added = 0
             if stabilized_candidates:
                 self.stabilized_hits += 1
                 for _, schedule in stabilized_candidates:
                     if self.add_column(model, schedule, priced_var=True, source="redcost"):
-                        self.stabilized_columns_added += 1
+                        stabilized_added += 1
+                self.stabilized_columns_added += 1
+                self._record_phase(
+                    "stabilized_heuristic",
+                    phase_started,
+                    label_pops=label_pops,
+                    columns_added=stabilized_added,
+                    timed_out=stabilized_timed_out,
+                    exhausted=stabilized_exhausted,
+                )
                 self._adapt_stabilization_after_pricing("stabilized_hit", cover_duals, vehicle_dual)
+                self._record_phase("redcost_total", redcost_started, columns_added=stabilized_added)
                 return {"result": SCIP_RESULT.SUCCESS}
+            self._record_phase(
+                "stabilized_heuristic",
+                phase_started,
+                label_pops=label_pops,
+                timed_out=stabilized_timed_out,
+                exhausted=stabilized_exhausted,
+            )
             self.stabilized_fallbacks += 1
 
         self.exact_fallback_calls += 1
-        exact_candidates, _exhausted, label_pops = self._exact_pricing(cover_duals, vehicle_dual, "redcost")
+        phase_started = time.perf_counter()
+        exact_candidates, exact_exhausted, label_pops, exact_timed_out = self._exact_pricing(
+            cover_duals,
+            vehicle_dual,
+            "redcost",
+            deadline=deadline,
+        )
         self.exact_label_pops += label_pops
         added = 0
         for _, schedule in exact_candidates:
             if self.add_column(model, schedule, priced_var=True, source="redcost"):
                 added += 1
+        self._record_phase(
+            "exact_fallback",
+            phase_started,
+            label_pops=label_pops,
+            columns_added=added,
+            timed_out=exact_timed_out,
+            exhausted=exact_exhausted,
+        )
         if self.stabilized_pricing:
             self._adapt_stabilization_after_pricing(
                 "stabilized_miss_exact_hit" if added else "exact_no_column",
                 cover_duals,
                 vehicle_dual,
             )
+        if added == 0 and (exact_timed_out or not exact_exhausted):
+            self._interrupt_for_pricing_budget(model, "exact_fallback")
+        self._record_phase("redcost_total", redcost_started, columns_added=added)
         return {"result": SCIP_RESULT.SUCCESS}
 
     def on_pricer_farkas(self, model):
         from pyscipopt import SCIP_RESULT
 
+        farkas_started = time.perf_counter()
+        deadline = self._pricing_deadline()
         self.farkas_calls += 1
         cover_duals, vehicle_dual = self._farkas_duals(model)
+        phase_started = time.perf_counter()
         pool_candidates = self._scan_column_pool(cover_duals, vehicle_dual, "farkas")
+        pool_added = 0
         if pool_candidates:
             for _, schedule in pool_candidates:
                 if self.add_column(model, schedule, priced_var=True, source="farkas"):
+                    pool_added += 1
                     self.pool_columns_added += 1
+            self._record_phase("farkas_pool", phase_started, columns_added=pool_added)
+            self._record_phase("farkas_total", farkas_started, columns_added=pool_added)
             return {"result": SCIP_RESULT.SUCCESS}
-        candidates, _exhausted, label_pops = self._exact_pricing(cover_duals, vehicle_dual, "farkas")
+        self._record_phase("farkas_pool", phase_started)
+        self.farkas_exact_calls += 1
+        phase_started = time.perf_counter()
+        candidates, exhausted, label_pops, timed_out = self._exact_pricing(
+            cover_duals,
+            vehicle_dual,
+            "farkas",
+            deadline=deadline,
+        )
         self.exact_label_pops += label_pops
+        added = 0
         for _, schedule in candidates:
-            self.add_column(model, schedule, priced_var=True, source="farkas")
+            if self.add_column(model, schedule, priced_var=True, source="farkas"):
+                added += 1
+        self._record_phase(
+            "farkas_exact",
+            phase_started,
+            label_pops=label_pops,
+            columns_added=added,
+            timed_out=timed_out,
+            exhausted=exhausted,
+        )
+        if added == 0 and (timed_out or not exhausted):
+            self._interrupt_for_pricing_budget(model, "farkas_exact")
+        self._record_phase("farkas_total", farkas_started, columns_added=added)
         return {"result": SCIP_RESULT.SUCCESS}
 
 
@@ -873,6 +1010,7 @@ def build_branch_price_model(
     stabilization_label_limit: int = 20000,
     stabilization_volatility_threshold: float = 0.25,
     pricing_preprocess: bool = True,
+    pricing_time_budget: float = 0.0,
     rmp_params: dict[str, Any] | None = None,
 ):
     from pyscipopt import Model, quicksum
@@ -910,6 +1048,7 @@ def build_branch_price_model(
         stabilization_label_limit=stabilization_label_limit,
         stabilization_volatility_threshold=stabilization_volatility_threshold,
         pricing_preprocess=pricing_preprocess,
+        pricing_time_budget=pricing_time_budget,
     )
     model.includePricer(pricer.plugin, "vehicle_schedule_pricer", "严格车辆日程列生成器", priority=1, delay=True)
 
@@ -964,6 +1103,7 @@ def solve_branch_price(
     stabilization_label_limit: int = 20000,
     stabilization_volatility_threshold: float = 0.25,
     pricing_preprocess: bool = True,
+    pricing_time_budget: float = 0.0,
     rmp_params: dict[str, Any] | None = None,
     memory_limit_mb: float | None = None,
 ):
@@ -982,6 +1122,7 @@ def solve_branch_price(
         stabilization_label_limit=stabilization_label_limit,
         stabilization_volatility_threshold=stabilization_volatility_threshold,
         pricing_preprocess=pricing_preprocess,
+        pricing_time_budget=pricing_time_budget,
         rmp_params=rmp_params,
     )
     if time_limit is not None:
@@ -996,15 +1137,18 @@ def solve_branch_price(
     solution_count = int(_safe_call(model.getNSols, 0) or 0)
     has_solution = solution_count > 0
     raw_status = str(_safe_call(model.getStatus, "unknown"))
+    pricing_budget_interrupted = pricer.pricing_incomplete_due_to_budget
     summary = {
-        "status": _status_name(raw_status),
+        "status": "PRICING_TIME_BUDGET" if pricing_budget_interrupted else _status_name(raw_status),
         "status_code": raw_status,
         "objective": round_float(_safe_call(model.getObjVal)) if has_solution else None,
         "runtime": round_float(_safe_call(model.getSolvingTime, 0.0)),
-        "best_bound": round_float(_safe_call(model.getDualbound)),
-        "mip_gap": round_float(_safe_call(model.getGap)) if has_solution else None,
+        # 中文注释：pricing 未完成时，SCIP 的 dual/gap 可能来自未验证 RMP，不能作为有效证明输出。
+        "best_bound": None if pricing_budget_interrupted else round_float(_safe_call(model.getDualbound)),
+        "mip_gap": None if pricing_budget_interrupted else (round_float(_safe_call(model.getGap)) if has_solution else None),
         "node_count": round_float(_safe_call(model.getNNodes, 0.0)),
         "solution_count": solution_count,
+        "pricing_budget_interrupted": pricing_budget_interrupted,
     }
 
     solution = {"summary": summary, "schedules": [], "artificial_tasks": []}
@@ -1057,10 +1201,22 @@ def solve_branch_price(
         "stabilized_columns_added": pricer.stabilized_columns_added,
         "stabilized_fallbacks": pricer.stabilized_fallbacks,
         "exact_fallback_calls": pricer.exact_fallback_calls,
+        "farkas_exact_calls": pricer.farkas_exact_calls,
         "stabilized_label_pops": pricer.stabilized_label_pops,
         "exact_label_pops": pricer.exact_label_pops,
         "alpha_increases": pricer.alpha_increases,
         "alpha_decreases": pricer.alpha_decreases,
+        "pricing_time_budget": pricer.pricing_time_budget,
+        "pricing_budget_interrupts": pricer.pricing_budget_interrupts,
+        "pricing_incomplete_due_to_budget": pricer.pricing_incomplete_due_to_budget,
+        "pricing_budget_incomplete_phase": pricer.pricing_budget_incomplete_phase,
+        "pricing_phase_stats": {
+            phase: {
+                key: round_float(value) if key == "seconds" else value
+                for key, value in stats.items()
+            }
+            for phase, stats in sorted(pricer.pricing_phase_stats.items())
+        },
         "open_label_dominance": "covered_current_node_used_sorties_with_return_ready",
         "pricing_preprocess_enabled": pricer.pricing_preprocess_enabled,
         "pricing_preprocess": pricer.preprocess.to_report(),
@@ -1070,7 +1226,7 @@ def solve_branch_price(
         "dominated_labels": pricer.dominated_labels,
         "artificial_penalty": ARTIFICIAL_TASK_PENALTY,
         "warm_start": data["warm_start"],
-        "strict_pricing": True,
+        "strict_pricing": not pricer.pricing_incomplete_due_to_budget,
         "eps": eps,
     }
     return clean_schedules, report, solution
@@ -1098,6 +1254,7 @@ def solve_bp_no_ml(
     stabilization_label_limit: int = 20000,
     stabilization_volatility_threshold: float = 0.25,
     pricing_preprocess: bool = True,
+    pricing_time_budget: float = 0.0,
     memory_limit_mb: float | None = None,
     artificial_penalty: float = ARTIFICIAL_TASK_PENALTY,
     rmp_params: dict[str, Any] | None = None,
@@ -1123,6 +1280,7 @@ def solve_bp_no_ml(
         stabilization_label_limit=stabilization_label_limit,
         stabilization_volatility_threshold=stabilization_volatility_threshold,
         pricing_preprocess=pricing_preprocess,
+        pricing_time_budget=pricing_time_budget,
         rmp_params=rmp_params,
         memory_limit_mb=memory_limit_mb,
     )
@@ -1149,7 +1307,7 @@ def solve_bp_no_ml(
         rmp_solves=0,
         cg_iterations=int(report.get("pricing_calls", 0)),
         pricing_calls=int(report.get("pricing_calls", 0)),
-        exact_pricing_calls=int(report.get("pricing_calls", 0)),
+        exact_pricing_calls=int(report.get("exact_fallback_calls", 0)) + int(report.get("farkas_exact_calls", 0)),
         generated_routes=int(report.get("generated_routes", 0)),
         generated_columns=int(report.get("generated_columns", 0)),
         root_relaxation=None,

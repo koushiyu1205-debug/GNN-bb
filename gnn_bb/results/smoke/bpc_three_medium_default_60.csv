@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,cg_iterations,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,root_relaxation,incumbent_node,log_path,instance_path,seed
+medium,20,3,17,CUT_ROUND_LIMIT,,524.340684,,57.075243,213,3,558,558,558,336,821,,,/home/kai/work/gnn_bb/results/smoke/logs/bpc_three_medium_default_60/medium.log,/home/kai/work/gnn_bb/json/instances/instance_medium.json,20260511

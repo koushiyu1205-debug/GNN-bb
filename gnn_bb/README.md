@@ -73,7 +73,7 @@ cd /home/kai/work/gnn_bb
 当前期望结果：
 
 ```text
-Ran 14 tests ... OK
+Ran 20 tests ... OK
 ```
 
 ### 4.2 纯 SCIP compact MILP baseline
@@ -281,6 +281,258 @@ results/solutions/bp_no_ml/solution_<instance>.json
   > results/logs/bp_no_ml/medium_terminal.log 2>&1
 ```
 
+### 4.3.1 最小 route-vehicle branch-price-and-cut
+
+为保留当前 4 秒级 route-vehicle baseline，BPC 版本新建为独立文件，不覆盖原主线：
+
+```text
+src/gnn_bb/bp/schedule_checker.py
+src/gnn_bb/bp/route_vehicle_bpc.py
+scripts/run_route_vehicle_bpc.py
+```
+
+这个最小 BPC 版本仍以单条 sortie route 作为列，但增加一个 exact schedule checker。若某辆车选中的 route 集合无法排成真实执行顺序，就加入安全的 no-good cut。当前实现已经接入 SCIP 树内 lazy constraint handler；外层 cut-and-resolve 只作为兼容性保护保留。
+
+集合和参数：
+
+```text
+N        任务集合
+R        车辆集合
+P        所有资源可行 sortie route 集合
+a_ip     route p 是否服务任务 i
+c_p      route p 的行驶 + 服务成本
+w_p      route p 至少占用的车辆工作时间下界
+F        固定车辆成本
+H        单车总工作时间上界
+S_bar    单车最多 sortie 数上界
+M        Phase-I 人工覆盖大惩罚
+C        已分离出的 schedule infeasible route-set cuts
+P(C)     cut C 中禁止同车同时选择的 route 集合
+```
+
+变量：
+
+```text
+lambda[p,r] ∈ {0,1}   车辆 r 是否执行 route p
+y[r]        ∈ {0,1}   车辆 r 是否启用
+u[i]        ∈ {0,1}   Phase-I 人工覆盖任务 i
+```
+
+目标函数：
+
+```text
+min  sum_{r in R} sum_{p in P} c_p lambda[p,r]
+   + F sum_{r in R} y[r]
+   + M sum_{i in N} u[i]
+```
+
+基础 master 约束：
+
+```text
+sum_{r in R} sum_{p in P} a_ip lambda[p,r] + u[i] = 1
+    for all i in N
+
+sum_{p in P} lambda[p,r] <= S_bar y[r]
+    for all r in R
+
+sum_{p in P} w_p lambda[p,r] <= H y[r]
+    for all r in R
+
+y[r+1] <= y[r]
+    for r = 1,...,R_bar-1
+```
+
+BPC schedule cuts：
+
+```text
+sum_{p in P(C)} lambda[p,r] <= |P(C)| - 1
+    for all C in C, for all r in R
+```
+
+这类 cut 的含义是：如果 exact schedule checker 证明某个 route 集合 `P(C)` 无法按任意顺序在时间窗、电量、充电/恢复时间和 horizon 内完成，则该集合不能被任何一辆同质车同时选中。车辆同质时，这个全局 cut 比按车辆单独加 cut 更强，而且不改变可行域。
+
+pricing reduced cost。设 `pi_i` 是任务覆盖约束对偶，`eta_r` 是 sortie 数约束对偶，`beta_r` 是车辆工作时间约束对偶，`gamma_C` 是 schedule cut 对偶，则：
+
+```text
+rc(p,r) = c_p
+        - sum_{i in N} a_ip pi_i
+        - eta_r
+        - beta_r w_p
+        - sum_{C in C: p in P(C)} gamma_{C,r}
+```
+
+exactness 说明：
+
+```text
+1. pricing 仍是 RCSP/Farkas pricing；新列会自动带上 schedule cut 系数。
+2. cut 只在 exact schedule checker 证明 route 集合不可排程时加入。
+3. 只有最后一次选中 route 集合通过 exact schedule checker，才输出 schedule-feasible primal。
+4. 存在 schedule cut duals 时，dominance key 会加入当前 route 前缀序列；只有同签名前缀标签才比较，避免漏列。
+5. ML 尚未介入；没有删列、漏列、误剪枝。
+6. 树内 lazy handler 只影响整数候选解和 valid cuts，不用 ML、不误剪枝；当前默认关闭，作为实验选项保留。
+```
+
+运行 very_small：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_route_vehicle_bpc.py \
+  --instances very_small \
+  --time-limit 3600 \
+  --memory-limit-mb 12000
+```
+
+运行 20 任务规模：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_route_vehicle_bpc.py \
+  --instances medium \
+  --time-limit 3600 \
+  --memory-limit-mb 12000 \
+  --max-cut-rounds 20 \
+  --pricing-time-budget 20 \
+  --pricing-progress-interval 200000 \
+  --results-csv results/bpc_no_ml_medium.csv \
+  --log-dir results/logs/bpc_no_ml \
+  --solution-dir results/solutions/bpc_no_ml
+```
+
+启用树内 lazy cuts 做实验对照：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_route_vehicle_bpc.py \
+  --instances medium \
+  --time-limit 3600 \
+  --memory-limit-mb 12000 \
+  --max-cut-rounds 20 \
+  --enable-tree-cuts \
+  --pricing-time-budget 20 \
+  --pricing-progress-interval 200000 \
+  --results-csv results/bpc_no_ml_medium_tree.csv \
+  --log-dir results/logs/bpc_no_ml_tree \
+  --solution-dir results/solutions/bpc_no_ml_tree
+```
+
+运行 30 任务规模：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_route_vehicle_bpc.py \
+  --instances 30 \
+  --time-limit 3600 \
+  --memory-limit-mb 12000 \
+  --max-cut-rounds 20 \
+  --results-csv results/bpc_no_ml_30.csv \
+  --log-dir results/logs/bpc_no_ml \
+  --solution-dir results/solutions/bpc_no_ml
+```
+
+当前短测结果：
+
+```text
+very_small, pricing_time_budget=5, time_limit=30s:
+status=OPTIMAL
+primal=132.270984
+dual=132.270984
+gap=0.0
+time=0.082337s
+cut_rounds=1
+generated_columns=14
+schedule_feasible_start.submitted=true
+
+medium, default outer global cuts, time_limit=60s, max_cut_rounds=3, pricing_time_budget=20:
+status=CUT_ROUND_LIMIT
+primal=None
+dual=524.340684
+gap=None
+time=57.075243s
+cut_rounds=3
+schedule_cuts_added=6
+generated_columns=821
+pricing_calls=558
+pricing_label_pops=1077211
+schedule_feasible_start.submitted=true
+schedule_feasible_solution=false
+
+medium, pricing_time_budget=0.000001:
+status=PRICING_TIME_BUDGET
+primal=743.688845
+dual=None
+gap=None
+strict_pricing=false
+```
+
+解释：当前默认 BPC 使用外层全局 cuts，能稳定返回；schedule-aware start 能提交真实可排程 incumbent；pricing budget 超时时会安全中断并清空 dual/gap。树内 lazy cuts 已实现，但 20 规模短测不稳定，暂时作为实验开关保留。
+
+### 4.3.2 根目录 `bpc/` clean BPC 主线
+
+新增根目录独立实现：
+
+```text
+bpc/
+scripts/run_bpc_clean.py
+configs/bpc_clean.yaml
+docs/bpc_clean_formulation.md
+```
+
+这个版本用于验收“规范、完整、可审查”的 BPC 流程。它不调用旧 `src/gnn_bb/bp/` 的 BPC 主入口，不使用 SCIP 默认 B&B 树，也不使用 outer cut-and-resolve、SCIP lazy handler、column pool、stabilized pricing、reduced graph pricing、ng relaxation 或 ML。SCIP 只负责求解每个节点的 RMP LP 并返回 dual；节点循环、pricing、cuts、branching、incumbent 校验和 bound 证明由 `bpc/` 自己控制。
+
+clean BPC 的硬规则：
+
+```text
+1. Phase-I 人工列保证 RMP 初始可行。
+2. reduced cost 使用当前 RMP true dual。
+3. exact pricing 完整结束后，节点 bound 才能用于剪枝或证明。
+4. schedule no-good cut 只在 exact schedule checker 证明不可排程后加入。
+5. integer incumbent 必须通过原问题 schedule feasibility 检查。
+6. pricing 若被中断，该节点不能声明完成。
+```
+
+运行 very_small：
+
+```bash
+cd /home/kai/work/gnn_bb
+
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_bpc_clean.py \
+  --instances very_small \
+  --time-limit 3600 \
+  --results-csv results/bpc_clean_very_small.csv \
+  --log-dir results/logs/bpc_clean \
+  --solution-dir results/solutions/bpc_clean
+```
+
+运行 20 任务规模：
+
+```bash
+cd /home/kai/work/gnn_bb
+mkdir -p results/logs/bpc_clean_terminal
+
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_bpc_clean.py \
+  --instances medium \
+  --time-limit 3600 \
+  --config configs/bpc_clean.yaml \
+  --results-csv results/bpc_clean_medium.csv \
+  --log-dir results/logs/bpc_clean \
+  --solution-dir results/solutions/bpc_clean \
+  2>&1 | tee results/logs/bpc_clean_terminal/medium_terminal.log
+```
+
+输出文件：
+
+```text
+results/bpc_clean_<instance>.csv
+results/logs/bpc_clean/<instance>.jsonl
+results/solutions/bpc_clean/solution_<instance>.json
+```
+
+数学与证明文档：
+
+```text
+docs/bpc_clean_formulation.md
+docs/bpc_clean_optimality_proof.md
+docs/bpc_clean_equivalence_proof.md
+```
+
+说明：clean BPC 第一版优先保证流程和证明逻辑清楚，不承诺比旧 route-vehicle pricer 更快。性能优化必须在这个版本的日志能够解释 root、pricing、cut、branching 行为之后再逐项加入。
+
 ### 4.4 真实 vehicle schedule column master
 
 为保留当前 route-vehicle baseline，新增了独立文件：
@@ -367,6 +619,21 @@ rc(k) = C_k - sum_{i in N} a_ik pi_i - mu
   --column-pool-rc-margin 50 \
   --stabilization-alpha 0.7 \
   --stabilization-label-limit 20000
+```
+
+带 Python pricer 单次回调时间预算运行 20 任务规模：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_schedule_bp.py \
+  --instances medium \
+  --time-limit 3600 \
+  --memory-limit-mb 12000 \
+  --max-columns-per-pricing 20 \
+  --column-pool-size 200 \
+  --column-pool-rc-margin 50 \
+  --stabilization-alpha 0.7 \
+  --stabilization-label-limit 20000 \
+  --pricing-time-budget 30
 ```
 
 短测 20 任务规模：
@@ -763,11 +1030,170 @@ dominated_labels=1130030
 
 结论：预处理代码已经正确接入，但在当前 medium 实例上只删除 14/380 条 task-task 弧，性能没有稳定改善。它对更紧时间窗、更紧电量或更大规模实例更可能有效；当前主要瓶颈仍是 exact fallback 的 Python label DP。
 
+已完成的 Python pricer time budget + pricing 分阶段统计：
+
+```text
+新增参数：
+  --pricing-time-budget <seconds>
+
+配置项：
+  schedule_pricing_time_budget_sec = 0.0
+
+默认行为：
+  0 表示关闭预算，不改变现有 baseline 可比性。
+
+预算作用域：
+  单次 Python pricer 回调共享一个墙钟 deadline。
+  redcost 阶段顺序为 pool -> stabilized heuristic -> exact fallback。
+  Farkas 阶段顺序为 pool -> Farkas exact pricing。
+
+exactness 规则：
+  如果 heuristic 阶段在预算内找到 true negative column，可以安全加入 RMP。
+  如果 exact fallback 找到 negative column，即使未穷尽，也可以安全加入 RMP。
+  如果 exact fallback 因预算耗尽且没有找到列，不能证明“无负列”。
+  此时会中断 SCIP，并把输出状态改成 PRICING_TIME_BUDGET。
+  同时 dual_bound 和 gap 置空，strict_pricing=false，避免把未验证 RMP 当成最优证明。
+```
+
+日志新增字段：
+
+```text
+pricing_time_budget
+pricing_budget_interrupts
+pricing_incomplete_due_to_budget
+pricing_budget_incomplete_phase
+pricing_phase_stats
+```
+
+`pricing_phase_stats` 当前包含：
+
+```text
+redcost_pool
+stabilized_heuristic
+exact_fallback
+farkas_pool
+farkas_exact
+redcost_total
+farkas_total
+```
+
+每个 phase 记录：
+
+```text
+calls
+seconds
+label_pops
+columns_added
+timeouts
+exhausted
+not_exhausted
+```
+
+当前验证：
+
+```text
+very_small, pricing_time_budget=1:
+status=OPTIMAL
+primal=132.270984
+dual=132.270984
+time=0.128816s
+strict_pricing=true
+
+medium, time_limit=10, pricing_time_budget=1:
+status=TIME_LIMIT
+primal=536.504258
+dual=None
+time=10.306494s
+pricing_budget_interrupts=0
+
+medium, pricing_time_budget=0.000001:
+status=PRICING_TIME_BUDGET
+primal=690.973326
+dual=None
+gap=None
+strict_pricing=false
+pricing_budget_incomplete_phase=exact_fallback
+```
+
+已撤回的实验：dynamic reduced-cost subgraph heuristic pricing。
+
+撤回原因：
+
+```text
+思路：
+  在 heuristic pricing 阶段只保留 reduced-cost proxy 较好的 depot->task 和 task->task 弧，
+  先在动态子图上找负 reduced-cost schedule，再回退到 full exact pricing。
+
+短测结果：
+  medium, k_successor=6, k_depot=10:
+    primal=690.973326
+    runtime=88.327426s
+    dynamic_subgraph_hits=60
+    dynamic_subgraph_columns_added=989
+    exact_label_pops=2847009
+
+  当前 stabilized + preprocess baseline:
+    primal=536.504258
+    runtime=124.785612s
+    exact_label_pops=3994723
+
+判断：
+  子图 heuristic 确实减少了 exact label 工作量，但找列质量明显变差。
+  它找到很多 true negative columns，却没有优先找到改善 incumbent 的关键 schedule。
+  这会污染 schedule baseline 的实验判断，所以不保留 CLI 开关和配置接口。
+```
+
+已撤回的实验：subgraph-stabilized pricing。
+
+撤回原因：
+
+```text
+思路：
+  把 stabilized heuristic pricing 从 full task graph 改成稳定对偶诱导的任务子图。
+  子图保留低 reduced-cost 后继/前驱弧，并周期性执行 full stabilized pricing 刷新质量。
+  exact fallback 仍然保留，因此理论上不破坏 exactness。
+
+对比基准：
+  当前 stabilized + preprocess + pricing_time_budget=1:
+    status=TIME_LIMIT
+    primal=536.504258
+    runtime=10.306494s
+    generated_columns=1006
+    stabilized_columns_added=722
+    pricing_budget_interrupts=0
+
+默认子图参数：
+  k_successor=6, k_predecessor=4, full_refresh_frequency=4:
+    status=PRICING_TIME_BUDGET
+    primal=690.973326
+    runtime=5.025784s
+    generated_columns=559
+    subgraph_stabilized_columns_added=385
+    pricing_budget_incomplete_phase=exact_fallback
+
+更宽子图测试：
+  k_successor=12, k_predecessor=8, full_refresh_frequency=1:
+    status=PRICING_TIME_BUDGET
+    primal=690.973326
+    runtime=4.766828s
+
+  k_successor=18, k_predecessor=18, full_refresh_frequency=1:
+    status=PRICING_TIME_BUDGET
+    primal=690.973326
+    runtime=4.941207s
+
+判断：
+  子图稳定化减少了局部 label 工作量，但列质量不够，无法复现旧 stabilized pricing 早期找到的 536.50 incumbent。
+  更宽子图和更频繁 full refresh 仍然触发 pricing budget，说明瓶颈不是单纯弧数量，而是 early columns 的质量和 exact fallback 时机。
+  因此该实验不保留代码、配置或 CLI 开关。
+```
+
 待继续优化：
 
 ```text
 1. two-level route->schedule 分解
-2. 给 Python pricer 增加显式时间检查，减少 exact fallback 超时尾巴
+2. 用 pricing_phase_stats 定位 exact fallback 的主要耗时来源
+3. 对 exact fallback 做更强的安全 dominance / lower-bound pruning
 ```
 
 
@@ -779,3 +1205,76 @@ dominated_labels=1130030
 2. 对 30 规模做受控短测，记录它卡在 pricing、LP、branching 还是内存。
 3. 在稳定 route-vehicle baseline 上实现 3PB：先做无 ML 的 candidate ranking 和 LP testing。
 4. 记录 branching candidate 日志，为 2LBB 的 M1/M2 训练数据做准备。
+
+
+## 7. Clean BPC 主线状态
+
+当前新增的规范 BPC 主线在根目录 `bpc/` 下，旧 `src/gnn_bb/bp/` 保留为历史实验/reference。
+
+当前 `bpc/` 模型正式定位为：
+
+```text
+route-vehicle BPC with schedule cuts
+```
+
+它不是 `vehicle-schedule BPC`。也就是说，master column 是单条 sortie route，不是一辆车完整日程；同一车辆多条 sortie 的真实先后顺序由 schedule checker 和 valid schedule no-good cuts 处理。
+
+核心边界：
+
+```text
+SCIP 负责：
+  - 每个节点的 RMP LP 求解
+  - primal / dual 提取
+
+Python BPC 负责：
+  - node loop
+  - column generation
+  - exact RCSP pricing
+  - schedule no-good cuts
+  - Ryan-Foster / task-vehicle / arc-usage / vehicle-use branching
+  - incumbent 校验
+  - lower bound / upper bound / gap 逻辑
+```
+
+20 规模 clean BPC 测试命令：
+
+```bash
+cd /home/kai/work/gnn_bb
+mkdir -p results/logs/bpc_clean_terminal
+
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_bpc_clean.py \
+  --instances medium \
+  --time-limit 3600 \
+  --config configs/bpc_clean.yaml \
+  --results-csv results/bpc_clean_medium.csv \
+  --log-dir results/logs/bpc_clean \
+  --solution-dir results/solutions/bpc_clean \
+  2>&1 | tee results/logs/bpc_clean_terminal/medium_terminal.log
+```
+
+当前 30 秒短测结果：
+
+```text
+上一版:
+  status=TIME_LIMIT
+  primal=743.688845
+  dual=494.885971
+  gap=0.334552
+  nodes=149
+
+当前 primal heuristic 加强后:
+  status=TIME_LIMIT
+  primal=626.902419
+  dual=495.116564
+  gap=0.210217
+  nodes=85
+```
+
+当前判断：
+
+```text
+clean BPC 已经能按规范流程运行并输出结果；
+primal heuristic 已把 20 规模 UB 从 743.69 改善到 626.90；
+但 120 秒内 UB 不再改善，lower bound 平台仍明显。
+下一步应优先做更强 branching / cuts，减少节点长期停在 494.89~501 的区间。
+```

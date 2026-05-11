@@ -1,0 +1,17 @@
+开始 route-vehicle BPC: instance=medium, tasks=20, time_limit=3600s, max_cut_rounds=20, memory_limit_mb=12000.0, log=/home/kai/work/gnn_bb/results/logs/bpc_no_ml/medium.log
+all 1 solutions given by solution candidate storage are infeasible
+
+permute transformed problem using random seed 20260511
+presolving:
+(round 1, exhaustive) 0 del vars, 0 del conss, 0 add conss, 0 chg bounds, 0 chg sides, 0 chg coeffs, 2 upgd conss, 0 impls, 2 clqs, 0 implints
+   (334.1s) probing: 73/88 (83.0%) - 0 fixings, 0 aggregations, 1 implications, 0 bound changes
+   (334.1s) probing aborted: 50/50 successive totally useless probings
+presolving (2 rounds: 2 fast, 2 medium, 2 exhaustive):
+ 0 deleted vars, 0 deleted constraints, 0 added constraints, 0 tightened bounds, 0 added holes, 0 changed sides, 0 changed coefficients
+ 0 implications, 3 cliques, 0 implied integral variables (0 bin, 0 int, 0 cont)
+presolved problem has 88 variables (88 bin, 0 int, 0 cont) and 38 constraints
+      1 constraints of type <schedule_feasibility_lazy>
+      2 constraints of type <setppc>
+     35 constraints of type <linear>
+Presolving Time: 334.11
+

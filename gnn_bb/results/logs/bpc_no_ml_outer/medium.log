@@ -1,0 +1,180 @@
+{
+  "summary": {
+    "status": "INTERRUPTED",
+    "status_code": "userinterrupt",
+    "objective": null,
+    "runtime": 0.113625,
+    "best_bound": null,
+    "mip_gap": null,
+    "node_count": 1,
+    "solution_count": 0,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "route_vehicle_branch_price_cut",
+    "generated_routes": 114,
+    "generated_columns": 332,
+    "priced_columns": 267,
+    "redcost_columns": 267,
+    "farkas_columns": 0,
+    "redcost_calls": 89,
+    "farkas_calls": 0,
+    "pricing_calls": 89,
+    "early_pricing_returns": 89,
+    "dominated_labels": 0,
+    "schedule_cut_count": 5,
+    "schedule_cut_constraint_count": 15,
+    "tree_schedule_cuts": false,
+    "tree_schedule_cut_handler": {
+      "enabled": false
+    },
+    "raw_schedule_cut_count": 5,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "submitted": true,
+      "routes": 9,
+      "covered_tasks": 20,
+      "uncovered_tasks": []
+    },
+    "strict_pricing": true,
+    "eps": 1e-06,
+    "cut_rounds": 4,
+    "schedule_cuts_added": 5,
+    "outer_schedule_cuts_added": 5,
+    "tree_schedule_cuts_added": 0,
+    "final_schedule_cut_count": 5,
+    "final_schedule_cut_constraint_count": 15,
+    "cut_kinds": {
+      "infeasible_route_set": 5,
+      "pairwise_incompatible": 0
+    },
+    "schedule_feasible_solution": false,
+    "last_schedule_conflicts": [
+      {
+        "vehicle": 1,
+        "route_ids": [
+          21,
+          22,
+          23
+        ],
+        "signatures": [
+          [
+            2,
+            6,
+            8,
+            4
+          ],
+          [
+            19,
+            10
+          ],
+          [
+            13,
+            9,
+            11
+          ]
+        ]
+      }
+    ],
+    "schedule_cuts": [
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            14,
+            16,
+            12,
+            5
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            15,
+            8,
+            4,
+            2
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            6,
+            8,
+            4
+          ],
+          [
+            13,
+            9,
+            11
+          ],
+          [
+            19,
+            10
+          ]
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "summary": {
+    "status": "OPTIMAL",
+    "status_code": "optimal",
+    "objective": 132.270984,
+    "runtime": 0.013851,
+    "best_bound": 132.270984,
+    "mip_gap": 0.0,
+    "node_count": 1,
+    "solution_count": 4,
+    "pricing_budget_interrupted": false,
+    "pricing_budget_incomplete_phase": null,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "route_vehicle_branch_price_cut",
+    "generated_routes": 10,
+    "generated_columns": 14,
+    "priced_columns": 4,
+    "redcost_columns": 4,
+    "farkas_columns": 0,
+    "redcost_calls": 5,
+    "farkas_calls": 0,
+    "pricing_calls": 5,
+    "early_pricing_returns": 4,
+    "dominated_labels": 0,
+    "schedule_cut_count": 0,
+    "schedule_cut_constraint_count": 0,
+    "tree_schedule_cuts": true,
+    "tree_schedule_cut_handler": {
+      "enabled": true,
+      "check_calls": 12,
+      "enforce_calls": 0,
+      "sepasol_calls": 0,
+      "infeasible_solutions": 0,
+      "cuts_added": 0,
+      "cut_constraints_added": 0,
+      "raw_cut_count": 0,
+      "cut_kinds": {
+        "infeasible_route_set": 0,
+        "pairwise_incompatible": 0
+      },
+      "generated_cuts": [],
+      "last_conflicts": []
+    },
+    "raw_schedule_cut_count": 0,
+    "pricing_time_budget": 5.0,
+    "pricing_progress_interval": 0,
+    "pricing_budget_interrupts": 0,
+    "pricing_incomplete_due_to_budget": false,
+    "pricing_budget_incomplete_phase": null,
+    "pricing_phase_stats": {
+      "redcost": {
+        "calls": 5,
+        "seconds": 0.000505,
+        "label_pops": 25,
+        "columns_found": 4,
+        "columns_added": 4,
+        "timeouts": 0,
+        "exhausted": 1,
+        "early_returns": 4
+      }
+    },
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "schedule_feasible": {
+        "enabled": true,
+        "submitted": true,
+        "vehicles_used": 2,
+        "routes": 2,
+        "selected": [
+          [
+            1,
+            4,
+            [
+              1,
+              2
+            ]
+          ],
+          [
+            2,
+            5,
+            [
+              3,
+              4
+            ]
+          ]
+        ]
+      },
+      "legacy": {
+        "enabled": false,
+        "skipped": true
+      }
+    },
+    "strict_pricing": true,
+    "eps": 1e-06,
+    "cut_rounds": 1,
+    "schedule_cuts_added": 0,
+    "outer_schedule_cuts_added": 0,
+    "tree_schedule_cuts_added": 0,
+    "final_schedule_cut_count": 0,
+    "final_schedule_cut_constraint_count": 0,
+    "cut_kinds": {
+      "infeasible_route_set": 0,
+      "pairwise_incompatible": 0
+    },
+    "schedule_feasible_solution": true,
+    "last_schedule_conflicts": [],
+    "schedule_cuts": []
+  }
+}

@@ -1,0 +1,1685 @@
+{
+  "routes": [
+    {
+      "tasks": [
+        1
+      ],
+      "task_set": [
+        1
+      ],
+      "task_count": 1,
+      "load": 2.0,
+      "travel_time": 13.34071,
+      "return_time": 16.34071,
+      "energy": 11.47707,
+      "cost": 13.75266,
+      "cycle_time": 18.636124,
+      "service_start": {
+        "1": 6.670355
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 1,
+          "path": [
+            "p0",
+            "p5",
+            "p7",
+            "p6"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 0,
+          "path": [
+            "p6",
+            "p7",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 0
+    },
+    {
+      "tasks": [
+        2
+      ],
+      "task_set": [
+        2
+      ],
+      "task_count": 1,
+      "load": 3.0,
+      "travel_time": 10.63619,
+      "return_time": 14.63619,
+      "energy": 9.129724,
+      "cost": 12.2913,
+      "cycle_time": 16.462135,
+      "service_start": {
+        "2": 5.318095
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 2,
+          "path": [
+            "p0",
+            "p1",
+            "p10"
+          ]
+        },
+        {
+          "from": 2,
+          "to": 0,
+          "path": [
+            "p10",
+            "p1",
+            "p0"
+          ]
+        }
+      ],
+      "id": 1
+    },
+    {
+      "tasks": [
+        3
+      ],
+      "task_set": [
+        3
+      ],
+      "task_count": 1,
+      "load": 1.0,
+      "travel_time": 8.541394,
+      "return_time": 12.270697,
+      "energy": 8.113628,
+      "cost": 10.32279,
+      "cycle_time": 13.893423,
+      "service_start": {
+        "3": 6.0
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 3,
+          "path": [
+            "p0",
+            "p5",
+            "p13"
+          ]
+        },
+        {
+          "from": 3,
+          "to": 0,
+          "path": [
+            "p13",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 2
+    },
+    {
+      "tasks": [
+        4
+      ],
+      "task_set": [
+        4
+      ],
+      "task_count": 1,
+      "load": 2.0,
+      "travel_time": 14.418986,
+      "return_time": 18.209493,
+      "energy": 12.06836,
+      "cost": 16.90331,
+      "cycle_time": 20.623165,
+      "service_start": {
+        "4": 8.0
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 4,
+          "path": [
+            "p0",
+            "p1",
+            "p10",
+            "p18"
+          ]
+        },
+        {
+          "from": 4,
+          "to": 0,
+          "path": [
+            "p18",
+            "p10",
+            "p1",
+            "p0"
+          ]
+        }
+      ],
+      "id": 3
+    },
+    {
+      "tasks": [
+        5
+      ],
+      "task_set": [
+        5
+      ],
+      "task_count": 1,
+      "load": 3.0,
+      "travel_time": 15.60416,
+      "return_time": 19.60416,
+      "energy": 12.683568,
+      "cost": 15.851292,
+      "cycle_time": 22.140874,
+      "service_start": {
+        "5": 7.80208
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 5,
+          "path": [
+            "p0",
+            "p4",
+            "p22"
+          ]
+        },
+        {
+          "from": 5,
+          "to": 0,
+          "path": [
+            "p22",
+            "p4",
+            "p0"
+          ]
+        }
+      ],
+      "id": 4
+    },
+    {
+      "tasks": [
+        6
+      ],
+      "task_set": [
+        6
+      ],
+      "task_count": 1,
+      "load": 1.0,
+      "travel_time": 19.67237,
+      "return_time": 21.67237,
+      "energy": 15.326,
+      "cost": 21.57839,
+      "cycle_time": 24.73757,
+      "service_start": {
+        "6": 9.836185
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 6,
+          "path": [
+            "p0",
+            "p3",
+            "p11",
+            "p19",
+            "p27"
+          ]
+        },
+        {
+          "from": 6,
+          "to": 0,
+          "path": [
+            "p27",
+            "p19",
+            "p11",
+            "p3",
+            "p0"
+          ]
+        }
+      ],
+      "id": 5
+    },
+    {
+      "tasks": [
+        7
+      ],
+      "task_set": [
+        7
+      ],
+      "task_count": 1,
+      "load": 2.0,
+      "travel_time": 16.683078,
+      "return_time": 19.683078,
+      "energy": 12.759606,
+      "cost": 17.000852,
+      "cycle_time": 22.234999,
+      "service_start": {
+        "7": 8.341539
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 7,
+          "path": [
+            "p0",
+            "p5",
+            "p23",
+            "p31"
+          ]
+        },
+        {
+          "from": 7,
+          "to": 0,
+          "path": [
+            "p31",
+            "p23",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 6
+    },
+    {
+      "tasks": [
+        8
+      ],
+      "task_set": [
+        8
+      ],
+      "task_count": 1,
+      "load": 3.0,
+      "travel_time": 19.87857,
+      "return_time": 23.87857,
+      "energy": 16.921066,
+      "cost": 22.904996,
+      "cycle_time": 27.262783,
+      "service_start": {
+        "8": 9.939285
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 8,
+          "path": [
+            "p0",
+            "p1",
+            "p10",
+            "p18",
+            "p36"
+          ]
+        },
+        {
+          "from": 8,
+          "to": 0,
+          "path": [
+            "p36",
+            "p18",
+            "p10",
+            "p1",
+            "p0"
+          ]
+        }
+      ],
+      "id": 7
+    },
+    {
+      "tasks": [
+        9
+      ],
+      "task_set": [
+        9
+      ],
+      "task_count": 1,
+      "load": 1.0,
+      "travel_time": 30.83782,
+      "return_time": 32.83782,
+      "energy": 24.655368,
+      "cost": 30.644414,
+      "cycle_time": 37.768894,
+      "service_start": {
+        "9": 15.41891
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 9,
+          "path": [
+            "p0",
+            "p5",
+            "p7",
+            "p6",
+            "p16",
+            "p33",
+            "p41"
+          ]
+        },
+        {
+          "from": 9,
+          "to": 0,
+          "path": [
+            "p41",
+            "p33",
+            "p16",
+            "p6",
+            "p7",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 8
+    },
+    {
+      "tasks": [
+        10
+      ],
+      "task_set": [
+        10
+      ],
+      "task_count": 1,
+      "load": 2.0,
+      "travel_time": 24.9534,
+      "return_time": 27.9534,
+      "energy": 20.979614,
+      "cost": 26.712298,
+      "cycle_time": 32.149323,
+      "service_start": {
+        "10": 12.4767
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 10,
+          "path": [
+            "p0",
+            "p3",
+            "p11",
+            "p19",
+            "p27",
+            "p45"
+          ]
+        },
+        {
+          "from": 10,
+          "to": 0,
+          "path": [
+            "p45",
+            "p27",
+            "p19",
+            "p11",
+            "p3",
+            "p0"
+          ]
+        }
+      ],
+      "id": 9
+    },
+    {
+      "tasks": [
+        11
+      ],
+      "task_set": [
+        11
+      ],
+      "task_count": 1,
+      "load": 3.0,
+      "travel_time": 25.68177,
+      "return_time": 29.68177,
+      "energy": 18.67822,
+      "cost": 25.61152,
+      "cycle_time": 33.417414,
+      "service_start": {
+        "11": 12.840885
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 11,
+          "path": [
+            "p0",
+            "p5",
+            "p15",
+            "p32",
+            "p50"
+          ]
+        },
+        {
+          "from": 11,
+          "to": 0,
+          "path": [
+            "p50",
+            "p32",
+            "p15",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 10
+    },
+    {
+      "tasks": [
+        12
+      ],
+      "task_set": [
+        12
+      ],
+      "task_count": 1,
+      "load": 1.0,
+      "travel_time": 27.05029,
+      "return_time": 29.05029,
+      "energy": 21.945618,
+      "cost": 25.853862,
+      "cycle_time": 33.439414,
+      "service_start": {
+        "12": 13.525145
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 12,
+          "path": [
+            "p0",
+            "p4",
+            "p12",
+            "p30",
+            "p55"
+          ]
+        },
+        {
+          "from": 12,
+          "to": 0,
+          "path": [
+            "p55",
+            "p30",
+            "p12",
+            "p4",
+            "p0"
+          ]
+        }
+      ],
+      "id": 11
+    },
+    {
+      "tasks": [
+        13
+      ],
+      "task_set": [
+        13
+      ],
+      "task_count": 1,
+      "load": 2.0,
+      "travel_time": 32.00881,
+      "return_time": 35.00881,
+      "energy": 24.051194,
+      "cost": 32.98223,
+      "cycle_time": 39.819049,
+      "service_start": {
+        "13": 16.004405
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 13,
+          "path": [
+            "p0",
+            "p1",
+            "p9",
+            "p17",
+            "p35",
+            "p60"
+          ]
+        },
+        {
+          "from": 13,
+          "to": 0,
+          "path": [
+            "p60",
+            "p35",
+            "p17",
+            "p9",
+            "p1",
+            "p0"
+          ]
+        }
+      ],
+      "id": 12
+    },
+    {
+      "tasks": [
+        14
+      ],
+      "task_set": [
+        14
+      ],
+      "task_count": 1,
+      "load": 3.0,
+      "travel_time": 31.602522,
+      "return_time": 35.602522,
+      "energy": 24.893824,
+      "cost": 32.683974,
+      "cycle_time": 40.581287,
+      "service_start": {
+        "14": 15.801261
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 14,
+          "path": [
+            "p0",
+            "p4",
+            "p12",
+            "p30",
+            "p38",
+            "p64"
+          ]
+        },
+        {
+          "from": 14,
+          "to": 0,
+          "path": [
+            "p64",
+            "p38",
+            "p30",
+            "p12",
+            "p4",
+            "p0"
+          ]
+        }
+      ],
+      "id": 13
+    },
+    {
+      "tasks": [
+        15
+      ],
+      "task_set": [
+        15
+      ],
+      "task_count": 1,
+      "load": 1.0,
+      "travel_time": 47.638834,
+      "return_time": 49.638834,
+      "energy": 33.739788,
+      "cost": 46.182518,
+      "cycle_time": 56.386792,
+      "service_start": {
+        "15": 23.819417
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 15,
+          "path": [
+            "p0",
+            "p3",
+            "p11",
+            "p19",
+            "p27",
+            "p53",
+            "p61",
+            "p69"
+          ]
+        },
+        {
+          "from": 15,
+          "to": 0,
+          "path": [
+            "p69",
+            "p61",
+            "p53",
+            "p27",
+            "p19",
+            "p11",
+            "p3",
+            "p0"
+          ]
+        }
+      ],
+      "id": 14
+    },
+    {
+      "tasks": [
+        16
+      ],
+      "task_set": [
+        16
+      ],
+      "task_count": 1,
+      "load": 2.0,
+      "travel_time": 34.936574,
+      "return_time": 37.936574,
+      "energy": 27.202004,
+      "cost": 32.770384,
+      "cycle_time": 43.376975,
+      "service_start": {
+        "16": 17.468287
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 16,
+          "path": [
+            "p0",
+            "p4",
+            "p12",
+            "p30",
+            "p55",
+            "p73"
+          ]
+        },
+        {
+          "from": 16,
+          "to": 0,
+          "path": [
+            "p73",
+            "p55",
+            "p30",
+            "p12",
+            "p4",
+            "p0"
+          ]
+        }
+      ],
+      "id": 15
+    },
+    {
+      "tasks": [
+        17
+      ],
+      "task_set": [
+        17
+      ],
+      "task_count": 1,
+      "load": 3.0,
+      "travel_time": 37.348274,
+      "return_time": 41.348274,
+      "energy": 30.016696,
+      "cost": 38.167634,
+      "cycle_time": 47.351613,
+      "service_start": {
+        "17": 18.674137
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 17,
+          "path": [
+            "p0",
+            "p1",
+            "p9",
+            "p17",
+            "p35",
+            "p60",
+            "p78"
+          ]
+        },
+        {
+          "from": 17,
+          "to": 0,
+          "path": [
+            "p78",
+            "p60",
+            "p35",
+            "p17",
+            "p9",
+            "p1",
+            "p0"
+          ]
+        }
+      ],
+      "id": 16
+    },
+    {
+      "tasks": [
+        18
+      ],
+      "task_set": [
+        18
+      ],
+      "task_count": 1,
+      "load": 1.0,
+      "travel_time": 38.674234,
+      "return_time": 40.674234,
+      "energy": 30.020082,
+      "cost": 40.863152,
+      "cycle_time": 46.67825,
+      "service_start": {
+        "18": 19.337117
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 18,
+          "path": [
+            "p0",
+            "p5",
+            "p15",
+            "p32",
+            "p40",
+            "p58",
+            "p83"
+          ]
+        },
+        {
+          "from": 18,
+          "to": 0,
+          "path": [
+            "p83",
+            "p58",
+            "p40",
+            "p32",
+            "p15",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 17
+    },
+    {
+      "tasks": [
+        19
+      ],
+      "task_set": [
+        19
+      ],
+      "task_count": 1,
+      "load": 2.0,
+      "travel_time": 41.057856,
+      "return_time": 44.057856,
+      "energy": 34.335976,
+      "cost": 41.62674,
+      "cycle_time": 50.925051,
+      "service_start": {
+        "19": 20.528928
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 19,
+          "path": [
+            "p0",
+            "p3",
+            "p11",
+            "p19",
+            "p27",
+            "p45",
+            "p63",
+            "p88"
+          ]
+        },
+        {
+          "from": 19,
+          "to": 0,
+          "path": [
+            "p88",
+            "p63",
+            "p45",
+            "p27",
+            "p19",
+            "p11",
+            "p3",
+            "p0"
+          ]
+        }
+      ],
+      "id": 18
+    },
+    {
+      "tasks": [
+        20
+      ],
+      "task_set": [
+        20
+      ],
+      "task_count": 1,
+      "load": 3.0,
+      "travel_time": 47.758552,
+      "return_time": 51.758552,
+      "energy": 39.153238,
+      "cost": 48.675776,
+      "cycle_time": 59.5892,
+      "service_start": {
+        "20": 23.879276
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 20,
+          "path": [
+            "p0",
+            "p5",
+            "p7",
+            "p6",
+            "p16",
+            "p33",
+            "p51",
+            "p76",
+            "p94"
+          ]
+        },
+        {
+          "from": 20,
+          "to": 0,
+          "path": [
+            "p94",
+            "p76",
+            "p51",
+            "p33",
+            "p16",
+            "p6",
+            "p7",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 19
+    },
+    {
+      "tasks": [
+        1,
+        3,
+        2,
+        4,
+        6
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4,
+        6
+      ],
+      "task_count": 5,
+      "load": 9.0,
+      "travel_time": 38.294722,
+      "return_time": 52.294722,
+      "energy": 33.306781,
+      "cost": 44.504833,
+      "cycle_time": 58.956078,
+      "service_start": {
+        "1": 6.670355,
+        "3": 14.655715,
+        "2": 25.499426,
+        "4": 31.390824,
+        "6": 40.458537
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 1,
+          "path": [
+            "p0",
+            "p5",
+            "p7",
+            "p6"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 3,
+          "path": [
+            "p6",
+            "p7",
+            "p5",
+            "p13"
+          ]
+        },
+        {
+          "from": 3,
+          "to": 2,
+          "path": [
+            "p13",
+            "p4",
+            "p3",
+            "p2",
+            "p10"
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "path": [
+            "p10",
+            "p18"
+          ]
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "path": [
+            "p18",
+            "p28",
+            "p27"
+          ]
+        },
+        {
+          "from": 6,
+          "to": 0,
+          "path": [
+            "p27",
+            "p19",
+            "p11",
+            "p3",
+            "p0"
+          ]
+        }
+      ],
+      "id": 20
+    },
+    {
+      "tasks": [
+        8,
+        5,
+        7
+      ],
+      "task_set": [
+        5,
+        7,
+        8
+      ],
+      "task_count": 3,
+      "load": 8.0,
+      "travel_time": 40.43535,
+      "return_time": 51.43535,
+      "energy": 33.851442,
+      "cost": 44.861797,
+      "cycle_time": 58.205638,
+      "service_start": {
+        "8": 9.939285,
+        "5": 29.416487,
+        "7": 40.093811
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 8,
+          "path": [
+            "p0",
+            "p1",
+            "p10",
+            "p18",
+            "p36"
+          ]
+        },
+        {
+          "from": 8,
+          "to": 5,
+          "path": [
+            "p36",
+            "p18",
+            "p10",
+            "p2",
+            "p3",
+            "p4",
+            "p22"
+          ]
+        },
+        {
+          "from": 5,
+          "to": 7,
+          "path": [
+            "p22",
+            "p39",
+            "p31"
+          ]
+        },
+        {
+          "from": 7,
+          "to": 0,
+          "path": [
+            "p31",
+            "p23",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 21
+    },
+    {
+      "tasks": [
+        13,
+        9,
+        11
+      ],
+      "task_set": [
+        9,
+        11,
+        13
+      ],
+      "task_count": 3,
+      "load": 6.0,
+      "travel_time": 47.860342,
+      "return_time": 56.860342,
+      "energy": 37.661191,
+      "cost": 53.382124,
+      "cycle_time": 64.39258,
+      "service_start": {
+        "13": 16.004405,
+        "9": 31.738182,
+        "11": 40.019457
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 13,
+          "path": [
+            "p0",
+            "p1",
+            "p9",
+            "p17",
+            "p35",
+            "p60"
+          ]
+        },
+        {
+          "from": 13,
+          "to": 9,
+          "path": [
+            "p60",
+            "p35",
+            "p25",
+            "p33",
+            "p41"
+          ]
+        },
+        {
+          "from": 9,
+          "to": 11,
+          "path": [
+            "p41",
+            "p42",
+            "p50"
+          ]
+        },
+        {
+          "from": 11,
+          "to": 0,
+          "path": [
+            "p50",
+            "p32",
+            "p15",
+            "p5",
+            "p0"
+          ]
+        }
+      ],
+      "id": 22
+    },
+    {
+      "tasks": [
+        10,
+        14,
+        12
+      ],
+      "task_set": [
+        10,
+        12,
+        14
+      ],
+      "task_count": 3,
+      "load": 6.0,
+      "travel_time": 46.789111,
+      "return_time": 55.789111,
+      "energy": 36.681446,
+      "cost": 52.653887,
+      "cycle_time": 63.1254,
+      "service_start": {
+        "10": 12.4767,
+        "14": 29.941555,
+        "12": 40.263966
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 10,
+          "path": [
+            "p0",
+            "p3",
+            "p11",
+            "p19",
+            "p27",
+            "p45"
+          ]
+        },
+        {
+          "from": 10,
+          "to": 14,
+          "path": [
+            "p45",
+            "p46",
+            "p64"
+          ]
+        },
+        {
+          "from": 14,
+          "to": 12,
+          "path": [
+            "p64",
+            "p56",
+            "p55"
+          ]
+        },
+        {
+          "from": 12,
+          "to": 0,
+          "path": [
+            "p55",
+            "p30",
+            "p12",
+            "p4",
+            "p0"
+          ]
+        }
+      ],
+      "id": 23
+    }
+  ],
+  "report": {
+    "mode": "route_vehicle_branch_price_cut",
+    "generated_routes": 24,
+    "generated_columns": 64,
+    "priced_columns": 0,
+    "redcost_columns": 0,
+    "farkas_columns": 0,
+    "redcost_calls": 1,
+    "farkas_calls": 0,
+    "pricing_calls": 1,
+    "early_pricing_returns": 0,
+    "dominated_labels": 0,
+    "schedule_cut_count": 0,
+    "schedule_cut_constraint_count": 0,
+    "tree_schedule_cuts": false,
+    "tree_schedule_cut_handler": {
+      "enabled": false
+    },
+    "raw_schedule_cut_count": 0,
+    "pricing_time_budget": 1e-06,
+    "pricing_progress_interval": 0,
+    "pricing_budget_interrupts": 1,
+    "pricing_incomplete_due_to_budget": true,
+    "pricing_budget_incomplete_phase": "redcost",
+    "pricing_phase_stats": {
+      "redcost": {
+        "calls": 1,
+        "seconds": 2.1e-05,
+        "label_pops": 0,
+        "columns_found": 0,
+        "columns_added": 0,
+        "timeouts": 1,
+        "exhausted": 0,
+        "early_returns": 0
+      }
+    },
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "schedule_feasible": {
+        "enabled": true,
+        "submitted": true,
+        "vehicles_used": 3,
+        "routes": 10,
+        "selected": [
+          [
+            1,
+            20,
+            [
+              1,
+              3,
+              2,
+              4,
+              6
+            ]
+          ],
+          [
+            1,
+            15,
+            [
+              16
+            ]
+          ],
+          [
+            1,
+            16,
+            [
+              17
+            ]
+          ],
+          [
+            1,
+            19,
+            [
+              20
+            ]
+          ],
+          [
+            2,
+            21,
+            [
+              8,
+              5,
+              7
+            ]
+          ],
+          [
+            2,
+            14,
+            [
+              15
+            ]
+          ],
+          [
+            2,
+            17,
+            [
+              18
+            ]
+          ],
+          [
+            3,
+            22,
+            [
+              13,
+              9,
+              11
+            ]
+          ],
+          [
+            3,
+            23,
+            [
+              10,
+              14,
+              12
+            ]
+          ],
+          [
+            3,
+            18,
+            [
+              19
+            ]
+          ]
+        ]
+      },
+      "legacy": {
+        "enabled": false,
+        "skipped": true
+      }
+    },
+    "strict_pricing": false,
+    "eps": 1e-06,
+    "cut_rounds": 1,
+    "schedule_cuts_added": 0,
+    "outer_schedule_cuts_added": 0,
+    "tree_schedule_cuts_added": 0,
+    "final_schedule_cut_count": 0,
+    "final_schedule_cut_constraint_count": 0,
+    "cut_kinds": {
+      "infeasible_route_set": 0,
+      "pairwise_incompatible": 0
+    },
+    "schedule_feasible_solution": true,
+    "last_schedule_conflicts": [],
+    "schedule_cuts": []
+  },
+  "solution": {
+    "summary": {
+      "status": "PRICING_TIME_BUDGET",
+      "status_code": "userinterrupt",
+      "objective": 743.688845,
+      "runtime": 0.00122,
+      "best_bound": null,
+      "mip_gap": null,
+      "node_count": 1,
+      "solution_count": 1,
+      "pricing_budget_interrupted": true,
+      "pricing_budget_incomplete_phase": "redcost",
+      "uses_artificial": false,
+      "artificial_task_count": 0
+    },
+    "vehicles": {
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0
+    },
+    "sorties": [
+      {
+        "vehicle": 2,
+        "sortie": 1,
+        "route_id": 14,
+        "tasks": [
+          15
+        ],
+        "cost": 46.182518,
+        "load": 1.0,
+        "energy": 33.739788,
+        "return_time": 49.638834,
+        "cycle_time": 56.386792,
+        "work_time_lb": 56.386792,
+        "service_start": {
+          "15": 23.819417
+        }
+      },
+      {
+        "vehicle": 1,
+        "sortie": 1,
+        "route_id": 15,
+        "tasks": [
+          16
+        ],
+        "cost": 32.770384,
+        "load": 2.0,
+        "energy": 27.202004,
+        "return_time": 37.936574,
+        "cycle_time": 43.376975,
+        "work_time_lb": 43.376975,
+        "service_start": {
+          "16": 17.468287
+        }
+      },
+      {
+        "vehicle": 1,
+        "sortie": 2,
+        "route_id": 16,
+        "tasks": [
+          17
+        ],
+        "cost": 38.167634,
+        "load": 3.0,
+        "energy": 30.016696,
+        "return_time": 41.348274,
+        "cycle_time": 47.351613,
+        "work_time_lb": 47.351613,
+        "service_start": {
+          "17": 18.674137
+        }
+      },
+      {
+        "vehicle": 2,
+        "sortie": 2,
+        "route_id": 17,
+        "tasks": [
+          18
+        ],
+        "cost": 40.863152,
+        "load": 1.0,
+        "energy": 30.020082,
+        "return_time": 40.674234,
+        "cycle_time": 46.67825,
+        "work_time_lb": 46.67825,
+        "service_start": {
+          "18": 19.337117
+        }
+      },
+      {
+        "vehicle": 3,
+        "sortie": 1,
+        "route_id": 18,
+        "tasks": [
+          19
+        ],
+        "cost": 41.62674,
+        "load": 2.0,
+        "energy": 34.335976,
+        "return_time": 44.057856,
+        "cycle_time": 50.925051,
+        "work_time_lb": 50.925051,
+        "service_start": {
+          "19": 20.528928
+        }
+      },
+      {
+        "vehicle": 1,
+        "sortie": 3,
+        "route_id": 19,
+        "tasks": [
+          20
+        ],
+        "cost": 48.675776,
+        "load": 3.0,
+        "energy": 39.153238,
+        "return_time": 51.758552,
+        "cycle_time": 59.5892,
+        "work_time_lb": 59.5892,
+        "service_start": {
+          "20": 23.879276
+        }
+      },
+      {
+        "vehicle": 1,
+        "sortie": 4,
+        "route_id": 20,
+        "tasks": [
+          1,
+          3,
+          2,
+          4,
+          6
+        ],
+        "cost": 44.504833,
+        "load": 9.0,
+        "energy": 33.306781,
+        "return_time": 52.294722,
+        "cycle_time": 58.956078,
+        "work_time_lb": 58.956078,
+        "service_start": {
+          "1": 6.670355,
+          "3": 14.655715,
+          "2": 25.499426,
+          "4": 31.390824,
+          "6": 40.458537
+        }
+      },
+      {
+        "vehicle": 2,
+        "sortie": 3,
+        "route_id": 21,
+        "tasks": [
+          8,
+          5,
+          7
+        ],
+        "cost": 44.861797,
+        "load": 8.0,
+        "energy": 33.851442,
+        "return_time": 51.43535,
+        "cycle_time": 58.205638,
+        "work_time_lb": 58.205638,
+        "service_start": {
+          "8": 9.939285,
+          "5": 29.416487,
+          "7": 40.093811
+        }
+      },
+      {
+        "vehicle": 3,
+        "sortie": 2,
+        "route_id": 22,
+        "tasks": [
+          13,
+          9,
+          11
+        ],
+        "cost": 53.382124,
+        "load": 6.0,
+        "energy": 37.661191,
+        "return_time": 56.860342,
+        "cycle_time": 64.39258,
+        "work_time_lb": 64.39258,
+        "service_start": {
+          "13": 16.004405,
+          "9": 31.738182,
+          "11": 40.019457
+        }
+      },
+      {
+        "vehicle": 3,
+        "sortie": 3,
+        "route_id": 23,
+        "tasks": [
+          10,
+          14,
+          12
+        ],
+        "cost": 52.653887,
+        "load": 6.0,
+        "energy": 36.681446,
+        "return_time": 55.789111,
+        "cycle_time": 63.1254,
+        "work_time_lb": 63.1254,
+        "service_start": {
+          "10": 12.4767,
+          "14": 29.941555,
+          "12": 40.263966
+        }
+      }
+    ],
+    "selected_route_ids": [
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "artificial_tasks": [],
+    "vehicle_schedules": [
+      {
+        "vehicle": 2,
+        "ready_time": 161.27068,
+        "route_order": [
+          17,
+          21,
+          14
+        ],
+        "routes": [
+          {
+            "route_id": 17,
+            "tasks": [
+              18
+            ],
+            "cost": 40.863152,
+            "energy": 30.020082
+          },
+          {
+            "route_id": 21,
+            "tasks": [
+              8,
+              5,
+              7
+            ],
+            "cost": 44.861797,
+            "energy": 33.851442
+          },
+          {
+            "route_id": 14,
+            "tasks": [
+              15
+            ],
+            "cost": 46.182518,
+            "energy": 33.739788
+          }
+        ]
+      },
+      {
+        "vehicle": 1,
+        "ready_time": 209.273866,
+        "route_order": [
+          20,
+          15,
+          16,
+          19
+        ],
+        "routes": [
+          {
+            "route_id": 20,
+            "tasks": [
+              1,
+              3,
+              2,
+              4,
+              6
+            ],
+            "cost": 44.504833,
+            "energy": 33.306781
+          },
+          {
+            "route_id": 15,
+            "tasks": [
+              16
+            ],
+            "cost": 32.770384,
+            "energy": 27.202004
+          },
+          {
+            "route_id": 16,
+            "tasks": [
+              17
+            ],
+            "cost": 38.167634,
+            "energy": 30.016696
+          },
+          {
+            "route_id": 19,
+            "tasks": [
+              20
+            ],
+            "cost": 48.675776,
+            "energy": 39.153238
+          }
+        ]
+      },
+      {
+        "vehicle": 3,
+        "ready_time": 178.443031,
+        "route_order": [
+          23,
+          22,
+          18
+        ],
+        "routes": [
+          {
+            "route_id": 23,
+            "tasks": [
+              10,
+              14,
+              12
+            ],
+            "cost": 52.653887,
+            "energy": 36.681446
+          },
+          {
+            "route_id": 22,
+            "tasks": [
+              13,
+              9,
+              11
+            ],
+            "cost": 53.382124,
+            "energy": 37.661191
+          },
+          {
+            "route_id": 18,
+            "tasks": [
+              19
+            ],
+            "cost": 41.62674,
+            "energy": 34.335976
+          }
+        ]
+      }
+    ]
+  }
+}

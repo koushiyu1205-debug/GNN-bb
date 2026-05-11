@@ -1,0 +1,578 @@
+{
+  "summary": {
+    "status": "TIME_LIMIT",
+    "status_code": "timelimit",
+    "objective": 526.902419,
+    "runtime": 15.133059,
+    "best_bound": 524.340684,
+    "mip_gap": null,
+    "node_count": 147,
+    "solution_count": 17,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "route_vehicle_branch_price_cut",
+    "generated_routes": 209,
+    "generated_columns": 567,
+    "priced_columns": 502,
+    "redcost_columns": 502,
+    "farkas_columns": 0,
+    "redcost_calls": 333,
+    "farkas_calls": 0,
+    "pricing_calls": 333,
+    "early_pricing_returns": 185,
+    "dominated_labels": 127883,
+    "schedule_cut_count": 22,
+    "schedule_cut_constraint_count": 66,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "submitted": true,
+      "routes": 9,
+      "covered_tasks": 20,
+      "uncovered_tasks": []
+    },
+    "strict_pricing": true,
+    "eps": 1e-06,
+    "cut_rounds": 17,
+    "schedule_cuts_added": 24,
+    "final_schedule_cut_count": 24,
+    "final_schedule_cut_constraint_count": 72,
+    "cut_kinds": {
+      "infeasible_route_set": 24,
+      "pairwise_incompatible": 0
+    },
+    "schedule_feasible_solution": false,
+    "last_schedule_conflicts": [
+      {
+        "vehicle": 2,
+        "route_ids": [
+          78,
+          195
+        ],
+        "signatures": [
+          [
+            15,
+            8,
+            4,
+            2
+          ],
+          [
+            12,
+            16,
+            14,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "route_ids": [
+          67,
+          132,
+          196
+        ],
+        "signatures": [
+          [
+            9,
+            1
+          ],
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            6,
+            19,
+            10
+          ]
+        ]
+      }
+    ],
+    "schedule_cuts": [
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            14,
+            16,
+            12,
+            5
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            15,
+            8,
+            4,
+            2
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            9,
+            1
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            14,
+            16,
+            12,
+            5
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            9,
+            1
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            5,
+            14,
+            16,
+            12
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            14,
+            12,
+            16,
+            5
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            14,
+            12,
+            16,
+            5
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            1,
+            9
+          ],
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            14,
+            12,
+            16,
+            5
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            5,
+            14,
+            16,
+            12
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            11,
+            18,
+            7,
+            3
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            3,
+            7,
+            18,
+            11
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            5,
+            14,
+            16,
+            12
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            12,
+            16,
+            14,
+            5
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            12,
+            16,
+            14,
+            5
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            5,
+            14,
+            12,
+            16
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            5,
+            12,
+            16,
+            14
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            12,
+            16,
+            14,
+            5
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "scope": "all_vehicles",
+        "source_vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            6,
+            19,
+            10
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      }
+    ]
+  }
+}

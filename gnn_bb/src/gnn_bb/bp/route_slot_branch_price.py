@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 import heapq
 from math import isfinite
 from pathlib import Path
+import time
 from typing import Any
 
 from gnn_bb.data.instances import task_ids
@@ -206,6 +207,88 @@ class RouteVehiclePricer:
         self.farkas_calls = 0
         self.early_pricing_returns = 0
         self.dominated_labels = 0
+        self.pricing_time_budget = max(0.0, float(data.get("pricing_time_budget", 0.0) or 0.0))
+        self.pricing_progress_interval = max(0, int(data.get("pricing_progress_interval", 0) or 0))
+        self.total_pricing_label_pops = 0
+        self.next_pricing_progress_label = self.pricing_progress_interval
+        self.pricing_budget_interrupts = 0
+        self.pricing_incomplete_due_to_budget = False
+        self.pricing_budget_incomplete_phase: str | None = None
+        self.pricing_phase_stats: dict[str, dict[str, float | int]] = {}
+
+    def _pricing_deadline(self) -> float | None:
+        if self.pricing_time_budget <= 0.0:
+            return None
+        return time.perf_counter() + self.pricing_time_budget
+
+    def _phase_stats(self, phase: str) -> dict[str, float | int]:
+        return self.pricing_phase_stats.setdefault(
+            phase,
+            {
+                "calls": 0,
+                "seconds": 0.0,
+                "label_pops": 0,
+                "columns_found": 0,
+                "columns_added": 0,
+                "timeouts": 0,
+                "exhausted": 0,
+                "early_returns": 0,
+            },
+        )
+
+    def _record_pricing_phase(
+        self,
+        phase: str,
+        seconds: float,
+        label_pops: int,
+        columns_found: int,
+        columns_added: int,
+        timed_out: bool,
+        exhausted: bool,
+    ) -> None:
+        stats = self._phase_stats(phase)
+        stats["calls"] = int(stats["calls"]) + 1
+        stats["seconds"] = float(stats["seconds"]) + float(seconds)
+        stats["label_pops"] = int(stats["label_pops"]) + int(label_pops)
+        stats["columns_found"] = int(stats["columns_found"]) + int(columns_found)
+        stats["columns_added"] = int(stats["columns_added"]) + int(columns_added)
+        if timed_out:
+            stats["timeouts"] = int(stats["timeouts"]) + 1
+        if exhausted:
+            stats["exhausted"] = int(stats["exhausted"]) + 1
+        if columns_found and not exhausted:
+            stats["early_returns"] = int(stats["early_returns"]) + 1
+
+    def _interrupt_for_pricing_budget(self, model, phase: str) -> None:
+        # 中文注释：exact pricing 未完成时不能声明“无负 reduced-cost 列”，因此直接中断 SCIP 并清空后续 dual/gap 证明。
+        self.pricing_budget_interrupts += 1
+        self.pricing_incomplete_due_to_budget = True
+        self.pricing_budget_incomplete_phase = phase
+        try:
+            model.interruptSolve()
+        except Exception:
+            pass
+
+    def _log_pricing_progress(
+        self,
+        pricing_mode: str,
+        label_pops: int,
+        queue_size: int,
+        columns_found: int,
+        elapsed: float,
+    ) -> None:
+        if self.pricing_progress_interval <= 0:
+            return
+        if self.total_pricing_label_pops < self.next_pricing_progress_label:
+            return
+        self.next_pricing_progress_label += self.pricing_progress_interval
+        print(
+            "[pricing] "
+            f"mode={pricing_mode} total_labels={self.total_pricing_label_pops} call_labels={label_pops} queue={queue_size} "
+            f"found={columns_found} routes={len(self.routes)} columns={len(self.columns)} "
+            f"cuts={len(self.data.get('schedule_cuts', []))} elapsed={elapsed:.2f}s",
+            flush=True,
+        )
 
     def on_pricer_init(self, model) -> None:
         # 中文注释：SCIP transform 后必须把原始约束引用更新成 transformed 约束。
@@ -358,6 +441,9 @@ class RouteVehiclePricer:
             return -dual_sum
         return cost - dual_sum
 
+    def _dominance_key(self, label: Label):
+        return (label.node, label.visited)
+
     def _dominates(self, left: Label, right: Label) -> bool:
         if left.node != right.node or left.visited != right.visited:
             return False
@@ -369,7 +455,7 @@ class RouteVehiclePricer:
         )
 
     def _is_dominated_or_record(self, label: Label, nondominated: dict[tuple[int, frozenset[int]], list[Label]]) -> bool:
-        key = (label.node, label.visited)
+        key = self._dominance_key(label)
         labels = nondominated.setdefault(key, [])
         for existing in labels:
             if self._dominates(existing, label):
@@ -378,6 +464,9 @@ class RouteVehiclePricer:
         nondominated[key].append(label)
         return False
 
+    def _can_use_dominance(self, vehicle_time_duals) -> bool:
+        return max(vehicle_time_duals.values(), default=0.0) <= DOMINANCE_TOL
+
     def _exact_pricing(self, cover_duals, sortie_count_duals, vehicle_time_duals, pricing_mode: str, stop_after_first_route: bool = False):
         tasks = task_ids(self.instance)
         vehicles = self.instance["vehicles"]
@@ -385,14 +474,23 @@ class RouteVehiclePricer:
         b_limit = float(vehicles["B_use"])
         horizon = float(vehicles["H"])
         best_columns = []
-        use_dominance = max(vehicle_time_duals.values(), default=0.0) <= DOMINANCE_TOL
+        use_dominance = self._can_use_dominance(vehicle_time_duals)
+        start_time = time.perf_counter()
+        deadline = self._pricing_deadline()
+        label_pops = 0
         start_label = Label(0.0, 0, None, None, frozenset(), 0.0, 0.0, 0.0, 0.0, 0.0, None, None)
         queue = [start_label]
-        nondominated = {(start_label.node, start_label.visited): [start_label]} if use_dominance else {}
+        nondominated = {self._dominance_key(start_label): [start_label]} if use_dominance else {}
 
         while queue:
+            if deadline is not None and time.perf_counter() >= deadline:
+                best_columns.sort(key=lambda item: item[0])
+                return best_columns, False, label_pops, True
             label = heapq.heappop(queue)
-            if use_dominance and not any(existing is label for existing in nondominated.get((label.node, label.visited), [])):
+            label_pops += 1
+            self.total_pricing_label_pops += 1
+            self._log_pricing_progress(pricing_mode, label_pops, len(queue), len(best_columns), time.perf_counter() - start_time)
+            if use_dominance and not any(existing is label for existing in nondominated.get(self._dominance_key(label), [])):
                 continue
             for task_id in tasks:
                 if task_id in label.visited:
@@ -450,26 +548,32 @@ class RouteVehiclePricer:
                     if stop_after_first_route:
                         self.early_pricing_returns += 1
                         best_columns.sort(key=lambda item: item[0])
-                        return best_columns
+                        return best_columns, False, label_pops, False
                 heapq.heappush(queue, next_label)
 
         best_columns.sort(key=lambda item: item[0])
-        return best_columns
+        return best_columns, True, label_pops, False
 
     def on_pricer_redcost(self, model):
         from pyscipopt import SCIP_RESULT
 
         self.redcost_calls += 1
         cover_duals, sortie_count_duals, vehicle_time_duals = self._duals(model)
-        priced_columns = self._exact_pricing(
+        started = time.perf_counter()
+        priced_columns, exhausted, label_pops, timed_out = self._exact_pricing(
             cover_duals,
             sortie_count_duals,
             vehicle_time_duals,
             pricing_mode="redcost",
             stop_after_first_route=True,
         )
+        added = 0
         for _, route, r in priced_columns:
-            self.add_column(model, route, r, priced_var=True, source="redcost")
+            if self.add_column(model, route, r, priced_var=True, source="redcost"):
+                added += 1
+        self._record_pricing_phase("redcost", time.perf_counter() - started, label_pops, len(priced_columns), added, timed_out, exhausted)
+        if timed_out and added == 0:
+            self._interrupt_for_pricing_budget(model, "redcost")
         return {"result": SCIP_RESULT.SUCCESS}
 
     def on_pricer_farkas(self, model):
@@ -477,15 +581,21 @@ class RouteVehiclePricer:
 
         self.farkas_calls += 1
         cover_duals, sortie_count_duals, vehicle_time_duals = self._farkas_duals(model)
-        priced_columns = self._exact_pricing(
+        started = time.perf_counter()
+        priced_columns, exhausted, label_pops, timed_out = self._exact_pricing(
             cover_duals,
             sortie_count_duals,
             vehicle_time_duals,
             pricing_mode="farkas",
             stop_after_first_route=True,
         )
+        added = 0
         for _, route, r in priced_columns:
-            self.add_column(model, route, r, priced_var=True, source="farkas")
+            if self.add_column(model, route, r, priced_var=True, source="farkas"):
+                added += 1
+        self._record_pricing_phase("farkas", time.perf_counter() - started, label_pops, len(priced_columns), added, timed_out, exhausted)
+        if timed_out and added == 0:
+            self._interrupt_for_pricing_budget(model, "farkas")
         return {"result": SCIP_RESULT.SUCCESS}
 
 

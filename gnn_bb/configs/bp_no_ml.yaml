@@ -24,6 +24,7 @@ schedule_stabilization_max_alpha: 0.95
 schedule_stabilization_label_limit: 20000
 schedule_stabilization_volatility_threshold: 0.25
 schedule_pricing_preprocess: true
+schedule_pricing_time_budget_sec: 0.0
 memory_limit_mb: 12000
 artificial_penalty: 1000000.0
 rmp_params:

@@ -1,0 +1,600 @@
+{
+  "summary": {
+    "status": "CUT_ROUND_LIMIT",
+    "status_code": "optimal",
+    "objective": 526.902419,
+    "runtime": 10.674826,
+    "best_bound": 526.902419,
+    "mip_gap": null,
+    "node_count": 119,
+    "solution_count": 17,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "route_vehicle_branch_price_cut",
+    "generated_routes": 211,
+    "generated_columns": 570,
+    "priced_columns": 505,
+    "redcost_columns": 505,
+    "farkas_columns": 0,
+    "redcost_calls": 305,
+    "farkas_calls": 0,
+    "pricing_calls": 305,
+    "early_pricing_returns": 186,
+    "dominated_labels": 104086,
+    "schedule_cut_count": 28,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "submitted": true,
+      "routes": 9,
+      "covered_tasks": 20,
+      "uncovered_tasks": []
+    },
+    "strict_pricing": true,
+    "eps": 1e-06,
+    "cut_rounds": 20,
+    "schedule_cuts_added": 30,
+    "final_schedule_cut_count": 30,
+    "cut_kinds": {
+      "infeasible_route_set": 30,
+      "pairwise_incompatible": 0
+    },
+    "schedule_feasible_solution": true,
+    "schedule_cuts": [
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            14,
+            16,
+            12,
+            5
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            14,
+            16,
+            12,
+            5
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            15,
+            8,
+            4,
+            2
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            15,
+            8,
+            4,
+            2
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            9,
+            1
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            14,
+            16,
+            12,
+            5
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            9,
+            1
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            9,
+            1
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            16,
+            12,
+            14,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            15,
+            8,
+            4,
+            2
+          ],
+          [
+            16,
+            12,
+            14,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            6,
+            19,
+            10
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            5,
+            14,
+            16,
+            12
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ],
+          [
+            17,
+            13
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            9,
+            1
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            1,
+            9
+          ],
+          [
+            15,
+            8,
+            4,
+            2
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            11,
+            18,
+            7,
+            3
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            5,
+            14,
+            16,
+            12
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            9,
+            1
+          ],
+          [
+            14,
+            16,
+            12,
+            5
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            3,
+            7,
+            18,
+            11
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            1,
+            9
+          ],
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            5,
+            14,
+            16,
+            12
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            5,
+            14,
+            16,
+            12
+          ],
+          [
+            9,
+            1
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            3,
+            7,
+            18,
+            11
+          ]
+        ]
+      },
+      {
+        "vehicle": 1,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            2,
+            4,
+            8,
+            15
+          ],
+          [
+            19,
+            10,
+            6
+          ]
+        ]
+      },
+      {
+        "vehicle": 2,
+        "kind": "infeasible_route_set",
+        "signatures": [
+          [
+            3,
+            7,
+            18,
+            11
+          ],
+          [
+            12,
+            16,
+            14,
+            5
+          ]
+        ]
+      }
+    ]
+  }
+}

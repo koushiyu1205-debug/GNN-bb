@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stabilization-alpha", type=float, help="初始 pi_stab = alpha*pi_current + (1-alpha)*pi_center 的 alpha")
     parser.add_argument("--stabilization-label-limit", type=int, help="stabilized heuristic pricing 的标签弹出上限")
     parser.add_argument("--disable-pricing-preprocess", action="store_true", help="关闭 pricing 前的确定性连接预处理，用于 ablation")
+    parser.add_argument("--pricing-time-budget", type=float, help="单次 Python pricer 回调的墙钟秒数预算；0 表示关闭")
     parser.add_argument("--memory-limit-mb", type=float, help="覆盖求解进程内存保护阈值，单位 MB")
     parser.add_argument("--quiet", action="store_true", help="关闭 SCIP 控制台日志")
     return parser.parse_args()
@@ -80,6 +81,11 @@ def main() -> None:
         if args.stabilization_label_limit is not None
         else config.get("schedule_stabilization_label_limit", 20000)
     )
+    pricing_time_budget = float(
+        args.pricing_time_budget
+        if args.pricing_time_budget is not None
+        else config.get("schedule_pricing_time_budget_sec", 0.0)
+    )
     memory_limit_mb = (
         float(args.memory_limit_mb)
         if args.memory_limit_mb is not None
@@ -101,7 +107,7 @@ def main() -> None:
             f"column_pool_size={column_pool_size}, column_pool_rc_margin={column_pool_rc_margin:g}, "
             f"stabilized_pricing={stabilized_pricing}, stabilization_alpha={stabilization_alpha:g}, "
             f"stabilization_label_limit={stabilization_label_limit}, "
-            f"pricing_preprocess={pricing_preprocess}, "
+            f"pricing_preprocess={pricing_preprocess}, pricing_time_budget={pricing_time_budget:g}s, "
             f"memory_limit_mb={memory_limit_mb}, log={log_path}",
             flush=True,
         )
@@ -124,6 +130,7 @@ def main() -> None:
             stabilization_label_limit=stabilization_label_limit,
             stabilization_volatility_threshold=float(config.get("schedule_stabilization_volatility_threshold", 0.25)),
             pricing_preprocess=pricing_preprocess,
+            pricing_time_budget=pricing_time_budget,
             memory_limit_mb=memory_limit_mb,
             rmp_params=dict(config.get("rmp_params", {})),
             seed=int(config["random_seed"]) if config.get("random_seed") is not None else None,

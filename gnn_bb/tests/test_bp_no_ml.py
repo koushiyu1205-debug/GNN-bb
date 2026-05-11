@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,9 +14,12 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from gnn_bb.bp.route_slot_branch_price import build_branch_price_model, evaluate_route
+from gnn_bb.bp.route_vehicle_bpc import solve_bpc_no_ml
+from gnn_bb.bp.schedule_checker import check_route_set_schedule_feasible
 from gnn_bb.bp.schedule_branch_price import BranchConstraint, BranchPriceSolver, IntegratedPricingLabel, _branch_coefficient_for_route, evaluate_sequence
 from gnn_bb.bp.vehicle_schedule_branch_price import build_branch_price_model as build_schedule_model
 from gnn_bb.bp.vehicle_schedule_branch_price import evaluate_schedule
+from gnn_bb.bp.vehicle_schedule_branch_price import solve_bp_no_ml as solve_schedule_bp
 from gnn_bb.data.instances import build_instance_from_legacy
 from gnn_bb.data.terrain import build_task_closure
 
@@ -57,6 +62,17 @@ class BPNoMLTests(unittest.TestCase):
         self.assertEqual(schedule["task_set"], [1, 2, 3, 4])
         self.assertGreater(schedule["ready_time"], 0.0)
 
+    def test_route_vehicle_bpc_schedule_checker(self):
+        instance = build_instance_from_legacy("very_small")
+        pairwise = build_task_closure(instance)
+        first = evaluate_route(instance, pairwise, [1, 2])
+        second = evaluate_route(instance, pairwise, [3, 4])
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        checked = check_route_set_schedule_feasible(instance, pairwise, [first, second])
+        self.assertTrue(checked.feasible)
+        self.assertEqual(set(checked.order), {0, 1})
+
     def test_vehicle_schedule_model_builds(self):
         try:
             import pyscipopt  # noqa: F401
@@ -69,6 +85,32 @@ class BPNoMLTests(unittest.TestCase):
         self.assertGreater(model.getNConss(), 0)
         self.assertGreater(len(pricer.schedules), 0)
         self.assertEqual(len(data["tasks"]), 4)
+
+    def test_vehicle_schedule_pricing_budget_reports_incomplete(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+        instance = build_instance_from_legacy("medium")
+        pairwise = build_task_closure(instance)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = solve_schedule_bp(
+                instance,
+                pairwise,
+                instance_path=root / "instance_medium.json",
+                time_limit=10,
+                log_path=root / "budget.log",
+                solution_path=root / "solution.json",
+                pricing_time_budget=0.000001,
+                max_columns_per_pricing=20,
+                log_level="quiet",
+            )
+            log = json.loads((root / "budget.log").read_text(encoding="utf-8"))
+        self.assertEqual(result.status, "PRICING_TIME_BUDGET")
+        self.assertIsNone(result.dual_bound)
+        self.assertFalse(log["report"]["strict_pricing"])
+        self.assertTrue(log["report"]["pricing_incomplete_due_to_budget"])
 
     def test_initial_rmp_builds(self):
         try:
@@ -188,6 +230,62 @@ class BPNoMLTests(unittest.TestCase):
         result = solver.solve()
         self.assertEqual(result.status, "OPTIMAL")
         self.assertAlmostEqual(result.primal_bound, 132.270984, places=5)
+
+    def test_route_vehicle_bpc_very_small_solves(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+        instance = build_instance_from_legacy("very_small")
+        pairwise = build_task_closure(instance)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = solve_bpc_no_ml(
+                instance,
+                pairwise,
+                instance_path=root / "instance_very_small.json",
+                time_limit=20,
+                log_path=root / "bpc.log",
+                solution_path=root / "solution.json",
+                max_nodes=200,
+                max_cut_rounds=5,
+                log_level="quiet",
+            )
+            solution = json.loads((root / "solution.json").read_text(encoding="utf-8"))
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertAlmostEqual(result.primal_bound, 132.270984, places=5)
+        self.assertTrue(solution["report"]["schedule_feasible_solution"])
+        self.assertTrue(solution["report"]["warm_start"]["schedule_feasible"]["submitted"])
+        self.assertGreaterEqual(len(solution["solution"].get("vehicle_schedules", [])), 1)
+
+    def test_route_vehicle_bpc_pricing_budget_reports_incomplete(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+        instance = build_instance_from_legacy("medium")
+        pairwise = build_task_closure(instance)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = solve_bpc_no_ml(
+                instance,
+                pairwise,
+                instance_path=root / "instance_medium.json",
+                time_limit=10,
+                log_path=root / "bpc_budget.log",
+                solution_path=root / "solution.json",
+                max_nodes=20,
+                max_cut_rounds=1,
+                pricing_time_budget=0.000001,
+                tree_schedule_cuts=False,
+                log_level="quiet",
+            )
+            log = json.loads((root / "bpc_budget.log").read_text(encoding="utf-8"))
+        self.assertEqual(result.status, "PRICING_TIME_BUDGET")
+        self.assertIsNone(result.dual_bound)
+        self.assertIsNone(result.gap)
+        self.assertTrue(log["report"]["pricing_incomplete_due_to_budget"])
+        self.assertFalse(log["report"]["strict_pricing"])
 
 
 if __name__ == "__main__":
