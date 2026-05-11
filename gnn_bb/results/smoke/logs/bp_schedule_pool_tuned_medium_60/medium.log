@@ -1,0 +1,49 @@
+{
+  "summary": {
+    "status": "TIME_LIMIT",
+    "status_code": "timelimit",
+    "objective": 690.973326,
+    "runtime": 65.909296,
+    "best_bound": null,
+    "mip_gap": null,
+    "node_count": 1,
+    "solution_count": 1,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "vehicle_schedule_branch_price",
+    "generated_routes": 158,
+    "generated_columns": 1067,
+    "priced_columns": 1045,
+    "redcost_columns": 1045,
+    "farkas_columns": 0,
+    "redcost_calls": 55,
+    "farkas_calls": 0,
+    "pricing_calls": 55,
+    "early_pricing_returns": 52,
+    "pricing_batch_cap_hits": 52,
+    "max_columns_per_pricing": 20,
+    "pool_size": 1000,
+    "max_pool_size": 1000,
+    "pool_score_margin": 50.0,
+    "pool_scans": 43,
+    "pool_hits": 3,
+    "pool_columns_added": 5,
+    "pool_evictions": 332988,
+    "pool_skipped_by_margin": 144078,
+    "open_label_dominance": "covered_current_node_used_sorties_with_return_ready",
+    "dominated_labels": 714844,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "routes": 9,
+      "schedules": 3,
+      "covered_tasks": 20,
+      "uncovered_tasks": [],
+      "submitted": true
+    },
+    "strict_pricing": true,
+    "eps": 1e-06
+  }
+}

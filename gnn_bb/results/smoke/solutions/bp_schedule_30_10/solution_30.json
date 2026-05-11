@@ -1,0 +1,5661 @@
+{
+  "schedules": [
+    {
+      "routes": [
+        [
+          1
+        ]
+      ],
+      "key": [
+        [
+          1
+        ]
+      ],
+      "task_set": [
+        1
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            1
+          ],
+          "task_set": [
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 9.976916,
+          "ready_time": 11.105032,
+          "duration": 11.105032,
+          "load": 2.0,
+          "energy": 5.640582,
+          "cost": 7.314064,
+          "travel_time": 6.976916,
+          "service_start": {
+            "1": 3.488458
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 1,
+              "path": [
+                "p0",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 0,
+              "path": [
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 7.314064,
+      "cost": 107.314064,
+      "ready_time": 11.105032,
+      "id": 0,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          2
+        ]
+      ],
+      "key": [
+        [
+          2
+        ]
+      ],
+      "task_set": [
+        2
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            2
+          ],
+          "task_set": [
+            2
+          ],
+          "start_time": 0.0,
+          "return_time": 21.175326,
+          "ready_time": 23.455499,
+          "duration": 23.455499,
+          "load": 3.0,
+          "energy": 11.400864,
+          "cost": 16.270886,
+          "travel_time": 17.175326,
+          "service_start": {
+            "2": 8.587663
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 2,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p7"
+              ]
+            },
+            {
+              "from": 2,
+              "to": 0,
+              "path": [
+                "p7",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 16.270886,
+      "cost": 116.270886,
+      "ready_time": 23.455499,
+      "id": 1,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          3
+        ]
+      ],
+      "key": [
+        [
+          3
+        ]
+      ],
+      "task_set": [
+        3
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            3
+          ],
+          "task_set": [
+            3
+          ],
+          "start_time": 0.0,
+          "return_time": 13.448687,
+          "ready_time": 15.053471,
+          "duration": 15.053471,
+          "load": 1.0,
+          "energy": 8.023922,
+          "cost": 11.902148,
+          "travel_time": 10.897374,
+          "service_start": {
+            "3": 6.0
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 3,
+              "path": [
+                "p0",
+                "p3",
+                "p2",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 0,
+              "path": [
+                "p10",
+                "p2",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 11.902148,
+      "cost": 111.902148,
+      "ready_time": 15.053471,
+      "id": 2,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          4
+        ]
+      ],
+      "key": [
+        [
+          4
+        ]
+      ],
+      "task_set": [
+        4
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            4
+          ],
+          "task_set": [
+            4
+          ],
+          "start_time": 0.0,
+          "return_time": 16.251523,
+          "ready_time": 17.800011,
+          "duration": 17.800011,
+          "load": 2.0,
+          "energy": 7.74244,
+          "cost": 10.410994,
+          "travel_time": 10.503046,
+          "service_start": {
+            "4": 8.0
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 4,
+              "path": [
+                "p0",
+                "p4",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 0,
+              "path": [
+                "p14",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 10.410994,
+      "cost": 110.410994,
+      "ready_time": 17.800011,
+      "id": 3,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          5
+        ]
+      ],
+      "key": [
+        [
+          5
+        ]
+      ],
+      "task_set": [
+        5
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            5
+          ],
+          "task_set": [
+            5
+          ],
+          "start_time": 0.0,
+          "return_time": 17.78701,
+          "ready_time": 19.83644,
+          "duration": 19.83644,
+          "load": 3.0,
+          "energy": 10.247148,
+          "cost": 14.637246,
+          "travel_time": 13.78701,
+          "service_start": {
+            "5": 6.893505
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 5,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 0,
+              "path": [
+                "p17",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 14.637246,
+      "cost": 114.637246,
+      "ready_time": 19.83644,
+      "id": 4,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          6
+        ]
+      ],
+      "key": [
+        [
+          6
+        ]
+      ],
+      "task_set": [
+        6
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            6
+          ],
+          "task_set": [
+            6
+          ],
+          "start_time": 0.0,
+          "return_time": 17.309848,
+          "ready_time": 19.214459,
+          "duration": 19.214459,
+          "load": 1.0,
+          "energy": 9.523054,
+          "cost": 14.287628,
+          "travel_time": 15.309848,
+          "service_start": {
+            "6": 7.654924
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 6,
+              "path": [
+                "p0",
+                "p1",
+                "p12",
+                "p20"
+              ]
+            },
+            {
+              "from": 6,
+              "to": 0,
+              "path": [
+                "p20",
+                "p12",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 14.287628,
+      "cost": 114.287628,
+      "ready_time": 19.214459,
+      "id": 5,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          7
+        ]
+      ],
+      "key": [
+        [
+          7
+        ]
+      ],
+      "task_set": [
+        7
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            7
+          ],
+          "task_set": [
+            7
+          ],
+          "start_time": 0.0,
+          "return_time": 17.728018,
+          "ready_time": 19.77101,
+          "duration": 19.77101,
+          "load": 2.0,
+          "energy": 10.214958,
+          "cost": 15.482388,
+          "travel_time": 14.728018,
+          "service_start": {
+            "7": 7.364009
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 7,
+              "path": [
+                "p0",
+                "p3",
+                "p2",
+                "p23"
+              ]
+            },
+            {
+              "from": 7,
+              "to": 0,
+              "path": [
+                "p23",
+                "p2",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 15.482388,
+      "cost": 115.482388,
+      "ready_time": 19.77101,
+      "id": 6,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          8
+        ]
+      ],
+      "key": [
+        [
+          8
+        ]
+      ],
+      "task_set": [
+        8
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            8
+          ],
+          "task_set": [
+            8
+          ],
+          "start_time": 0.0,
+          "return_time": 19.084104,
+          "ready_time": 21.246401,
+          "duration": 21.246401,
+          "load": 3.0,
+          "energy": 10.811486,
+          "cost": 15.742228,
+          "travel_time": 15.084104,
+          "service_start": {
+            "8": 7.542052
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 8,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p27"
+              ]
+            },
+            {
+              "from": 8,
+              "to": 0,
+              "path": [
+                "p27",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 15.742228,
+      "cost": 115.742228,
+      "ready_time": 21.246401,
+      "id": 7,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          9
+        ]
+      ],
+      "key": [
+        [
+          9
+        ]
+      ],
+      "task_set": [
+        9
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            9
+          ],
+          "task_set": [
+            9
+          ],
+          "start_time": 0.0,
+          "return_time": 16.348276,
+          "ready_time": 18.067875,
+          "duration": 18.067875,
+          "load": 1.0,
+          "energy": 8.597994,
+          "cost": 13.829374,
+          "travel_time": 12.696552,
+          "service_start": {
+            "9": 8.0
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 9,
+              "path": [
+                "p0",
+                "p1",
+                "p9",
+                "p30"
+              ]
+            },
+            {
+              "from": 9,
+              "to": 0,
+              "path": [
+                "p30",
+                "p9",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 13.829374,
+      "cost": 113.829374,
+      "ready_time": 18.067875,
+      "id": 8,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          10
+        ]
+      ],
+      "key": [
+        [
+          10
+        ]
+      ],
+      "task_set": [
+        10
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            10
+          ],
+          "task_set": [
+            10
+          ],
+          "start_time": 0.0,
+          "return_time": 19.51907,
+          "ready_time": 21.628398,
+          "duration": 21.628398,
+          "load": 2.0,
+          "energy": 10.546638,
+          "cost": 15.941298,
+          "travel_time": 16.51907,
+          "service_start": {
+            "10": 8.259535
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 10,
+              "path": [
+                "p0",
+                "p1",
+                "p12",
+                "p20",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 0,
+              "path": [
+                "p33",
+                "p20",
+                "p12",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 15.941298,
+      "cost": 115.941298,
+      "ready_time": 21.628398,
+      "id": 9,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          11
+        ]
+      ],
+      "key": [
+        [
+          11
+        ]
+      ],
+      "task_set": [
+        11
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            11
+          ],
+          "task_set": [
+            11
+          ],
+          "start_time": 0.0,
+          "return_time": 16.34077,
+          "ready_time": 18.427523,
+          "duration": 18.427523,
+          "load": 3.0,
+          "energy": 10.433764,
+          "cost": 13.896136,
+          "travel_time": 12.34077,
+          "service_start": {
+            "11": 6.170385
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 11,
+              "path": [
+                "p0",
+                "p5",
+                "p15",
+                "p36"
+              ]
+            },
+            {
+              "from": 11,
+              "to": 0,
+              "path": [
+                "p36",
+                "p15",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 13.896136,
+      "cost": 113.896136,
+      "ready_time": 18.427523,
+      "id": 10,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          12
+        ]
+      ],
+      "key": [
+        [
+          12
+        ]
+      ],
+      "task_set": [
+        12
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            12
+          ],
+          "task_set": [
+            12
+          ],
+          "start_time": 0.0,
+          "return_time": 17.178742,
+          "ready_time": 19.324681,
+          "duration": 19.324681,
+          "load": 1.0,
+          "energy": 10.729694,
+          "cost": 17.029164,
+          "travel_time": 15.178742,
+          "service_start": {
+            "12": 7.589371
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 12,
+              "path": [
+                "p0",
+                "p1",
+                "p19",
+                "p40"
+              ]
+            },
+            {
+              "from": 12,
+              "to": 0,
+              "path": [
+                "p40",
+                "p19",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 17.029164,
+      "cost": 117.029164,
+      "ready_time": 19.324681,
+      "id": 11,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          13
+        ]
+      ],
+      "key": [
+        [
+          13
+        ]
+      ],
+      "task_set": [
+        13
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            13
+          ],
+          "task_set": [
+            13
+          ],
+          "start_time": 0.0,
+          "return_time": 18.626974,
+          "ready_time": 21.079618,
+          "duration": 21.079618,
+          "load": 2.0,
+          "energy": 12.263222,
+          "cost": 16.181338,
+          "travel_time": 15.626974,
+          "service_start": {
+            "13": 7.813487
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 13,
+              "path": [
+                "p0",
+                "p4",
+                "p25",
+                "p43"
+              ]
+            },
+            {
+              "from": 13,
+              "to": 0,
+              "path": [
+                "p43",
+                "p25",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 16.181338,
+      "cost": 116.181338,
+      "ready_time": 21.079618,
+      "id": 12,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          14
+        ]
+      ],
+      "key": [
+        [
+          14
+        ]
+      ],
+      "task_set": [
+        14
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            14
+          ],
+          "task_set": [
+            14
+          ],
+          "start_time": 0.0,
+          "return_time": 19.842037,
+          "ready_time": 22.182393,
+          "duration": 22.182393,
+          "load": 3.0,
+          "energy": 11.701778,
+          "cost": 16.669852,
+          "travel_time": 15.684074,
+          "service_start": {
+            "14": 8.0
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 14,
+              "path": [
+                "p0",
+                "p4",
+                "p25",
+                "p46"
+              ]
+            },
+            {
+              "from": 14,
+              "to": 0,
+              "path": [
+                "p46",
+                "p25",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 16.669852,
+      "cost": 116.669852,
+      "ready_time": 22.182393,
+      "id": 13,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          15
+        ]
+      ],
+      "key": [
+        [
+          15
+        ]
+      ],
+      "task_set": [
+        15
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            15
+          ],
+          "task_set": [
+            15
+          ],
+          "start_time": 0.0,
+          "return_time": 21.672016,
+          "ready_time": 24.379609,
+          "duration": 24.379609,
+          "load": 1.0,
+          "energy": 13.537966,
+          "cost": 19.563378,
+          "travel_time": 19.672016,
+          "service_start": {
+            "15": 9.836008
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 15,
+              "path": [
+                "p0",
+                "p1",
+                "p11",
+                "p29",
+                "p50"
+              ]
+            },
+            {
+              "from": 15,
+              "to": 0,
+              "path": [
+                "p50",
+                "p29",
+                "p11",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 19.563378,
+      "cost": 119.563378,
+      "ready_time": 24.379609,
+      "id": 14,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          16
+        ]
+      ],
+      "key": [
+        [
+          16
+        ]
+      ],
+      "task_set": [
+        16
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            16
+          ],
+          "task_set": [
+            16
+          ],
+          "start_time": 0.0,
+          "return_time": 20.837764,
+          "ready_time": 23.253527,
+          "duration": 23.253527,
+          "load": 2.0,
+          "energy": 12.078814,
+          "cost": 19.666252,
+          "travel_time": 17.837764,
+          "service_start": {
+            "16": 8.918882
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 16,
+              "path": [
+                "p0",
+                "p3",
+                "p24",
+                "p45",
+                "p53"
+              ]
+            },
+            {
+              "from": 16,
+              "to": 0,
+              "path": [
+                "p53",
+                "p45",
+                "p24",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 19.666252,
+      "cost": 119.666252,
+      "ready_time": 23.253527,
+      "id": 15,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          17
+        ]
+      ],
+      "key": [
+        [
+          17
+        ]
+      ],
+      "task_set": [
+        17
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            17
+          ],
+          "task_set": [
+            17
+          ],
+          "start_time": 0.0,
+          "return_time": 25.164504,
+          "ready_time": 28.20221,
+          "duration": 28.20221,
+          "load": 3.0,
+          "energy": 15.188528,
+          "cost": 21.001122,
+          "travel_time": 21.164504,
+          "service_start": {
+            "17": 10.582252
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 17,
+              "path": [
+                "p0",
+                "p4",
+                "p25",
+                "p43",
+                "p56"
+              ]
+            },
+            {
+              "from": 17,
+              "to": 0,
+              "path": [
+                "p56",
+                "p43",
+                "p25",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 21.001122,
+      "cost": 121.001122,
+      "ready_time": 28.20221,
+      "id": 16,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          18
+        ]
+      ],
+      "key": [
+        [
+          18
+        ]
+      ],
+      "task_set": [
+        18
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            18
+          ],
+          "task_set": [
+            18
+          ],
+          "start_time": 0.0,
+          "return_time": 27.232226,
+          "ready_time": 30.649246,
+          "duration": 30.649246,
+          "load": 1.0,
+          "energy": 17.0851,
+          "cost": 27.02554,
+          "travel_time": 25.232226,
+          "service_start": {
+            "18": 12.616113
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 18,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p17",
+                "p38",
+                "p59"
+              ]
+            },
+            {
+              "from": 18,
+              "to": 0,
+              "path": [
+                "p59",
+                "p38",
+                "p17",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 27.02554,
+      "cost": 127.02554,
+      "ready_time": 30.649246,
+      "id": 17,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          19
+        ]
+      ],
+      "key": [
+        [
+          19
+        ]
+      ],
+      "task_set": [
+        19
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            19
+          ],
+          "task_set": [
+            19
+          ],
+          "start_time": 0.0,
+          "return_time": 25.98721,
+          "ready_time": 29.332301,
+          "duration": 29.332301,
+          "load": 2.0,
+          "energy": 16.725456,
+          "cost": 24.580016,
+          "travel_time": 22.98721,
+          "service_start": {
+            "19": 11.493605
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 19,
+              "path": [
+                "p0",
+                "p3",
+                "p21",
+                "p34",
+                "p55",
+                "p63"
+              ]
+            },
+            {
+              "from": 19,
+              "to": 0,
+              "path": [
+                "p63",
+                "p55",
+                "p34",
+                "p21",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 24.580016,
+      "cost": 124.580016,
+      "ready_time": 29.332301,
+      "id": 18,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          20
+        ]
+      ],
+      "key": [
+        [
+          20
+        ]
+      ],
+      "task_set": [
+        20
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            20
+          ],
+          "task_set": [
+            20
+          ],
+          "start_time": 0.0,
+          "return_time": 25.28797,
+          "ready_time": 28.14983,
+          "duration": 28.14983,
+          "load": 3.0,
+          "energy": 14.309302,
+          "cost": 23.572254,
+          "travel_time": 21.28797,
+          "service_start": {
+            "20": 10.643985
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 20,
+              "path": [
+                "p0",
+                "p3",
+                "p24",
+                "p45",
+                "p53",
+                "p66"
+              ]
+            },
+            {
+              "from": 20,
+              "to": 0,
+              "path": [
+                "p66",
+                "p53",
+                "p45",
+                "p24",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 23.572254,
+      "cost": 123.572254,
+      "ready_time": 28.14983,
+      "id": 19,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          21
+        ]
+      ],
+      "key": [
+        [
+          21
+        ]
+      ],
+      "task_set": [
+        21
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            21
+          ],
+          "task_set": [
+            21
+          ],
+          "start_time": 0.0,
+          "return_time": 26.405876,
+          "ready_time": 29.980246,
+          "duration": 29.980246,
+          "load": 1.0,
+          "energy": 17.87185,
+          "cost": 26.47221,
+          "travel_time": 24.405876,
+          "service_start": {
+            "21": 12.202938
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 21,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p27",
+                "p48",
+                "p69"
+              ]
+            },
+            {
+              "from": 21,
+              "to": 0,
+              "path": [
+                "p69",
+                "p48",
+                "p27",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 26.47221,
+      "cost": 126.47221,
+      "ready_time": 29.980246,
+      "id": 20,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          22
+        ]
+      ],
+      "key": [
+        [
+          22
+        ]
+      ],
+      "task_set": [
+        22
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            22
+          ],
+          "task_set": [
+            22
+          ],
+          "start_time": 0.0,
+          "return_time": 26.781742,
+          "ready_time": 30.011656,
+          "duration": 30.011656,
+          "load": 2.0,
+          "energy": 16.14957,
+          "cost": 25.036504,
+          "travel_time": 23.781742,
+          "service_start": {
+            "22": 11.890871
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 22,
+              "path": [
+                "p0",
+                "p1",
+                "p9",
+                "p30",
+                "p51",
+                "p72"
+              ]
+            },
+            {
+              "from": 22,
+              "to": 0,
+              "path": [
+                "p72",
+                "p51",
+                "p30",
+                "p9",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 25.036504,
+      "cost": 125.036504,
+      "ready_time": 30.011656,
+      "id": 21,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          23
+        ]
+      ],
+      "key": [
+        [
+          23
+        ]
+      ],
+      "task_set": [
+        23
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            23
+          ],
+          "task_set": [
+            23
+          ],
+          "start_time": 0.0,
+          "return_time": 29.462878,
+          "ready_time": 33.30261,
+          "duration": 33.30261,
+          "load": 3.0,
+          "energy": 19.198662,
+          "cost": 25.202146,
+          "travel_time": 25.462878,
+          "service_start": {
+            "23": 12.731439
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 23,
+              "path": [
+                "p0",
+                "p5",
+                "p26",
+                "p47",
+                "p89",
+                "p76"
+              ]
+            },
+            {
+              "from": 23,
+              "to": 0,
+              "path": [
+                "p76",
+                "p89",
+                "p47",
+                "p26",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 25.202146,
+      "cost": 125.202146,
+      "ready_time": 33.30261,
+      "id": 22,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          24
+        ]
+      ],
+      "key": [
+        [
+          24
+        ]
+      ],
+      "task_set": [
+        24
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            24
+          ],
+          "task_set": [
+            24
+          ],
+          "start_time": 0.0,
+          "return_time": 25.491454,
+          "ready_time": 29.082116,
+          "duration": 29.082116,
+          "load": 1.0,
+          "energy": 17.95331,
+          "cost": 26.056942,
+          "travel_time": 23.491454,
+          "service_start": {
+            "24": 11.745727
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 24,
+              "path": [
+                "p0",
+                "p5",
+                "p26",
+                "p37",
+                "p58",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 0,
+              "path": [
+                "p79",
+                "p58",
+                "p37",
+                "p26",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 26.056942,
+      "cost": 126.056942,
+      "ready_time": 29.082116,
+      "id": 23,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          25
+        ]
+      ],
+      "key": [
+        [
+          25
+        ]
+      ],
+      "task_set": [
+        25
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            25
+          ],
+          "task_set": [
+            25
+          ],
+          "start_time": 0.0,
+          "return_time": 28.81321,
+          "ready_time": 32.448619,
+          "duration": 32.448619,
+          "load": 2.0,
+          "energy": 18.177046,
+          "cost": 26.593374,
+          "travel_time": 25.81321,
+          "service_start": {
+            "25": 12.906605
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 25,
+              "path": [
+                "p0",
+                "p1",
+                "p19",
+                "p40",
+                "p61",
+                "p82"
+              ]
+            },
+            {
+              "from": 25,
+              "to": 0,
+              "path": [
+                "p82",
+                "p61",
+                "p40",
+                "p19",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 26.593374,
+      "cost": 126.593374,
+      "ready_time": 32.448619,
+      "id": 24,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          26
+        ]
+      ],
+      "key": [
+        [
+          26
+        ]
+      ],
+      "task_set": [
+        26
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            26
+          ],
+          "task_set": [
+            26
+          ],
+          "start_time": 0.0,
+          "return_time": 31.774594,
+          "ready_time": 35.865621,
+          "duration": 35.865621,
+          "load": 3.0,
+          "energy": 20.455134,
+          "cost": 28.199894,
+          "travel_time": 27.774594,
+          "service_start": {
+            "26": 13.887297
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 26,
+              "path": [
+                "p0",
+                "p4",
+                "p25",
+                "p43",
+                "p64",
+                "p85"
+              ]
+            },
+            {
+              "from": 26,
+              "to": 0,
+              "path": [
+                "p85",
+                "p64",
+                "p43",
+                "p25",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 28.199894,
+      "cost": 128.199894,
+      "ready_time": 35.865621,
+      "id": 25,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          27
+        ]
+      ],
+      "key": [
+        [
+          27
+        ]
+      ],
+      "task_set": [
+        27
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            27
+          ],
+          "task_set": [
+            27
+          ],
+          "start_time": 0.0,
+          "return_time": 25.663586,
+          "ready_time": 29.268702,
+          "duration": 29.268702,
+          "load": 1.0,
+          "energy": 18.025582,
+          "cost": 24.005554,
+          "travel_time": 23.663586,
+          "service_start": {
+            "27": 11.831793
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 27,
+              "path": [
+                "p0",
+                "p5",
+                "p26",
+                "p47",
+                "p89"
+              ]
+            },
+            {
+              "from": 27,
+              "to": 0,
+              "path": [
+                "p89",
+                "p47",
+                "p26",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 24.005554,
+      "cost": 124.005554,
+      "ready_time": 29.268702,
+      "id": 26,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          28
+        ]
+      ],
+      "key": [
+        [
+          28
+        ]
+      ],
+      "task_set": [
+        28
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            28
+          ],
+          "task_set": [
+            28
+          ],
+          "start_time": 0.0,
+          "return_time": 33.322422,
+          "ready_time": 37.375983,
+          "duration": 37.375983,
+          "load": 2.0,
+          "energy": 20.267804,
+          "cost": 29.904248,
+          "travel_time": 30.322422,
+          "service_start": {
+            "28": 15.161211
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 28,
+              "path": [
+                "p0",
+                "p1",
+                "p11",
+                "p29",
+                "p50",
+                "p71",
+                "p92"
+              ]
+            },
+            {
+              "from": 28,
+              "to": 0,
+              "path": [
+                "p92",
+                "p71",
+                "p50",
+                "p29",
+                "p11",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 29.904248,
+      "cost": 129.904248,
+      "ready_time": 37.375983,
+      "id": 27,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          29
+        ]
+      ],
+      "key": [
+        [
+          29
+        ]
+      ],
+      "task_set": [
+        29
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            29
+          ],
+          "task_set": [
+            29
+          ],
+          "start_time": 0.0,
+          "return_time": 30.242642,
+          "ready_time": 33.878036,
+          "duration": 33.878036,
+          "load": 3.0,
+          "energy": 18.17697,
+          "cost": 29.87924,
+          "travel_time": 26.242642,
+          "service_start": {
+            "29": 13.121321
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 29,
+              "path": [
+                "p0",
+                "p3",
+                "p24",
+                "p45",
+                "p53",
+                "p74",
+                "p95"
+              ]
+            },
+            {
+              "from": 29,
+              "to": 0,
+              "path": [
+                "p95",
+                "p74",
+                "p53",
+                "p45",
+                "p24",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 29.87924,
+      "cost": 129.87924,
+      "ready_time": 33.878036,
+      "id": 28,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          30
+        ]
+      ],
+      "key": [
+        [
+          30
+        ]
+      ],
+      "task_set": [
+        30
+      ],
+      "task_count": 1,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            30
+          ],
+          "task_set": [
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 29.443548,
+          "ready_time": 33.509344,
+          "duration": 33.509344,
+          "load": 1.0,
+          "energy": 20.328978,
+          "cost": 29.782404,
+          "travel_time": 27.443548,
+          "service_start": {
+            "30": 13.721774
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 30,
+              "path": [
+                "p0",
+                "p5",
+                "p15",
+                "p36",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 0,
+              "path": [
+                "p99",
+                "p78",
+                "p57",
+                "p36",
+                "p15",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 29.782404,
+      "cost": 129.782404,
+      "ready_time": 33.509344,
+      "id": 29,
+      "source": "initial"
+    },
+    {
+      "routes": [
+        [
+          1,
+          4,
+          7,
+          6,
+          9,
+          3
+        ],
+        [
+          12,
+          13,
+          14,
+          11
+        ],
+        [
+          8,
+          23,
+          24,
+          21,
+          18
+        ],
+        [
+          20,
+          16,
+          17,
+          30
+        ]
+      ],
+      "key": [
+        [
+          1,
+          4,
+          7,
+          6,
+          9,
+          3
+        ],
+        [
+          12,
+          13,
+          14,
+          11
+        ],
+        [
+          8,
+          23,
+          24,
+          21,
+          18
+        ],
+        [
+          20,
+          16,
+          17,
+          30
+        ]
+      ],
+      "task_set": [
+        1,
+        3,
+        4,
+        6,
+        7,
+        8,
+        9,
+        11,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        20,
+        21,
+        23,
+        24,
+        30
+      ],
+      "task_count": 19,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            1,
+            4,
+            7,
+            6,
+            9,
+            3
+          ],
+          "task_set": [
+            1,
+            3,
+            4,
+            6,
+            7,
+            9
+          ],
+          "start_time": 0.0,
+          "return_time": 39.339933,
+          "ready_time": 43.699017,
+          "duration": 43.699017,
+          "load": 9.0,
+          "energy": 21.795421,
+          "cost": 34.59174,
+          "travel_time": 24.339933,
+          "service_start": {
+            "1": 3.488458,
+            "4": 8.251523,
+            "7": 16.140642,
+            "6": 21.175438,
+            "9": 25.444533,
+            "3": 31.891246
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 1,
+              "path": [
+                "p0",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 4,
+              "path": [
+                "p4",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 7,
+              "path": [
+                "p14",
+                "p24",
+                "p23"
+              ]
+            },
+            {
+              "from": 7,
+              "to": 6,
+              "path": [
+                "p23",
+                "p20"
+              ]
+            },
+            {
+              "from": 6,
+              "to": 9,
+              "path": [
+                "p20",
+                "p30"
+              ]
+            },
+            {
+              "from": 9,
+              "to": 3,
+              "path": [
+                "p30",
+                "p9",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 0,
+              "path": [
+                "p10",
+                "p2",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        },
+        {
+          "sortie": 2,
+          "tasks": [
+            12,
+            13,
+            14,
+            11
+          ],
+          "task_set": [
+            11,
+            12,
+            13,
+            14
+          ],
+          "start_time": 43.699017,
+          "return_time": 88.540305,
+          "ready_time": 93.541498,
+          "duration": 49.842481,
+          "load": 9.0,
+          "energy": 25.005966,
+          "cost": 40.869492,
+          "travel_time": 31.841288,
+          "service_start": {
+            "12": 51.288388,
+            "13": 66.803103,
+            "14": 71.718032,
+            "11": 78.36992
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 12,
+              "path": [
+                "p0",
+                "p1",
+                "p19",
+                "p40"
+              ]
+            },
+            {
+              "from": 12,
+              "to": 13,
+              "path": [
+                "p40",
+                "p22",
+                "p21",
+                "p24",
+                "p32",
+                "p35",
+                "p43"
+              ]
+            },
+            {
+              "from": 13,
+              "to": 14,
+              "path": [
+                "p43",
+                "p46"
+              ]
+            },
+            {
+              "from": 14,
+              "to": 11,
+              "path": [
+                "p46",
+                "p36"
+              ]
+            },
+            {
+              "from": 11,
+              "to": 0,
+              "path": [
+                "p36",
+                "p15",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        },
+        {
+          "sortie": 3,
+          "tasks": [
+            8,
+            23,
+            24,
+            21,
+            18
+          ],
+          "task_set": [
+            8,
+            18,
+            21,
+            23,
+            24
+          ],
+          "start_time": 93.541498,
+          "return_time": 148.862543,
+          "ready_time": 155.391094,
+          "duration": 61.849596,
+          "load": 9.0,
+          "energy": 32.642755,
+          "cost": 55.500227,
+          "travel_time": 41.321045,
+          "service_start": {
+            "8": 101.08355,
+            "23": 113.424004,
+            "24": 120.949137,
+            "21": 128.827171,
+            "18": 134.24643
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 8,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p27"
+              ]
+            },
+            {
+              "from": 8,
+              "to": 23,
+              "path": [
+                "p27",
+                "p37",
+                "p58",
+                "p76"
+              ]
+            },
+            {
+              "from": 23,
+              "to": 24,
+              "path": [
+                "p76",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 21,
+              "path": [
+                "p79",
+                "p87",
+                "p69"
+              ]
+            },
+            {
+              "from": 21,
+              "to": 18,
+              "path": [
+                "p69",
+                "p59"
+              ]
+            },
+            {
+              "from": 18,
+              "to": 0,
+              "path": [
+                "p59",
+                "p38",
+                "p17",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        },
+        {
+          "sortie": 4,
+          "tasks": [
+            20,
+            16,
+            17,
+            30
+          ],
+          "task_set": [
+            16,
+            17,
+            20,
+            30
+          ],
+          "start_time": 155.391094,
+          "return_time": 209.88026,
+          "ready_time": 216.187886,
+          "duration": 60.796792,
+          "load": 9.0,
+          "energy": 31.538129,
+          "cost": 52.312329,
+          "travel_time": 41.489166,
+          "service_start": {
+            "20": 166.035079,
+            "16": 171.760182,
+            "17": 178.038689,
+            "30": 194.158486
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 20,
+              "path": [
+                "p0",
+                "p3",
+                "p24",
+                "p45",
+                "p53",
+                "p66"
+              ]
+            },
+            {
+              "from": 20,
+              "to": 16,
+              "path": [
+                "p66",
+                "p53"
+              ]
+            },
+            {
+              "from": 16,
+              "to": 17,
+              "path": [
+                "p53",
+                "p56"
+              ]
+            },
+            {
+              "from": 17,
+              "to": 30,
+              "path": [
+                "p56",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 0,
+              "path": [
+                "p99",
+                "p78",
+                "p57",
+                "p36",
+                "p15",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 4,
+      "route_cost": 183.273788,
+      "cost": 283.273788,
+      "ready_time": 216.187886,
+      "id": 30,
+      "source": "warm_start"
+    },
+    {
+      "routes": [
+        [
+          10,
+          15,
+          2,
+          5
+        ],
+        [
+          19,
+          29,
+          26,
+          27
+        ],
+        [
+          28,
+          25,
+          22
+        ]
+      ],
+      "key": [
+        [
+          10,
+          15,
+          2,
+          5
+        ],
+        [
+          19,
+          29,
+          26,
+          27
+        ],
+        [
+          28,
+          25,
+          22
+        ]
+      ],
+      "task_set": [
+        2,
+        5,
+        10,
+        15,
+        19,
+        22,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "task_count": 11,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            10,
+            15,
+            2,
+            5
+          ],
+          "task_set": [
+            2,
+            5,
+            10,
+            15
+          ],
+          "start_time": 0.0,
+          "return_time": 45.682877,
+          "ready_time": 50.324176,
+          "duration": 50.324176,
+          "load": 9.0,
+          "energy": 23.206493,
+          "cost": 37.454543,
+          "travel_time": 32.682877,
+          "service_start": {
+            "10": 8.259535,
+            "15": 19.442484,
+            "2": 28.838178,
+            "5": 34.789372
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 10,
+              "path": [
+                "p0",
+                "p1",
+                "p12",
+                "p20",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 15,
+              "path": [
+                "p33",
+                "p30",
+                "p40",
+                "p50"
+              ]
+            },
+            {
+              "from": 15,
+              "to": 2,
+              "path": [
+                "p50",
+                "p29",
+                "p8",
+                "p7"
+              ]
+            },
+            {
+              "from": 2,
+              "to": 5,
+              "path": [
+                "p7",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 0,
+              "path": [
+                "p17",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        },
+        {
+          "sortie": 2,
+          "tasks": [
+            19,
+            29,
+            26,
+            27
+          ],
+          "task_set": [
+            19,
+            26,
+            27,
+            29
+          ],
+          "start_time": 50.324176,
+          "return_time": 110.779466,
+          "ready_time": 118.137455,
+          "duration": 67.813279,
+          "load": 9.0,
+          "energy": 36.789944,
+          "cost": 60.311929,
+          "travel_time": 47.45529,
+          "service_start": {
+            "19": 61.817781,
+            "29": 71.038047,
+            "26": 80.566513,
+            "27": 96.947673
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 19,
+              "path": [
+                "p0",
+                "p3",
+                "p21",
+                "p34",
+                "p55",
+                "p63"
+              ]
+            },
+            {
+              "from": 19,
+              "to": 29,
+              "path": [
+                "p63",
+                "p66",
+                "p95"
+              ]
+            },
+            {
+              "from": 29,
+              "to": 26,
+              "path": [
+                "p95",
+                "p77",
+                "p85"
+              ]
+            },
+            {
+              "from": 26,
+              "to": 27,
+              "path": [
+                "p85",
+                "p67",
+                "p68",
+                "p89"
+              ]
+            },
+            {
+              "from": 27,
+              "to": 0,
+              "path": [
+                "p89",
+                "p47",
+                "p26",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        },
+        {
+          "sortie": 3,
+          "tasks": [
+            28,
+            25,
+            22
+          ],
+          "task_set": [
+            22,
+            25,
+            28
+          ],
+          "start_time": 118.137455,
+          "return_time": 164.35555,
+          "ready_time": 169.590423,
+          "duration": 51.452968,
+          "load": 6.0,
+          "energy": 26.174367,
+          "cost": 45.020056,
+          "travel_time": 37.218095,
+          "service_start": {
+            "28": 133.298666,
+            "25": 141.294451,
+            "22": 149.464679
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 28,
+              "path": [
+                "p0",
+                "p1",
+                "p11",
+                "p29",
+                "p50",
+                "p71",
+                "p92"
+              ]
+            },
+            {
+              "from": 28,
+              "to": 25,
+              "path": [
+                "p92",
+                "p82"
+              ]
+            },
+            {
+              "from": 25,
+              "to": 22,
+              "path": [
+                "p82",
+                "p72"
+              ]
+            },
+            {
+              "from": 22,
+              "to": 0,
+              "path": [
+                "p72",
+                "p51",
+                "p30",
+                "p9",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 3,
+      "route_cost": 142.786528,
+      "cost": 242.786528,
+      "ready_time": 169.590423,
+      "id": 31,
+      "source": "warm_start"
+    },
+    {
+      "routes": [
+        [
+          2,
+          5,
+          3,
+          1
+        ]
+      ],
+      "key": [
+        [
+          2,
+          5,
+          3,
+          1
+        ]
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            2,
+            5,
+            3,
+            1
+          ],
+          "task_set": [
+            1,
+            2,
+            3,
+            5
+          ],
+          "start_time": 0.0,
+          "return_time": 41.682108,
+          "ready_time": 46.01831,
+          "duration": 46.01831,
+          "load": 9.0,
+          "energy": 21.681009,
+          "cost": 31.576328,
+          "travel_time": 28.682108,
+          "service_start": {
+            "2": 8.587663,
+            "5": 14.538857,
+            "3": 28.816314,
+            "1": 35.19365
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 2,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p7"
+              ]
+            },
+            {
+              "from": 2,
+              "to": 5,
+              "path": [
+                "p7",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 3,
+              "path": [
+                "p17",
+                "p7",
+                "p8",
+                "p11",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 1,
+              "path": [
+                "p10",
+                "p2",
+                "p3",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 0,
+              "path": [
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 31.576328,
+      "cost": 131.576328,
+      "ready_time": 46.01831,
+      "id": 32,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          30,
+          2,
+          10,
+          4
+        ]
+      ],
+      "key": [
+        [
+          30,
+          2,
+          10,
+          4
+        ]
+      ],
+      "task_set": [
+        2,
+        4,
+        10,
+        30
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            30,
+            2,
+            10,
+            4
+          ],
+          "task_set": [
+            2,
+            4,
+            10,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 64.886675,
+          "ready_time": 72.437364,
+          "duration": 72.437364,
+          "load": 8.0,
+          "energy": 37.753446,
+          "cost": 57.634032,
+          "travel_time": 52.886675,
+          "service_start": {
+            "30": 13.721774,
+            "2": 32.970249,
+            "10": 45.987985,
+            "4": 56.635152
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 30,
+              "path": [
+                "p0",
+                "p5",
+                "p15",
+                "p36",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 2,
+              "path": [
+                "p99",
+                "p65",
+                "p47",
+                "p26",
+                "p16",
+                "p17",
+                "p7"
+              ]
+            },
+            {
+              "from": 2,
+              "to": 10,
+              "path": [
+                "p7",
+                "p8",
+                "p11",
+                "p19",
+                "p22",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 4,
+              "path": [
+                "p33",
+                "p20",
+                "p21",
+                "p24",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 0,
+              "path": [
+                "p14",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 57.634032,
+      "cost": 157.634032,
+      "ready_time": 72.437364,
+      "id": 33,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          29,
+          1,
+          4,
+          30
+        ]
+      ],
+      "key": [
+        [
+          29,
+          1,
+          4,
+          30
+        ]
+      ],
+      "task_set": [
+        1,
+        4,
+        29,
+        30
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            29,
+            1,
+            4,
+            30
+          ],
+          "task_set": [
+            1,
+            4,
+            29,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 63.912921,
+          "ready_time": 71.661329,
+          "duration": 71.661329,
+          "load": 8.0,
+          "energy": 38.742042,
+          "cost": 61.243518,
+          "travel_time": 51.912921,
+          "service_start": {
+            "29": 13.121321,
+            "1": 27.454086,
+            "4": 32.217151,
+            "30": 48.191147
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 29,
+              "path": [
+                "p0",
+                "p3",
+                "p24",
+                "p45",
+                "p53",
+                "p74",
+                "p95"
+              ]
+            },
+            {
+              "from": 29,
+              "to": 1,
+              "path": [
+                "p95",
+                "p74",
+                "p53",
+                "p35",
+                "p14",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 4,
+              "path": [
+                "p4",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 30,
+              "path": [
+                "p14",
+                "p15",
+                "p36",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 0,
+              "path": [
+                "p99",
+                "p78",
+                "p57",
+                "p36",
+                "p15",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 61.243518,
+      "cost": 161.243518,
+      "ready_time": 71.661329,
+      "id": 34,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          30,
+          5,
+          10,
+          3
+        ]
+      ],
+      "key": [
+        [
+          30,
+          5,
+          10,
+          3
+        ]
+      ],
+      "task_set": [
+        3,
+        5,
+        10,
+        30
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            30,
+            5,
+            10,
+            3
+          ],
+          "task_set": [
+            3,
+            5,
+            10,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 60.880973,
+          "ready_time": 67.961911,
+          "duration": 67.961911,
+          "load": 7.0,
+          "energy": 35.404692,
+          "cost": 54.995775,
+          "travel_time": 49.880973,
+          "service_start": {
+            "30": 13.721774,
+            "5": 31.019055,
+            "10": 45.987985,
+            "3": 53.432286
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 30,
+              "path": [
+                "p0",
+                "p5",
+                "p15",
+                "p36",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 5,
+              "path": [
+                "p99",
+                "p65",
+                "p47",
+                "p26",
+                "p16",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 10,
+              "path": [
+                "p17",
+                "p7",
+                "p8",
+                "p11",
+                "p19",
+                "p22",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 3,
+              "path": [
+                "p33",
+                "p20",
+                "p12",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 0,
+              "path": [
+                "p10",
+                "p2",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 54.995775,
+      "cost": 154.995775,
+      "ready_time": 67.961911,
+      "id": 35,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          29,
+          30,
+          23,
+          24
+        ]
+      ],
+      "key": [
+        [
+          29,
+          30,
+          23,
+          24
+        ]
+      ],
+      "task_set": [
+        23,
+        24,
+        29,
+        30
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            29,
+            30,
+            23,
+            24
+          ],
+          "task_set": [
+            23,
+            24,
+            29,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 63.29361,
+          "ready_time": 70.899306,
+          "duration": 70.899306,
+          "load": 8.0,
+          "energy": 38.028482,
+          "cost": 65.088791,
+          "travel_time": 51.29361,
+          "service_start": {
+            "29": 13.121321,
+            "30": 32.372151,
+            "23": 42.02275,
+            "24": 49.547883
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 29,
+              "path": [
+                "p0",
+                "p3",
+                "p24",
+                "p45",
+                "p53",
+                "p74",
+                "p95"
+              ]
+            },
+            {
+              "from": 29,
+              "to": 30,
+              "path": [
+                "p95",
+                "p77",
+                "p85",
+                "p88",
+                "p96",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 23,
+              "path": [
+                "p99",
+                "p86",
+                "p68",
+                "p76"
+              ]
+            },
+            {
+              "from": 23,
+              "to": 24,
+              "path": [
+                "p76",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 0,
+              "path": [
+                "p79",
+                "p58",
+                "p37",
+                "p26",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 65.088791,
+      "cost": 165.088791,
+      "ready_time": 70.899306,
+      "id": 36,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          24,
+          10,
+          1,
+          4
+        ]
+      ],
+      "key": [
+        [
+          24,
+          10,
+          1,
+          4
+        ]
+      ],
+      "task_set": [
+        1,
+        4,
+        10,
+        24
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            24,
+            10,
+            1,
+            4
+          ],
+          "task_set": [
+            1,
+            4,
+            10,
+            24
+          ],
+          "start_time": 0.0,
+          "return_time": 58.453529,
+          "ready_time": 65.522386,
+          "duration": 65.522386,
+          "load": 7.0,
+          "energy": 35.344283,
+          "cost": 51.074967,
+          "travel_time": 47.453529,
+          "service_start": {
+            "24": 11.745727,
+            "10": 34.44163,
+            "1": 45.438941,
+            "4": 50.202006
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 24,
+              "path": [
+                "p0",
+                "p5",
+                "p26",
+                "p37",
+                "p58",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 10,
+              "path": [
+                "p79",
+                "p58",
+                "p37",
+                "p27",
+                "p17",
+                "p7",
+                "p8",
+                "p11",
+                "p19",
+                "p22",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 1,
+              "path": [
+                "p33",
+                "p20",
+                "p12",
+                "p2",
+                "p3",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 4,
+              "path": [
+                "p4",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 0,
+              "path": [
+                "p14",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 51.074967,
+      "cost": 151.074967,
+      "ready_time": 65.522386,
+      "id": 37,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          28,
+          5,
+          21,
+          24
+        ]
+      ],
+      "key": [
+        [
+          28,
+          5,
+          21,
+          24
+        ]
+      ],
+      "task_set": [
+        5,
+        21,
+        24,
+        28
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            28,
+            5,
+            21,
+            24
+          ],
+          "task_set": [
+            5,
+            21,
+            24,
+            28
+          ],
+          "start_time": 0.0,
+          "return_time": 65.807924,
+          "ready_time": 73.784649,
+          "duration": 73.784649,
+          "load": 7.0,
+          "energy": 39.883625,
+          "cost": 61.514763,
+          "travel_time": 54.807924,
+          "service_start": {
+            "28": 15.161211,
+            "5": 32.837076,
+            "21": 44.184163,
+            "24": 52.062197
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 28,
+              "path": [
+                "p0",
+                "p1",
+                "p11",
+                "p29",
+                "p50",
+                "p71",
+                "p92"
+              ]
+            },
+            {
+              "from": 28,
+              "to": 5,
+              "path": [
+                "p92",
+                "p71",
+                "p50",
+                "p29",
+                "p18",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 21,
+              "path": [
+                "p17",
+                "p27",
+                "p48",
+                "p69"
+              ]
+            },
+            {
+              "from": 21,
+              "to": 24,
+              "path": [
+                "p69",
+                "p87",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 0,
+              "path": [
+                "p79",
+                "p58",
+                "p37",
+                "p26",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 61.514763,
+      "cost": 161.514763,
+      "ready_time": 73.784649,
+      "id": 38,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          28,
+          5,
+          3,
+          4
+        ]
+      ],
+      "key": [
+        [
+          28,
+          5,
+          3,
+          4
+        ]
+      ],
+      "task_set": [
+        3,
+        4,
+        5,
+        28
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            28,
+            5,
+            3,
+            4
+          ],
+          "task_set": [
+            3,
+            4,
+            5,
+            28
+          ],
+          "start_time": 0.0,
+          "return_time": 61.383957,
+          "ready_time": 68.476706,
+          "duration": 68.476706,
+          "load": 8.0,
+          "energy": 35.463743,
+          "cost": 51.666982,
+          "travel_time": 49.383957,
+          "service_start": {
+            "28": 15.161211,
+            "5": 32.837076,
+            "3": 47.114533,
+            "4": 53.132434
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 28,
+              "path": [
+                "p0",
+                "p1",
+                "p11",
+                "p29",
+                "p50",
+                "p71",
+                "p92"
+              ]
+            },
+            {
+              "from": 28,
+              "to": 5,
+              "path": [
+                "p92",
+                "p71",
+                "p50",
+                "p29",
+                "p18",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 3,
+              "path": [
+                "p17",
+                "p7",
+                "p8",
+                "p11",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 4,
+              "path": [
+                "p10",
+                "p13",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 0,
+              "path": [
+                "p14",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 51.666982,
+      "cost": 151.666982,
+      "ready_time": 68.476706,
+      "id": 39,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          28,
+          10,
+          1,
+          5
+        ]
+      ],
+      "key": [
+        [
+          28,
+          10,
+          1,
+          5
+        ]
+      ],
+      "task_set": [
+        1,
+        5,
+        10,
+        28
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            28,
+            10,
+            1,
+            5
+          ],
+          "task_set": [
+            1,
+            5,
+            10,
+            28
+          ],
+          "start_time": 0.0,
+          "return_time": 61.254609,
+          "ready_time": 68.359884,
+          "duration": 68.359884,
+          "load": 9.0,
+          "energy": 35.526375,
+          "cost": 52.999356,
+          "travel_time": 48.254609,
+          "service_start": {
+            "28": 15.161211,
+            "10": 29.522805,
+            "1": 40.520116,
+            "5": 50.361104
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 28,
+              "path": [
+                "p0",
+                "p1",
+                "p11",
+                "p29",
+                "p50",
+                "p71",
+                "p92"
+              ]
+            },
+            {
+              "from": 28,
+              "to": 10,
+              "path": [
+                "p92",
+                "p61",
+                "p51",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 1,
+              "path": [
+                "p33",
+                "p20",
+                "p12",
+                "p2",
+                "p3",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 5,
+              "path": [
+                "p4",
+                "p5",
+                "p6",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 0,
+              "path": [
+                "p17",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 52.999356,
+      "cost": 152.999356,
+      "ready_time": 68.359884,
+      "id": 40,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          28,
+          3,
+          10,
+          2
+        ]
+      ],
+      "key": [
+        [
+          28,
+          3,
+          10,
+          2
+        ]
+      ],
+      "task_set": [
+        2,
+        3,
+        10,
+        28
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            28,
+            3,
+            10,
+            2
+          ],
+          "task_set": [
+            2,
+            3,
+            10,
+            28
+          ],
+          "start_time": 0.0,
+          "return_time": 63.719578,
+          "ready_time": 70.996234,
+          "duration": 70.996234,
+          "load": 8.0,
+          "energy": 36.38328,
+          "cost": 53.169396,
+          "travel_time": 51.719578,
+          "service_start": {
+            "28": 15.161211,
+            "3": 32.669878,
+            "10": 39.114179,
+            "2": 51.131915
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 28,
+              "path": [
+                "p0",
+                "p1",
+                "p11",
+                "p29",
+                "p50",
+                "p71",
+                "p92"
+              ]
+            },
+            {
+              "from": 28,
+              "to": 3,
+              "path": [
+                "p92",
+                "p71",
+                "p50",
+                "p29",
+                "p11",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 10,
+              "path": [
+                "p10",
+                "p12",
+                "p20",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 2,
+              "path": [
+                "p33",
+                "p22",
+                "p19",
+                "p11",
+                "p8",
+                "p7"
+              ]
+            },
+            {
+              "from": 2,
+              "to": 0,
+              "path": [
+                "p7",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 53.169396,
+      "cost": 153.169396,
+      "ready_time": 70.996234,
+      "id": 41,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          21,
+          23,
+          4,
+          3,
+          10
+        ]
+      ],
+      "key": [
+        [
+          21,
+          23,
+          4,
+          3,
+          10
+        ]
+      ],
+      "task_set": [
+        3,
+        4,
+        10,
+        21,
+        23
+      ],
+      "task_count": 5,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            21,
+            23,
+            4,
+            3,
+            10
+          ],
+          "task_set": [
+            3,
+            4,
+            10,
+            21,
+            23
+          ],
+          "start_time": 0.0,
+          "return_time": 66.098261,
+          "ready_time": 73.998332,
+          "duration": 73.998332,
+          "load": 9.0,
+          "energy": 39.500354,
+          "cost": 59.616872,
+          "travel_time": 52.098261,
+          "service_start": {
+            "21": 12.202938,
+            "23": 23.606105,
+            "4": 41.376524,
+            "3": 48.394425,
+            "10": 54.838726
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 21,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p27",
+                "p48",
+                "p69"
+              ]
+            },
+            {
+              "from": 21,
+              "to": 23,
+              "path": [
+                "p69",
+                "p87",
+                "p79",
+                "p76"
+              ]
+            },
+            {
+              "from": 23,
+              "to": 4,
+              "path": [
+                "p76",
+                "p89",
+                "p47",
+                "p26",
+                "p15",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 3,
+              "path": [
+                "p14",
+                "p13",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 10,
+              "path": [
+                "p10",
+                "p12",
+                "p20",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 0,
+              "path": [
+                "p33",
+                "p20",
+                "p12",
+                "p1",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 59.616872,
+      "cost": 159.616872,
+      "ready_time": 73.998332,
+      "id": 42,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          20,
+          29,
+          10,
+          3
+        ]
+      ],
+      "key": [
+        [
+          20,
+          29,
+          10,
+          3
+        ]
+      ],
+      "task_set": [
+        3,
+        10,
+        20,
+        29
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            20,
+            29,
+            10,
+            3
+          ],
+          "task_set": [
+            3,
+            10,
+            20,
+            29
+          ],
+          "start_time": 0.0,
+          "return_time": 51.561073,
+          "ready_time": 57.003102,
+          "duration": 57.003102,
+          "load": 9.0,
+          "energy": 27.210147,
+          "cost": 47.073265,
+          "travel_time": 38.561073,
+          "service_start": {
+            "20": 10.643985,
+            "29": 18.239084,
+            "10": 36.668085,
+            "3": 44.112386
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 20,
+              "path": [
+                "p0",
+                "p3",
+                "p24",
+                "p45",
+                "p53",
+                "p66"
+              ]
+            },
+            {
+              "from": 20,
+              "to": 29,
+              "path": [
+                "p66",
+                "p95"
+              ]
+            },
+            {
+              "from": 29,
+              "to": 10,
+              "path": [
+                "p95",
+                "p74",
+                "p53",
+                "p45",
+                "p32",
+                "p33"
+              ]
+            },
+            {
+              "from": 10,
+              "to": 3,
+              "path": [
+                "p33",
+                "p20",
+                "p12",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 0,
+              "path": [
+                "p10",
+                "p2",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 47.073265,
+      "cost": 147.073265,
+      "ready_time": 57.003102,
+      "id": 43,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          30,
+          27,
+          24,
+          1,
+          4,
+          3
+        ]
+      ],
+      "key": [
+        [
+          30,
+          27,
+          24,
+          1,
+          4,
+          3
+        ]
+      ],
+      "task_set": [
+        1,
+        3,
+        4,
+        24,
+        27,
+        30
+      ],
+      "task_count": 6,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            30,
+            27,
+            24,
+            1,
+            4,
+            3
+          ],
+          "task_set": [
+            1,
+            3,
+            4,
+            24,
+            27,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 62.211272,
+          "ready_time": 69.826924,
+          "duration": 69.826924,
+          "load": 8.0,
+          "energy": 38.078261,
+          "cost": 63.371672,
+          "travel_time": 48.211272,
+          "service_start": {
+            "30": 13.721774,
+            "27": 23.045977,
+            "24": 29.470756,
+            "1": 42.981619,
+            "4": 47.744684,
+            "3": 54.762585
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 30,
+              "path": [
+                "p0",
+                "p5",
+                "p15",
+                "p36",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 27,
+              "path": [
+                "p99",
+                "p86",
+                "p68",
+                "p89"
+              ]
+            },
+            {
+              "from": 27,
+              "to": 24,
+              "path": [
+                "p89",
+                "p76",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 1,
+              "path": [
+                "p79",
+                "p58",
+                "p37",
+                "p16",
+                "p15",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 4,
+              "path": [
+                "p4",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 3,
+              "path": [
+                "p14",
+                "p13",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 0,
+              "path": [
+                "p10",
+                "p2",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 63.371672,
+      "cost": 163.371672,
+      "ready_time": 69.826924,
+      "id": 44,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          2,
+          21,
+          24,
+          1,
+          4
+        ]
+      ],
+      "key": [
+        [
+          2,
+          21,
+          24,
+          1,
+          4
+        ]
+      ],
+      "task_set": [
+        1,
+        2,
+        4,
+        21,
+        24
+      ],
+      "task_count": 5,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            2,
+            21,
+            24,
+            1,
+            4
+          ],
+          "task_set": [
+            1,
+            2,
+            4,
+            21,
+            24
+          ],
+          "start_time": 0.0,
+          "return_time": 56.289429,
+          "ready_time": 62.731814,
+          "duration": 62.731814,
+          "load": 9.0,
+          "energy": 32.211924,
+          "cost": 50.055168,
+          "travel_time": 42.289429,
+          "service_start": {
+            "2": 8.587663,
+            "21": 21.885944,
+            "24": 29.763978,
+            "1": 43.274841,
+            "4": 48.037906
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 2,
+              "path": [
+                "p0",
+                "p5",
+                "p6",
+                "p7"
+              ]
+            },
+            {
+              "from": 2,
+              "to": 21,
+              "path": [
+                "p7",
+                "p17",
+                "p27",
+                "p48",
+                "p69"
+              ]
+            },
+            {
+              "from": 21,
+              "to": 24,
+              "path": [
+                "p69",
+                "p87",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 1,
+              "path": [
+                "p79",
+                "p58",
+                "p37",
+                "p16",
+                "p15",
+                "p4"
+              ]
+            },
+            {
+              "from": 1,
+              "to": 4,
+              "path": [
+                "p4",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 0,
+              "path": [
+                "p14",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 50.055168,
+      "cost": 150.055168,
+      "ready_time": 62.731814,
+      "id": 45,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          30,
+          21,
+          5,
+          2,
+          3
+        ]
+      ],
+      "key": [
+        [
+          30,
+          21,
+          5,
+          2,
+          3
+        ]
+      ],
+      "task_set": [
+        2,
+        3,
+        5,
+        21,
+        30
+      ],
+      "task_count": 5,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            30,
+            21,
+            5,
+            2,
+            3
+          ],
+          "task_set": [
+            2,
+            3,
+            5,
+            21,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 63.538626,
+          "ready_time": 70.981211,
+          "duration": 70.981211,
+          "load": 9.0,
+          "energy": 37.212925,
+          "cost": 59.961719,
+          "travel_time": 49.538626,
+          "service_start": {
+            "30": 13.721774,
+            "21": 28.465395,
+            "5": 37.812482,
+            "2": 43.763676,
+            "3": 56.089939
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 30,
+              "path": [
+                "p0",
+                "p5",
+                "p15",
+                "p36",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 21,
+              "path": [
+                "p99",
+                "p86",
+                "p68",
+                "p69"
+              ]
+            },
+            {
+              "from": 21,
+              "to": 5,
+              "path": [
+                "p69",
+                "p48",
+                "p27",
+                "p17"
+              ]
+            },
+            {
+              "from": 5,
+              "to": 2,
+              "path": [
+                "p17",
+                "p7"
+              ]
+            },
+            {
+              "from": 2,
+              "to": 3,
+              "path": [
+                "p7",
+                "p8",
+                "p11",
+                "p10"
+              ]
+            },
+            {
+              "from": 3,
+              "to": 0,
+              "path": [
+                "p10",
+                "p2",
+                "p3",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 59.961719,
+      "cost": 159.961719,
+      "ready_time": 70.981211,
+      "id": 46,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          23,
+          30,
+          20,
+          4
+        ]
+      ],
+      "key": [
+        [
+          23,
+          30,
+          20,
+          4
+        ]
+      ],
+      "task_set": [
+        4,
+        20,
+        23,
+        30
+      ],
+      "task_count": 4,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            23,
+            30,
+            20,
+            4
+          ],
+          "task_set": [
+            4,
+            20,
+            23,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 60.906887,
+          "ready_time": 68.12758,
+          "duration": 68.12758,
+          "load": 9.0,
+          "energy": 36.103463,
+          "cost": 56.359433,
+          "travel_time": 47.906887,
+          "service_start": {
+            "23": 12.731439,
+            "30": 24.382038,
+            "20": 42.563,
+            "4": 52.655364
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 23,
+              "path": [
+                "p0",
+                "p5",
+                "p26",
+                "p47",
+                "p89",
+                "p76"
+              ]
+            },
+            {
+              "from": 23,
+              "to": 30,
+              "path": [
+                "p76",
+                "p68",
+                "p86",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 20,
+              "path": [
+                "p99",
+                "p96",
+                "p67",
+                "p66"
+              ]
+            },
+            {
+              "from": 20,
+              "to": 4,
+              "path": [
+                "p66",
+                "p53",
+                "p35",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 0,
+              "path": [
+                "p14",
+                "p4",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 56.359433,
+      "cost": 156.359433,
+      "ready_time": 68.12758,
+      "id": 47,
+      "source": "redcost"
+    },
+    {
+      "routes": [
+        [
+          4,
+          30,
+          23,
+          24,
+          21,
+          18
+        ]
+      ],
+      "key": [
+        [
+          4,
+          30,
+          23,
+          24,
+          21,
+          18
+        ]
+      ],
+      "task_set": [
+        4,
+        18,
+        21,
+        23,
+        24,
+        30
+      ],
+      "task_count": 6,
+      "sorties": [
+        {
+          "sortie": 1,
+          "tasks": [
+            4,
+            30,
+            23,
+            24,
+            21,
+            18
+          ],
+          "task_set": [
+            4,
+            18,
+            21,
+            23,
+            24,
+            30
+          ],
+          "start_time": 0.0,
+          "return_time": 69.063134,
+          "ready_time": 76.820586,
+          "duration": 76.820586,
+          "load": 9.0,
+          "energy": 38.78726,
+          "cost": 68.239752,
+          "travel_time": 51.314657,
+          "service_start": {
+            "4": 8.0,
+            "30": 23.973996,
+            "23": 33.624595,
+            "24": 41.149728,
+            "21": 49.027762,
+            "18": 54.447021
+          },
+          "physical_paths": [
+            {
+              "from": 0,
+              "to": 4,
+              "path": [
+                "p0",
+                "p4",
+                "p14"
+              ]
+            },
+            {
+              "from": 4,
+              "to": 30,
+              "path": [
+                "p14",
+                "p15",
+                "p36",
+                "p57",
+                "p78",
+                "p99"
+              ]
+            },
+            {
+              "from": 30,
+              "to": 23,
+              "path": [
+                "p99",
+                "p86",
+                "p68",
+                "p76"
+              ]
+            },
+            {
+              "from": 23,
+              "to": 24,
+              "path": [
+                "p76",
+                "p79"
+              ]
+            },
+            {
+              "from": 24,
+              "to": 21,
+              "path": [
+                "p79",
+                "p87",
+                "p69"
+              ]
+            },
+            {
+              "from": 21,
+              "to": 18,
+              "path": [
+                "p69",
+                "p59"
+              ]
+            },
+            {
+              "from": 18,
+              "to": 0,
+              "path": [
+                "p59",
+                "p38",
+                "p17",
+                "p6",
+                "p5",
+                "p0"
+              ]
+            }
+          ]
+        }
+      ],
+      "sortie_count": 1,
+      "route_cost": 68.239752,
+      "cost": 168.239752,
+      "ready_time": 76.820586,
+      "id": 48,
+      "source": "redcost"
+    }
+  ],
+  "report": {
+    "mode": "vehicle_schedule_branch_price",
+    "generated_routes": 54,
+    "generated_columns": 49,
+    "priced_columns": 17,
+    "redcost_columns": 17,
+    "farkas_columns": 0,
+    "redcost_calls": 17,
+    "farkas_calls": 0,
+    "pricing_calls": 17,
+    "early_pricing_returns": 17,
+    "dominated_labels": 349463,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "routes": 7,
+      "schedules": 2,
+      "covered_tasks": 30,
+      "uncovered_tasks": [],
+      "submitted": true
+    },
+    "strict_pricing": true,
+    "eps": 1e-06
+  },
+  "solution": {
+    "summary": {
+      "status": "TIME_LIMIT",
+      "status_code": "timelimit",
+      "objective": 526.060316,
+      "runtime": 19.054935,
+      "best_bound": null,
+      "mip_gap": null,
+      "node_count": 1,
+      "solution_count": 1,
+      "uses_artificial": false,
+      "artificial_task_count": 0
+    },
+    "schedules": [
+      {
+        "routes": [
+          [
+            1,
+            4,
+            7,
+            6,
+            9,
+            3
+          ],
+          [
+            12,
+            13,
+            14,
+            11
+          ],
+          [
+            8,
+            23,
+            24,
+            21,
+            18
+          ],
+          [
+            20,
+            16,
+            17,
+            30
+          ]
+        ],
+        "key": [
+          [
+            1,
+            4,
+            7,
+            6,
+            9,
+            3
+          ],
+          [
+            12,
+            13,
+            14,
+            11
+          ],
+          [
+            8,
+            23,
+            24,
+            21,
+            18
+          ],
+          [
+            20,
+            16,
+            17,
+            30
+          ]
+        ],
+        "task_set": [
+          1,
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          20,
+          21,
+          23,
+          24,
+          30
+        ],
+        "task_count": 19,
+        "sorties": [
+          {
+            "sortie": 1,
+            "tasks": [
+              1,
+              4,
+              7,
+              6,
+              9,
+              3
+            ],
+            "task_set": [
+              1,
+              3,
+              4,
+              6,
+              7,
+              9
+            ],
+            "start_time": 0.0,
+            "return_time": 39.339933,
+            "ready_time": 43.699017,
+            "duration": 43.699017,
+            "load": 9.0,
+            "energy": 21.795421,
+            "cost": 34.59174,
+            "travel_time": 24.339933,
+            "service_start": {
+              "1": 3.488458,
+              "4": 8.251523,
+              "7": 16.140642,
+              "6": 21.175438,
+              "9": 25.444533,
+              "3": 31.891246
+            },
+            "physical_paths": [
+              {
+                "from": 0,
+                "to": 1,
+                "path": [
+                  "p0",
+                  "p4"
+                ]
+              },
+              {
+                "from": 1,
+                "to": 4,
+                "path": [
+                  "p4",
+                  "p14"
+                ]
+              },
+              {
+                "from": 4,
+                "to": 7,
+                "path": [
+                  "p14",
+                  "p24",
+                  "p23"
+                ]
+              },
+              {
+                "from": 7,
+                "to": 6,
+                "path": [
+                  "p23",
+                  "p20"
+                ]
+              },
+              {
+                "from": 6,
+                "to": 9,
+                "path": [
+                  "p20",
+                  "p30"
+                ]
+              },
+              {
+                "from": 9,
+                "to": 3,
+                "path": [
+                  "p30",
+                  "p9",
+                  "p10"
+                ]
+              },
+              {
+                "from": 3,
+                "to": 0,
+                "path": [
+                  "p10",
+                  "p2",
+                  "p3",
+                  "p0"
+                ]
+              }
+            ]
+          },
+          {
+            "sortie": 2,
+            "tasks": [
+              12,
+              13,
+              14,
+              11
+            ],
+            "task_set": [
+              11,
+              12,
+              13,
+              14
+            ],
+            "start_time": 43.699017,
+            "return_time": 88.540305,
+            "ready_time": 93.541498,
+            "duration": 49.842481,
+            "load": 9.0,
+            "energy": 25.005966,
+            "cost": 40.869492,
+            "travel_time": 31.841288,
+            "service_start": {
+              "12": 51.288388,
+              "13": 66.803103,
+              "14": 71.718032,
+              "11": 78.36992
+            },
+            "physical_paths": [
+              {
+                "from": 0,
+                "to": 12,
+                "path": [
+                  "p0",
+                  "p1",
+                  "p19",
+                  "p40"
+                ]
+              },
+              {
+                "from": 12,
+                "to": 13,
+                "path": [
+                  "p40",
+                  "p22",
+                  "p21",
+                  "p24",
+                  "p32",
+                  "p35",
+                  "p43"
+                ]
+              },
+              {
+                "from": 13,
+                "to": 14,
+                "path": [
+                  "p43",
+                  "p46"
+                ]
+              },
+              {
+                "from": 14,
+                "to": 11,
+                "path": [
+                  "p46",
+                  "p36"
+                ]
+              },
+              {
+                "from": 11,
+                "to": 0,
+                "path": [
+                  "p36",
+                  "p15",
+                  "p5",
+                  "p0"
+                ]
+              }
+            ]
+          },
+          {
+            "sortie": 3,
+            "tasks": [
+              8,
+              23,
+              24,
+              21,
+              18
+            ],
+            "task_set": [
+              8,
+              18,
+              21,
+              23,
+              24
+            ],
+            "start_time": 93.541498,
+            "return_time": 148.862543,
+            "ready_time": 155.391094,
+            "duration": 61.849596,
+            "load": 9.0,
+            "energy": 32.642755,
+            "cost": 55.500227,
+            "travel_time": 41.321045,
+            "service_start": {
+              "8": 101.08355,
+              "23": 113.424004,
+              "24": 120.949137,
+              "21": 128.827171,
+              "18": 134.24643
+            },
+            "physical_paths": [
+              {
+                "from": 0,
+                "to": 8,
+                "path": [
+                  "p0",
+                  "p5",
+                  "p6",
+                  "p27"
+                ]
+              },
+              {
+                "from": 8,
+                "to": 23,
+                "path": [
+                  "p27",
+                  "p37",
+                  "p58",
+                  "p76"
+                ]
+              },
+              {
+                "from": 23,
+                "to": 24,
+                "path": [
+                  "p76",
+                  "p79"
+                ]
+              },
+              {
+                "from": 24,
+                "to": 21,
+                "path": [
+                  "p79",
+                  "p87",
+                  "p69"
+                ]
+              },
+              {
+                "from": 21,
+                "to": 18,
+                "path": [
+                  "p69",
+                  "p59"
+                ]
+              },
+              {
+                "from": 18,
+                "to": 0,
+                "path": [
+                  "p59",
+                  "p38",
+                  "p17",
+                  "p6",
+                  "p5",
+                  "p0"
+                ]
+              }
+            ]
+          },
+          {
+            "sortie": 4,
+            "tasks": [
+              20,
+              16,
+              17,
+              30
+            ],
+            "task_set": [
+              16,
+              17,
+              20,
+              30
+            ],
+            "start_time": 155.391094,
+            "return_time": 209.88026,
+            "ready_time": 216.187886,
+            "duration": 60.796792,
+            "load": 9.0,
+            "energy": 31.538129,
+            "cost": 52.312329,
+            "travel_time": 41.489166,
+            "service_start": {
+              "20": 166.035079,
+              "16": 171.760182,
+              "17": 178.038689,
+              "30": 194.158486
+            },
+            "physical_paths": [
+              {
+                "from": 0,
+                "to": 20,
+                "path": [
+                  "p0",
+                  "p3",
+                  "p24",
+                  "p45",
+                  "p53",
+                  "p66"
+                ]
+              },
+              {
+                "from": 20,
+                "to": 16,
+                "path": [
+                  "p66",
+                  "p53"
+                ]
+              },
+              {
+                "from": 16,
+                "to": 17,
+                "path": [
+                  "p53",
+                  "p56"
+                ]
+              },
+              {
+                "from": 17,
+                "to": 30,
+                "path": [
+                  "p56",
+                  "p57",
+                  "p78",
+                  "p99"
+                ]
+              },
+              {
+                "from": 30,
+                "to": 0,
+                "path": [
+                  "p99",
+                  "p78",
+                  "p57",
+                  "p36",
+                  "p15",
+                  "p5",
+                  "p0"
+                ]
+              }
+            ]
+          }
+        ],
+        "sortie_count": 4,
+        "route_cost": 183.273788,
+        "cost": 283.273788,
+        "ready_time": 216.187886,
+        "id": 30,
+        "source": "warm_start"
+      },
+      {
+        "routes": [
+          [
+            10,
+            15,
+            2,
+            5
+          ],
+          [
+            19,
+            29,
+            26,
+            27
+          ],
+          [
+            28,
+            25,
+            22
+          ]
+        ],
+        "key": [
+          [
+            10,
+            15,
+            2,
+            5
+          ],
+          [
+            19,
+            29,
+            26,
+            27
+          ],
+          [
+            28,
+            25,
+            22
+          ]
+        ],
+        "task_set": [
+          2,
+          5,
+          10,
+          15,
+          19,
+          22,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "task_count": 11,
+        "sorties": [
+          {
+            "sortie": 1,
+            "tasks": [
+              10,
+              15,
+              2,
+              5
+            ],
+            "task_set": [
+              2,
+              5,
+              10,
+              15
+            ],
+            "start_time": 0.0,
+            "return_time": 45.682877,
+            "ready_time": 50.324176,
+            "duration": 50.324176,
+            "load": 9.0,
+            "energy": 23.206493,
+            "cost": 37.454543,
+            "travel_time": 32.682877,
+            "service_start": {
+              "10": 8.259535,
+              "15": 19.442484,
+              "2": 28.838178,
+              "5": 34.789372
+            },
+            "physical_paths": [
+              {
+                "from": 0,
+                "to": 10,
+                "path": [
+                  "p0",
+                  "p1",
+                  "p12",
+                  "p20",
+                  "p33"
+                ]
+              },
+              {
+                "from": 10,
+                "to": 15,
+                "path": [
+                  "p33",
+                  "p30",
+                  "p40",
+                  "p50"
+                ]
+              },
+              {
+                "from": 15,
+                "to": 2,
+                "path": [
+                  "p50",
+                  "p29",
+                  "p8",
+                  "p7"
+                ]
+              },
+              {
+                "from": 2,
+                "to": 5,
+                "path": [
+                  "p7",
+                  "p17"
+                ]
+              },
+              {
+                "from": 5,
+                "to": 0,
+                "path": [
+                  "p17",
+                  "p6",
+                  "p5",
+                  "p0"
+                ]
+              }
+            ]
+          },
+          {
+            "sortie": 2,
+            "tasks": [
+              19,
+              29,
+              26,
+              27
+            ],
+            "task_set": [
+              19,
+              26,
+              27,
+              29
+            ],
+            "start_time": 50.324176,
+            "return_time": 110.779466,
+            "ready_time": 118.137455,
+            "duration": 67.813279,
+            "load": 9.0,
+            "energy": 36.789944,
+            "cost": 60.311929,
+            "travel_time": 47.45529,
+            "service_start": {
+              "19": 61.817781,
+              "29": 71.038047,
+              "26": 80.566513,
+              "27": 96.947673
+            },
+            "physical_paths": [
+              {
+                "from": 0,
+                "to": 19,
+                "path": [
+                  "p0",
+                  "p3",
+                  "p21",
+                  "p34",
+                  "p55",
+                  "p63"
+                ]
+              },
+              {
+                "from": 19,
+                "to": 29,
+                "path": [
+                  "p63",
+                  "p66",
+                  "p95"
+                ]
+              },
+              {
+                "from": 29,
+                "to": 26,
+                "path": [
+                  "p95",
+                  "p77",
+                  "p85"
+                ]
+              },
+              {
+                "from": 26,
+                "to": 27,
+                "path": [
+                  "p85",
+                  "p67",
+                  "p68",
+                  "p89"
+                ]
+              },
+              {
+                "from": 27,
+                "to": 0,
+                "path": [
+                  "p89",
+                  "p47",
+                  "p26",
+                  "p5",
+                  "p0"
+                ]
+              }
+            ]
+          },
+          {
+            "sortie": 3,
+            "tasks": [
+              28,
+              25,
+              22
+            ],
+            "task_set": [
+              22,
+              25,
+              28
+            ],
+            "start_time": 118.137455,
+            "return_time": 164.35555,
+            "ready_time": 169.590423,
+            "duration": 51.452968,
+            "load": 6.0,
+            "energy": 26.174367,
+            "cost": 45.020056,
+            "travel_time": 37.218095,
+            "service_start": {
+              "28": 133.298666,
+              "25": 141.294451,
+              "22": 149.464679
+            },
+            "physical_paths": [
+              {
+                "from": 0,
+                "to": 28,
+                "path": [
+                  "p0",
+                  "p1",
+                  "p11",
+                  "p29",
+                  "p50",
+                  "p71",
+                  "p92"
+                ]
+              },
+              {
+                "from": 28,
+                "to": 25,
+                "path": [
+                  "p92",
+                  "p82"
+                ]
+              },
+              {
+                "from": 25,
+                "to": 22,
+                "path": [
+                  "p82",
+                  "p72"
+                ]
+              },
+              {
+                "from": 22,
+                "to": 0,
+                "path": [
+                  "p72",
+                  "p51",
+                  "p30",
+                  "p9",
+                  "p1",
+                  "p0"
+                ]
+              }
+            ]
+          }
+        ],
+        "sortie_count": 3,
+        "route_cost": 142.786528,
+        "cost": 242.786528,
+        "ready_time": 169.590423,
+        "id": 31,
+        "source": "warm_start"
+      }
+    ],
+    "artificial_tasks": []
+  }
+}

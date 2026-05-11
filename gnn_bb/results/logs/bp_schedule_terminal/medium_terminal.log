@@ -1,0 +1,26 @@
+开始 schedule B&P: instance=medium, tasks=20, time_limit=3600s, max_columns_per_pricing=20, column_pool_size=200, column_pool_rc_margin=50, stabilized_pricing=True, stabilization_alpha=0.7, stabilization_label_limit=20000, pricing_preprocess=True, memory_limit_mb=12000.0, log=/home/kai/work/gnn_bb/results/logs/bp_schedule/medium.log
+1/1 feasible solution given by solution candidate storage, new primal bound 6.909733e+02
+
+permute transformed problem using random seed 20260511
+presolving:
+   (0.0s) probing cycle finished: starting next cycle
+presolving (1 rounds: 1 fast, 1 medium, 1 exhaustive):
+ 0 deleted vars, 0 deleted constraints, 0 added constraints, 0 tightened bounds, 0 added holes, 0 changed sides, 0 changed coefficients
+ 0 implications, 0 cliques, 0 implied integral variables (0 bin, 0 int, 0 cont)
+presolved problem has 42 variables (42 bin, 0 int, 0 cont) and 21 constraints
+     21 constraints of type <linear>
+Presolving Time: 0.00
+transformed 1/1 original solutions to the transformed problem space
+
+ time | node  | left  |LP iter|LP it/n|mem/heur|mdpt |vars |cons |rows |cuts |sepa|confs|strbr|  dualbound   | primalbound  |  gap   | compl. 
+  0.0s|     1 |     0 |    11 |     - |  1166k |   0 |  62 |  21 |  21 |   0 |  0 |   0 |   0 |      --      | 6.909733e+02 |    Inf | unknown
+r12.8s|     1 |     0 |   522 |     - |simplero|   0 | 938 |  21 |  21 |   0 |  0 |   0 |   0 |      --      | 5.365043e+02 |    Inf | unknown
+ 60.0s|     1 |     0 |   886 |     - |  7301k |   0 |1431 |  21 |  21 |   0 |  0 |   0 |   0 |      --      | 5.365043e+02 |    Inf | unknown
+  470s|     1 |     0 |   898 |     - |  7301k |   0 |1457 |  21 |  21 |   0 |  0 |   0 |   0 | 5.245749e+02 | 5.365043e+02 |   2.27%| unknown
+  470s|     1 |     0 |  1323 |     - |  8237k |   0 |1477 |  21 |  22 |   1 |  1 |   0 |   0 | 5.245749e+02 | 5.365043e+02 |   2.27%| unknown
+  636s|     1 |     0 |  1325 |     - |  8237k |   0 |1478 |  21 |  22 |   1 |  1 |   0 |   0 | 5.245749e+02 | 5.365043e+02 |   2.27%| unknown
+  636s|     1 |     0 |  1378 |     - |  8788k |   0 |1498 |  21 |  23 |   2 |  2 |   0 |   0 | 5.245749e+02 | 5.365043e+02 |   2.27%| unknown
+  811s|     1 |     0 |  1378 |     - |  8788k |   0 |1498 |  21 |  23 |   2 |  2 |   0 |   0 | 5.245749e+02 | 5.365043e+02 |   2.27%| unknown
+  811s|     1 |     0 |  1419 |     - |  8995k |   0 |1518 |  21 |  24 |   3 |  3 |   0 |   0 | 5.245749e+02 | 5.365043e+02 |   2.27%| unknown
+ 1158s|     1 |     0 |  1434 |     - |  8995k |   0 |1530 |  21 |  24 |   3 |  3 |   0 |   0 | 5.246588e+02 | 5.365043e+02 |   2.26%| unknown
+ 1158s|     1 |     0 |  1467 |     - |  9185k |   0 |1550 |  21 |  25 |   4 |  4 |   0 |   0 | 5.246588e+02 | 5.365043e+02 |   2.26%| unknown

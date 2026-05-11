@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,cg_iterations,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,root_relaxation,incumbent_node,log_path,instance_path,seed
+30,30,4,21,OPTIMAL,479.674912,479.674912,0.0,239.059362,5,0,542,542,542,565,1929,,,/home/kai/work/gnn_bb/results/logs/bp_no_ml/30.log,/home/kai/work/gnn_bb/json/instances/instance_30.json,20260511

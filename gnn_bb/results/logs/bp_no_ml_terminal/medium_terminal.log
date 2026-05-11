@@ -1,0 +1,34 @@
+开始 no-ML B&P: instance=medium, tasks=20, time_limit=3600s, memory_limit_mb=12000.0, log=/home/kai/work/gnn_bb/results/logs/bp_no_ml/medium.log
+1/1 feasible solution given by solution candidate storage, new primal bound 7.002369e+02
+
+permute transformed problem using random seed 20260511
+presolving:
+(round 1, exhaustive) 0 del vars, 0 del conss, 0 add conss, 0 chg bounds, 0 chg sides, 0 chg coeffs, 2 upgd conss, 0 impls, 2 clqs, 0 implints
+   (0.0s) probing: 73/88 (83.0%) - 0 fixings, 0 aggregations, 1 implications, 0 bound changes
+   (0.0s) probing aborted: 50/50 successive totally useless probings
+presolving (2 rounds: 2 fast, 2 medium, 2 exhaustive):
+ 0 deleted vars, 0 deleted constraints, 0 added constraints, 0 tightened bounds, 0 added holes, 0 changed sides, 0 changed coefficients
+ 0 implications, 3 cliques, 0 implied integral variables (0 bin, 0 int, 0 cont)
+presolved problem has 88 variables (88 bin, 0 int, 0 cont) and 28 constraints
+      2 constraints of type <setppc>
+     26 constraints of type <linear>
+Presolving Time: 0.00
+transformed 1/1 original solutions to the transformed problem space
+
+ time | node  | left  |LP iter|LP it/n|mem/heur|mdpt |vars |cons |rows |cuts |sepa|confs|strbr|  dualbound   | primalbound  |  gap   | compl. 
+  0.0s|     1 |     0 |    28 |     - |  1366k |   0 |  91 |  28 |  28 |   0 |  0 |   0 |   0 |      --      | 7.002369e+02 |    Inf | unknown
+  0.2s|     1 |     0 |   343 |     - |  2218k |   0 | 390 |  28 |  28 |   0 |  0 |   0 |   0 |      --      | 7.002369e+02 |    Inf | unknown
+  0.5s|     1 |     0 |   365 |     - |  2464k |   0 | 417 |  28 |  28 |   0 |  0 |   0 |   0 | 4.902837e+02 | 7.002369e+02 |  42.82%| unknown
+r 0.5s|     1 |     0 |   365 |     - |shifting|   0 | 417 |  28 |  28 |   0 |  0 |   0 |   0 | 4.902837e+02 | 6.321035e+02 |  28.93%| unknown
+d 0.5s|     1 |     0 |   466 |     - |farkasdi|   0 | 417 |  28 |  28 |   0 |  1 |   0 |   0 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+  0.6s|     1 |     0 |   466 |     - |  2751k |   0 | 417 |  28 |  28 |   0 |  1 |   0 |   0 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+  0.6s|     1 |     2 |   466 |     - |  2791k |   0 | 417 |  28 |  28 |   0 |  2 |   0 |   8 | 4.902837e+02 | 5.269024e+02 |   7.47%| unknown
+
+SCIP Status        : problem is solved [optimal solution found]
+Solving Time (sec) : 4.64
+Solving Nodes      : 69
+Primal Bound       : +5.26902419000000e+02 (9 solutions)
+Dual Bound         : +5.26902419000000e+02
+Gap                : 0.00 %
+medium: status=OPTIMAL, primal=526.902419, dual=526.902419, gap=0.0, time=4.643635s, nodes=69, columns=530
+no-ML B&P CSV 已写入：/home/kai/work/gnn_bb/results/bp_no_ml_medium.csv

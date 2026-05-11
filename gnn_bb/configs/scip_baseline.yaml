@@ -1,0 +1,18 @@
+# 中文摘要：本配置文件定义纯 SCIP compact MILP baseline 的默认实例、时间限制、日志和 SCIP 参数。
+
+python: /home/kai/miniconda3/envs/ecole/bin/python
+instances: ["very_small"]
+time_limit: 3600
+random_seed: 20260511
+instance_dir: json/instances
+results_csv: results/scip_baseline.csv
+log_dir: results/logs/scip_baseline
+display_log: true
+write_instance_json: true
+scip_params:
+  display/verblevel: 4
+  randomization/randomseedshift: 20260511
+  randomization/permutationseed: 20260511
+  randomization/lpseed: 20260511
+  parallel/maxnthreads: 1
+

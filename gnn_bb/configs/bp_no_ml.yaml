@@ -1,0 +1,34 @@
+# 中文摘要：本配置文件定义 no-ML branch-and-price baseline 的默认运行参数；当前入口使用 route-vehicle master + SCIP 原生 Pricer。
+
+python: /home/kai/miniconda3/envs/ecole/bin/python
+instances: ["very_small"]
+time_limit: 3600
+random_seed: 20260511
+instance_dir: json/instances
+results_csv: results/bp_no_ml.csv
+log_dir: results/logs/bp_no_ml
+log_level: progress
+write_instance_json: true
+pricing_eps: 1.0e-6
+integer_tol: 1.0e-6
+max_nodes: 100000
+max_cg_iterations_per_node: 200
+max_columns_per_pricing: 200
+schedule_max_columns_per_pricing: 20
+schedule_column_pool_size: 200
+schedule_column_pool_rc_margin: 50.0
+schedule_stabilized_pricing: true
+schedule_stabilization_alpha: 0.7
+schedule_stabilization_min_alpha: 0.2
+schedule_stabilization_max_alpha: 0.95
+schedule_stabilization_label_limit: 20000
+schedule_stabilization_volatility_threshold: 0.25
+schedule_pricing_preprocess: true
+memory_limit_mb: 12000
+artificial_penalty: 1000000.0
+rmp_params:
+  display/verblevel: 4
+  randomization/randomseedshift: 20260511
+  randomization/permutationseed: 20260511
+  randomization/lpseed: 20260511
+  parallel/maxnthreads: 1

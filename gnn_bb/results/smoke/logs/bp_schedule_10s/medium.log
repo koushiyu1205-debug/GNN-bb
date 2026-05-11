@@ -1,0 +1,67 @@
+start schedule-master instance=medium tasks=20 vehicle_limit=5 sorties_per_vehicle=4 time_limit=10s
+initial schedules=20 initial_routes=20
+process node 0 d=0: node_lb=None, open=0, incumbent=None
+node 0 d=0 cg=1: solve RMP (schedules=20, branches=0)
+node 0 d=0 cg=1: RMP optimal, lp=15000569.121352
+node 0 d=0 cg=1: exact schedule pricing
+node 0 d=0 cg=1: pricing priced=200, added=200, schedules=220 batch_cap_hit
+node 0 d=0 cg=2: solve RMP (schedules=220, branches=0)
+node 0 d=0 cg=2: RMP optimal, lp=5000724.966173
+node 0 d=0 cg=2: exact schedule pricing
+node 0 d=0 cg=2: pricing priced=200, added=200, schedules=420 batch_cap_hit
+node 0 d=0 cg=3: solve RMP (schedules=420, branches=0)
+node 0 d=0 cg=3: RMP optimal, lp=500845.88277
+node 0 d=0 cg=3: exact schedule pricing
+node 0 d=0 cg=3: pricing priced=200, added=200, schedules=620 batch_cap_hit
+node 0 d=0 cg=4: solve RMP (schedules=620, branches=0)
+node 0 d=0 cg=4: RMP optimal, lp=711.798703
+node 0 d=0 cg=4: exact schedule pricing
+node 0 d=0 cg=4: pricing priced=200, added=200, schedules=820 batch_cap_hit
+node 0 d=0 cg=5: solve RMP (schedules=820, branches=0)
+node 0 d=0 cg=5: RMP optimal, lp=594.989391
+node 0 d=0 cg=5: exact schedule pricing
+node 0 d=0 cg=5: pricing priced=200, added=200, schedules=1020 batch_cap_hit
+node 0 d=0 cg=6: solve RMP (schedules=1020, branches=0)
+node 0 d=0 cg=6: RMP optimal, lp=567.494582
+node 0 d=0 cg=6: exact schedule pricing
+node 0 d=0 cg=6: pricing priced=200, added=200, schedules=1220 batch_cap_hit
+node 0 d=0 cg=7: solve RMP (schedules=1220, branches=0)
+node 0 d=0 cg=7: RMP optimal, lp=547.775462
+node 0 d=0 cg=7: exact schedule pricing
+node 0 d=0 cg=7: pricing priced=200, added=200, schedules=1420 batch_cap_hit
+node 0 d=0 cg=8: solve RMP (schedules=1420, branches=0)
+node 0 d=0 cg=8: RMP optimal, lp=545.652685
+node 0 d=0 cg=8: exact schedule pricing
+node 0 d=0 cg=8: pricing priced=200, added=200, schedules=1620 batch_cap_hit
+node 0 d=0 cg=9: solve RMP (schedules=1620, branches=0)
+node 0 d=0 cg=9: RMP optimal, lp=533.341684
+node 0 d=0 cg=9: exact schedule pricing
+node 0 d=0 cg=9: pricing priced=200, added=200, schedules=1820 batch_cap_hit
+node 0 d=0 cg=10: solve RMP (schedules=1820, branches=0)
+node 0 d=0 cg=10: RMP optimal, lp=518.937912
+node 0 d=0 cg=10: exact schedule pricing
+node 0 d=0 cg=10: pricing priced=200, added=200, schedules=2020 batch_cap_hit
+node 0 d=0 cg=11: solve RMP (schedules=2020, branches=0)
+node 0 d=0 cg=11: RMP optimal, lp=516.02432
+node 0 d=0 cg=11: exact schedule pricing
+node 0 d=0 cg=11: pricing priced=200, added=200, schedules=2220 batch_cap_hit
+node 0 d=0 cg=12: solve RMP (schedules=2220, branches=0)
+node 0 d=0 cg=12: RMP optimal, lp=509.83008
+node 0 d=0 cg=12: exact schedule pricing
+node 0 d=0 cg=12: pricing priced=200, added=200, schedules=2420 batch_cap_hit
+node 0 d=0 cg=13: solve RMP (schedules=2420, branches=0)
+node 0 d=0 cg=13: RMP optimal, lp=505.432937
+node 0 d=0 cg=13: exact schedule pricing
+node 0 d=0 cg=13: pricing priced=200, added=200, schedules=2620 batch_cap_hit
+node 0 d=0 cg=14: solve RMP (schedules=2620, branches=0)
+node 0 d=0 cg=14: RMP optimal, lp=496.646911
+node 0 d=0 cg=14: exact schedule pricing
+node 0 d=0 cg=14: pricing priced=200, added=200, schedules=2820 batch_cap_hit
+node 0 d=0 cg=15: solve RMP (schedules=2820, branches=0)
+node 0 d=0 cg=15: RMP optimal, lp=495.153989
+node 0 d=0 cg=15: exact schedule pricing
+node 0 d=0 cg=15: pricing priced=200, added=200, schedules=3020 batch_cap_hit
+node 0 d=0 cg=16: solve RMP (schedules=3020, branches=0)
+node 0 d=0 cg=16: RMP optimal, lp=494.378326
+node 0 d=0 cg=16: exact schedule pricing
+stop inside node 0: status=TIME_LIMIT, open=1

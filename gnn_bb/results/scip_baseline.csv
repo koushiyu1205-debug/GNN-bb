@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,variable_count,constraint_count,status,primal_bound,dual_bound,gap,solving_time,node_count,memory_mb,log_path,instance_path,seed
+medium,20,5,4,9665,26944,INTERRUPTED,,181.609517,,256.608719,3702,,/home/kai/work/gnn_bb/results/logs/scip_baseline/medium.log,/home/kai/work/gnn_bb/json/instances/instance_medium.json,20260511

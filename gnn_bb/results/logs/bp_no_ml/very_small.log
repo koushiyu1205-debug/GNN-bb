@@ -1,0 +1,13 @@
+start instance=very_small tasks=4 vehicles=2 sorties_per_vehicle=2 time_limit=30s
+initial columns=16 initial_routes=4
+process node 0 d=0: node_lb=None, open=0, incumbent=None
+node 0 d=0 cg=1: solve RMP (cols=16, branches=0)
+node 0 d=0 cg=1: RMP optimal, lp=244.571768
+node 0 d=0 cg=1: exact pricing
+node 0 d=0 cg=1: pricing priced=48, added=48, total_cols=64
+node 0 d=0 cg=2: solve RMP (cols=64, branches=0)
+node 0 d=0 cg=2: RMP optimal, lp=132.270984
+node 0 d=0 cg=2: exact pricing
+node 0 d=0 cg=2: pricing priced=0, added=0, total_cols=64
+node 0 d=0: lp=132.270984, global_lb=132.270984, incumbent=None, bp_gap=None, open=0
+incumbent node=0 value=132.270984

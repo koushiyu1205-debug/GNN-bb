@@ -1,0 +1,38 @@
+{
+  "summary": {
+    "status": "INTERRUPTED",
+    "status_code": "userinterrupt",
+    "objective": 690.973326,
+    "runtime": 641.428454,
+    "best_bound": 524.574877,
+    "mip_gap": 0.317206,
+    "node_count": 1,
+    "solution_count": 1,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "vehicle_schedule_branch_price",
+    "generated_routes": 212,
+    "generated_columns": 620,
+    "priced_columns": 598,
+    "redcost_columns": 598,
+    "farkas_columns": 0,
+    "redcost_calls": 599,
+    "farkas_calls": 0,
+    "pricing_calls": 599,
+    "early_pricing_returns": 598,
+    "dominated_labels": 6996881,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "routes": 9,
+      "schedules": 3,
+      "covered_tasks": 20,
+      "uncovered_tasks": [],
+      "submitted": true
+    },
+    "strict_pricing": true,
+    "eps": 1e-06
+  }
+}

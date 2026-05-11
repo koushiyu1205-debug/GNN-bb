@@ -1,0 +1,3 @@
+solver,instance,cg_iterations,constraint_count,dual_bound,exact_pricing_calls,gap,generated_columns,generated_routes,incumbent_node,instance_path,log_path,memory_mb,node_count,pricing_calls,primal_bound,rmp_solves,root_relaxation,seed,solving_time,sortie_count,status,task_count,variable_count,vehicle_count
+scip_baseline,medium,,26944,181.609517,,,,,,/home/kai/work/gnn_bb/json/instances/instance_medium.json,/home/kai/work/gnn_bb/results/logs/scip_baseline/medium.log,,3702,,,,,20260511,256.608719,4,INTERRUPTED,20,9665,5
+bp_no_ml,very_small,2,,132.270984,2,0.0,64,16,0,/home/kai/work/gnn_bb/json/instances/instance_very_small.json,/home/kai/work/gnn_bb/results/logs/bp_no_ml/very_small.log,,1,2,132.270984,2,132.270984,20260511,0.048777,2,OPTIMAL,4,,2

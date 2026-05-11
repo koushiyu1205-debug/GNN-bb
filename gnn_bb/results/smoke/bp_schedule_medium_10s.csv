@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,cg_iterations,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,root_relaxation,incumbent_node,log_path,instance_path,seed
+medium,20,5,4,TIME_LIMIT,,,,10.007934,1,16,15,16,16,4588,3020,,,/home/kai/work/gnn_bb/results/smoke/logs/bp_schedule_10s/medium.log,/home/kai/work/gnn_bb/json/instances/instance_medium.json,20260511

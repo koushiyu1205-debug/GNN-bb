@@ -1,0 +1,38 @@
+{
+  "summary": {
+    "status": "OPTIMAL",
+    "status_code": "optimal",
+    "objective": 132.270984,
+    "runtime": 0.003454,
+    "best_bound": 132.270984,
+    "mip_gap": 0.0,
+    "node_count": 1,
+    "solution_count": 1,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "vehicle_schedule_branch_price",
+    "generated_routes": 9,
+    "generated_columns": 10,
+    "priced_columns": 5,
+    "redcost_columns": 5,
+    "farkas_columns": 0,
+    "redcost_calls": 6,
+    "farkas_calls": 0,
+    "pricing_calls": 6,
+    "early_pricing_returns": 5,
+    "dominated_labels": 78,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "routes": 2,
+      "schedules": 1,
+      "covered_tasks": 4,
+      "uncovered_tasks": [],
+      "submitted": true
+    },
+    "strict_pricing": true,
+    "eps": 1e-06
+  }
+}

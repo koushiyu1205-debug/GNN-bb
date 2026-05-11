@@ -1,0 +1,1828 @@
+{
+  "summary": {
+    "objective": 132.270984,
+    "node_id": 0,
+    "used_vehicles": [
+      1
+    ],
+    "vehicle_schedules": [
+      {
+        "vehicle": 1,
+        "schedule_id": 4,
+        "cost": 132.270984,
+        "sorties": [
+          {
+            "vehicle": 1,
+            "sortie": 1,
+            "route_id": 4,
+            "tasks": [
+              1,
+              2
+            ],
+            "cost": 12.291036,
+            "load": 4.0,
+            "energy": 10.299124,
+            "return_time": 11.696733,
+            "cycle_time": 16.846295,
+            "service_start": {
+              "1": 2.402732,
+              "2": 5.818548
+            }
+          },
+          {
+            "vehicle": 1,
+            "sortie": 2,
+            "route_id": 6,
+            "tasks": [
+              3,
+              4
+            ],
+            "cost": 19.979948,
+            "load": 5.0,
+            "energy": 18.023506,
+            "return_time": 18.45586,
+            "cycle_time": 27.467613,
+            "service_start": {
+              "3": 4.044943,
+              "4": 9.027754
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "routes": [
+    {
+      "id": 0,
+      "tasks": [
+        1
+      ],
+      "task_set": [
+        1
+      ],
+      "arcs": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "cost": 8.085904,
+      "load": 2.0,
+      "energy": 6.924156,
+      "return_time": 6.805464,
+      "travel_time": 4.805464,
+      "cycle_time": 10.267542,
+      "service_start": {
+        "1": 2.402732
+      }
+    },
+    {
+      "id": 1,
+      "tasks": [
+        2
+      ],
+      "task_set": [
+        2
+      ],
+      "arcs": [
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "cost": 8.874294,
+      "load": 2.0,
+      "energy": 8.203556,
+      "return_time": 8.75637,
+      "travel_time": 5.75637,
+      "cycle_time": 12.858148,
+      "service_start": {
+        "2": 2.878185
+      }
+    },
+    {
+      "id": 2,
+      "tasks": [
+        3
+      ],
+      "task_set": [
+        3
+      ],
+      "arcs": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "cost": 10.268204,
+      "load": 2.0,
+      "energy": 9.966422,
+      "return_time": 10.089886,
+      "travel_time": 8.089886,
+      "cycle_time": 15.073097,
+      "service_start": {
+        "3": 4.044943
+      }
+    },
+    {
+      "id": 3,
+      "tasks": [
+        4
+      ],
+      "task_set": [
+        4
+      ],
+      "arcs": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "cost": 17.343366,
+      "load": 3.0,
+      "energy": 16.597792,
+      "return_time": 15.856212,
+      "travel_time": 12.856212,
+      "cycle_time": 24.155108,
+      "service_start": {
+        "4": 6.428106
+      }
+    },
+    {
+      "id": 4,
+      "tasks": [
+        1,
+        2
+      ],
+      "task_set": [
+        1,
+        2
+      ],
+      "arcs": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "cost": 12.291036,
+      "load": 4.0,
+      "energy": 10.299124,
+      "return_time": 11.696733,
+      "travel_time": 6.696733,
+      "cycle_time": 16.846295,
+      "service_start": {
+        "1": 2.402732,
+        "2": 5.818548
+      }
+    },
+    {
+      "id": 5,
+      "tasks": [
+        1,
+        3
+      ],
+      "task_set": [
+        1,
+        3
+      ],
+      "arcs": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "cost": 15.81253,
+      "load": 4.0,
+      "energy": 14.272643,
+      "return_time": 14.63504,
+      "travel_time": 10.63504,
+      "cycle_time": 21.771362,
+      "service_start": {
+        "1": 2.402732,
+        "3": 8.590097
+      }
+    },
+    {
+      "id": 6,
+      "tasks": [
+        3,
+        4
+      ],
+      "task_set": [
+        3,
+        4
+      ],
+      "arcs": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "cost": 19.979948,
+      "load": 5.0,
+      "energy": 18.023506,
+      "return_time": 18.45586,
+      "travel_time": 13.45586,
+      "cycle_time": 27.467613,
+      "service_start": {
+        "3": 4.044943,
+        "4": 9.027754
+      }
+    },
+    {
+      "id": 7,
+      "tasks": [
+        4,
+        3
+      ],
+      "task_set": [
+        3,
+        4
+      ],
+      "arcs": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "cost": 19.979948,
+      "load": 5.0,
+      "energy": 18.023506,
+      "return_time": 18.45586,
+      "travel_time": 13.45586,
+      "cycle_time": 27.467613,
+      "service_start": {
+        "4": 6.428106,
+        "3": 12.410917
+      }
+    },
+    {
+      "id": 8,
+      "tasks": [
+        1,
+        4
+      ],
+      "task_set": [
+        1,
+        4
+      ],
+      "arcs": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "cost": 20.22513,
+      "load": 5.0,
+      "energy": 18.107309,
+      "return_time": 18.038686,
+      "travel_time": 13.038686,
+      "cycle_time": 27.09234,
+      "service_start": {
+        "1": 2.402732,
+        "4": 8.61058
+      }
+    },
+    {
+      "id": 9,
+      "tasks": [
+        2,
+        4
+      ],
+      "task_set": [
+        2,
+        4
+      ],
+      "arcs": [
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "cost": 19.843366,
+      "load": 5.0,
+      "energy": 17.797792,
+      "return_time": 18.856212,
+      "travel_time": 12.856212,
+      "cycle_time": 27.755108,
+      "service_start": {
+        "2": 2.878185,
+        "4": 9.428106
+      }
+    },
+    {
+      "id": 10,
+      "tasks": [
+        4,
+        2
+      ],
+      "task_set": [
+        2,
+        4
+      ],
+      "arcs": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "cost": 19.843366,
+      "load": 5.0,
+      "energy": 17.797792,
+      "return_time": 18.856212,
+      "travel_time": 12.856212,
+      "cycle_time": 27.755108,
+      "service_start": {
+        "4": 6.428106,
+        "2": 12.978027
+      }
+    },
+    {
+      "id": 11,
+      "tasks": [
+        2,
+        3
+      ],
+      "task_set": [
+        2,
+        3
+      ],
+      "arcs": [
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "cost": 14.895788,
+      "load": 4.0,
+      "energy": 13.377075,
+      "return_time": 14.694677,
+      "travel_time": 9.694677,
+      "cycle_time": 21.383215,
+      "service_start": {
+        "2": 2.878185,
+        "3": 8.649734
+      }
+    },
+    {
+      "id": 12,
+      "tasks": [
+        3,
+        2
+      ],
+      "task_set": [
+        2,
+        3
+      ],
+      "arcs": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "cost": 14.895788,
+      "load": 4.0,
+      "energy": 13.377075,
+      "return_time": 14.694677,
+      "travel_time": 9.694677,
+      "cycle_time": 21.383215,
+      "service_start": {
+        "3": 4.044943,
+        "2": 8.816492
+      }
+    },
+    {
+      "id": 13,
+      "tasks": [
+        2,
+        1
+      ],
+      "task_set": [
+        1,
+        2
+      ],
+      "arcs": [
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "cost": 12.291036,
+      "load": 4.0,
+      "energy": 10.299124,
+      "return_time": 11.696733,
+      "travel_time": 6.696733,
+      "cycle_time": 16.846295,
+      "service_start": {
+        "2": 2.878185,
+        "1": 7.294001
+      }
+    },
+    {
+      "id": 14,
+      "tasks": [
+        4,
+        1
+      ],
+      "task_set": [
+        1,
+        4
+      ],
+      "arcs": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "cost": 20.22513,
+      "load": 5.0,
+      "energy": 18.107309,
+      "return_time": 18.038686,
+      "travel_time": 13.038686,
+      "cycle_time": 27.09234,
+      "service_start": {
+        "4": 6.428106,
+        "1": 13.635954
+      }
+    },
+    {
+      "id": 15,
+      "tasks": [
+        3,
+        1
+      ],
+      "task_set": [
+        1,
+        3
+      ],
+      "arcs": [
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "cost": 15.81253,
+      "load": 4.0,
+      "energy": 14.272643,
+      "return_time": 14.63504,
+      "travel_time": 10.63504,
+      "cycle_time": 21.771362,
+      "service_start": {
+        "3": 4.044943,
+        "1": 10.232308
+      }
+    }
+  ],
+  "schedules": [
+    {
+      "id": 0,
+      "key": [
+        [
+          1
+        ]
+      ],
+      "route_ids": [
+        0
+      ],
+      "task_set": [
+        1
+      ],
+      "cost": 108.085904,
+      "cycle_time": 10.267542,
+      "source": "single_task_schedule"
+    },
+    {
+      "id": 1,
+      "key": [
+        [
+          2
+        ]
+      ],
+      "route_ids": [
+        1
+      ],
+      "task_set": [
+        2
+      ],
+      "cost": 108.874294,
+      "cycle_time": 12.858148,
+      "source": "single_task_schedule"
+    },
+    {
+      "id": 2,
+      "key": [
+        [
+          3
+        ]
+      ],
+      "route_ids": [
+        2
+      ],
+      "task_set": [
+        3
+      ],
+      "cost": 110.268204,
+      "cycle_time": 15.073097,
+      "source": "single_task_schedule"
+    },
+    {
+      "id": 3,
+      "key": [
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        3
+      ],
+      "task_set": [
+        4
+      ],
+      "cost": 117.343366,
+      "cycle_time": 24.155108,
+      "source": "single_task_schedule"
+    },
+    {
+      "id": 4,
+      "key": [
+        [
+          1,
+          2
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "route_ids": [
+        4,
+        6
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 132.270984,
+      "cycle_time": 44.313908,
+      "source": "pricing"
+    },
+    {
+      "id": 5,
+      "key": [
+        [
+          1,
+          2
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "route_ids": [
+        4,
+        7
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 132.270984,
+      "cycle_time": 44.313908,
+      "source": "pricing"
+    },
+    {
+      "id": 6,
+      "key": [
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "route_ids": [
+        13,
+        6
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 132.270984,
+      "cycle_time": 44.313908,
+      "source": "pricing"
+    },
+    {
+      "id": 7,
+      "key": [
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "route_ids": [
+        8,
+        11
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 135.12091800000002,
+      "cycle_time": 48.475555,
+      "source": "pricing"
+    },
+    {
+      "id": 8,
+      "key": [
+        [
+          1,
+          4
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "route_ids": [
+        8,
+        12
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 135.12091800000002,
+      "cycle_time": 48.475555,
+      "source": "pricing"
+    },
+    {
+      "id": 9,
+      "key": [
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          1
+        ]
+      ],
+      "route_ids": [
+        11,
+        14
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 135.12091800000002,
+      "cycle_time": 48.475555,
+      "source": "pricing"
+    },
+    {
+      "id": 10,
+      "key": [
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ]
+      ],
+      "route_ids": [
+        5,
+        9
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 135.65589599999998,
+      "cycle_time": 49.52647,
+      "source": "pricing"
+    },
+    {
+      "id": 11,
+      "key": [
+        [
+          1,
+          3
+        ],
+        [
+          4,
+          2
+        ]
+      ],
+      "route_ids": [
+        5,
+        10
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 135.65589599999998,
+      "cycle_time": 49.52647,
+      "source": "pricing"
+    },
+    {
+      "id": 12,
+      "key": [
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "route_ids": [
+        9,
+        15
+      ],
+      "task_set": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 135.65589599999998,
+      "cycle_time": 49.52647,
+      "source": "pricing"
+    },
+    {
+      "id": 13,
+      "key": [
+        [
+          1,
+          2
+        ],
+        [
+          3
+        ]
+      ],
+      "route_ids": [
+        4,
+        2
+      ],
+      "task_set": [
+        1,
+        2,
+        3
+      ],
+      "cost": 122.55924,
+      "cycle_time": 31.919392000000002,
+      "source": "pricing"
+    },
+    {
+      "id": 14,
+      "key": [
+        [
+          2,
+          1
+        ],
+        [
+          3
+        ]
+      ],
+      "route_ids": [
+        13,
+        2
+      ],
+      "task_set": [
+        1,
+        2,
+        3
+      ],
+      "cost": 122.55924,
+      "cycle_time": 31.919392000000002,
+      "source": "pricing"
+    },
+    {
+      "id": 15,
+      "key": [
+        [
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "route_ids": [
+        0,
+        11
+      ],
+      "task_set": [
+        1,
+        2,
+        3
+      ],
+      "cost": 122.981692,
+      "cycle_time": 31.650757,
+      "source": "pricing"
+    },
+    {
+      "id": 16,
+      "key": [
+        [
+          1
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "route_ids": [
+        0,
+        12
+      ],
+      "task_set": [
+        1,
+        2,
+        3
+      ],
+      "cost": 122.981692,
+      "cycle_time": 31.650757,
+      "source": "pricing"
+    },
+    {
+      "id": 17,
+      "key": [
+        [
+          1,
+          3
+        ],
+        [
+          2
+        ]
+      ],
+      "route_ids": [
+        5,
+        1
+      ],
+      "task_set": [
+        1,
+        2,
+        3
+      ],
+      "cost": 124.686824,
+      "cycle_time": 34.629509999999996,
+      "source": "pricing"
+    },
+    {
+      "id": 18,
+      "key": [
+        [
+          2
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "route_ids": [
+        1,
+        15
+      ],
+      "task_set": [
+        1,
+        2,
+        3
+      ],
+      "cost": 124.686824,
+      "cycle_time": 34.629509999999996,
+      "source": "pricing"
+    },
+    {
+      "id": 19,
+      "key": [
+        [
+          1
+        ],
+        [
+          2,
+          4
+        ]
+      ],
+      "route_ids": [
+        0,
+        9
+      ],
+      "task_set": [
+        1,
+        2,
+        4
+      ],
+      "cost": 127.92927,
+      "cycle_time": 38.02265,
+      "source": "pricing"
+    },
+    {
+      "id": 20,
+      "key": [
+        [
+          1
+        ],
+        [
+          4,
+          2
+        ]
+      ],
+      "route_ids": [
+        0,
+        10
+      ],
+      "task_set": [
+        1,
+        2,
+        4
+      ],
+      "cost": 127.92927,
+      "cycle_time": 38.02265,
+      "source": "pricing"
+    },
+    {
+      "id": 21,
+      "key": [
+        [
+          1
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "route_ids": [
+        0,
+        6
+      ],
+      "task_set": [
+        1,
+        3,
+        4
+      ],
+      "cost": 128.065852,
+      "cycle_time": 37.735155,
+      "source": "pricing"
+    },
+    {
+      "id": 22,
+      "key": [
+        [
+          1
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "route_ids": [
+        0,
+        7
+      ],
+      "task_set": [
+        1,
+        3,
+        4
+      ],
+      "cost": 128.065852,
+      "cycle_time": 37.735155,
+      "source": "pricing"
+    },
+    {
+      "id": 23,
+      "key": [
+        [
+          2
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "route_ids": [
+        1,
+        6
+      ],
+      "task_set": [
+        2,
+        3,
+        4
+      ],
+      "cost": 128.854242,
+      "cycle_time": 40.325761,
+      "source": "pricing"
+    },
+    {
+      "id": 24,
+      "key": [
+        [
+          2
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "route_ids": [
+        1,
+        7
+      ],
+      "task_set": [
+        2,
+        3,
+        4
+      ],
+      "cost": 128.854242,
+      "cycle_time": 40.325761,
+      "source": "pricing"
+    },
+    {
+      "id": 25,
+      "key": [
+        [
+          1,
+          4
+        ],
+        [
+          2
+        ]
+      ],
+      "route_ids": [
+        8,
+        1
+      ],
+      "task_set": [
+        1,
+        2,
+        4
+      ],
+      "cost": 129.099424,
+      "cycle_time": 39.950488,
+      "source": "pricing"
+    },
+    {
+      "id": 26,
+      "key": [
+        [
+          2
+        ],
+        [
+          4,
+          1
+        ]
+      ],
+      "route_ids": [
+        1,
+        14
+      ],
+      "task_set": [
+        1,
+        2,
+        4
+      ],
+      "cost": 129.099424,
+      "cycle_time": 39.950488,
+      "source": "pricing"
+    },
+    {
+      "id": 27,
+      "key": [
+        [
+          1,
+          2
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        4,
+        3
+      ],
+      "task_set": [
+        1,
+        2,
+        4
+      ],
+      "cost": 129.634402,
+      "cycle_time": 41.001402999999996,
+      "source": "pricing"
+    },
+    {
+      "id": 28,
+      "key": [
+        [
+          2,
+          1
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        13,
+        3
+      ],
+      "task_set": [
+        1,
+        2,
+        4
+      ],
+      "cost": 129.634402,
+      "cycle_time": 41.001402999999996,
+      "source": "pricing"
+    },
+    {
+      "id": 29,
+      "key": [
+        [
+          2,
+          4
+        ],
+        [
+          3
+        ]
+      ],
+      "route_ids": [
+        9,
+        2
+      ],
+      "task_set": [
+        2,
+        3,
+        4
+      ],
+      "cost": 130.11157,
+      "cycle_time": 42.828205,
+      "source": "pricing"
+    },
+    {
+      "id": 30,
+      "key": [
+        [
+          3
+        ],
+        [
+          4,
+          2
+        ]
+      ],
+      "route_ids": [
+        2,
+        10
+      ],
+      "task_set": [
+        2,
+        3,
+        4
+      ],
+      "cost": 130.11157,
+      "cycle_time": 42.828205,
+      "source": "pricing"
+    },
+    {
+      "id": 31,
+      "key": [
+        [
+          1,
+          4
+        ],
+        [
+          3
+        ]
+      ],
+      "route_ids": [
+        8,
+        2
+      ],
+      "task_set": [
+        1,
+        3,
+        4
+      ],
+      "cost": 130.493334,
+      "cycle_time": 42.165437,
+      "source": "pricing"
+    },
+    {
+      "id": 32,
+      "key": [
+        [
+          3
+        ],
+        [
+          4,
+          1
+        ]
+      ],
+      "route_ids": [
+        2,
+        14
+      ],
+      "task_set": [
+        1,
+        3,
+        4
+      ],
+      "cost": 130.493334,
+      "cycle_time": 42.165437,
+      "source": "pricing"
+    },
+    {
+      "id": 33,
+      "key": [
+        [
+          2,
+          3
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        11,
+        3
+      ],
+      "task_set": [
+        2,
+        3,
+        4
+      ],
+      "cost": 132.23915399999998,
+      "cycle_time": 45.538323,
+      "source": "pricing"
+    },
+    {
+      "id": 34,
+      "key": [
+        [
+          3,
+          2
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        12,
+        3
+      ],
+      "task_set": [
+        2,
+        3,
+        4
+      ],
+      "cost": 132.23915399999998,
+      "cycle_time": 45.538323,
+      "source": "pricing"
+    },
+    {
+      "id": 35,
+      "key": [
+        [
+          1,
+          3
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        5,
+        3
+      ],
+      "task_set": [
+        1,
+        3,
+        4
+      ],
+      "cost": 133.15589599999998,
+      "cycle_time": 45.926469999999995,
+      "source": "pricing"
+    },
+    {
+      "id": 36,
+      "key": [
+        [
+          3,
+          1
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        15,
+        3
+      ],
+      "task_set": [
+        1,
+        3,
+        4
+      ],
+      "cost": 133.15589599999998,
+      "cycle_time": 45.926469999999995,
+      "source": "pricing"
+    },
+    {
+      "id": 37,
+      "key": [
+        [
+          1,
+          2
+        ]
+      ],
+      "route_ids": [
+        4
+      ],
+      "task_set": [
+        1,
+        2
+      ],
+      "cost": 112.291036,
+      "cycle_time": 16.846295,
+      "source": "pricing"
+    },
+    {
+      "id": 38,
+      "key": [
+        [
+          2,
+          1
+        ]
+      ],
+      "route_ids": [
+        13
+      ],
+      "task_set": [
+        1,
+        2
+      ],
+      "cost": 112.291036,
+      "cycle_time": 16.846295,
+      "source": "pricing"
+    },
+    {
+      "id": 39,
+      "key": [
+        [
+          2,
+          3
+        ]
+      ],
+      "route_ids": [
+        11
+      ],
+      "task_set": [
+        2,
+        3
+      ],
+      "cost": 114.895788,
+      "cycle_time": 21.383215,
+      "source": "pricing"
+    },
+    {
+      "id": 40,
+      "key": [
+        [
+          3,
+          2
+        ]
+      ],
+      "route_ids": [
+        12
+      ],
+      "task_set": [
+        2,
+        3
+      ],
+      "cost": 114.895788,
+      "cycle_time": 21.383215,
+      "source": "pricing"
+    },
+    {
+      "id": 41,
+      "key": [
+        [
+          1,
+          3
+        ]
+      ],
+      "route_ids": [
+        5
+      ],
+      "task_set": [
+        1,
+        3
+      ],
+      "cost": 115.81253,
+      "cycle_time": 21.771362,
+      "source": "pricing"
+    },
+    {
+      "id": 42,
+      "key": [
+        [
+          3,
+          1
+        ]
+      ],
+      "route_ids": [
+        15
+      ],
+      "task_set": [
+        1,
+        3
+      ],
+      "cost": 115.81253,
+      "cycle_time": 21.771362,
+      "source": "pricing"
+    },
+    {
+      "id": 43,
+      "key": [
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ],
+      "route_ids": [
+        0,
+        1
+      ],
+      "task_set": [
+        1,
+        2
+      ],
+      "cost": 116.96019799999999,
+      "cycle_time": 23.12569,
+      "source": "pricing"
+    },
+    {
+      "id": 44,
+      "key": [
+        [
+          1
+        ],
+        [
+          3
+        ]
+      ],
+      "route_ids": [
+        0,
+        2
+      ],
+      "task_set": [
+        1,
+        3
+      ],
+      "cost": 118.354108,
+      "cycle_time": 25.340639000000003,
+      "source": "pricing"
+    },
+    {
+      "id": 45,
+      "key": [
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ],
+      "route_ids": [
+        1,
+        2
+      ],
+      "task_set": [
+        2,
+        3
+      ],
+      "cost": 119.142498,
+      "cycle_time": 27.931245,
+      "source": "pricing"
+    },
+    {
+      "id": 46,
+      "key": [
+        [
+          2,
+          4
+        ]
+      ],
+      "route_ids": [
+        9
+      ],
+      "task_set": [
+        2,
+        4
+      ],
+      "cost": 119.843366,
+      "cycle_time": 27.755108,
+      "source": "pricing"
+    },
+    {
+      "id": 47,
+      "key": [
+        [
+          4,
+          2
+        ]
+      ],
+      "route_ids": [
+        10
+      ],
+      "task_set": [
+        2,
+        4
+      ],
+      "cost": 119.843366,
+      "cycle_time": 27.755108,
+      "source": "pricing"
+    },
+    {
+      "id": 48,
+      "key": [
+        [
+          3,
+          4
+        ]
+      ],
+      "route_ids": [
+        6
+      ],
+      "task_set": [
+        3,
+        4
+      ],
+      "cost": 119.97994800000001,
+      "cycle_time": 27.467613,
+      "source": "pricing"
+    },
+    {
+      "id": 49,
+      "key": [
+        [
+          4,
+          3
+        ]
+      ],
+      "route_ids": [
+        7
+      ],
+      "task_set": [
+        3,
+        4
+      ],
+      "cost": 119.97994800000001,
+      "cycle_time": 27.467613,
+      "source": "pricing"
+    },
+    {
+      "id": 50,
+      "key": [
+        [
+          1,
+          4
+        ]
+      ],
+      "route_ids": [
+        8
+      ],
+      "task_set": [
+        1,
+        4
+      ],
+      "cost": 120.22513000000001,
+      "cycle_time": 27.09234,
+      "source": "pricing"
+    },
+    {
+      "id": 51,
+      "key": [
+        [
+          4,
+          1
+        ]
+      ],
+      "route_ids": [
+        14
+      ],
+      "task_set": [
+        1,
+        4
+      ],
+      "cost": 120.22513000000001,
+      "cycle_time": 27.09234,
+      "source": "pricing"
+    },
+    {
+      "id": 52,
+      "key": [
+        [
+          1
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        0,
+        3
+      ],
+      "task_set": [
+        1,
+        4
+      ],
+      "cost": 125.42927,
+      "cycle_time": 34.42265,
+      "source": "pricing"
+    },
+    {
+      "id": 53,
+      "key": [
+        [
+          2
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        1,
+        3
+      ],
+      "task_set": [
+        2,
+        4
+      ],
+      "cost": 126.21766,
+      "cycle_time": 37.013256,
+      "source": "pricing"
+    },
+    {
+      "id": 54,
+      "key": [
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ],
+      "route_ids": [
+        2,
+        3
+      ],
+      "task_set": [
+        3,
+        4
+      ],
+      "cost": 127.61157,
+      "cycle_time": 39.228205,
+      "source": "pricing"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,cg_iterations,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,root_relaxation,incumbent_node,log_path,instance_path,seed
+medium,20,3,17,INTERRUPTED,690.973326,524.574877,0.317206,641.428454,1,0,599,599,599,212,620,,,/home/kai/work/gnn_bb/results/logs/bp_schedule_full/medium.log,/home/kai/work/gnn_bb/json/instances/instance_medium.json,20260511

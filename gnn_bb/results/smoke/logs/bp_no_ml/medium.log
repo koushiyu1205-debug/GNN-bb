@@ -1,0 +1,310 @@
+start instance=medium tasks=20 vehicles=5 sorties_per_vehicle=4 time_limit=45s max_nodes=20 max_cols_per_pricing=200
+initial columns=400 initial_routes=20
+process node 0 d=0: node_lb=None, open=0, incumbent=None
+node 0 d=0 cg=1: solve RMP (cols=400, branches=0)
+node 0 d=0 cg=1: RMP optimal, lp=1053.380092
+node 0 d=0 cg=1: exact pricing
+node 0 d=0 cg=1: pricing priced=200, added=200, total_cols=600 batch_cap_hit
+node 0 d=0 cg=2: solve RMP (cols=600, branches=0)
+node 0 d=0 cg=2: RMP optimal, lp=826.678205
+node 0 d=0 cg=2: exact pricing
+node 0 d=0 cg=2: pricing priced=200, added=200, total_cols=800 batch_cap_hit
+node 0 d=0 cg=3: solve RMP (cols=800, branches=0)
+node 0 d=0 cg=3: RMP optimal, lp=758.671632
+node 0 d=0 cg=3: exact pricing
+node 0 d=0 cg=3: pricing priced=200, added=200, total_cols=1000 batch_cap_hit
+node 0 d=0 cg=4: solve RMP (cols=1000, branches=0)
+node 0 d=0 cg=4: RMP optimal, lp=645.751218
+node 0 d=0 cg=4: exact pricing
+node 0 d=0 cg=4: pricing priced=200, added=200, total_cols=1200 batch_cap_hit
+node 0 d=0 cg=5: solve RMP (cols=1200, branches=0)
+node 0 d=0 cg=5: RMP optimal, lp=547.151646
+node 0 d=0 cg=5: exact pricing
+node 0 d=0 cg=5: pricing priced=200, added=200, total_cols=1400 batch_cap_hit
+node 0 d=0 cg=6: solve RMP (cols=1400, branches=0)
+node 0 d=0 cg=6: RMP optimal, lp=537.561516
+node 0 d=0 cg=6: exact pricing
+node 0 d=0 cg=6: pricing priced=200, added=200, total_cols=1600 batch_cap_hit
+node 0 d=0 cg=7: solve RMP (cols=1600, branches=0)
+node 0 d=0 cg=7: RMP optimal, lp=537.561516
+node 0 d=0 cg=7: exact pricing
+node 0 d=0 cg=7: pricing priced=200, added=200, total_cols=1800 batch_cap_hit
+node 0 d=0 cg=8: solve RMP (cols=1800, branches=0)
+node 0 d=0 cg=8: RMP optimal, lp=523.667861
+node 0 d=0 cg=8: exact pricing
+node 0 d=0 cg=8: pricing priced=200, added=200, total_cols=2000 batch_cap_hit
+node 0 d=0 cg=9: solve RMP (cols=2000, branches=0)
+node 0 d=0 cg=9: RMP optimal, lp=522.021475
+node 0 d=0 cg=9: exact pricing
+node 0 d=0 cg=9: pricing priced=200, added=200, total_cols=2200 batch_cap_hit
+node 0 d=0 cg=10: solve RMP (cols=2200, branches=0)
+node 0 d=0 cg=10: RMP optimal, lp=499.333576
+node 0 d=0 cg=10: exact pricing
+node 0 d=0 cg=10: pricing priced=200, added=200, total_cols=2400 batch_cap_hit
+node 0 d=0 cg=11: solve RMP (cols=2400, branches=0)
+node 0 d=0 cg=11: RMP optimal, lp=494.070898
+node 0 d=0 cg=11: exact pricing
+node 0 d=0 cg=11: pricing priced=200, added=200, total_cols=2600 batch_cap_hit
+node 0 d=0 cg=12: solve RMP (cols=2600, branches=0)
+node 0 d=0 cg=12: RMP optimal, lp=492.435358
+node 0 d=0 cg=12: exact pricing
+node 0 d=0 cg=12: pricing priced=200, added=200, total_cols=2800 batch_cap_hit
+node 0 d=0 cg=13: solve RMP (cols=2800, branches=0)
+node 0 d=0 cg=13: RMP optimal, lp=490.283693
+node 0 d=0 cg=13: exact pricing
+node 0 d=0 cg=13: pricing priced=200, added=200, total_cols=3000 batch_cap_hit
+node 0 d=0 cg=14: solve RMP (cols=3000, branches=0)
+node 0 d=0 cg=14: RMP optimal, lp=490.283693
+node 0 d=0 cg=14: exact pricing
+node 0 d=0 cg=14: pricing priced=80, added=80, total_cols=3080
+node 0 d=0 cg=15: solve RMP (cols=3080, branches=0)
+node 0 d=0 cg=15: RMP optimal, lp=490.283693
+node 0 d=0 cg=15: exact pricing
+node 0 d=0 cg=15: pricing priced=0, added=0, total_cols=3080
+node 0 d=0: lp=490.283693, global_lb=490.283693, incumbent=None, bp_gap=None, open=0
+branch node 0: left=rf_1_3_<=_0, right=rf_1_3_>=_1
+tree after node 0: global_lb=490.283693, incumbent=None, bp_gap=None, open=2
+process node 1 d=1: node_lb=490.283693, open=1, incumbent=None
+node 1 d=1 cg=1: solve RMP (cols=3080, branches=1)
+node 1 d=1 cg=1: RMP optimal, lp=498.141777
+node 1 d=1 cg=1: exact pricing
+node 1 d=1 cg=1: pricing priced=200, added=200, total_cols=3280 batch_cap_hit
+node 1 d=1 cg=2: solve RMP (cols=3280, branches=1)
+node 1 d=1 cg=2: RMP optimal, lp=494.281908
+node 1 d=1 cg=2: exact pricing
+node 1 d=1 cg=2: pricing priced=40, added=40, total_cols=3320
+node 1 d=1 cg=3: solve RMP (cols=3320, branches=1)
+node 1 d=1 cg=3: RMP optimal, lp=494.281908
+node 1 d=1 cg=3: exact pricing
+node 1 d=1 cg=3: pricing priced=0, added=0, total_cols=3320
+node 1 d=1: lp=494.281908, global_lb=490.283693, incumbent=None, bp_gap=None, open=1
+branch node 1: left=rf_9_18_<=_0, right=rf_9_18_>=_1
+tree after node 1: global_lb=490.283693, incumbent=None, bp_gap=None, open=3
+process node 2 d=1: node_lb=490.283693, open=2, incumbent=None
+node 2 d=1 cg=1: solve RMP (cols=3320, branches=1)
+node 2 d=1 cg=1: RMP optimal, lp=505.196012
+node 2 d=1 cg=1: exact pricing
+node 2 d=1 cg=1: pricing priced=200, added=200, total_cols=3520 batch_cap_hit
+node 2 d=1 cg=2: solve RMP (cols=3520, branches=1)
+node 2 d=1 cg=2: RMP optimal, lp=492.075694
+node 2 d=1 cg=2: exact pricing
+node 2 d=1 cg=2: pricing priced=100, added=100, total_cols=3620
+node 2 d=1 cg=3: solve RMP (cols=3620, branches=1)
+node 2 d=1 cg=3: RMP optimal, lp=492.075694
+node 2 d=1 cg=3: exact pricing
+node 2 d=1 cg=3: pricing priced=0, added=0, total_cols=3620
+node 2 d=1: lp=492.075694, global_lb=492.075694, incumbent=None, bp_gap=None, open=2
+branch node 2: left=rf_9_18_<=_0, right=rf_9_18_>=_1
+tree after node 2: global_lb=492.075694, incumbent=None, bp_gap=None, open=4
+process node 5 d=2: node_lb=492.075694, open=3, incumbent=None
+node 5 d=2 cg=1: solve RMP (cols=3620, branches=2)
+node 5 d=2 cg=1: RMP optimal, lp=502.939413
+node 5 d=2 cg=1: exact pricing
+node 5 d=2 cg=1: pricing priced=200, added=200, total_cols=3820 batch_cap_hit
+node 5 d=2 cg=2: solve RMP (cols=3820, branches=2)
+node 5 d=2 cg=2: RMP optimal, lp=502.939413
+node 5 d=2 cg=2: exact pricing
+node 5 d=2 cg=2: pricing priced=80, added=80, total_cols=3900
+node 5 d=2 cg=3: solve RMP (cols=3900, branches=2)
+node 5 d=2 cg=3: RMP optimal, lp=502.939413
+node 5 d=2 cg=3: exact pricing
+node 5 d=2 cg=3: pricing priced=200, added=200, total_cols=4100 batch_cap_hit
+node 5 d=2 cg=4: solve RMP (cols=4100, branches=2)
+node 5 d=2 cg=4: RMP optimal, lp=502.939413
+node 5 d=2 cg=4: exact pricing
+node 5 d=2 cg=4: pricing priced=200, added=200, total_cols=4300 batch_cap_hit
+node 5 d=2 cg=5: solve RMP (cols=4300, branches=2)
+node 5 d=2 cg=5: RMP optimal, lp=502.939413
+node 5 d=2 cg=5: exact pricing
+node 5 d=2 cg=5: pricing priced=120, added=120, total_cols=4420
+node 5 d=2 cg=6: solve RMP (cols=4420, branches=2)
+node 5 d=2 cg=6: RMP optimal, lp=502.939413
+node 5 d=2 cg=6: exact pricing
+node 5 d=2 cg=6: pricing priced=0, added=0, total_cols=4420
+node 5 d=2: lp=502.939413, global_lb=492.075694, incumbent=None, bp_gap=None, open=3
+branch node 5: left=taskveh_17_v1_<=_0, right=taskveh_17_v1_>=_1
+tree after node 5: global_lb=492.075694, incumbent=None, bp_gap=None, open=5
+process node 6 d=2: node_lb=492.075694, open=4, incumbent=None
+node 6 d=2 cg=1: solve RMP (cols=4420, branches=2)
+node 6 d=2 cg=1: RMP optimal, lp=541.319952
+node 6 d=2 cg=1: exact pricing
+node 6 d=2 cg=1: pricing priced=200, added=200, total_cols=4620 batch_cap_hit
+node 6 d=2 cg=2: solve RMP (cols=4620, branches=2)
+node 6 d=2 cg=2: RMP optimal, lp=513.013552
+node 6 d=2 cg=2: exact pricing
+node 6 d=2 cg=2: pricing priced=200, added=200, total_cols=4820 batch_cap_hit
+node 6 d=2 cg=3: solve RMP (cols=4820, branches=2)
+node 6 d=2 cg=3: RMP optimal, lp=513.013552
+node 6 d=2 cg=3: exact pricing
+node 6 d=2 cg=3: pricing priced=200, added=200, total_cols=5020 batch_cap_hit
+node 6 d=2 cg=4: solve RMP (cols=5020, branches=2)
+node 6 d=2 cg=4: RMP optimal, lp=513.013552
+node 6 d=2 cg=4: exact pricing
+node 6 d=2 cg=4: pricing priced=0, added=0, total_cols=5020
+node 6 d=2: lp=513.013552, global_lb=494.281908, incumbent=None, bp_gap=None, open=4
+branch node 6: left=taskveh_17_v5_<=_0, right=taskveh_17_v5_>=_1
+tree after node 6: global_lb=494.281908, incumbent=None, bp_gap=None, open=6
+process node 3 d=2: node_lb=494.281908, open=5, incumbent=None
+node 3 d=2 cg=1: solve RMP (cols=5020, branches=2)
+node 3 d=2 cg=1: RMP optimal, lp=501.902419
+node 3 d=2 cg=1: exact pricing
+node 3 d=2 cg=1: pricing priced=200, added=200, total_cols=5220 batch_cap_hit
+node 3 d=2 cg=2: solve RMP (cols=5220, branches=2)
+node 3 d=2 cg=2: RMP optimal, lp=501.902419
+node 3 d=2 cg=2: exact pricing
+node 3 d=2 cg=2: pricing priced=80, added=80, total_cols=5300
+node 3 d=2 cg=3: solve RMP (cols=5300, branches=2)
+node 3 d=2 cg=3: RMP optimal, lp=501.902419
+node 3 d=2 cg=3: exact pricing
+node 3 d=2 cg=3: pricing priced=0, added=0, total_cols=5300
+node 3 d=2: lp=501.902419, global_lb=494.281908, incumbent=None, bp_gap=None, open=5
+branch node 3: left=taskveh_8_v2_<=_0, right=taskveh_8_v2_>=_1
+tree after node 3: global_lb=494.281908, incumbent=None, bp_gap=None, open=7
+process node 4 d=2: node_lb=494.281908, open=6, incumbent=None
+node 4 d=2 cg=1: solve RMP (cols=5300, branches=2)
+node 4 d=2 cg=1: RMP optimal, lp=524.184517
+node 4 d=2 cg=1: exact pricing
+node 4 d=2 cg=1: pricing priced=200, added=200, total_cols=5500 batch_cap_hit
+node 4 d=2 cg=2: solve RMP (cols=5500, branches=2)
+node 4 d=2 cg=2: RMP optimal, lp=520.686657
+node 4 d=2 cg=2: exact pricing
+node 4 d=2 cg=2: pricing priced=200, added=200, total_cols=5700 batch_cap_hit
+node 4 d=2 cg=3: solve RMP (cols=5700, branches=2)
+node 4 d=2 cg=3: RMP optimal, lp=515.963747
+node 4 d=2 cg=3: exact pricing
+node 4 d=2 cg=3: pricing priced=60, added=60, total_cols=5760
+node 4 d=2 cg=4: solve RMP (cols=5760, branches=2)
+node 4 d=2 cg=4: RMP optimal, lp=515.963747
+node 4 d=2 cg=4: exact pricing
+node 4 d=2 cg=4: pricing priced=0, added=0, total_cols=5760
+node 4 d=2: lp=515.963747, global_lb=501.902419, incumbent=None, bp_gap=None, open=6
+branch node 4: left=taskveh_8_v3_<=_0, right=taskveh_8_v3_>=_1
+tree after node 4: global_lb=501.902419, incumbent=None, bp_gap=None, open=8
+process node 11 d=3: node_lb=501.902419, open=7, incumbent=None
+node 11 d=3 cg=1: solve RMP (cols=5760, branches=3)
+node 11 d=3 cg=1: RMP optimal, lp=502.032482
+node 11 d=3 cg=1: exact pricing
+node 11 d=3 cg=1: pricing priced=200, added=200, total_cols=5960 batch_cap_hit
+node 11 d=3 cg=2: solve RMP (cols=5960, branches=3)
+node 11 d=3 cg=2: RMP optimal, lp=501.902419
+node 11 d=3 cg=2: exact pricing
+node 11 d=3 cg=2: pricing priced=0, added=0, total_cols=5960
+node 11 d=3: lp=501.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=7
+branch node 11: left=taskveh_20_v2_<=_0, right=taskveh_20_v2_>=_1
+tree after node 11: global_lb=501.902419, incumbent=None, bp_gap=None, open=9
+process node 12 d=3: node_lb=501.902419, open=8, incumbent=None
+node 12 d=3 cg=1: solve RMP (cols=5960, branches=3)
+node 12 d=3 cg=1: RMP optimal, lp=526.902419
+node 12 d=3 cg=1: exact pricing
+node 12 d=3 cg=1: pricing priced=0, added=0, total_cols=5960
+node 12 d=3: lp=526.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=8
+branch node 12: left=taskveh_11_v2_<=_0, right=taskveh_11_v2_>=_1
+tree after node 12: global_lb=501.902419, incumbent=None, bp_gap=None, open=10
+process node 15 d=4: node_lb=501.902419, open=9, incumbent=None
+node 15 d=4 cg=1: solve RMP (cols=5960, branches=4)
+node 15 d=4 cg=1: RMP optimal, lp=501.902419
+node 15 d=4 cg=1: exact pricing
+node 15 d=4 cg=1: pricing priced=0, added=0, total_cols=5960
+node 15 d=4: lp=501.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=9
+branch node 15: left=taskveh_17_v1_<=_0, right=taskveh_17_v1_>=_1
+tree after node 15: global_lb=501.902419, incumbent=None, bp_gap=None, open=11
+process node 16 d=4: node_lb=501.902419, open=10, incumbent=None
+node 16 d=4 cg=1: solve RMP (cols=5960, branches=4)
+node 16 d=4 cg=1: RMP optimal, lp=526.902419
+node 16 d=4 cg=1: exact pricing
+node 16 d=4 cg=1: pricing priced=0, added=0, total_cols=5960
+node 16 d=4: lp=526.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=10
+branch node 16: left=taskveh_16_v2_<=_0, right=taskveh_16_v2_>=_1
+tree after node 16: global_lb=501.902419, incumbent=None, bp_gap=None, open=12
+process node 19 d=5: node_lb=501.902419, open=11, incumbent=None
+node 19 d=5 cg=1: solve RMP (cols=5960, branches=5)
+node 19 d=5 cg=1: RMP optimal, lp=501.902419
+node 19 d=5 cg=1: exact pricing
+node 19 d=5 cg=1: pricing priced=0, added=0, total_cols=5960
+node 19 d=5: lp=501.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=11
+branch node 19: left=taskveh_10_v4_<=_0, right=taskveh_10_v4_>=_1
+tree after node 19: global_lb=501.902419, incumbent=None, bp_gap=None, open=13
+process node 20 d=5: node_lb=501.902419, open=12, incumbent=None
+node 20 d=5 cg=1: solve RMP (cols=5960, branches=5)
+node 20 d=5 cg=1: RMP optimal, lp=501.902419
+node 20 d=5 cg=1: exact pricing
+node 20 d=5 cg=1: pricing priced=0, added=0, total_cols=5960
+node 20 d=5: lp=501.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=12
+branch node 20: left=taskveh_8_v3_<=_0, right=taskveh_8_v3_>=_1
+tree after node 20: global_lb=501.902419, incumbent=None, bp_gap=None, open=14
+process node 25 d=6: node_lb=501.902419, open=13, incumbent=None
+node 25 d=6 cg=1: solve RMP (cols=5960, branches=6)
+node 25 d=6 cg=1: RMP optimal, lp=501.902419
+node 25 d=6 cg=1: exact pricing
+node 25 d=6 cg=1: pricing priced=0, added=0, total_cols=5960
+node 25 d=6: lp=501.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=13
+branch node 25: left=taskveh_11_v1_<=_0, right=taskveh_11_v1_>=_1
+tree after node 25: global_lb=501.902419, incumbent=None, bp_gap=None, open=15
+process node 26 d=6: node_lb=501.902419, open=14, incumbent=None
+node 26 d=6 cg=1: solve RMP (cols=5960, branches=6)
+node 26 d=6 cg=1: RMP optimal, lp=626.902419
+node 26 d=6 cg=1: exact pricing
+node 26 d=6 cg=1: pricing priced=156, added=156, total_cols=6116
+node 26 d=6 cg=2: solve RMP (cols=6116, branches=6)
+node 26 d=6 cg=2: RMP optimal, lp=626.902419
+node 26 d=6 cg=2: exact pricing
+node 26 d=6 cg=2: pricing priced=0, added=0, total_cols=6116
+node 26 d=6: lp=626.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=14
+branch node 26: left=col_15_8_4_2_3_2_<=_0, right=col_15_8_4_2_3_2_>=_1
+tree after node 26: global_lb=501.902419, incumbent=None, bp_gap=None, open=16
+process node 23 d=6: node_lb=501.902419, open=15, incumbent=None
+node 23 d=6 cg=1: solve RMP (cols=6116, branches=6)
+node 23 d=6 cg=1: RMP optimal, lp=501.902419
+node 23 d=6 cg=1: exact pricing
+node 23 d=6 cg=1: pricing priced=80, added=80, total_cols=6196
+node 23 d=6 cg=2: solve RMP (cols=6196, branches=6)
+node 23 d=6 cg=2: RMP optimal, lp=501.902419
+node 23 d=6 cg=2: exact pricing
+node 23 d=6 cg=2: pricing priced=0, added=0, total_cols=6196
+node 23 d=6: lp=501.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=15
+branch node 23: left=taskveh_20_v1_<=_0, right=taskveh_20_v1_>=_1
+tree after node 23: global_lb=501.902419, incumbent=None, bp_gap=None, open=17
+process node 27 d=7: node_lb=501.902419, open=16, incumbent=None
+node 27 d=7 cg=1: solve RMP (cols=6196, branches=7)
+node 27 d=7 cg=1: RMP optimal, lp=526.902419
+node 27 d=7 cg=1: exact pricing
+node 27 d=7 cg=1: pricing priced=0, added=0, total_cols=6196
+node 27 d=7: lp=526.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=16
+branch node 27: left=arc_0_14_<=_0, right=arc_0_14_>=_1
+tree after node 27: global_lb=501.902419, incumbent=None, bp_gap=None, open=18
+process node 28 d=7: node_lb=501.902419, open=17, incumbent=None
+node 28 d=7 cg=1: solve RMP (cols=6196, branches=7)
+node 28 d=7 cg=1: RMP optimal, lp=502.513685
+node 28 d=7 cg=1: exact pricing
+node 28 d=7 cg=1: pricing priced=0, added=0, total_cols=6196
+node 28 d=7: lp=502.513685, global_lb=501.902419, incumbent=None, bp_gap=None, open=17
+branch node 28: left=rf_3_11_<=_0, right=rf_3_11_>=_1
+tree after node 28: global_lb=501.902419, incumbent=None, bp_gap=None, open=19
+process node 24 d=6: node_lb=501.902419, open=18, incumbent=None
+node 24 d=6 cg=1: solve RMP (cols=6196, branches=6)
+node 24 d=6 cg=1: RMP optimal, lp=726.902419
+node 24 d=6 cg=1: exact pricing
+node 24 d=6 cg=1: pricing priced=32, added=32, total_cols=6228
+node 24 d=6 cg=2: solve RMP (cols=6228, branches=6)
+node 24 d=6 cg=2: RMP optimal, lp=726.902419
+node 24 d=6 cg=2: exact pricing
+node 24 d=6 cg=2: pricing priced=16, added=16, total_cols=6244
+node 24 d=6 cg=3: solve RMP (cols=6244, branches=6)
+node 24 d=6 cg=3: RMP optimal, lp=726.902419
+node 24 d=6 cg=3: exact pricing
+node 24 d=6 cg=3: pricing priced=24, added=24, total_cols=6268
+node 24 d=6 cg=4: solve RMP (cols=6268, branches=6)
+node 24 d=6 cg=4: RMP optimal, lp=726.902419
+node 24 d=6 cg=4: exact pricing
+node 24 d=6 cg=4: pricing priced=0, added=0, total_cols=6268
+node 24 d=6: lp=726.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=18
+branch node 24: left=col_5_14_12_16_3_2_<=_0, right=col_5_14_12_16_3_2_>=_1
+tree after node 24: global_lb=501.902419, incumbent=None, bp_gap=None, open=20
+process node 31 d=7: node_lb=501.902419, open=19, incumbent=None
+node 31 d=7 cg=1: solve RMP (cols=6268, branches=7)
+node 31 d=7 cg=1: RMP optimal, lp=501.902419
+node 31 d=7 cg=1: exact pricing
+node 31 d=7 cg=1: pricing priced=0, added=0, total_cols=6268
+node 31 d=7: lp=501.902419, global_lb=501.902419, incumbent=None, bp_gap=None, open=19
+branch node 31: left=taskveh_10_v1_<=_0, right=taskveh_10_v1_>=_1
+tree after node 31: global_lb=501.902419, incumbent=None, bp_gap=None, open=21

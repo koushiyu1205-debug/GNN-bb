@@ -1,0 +1,37 @@
+{
+  "summary": {
+    "status": "OPTIMAL",
+    "status_code": "optimal",
+    "objective": 479.674912,
+    "runtime": 239.059362,
+    "best_bound": 479.674912,
+    "mip_gap": 0.0,
+    "node_count": 5,
+    "solution_count": 5,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "route_vehicle_branch_price",
+    "generated_routes": 565,
+    "generated_columns": 1929,
+    "priced_columns": 1802,
+    "redcost_columns": 1802,
+    "farkas_columns": 0,
+    "redcost_calls": 542,
+    "farkas_calls": 0,
+    "pricing_calls": 542,
+    "early_pricing_returns": 536,
+    "dominated_labels": 3603778,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "submitted": true,
+      "routes": 7,
+      "covered_tasks": 30,
+      "uncovered_tasks": []
+    },
+    "strict_pricing": true,
+    "eps": 1e-06
+  }
+}

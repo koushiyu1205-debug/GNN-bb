@@ -1,0 +1,37 @@
+{
+  "summary": {
+    "status": "OPTIMAL",
+    "status_code": "optimal",
+    "objective": 526.902419,
+    "runtime": 85.823296,
+    "best_bound": 526.902419,
+    "mip_gap": 0.0,
+    "node_count": 884,
+    "solution_count": 6,
+    "uses_artificial": false,
+    "artificial_task_count": 0
+  },
+  "report": {
+    "mode": "route_slot_branch_price",
+    "generated_routes": 320,
+    "generated_columns": 5150,
+    "priced_columns": 4745,
+    "redcost_columns": 4745,
+    "farkas_columns": 0,
+    "redcost_calls": 1269,
+    "farkas_calls": 2,
+    "pricing_calls": 1271,
+    "early_pricing_returns": 377,
+    "dominated_labels": 754957,
+    "artificial_penalty": 1000000.0,
+    "warm_start": {
+      "enabled": true,
+      "submitted": true,
+      "routes": 9,
+      "covered_tasks": 20,
+      "uncovered_tasks": []
+    },
+    "strict_pricing": true,
+    "eps": 1e-06
+  }
+}

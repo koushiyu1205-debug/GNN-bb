@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,cg_iterations,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,root_relaxation,incumbent_node,log_path,instance_path,seed
+very_small,4,2,2,OPTIMAL,132.270984,132.270984,0.0,0.003924,1,0,4,4,4,11,12,,,/home/kai/work/gnn_bb/results/smoke/logs/bp_schedule_pool_best_very_small/very_small.log,/home/kai/work/gnn_bb/json/instances/instance_very_small.json,20260511

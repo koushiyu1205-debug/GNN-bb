@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_count,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,cg_iterations,pricing_calls,exact_pricing_calls,generated_routes,generated_columns,root_relaxation,incumbent_node,log_path,instance_path,seed
+medium,20,5,4,OPTIMAL,526.902419,526.902419,0.0,85.823296,884,0,1271,1271,1271,320,5150,,,/home/kai/work/gnn_bb/results/smoke/logs/bp_route_slot_medium_3600/medium.log,/home/kai/work/gnn_bb/json/instances/instance_medium.json,20260511
