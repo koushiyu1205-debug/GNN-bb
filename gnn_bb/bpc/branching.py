@@ -30,6 +30,39 @@ class BranchConstraint:
         return f"task_vehicle({self.task_i},{self.vehicle})={relation}"
 
 
+@dataclass(frozen=True)
+class BranchCandidate:
+    """中文注释：3PB 使用的分支候选。value 是当前 LP 中对应结构变量的聚合值。"""
+
+    kind: str
+    left: BranchConstraint
+    right: BranchConstraint
+    value: float
+    fractionality: float
+
+    @property
+    def key(self) -> str:
+        if self.kind == "ryan_foster":
+            return f"rf:{self.left.task_i}:{self.left.task_j}"
+        if self.kind == "task_vehicle":
+            return f"task_vehicle:{self.left.task_i}:{self.left.vehicle}"
+        if self.kind == "arc":
+            return f"arc:{self.left.task_i}:{self.left.task_j}"
+        if self.kind == "vehicle":
+            return f"vehicle:{self.left.vehicle}"
+        return f"{self.kind}:{self.left.name()}:{self.right.name()}"
+
+    def compact(self) -> dict:
+        return {
+            "key": self.key,
+            "kind": self.kind,
+            "left": self.left.name(),
+            "right": self.right.name(),
+            "value": round(float(self.value), 9),
+            "fractionality": round(float(self.fractionality), 9),
+        }
+
+
 def route_uses_arc(route: RouteColumn, tail: int, head: int) -> bool:
     return any(int(left) == int(tail) and int(right) == int(head) for left, right in zip(route.tasks[:-1], route.tasks[1:]))
 
@@ -135,15 +168,16 @@ def _fixed_arcs(constraints: tuple[BranchConstraint, ...]) -> set[tuple[int, int
     }
 
 
-def choose_branch(
+def generate_branch_candidates(
     data: BPCData,
     route_values: list[tuple[RouteColumn, int, float]],
     y_values: dict[int, float],
     constraints: tuple[BranchConstraint, ...],
     *,
     tol: float = 1.0e-6,
-) -> tuple[BranchConstraint, BranchConstraint] | None:
-    # 中文注释：Ryan-Foster 在 route master 中最自然，因为它能直接转成 pricing 中的 route 过滤规则。
+) -> list[BranchCandidate]:
+    candidates: list[BranchCandidate] = []
+
     fixed_rf = _fixed_rf_pairs(constraints)
     pair_values = {pair: 0.0 for pair in combinations(data.tasks, 2)}
     for route, _vehicle, value in route_values:
@@ -151,22 +185,19 @@ def choose_branch(
             continue
         for pair in combinations(sorted(route.task_set), 2):
             pair_values[pair] = pair_values.get(pair, 0.0) + float(value)
-
-    rf_candidate = None
     for (left, right), value in pair_values.items():
         if tuple(sorted((left, right))) in fixed_rf:
             continue
         if tol < value < 1.0 - tol:
-            score = abs(value - 0.5)
-            item = (score, left, right, value)
-            if rf_candidate is None or item < rf_candidate:
-                rf_candidate = item
-    if rf_candidate is not None:
-        _, left, right, _ = rf_candidate
-        return (
-            BranchConstraint("ryan_separate", int(left), int(right)),
-            BranchConstraint("ryan_together", int(left), int(right)),
-        )
+            candidates.append(
+                BranchCandidate(
+                    "ryan_foster",
+                    BranchConstraint("ryan_separate", int(left), int(right)),
+                    BranchConstraint("ryan_together", int(left), int(right)),
+                    float(value),
+                    0.5 - abs(float(value) - 0.5),
+                )
+            )
 
     fixed_task_vehicle = _fixed_task_vehicle_pairs(constraints)
     assignment_values: dict[tuple[int, int], float] = {(task, vehicle): 0.0 for task in data.tasks for vehicle in data.vehicles}
@@ -175,61 +206,71 @@ def choose_branch(
             continue
         for task in route.task_set:
             assignment_values[(int(task), int(vehicle))] += float(value)
-
-    assignment_candidate = None
     for (task, vehicle), value in assignment_values.items():
         if (task, vehicle) in fixed_task_vehicle or _task_has_vehicle_on(constraints, task):
             continue
         if tol < value < 1.0 - tol:
-            score = abs(value - 0.5)
-            item = (score, task, vehicle, value)
-            if assignment_candidate is None or item < assignment_candidate:
-                assignment_candidate = item
-    if assignment_candidate is None:
-        fixed_arcs = _fixed_arcs(constraints)
-        arc_values: dict[tuple[int, int], float] = {}
-        for route, _vehicle, value in route_values:
-            if abs(value) <= tol:
-                continue
-            for tail, head in zip(route.tasks[:-1], route.tasks[1:]):
-                arc = (int(tail), int(head))
-                arc_values[arc] = arc_values.get(arc, 0.0) + float(value)
-
-        arc_candidate = None
-        for (tail, head), value in arc_values.items():
-            if (tail, head) in fixed_arcs:
-                continue
-            if tol < value < 1.0 - tol:
-                score = abs(value - 0.5)
-                item = (score, tail, head, value)
-                if arc_candidate is None or item < arc_candidate:
-                    arc_candidate = item
-        if arc_candidate is not None:
-            _, tail, head, _ = arc_candidate
-            return (
-                BranchConstraint("arc_off", int(tail), int(head)),
-                BranchConstraint("arc_on", int(tail), int(head)),
+            candidates.append(
+                BranchCandidate(
+                    "task_vehicle",
+                    BranchConstraint("task_vehicle_off", int(task), vehicle=int(vehicle)),
+                    BranchConstraint("task_vehicle_on", int(task), vehicle=int(vehicle)),
+                    float(value),
+                    0.5 - abs(float(value) - 0.5),
+                )
             )
 
-        fixed_vehicles = _fixed_vehicles(constraints)
-        vehicle_candidate = None
-        for vehicle, value in sorted(y_values.items()):
-            if int(vehicle) in fixed_vehicles:
-                continue
-            if tol < value < 1.0 - tol:
-                score = abs(value - 0.5)
-                item = (score, int(vehicle), value)
-                if vehicle_candidate is None or item < vehicle_candidate:
-                    vehicle_candidate = item
-        if vehicle_candidate is not None:
-            _, vehicle, _ = vehicle_candidate
-            return (
-                BranchConstraint("vehicle_use_off", 0, vehicle=int(vehicle)),
-                BranchConstraint("vehicle_use_on", 0, vehicle=int(vehicle)),
+    fixed_arcs = _fixed_arcs(constraints)
+    arc_values: dict[tuple[int, int], float] = {}
+    for route, _vehicle, value in route_values:
+        if abs(value) <= tol:
+            continue
+        for tail, head in zip(route.tasks[:-1], route.tasks[1:]):
+            arc = (int(tail), int(head))
+            arc_values[arc] = arc_values.get(arc, 0.0) + float(value)
+    for (tail, head), value in arc_values.items():
+        if (tail, head) in fixed_arcs:
+            continue
+        if tol < value < 1.0 - tol:
+            candidates.append(
+                BranchCandidate(
+                    "arc",
+                    BranchConstraint("arc_off", int(tail), int(head)),
+                    BranchConstraint("arc_on", int(tail), int(head)),
+                    float(value),
+                    0.5 - abs(float(value) - 0.5),
+                )
             )
+
+    fixed_vehicles = _fixed_vehicles(constraints)
+    for vehicle, value in sorted(y_values.items()):
+        if int(vehicle) in fixed_vehicles:
+            continue
+        if tol < value < 1.0 - tol:
+            candidates.append(
+                BranchCandidate(
+                    "vehicle",
+                    BranchConstraint("vehicle_use_off", 0, vehicle=int(vehicle)),
+                    BranchConstraint("vehicle_use_on", 0, vehicle=int(vehicle)),
+                    float(value),
+                    0.5 - abs(float(value) - 0.5),
+                )
+            )
+    return candidates
+
+
+def choose_branch(
+    data: BPCData,
+    route_values: list[tuple[RouteColumn, int, float]],
+    y_values: dict[int, float],
+    constraints: tuple[BranchConstraint, ...],
+    *,
+    tol: float = 1.0e-6,
+) -> tuple[BranchConstraint, BranchConstraint] | None:
+    # 中文注释：兼容旧的首个候选策略；3PB 会直接使用 generate_branch_candidates。
+    candidates = generate_branch_candidates(data, route_values, y_values, constraints, tol=tol)
+    if not candidates:
         return None
-    _, task, vehicle, _ = assignment_candidate
-    return (
-        BranchConstraint("task_vehicle_off", int(task), vehicle=int(vehicle)),
-        BranchConstraint("task_vehicle_on", int(task), vehicle=int(vehicle)),
-    )
+    priority = {"ryan_foster": 0, "task_vehicle": 1, "arc": 2, "vehicle": 3}
+    candidate = min(candidates, key=lambda item: (priority.get(item.kind, 99), -item.fractionality, item.key))
+    return candidate.left, candidate.right

@@ -1,0 +1,12 @@
+{"event": "incumbent", "node_id": 0, "objective": 132.270984, "source": "greedy_schedule", "time": 0.007483}
+{"event": "start", "initial_incumbent": 132.270984, "initial_routes": 6, "instance": "very_small", "tasks": 4, "time": 0.007576, "vehicles": 2}
+{"depth": 0, "event": "node_start", "node_id": 0, "node_lb": 0.0, "open_nodes": 0, "time": 0.0076}
+{"artificial_sum": 0.0, "cg_iter": 1, "constraint_count": 8, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 0.0, "phase": "phase1", "route_count": 6, "status": "OPTIMAL", "time": 1.896913, "variable_count": 18}
+{"artificial_sum": 0.0, "cg_iter": 2, "constraint_count": 9, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 132.270984, "phase": "phase2", "route_count": 6, "status": "OPTIMAL", "time": 1.898598, "variable_count": 14}
+{"added_routes": 2, "best_reduced_cost": -52.541578, "cg_iter": 2, "depth": 0, "event": "pricing", "exhausted": true, "generated_labels": 32, "label_pops": 34, "negative_routes": 2, "node_id": 0, "phase": "phase2", "time": 1.899013}
+{"artificial_sum": 0.0, "cg_iter": 3, "constraint_count": 9, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 132.270984, "phase": "phase2", "route_count": 8, "status": "OPTIMAL", "time": 1.900528, "variable_count": 18}
+{"added_routes": 2, "best_reduced_cost": -50.114096, "cg_iter": 3, "depth": 0, "event": "pricing", "exhausted": true, "generated_labels": 32, "label_pops": 34, "negative_routes": 2, "node_id": 0, "phase": "phase2", "time": 1.900882}
+{"artificial_sum": 0.0, "cg_iter": 4, "constraint_count": 9, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 132.270984, "phase": "phase2", "route_count": 10, "status": "OPTIMAL", "time": 1.90235, "variable_count": 22}
+{"added_routes": 0, "best_reduced_cost": -0.0, "cg_iter": 4, "depth": 0, "event": "pricing", "exhausted": true, "generated_labels": 32, "label_pops": 34, "negative_routes": 0, "node_id": 0, "phase": "phase2", "time": 1.90266}
+{"bound": 132.270984, "event": "fathom", "node_id": 0, "reason": "bound", "time": 1.902706}
+{"cuts": 0, "dual_bound": 132.270984, "event": "finish", "gap": 0.0, "nodes": 1, "primal_bound": 132.270984, "routes": 10, "status": "OPTIMAL", "time": 1.902735}

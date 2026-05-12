@@ -1278,3 +1278,104 @@ primal heuristic 已把 20 规模 UB 从 743.69 改善到 626.90；
 但 120 秒内 UB 不再改善，lower bound 平台仍明显。
 下一步应优先做更强 branching / cuts，减少节点长期停在 494.89~501 的区间。
 ```
+
+## 8. No-ML 3PB Branching Baseline
+
+当前 clean BPC 已加入完整 no-ML 3PB branching baseline。它只负责选择分支候选，不负责剪枝、不证明节点最优，因此不破坏 exactness。
+
+核心日志位置：
+
+```text
+results/logs/bpc_clean_30s_3pb/medium.jsonl
+```
+
+日志事件：
+
+```text
+branch_candidates  - 当前节点完整候选数、类型分布、筛选后的候选
+branch_selection   - LP score、heuristic CG score、左右子节点测试结果、最终选择
+```
+
+当前 3PB workflow：
+
+```text
+1. Initial screening:
+   有 pseudocost 的候选按 pseudocost 取 top theta_p；
+   无 pseudocost 的候选按 fractionality 取 top theta_f。
+
+2. LP testing:
+   对 screened candidates 的左右 child 只解 restricted RMP LP；
+   不做 column generation；
+   按左右 bound improvement 计算 LP score；
+   取 top theta_tilde。
+
+3. Heuristic CG testing:
+   对 top theta_tilde 全部做 limited child CG loop；
+   每轮解 child RMP、limited pricing、把测试列加入局部 column set、重解 child RMP；
+   测试列不加入全局 pool，测试结果不用于剪枝。
+```
+
+20 规模 30 秒短测命令：
+
+```bash
+cd /home/kai/work/gnn_bb
+mkdir -p results/logs/bpc_clean_terminal
+
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_bpc_clean.py \
+  --instances medium \
+  --time-limit 30 \
+  --config configs/bpc_clean.yaml \
+  --results-csv results/bpc_clean_medium_30s_3pb.csv \
+  --log-dir results/logs/bpc_clean_30s_3pb \
+  --solution-dir results/solutions/bpc_clean_30s_3pb \
+  2>&1 | tee results/logs/bpc_clean_terminal/medium_30s_3pb_terminal.log
+```
+
+20 规模 3600 秒完整测试命令：
+
+```bash
+cd /home/kai/work/gnn_bb
+mkdir -p results/logs/bpc_clean_terminal
+
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_bpc_clean.py \
+  --instances medium \
+  --time-limit 3600 \
+  --config configs/bpc_clean.yaml \
+  --results-csv results/bpc_clean_medium_3pb.csv \
+  --log-dir results/logs/bpc_clean_3pb \
+  --solution-dir results/solutions/bpc_clean_3pb \
+  2>&1 | tee results/logs/bpc_clean_terminal/medium_3pb_terminal.log
+```
+
+查看分支测试日志：
+
+```bash
+cd /home/kai/work/gnn_bb
+rg -n '"event": "branch_candidates"|"event": "branch_selection"' \
+  results/logs/bpc_clean_3pb/medium.jsonl
+```
+
+当前 20 规模 30 秒短测结果：
+
+```text
+status=TIME_LIMIT
+primal=626.902419
+dual=526.902419
+gap=0.159514
+nodes=17
+rmp=39
+pricing=25
+branch_lp_test_rmp_solves=180
+branch_heuristic_test_rmp_solves=76
+branch_heuristic_test_pricing_calls=70
+branch_testing_time=11.064354
+routes=1000
+cuts=12
+```
+
+备注：
+
+```text
+3PB 增加了分支测试开销，当前 CSV 已单独记录 branching testing 成本；
+它的价值需要用 3600 秒完整结果比较 tree size、gap 和最终证明时间。
+```

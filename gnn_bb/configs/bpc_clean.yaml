@@ -17,6 +17,15 @@ max_routes_per_pricing: 200
 # 0 表示 exact pricing 不设 label 上限；若设为正数，中断的 pricing 不能用于证明节点 bound。
 max_labels_per_pricing: 0
 
+# no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
+branching_strategy: 3pb
+three_pb_pseudocost_candidates: 6
+three_pb_fractional_candidates: 6
+three_pb_lp_candidates: 3
+three_pb_heuristic_cg_iterations: 3
+three_pb_heuristic_routes_per_iter: 50
+three_pb_heuristic_max_labels: 800
+
 rmp_params:
   display/verblevel: 0
   randomization/randomseedshift: 20260511

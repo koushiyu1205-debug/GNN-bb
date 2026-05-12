@@ -1,0 +1,105 @@
+开始 clean BPC: instance=medium, tasks=20, vehicles=3, time_limit=30s, max_nodes=100000, log=/home/kai/work/gnn_bb/results/logs/20260512_090521_medium_3pb_full_30s/medium.jsonl
+[clean-BPC     6.54s] incumbent node 0: obj=627.942924
+[clean-BPC     6.54s] start: {'time': 6.53785, 'event': 'start', 'instance': 'medium', 'tasks': 20, 'vehicles': 3, 'initial_routes': 26, 'initial_incumbent': 627.942924}
+[clean-BPC     6.54s] node 0 d=0 lb=0.0 open=0
+[clean-BPC     6.59s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=26
+[clean-BPC     6.59s] node 0 cg=2 phase=phase2 obj=496.984869 artificial=0.0 cols=26
+[clean-BPC     7.00s] node 0 cg=2 phase=phase2 best_rc=-77.272711 found=3961 added=200 exhausted=True
+[clean-BPC     7.01s] node 0 cg=3 phase=phase2 obj=496.984869 artificial=0.0 cols=226
+[clean-BPC     7.40s] node 0 cg=3 phase=phase2 best_rc=-49.929709333 found=1922 added=200 exhausted=True
+[clean-BPC     7.41s] node 0 cg=4 phase=phase2 obj=496.984869 artificial=0.0 cols=426
+[clean-BPC     7.79s] node 0 cg=4 phase=phase2 best_rc=-29.29171875 found=775 added=200 exhausted=True
+[clean-BPC     7.81s] node 0 cg=5 phase=phase2 obj=496.984869 artificial=0.0 cols=626
+[clean-BPC     8.17s] node 0 cg=5 phase=phase2 best_rc=-21.788776583 found=141 added=141 exhausted=True
+[clean-BPC     8.20s] node 0 cg=6 phase=phase2 obj=490.61498 artificial=0.0 cols=767
+[clean-BPC     8.56s] node 0 cg=6 phase=phase2 best_rc=-0.662573933 found=6 added=6 exhausted=True
+[clean-BPC     8.59s] node 0 cg=7 phase=phase2 obj=490.283693 artificial=0.0 cols=773
+[clean-BPC     8.95s] node 0 cg=7 phase=phase2 best_rc=-4.371144 found=26 added=26 exhausted=True
+[clean-BPC     8.98s] node 0 cg=8 phase=phase2 obj=490.283693 artificial=0.0 cols=799
+[clean-BPC     9.34s] node 0 cg=8 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    10.17s] branch node 0: left=arc(18,9)=off right=arc(18,9)=on
+[clean-BPC    10.17s] node 1 d=1 lb=490.283693 open=1
+[clean-BPC    10.19s] node 1 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=799
+[clean-BPC    10.22s] node 1 cg=2 phase=phase2 obj=490.283693 artificial=0.0 cols=799
+[clean-BPC    10.68s] node 1 cg=2 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    12.05s] branch node 1: left=arc(9,18)=off right=arc(9,18)=on
+[clean-BPC    12.05s] node 2 d=1 lb=490.283693 open=2
+[clean-BPC    12.08s] node 2 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=799
+[clean-BPC    12.10s] node 2 cg=2 phase=phase2 obj=530.555632 artificial=0.0 cols=799
+[clean-BPC    12.50s] node 2 cg=2 phase=phase2 best_rc=-24.312594083 found=185 added=185 exhausted=True
+[clean-BPC    12.53s] node 2 cg=3 phase=phase2 obj=511.028241 artificial=0.0 cols=984
+[clean-BPC    12.91s] node 2 cg=3 phase=phase2 best_rc=-2.091472833 found=16 added=16 exhausted=True
+[clean-BPC    12.95s] node 2 cg=4 phase=phase2 obj=511.028241 artificial=0.0 cols=1000
+[clean-BPC    13.32s] node 2 cg=4 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    13.95s] branch node 2: left=vehicle(2)=off right=vehicle(2)=on
+[clean-BPC    13.95s] node 3 d=2 lb=490.283693 open=3
+[clean-BPC    13.99s] node 3 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    14.03s] node 3 cg=2 phase=phase2 obj=494.885971 artificial=0.0 cols=1000
+[clean-BPC    14.55s] node 3 cg=2 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    14.86s] branch node 3: left=vehicle(2)=off right=vehicle(2)=on
+[clean-BPC    14.86s] node 4 d=2 lb=490.283693 open=4
+[clean-BPC    14.89s] node 4 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    14.93s] node 4 cg=2 phase=phase2 obj=511.028241 artificial=0.0 cols=1000
+[clean-BPC    15.40s] node 4 cg=2 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    16.41s] branch node 4: left=vehicle(2)=off right=vehicle(2)=on
+[clean-BPC    16.41s] node 7 d=3 lb=494.885971 open=5
+[clean-BPC    16.44s] node 7 cg=1 phase=phase1 obj=3.738435 artificial=3.738435 cols=1000
+[clean-BPC    16.80s] node 7 cg=1 phase=phase1 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    16.80s] fathom node 7: reason=phase1_infeasible bound=None
+[clean-BPC    16.80s] node 8 d=3 lb=494.885971 open=4
+[clean-BPC    16.83s] node 8 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    16.86s] node 8 cg=2 phase=phase2 obj=526.902419 artificial=0.0 cols=1000
+[clean-BPC    17.41s] node 8 cg=2 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    17.42s] incumbent node 8: obj=626.902419
+[clean-BPC    17.42s] cut_added: {'time': 17.423947, 'event': 'cut_added', 'node_id': 8, 'source_vehicle': 1, 'added': 3, 'signatures': [[19, 10, 6], [15, 8, 4, 2]]}
+[clean-BPC    17.42s] node 5 d=2 lb=511.028241 open=4
+[clean-BPC    17.46s] node 5 cg=1 phase=phase1 obj=5.01681 artificial=5.01681 cols=1000
+[clean-BPC    17.71s] node 5 cg=1 phase=phase1 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    17.71s] fathom node 5: reason=phase1_infeasible bound=None
+[clean-BPC    17.71s] node 10 d=3 lb=511.028241 open=3
+[clean-BPC    17.74s] node 10 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    17.78s] node 10 cg=2 phase=phase2 obj=538.013552 artificial=0.0 cols=1000
+[clean-BPC    18.27s] node 10 cg=2 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    19.72s] branch node 10: left=arc(4,2)=off right=arc(4,2)=on
+[clean-BPC    19.72s] node 9 d=3 lb=511.028241 open=4
+[clean-BPC    19.74s] node 9 cg=1 phase=phase1 obj=5.01681 artificial=5.01681 cols=1000
+[clean-BPC    20.06s] node 9 cg=1 phase=phase1 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    20.06s] fathom node 9: reason=phase1_infeasible bound=None
+[clean-BPC    20.06s] node 6 d=2 lb=511.028241 open=3
+[clean-BPC    20.09s] node 6 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    20.12s] node 6 cg=2 phase=phase2 obj=538.013552 artificial=0.0 cols=1000
+[clean-BPC    20.52s] node 6 cg=2 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    21.49s] branch node 6: left=arc(4,2)=off right=arc(4,2)=on
+[clean-BPC    21.49s] node 8 d=3 lb=526.902419 open=4
+[clean-BPC    21.52s] node 8 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    21.56s] node 8 cg=2 phase=phase2 obj=526.902419 artificial=0.0 cols=1000
+[clean-BPC    22.12s] node 8 cg=2 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    22.13s] cut_added: {'time': 22.128929, 'event': 'cut_added', 'node_id': 8, 'source_vehicle': 1, 'added': 3, 'signatures': [[9, 1], [15, 8, 4, 2]]}
+[clean-BPC    22.13s] node 8 d=3 lb=526.902419 open=4
+[clean-BPC    22.16s] node 8 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    22.20s] node 8 cg=2 phase=phase2 obj=526.902419 artificial=0.0 cols=1000
+[clean-BPC    22.75s] node 8 cg=2 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    22.76s] cut_added: {'time': 22.764252, 'event': 'cut_added', 'node_id': 8, 'source_vehicle': 2, 'added': 3, 'signatures': [[3, 7, 18, 11], [5, 14, 16, 12], [19, 10, 6]]}
+[clean-BPC    22.76s] node 8 d=3 lb=526.902419 open=4
+[clean-BPC    22.80s] node 8 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    22.84s] node 8 cg=2 phase=phase2 obj=526.902419 artificial=0.0 cols=1000
+[clean-BPC    23.39s] node 8 cg=2 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    25.02s] branch node 8: left=arc(6,19)=off right=arc(6,19)=on
+[clean-BPC    25.02s] node 15 d=4 lb=526.902419 open=5
+[clean-BPC    25.07s] node 15 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    25.10s] node 15 cg=2 phase=phase2 obj=526.902419 artificial=0.0 cols=1000
+[clean-BPC    25.74s] node 15 cg=2 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    27.27s] branch node 15: left=arc(10,19)=off right=arc(10,19)=on
+[clean-BPC    27.27s] node 16 d=4 lb=526.902419 open=6
+[clean-BPC    27.32s] node 16 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    27.35s] node 16 cg=2 phase=phase2 obj=526.902419 artificial=0.0 cols=1000
+[clean-BPC    27.93s] node 16 cg=2 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    27.94s] cut_added: {'time': 27.944835, 'event': 'cut_added', 'node_id': 16, 'source_vehicle': 2, 'added': 3, 'signatures': [[3, 7, 18, 11], [5, 14, 16, 12], [6, 19, 10]]}
+[clean-BPC    27.94s] node 17 d=5 lb=526.902419 open=6
+[clean-BPC    27.98s] node 17 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1000
+[clean-BPC    28.02s] node 17 cg=2 phase=phase2 obj=526.902419 artificial=0.0 cols=1000
+[clean-BPC    28.73s] node 17 cg=2 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    30.06s] branch node 17: left=arc(8,15)=off right=arc(8,15)=on
+[clean-BPC    30.06s] finish status=TIME_LIMIT primal=626.902419 dual=526.902419 gap=0.159514
+medium: status=TIME_LIMIT, primal=626.902419, dual=526.902419, gap=0.159514, time=30.061663s, nodes=17, rmp=39, pricing=25, routes=1000, cuts=12
+clean BPC CSV 已写入：/home/kai/work/gnn_bb/results/20260512_090521_medium_3pb_full_30s.csv

@@ -23,6 +23,12 @@ class BPCStats:
     rmp_solves: int = 0
     pricing_calls: int = 0
     exact_pricing_calls: int = 0
+    branch_lp_test_rmp_solves: int = 0
+    branch_heuristic_test_rmp_solves: int = 0
+    branch_heuristic_test_pricing_calls: int = 0
+    branch_lp_candidates_tested: int = 0
+    branch_heuristic_candidates_tested: int = 0
+    branch_testing_time: float = 0.0
     generated_routes: int = 0
     generated_columns: int = 0
     cuts_added: int = 0

@@ -1,0 +1,15 @@
+开始 clean BPC: instance=very_small, tasks=4, vehicles=2, time_limit=30s, max_nodes=100000, log=/home/kai/work/gnn_bb/results/smoke/logs/20260512_090515_very_small_3pb_full_smoke/very_small.jsonl
+[clean-BPC     0.01s] incumbent node 0: obj=132.270984
+[clean-BPC     0.01s] start: {'time': 0.006403, 'event': 'start', 'instance': 'very_small', 'tasks': 4, 'vehicles': 2, 'initial_routes': 6, 'initial_incumbent': 132.270984}
+[clean-BPC     0.01s] node 0 d=0 lb=0.0 open=0
+[clean-BPC     0.06s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=6
+[clean-BPC     0.06s] node 0 cg=2 phase=phase2 obj=132.270984 artificial=0.0 cols=6
+[clean-BPC     0.07s] node 0 cg=2 phase=phase2 best_rc=-52.541578 found=2 added=2 exhausted=True
+[clean-BPC     0.07s] node 0 cg=3 phase=phase2 obj=132.270984 artificial=0.0 cols=8
+[clean-BPC     0.07s] node 0 cg=3 phase=phase2 best_rc=-50.114096 found=2 added=2 exhausted=True
+[clean-BPC     0.07s] node 0 cg=4 phase=phase2 obj=132.270984 artificial=0.0 cols=10
+[clean-BPC     0.07s] node 0 cg=4 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC     0.07s] fathom node 0: reason=bound bound=132.270984
+[clean-BPC     0.07s] finish status=OPTIMAL primal=132.270984 dual=132.270984 gap=0.0
+very_small: status=OPTIMAL, primal=132.270984, dual=132.270984, gap=0.0, time=0.070828s, nodes=1, rmp=4, pricing=3, routes=10, cuts=0
+clean BPC CSV 已写入：/home/kai/work/gnn_bb/results/smoke/20260512_090515_very_small_3pb_full_smoke.csv

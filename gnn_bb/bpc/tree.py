@@ -9,7 +9,7 @@ import math
 import time
 from typing import Any
 
-from .branching import BranchConstraint, choose_branch
+from .branching import BranchCandidate, BranchConstraint, choose_branch, generate_branch_candidates
 from .columns import RouteColumn, RoutePool, evaluate_route, route_to_json
 from .cuts import ScheduleNoGoodCut, make_no_good_cuts_for_all_vehicles
 from .data import BPCData
@@ -42,6 +42,55 @@ class TreeResult:
     incumbent: Incumbent | None
 
 
+@dataclass
+class PseudoCostRecord:
+    count: int = 0
+    score_sum: float = 0.0
+
+    @property
+    def initialized(self) -> bool:
+        return self.count > 0
+
+    @property
+    def average_score(self) -> float:
+        return self.score_sum / self.count if self.count else 0.0
+
+    def update(self, score: float) -> None:
+        self.count += 1
+        self.score_sum += float(score)
+
+
+@dataclass
+class BranchTestResult:
+    candidate: BranchCandidate
+    lp_score: float
+    heuristic_score: float
+    left_lp_status: str
+    right_lp_status: str
+    left_lp_gain: float
+    right_lp_gain: float
+    left_heuristic_gain: float
+    right_heuristic_gain: float
+    left_best_reduced_cost: float | None
+    right_best_reduced_cost: float | None
+    left_heuristic_iterations: int
+    right_heuristic_iterations: int
+    left_heuristic_added_routes: int
+    right_heuristic_added_routes: int
+    left_heuristic_exhausted: bool | None
+    right_heuristic_exhausted: bool | None
+    selected_by: str
+
+
+@dataclass
+class HeuristicChildResult:
+    gain: float
+    best_reduced_cost: float | None
+    iterations: int
+    added_routes: int
+    exhausted: bool | None
+
+
 class CleanBPCTree:
     def __init__(
         self,
@@ -55,6 +104,13 @@ class CleanBPCTree:
         max_labels_per_pricing: int,
         rmp_params: dict[str, Any] | None,
         logger: BPCLogger,
+        branching_strategy: str = "3pb",
+        three_pb_pseudocost_candidates: int = 6,
+        three_pb_fractional_candidates: int = 6,
+        three_pb_lp_candidates: int = 3,
+        three_pb_heuristic_cg_iterations: int = 3,
+        three_pb_heuristic_routes_per_iter: int = 50,
+        three_pb_heuristic_max_labels: int = 800,
     ) -> None:
         self.data = data
         self.time_limit = float(time_limit)
@@ -65,6 +121,14 @@ class CleanBPCTree:
         self.max_labels_per_pricing = int(max_labels_per_pricing)
         self.rmp_params = dict(rmp_params or {})
         self.logger = logger
+        self.branching_strategy = str(branching_strategy)
+        self.three_pb_pseudocost_candidates = int(three_pb_pseudocost_candidates)
+        self.three_pb_fractional_candidates = int(three_pb_fractional_candidates)
+        self.three_pb_lp_candidates = int(three_pb_lp_candidates)
+        self.three_pb_heuristic_cg_iterations = int(three_pb_heuristic_cg_iterations)
+        self.three_pb_heuristic_routes_per_iter = int(three_pb_heuristic_routes_per_iter)
+        self.three_pb_heuristic_max_labels = int(three_pb_heuristic_max_labels)
+        self.pseudocosts: dict[str, PseudoCostRecord] = {}
         self.pool = RoutePool()
         self.cuts: list[ScheduleNoGoodCut] = []
         self.cut_keys: set[tuple[int, tuple[tuple[int, ...], ...]]] = set()
@@ -584,13 +648,7 @@ class CleanBPCTree:
             self.logger.log("fathom", node_id=node.id, reason="integral", bound=round(node.lower_bound, 6))
             return []
 
-        branch = choose_branch(
-            self.data,
-            last_solution.route_values,
-            last_solution.y_values,
-            node.branch_constraints,
-            tol=self.integer_tol,
-        )
+        branch = self._choose_branch(node, last_solution)
         if branch is None:
             self.abort_status = "BRANCH_FAILED"
             self.logger.log("fathom", node_id=node.id, reason="no_branch_candidate", bound=round(node.lower_bound, 6))
@@ -601,6 +659,297 @@ class CleanBPCTree:
         right_node = self._make_child(node, right)
         self.logger.log("branch", node_id=node.id, left=left.name(), right=right.name(), lower_bound=round(node.lower_bound, 6))
         return [left_node, right_node]
+
+    def _choose_branch(self, node: BPCNode, solution: RMPSolution) -> tuple[BranchConstraint, BranchConstraint] | None:
+        if self.branching_strategy.lower() != "3pb":
+            return choose_branch(
+                self.data,
+                solution.route_values,
+                solution.y_values,
+                node.branch_constraints,
+                tol=self.integer_tol,
+            )
+        return self._choose_branch_three_phase(node, solution)
+
+    def _choose_branch_three_phase(self, node: BPCNode, solution: RMPSolution) -> tuple[BranchConstraint, BranchConstraint] | None:
+        candidates = generate_branch_candidates(
+            self.data,
+            solution.route_values,
+            solution.y_values,
+            node.branch_constraints,
+            tol=self.integer_tol,
+        )
+        if not candidates:
+            self.logger.log("branch_candidates", node_id=node.id, count=0, strategy="3pb")
+            return None
+
+        initialized: list[BranchCandidate] = []
+        uninitialized: list[BranchCandidate] = []
+        for candidate in candidates:
+            record = self.pseudocosts.get(candidate.key)
+            if record is not None and record.initialized:
+                initialized.append(candidate)
+            else:
+                uninitialized.append(candidate)
+
+        initialized.sort(key=lambda item: (-self.pseudocosts[item.key].average_score, -item.fractionality, item.key))
+        uninitialized.sort(key=lambda item: (-item.fractionality, item.key))
+        screened = [
+            *initialized[: max(0, self.three_pb_pseudocost_candidates)],
+            *uninitialized[: max(0, self.three_pb_fractional_candidates)],
+        ]
+        if not screened:
+            screened = sorted(candidates, key=lambda item: (-item.fractionality, item.key))[:1]
+
+        self.logger.log(
+            "branch_candidates",
+            node_id=node.id,
+            strategy="3pb",
+            count=len(candidates),
+            initialized=len(initialized),
+            uninitialized=len(uninitialized),
+            screened=len(screened),
+            by_kind=self._candidate_kind_counts(candidates),
+            screened_candidates=[candidate.compact() for candidate in screened[:20]],
+        )
+
+        testing_started = time.perf_counter()
+        lp_results: list[BranchTestResult] = []
+        for candidate in screened:
+            lp_results.append(self._lp_test_candidate(node, solution, candidate))
+        self.stats.branch_lp_candidates_tested += len(lp_results)
+
+        lp_results.sort(key=lambda item: (-item.lp_score, item.candidate.key))
+        lp_top = lp_results[: max(1, min(self.three_pb_lp_candidates, len(lp_results)))]
+
+        heuristic_results: list[BranchTestResult] = []
+        for item in lp_top:
+            heuristic_results.append(self._heuristic_test_candidate(node, solution, item))
+        self.stats.branch_heuristic_candidates_tested += len(heuristic_results)
+        testing_time = time.perf_counter() - testing_started
+        self.stats.branch_testing_time += testing_time
+
+        selected = max(heuristic_results, key=lambda item: (item.heuristic_score, item.lp_score, item.candidate.fractionality, item.candidate.key))
+        for result in lp_results:
+            self.pseudocosts.setdefault(result.candidate.key, PseudoCostRecord()).update(result.lp_score)
+
+        self.logger.log(
+            "branch_selection",
+            node_id=node.id,
+            strategy="3pb",
+            selected=selected.candidate.compact(),
+            selected_by=selected.selected_by,
+            lp_tested=len(lp_results),
+            heuristic_tested=len(heuristic_results),
+            testing_time=round(testing_time, 6),
+            top_results=[self._branch_test_to_log(item) for item in heuristic_results[:20]],
+        )
+        return selected.candidate.left, selected.candidate.right
+
+    def _candidate_kind_counts(self, candidates: list[BranchCandidate]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for candidate in candidates:
+            counts[candidate.kind] = counts.get(candidate.kind, 0) + 1
+        return dict(sorted(counts.items()))
+
+    def _branch_test_to_log(self, result: BranchTestResult) -> dict[str, Any]:
+        return {
+            **result.candidate.compact(),
+            "lp_score": round(result.lp_score, 9),
+            "heuristic_score": round(result.heuristic_score, 9),
+            "left_lp_status": result.left_lp_status,
+            "right_lp_status": result.right_lp_status,
+            "left_lp_gain": round(result.left_lp_gain, 9),
+            "right_lp_gain": round(result.right_lp_gain, 9),
+            "left_heuristic_gain": round(result.left_heuristic_gain, 9),
+            "right_heuristic_gain": round(result.right_heuristic_gain, 9),
+            "left_best_reduced_cost": None if result.left_best_reduced_cost is None else round(result.left_best_reduced_cost, 9),
+            "right_best_reduced_cost": None if result.right_best_reduced_cost is None else round(result.right_best_reduced_cost, 9),
+            "left_heuristic_iterations": result.left_heuristic_iterations,
+            "right_heuristic_iterations": result.right_heuristic_iterations,
+            "left_heuristic_added_routes": result.left_heuristic_added_routes,
+            "right_heuristic_added_routes": result.right_heuristic_added_routes,
+            "left_heuristic_exhausted": result.left_heuristic_exhausted,
+            "right_heuristic_exhausted": result.right_heuristic_exhausted,
+            "selected_by": result.selected_by,
+        }
+
+    def _lp_test_candidate(self, node: BPCNode, solution: RMPSolution, candidate: BranchCandidate) -> BranchTestResult:
+        left_status, left_gain = self._restricted_child_lp_gain(node, solution, candidate.left)
+        right_status, right_gain = self._restricted_child_lp_gain(node, solution, candidate.right)
+        lp_score = self._branch_score(left_gain, right_gain)
+        return BranchTestResult(
+            candidate=candidate,
+            lp_score=lp_score,
+            heuristic_score=lp_score,
+            left_lp_status=left_status,
+            right_lp_status=right_status,
+            left_lp_gain=left_gain,
+            right_lp_gain=right_gain,
+            left_heuristic_gain=left_gain,
+            right_heuristic_gain=right_gain,
+            left_best_reduced_cost=None,
+            right_best_reduced_cost=None,
+            left_heuristic_iterations=0,
+            right_heuristic_iterations=0,
+            left_heuristic_added_routes=0,
+            right_heuristic_added_routes=0,
+            left_heuristic_exhausted=None,
+            right_heuristic_exhausted=None,
+            selected_by="lp",
+        )
+
+    def _heuristic_test_candidate(self, node: BPCNode, solution: RMPSolution, result: BranchTestResult) -> BranchTestResult:
+        left = self._heuristic_child_gain(node, solution, result.candidate.left)
+        right = self._heuristic_child_gain(node, solution, result.candidate.right)
+        heuristic_score = self._branch_score(left.gain, right.gain)
+        return BranchTestResult(
+            candidate=result.candidate,
+            lp_score=result.lp_score,
+            heuristic_score=heuristic_score,
+            left_lp_status=result.left_lp_status,
+            right_lp_status=result.right_lp_status,
+            left_lp_gain=result.left_lp_gain,
+            right_lp_gain=result.right_lp_gain,
+            left_heuristic_gain=left.gain,
+            right_heuristic_gain=right.gain,
+            left_best_reduced_cost=left.best_reduced_cost,
+            right_best_reduced_cost=right.best_reduced_cost,
+            left_heuristic_iterations=left.iterations,
+            right_heuristic_iterations=right.iterations,
+            left_heuristic_added_routes=left.added_routes,
+            right_heuristic_added_routes=right.added_routes,
+            left_heuristic_exhausted=left.exhausted,
+            right_heuristic_exhausted=right.exhausted,
+            selected_by="heuristic",
+        )
+
+    def _restricted_child_lp_gain(self, node: BPCNode, solution: RMPSolution, constraint: BranchConstraint) -> tuple[str, float]:
+        child_constraints = (*node.branch_constraints, constraint)
+        child = solve_rmp_lp(
+            self.data,
+            self.pool.routes,
+            self.cuts,
+            child_constraints,
+            phase="phase2",
+            rmp_params=self.rmp_params,
+            verbose=False,
+        )
+        self.stats.branch_lp_test_rmp_solves += 1
+        parent = float(solution.objective or 0.0)
+        if child.optimal and child.objective is not None:
+            return child.status, max(0.0, float(child.objective) - parent)
+        return child.status, self._testing_infeasible_gain(parent)
+
+    def _heuristic_child_gain(self, node: BPCNode, solution: RMPSolution, constraint: BranchConstraint) -> HeuristicChildResult:
+        child_constraints = (*node.branch_constraints, constraint)
+        parent = float(solution.objective or 0.0)
+        local_pool = RoutePool()
+        for route in self.pool.routes:
+            local_pool.add(route)
+
+        iterations = 0
+        added_total = 0
+        best_rc: float | None = None
+        all_pricing_exhausted = True
+        last_objective: float | None = None
+        added_after_last_solve = False
+
+        max_iterations = max(1, self.three_pb_heuristic_cg_iterations)
+        routes_per_iter = max(1, self.three_pb_heuristic_routes_per_iter)
+        max_labels = max(0, self.three_pb_heuristic_max_labels)
+
+        for _round in range(max_iterations):
+            if not self._time_left():
+                break
+            child = solve_rmp_lp(
+                self.data,
+                local_pool.routes,
+                self.cuts,
+                child_constraints,
+                phase="phase2",
+                rmp_params=self.rmp_params,
+                verbose=False,
+            )
+            self.stats.branch_heuristic_test_rmp_solves += 1
+            added_after_last_solve = False
+            if not child.optimal or child.objective is None or child.duals is None:
+                return HeuristicChildResult(
+                    gain=self._testing_infeasible_gain(parent),
+                    best_reduced_cost=best_rc,
+                    iterations=iterations,
+                    added_routes=added_total,
+                    exhausted=None if iterations == 0 else all_pricing_exhausted,
+                )
+            last_objective = float(child.objective)
+            pricing = exact_pricing(
+                self.data,
+                local_pool.routes,
+                child.duals,
+                self.cuts,
+                child_constraints,
+                phase="phase2",
+                eps=self.eps,
+                max_routes_to_return=routes_per_iter,
+                max_labels=max_labels,
+            )
+            self.stats.branch_heuristic_test_pricing_calls += 1
+            iterations += 1
+            all_pricing_exhausted = all_pricing_exhausted and pricing.exhausted
+            current_rc = pricing.best_reduced_cost
+            if best_rc is None:
+                best_rc = current_rc
+            elif current_rc is not None:
+                best_rc = min(best_rc, current_rc)
+            added = 0
+            for route in pricing.routes:
+                before = len(local_pool.routes)
+                local_pool.add(route)
+                if len(local_pool.routes) > before:
+                    added += 1
+            added_total += added
+            if added == 0:
+                break
+            added_after_last_solve = True
+
+        if added_after_last_solve and self._time_left():
+            child = solve_rmp_lp(
+                self.data,
+                local_pool.routes,
+                self.cuts,
+                child_constraints,
+                phase="phase2",
+                rmp_params=self.rmp_params,
+                verbose=False,
+            )
+            self.stats.branch_heuristic_test_rmp_solves += 1
+            if child.optimal and child.objective is not None:
+                last_objective = float(child.objective)
+
+        if last_objective is None:
+            return HeuristicChildResult(
+                gain=self._testing_infeasible_gain(parent),
+                best_reduced_cost=best_rc,
+                iterations=iterations,
+                added_routes=added_total,
+                exhausted=None if iterations == 0 else all_pricing_exhausted,
+            )
+        return HeuristicChildResult(
+            gain=max(0.0, last_objective - parent),
+            best_reduced_cost=best_rc,
+            iterations=iterations,
+            added_routes=added_total,
+            exhausted=all_pricing_exhausted,
+        )
+
+    def _testing_infeasible_gain(self, parent_bound: float) -> float:
+        return max(1.0, abs(float(parent_bound)) * 0.05)
+
+    def _branch_score(self, left_gain: float, right_gain: float) -> float:
+        eps = max(self.integer_tol, 1.0e-6)
+        left = max(float(left_gain), eps)
+        right = max(float(right_gain), eps)
+        return min(left, right) + 0.1 * max(left, right) + 0.01 * left * right
 
     def _make_child(self, parent: BPCNode, constraint: BranchConstraint) -> BPCNode:
         node = BPCNode(

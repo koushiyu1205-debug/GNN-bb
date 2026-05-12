@@ -27,6 +27,12 @@ class BPCResult:
     rmp_solves: int
     pricing_calls: int
     exact_pricing_calls: int
+    branch_lp_test_rmp_solves: int
+    branch_heuristic_test_rmp_solves: int
+    branch_heuristic_test_pricing_calls: int
+    branch_lp_candidates_tested: int
+    branch_heuristic_candidates_tested: int
+    branch_testing_time: float
     generated_routes: int
     generated_columns: int
     cuts_added: int
@@ -62,6 +68,13 @@ def solve_bpc_clean(
     solution_path: str | Path | None,
     seed: int | None,
     quiet: bool,
+    branching_strategy: str = "3pb",
+    three_pb_pseudocost_candidates: int = 6,
+    three_pb_fractional_candidates: int = 6,
+    three_pb_lp_candidates: int = 3,
+    three_pb_heuristic_cg_iterations: int = 3,
+    three_pb_heuristic_routes_per_iter: int = 50,
+    three_pb_heuristic_max_labels: int = 800,
 ) -> BPCResult:
     logger = BPCLogger(log_path, console=not quiet)
     try:
@@ -75,6 +88,13 @@ def solve_bpc_clean(
             max_labels_per_pricing=max_labels_per_pricing,
             rmp_params=rmp_params,
             logger=logger,
+            branching_strategy=branching_strategy,
+            three_pb_pseudocost_candidates=three_pb_pseudocost_candidates,
+            three_pb_fractional_candidates=three_pb_fractional_candidates,
+            three_pb_lp_candidates=three_pb_lp_candidates,
+            three_pb_heuristic_cg_iterations=three_pb_heuristic_cg_iterations,
+            three_pb_heuristic_routes_per_iter=three_pb_heuristic_routes_per_iter,
+            three_pb_heuristic_max_labels=three_pb_heuristic_max_labels,
         )
         tree_result = tree.solve()
     finally:
@@ -95,6 +115,12 @@ def solve_bpc_clean(
         rmp_solves=tree_result.stats.rmp_solves,
         pricing_calls=tree_result.stats.pricing_calls,
         exact_pricing_calls=tree_result.stats.exact_pricing_calls,
+        branch_lp_test_rmp_solves=tree_result.stats.branch_lp_test_rmp_solves,
+        branch_heuristic_test_rmp_solves=tree_result.stats.branch_heuristic_test_rmp_solves,
+        branch_heuristic_test_pricing_calls=tree_result.stats.branch_heuristic_test_pricing_calls,
+        branch_lp_candidates_tested=tree_result.stats.branch_lp_candidates_tested,
+        branch_heuristic_candidates_tested=tree_result.stats.branch_heuristic_candidates_tested,
+        branch_testing_time=_round(tree_result.stats.branch_testing_time),
         generated_routes=len(tree_result.routes),
         generated_columns=generated_columns,
         cuts_added=len(tree_result.cuts),

@@ -1,0 +1,545 @@
+{
+  "summary": {
+    "instance": "very_small",
+    "task_count": 4,
+    "vehicle_count": 2,
+    "sortie_count": 2,
+    "status": "OPTIMAL",
+    "primal_bound": 132.270984,
+    "dual_bound": 132.270984,
+    "gap": 0.0,
+    "solving_time": 0.070828,
+    "node_count": 1,
+    "rmp_solves": 4,
+    "pricing_calls": 3,
+    "exact_pricing_calls": 3,
+    "branch_lp_test_rmp_solves": 0,
+    "branch_heuristic_test_rmp_solves": 0,
+    "branch_heuristic_test_pricing_calls": 0,
+    "branch_lp_candidates_tested": 0,
+    "branch_heuristic_candidates_tested": 0,
+    "branch_testing_time": 0.0,
+    "generated_routes": 10,
+    "generated_columns": 20,
+    "cuts_added": 0,
+    "root_relaxation": 132.270984,
+    "incumbent_node": 0,
+    "log_path": "/home/kai/work/gnn_bb/results/smoke/logs/20260512_090515_very_small_3pb_full_smoke/very_small.jsonl",
+    "instance_path": "/home/kai/work/gnn_bb/json/instances/instance_very_small.json",
+    "seed": 20260511
+  },
+  "solution": {
+    "vehicles": {
+      "1": 0.0,
+      "2": 1.0
+    },
+    "sorties": [
+      {
+        "vehicle": 2,
+        "sortie": 1,
+        "route_id": 4,
+        "tasks": [
+          3,
+          4
+        ],
+        "cost": 19.979948,
+        "load": 5.0,
+        "energy": 18.023506,
+        "return_time": 18.45586,
+        "cycle_time": 27.467613,
+        "service_start": {
+          "3": 4.044943,
+          "4": 9.027754
+        }
+      },
+      {
+        "vehicle": 2,
+        "sortie": 2,
+        "route_id": 5,
+        "tasks": [
+          1,
+          2
+        ],
+        "cost": 12.291036,
+        "load": 4.0,
+        "energy": 10.299124,
+        "return_time": 11.696733,
+        "cycle_time": 16.846295,
+        "service_start": {
+          "1": 2.402732,
+          "2": 5.818548
+        }
+      }
+    ],
+    "selected_route_ids": [
+      4,
+      5
+    ]
+  },
+  "routes": [
+    {
+      "id": 0,
+      "tasks": [
+        1
+      ],
+      "task_set": [
+        1
+      ],
+      "load": 2.0,
+      "travel_time": 4.805464,
+      "return_time": 6.805464,
+      "energy": 6.924156,
+      "cost": 8.085904,
+      "cycle_time": 10.267542,
+      "service_start": {
+        "1": 2.402732
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 1,
+          "path": [
+            "p0",
+            "p1",
+            "p2"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 0,
+          "path": [
+            "p2",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "tasks": [
+        2
+      ],
+      "task_set": [
+        2
+      ],
+      "load": 2.0,
+      "travel_time": 5.75637,
+      "return_time": 8.75637,
+      "energy": 8.203556,
+      "cost": 8.874294,
+      "cycle_time": 12.858148,
+      "service_start": {
+        "2": 2.878185
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 2,
+          "path": [
+            "p0",
+            "p1",
+            "p4"
+          ]
+        },
+        {
+          "from": 2,
+          "to": 0,
+          "path": [
+            "p4",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "tasks": [
+        3
+      ],
+      "task_set": [
+        3
+      ],
+      "load": 2.0,
+      "travel_time": 8.089886,
+      "return_time": 10.089886,
+      "energy": 9.966422,
+      "cost": 10.268204,
+      "cycle_time": 15.073097,
+      "service_start": {
+        "3": 4.044943
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 3,
+          "path": [
+            "p0",
+            "p3",
+            "p6"
+          ]
+        },
+        {
+          "from": 3,
+          "to": 0,
+          "path": [
+            "p6",
+            "p3",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "tasks": [
+        4
+      ],
+      "task_set": [
+        4
+      ],
+      "load": 3.0,
+      "travel_time": 12.856212,
+      "return_time": 15.856212,
+      "energy": 16.597792,
+      "cost": 17.343366,
+      "cycle_time": 24.155108,
+      "service_start": {
+        "4": 6.428106
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 4,
+          "path": [
+            "p0",
+            "p1",
+            "p4",
+            "p7",
+            "p8"
+          ]
+        },
+        {
+          "from": 4,
+          "to": 0,
+          "path": [
+            "p8",
+            "p7",
+            "p4",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "tasks": [
+        3,
+        4
+      ],
+      "task_set": [
+        3,
+        4
+      ],
+      "load": 5.0,
+      "travel_time": 13.45586,
+      "return_time": 18.45586,
+      "energy": 18.023506,
+      "cost": 19.979948,
+      "cycle_time": 27.467613,
+      "service_start": {
+        "3": 4.044943,
+        "4": 9.027754
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 3,
+          "path": [
+            "p0",
+            "p3",
+            "p6"
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "path": [
+            "p6",
+            "p7",
+            "p8"
+          ]
+        },
+        {
+          "from": 4,
+          "to": 0,
+          "path": [
+            "p8",
+            "p7",
+            "p4",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "tasks": [
+        1,
+        2
+      ],
+      "task_set": [
+        1,
+        2
+      ],
+      "load": 4.0,
+      "travel_time": 6.696733,
+      "return_time": 11.696733,
+      "energy": 10.299124,
+      "cost": 12.291036,
+      "cycle_time": 16.846295,
+      "service_start": {
+        "1": 2.402732,
+        "2": 5.818548
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 1,
+          "path": [
+            "p0",
+            "p1",
+            "p2"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "path": [
+            "p2",
+            "p4"
+          ]
+        },
+        {
+          "from": 2,
+          "to": 0,
+          "path": [
+            "p4",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "tasks": [
+        3,
+        1
+      ],
+      "task_set": [
+        1,
+        3
+      ],
+      "load": 4.0,
+      "travel_time": 10.63504,
+      "return_time": 14.63504,
+      "energy": 14.272643,
+      "cost": 15.81253,
+      "cycle_time": 21.771362,
+      "service_start": {
+        "3": 4.044943,
+        "1": 10.232308
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 3,
+          "path": [
+            "p0",
+            "p3",
+            "p6"
+          ]
+        },
+        {
+          "from": 3,
+          "to": 1,
+          "path": [
+            "p6",
+            "p3",
+            "p4",
+            "p2"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 0,
+          "path": [
+            "p2",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "tasks": [
+        1,
+        3
+      ],
+      "task_set": [
+        1,
+        3
+      ],
+      "load": 4.0,
+      "travel_time": 10.63504,
+      "return_time": 14.63504,
+      "energy": 14.272643,
+      "cost": 15.81253,
+      "cycle_time": 21.771362,
+      "service_start": {
+        "1": 2.402732,
+        "3": 8.590097
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 1,
+          "path": [
+            "p0",
+            "p1",
+            "p2"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 3,
+          "path": [
+            "p2",
+            "p4",
+            "p3",
+            "p6"
+          ]
+        },
+        {
+          "from": 3,
+          "to": 0,
+          "path": [
+            "p6",
+            "p3",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "tasks": [
+        1,
+        4
+      ],
+      "task_set": [
+        1,
+        4
+      ],
+      "load": 5.0,
+      "travel_time": 13.038686,
+      "return_time": 18.038686,
+      "energy": 18.107309,
+      "cost": 20.22513,
+      "cycle_time": 27.09234,
+      "service_start": {
+        "1": 2.402732,
+        "4": 8.61058
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 1,
+          "path": [
+            "p0",
+            "p1",
+            "p2"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 4,
+          "path": [
+            "p2",
+            "p5",
+            "p8"
+          ]
+        },
+        {
+          "from": 4,
+          "to": 0,
+          "path": [
+            "p8",
+            "p7",
+            "p4",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "tasks": [
+        4,
+        1
+      ],
+      "task_set": [
+        1,
+        4
+      ],
+      "load": 5.0,
+      "travel_time": 13.038686,
+      "return_time": 18.038686,
+      "energy": 18.107309,
+      "cost": 20.22513,
+      "cycle_time": 27.09234,
+      "service_start": {
+        "4": 6.428106,
+        "1": 13.635954
+      },
+      "physical_paths": [
+        {
+          "from": 0,
+          "to": 4,
+          "path": [
+            "p0",
+            "p1",
+            "p4",
+            "p7",
+            "p8"
+          ]
+        },
+        {
+          "from": 4,
+          "to": 1,
+          "path": [
+            "p8",
+            "p5",
+            "p2"
+          ]
+        },
+        {
+          "from": 1,
+          "to": 0,
+          "path": [
+            "p2",
+            "p1",
+            "p0"
+          ]
+        }
+      ]
+    }
+  ],
+  "cuts": []
+}

@@ -71,6 +71,13 @@ def main() -> None:
             solution_path=solution_path,
             seed=int(config["random_seed"]) if config.get("random_seed") is not None else None,
             quiet=bool(args.quiet or config.get("log_level", "progress") == "quiet"),
+            branching_strategy=str(config.get("branching_strategy", "3pb")),
+            three_pb_pseudocost_candidates=int(config.get("three_pb_pseudocost_candidates", 6)),
+            three_pb_fractional_candidates=int(config.get("three_pb_fractional_candidates", 6)),
+            three_pb_lp_candidates=int(config.get("three_pb_lp_candidates", 3)),
+            three_pb_heuristic_cg_iterations=int(config.get("three_pb_heuristic_cg_iterations", 3)),
+            three_pb_heuristic_routes_per_iter=int(config.get("three_pb_heuristic_routes_per_iter", 50)),
+            three_pb_heuristic_max_labels=int(config.get("three_pb_heuristic_max_labels", 800)),
         )
         rows.append(result.to_row())
         print(
