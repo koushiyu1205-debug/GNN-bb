@@ -1,0 +1,4 @@
+开始 vehicle-schedule BPC: instance=medium, tasks=20, vehicles=3, time_limit=3600.0s, log=/home/kai/work/gnn_bb/branchpricecut/results/20260513_113758_medium_vehicle_schedule/logs/medium.jsonl
+[vehicle-BPC     0.00s] start instance=medium tasks=20 init_cols=20
+[vehicle-BPC     0.00s] node=0 d=0 lb=0.0 open=0
+[vehicle-BPC     0.12s] node=0 phase=phase1 cg=1 obj=17.0 artificial=17.0 cols=20

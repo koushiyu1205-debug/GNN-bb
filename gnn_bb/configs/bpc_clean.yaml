@@ -26,6 +26,48 @@ three_pb_heuristic_cg_iterations: 3
 three_pb_heuristic_routes_per_iter: 50
 three_pb_heuristic_max_labels: 800
 
+# task-vehicle linking:
+# sum_p a_ip lambda[p,r] <= y[r]。这是有限 row，用于强化车辆固定成本的 LP 松弛。
+task_vehicle_linking_enabled: true
+
+# 统一 crossing cuts:
+# x(delta(S)) >= 2 K(S), K(S)=max(Kcap(S), Kresource(S))。
+# Kcap=ceil(d(S)/Q)，Kresource 由资源不兼容图 exact coloring 证明。
+# cut manager 对同一 S 只保留 RHS 最大的一条 crossing_cut。
+robust_capacity_cuts_enabled: true
+robust_capacity_cut_max_depth: 0
+robust_capacity_cut_max_subset_size: 5
+robust_capacity_cut_max_per_round: 20
+robust_capacity_cut_min_violation: 1.0e-5
+robust_capacity_cut_max_rounds_per_node: 3
+
+resource_lower_bound_cuts_enabled: true
+resource_cut_max_depth: 0
+resource_cut_max_subset_size: 6
+resource_cut_max_per_round: 20
+resource_cut_min_violation: 1.0e-5
+resource_cut_max_rounds_per_node: 3
+
+# Schedule capacity upper-bound cuts:
+# sum_i z[i,r] <= U(S) y[r]，U(S) 由 exact 单车多 sortie schedule oracle 证明。
+# oracle 超过状态上限时不加 cut。
+schedule_capacity_cuts_enabled: true
+schedule_capacity_cut_max_depth: 0
+schedule_capacity_cut_max_subset_size: 10
+schedule_capacity_cut_max_per_round: 20
+schedule_capacity_cut_min_violation: 1.0e-5
+schedule_capacity_cut_max_rounds_per_node: 3
+schedule_capacity_oracle_max_states: 200000
+schedule_capacity_candidate_top_tasks: 12
+schedule_capacity_candidate_max_combinations: 300
+schedule_capacity_route_union_top_routes: 8
+schedule_capacity_route_union_max_routes: 4
+
+# 只清洗 inactive robust cuts，不清洗 schedule no-good cuts。
+cut_purge_age: 20
+cut_purge_slack: 1.0e-5
+cut_purge_dual: 1.0e-8
+
 rmp_params:
   display/verblevel: 0
   randomization/randomseedshift: 20260511

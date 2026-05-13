@@ -53,7 +53,7 @@ master 变量：
 
 ```text
 lambda[p,r] >= 0   车辆 r 是否选择 route p 的 LP 松弛变量
-y[r]        >= 0   车辆 r 是否启用的 LP 松弛变量
+0 <= y[r] <= 1     车辆 r 是否启用的 LP 松弛变量
 u[i]        >= 0   Phase-I 人工覆盖变量
 ```
 
@@ -67,6 +67,7 @@ Phase-I 用来保证每个节点 RMP 初始可行：
 min sum_i u[i]
 
 sum_r sum_p a[i,p] lambda[p,r] + u[i] = 1    for all i
+sum_p a[i,p] lambda[p,r] <= y[r]             for all i,r
 sum_p lambda[p,r] <= S_bar y[r]              for all r
 sum_p w[p] lambda[p,r] <= H y[r]             for all r
 y[r+1] <= y[r]
@@ -88,6 +89,7 @@ min sum_r F y[r] + sum_r sum_p c[p] lambda[p,r]
 
 ```text
 sum_r sum_p a[i,p] lambda[p,r] = 1           for all i
+sum_p a[i,p] lambda[p,r] <= y[r]             for all i,r
 sum_p lambda[p,r] <= S_bar y[r]              for all r
 sum_p w[p] lambda[p,r] <= H y[r]             for all r
 y[r+1] <= y[r]
@@ -109,6 +111,7 @@ w[p] = travel_time[p] + service_time[p] + energy[p] / rho
 - `pi[i]` 是任务覆盖约束 dual；
 - `eta[r]` 是 sortie 数约束 dual；
 - `beta[r]` 是车辆工作时间约束 dual；
+- `xi[i,r]` 是 task-vehicle linking 约束 dual；
 - `gamma[g]` 是 schedule cut dual；
 - `b[g,p,r]` 是 route-vehicle column 在 cut `g` 中的系数。
 - `delta[h]` 是 pricing-compatible branching 约束 dual；
@@ -119,6 +122,7 @@ Phase-II reduced cost：
 ```text
 rc[p,r] = c[p]
         - sum_i a[i,p] pi[i]
+        - sum_i a[i,p] xi[i,r]
         - eta[r]
         - beta[r] w[p]
         - sum_g b[g,p,r] gamma[g]
@@ -130,6 +134,7 @@ Phase-I reduced cost 使用 route objective `0`：
 ```text
 rc_I[p,r] = 0
           - sum_i a[i,p] pi[i]
+          - sum_i a[i,p] xi[i,r]
           - eta[r]
           - beta[r] w[p]
           - sum_g b[g,p,r] gamma[g]
@@ -140,7 +145,15 @@ rc_I[p,r] = 0
 
 ## 5. Cuts
 
-当前 clean v1 只加 schedule no-good cuts。
+当前 clean BPC 包含 schedule pair conflict cuts、schedule no-good cuts、统一 crossing cuts 和 schedule capacity upper-bound cuts。统一 crossing cut 合并了 RCI 与 k-path/resource lower bound，同一个任务子集只保留 RHS 最大的版本。
+
+如果两条 route `p,q` 被 exact schedule checker 证明不能由同一辆车共同排程，则对每辆同质车加入：
+
+```text
+lambda[p,r] + lambda[q,r] <= 1
+```
+
+该 cut 使用 route signature 判断系数，不依赖 route 对象 id。
 
 如果整数解中，某辆车选择的 route 集合 `C` 经过 exact schedule checker 证明无法按任意顺序完成，则对每辆同质车加入：
 
@@ -149,6 +162,18 @@ sum_{p in C} lambda[p,r] <= |C| - 1
 ```
 
 这类 cut 只排除原问题不可行组合，因此不破坏 exactness。
+
+Schedule capacity upper-bound cut：
+
+```text
+z[i,r] = sum_p a[i,p] lambda[p,r]
+
+sum_{i in S} z[i,r] <= U(S) y[r]          for all r
+```
+
+其中 `U(S)` 是一辆真实车辆在完整多 sortie schedule 中最多能服务 `S` 内多少个任务。当前实现用 exact labeling oracle 计算；若 oracle 超过状态上限或不能证明，则不加 cut。
+
+有效性：若 `y[r]=0`，车辆 `r` 不服务任何任务；若 `y[r]=1`，左侧是一辆车在 `S` 中服务的任务数，按 `U(S)` 定义不超过该上界。因此该 cut 不删除任何原问题整数可行解。
 
 ## 6. Branching
 

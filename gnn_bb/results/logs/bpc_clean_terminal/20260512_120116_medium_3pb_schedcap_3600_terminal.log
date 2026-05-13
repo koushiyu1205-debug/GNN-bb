@@ -1,0 +1,1 @@
+开始 clean BPC: instance=medium, tasks=20, vehicles=3, time_limit=3600s, max_nodes=100000, log=/home/kai/work/gnn_bb/results/logs/20260512_120116_medium_3pb_schedcap_3600/medium.jsonl

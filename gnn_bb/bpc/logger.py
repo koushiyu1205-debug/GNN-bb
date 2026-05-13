@@ -37,6 +37,7 @@ class BPCLogger:
             "node_start",
             "rmp",
             "pricing",
+            "schedule_capacity_candidates",
             "cut_added",
             "branch",
             "fathom",
@@ -61,6 +62,30 @@ class BPCLogger:
                 f"best_rc={record.get('best_reduced_cost')} found={record.get('negative_routes')} "
                 f"added={record.get('added_routes')} exhausted={record.get('exhausted')}"
             )
+        if event == "schedule_capacity_candidates":
+            return f"{prefix} node {record['node_id']} schedule-cap candidates={record.get('by_vehicle')}"
+        if event == "cut_added":
+            cuts = record.get("cuts") or []
+            head = cuts[0] if cuts else {}
+            detail = ""
+            if record.get("family") == "schedule_capacity" and head:
+                detail = (
+                    f" first(vehicle={head.get('vehicle')}, |S|={len(head.get('tasks', []))}, "
+                    f"U={head.get('upper_bound')}, viol={head.get('activity_minus_rhs')})"
+                )
+            elif str(record.get("family", "")).startswith("schedule_") and record.get("signatures"):
+                detail = (
+                    f" source_vehicle={record.get('source_vehicle')} "
+                    f"route_count={record.get('route_count')} signatures={record.get('signatures')}"
+                )
+            elif head:
+                detail = f" first={head}"
+            upgraded = record.get("upgraded")
+            upgrade_text = "" if upgraded is None else f" upgraded={upgraded}"
+            return (
+                f"{prefix} cut_added family={record.get('family')} node={record.get('node_id')} "
+                f"added={record.get('added')}{upgrade_text}{detail}"
+            )
         if event == "branch":
             return f"{prefix} branch node {record['node_id']}: left={record.get('left')} right={record.get('right')}"
         if event == "fathom":
@@ -70,6 +95,10 @@ class BPCLogger:
         if event == "finish":
             return (
                 f"{prefix} finish status={record.get('status')} primal={record.get('primal_bound')} "
-                f"dual={record.get('dual_bound')} gap={record.get('gap')}"
+                f"dual={record.get('dual_bound')} gap={record.get('gap')} cuts={record.get('cuts')} "
+                f"crossing={record.get('crossing_cuts_added')} "
+                f"crossing_upgraded={record.get('crossing_cuts_upgraded')} "
+                f"nogood={record.get('schedule_nogood_cuts_added')} "
+                f"sched_cap={record.get('schedule_capacity_cuts_added')}"
             )
         return f"{prefix} {event}: {record}"

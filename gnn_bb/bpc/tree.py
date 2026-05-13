@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import heapq
+from itertools import combinations
 from itertools import permutations
 import math
 import time
@@ -11,12 +12,20 @@ from typing import Any
 
 from .branching import BranchCandidate, BranchConstraint, choose_branch, generate_branch_candidates
 from .columns import RouteColumn, RoutePool, evaluate_route, route_to_json
-from .cuts import ScheduleNoGoodCut, make_no_good_cuts_for_all_vehicles
+from .cuts import (
+    Cut,
+    CrossingCut,
+    ScheduleCapacityCut,
+    ScheduleNoGoodCut,
+    capacity_route_lower_bound,
+    make_no_good_cuts_for_all_vehicles,
+)
 from .data import BPCData
 from .logger import BPCLogger
 from .node import BPCNode, BPCStats
 from .pricing import exact_pricing
 from .rmp import RMPSolution, solve_rmp_lp
+from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity
 from .validation import check_route_set_schedule_feasible, shrink_infeasible_route_set
 
 
@@ -38,7 +47,7 @@ class TreeResult:
     node_count: int
     stats: BPCStats
     routes: list[RouteColumn]
-    cuts: list[ScheduleNoGoodCut]
+    cuts: list[Cut]
     incumbent: Incumbent | None
 
 
@@ -111,6 +120,33 @@ class CleanBPCTree:
         three_pb_heuristic_cg_iterations: int = 3,
         three_pb_heuristic_routes_per_iter: int = 50,
         three_pb_heuristic_max_labels: int = 800,
+        task_vehicle_linking_enabled: bool = True,
+        robust_capacity_cuts_enabled: bool = True,
+        robust_capacity_cut_max_depth: int = 0,
+        robust_capacity_cut_max_subset_size: int = 5,
+        robust_capacity_cut_max_per_round: int = 20,
+        robust_capacity_cut_min_violation: float = 1.0e-5,
+        robust_capacity_cut_max_rounds_per_node: int = 3,
+        resource_lower_bound_cuts_enabled: bool = True,
+        resource_cut_max_depth: int = 0,
+        resource_cut_max_subset_size: int = 6,
+        resource_cut_max_per_round: int = 20,
+        resource_cut_min_violation: float = 1.0e-5,
+        resource_cut_max_rounds_per_node: int = 3,
+        schedule_capacity_cuts_enabled: bool = True,
+        schedule_capacity_cut_max_depth: int = 0,
+        schedule_capacity_cut_max_subset_size: int = 10,
+        schedule_capacity_cut_max_per_round: int = 20,
+        schedule_capacity_cut_min_violation: float = 1.0e-5,
+        schedule_capacity_cut_max_rounds_per_node: int = 3,
+        schedule_capacity_oracle_max_states: int = 200000,
+        schedule_capacity_candidate_top_tasks: int = 12,
+        schedule_capacity_candidate_max_combinations: int = 300,
+        schedule_capacity_route_union_top_routes: int = 8,
+        schedule_capacity_route_union_max_routes: int = 4,
+        cut_purge_age: int = 20,
+        cut_purge_slack: float = 1.0e-5,
+        cut_purge_dual: float = 1.0e-8,
     ) -> None:
         self.data = data
         self.time_limit = float(time_limit)
@@ -128,10 +164,54 @@ class CleanBPCTree:
         self.three_pb_heuristic_cg_iterations = int(three_pb_heuristic_cg_iterations)
         self.three_pb_heuristic_routes_per_iter = int(three_pb_heuristic_routes_per_iter)
         self.three_pb_heuristic_max_labels = int(three_pb_heuristic_max_labels)
+        self.task_vehicle_linking_enabled = bool(task_vehicle_linking_enabled)
+        self.robust_capacity_cuts_enabled = bool(robust_capacity_cuts_enabled)
+        self.robust_capacity_cut_max_depth = int(robust_capacity_cut_max_depth)
+        self.robust_capacity_cut_max_subset_size = int(robust_capacity_cut_max_subset_size)
+        self.robust_capacity_cut_max_per_round = int(robust_capacity_cut_max_per_round)
+        self.robust_capacity_cut_min_violation = float(robust_capacity_cut_min_violation)
+        self.robust_capacity_cut_max_rounds_per_node = int(robust_capacity_cut_max_rounds_per_node)
+        self.resource_lower_bound_cuts_enabled = bool(resource_lower_bound_cuts_enabled)
+        self.resource_cut_max_depth = int(resource_cut_max_depth)
+        self.resource_cut_max_subset_size = int(resource_cut_max_subset_size)
+        self.resource_cut_max_per_round = int(resource_cut_max_per_round)
+        self.resource_cut_min_violation = float(resource_cut_min_violation)
+        self.resource_cut_max_rounds_per_node = int(resource_cut_max_rounds_per_node)
+        self.crossing_cuts_enabled = self.robust_capacity_cuts_enabled or self.resource_lower_bound_cuts_enabled
+        self.crossing_cut_max_depth = max(self.robust_capacity_cut_max_depth, self.resource_cut_max_depth)
+        self.crossing_cut_max_subset_size = max(self.robust_capacity_cut_max_subset_size, self.resource_cut_max_subset_size)
+        self.crossing_cut_max_per_round = max(self.robust_capacity_cut_max_per_round, self.resource_cut_max_per_round)
+        self.crossing_cut_min_violation = min(self.robust_capacity_cut_min_violation, self.resource_cut_min_violation)
+        self.crossing_cut_max_rounds_per_node = max(
+            self.robust_capacity_cut_max_rounds_per_node,
+            self.resource_cut_max_rounds_per_node,
+        )
+        self.schedule_capacity_cuts_enabled = bool(schedule_capacity_cuts_enabled)
+        self.schedule_capacity_cut_max_depth = int(schedule_capacity_cut_max_depth)
+        self.schedule_capacity_cut_max_subset_size = int(schedule_capacity_cut_max_subset_size)
+        self.schedule_capacity_cut_max_per_round = int(schedule_capacity_cut_max_per_round)
+        self.schedule_capacity_cut_min_violation = float(schedule_capacity_cut_min_violation)
+        self.schedule_capacity_cut_max_rounds_per_node = int(schedule_capacity_cut_max_rounds_per_node)
+        self.schedule_capacity_oracle_max_states = int(schedule_capacity_oracle_max_states)
+        self.schedule_capacity_candidate_top_tasks = int(schedule_capacity_candidate_top_tasks)
+        self.schedule_capacity_candidate_max_combinations = int(schedule_capacity_candidate_max_combinations)
+        self.schedule_capacity_route_union_top_routes = int(schedule_capacity_route_union_top_routes)
+        self.schedule_capacity_route_union_max_routes = int(schedule_capacity_route_union_max_routes)
+        self.cut_purge_age = int(cut_purge_age)
+        self.cut_purge_slack = float(cut_purge_slack)
+        self.cut_purge_dual = float(cut_purge_dual)
         self.pseudocosts: dict[str, PseudoCostRecord] = {}
         self.pool = RoutePool()
-        self.cuts: list[ScheduleNoGoodCut] = []
-        self.cut_keys: set[tuple[int, tuple[tuple[int, ...], ...]]] = set()
+        self.cuts: list[Cut] = []
+        self.cut_keys: set[tuple] = set()
+        self.cut_inactive_age: dict[tuple, int] = {}
+        self.cut_rounds_by_node: dict[int, int] = {}
+        self.resource_cut_rounds_by_node: dict[int, int] = {}
+        self.schedule_capacity_cut_rounds_by_node: dict[int, int] = {}
+        self.schedule_capacity_cache: dict[tuple[int, ...], ScheduleCapacityResult | None] = {}
+        self.resource_pair_incompatible: set[tuple[int, int]] | None = None
+        self.resource_chromatic_cache: dict[tuple[int, ...], int] = {}
+        self.next_cut_id = 0
         self.stats = BPCStats()
         self.incumbent: Incumbent | None = None
         self.next_node_id = 1
@@ -150,6 +230,16 @@ class CleanBPCTree:
             if route is not None:
                 self.pool.add(route)
         self._build_greedy_incumbent()
+
+    def _allocate_cut_id(self) -> int:
+        cut_id = self.next_cut_id
+        self.next_cut_id += 1
+        return cut_id
+
+    def _allocate_cut_ids(self, count: int) -> int:
+        first_id = self.next_cut_id
+        self.next_cut_id += int(count)
+        return first_id
 
     def _build_greedy_incumbent(self) -> None:
         # 中文注释：这个启发式只给 UB，不参与 lower bound 或最优性证明。
@@ -473,6 +563,8 @@ class CleanBPCTree:
             vehicles=len(self.data.vehicles),
             initial_routes=len(self.pool.routes),
             initial_incumbent=None if self.incumbent is None else round(self.incumbent.objective, 6),
+            task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
+            schedule_capacity_cuts_enabled=self.schedule_capacity_cuts_enabled,
         )
 
         status = "UNKNOWN"
@@ -527,6 +619,16 @@ class CleanBPCTree:
             nodes=self.stats.nodes_processed,
             routes=len(self.pool.routes),
             cuts=len(self.cuts),
+            crossing_cuts_added=self.stats.crossing_cuts_added,
+            crossing_cuts_upgraded=self.stats.crossing_cuts_upgraded,
+            robust_capacity_cuts_added=self.stats.robust_capacity_cuts_added,
+            resource_lower_bound_cuts_added=self.stats.resource_lower_bound_cuts_added,
+            schedule_nogood_cuts_added=self.stats.schedule_nogood_cuts_added,
+            schedule_capacity_cuts_added=self.stats.schedule_capacity_cuts_added,
+            cuts_purged=self.stats.cuts_purged,
+            rmp_solves=self.stats.rmp_solves,
+            pricing_calls=self.stats.pricing_calls,
+            branch_testing_time=round(self.stats.branch_testing_time, 6),
         )
         return result
 
@@ -555,6 +657,7 @@ class CleanBPCTree:
                 phase=phase,
                 rmp_params=self.rmp_params,
                 verbose=False,
+                task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
             )
             self.stats.rmp_solves += 1
             last_solution = solution
@@ -577,6 +680,12 @@ class CleanBPCTree:
                 self.stats.fathomed_infeasible += 1
                 self.logger.log("fathom", node_id=node.id, reason=f"rmp_{solution.status.lower()}", bound=None)
                 return []
+
+            if phase == "phase2":
+                purged = self._purge_inactive_capacity_cuts(solution)
+                if purged:
+                    self.logger.log("cut_purged", node_id=node.id, removed=purged, remaining=len(self.cuts))
+                    continue
 
             if phase == "phase1" and solution.artificial_sum <= self.integer_tol:
                 phase = "phase2"
@@ -625,6 +734,12 @@ class CleanBPCTree:
                 self.stats.fathomed_infeasible += 1
                 self.logger.log("fathom", node_id=node.id, reason="phase1_infeasible", bound=None)
                 return []
+            separated = self._separate_crossing_cuts(node, solution)
+            if separated:
+                continue
+            separated = self._separate_schedule_capacity_cuts(node, solution)
+            if separated:
+                continue
             break
 
         if last_solution is None or not last_solution.optimal or last_solution.objective is None:
@@ -644,6 +759,8 @@ class CleanBPCTree:
             cuts_added = self._validate_integral_or_cut(node, last_solution)
             if cuts_added:
                 return [BPCNode(priority=node.lower_bound, id=node.id, depth=node.depth, branch_constraints=node.branch_constraints, parent_id=node.parent_id, description=node.description, lower_bound=node.lower_bound)]
+            if self.abort_status is not None:
+                return []
             self.stats.fathomed_integral += 1
             self.logger.log("fathom", node_id=node.id, reason="integral", bound=round(node.lower_bound, 6))
             return []
@@ -659,6 +776,429 @@ class CleanBPCTree:
         right_node = self._make_child(node, right)
         self.logger.log("branch", node_id=node.id, left=left.name(), right=right.name(), lower_bound=round(node.lower_bound, 6))
         return [left_node, right_node]
+
+    def _cut_activity(self, cut: Cut, solution: RMPSolution) -> float:
+        return sum(cut.coefficient(route, vehicle) * value for route, vehicle, value in solution.route_values)
+
+    def _cut_slack(self, cut: Cut, solution: RMPSolution) -> float:
+        activity = self._cut_activity(cut, solution)
+        if cut.sense == "<=":
+            return float(cut.rhs) - activity
+        if cut.sense == ">=":
+            return activity - float(cut.rhs)
+        raise ValueError(f"未知 cut sense: {cut.sense}")
+
+    def _purge_inactive_capacity_cuts(self, solution: RMPSolution) -> int:
+        if self.cut_purge_age <= 0 or solution.duals is None:
+            return 0
+        kept: list[Cut] = []
+        removed = 0
+        for cut in self.cuts:
+            if not isinstance(cut, (CrossingCut, ScheduleCapacityCut)):
+                kept.append(cut)
+                continue
+            key = cut.key
+            slack = self._cut_slack(cut, solution)
+            dual_abs = abs(float(solution.duals.cuts.get(cut.id, 0.0)))
+            if slack > self.cut_purge_slack and dual_abs <= self.cut_purge_dual:
+                self.cut_inactive_age[key] = self.cut_inactive_age.get(key, 0) + 1
+            else:
+                self.cut_inactive_age[key] = 0
+            if self.cut_inactive_age.get(key, 0) >= self.cut_purge_age:
+                removed += 1
+                self.cut_keys.discard(key)
+                self.cut_inactive_age.pop(key, None)
+            else:
+                kept.append(cut)
+        if removed:
+            self.cuts = kept
+            self.stats.cuts_purged += removed
+        return removed
+
+    def _separate_crossing_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        # 中文注释：统一处理 RCI 和 k-path/resource cut，同一 S 只保留 RHS 最大的一条 crossing cut。
+        if not self.crossing_cuts_enabled:
+            return 0
+        if node.depth > self.crossing_cut_max_depth:
+            return 0
+        rounds = self.cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.crossing_cut_max_rounds_per_node:
+            return 0
+
+        max_size = min(self.crossing_cut_max_subset_size, len(self.data.tasks))
+        candidates: list[tuple[float, tuple[int, ...], int, int, int, float, float, str, int | None]] = []
+        for size in range(2, max_size + 1):
+            for subset in combinations(self.data.tasks, size):
+                tasks = tuple(sorted(int(task) for task in subset))
+                demand = sum(self.data.task_value(task, "d") for task in tasks)
+                capacity_bound = capacity_route_lower_bound(self.data, tasks) if self.robust_capacity_cuts_enabled else 0
+                resource_bound = self._resource_chromatic_bound(tasks) if self.resource_lower_bound_cuts_enabled else 0
+                k_bound = max(capacity_bound, resource_bound)
+                if k_bound <= 1:
+                    continue
+                rhs = float(2 * k_bound)
+                existing_index = self._find_crossing_cut_index(tasks)
+                if existing_index is not None and float(getattr(self.cuts[existing_index], "rhs", 0.0)) >= rhs - self.integer_tol:
+                    continue
+                temp_cut = CrossingCut(
+                    id=-1,
+                    tasks=tasks,
+                    rhs=rhs,
+                    k_bound=k_bound,
+                    capacity_bound=capacity_bound,
+                    resource_bound=resource_bound,
+                    demand=demand,
+                    capacity=self.data.capacity,
+                )
+                activity = self._cut_activity(temp_cut, solution)
+                violation = rhs - activity
+                if violation > self.crossing_cut_min_violation:
+                    source = "resource" if resource_bound > capacity_bound else "capacity"
+                    candidates.append((violation, tasks, k_bound, capacity_bound, resource_bound, demand, rhs, source, existing_index))
+
+        if not candidates:
+            return 0
+        candidates.sort(key=lambda item: (-item[0], -item[2], len(item[1]), item[1]))
+        added = 0
+        upgraded = 0
+        added_payload = []
+        for violation, tasks, k_bound, capacity_bound, resource_bound, demand, rhs, source, existing_index in candidates[
+            : max(1, self.crossing_cut_max_per_round)
+        ]:
+            cut = CrossingCut(
+                id=self._allocate_cut_id(),
+                tasks=tasks,
+                rhs=rhs,
+                k_bound=k_bound,
+                capacity_bound=capacity_bound,
+                resource_bound=resource_bound,
+                demand=demand,
+                capacity=self.data.capacity,
+            )
+            if existing_index is not None:
+                old_cut = self.cuts[existing_index]
+                if float(getattr(old_cut, "rhs", 0.0)) >= rhs - self.integer_tol:
+                    continue
+                self.cuts[existing_index] = cut
+                self.cut_inactive_age[cut.key] = 0
+                upgraded += 1
+            else:
+                if cut.key in self.cut_keys:
+                    continue
+                self.cuts.append(cut)
+                self.cut_keys.add(cut.key)
+                self.cut_inactive_age[cut.key] = 0
+                added += 1
+
+            if source == "resource":
+                self.stats.resource_lower_bound_cuts_added += 1
+            else:
+                self.stats.robust_capacity_cuts_added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "tasks": list(tasks),
+                    "demand": round(demand, 6),
+                    "capacity_bound": capacity_bound,
+                    "resource_bound": resource_bound,
+                    "k_bound": k_bound,
+                    "rhs": round(rhs, 6),
+                    "source": source,
+                    "violation": round(violation, 9),
+                    "action": "upgrade" if existing_index is not None else "add",
+                }
+            )
+        changed = added + upgraded
+        if changed:
+            self.cut_rounds_by_node[node.id] = rounds + 1
+            self.stats.cuts_added += added
+            self.stats.crossing_cuts_added += added
+            self.stats.crossing_cuts_upgraded += upgraded
+            self.logger.log(
+                "cut_added",
+                node_id=node.id,
+                family="crossing_cut",
+                added=added,
+                upgraded=upgraded,
+                cuts=added_payload,
+            )
+        return changed
+
+    def _find_crossing_cut_index(self, tasks: tuple[int, ...]) -> int | None:
+        key = ("crossing_cut", frozenset(int(task) for task in tasks))
+        for index, cut in enumerate(self.cuts):
+            if isinstance(cut, CrossingCut) and cut.key == key:
+                return index
+        return None
+
+    def _ensure_resource_pair_incompatibilities(self) -> set[tuple[int, int]]:
+        if self.resource_pair_incompatible is not None:
+            return self.resource_pair_incompatible
+        incompatible: set[tuple[int, int]] = set()
+        tasks = tuple(self.data.tasks)
+        for left_index, left in enumerate(tasks):
+            for right in tasks[left_index + 1 :]:
+                if not self._pair_route_compatible(int(left), int(right)):
+                    incompatible.add((int(left), int(right)))
+        self.resource_pair_incompatible = incompatible
+        self.logger.log(
+            "resource_pair_graph",
+            incompatible_edges=len(incompatible),
+            possible_edges=len(tasks) * (len(tasks) - 1) // 2,
+        )
+        return incompatible
+
+    def _pair_route_compatible(self, left: int, right: int) -> bool:
+        # 中文注释：两任务只要存在任一顺序能放进同一条 sortie route，就不能在 incompatibility graph 中连边。
+        return evaluate_route(self.data, (left, right)) is not None or evaluate_route(self.data, (right, left)) is not None
+
+    def _resource_chromatic_bound(self, tasks: tuple[int, ...]) -> int:
+        tasks = tuple(sorted(int(task) for task in tasks))
+        cached = self.resource_chromatic_cache.get(tasks)
+        if cached is not None:
+            return cached
+        incompatible = self._ensure_resource_pair_incompatibilities()
+        index_of = {task: index for index, task in enumerate(tasks)}
+        n = len(tasks)
+        adjacency = [0 for _ in range(n)]
+        for left, right in incompatible:
+            if left not in index_of or right not in index_of:
+                continue
+            i = index_of[left]
+            j = index_of[right]
+            adjacency[i] |= 1 << j
+            adjacency[j] |= 1 << i
+        degrees = [adjacency[index].bit_count() for index in range(n)]
+        order = sorted(range(n), key=lambda index: (-degrees[index], tasks[index]))
+
+        lower = self._resource_clique_lower_bound(adjacency)
+        lower = max(1, lower)
+        for color_count in range(lower, n + 1):
+            if self._resource_can_color(order, adjacency, color_count):
+                self.resource_chromatic_cache[tasks] = color_count
+                return color_count
+        self.resource_chromatic_cache[tasks] = n
+        return n
+
+    def _resource_clique_lower_bound(self, adjacency: list[int]) -> int:
+        # 中文注释：子集规模很小，直接枚举 clique 下界即可；后续 exact coloring 仍负责证明 chromatic number。
+        n = len(adjacency)
+        best = 1 if n else 0
+        for mask in range(1, 1 << n):
+            size = mask.bit_count()
+            if size <= best:
+                continue
+            clique = True
+            for i in range(n):
+                if not (mask & (1 << i)):
+                    continue
+                others = mask & ~(1 << i)
+                if others & ~adjacency[i]:
+                    clique = False
+                    break
+            if clique:
+                best = size
+        return best
+
+    def _resource_can_color(self, order: list[int], adjacency: list[int], color_count: int) -> bool:
+        color_masks = [0 for _ in range(color_count)]
+
+        def search(position: int) -> bool:
+            if position == len(order):
+                return True
+            vertex = order[position]
+            tried_empty = False
+            for color in range(color_count):
+                if color_masks[color] == 0:
+                    if tried_empty:
+                        continue
+                    tried_empty = True
+                if adjacency[vertex] & color_masks[color]:
+                    continue
+                color_masks[color] |= 1 << vertex
+                if search(position + 1):
+                    return True
+                color_masks[color] &= ~(1 << vertex)
+            return False
+
+        return search(0)
+
+    def _separate_schedule_capacity_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        if not self.schedule_capacity_cuts_enabled:
+            return 0
+        if node.depth > self.schedule_capacity_cut_max_depth:
+            return 0
+        rounds = self.schedule_capacity_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.schedule_capacity_cut_max_rounds_per_node:
+            return 0
+
+        candidate_subsets_by_vehicle = self._schedule_capacity_candidate_subsets_by_vehicle(solution)
+        self.logger.log(
+            "schedule_capacity_candidates",
+            node_id=node.id,
+            by_vehicle={str(vehicle): len(subsets) for vehicle, subsets in candidate_subsets_by_vehicle.items()},
+        )
+        candidates: list[tuple[float, int, tuple[int, ...], int, int, float]] = []
+        for vehicle in self.data.vehicles:
+            y_value = float(solution.y_values.get(vehicle, 0.0))
+            if y_value <= self.integer_tol:
+                continue
+            for tasks in candidate_subsets_by_vehicle.get(int(vehicle), []):
+                key = ("schedule_capacity", int(vehicle), tasks)
+                if key in self.cut_keys:
+                    continue
+                oracle = self._schedule_capacity_bound(tasks)
+                if oracle is None:
+                    continue
+                upper_bound = int(oracle.upper_bound)
+                if upper_bound >= len(tasks):
+                    continue
+                activity = self._task_vehicle_mass(solution, tasks, int(vehicle)) - upper_bound * y_value
+                if activity > self.schedule_capacity_cut_min_violation:
+                    candidates.append((activity, int(vehicle), tasks, upper_bound, oracle.states_explored, y_value))
+
+        if not candidates:
+            return 0
+        candidates.sort(key=lambda item: (-item[0], item[1], len(item[2]), item[2]))
+        added = 0
+        added_payload = []
+        for violation, vehicle, tasks, upper_bound, states, y_value in candidates[: max(1, self.schedule_capacity_cut_max_per_round)]:
+            cut = ScheduleCapacityCut(
+                id=self._allocate_cut_id(),
+                vehicle=vehicle,
+                tasks=tasks,
+                upper_bound=upper_bound,
+                oracle_states=states,
+            )
+            if cut.key in self.cut_keys:
+                continue
+            self.cuts.append(cut)
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "vehicle": vehicle,
+                    "tasks": list(tasks),
+                    "upper_bound": upper_bound,
+                    "y": round(y_value, 9),
+                    "activity_minus_rhs": round(violation, 9),
+                    "oracle_states": states,
+                }
+            )
+        if added:
+            self.schedule_capacity_cut_rounds_by_node[node.id] = rounds + 1
+            self.stats.cuts_added += added
+            self.stats.schedule_capacity_cuts_added += added
+            self.logger.log(
+                "cut_added",
+                node_id=node.id,
+                family="schedule_capacity",
+                added=added,
+                cuts=added_payload,
+            )
+        return added
+
+    def _schedule_capacity_candidate_subsets_by_vehicle(self, solution: RMPSolution) -> dict[int, list[tuple[int, ...]]]:
+        max_size = min(self.schedule_capacity_cut_max_subset_size, len(self.data.tasks))
+        all_tasks = tuple(sorted(int(task) for task in self.data.tasks))
+        by_vehicle: dict[int, list[tuple[int, ...]]] = {}
+
+        for vehicle in self.data.vehicles:
+            candidates: set[tuple[int, ...]] = set()
+            if len(all_tasks) <= max_size:
+                candidates.add(all_tasks)
+
+            task_values = self._vehicle_task_values(solution, int(vehicle))
+            value_by_task = {task: value for value, task in task_values}
+            ordered = [task for _value, task in task_values[:max_size]]
+            for size in range(2, len(ordered) + 1):
+                candidates.add(tuple(sorted(ordered[:size])))
+
+            # 中文注释：也加入接近 y 的任务，专门捕捉某辆车 fractional 承担过多任务的结构。
+            y_value = float(solution.y_values.get(vehicle, 0.0))
+            near_y = [task for value, task in task_values if value >= max(self.integer_tol, 0.8 * y_value)]
+            near_y = near_y[:max_size]
+            for size in range(2, len(near_y) + 1):
+                candidates.add(tuple(sorted(near_y[:size])))
+
+            self._add_schedule_capacity_route_union_candidates(solution, int(vehicle), max_size, candidates)
+            self._add_schedule_capacity_scored_task_combinations(value_by_task, y_value, max_size, candidates)
+            by_vehicle[int(vehicle)] = sorted(candidates, key=lambda item: (len(item), item))
+
+        return by_vehicle
+
+    def _vehicle_task_values(self, solution: RMPSolution, vehicle: int) -> list[tuple[float, int]]:
+        task_values = []
+        for task in self.data.tasks:
+            value = self._task_vehicle_mass(solution, (int(task),), int(vehicle))
+            if value > self.integer_tol:
+                task_values.append((value, int(task)))
+        task_values.sort(key=lambda item: (-item[0], item[1]))
+        return task_values
+
+    def _add_schedule_capacity_route_union_candidates(
+        self,
+        solution: RMPSolution,
+        vehicle: int,
+        max_size: int,
+        candidates: set[tuple[int, ...]],
+    ) -> None:
+        support = [
+            (float(value), route)
+            for route, route_vehicle, value in solution.route_values
+            if int(route_vehicle) == int(vehicle) and value > self.integer_tol
+        ]
+        support.sort(key=lambda item: (-item[0] * len(item[1].task_set), -item[0], item[1].signature))
+        top_routes = [route for _value, route in support[: max(0, self.schedule_capacity_route_union_top_routes)]]
+        max_routes = min(max(2, self.schedule_capacity_route_union_max_routes), len(top_routes))
+        for size in range(2, max_routes + 1):
+            for route_combo in combinations(top_routes, size):
+                tasks = tuple(sorted({int(task) for route in route_combo for task in route.task_set}))
+                if 2 <= len(tasks) <= max_size:
+                    candidates.add(tasks)
+
+    def _add_schedule_capacity_scored_task_combinations(
+        self,
+        value_by_task: dict[int, float],
+        y_value: float,
+        max_size: int,
+        candidates: set[tuple[int, ...]],
+    ) -> None:
+        if y_value <= self.integer_tol:
+            return
+        top_count = max(max_size, self.schedule_capacity_candidate_top_tasks)
+        ordered = sorted(value_by_task, key=lambda task: (-value_by_task[task], task))[:top_count]
+        scored: list[tuple[float, tuple[int, ...]]] = []
+        for size in range(2, min(max_size, len(ordered)) + 1):
+            for tasks in combinations(ordered, size):
+                mass = sum(value_by_task[task] for task in tasks)
+                # 中文注释：若 U(S) 至少比 |S| 小 1，这个分数就是潜在 violation；只用于排序，不参与证明。
+                score = mass - (size - 1) * y_value
+                if score > -0.25 * max(1.0, y_value):
+                    scored.append((score, tuple(sorted(int(task) for task in tasks))))
+        scored.sort(key=lambda item: (-item[0], len(item[1]), item[1]))
+        for _score, tasks in scored[: max(0, self.schedule_capacity_candidate_max_combinations)]:
+            candidates.add(tasks)
+
+    def _task_vehicle_mass(self, solution: RMPSolution, tasks: tuple[int, ...], vehicle: int) -> float:
+        subset = set(int(task) for task in tasks)
+        return sum(
+            sum(1 for task in route.task_set if int(task) in subset) * value
+            for route, route_vehicle, value in solution.route_values
+            if int(route_vehicle) == int(vehicle)
+        )
+
+    def _schedule_capacity_bound(self, tasks: tuple[int, ...]) -> ScheduleCapacityResult | None:
+        tasks = tuple(sorted(int(task) for task in tasks))
+        if tasks not in self.schedule_capacity_cache:
+            self.schedule_capacity_cache[tasks] = exact_schedule_task_capacity(
+                self.data,
+                tasks,
+                max_states=self.schedule_capacity_oracle_max_states,
+            )
+        return self.schedule_capacity_cache[tasks]
 
     def _choose_branch(self, node: BPCNode, solution: RMPSolution) -> tuple[BranchConstraint, BranchConstraint] | None:
         if self.branching_strategy.lower() != "3pb":
@@ -834,6 +1374,7 @@ class CleanBPCTree:
             phase="phase2",
             rmp_params=self.rmp_params,
             verbose=False,
+            task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
         )
         self.stats.branch_lp_test_rmp_solves += 1
         parent = float(solution.objective or 0.0)
@@ -870,6 +1411,7 @@ class CleanBPCTree:
                 phase="phase2",
                 rmp_params=self.rmp_params,
                 verbose=False,
+                task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
             )
             self.stats.branch_heuristic_test_rmp_solves += 1
             added_after_last_solve = False
@@ -921,6 +1463,7 @@ class CleanBPCTree:
                 phase="phase2",
                 rmp_params=self.rmp_params,
                 verbose=False,
+                task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
             )
             self.stats.branch_heuristic_test_rmp_solves += 1
             if child.optimal and child.objective is not None:
@@ -992,36 +1535,76 @@ class CleanBPCTree:
             checked = check_route_set_schedule_feasible(self.data, routes)
             if checked.feasible:
                 continue
+
             conflict = shrink_infeasible_route_set(self.data, routes)
-            new_cuts = make_no_good_cuts_for_all_vehicles(
-                self.data.vehicles,
+            core_added = self._add_schedule_conflict_cuts(
+                node,
+                int(vehicle),
                 conflict,
-                len(self.cuts),
-                source_vehicle=vehicle,
-                kind="schedule_infeasible_route_set",
+                kind="schedule_nogood_core",
             )
-            added = 0
-            for cut in new_cuts:
-                if cut.key in self.cut_keys:
-                    continue
-                self.cut_keys.add(cut.key)
-                self.cuts.append(cut)
-                added += 1
-            self.stats.cuts_added += added
+            if core_added:
+                return core_added
+
+            full_added = self._add_schedule_conflict_cuts(
+                node,
+                int(vehicle),
+                routes,
+                kind="schedule_nogood_full",
+            )
+            if full_added:
+                return full_added
+
+            self.abort_status = "SCHEDULE_CUT_DUPLICATE"
             self.logger.log(
-                "cut_added",
+                "fathom",
                 node_id=node.id,
-                source_vehicle=vehicle,
-                added=added,
-                signatures=[list(route.signature) for route in conflict],
+                reason="schedule_infeasible_but_no_new_cut",
+                bound=None,
             )
-            return added
+            return 0
 
         objective = float(solution.objective or 0.0)
         if self.incumbent is None or objective < self.incumbent.objective - self.integer_tol:
             self.incumbent = Incumbent(objective=objective, route_values=selected, y_values=solution.y_values, node_id=node.id)
             self.logger.log("incumbent", node_id=node.id, objective=round(objective, 6), source="certified_integral")
         return 0
+
+    def _add_schedule_conflict_cuts(
+        self,
+        node: BPCNode,
+        source_vehicle: int,
+        routes: list[RouteColumn],
+        *,
+        kind: str,
+    ) -> int:
+        new_cuts = make_no_good_cuts_for_all_vehicles(
+            self.data.vehicles,
+            routes,
+            self._allocate_cut_ids(len(self.data.vehicles)),
+            source_vehicle=source_vehicle,
+            kind=kind,
+        )
+        added = 0
+        for cut in new_cuts:
+            if cut.key in self.cut_keys:
+                continue
+            self.cut_keys.add(cut.key)
+            self.cuts.append(cut)
+            added += 1
+        if added:
+            self.stats.cuts_added += added
+            self.stats.schedule_nogood_cuts_added += added
+            self.logger.log(
+                "cut_added",
+                node_id=node.id,
+                family=kind,
+                source_vehicle=source_vehicle,
+                added=added,
+                route_count=len(routes),
+                signatures=[list(route.signature) for route in routes],
+            )
+        return added
 
 
 def incumbent_to_solution(data: BPCData, incumbent: Incumbent | None) -> dict[str, Any]:

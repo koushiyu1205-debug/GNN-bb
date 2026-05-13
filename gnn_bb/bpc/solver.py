@@ -33,6 +33,13 @@ class BPCResult:
     branch_lp_candidates_tested: int
     branch_heuristic_candidates_tested: int
     branch_testing_time: float
+    crossing_cuts_added: int
+    crossing_cuts_upgraded: int
+    robust_capacity_cuts_added: int
+    resource_lower_bound_cuts_added: int
+    schedule_nogood_cuts_added: int
+    schedule_capacity_cuts_added: int
+    cuts_purged: int
     generated_routes: int
     generated_columns: int
     cuts_added: int
@@ -75,6 +82,33 @@ def solve_bpc_clean(
     three_pb_heuristic_cg_iterations: int = 3,
     three_pb_heuristic_routes_per_iter: int = 50,
     three_pb_heuristic_max_labels: int = 800,
+    task_vehicle_linking_enabled: bool = True,
+    robust_capacity_cuts_enabled: bool = True,
+    robust_capacity_cut_max_depth: int = 0,
+    robust_capacity_cut_max_subset_size: int = 5,
+    robust_capacity_cut_max_per_round: int = 20,
+    robust_capacity_cut_min_violation: float = 1.0e-5,
+    robust_capacity_cut_max_rounds_per_node: int = 3,
+    resource_lower_bound_cuts_enabled: bool = True,
+    resource_cut_max_depth: int = 0,
+    resource_cut_max_subset_size: int = 6,
+    resource_cut_max_per_round: int = 20,
+    resource_cut_min_violation: float = 1.0e-5,
+    resource_cut_max_rounds_per_node: int = 3,
+    schedule_capacity_cuts_enabled: bool = True,
+    schedule_capacity_cut_max_depth: int = 0,
+    schedule_capacity_cut_max_subset_size: int = 10,
+    schedule_capacity_cut_max_per_round: int = 20,
+    schedule_capacity_cut_min_violation: float = 1.0e-5,
+    schedule_capacity_cut_max_rounds_per_node: int = 3,
+    schedule_capacity_oracle_max_states: int = 200000,
+    schedule_capacity_candidate_top_tasks: int = 12,
+    schedule_capacity_candidate_max_combinations: int = 300,
+    schedule_capacity_route_union_top_routes: int = 8,
+    schedule_capacity_route_union_max_routes: int = 4,
+    cut_purge_age: int = 20,
+    cut_purge_slack: float = 1.0e-5,
+    cut_purge_dual: float = 1.0e-8,
 ) -> BPCResult:
     logger = BPCLogger(log_path, console=not quiet)
     try:
@@ -95,6 +129,33 @@ def solve_bpc_clean(
             three_pb_heuristic_cg_iterations=three_pb_heuristic_cg_iterations,
             three_pb_heuristic_routes_per_iter=three_pb_heuristic_routes_per_iter,
             three_pb_heuristic_max_labels=three_pb_heuristic_max_labels,
+            task_vehicle_linking_enabled=task_vehicle_linking_enabled,
+            robust_capacity_cuts_enabled=robust_capacity_cuts_enabled,
+            robust_capacity_cut_max_depth=robust_capacity_cut_max_depth,
+            robust_capacity_cut_max_subset_size=robust_capacity_cut_max_subset_size,
+            robust_capacity_cut_max_per_round=robust_capacity_cut_max_per_round,
+            robust_capacity_cut_min_violation=robust_capacity_cut_min_violation,
+            robust_capacity_cut_max_rounds_per_node=robust_capacity_cut_max_rounds_per_node,
+            resource_lower_bound_cuts_enabled=resource_lower_bound_cuts_enabled,
+            resource_cut_max_depth=resource_cut_max_depth,
+            resource_cut_max_subset_size=resource_cut_max_subset_size,
+            resource_cut_max_per_round=resource_cut_max_per_round,
+            resource_cut_min_violation=resource_cut_min_violation,
+            resource_cut_max_rounds_per_node=resource_cut_max_rounds_per_node,
+            schedule_capacity_cuts_enabled=schedule_capacity_cuts_enabled,
+            schedule_capacity_cut_max_depth=schedule_capacity_cut_max_depth,
+            schedule_capacity_cut_max_subset_size=schedule_capacity_cut_max_subset_size,
+            schedule_capacity_cut_max_per_round=schedule_capacity_cut_max_per_round,
+            schedule_capacity_cut_min_violation=schedule_capacity_cut_min_violation,
+            schedule_capacity_cut_max_rounds_per_node=schedule_capacity_cut_max_rounds_per_node,
+            schedule_capacity_oracle_max_states=schedule_capacity_oracle_max_states,
+            schedule_capacity_candidate_top_tasks=schedule_capacity_candidate_top_tasks,
+            schedule_capacity_candidate_max_combinations=schedule_capacity_candidate_max_combinations,
+            schedule_capacity_route_union_top_routes=schedule_capacity_route_union_top_routes,
+            schedule_capacity_route_union_max_routes=schedule_capacity_route_union_max_routes,
+            cut_purge_age=cut_purge_age,
+            cut_purge_slack=cut_purge_slack,
+            cut_purge_dual=cut_purge_dual,
         )
         tree_result = tree.solve()
     finally:
@@ -121,6 +182,13 @@ def solve_bpc_clean(
         branch_lp_candidates_tested=tree_result.stats.branch_lp_candidates_tested,
         branch_heuristic_candidates_tested=tree_result.stats.branch_heuristic_candidates_tested,
         branch_testing_time=_round(tree_result.stats.branch_testing_time),
+        crossing_cuts_added=tree_result.stats.crossing_cuts_added,
+        crossing_cuts_upgraded=tree_result.stats.crossing_cuts_upgraded,
+        robust_capacity_cuts_added=tree_result.stats.robust_capacity_cuts_added,
+        resource_lower_bound_cuts_added=tree_result.stats.resource_lower_bound_cuts_added,
+        schedule_nogood_cuts_added=tree_result.stats.schedule_nogood_cuts_added,
+        schedule_capacity_cuts_added=tree_result.stats.schedule_capacity_cuts_added,
+        cuts_purged=tree_result.stats.cuts_purged,
         generated_routes=len(tree_result.routes),
         generated_columns=generated_columns,
         cuts_added=len(tree_result.cuts),
@@ -141,11 +209,20 @@ def solve_bpc_clean(
             "cuts": [
                 {
                     "id": cut.id,
-                    "vehicle": cut.vehicle,
+                    "vehicle": getattr(cut, "vehicle", None),
                     "kind": cut.kind,
-                    "source_vehicle": cut.source_vehicle,
-                    "signatures": [list(signature) for signature in cut.signatures],
+                    "source_vehicle": getattr(cut, "source_vehicle", None),
+                    "signatures": [list(signature) for signature in getattr(cut, "signatures", ())],
+                    "tasks": list(getattr(cut, "tasks", ())),
+                    "sense": cut.sense,
                     "rhs": cut.rhs,
+                    "k_bound": getattr(cut, "k_bound", None),
+                    "capacity_bound": getattr(cut, "capacity_bound", None),
+                    "resource_bound": getattr(cut, "resource_bound", None),
+                    "demand": getattr(cut, "demand", None),
+                    "capacity": getattr(cut, "capacity", None),
+                    "upper_bound": getattr(cut, "upper_bound", None),
+                    "oracle_states": getattr(cut, "oracle_states", None),
                 }
                 for cut in tree_result.cuts
             ],

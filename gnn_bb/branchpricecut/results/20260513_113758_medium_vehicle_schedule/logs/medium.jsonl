@@ -1,0 +1,3 @@
+{"event": "start", "initial_columns": 20, "instance": "medium", "tasks": 20, "time": 0.000648}
+{"depth": 0, "event": "node", "lower_bound": 0.0, "node": 0, "open_nodes": 0, "time": 0.000715}
+{"artificial": 17.0, "cg_iter": 1, "columns": 20, "event": "rmp", "node": 0, "objective": 17.0, "phase": "phase1", "time": 0.115038}

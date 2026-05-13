@@ -29,6 +29,13 @@ class BPCStats:
     branch_lp_candidates_tested: int = 0
     branch_heuristic_candidates_tested: int = 0
     branch_testing_time: float = 0.0
+    crossing_cuts_added: int = 0
+    crossing_cuts_upgraded: int = 0
+    robust_capacity_cuts_added: int = 0
+    resource_lower_bound_cuts_added: int = 0
+    schedule_nogood_cuts_added: int = 0
+    schedule_capacity_cuts_added: int = 0
+    cuts_purged: int = 0
     generated_routes: int = 0
     generated_columns: int = 0
     cuts_added: int = 0

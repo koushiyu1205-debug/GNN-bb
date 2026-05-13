@@ -1,0 +1,21 @@
+{
+  "python": "/home/kai/miniconda3/envs/ecole/bin/python",
+  "instance_dir": "json/instances",
+  "instances": ["very_small"],
+  "time_limit": 3600,
+  "max_nodes": 100000,
+  "pricing_eps": 1.0e-6,
+  "integer_tol": 1.0e-6,
+  "max_columns_per_pricing": 100,
+  "max_labels_per_pricing": 200000,
+  "max_generated_labels_per_pricing": 300000,
+  "max_queue_size_per_pricing": 100000,
+  "max_candidate_pool_per_pricing": 5000,
+  "max_pricing_seconds": 60,
+  "random_seed": 20260511,
+  "rmp_params": {
+    "randomization/permutationseed": 20260511,
+    "randomization/randomseedshift": 0,
+    "parallel/maxnthreads": 1
+  }
+}

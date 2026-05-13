@@ -8,7 +8,7 @@ from typing import Any
 
 from .branching import BranchConstraint, partial_sequence_allowed, route_allowed_by_branch, route_branch_coefficient
 from .columns import RouteColumn, evaluate_route, route_work_time_lower_bound
-from .cuts import ScheduleNoGoodCut
+from .cuts import Cut
 from .data import BPCData
 from .rmp import RMPDuals
 
@@ -40,7 +40,7 @@ def reduced_cost(
     route: RouteColumn,
     vehicle: int,
     duals: RMPDuals,
-    cuts: list[ScheduleNoGoodCut],
+    cuts: list[Cut],
     branch_constraints: tuple[BranchConstraint, ...],
     *,
     phase: str,
@@ -49,6 +49,7 @@ def reduced_cost(
     value = (
         route_cost
         - sum(float(duals.cover[task]) for task in route.task_set)
+        - sum(float(duals.task_vehicle.get((int(task), int(vehicle)), 0.0)) for task in route.task_set)
         - float(duals.sortie_count[vehicle])
         - float(duals.vehicle_time[vehicle]) * route_work_time_lower_bound(data, route)
     )
@@ -63,17 +64,20 @@ def reduced_cost(
     return value
 
 
-def _label_priority(sequence: tuple[int, ...], cost: float, duals: RMPDuals, phase: str) -> float:
+def _label_priority(sequence: tuple[int, ...], cost: float, duals: RMPDuals, phase: str, vehicle: int) -> float:
     # 中文注释：priority 只影响遍历顺序；最终证明依赖完整枚举，不依赖这个启发式。
     base = 0.0 if phase == "phase1" else cost
-    return base - sum(float(duals.cover[task]) for task in sequence)
+    return base - sum(
+        float(duals.cover[task]) + float(duals.task_vehicle.get((int(task), int(vehicle)), 0.0))
+        for task in sequence
+    )
 
 
 def exact_pricing(
     data: BPCData,
     routes: list[RouteColumn],
     duals: RMPDuals,
-    cuts: list[ScheduleNoGoodCut],
+    cuts: list[Cut],
     branch_constraints: tuple[BranchConstraint, ...],
     *,
     phase: str,
@@ -123,7 +127,7 @@ def exact_pricing(
 
                 next_cost = label.cost + float(segment["cost"]) + data.task_value(task, "c_srv")
                 next_label = Label(
-                    priority=_label_priority(next_sequence, next_cost, duals, phase),
+                    priority=_label_priority(next_sequence, next_cost, duals, phase, vehicle),
                     node=int(task),
                     sequence=next_sequence,
                     time=finish,

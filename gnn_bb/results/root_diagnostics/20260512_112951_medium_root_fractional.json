@@ -1,0 +1,664 @@
+{
+  "instance": "medium",
+  "task_count": 20,
+  "vehicle_count": 3,
+  "sortie_limit": 17,
+  "subset_max_size": 6,
+  "root_cg_iterations": [
+    {
+      "iteration": 1,
+      "phase": "phase1",
+      "rmp_objective": 0.0,
+      "artificial_sum": 0.0,
+      "route_pool_size": 20
+    },
+    {
+      "iteration": 2,
+      "phase": "phase2",
+      "rmp_objective": 838.77781,
+      "artificial_sum": 0.0,
+      "route_pool_size": 20,
+      "best_reduced_cost": -89.385677583,
+      "negative_routes": 4566,
+      "added_routes": 200,
+      "exhausted": true,
+      "label_pops": 13767,
+      "generated_labels": 13764
+    },
+    {
+      "iteration": 3,
+      "phase": "phase2",
+      "rmp_objective": 523.186884,
+      "artificial_sum": 0.0,
+      "route_pool_size": 220,
+      "best_reduced_cost": -50.617363583,
+      "negative_routes": 1095,
+      "added_routes": 200,
+      "exhausted": true,
+      "label_pops": 13767,
+      "generated_labels": 13764
+    },
+    {
+      "iteration": 4,
+      "phase": "phase2",
+      "rmp_objective": 498.932566,
+      "artificial_sum": 0.0,
+      "route_pool_size": 420,
+      "best_reduced_cost": -27.68169925,
+      "negative_routes": 216,
+      "added_routes": 200,
+      "exhausted": true,
+      "label_pops": 13767,
+      "generated_labels": 13764
+    },
+    {
+      "iteration": 5,
+      "phase": "phase2",
+      "rmp_objective": 492.38259,
+      "artificial_sum": 0.0,
+      "route_pool_size": 620,
+      "best_reduced_cost": -4.033307833,
+      "negative_routes": 8,
+      "added_routes": 8,
+      "exhausted": true,
+      "label_pops": 13767,
+      "generated_labels": 13764
+    },
+    {
+      "iteration": 6,
+      "phase": "phase2",
+      "rmp_objective": 490.283693,
+      "artificial_sum": 0.0,
+      "route_pool_size": 628,
+      "best_reduced_cost": -0.0,
+      "negative_routes": 0,
+      "added_routes": 0,
+      "exhausted": true,
+      "label_pops": 13767,
+      "generated_labels": 13764
+    }
+  ],
+  "fractional_structure": {
+    "objective": 490.283693,
+    "route_pool_size": 628,
+    "support_route_vehicle_variables": 19,
+    "fractional_route_vehicle_variables": 19,
+    "fractional_y_count": 3,
+    "max_task_vehicle_link_violation": 0.0,
+    "vehicles": [
+      {
+        "vehicle": 1,
+        "y": 0.659430087,
+        "sortie_mass": 2.570323534,
+        "sortie_limit_rhs": 11.210311487,
+        "work_mass": 158.263221,
+        "work_limit_rhs": 158.263221,
+        "nonzero_route_count": 6
+      },
+      {
+        "vehicle": 2,
+        "y": 0.5,
+        "sortie_mass": 1.990686644,
+        "sortie_limit_rhs": 8.5,
+        "work_mass": 120.0,
+        "work_limit_rhs": 120.0,
+        "nonzero_route_count": 7
+      },
+      {
+        "vehicle": 3,
+        "y": 0.5,
+        "sortie_mass": 1.938989822,
+        "sortie_limit_rhs": 8.5,
+        "work_mass": 120.0,
+        "work_limit_rhs": 120.0,
+        "nonzero_route_count": 6
+      }
+    ],
+    "top_fractional_routes": [
+      {
+        "route_id": 19,
+        "vehicle": 1,
+        "value": 0.5,
+        "tasks": [
+          20
+        ],
+        "cost": 48.675776,
+        "load": 3.0,
+        "work_time_lb": 59.5892
+      },
+      {
+        "route_id": 19,
+        "vehicle": 2,
+        "value": 0.5,
+        "tasks": [
+          20
+        ],
+        "cost": 48.675776,
+        "load": 3.0,
+        "work_time_lb": 59.5892
+      },
+      {
+        "route_id": 528,
+        "vehicle": 2,
+        "value": 0.5,
+        "tasks": [
+          19,
+          10,
+          6
+        ],
+        "cost": 46.54674,
+        "load": 5.0,
+        "work_time_lb": 56.261051
+      },
+      {
+        "route_id": 528,
+        "vehicle": 3,
+        "value": 0.5,
+        "tasks": [
+          19,
+          10,
+          6
+        ],
+        "cost": 46.54674,
+        "load": 5.0,
+        "work_time_lb": 56.261051
+      },
+      {
+        "route_id": 627,
+        "vehicle": 1,
+        "value": 0.501463359,
+        "tasks": [
+          2,
+          4,
+          8,
+          15
+        ],
+        "cost": 54.287138,
+        "load": 9.0,
+        "work_time_lb": 68.506232
+      },
+      {
+        "route_id": 627,
+        "vehicle": 3,
+        "value": 0.438989822,
+        "tasks": [
+          2,
+          4,
+          8,
+          15
+        ],
+        "cost": 54.287138,
+        "load": 9.0,
+        "work_time_lb": 68.506232
+      },
+      {
+        "route_id": 264,
+        "vehicle": 1,
+        "value": 0.409430087,
+        "tasks": [
+          13,
+          17
+        ],
+        "cost": 41.227634,
+        "load": 5.0,
+        "work_time_lb": 50.559613
+      },
+      {
+        "route_id": 24,
+        "vehicle": 1,
+        "value": 0.659430087,
+        "tasks": [
+          16,
+          12,
+          14,
+          5
+        ],
+        "cost": 53.305861,
+        "load": 9.0,
+        "work_time_lb": 65.03506
+      },
+      {
+        "route_id": 26,
+        "vehicle": 2,
+        "value": 0.340569913,
+        "tasks": [
+          14,
+          12,
+          16,
+          5
+        ],
+        "cost": 53.305861,
+        "load": 9.0,
+        "work_time_lb": 65.03506
+      },
+      {
+        "route_id": 120,
+        "vehicle": 2,
+        "value": 0.25,
+        "tasks": [
+          1,
+          9,
+          11,
+          7,
+          3
+        ],
+        "cost": 50.509755,
+        "load": 9.0,
+        "work_time_lb": 62.805052
+      },
+      {
+        "route_id": 120,
+        "vehicle": 3,
+        "value": 0.25,
+        "tasks": [
+          1,
+          9,
+          11,
+          7,
+          3
+        ],
+        "cost": 50.509755,
+        "load": 9.0,
+        "work_time_lb": 62.805052
+      },
+      {
+        "route_id": 234,
+        "vehicle": 3,
+        "value": 0.25,
+        "tasks": [
+          13,
+          17,
+          1
+        ],
+        "cost": 48.048686,
+        "load": 7.0,
+        "work_time_lb": 60.444522
+      }
+    ],
+    "top_task_vehicle_splits": [
+      {
+        "task": 1,
+        "vehicle_values": {
+          "3": 0.5,
+          "1": 0.25,
+          "2": 0.25
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.5,
+        "entropy": 1.039720771
+      },
+      {
+        "task": 9,
+        "vehicle_values": {
+          "3": 0.5,
+          "1": 0.25,
+          "2": 0.25
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.5,
+        "entropy": 1.039720771
+      },
+      {
+        "task": 18,
+        "vehicle_values": {
+          "3": 0.5,
+          "1": 0.25,
+          "2": 0.25
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.5,
+        "entropy": 1.039720771
+      },
+      {
+        "task": 2,
+        "vehicle_values": {
+          "1": 0.501463359,
+          "3": 0.438989822,
+          "2": 0.059546819
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.501463359,
+        "entropy": 0.875514662
+      },
+      {
+        "task": 4,
+        "vehicle_values": {
+          "1": 0.501463359,
+          "3": 0.438989822,
+          "2": 0.059546819
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.501463359,
+        "entropy": 0.875514662
+      },
+      {
+        "task": 8,
+        "vehicle_values": {
+          "1": 0.501463359,
+          "3": 0.438989822,
+          "2": 0.059546819
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.501463359,
+        "entropy": 0.875514662
+      },
+      {
+        "task": 15,
+        "vehicle_values": {
+          "1": 0.501463359,
+          "3": 0.438989822,
+          "2": 0.059546819
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.501463359,
+        "entropy": 0.875514662
+      },
+      {
+        "task": 13,
+        "vehicle_values": {
+          "1": 0.659430087,
+          "3": 0.25,
+          "2": 0.090569913
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.659430087,
+        "entropy": 0.838662352
+      },
+      {
+        "task": 17,
+        "vehicle_values": {
+          "1": 0.659430087,
+          "3": 0.25,
+          "2": 0.090569913
+        },
+        "positive_vehicle_count": 3,
+        "max_vehicle_value": 0.659430087,
+        "entropy": 0.838662352
+      },
+      {
+        "task": 3,
+        "vehicle_values": {
+          "2": 0.5,
+          "3": 0.5,
+          "1": 0
+        },
+        "positive_vehicle_count": 2,
+        "max_vehicle_value": 0.5,
+        "entropy": 0.693147181
+      },
+      {
+        "task": 6,
+        "vehicle_values": {
+          "2": 0.5,
+          "3": 0.5,
+          "1": 0
+        },
+        "positive_vehicle_count": 2,
+        "max_vehicle_value": 0.5,
+        "entropy": 0.693147181
+      },
+      {
+        "task": 7,
+        "vehicle_values": {
+          "2": 0.5,
+          "3": 0.5,
+          "1": 0
+        },
+        "positive_vehicle_count": 2,
+        "max_vehicle_value": 0.5,
+        "entropy": 0.693147181
+      }
+    ],
+    "fractional_pair_count": 13,
+    "top_fractional_pairs": [
+      {
+        "pair": [
+          1,
+          3
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          1,
+          7
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          1,
+          9
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          1,
+          11
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          1,
+          13
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          1,
+          17
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          3,
+          9
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          3,
+          18
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          7,
+          9
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          7,
+          18
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          9,
+          11
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "pair": [
+          9,
+          18
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      }
+    ],
+    "fractional_arc_count": 26,
+    "top_fractional_arcs": [
+      {
+        "arc": [
+          1,
+          9
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "arc": [
+          9,
+          11
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "arc": [
+          11,
+          7
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "arc": [
+          18,
+          9
+        ],
+        "value": 0.5,
+        "fractionality": 0.5
+      },
+      {
+        "arc": [
+          12,
+          14
+        ],
+        "value": 0.659430087,
+        "fractionality": 0.340569913
+      },
+      {
+        "arc": [
+          12,
+          16
+        ],
+        "value": 0.340569913,
+        "fractionality": 0.340569913
+      },
+      {
+        "arc": [
+          14,
+          5
+        ],
+        "value": 0.659430087,
+        "fractionality": 0.340569913
+      },
+      {
+        "arc": [
+          14,
+          12
+        ],
+        "value": 0.340569913,
+        "fractionality": 0.340569913
+      },
+      {
+        "arc": [
+          16,
+          5
+        ],
+        "value": 0.340569913,
+        "fractionality": 0.340569913
+      },
+      {
+        "arc": [
+          16,
+          12
+        ],
+        "value": 0.659430087,
+        "fractionality": 0.340569913
+      },
+      {
+        "arc": [
+          3,
+          7
+        ],
+        "value": 0.25,
+        "fractionality": 0.25
+      },
+      {
+        "arc": [
+          7,
+          3
+        ],
+        "value": 0.75,
+        "fractionality": 0.25
+      }
+    ],
+    "branch_candidate_counts": {
+      "arc": 26,
+      "ryan_foster": 13,
+      "task_vehicle": 49,
+      "vehicle": 3
+    }
+  },
+  "cut_violations": {
+    "pair_incompatibility_edges": 70,
+    "pair_possible_edges": 190,
+    "rci": {
+      "violated_count": 0,
+      "best_candidate": {
+        "tasks": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "size": 4,
+        "demand": 10.0,
+        "rhs": 4.0,
+        "activity": 4.0,
+        "violation": 0.0
+      },
+      "top_violated": []
+    },
+    "k_path_resource": {
+      "stronger_than_capacity_subset_count": 36916,
+      "violated_count": 0,
+      "best_candidate": {
+        "tasks": [
+          1,
+          15
+        ],
+        "size": 2,
+        "demand": 3.0,
+        "capacity_bound": 1,
+        "chromatic_bound": 2,
+        "k_bound": 2,
+        "rhs": 4.0,
+        "activity": 4.0,
+        "violation": 0.0
+      },
+      "top_violated": []
+    }
+  },
+  "interpretation": [
+    "RCI/RCC 没有起作用的直接原因：当前 root LP 解在枚举范围内没有违反 x(delta(S)) >= 2 ceil(d(S)/Q)。",
+    "k-path/resource cut 没有起作用的直接原因：虽然存在资源不兼容 pair，但当前 root LP 解没有违反 x(delta(S)) >= 2 k(S)。",
+    "当前 root LP 的主要 fractional 结构集中在任务配对/任务弧选择上，更像 branching 结构问题，而不是容量子集 cut violation。",
+    "RMP 根节点仍由多个 fractional route-vehicle column 混合覆盖任务；schedule no-good cut 只在整数 route 集不可排程时触发，不能切这类 fractional 解。",
+    "task-vehicle linking 约束在 root LP 中满足，但没有改变 root bound，说明 fixed vehicle cost 稀释不是当前 root bound 的主要瓶颈。"
+  ]
+}

@@ -1,0 +1,14 @@
+{"event": "incumbent", "node": 0, "objective": 232.270984, "source": "greedy", "time": 0.000545}
+{"event": "start", "initial_columns": 6, "instance": "very_small", "tasks": 4, "time": 0.000622}
+{"depth": 0, "event": "node", "lower_bound": 0.0, "node": 0, "open_nodes": 0, "time": 0.000675}
+{"artificial": 0.0, "cg_iter": 1, "columns": 6, "event": "rmp", "node": 0, "objective": 0.0, "phase": "phase1", "time": 0.085189}
+{"added": 0, "best_rc": 0.0, "cg_iter": 1, "event": "pricing", "exhausted": true, "found": 0, "labels": 110, "node": 0, "phase": "phase1", "time": 0.086903}
+{"artificial": 0.0, "cg_iter": 1, "columns": 6, "event": "rmp", "node": 0, "objective": 232.270984, "phase": "phase2", "time": 0.089616}
+{"added": 45, "best_rc": -102.541578, "cg_iter": 1, "event": "pricing", "exhausted": true, "found": 45, "labels": 110, "node": 0, "phase": "phase2", "time": 0.091819}
+{"artificial": 0.0, "cg_iter": 2, "columns": 51, "event": "rmp", "node": 0, "objective": 132.270984, "phase": "phase2", "time": 0.09572}
+{"added": 2, "best_rc": -0.114096, "cg_iter": 2, "event": "pricing", "exhausted": true, "found": 2, "labels": 110, "node": 0, "phase": "phase2", "time": 0.097556}
+{"artificial": 0.0, "cg_iter": 3, "columns": 53, "event": "rmp", "node": 0, "objective": 132.270984, "phase": "phase2", "time": 0.100842}
+{"added": 0, "best_rc": 0.0, "cg_iter": 3, "event": "pricing", "exhausted": true, "found": 0, "labels": 110, "node": 0, "phase": "phase2", "time": 0.102403}
+{"event": "incumbent", "node": 0, "objective": 132.270984, "source": "integral_master", "time": 0.102465}
+{"event": "fathom", "node": 0, "reason": "integral", "time": 0.102479}
+{"dual": 132.270984, "event": "finish", "gap": 0.0, "nodes": 1, "primal": 132.270984, "status": "OPTIMAL", "time": 0.102499}

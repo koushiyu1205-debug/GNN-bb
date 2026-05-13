@@ -7,13 +7,14 @@ from typing import Any
 
 from .branching import BranchConstraint, route_allowed_by_branch, route_branch_coefficient
 from .columns import RouteColumn, route_work_time_lower_bound
-from .cuts import ScheduleNoGoodCut
+from .cuts import Cut
 from .data import BPCData
 
 
 @dataclass
 class RMPDuals:
     cover: dict[int, float]
+    task_vehicle: dict[tuple[int, int], float]
     sortie_count: dict[int, float]
     vehicle_time: dict[int, float]
     cuts: dict[int, float]
@@ -30,6 +31,7 @@ class RMPSolution:
     y_values: dict[int, float]
     variable_count: int
     constraint_count: int
+    lambda_reduced_costs: dict[tuple[int, int], float] | None = None
 
     @property
     def optimal(self) -> bool:
@@ -39,7 +41,15 @@ class RMPSolution:
 class _DualCapturePricer:
     """中文注释：只在 SCIP pricing callback 中读取 dual，不生成列；真正 pricing 由 clean BPC 外层执行。"""
 
-    def __init__(self, cover_cons, sortie_cons, time_cons, cut_cons, branch_cons):
+    def __init__(
+        self,
+        cover_cons,
+        task_vehicle_cons,
+        sortie_cons,
+        time_cons,
+        cut_cons,
+        branch_cons,
+    ):
         from pyscipopt import Pricer
 
         class _Pricer(Pricer):
@@ -58,6 +68,7 @@ class _DualCapturePricer:
 
         self.plugin = _Pricer(self)
         self.cover_cons = dict(cover_cons)
+        self.task_vehicle_cons = dict(task_vehicle_cons)
         self.sortie_cons = dict(sortie_cons)
         self.time_cons = dict(time_cons)
         self.cut_cons = dict(cut_cons)
@@ -66,6 +77,7 @@ class _DualCapturePricer:
 
     def on_init(self, model) -> None:
         self.cover_cons = {key: model.getTransformedCons(cons) for key, cons in self.cover_cons.items()}
+        self.task_vehicle_cons = {key: model.getTransformedCons(cons) for key, cons in self.task_vehicle_cons.items()}
         self.sortie_cons = {key: model.getTransformedCons(cons) for key, cons in self.sortie_cons.items()}
         self.time_cons = {key: model.getTransformedCons(cons) for key, cons in self.time_cons.items()}
         self.cut_cons = {key: model.getTransformedCons(cons) for key, cons in self.cut_cons.items()}
@@ -76,6 +88,7 @@ class _DualCapturePricer:
 
         self.duals = RMPDuals(
             cover={task: float(model.getDualsolLinear(cons)) for task, cons in self.cover_cons.items()},
+            task_vehicle={key: float(model.getDualsolLinear(cons)) for key, cons in self.task_vehicle_cons.items()},
             sortie_count={vehicle: float(model.getDualsolLinear(cons)) for vehicle, cons in self.sortie_cons.items()},
             vehicle_time={vehicle: float(model.getDualsolLinear(cons)) for vehicle, cons in self.time_cons.items()},
             cuts={cut_id: float(model.getDualsolLinear(cons)) for cut_id, cons in self.cut_cons.items()},
@@ -108,12 +121,14 @@ def _status_name(status: Any) -> str:
 def solve_rmp_lp(
     data: BPCData,
     routes: list[RouteColumn],
-    cuts: list[ScheduleNoGoodCut],
+    cuts: list[Cut],
     branch_constraints: tuple[BranchConstraint, ...],
     *,
     phase: str,
     rmp_params: dict[str, Any] | None = None,
     verbose: bool = False,
+    task_vehicle_linking_enabled: bool = True,
+    capture_lambda_reduced_costs: bool = False,
 ) -> RMPSolution:
     from pyscipopt import Model, quicksum
 
@@ -147,16 +162,17 @@ def solve_rmp_lp(
         )
 
     route_vars: dict[tuple[int, int], Any] = {}
-    for route in routes:
+    for route_index, route in enumerate(routes):
         for vehicle in data.vehicles:
             if not route_allowed_by_branch(route, vehicle, branch_constraints):
                 continue
-            route_vars[(route.id, vehicle)] = model.addVar(
+            # 中文注释：RMP 内部用当前 routes 列表下标做 key，避免临时 RouteColumn(id=-1) 造成变量覆盖。
+            route_vars[(route_index, vehicle)] = model.addVar(
                 vtype="C",
                 lb=0.0,
                 ub=1.0,
                 obj=0.0 if phase == "phase1" else float(route.cost),
-                name=f"lambda[{route.id},{vehicle}]",
+                name=f"lambda[{route_index},{vehicle}]",
             )
 
     artificial = {}
@@ -164,6 +180,12 @@ def solve_rmp_lp(
         artificial = {
             task: model.addVar(vtype="C", lb=0.0, ub=1.0, obj=1.0, name=f"artificial[{task}]")
             for task in data.tasks
+        }
+    cut_artificial = {}
+    if phase == "phase1":
+        cut_artificial = {
+            cut.id: model.addVar(vtype="C", lb=0.0, obj=1.0, name=f"cut_artificial[{cut.id}]")
+            for cut in cuts
         }
 
     cover_cons = {}
@@ -176,6 +198,22 @@ def solve_rmp_lp(
         if phase == "phase1":
             terms.append(artificial[task])
         cover_cons[task] = model.addCons(quicksum(terms) == 1.0, name=f"cover[{task}]", modifiable=True)
+
+    task_vehicle_cons = {}
+    if task_vehicle_linking_enabled:
+        for task in data.tasks:
+            for vehicle in data.vehicles:
+                terms = [
+                    var
+                    for (route_id, var_vehicle), var in route_vars.items()
+                    if int(var_vehicle) == int(vehicle) and task in routes[route_id].task_set
+                ]
+                # 中文注释：如果任务 i 在车辆 r 上被服务，则车辆 r 必须启用；这是有限 linking row，不依赖潜在列数量。
+                task_vehicle_cons[(int(task), int(vehicle))] = model.addCons(
+                    quicksum(terms) - y[vehicle] <= 0.0,
+                    name=f"task_vehicle_link[{task},{vehicle}]",
+                    modifiable=True,
+                )
 
     sortie_cons = {}
     time_cons = {}
@@ -208,7 +246,25 @@ def solve_rmp_lp(
             for (route_id, vehicle), var in route_vars.items()
             if cut.coefficient(routes[route_id], vehicle) != 0.0
         ]
-        cut_cons[cut.id] = model.addCons(quicksum(terms) <= cut.rhs, name=f"schedule_nogood[{cut.id}]", modifiable=True)
+        y_terms = [
+            cut.y_coefficient(vehicle) * var
+            for vehicle, var in y.items()
+            if hasattr(cut, "y_coefficient") and cut.y_coefficient(vehicle) != 0.0
+        ]
+        expr = quicksum([*terms, *y_terms])
+        if phase == "phase1":
+            if cut.sense == "<=":
+                expr -= cut_artificial[cut.id]
+            elif cut.sense == ">=":
+                expr += cut_artificial[cut.id]
+            else:
+                raise ValueError(f"未知 cut sense: {cut.sense}")
+        if cut.sense == "<=":
+            cut_cons[cut.id] = model.addCons(expr <= cut.rhs, name=f"cut[{cut.id}]", modifiable=True)
+        elif cut.sense == ">=":
+            cut_cons[cut.id] = model.addCons(expr >= cut.rhs, name=f"cut[{cut.id}]", modifiable=True)
+        else:
+            raise ValueError(f"未知 cut sense: {cut.sense}")
 
     branch_cons = {}
     for index, constraint in enumerate(branch_constraints):
@@ -221,7 +277,14 @@ def solve_rmp_lp(
         ]
         branch_cons[index] = model.addCons(quicksum(terms) >= 1.0, name=f"branch_arc_on[{index}]", modifiable=True)
 
-    dual_capture = _DualCapturePricer(cover_cons, sortie_cons, time_cons, cut_cons, branch_cons)
+    dual_capture = _DualCapturePricer(
+        cover_cons,
+        task_vehicle_cons,
+        sortie_cons,
+        time_cons,
+        cut_cons,
+        branch_cons,
+    )
     model.includePricer(dual_capture.plugin, "clean_bpc_dual_capture", "读取 RMP LP dual 的空 pricer", priority=1, delay=False)
 
     model.optimize()
@@ -236,10 +299,16 @@ def solve_rmp_lp(
             y_values={},
             variable_count=model.getNVars(),
             constraint_count=model.getNConss(),
+            lambda_reduced_costs={} if capture_lambda_reduced_costs else None,
         )
 
     objective = float(model.getObjVal())
-    artificial_sum = sum(float(model.getVal(var)) for var in artificial.values()) if phase == "phase1" else 0.0
+    artificial_sum = (
+        sum(float(model.getVal(var)) for var in artificial.values())
+        + sum(float(model.getVal(var)) for var in cut_artificial.values())
+        if phase == "phase1"
+        else 0.0
+    )
     route_values = [
         (routes[route_id], vehicle, float(model.getVal(var)))
         for (route_id, vehicle), var in route_vars.items()
@@ -249,6 +318,13 @@ def solve_rmp_lp(
     duals = dual_capture.duals
     if duals is None:
         raise RuntimeError("SCIP 未调用 dual capture pricer，无法取得 RMP dual。")
+    lambda_reduced_costs = None
+    if capture_lambda_reduced_costs:
+        # 中文注释：只用于 reduced-cost 一致性测试；正常 BPC 不依赖已有变量的 solver reduced cost。
+        lambda_reduced_costs = {
+            (int(route_id), int(vehicle)): float(model.getVarRedcost(var))
+            for (route_id, vehicle), var in route_vars.items()
+        }
     return RMPSolution(
         status=status,
         objective=objective,
@@ -258,4 +334,5 @@ def solve_rmp_lp(
         y_values=y_values,
         variable_count=model.getNVars(),
         constraint_count=model.getNConss(),
+        lambda_reduced_costs=lambda_reduced_costs,
     )

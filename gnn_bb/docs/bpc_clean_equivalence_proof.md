@@ -12,6 +12,7 @@ route-vehicle master + schedule no-good cuts
 
 本文要证明的是：
 
+
 ```text
 原问题
 = 完整 route-vehicle master + 完整 schedule no-good cuts 的整数模型

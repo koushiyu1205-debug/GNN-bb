@@ -1,0 +1,5 @@
+{"event": "start", "initial_columns": 20, "instance": "medium", "tasks": 20, "time": 0.000642}
+{"depth": 0, "event": "node", "lower_bound": 0.0, "node": 0, "open_nodes": 0, "time": 0.000707}
+{"artificial": 17.0, "cg_iter": 1, "columns": 20, "event": "rmp", "node": 0, "objective": 17.0, "phase": "phase1", "time": 0.106679}
+{"added": 100, "best_rc": -11.0, "cg_iter": 1, "event": "pricing", "exhausted": false, "found": 100, "generated_labels": 200079, "labels": 200000, "node": 0, "phase": "phase1", "queue_peak": 106, "stop_reason": "label_pop_limit", "time": 3.516993}
+{"dual": null, "event": "finish", "gap": null, "nodes": 1, "primal": null, "status": "PRICING_LIMIT", "time": 3.517096}

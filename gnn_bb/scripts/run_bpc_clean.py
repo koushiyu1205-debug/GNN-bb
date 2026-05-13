@@ -78,12 +78,44 @@ def main() -> None:
             three_pb_heuristic_cg_iterations=int(config.get("three_pb_heuristic_cg_iterations", 3)),
             three_pb_heuristic_routes_per_iter=int(config.get("three_pb_heuristic_routes_per_iter", 50)),
             three_pb_heuristic_max_labels=int(config.get("three_pb_heuristic_max_labels", 800)),
+            task_vehicle_linking_enabled=bool(config.get("task_vehicle_linking_enabled", True)),
+            robust_capacity_cuts_enabled=bool(config.get("robust_capacity_cuts_enabled", True)),
+            robust_capacity_cut_max_depth=int(config.get("robust_capacity_cut_max_depth", 0)),
+            robust_capacity_cut_max_subset_size=int(config.get("robust_capacity_cut_max_subset_size", 5)),
+            robust_capacity_cut_max_per_round=int(config.get("robust_capacity_cut_max_per_round", 20)),
+            robust_capacity_cut_min_violation=float(config.get("robust_capacity_cut_min_violation", 1.0e-5)),
+            robust_capacity_cut_max_rounds_per_node=int(config.get("robust_capacity_cut_max_rounds_per_node", 3)),
+            resource_lower_bound_cuts_enabled=bool(config.get("resource_lower_bound_cuts_enabled", True)),
+            resource_cut_max_depth=int(config.get("resource_cut_max_depth", 0)),
+            resource_cut_max_subset_size=int(config.get("resource_cut_max_subset_size", 6)),
+            resource_cut_max_per_round=int(config.get("resource_cut_max_per_round", 20)),
+            resource_cut_min_violation=float(config.get("resource_cut_min_violation", 1.0e-5)),
+            resource_cut_max_rounds_per_node=int(config.get("resource_cut_max_rounds_per_node", 3)),
+            schedule_capacity_cuts_enabled=bool(config.get("schedule_capacity_cuts_enabled", True)),
+            schedule_capacity_cut_max_depth=int(config.get("schedule_capacity_cut_max_depth", 0)),
+            schedule_capacity_cut_max_subset_size=int(config.get("schedule_capacity_cut_max_subset_size", 10)),
+            schedule_capacity_cut_max_per_round=int(config.get("schedule_capacity_cut_max_per_round", 20)),
+            schedule_capacity_cut_min_violation=float(config.get("schedule_capacity_cut_min_violation", 1.0e-5)),
+            schedule_capacity_cut_max_rounds_per_node=int(config.get("schedule_capacity_cut_max_rounds_per_node", 3)),
+            schedule_capacity_oracle_max_states=int(config.get("schedule_capacity_oracle_max_states", 200000)),
+            schedule_capacity_candidate_top_tasks=int(config.get("schedule_capacity_candidate_top_tasks", 12)),
+            schedule_capacity_candidate_max_combinations=int(config.get("schedule_capacity_candidate_max_combinations", 300)),
+            schedule_capacity_route_union_top_routes=int(config.get("schedule_capacity_route_union_top_routes", 8)),
+            schedule_capacity_route_union_max_routes=int(config.get("schedule_capacity_route_union_max_routes", 4)),
+            cut_purge_age=int(config.get("cut_purge_age", 20)),
+            cut_purge_slack=float(config.get("cut_purge_slack", 1.0e-5)),
+            cut_purge_dual=float(config.get("cut_purge_dual", 1.0e-8)),
         )
         rows.append(result.to_row())
         print(
             f"{result.instance}: status={result.status}, primal={result.primal_bound}, dual={result.dual_bound}, "
             f"gap={result.gap}, time={result.solving_time}s, nodes={result.node_count}, "
-            f"rmp={result.rmp_solves}, pricing={result.pricing_calls}, routes={result.generated_routes}, cuts={result.cuts_added}",
+            f"rmp={result.rmp_solves}, pricing={result.pricing_calls}, routes={result.generated_routes}, "
+            f"cuts={result.cuts_added}, crossing={result.crossing_cuts_added}, "
+            f"crossing_upgraded={result.crossing_cuts_upgraded}, rci={result.robust_capacity_cuts_added}, "
+            f"kpath={result.resource_lower_bound_cuts_added}, nogood={result.schedule_nogood_cuts_added}, "
+            f"sched_cap={result.schedule_capacity_cuts_added}, "
+            f"cuts_purged={result.cuts_purged}, branch_test_time={result.branch_testing_time}s",
             flush=True,
         )
     output = ROOT / args.results_csv

@@ -1,0 +1,13 @@
+# 中文摘要：clean BPC 长时间消融实验配置。变量组合固定 seed 和 solver 参数，只切换 linking / schedule-cap。
+
+base_config: configs/bpc_clean.yaml
+instances: ["medium"]
+time_limit: 3600
+max_nodes: 100000
+
+# 四个 variant 用于判断 3600s 改善来自哪里：
+# no_link_no_schedcap: 关闭 task-vehicle linking，关闭 schedule-cap cut
+# link_only:          只开启 task-vehicle linking
+# schedcap_only:      只开启 schedule-cap cut
+# link_schedcap:      两者都开启，即当前主线
+variants: ["no_link_no_schedcap", "link_only", "schedcap_only", "link_schedcap"]

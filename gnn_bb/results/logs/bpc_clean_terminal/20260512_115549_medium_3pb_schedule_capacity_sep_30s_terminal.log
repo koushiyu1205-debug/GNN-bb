@@ -1,0 +1,53 @@
+开始 clean BPC: instance=medium, tasks=20, vehicles=3, time_limit=30s, max_nodes=100000, log=/home/kai/work/gnn_bb/results/logs/20260512_115549_medium_3pb_schedule_capacity_sep_30s/medium.jsonl
+[clean-BPC     6.61s] incumbent node 0: obj=627.942924
+[clean-BPC     6.61s] start: {'time': 6.613297, 'event': 'start', 'instance': 'medium', 'tasks': 20, 'vehicles': 3, 'initial_routes': 26, 'initial_incumbent': 627.942924}
+[clean-BPC     6.61s] node 0 d=0 lb=0.0 open=0
+[clean-BPC     6.69s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=26
+[clean-BPC     6.69s] node 0 cg=2 phase=phase2 obj=496.984869 artificial=0.0 cols=26
+[clean-BPC     7.13s] node 0 cg=2 phase=phase2 best_rc=-77.272711 found=4010 added=200 exhausted=True
+[clean-BPC     7.14s] node 0 cg=3 phase=phase2 obj=496.984869 artificial=0.0 cols=226
+[clean-BPC     7.56s] node 0 cg=3 phase=phase2 best_rc=-52.4358845 found=2095 added=200 exhausted=True
+[clean-BPC     7.59s] node 0 cg=4 phase=phase2 obj=496.984869 artificial=0.0 cols=426
+[clean-BPC     7.99s] node 0 cg=4 phase=phase2 best_rc=-38.884960083 found=532 added=200 exhausted=True
+[clean-BPC     8.03s] node 0 cg=5 phase=phase2 obj=496.984869 artificial=0.0 cols=626
+[clean-BPC     8.42s] node 0 cg=5 phase=phase2 best_rc=-20.887309033 found=78 added=78 exhausted=True
+[clean-BPC     8.47s] node 0 cg=6 phase=phase2 obj=490.283693 artificial=0.0 cols=704
+[clean-BPC     8.85s] node 0 cg=6 phase=phase2 best_rc=-4.371144 found=26 added=26 exhausted=True
+[clean-BPC     8.89s] node 0 cg=7 phase=phase2 obj=490.283693 artificial=0.0 cols=730
+[clean-BPC     9.28s] node 0 cg=7 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    13.41s] cut_added: {'time': 13.414808, 'event': 'cut_added', 'node_id': 0, 'family': 'schedule_capacity', 'added': 2, 'cuts': [{'id': 0, 'vehicle': 2, 'tasks': [1, 2, 4, 5, 8, 12, 13, 14, 15, 16], 'upper_bound': 9, 'y': 0.553143362, 'activity_minus_rhs': 0.340569913, 'oracle_states': 14437}, {'id': 1, 'vehicle': 2, 'tasks': [2, 4, 5, 8, 9, 12, 14, 15, 16, 18], 'upper_bound': 9, 'y': 0.553143362, 'activity_minus_rhs': 0.117141594, 'oracle_states': 10404}]}
+[clean-BPC    13.46s] node 0 cg=8 phase=phase2 obj=490.283693 artificial=0.0 cols=730
+[clean-BPC    13.86s] node 0 cg=8 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    15.91s] cut_added: {'time': 15.908677, 'event': 'cut_added', 'node_id': 0, 'family': 'schedule_capacity', 'added': 2, 'cuts': [{'id': 2, 'vehicle': 3, 'tasks': [5, 6, 9, 10, 12, 14, 16, 18, 19, 20], 'upper_bound': 9, 'y': 0.553143362, 'activity_minus_rhs': 0.031597469, 'oracle_states': 8278}, {'id': 3, 'vehicle': 1, 'tasks': [2, 4, 5, 8, 12, 13, 14, 15, 16, 17], 'upper_bound': 9, 'y': 0.553143362, 'activity_minus_rhs': 0.011822006, 'oracle_states': 11824}]}
+[clean-BPC    15.96s] node 0 cg=9 phase=phase2 obj=490.283693 artificial=0.0 cols=730
+[clean-BPC    16.35s] node 0 cg=9 phase=phase2 best_rc=-2.1959825 found=18 added=18 exhausted=True
+[clean-BPC    16.40s] node 0 cg=10 phase=phase2 obj=490.283693 artificial=0.0 cols=748
+[clean-BPC    16.80s] node 0 cg=10 phase=phase2 best_rc=0.0 found=0 added=0 exhausted=True
+[clean-BPC    18.03s] cut_added: {'time': 18.031162, 'event': 'cut_added', 'node_id': 0, 'family': 'schedule_capacity', 'added': 1, 'cuts': [{'id': 4, 'vehicle': 3, 'tasks': [2, 4, 5, 8, 9, 12, 14, 15, 16, 18], 'upper_bound': 9, 'y': 0.553143363, 'activity_minus_rhs': 0.43704386, 'oracle_states': 10404}]}
+[clean-BPC    18.09s] node 0 cg=11 phase=phase2 obj=490.283693 artificial=0.0 cols=748
+[clean-BPC    18.49s] node 0 cg=11 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    21.23s] branch node 0: left=arc(11,7)=off right=arc(11,7)=on
+[clean-BPC    21.23s] node 1 d=1 lb=490.283693 open=1
+[clean-BPC    21.27s] node 1 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=748
+[clean-BPC    21.33s] node 1 cg=2 phase=phase2 obj=491.291843 artificial=0.0 cols=748
+[clean-BPC    21.83s] node 1 cg=2 phase=phase2 best_rc=-0.0675615 found=2 added=2 exhausted=True
+[clean-BPC    21.88s] node 1 cg=3 phase=phase2 obj=491.291843 artificial=0.0 cols=750
+[clean-BPC    22.39s] node 1 cg=3 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    24.57s] branch node 1: left=RF(11,18)=separate right=RF(11,18)=same
+[clean-BPC    24.57s] node 2 d=1 lb=490.283693 open=2
+[clean-BPC    24.62s] node 2 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=750
+[clean-BPC    24.67s] node 2 cg=2 phase=phase2 obj=506.013747 artificial=0.0 cols=750
+[clean-BPC    25.10s] node 2 cg=2 phase=phase2 best_rc=-32.152966667 found=32 added=32 exhausted=True
+[clean-BPC    25.17s] node 2 cg=3 phase=phase2 obj=493.935479 artificial=0.0 cols=782
+[clean-BPC    25.60s] node 2 cg=3 phase=phase2 best_rc=-1.66278925 found=12 added=12 exhausted=True
+[clean-BPC    25.66s] node 2 cg=4 phase=phase2 obj=493.935479 artificial=0.0 cols=794
+[clean-BPC    26.10s] node 2 cg=4 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    28.34s] branch node 2: left=arc(18,11)=off right=arc(18,11)=on
+[clean-BPC    28.34s] node 3 d=2 lb=491.291843 open=3
+[clean-BPC    28.38s] node 3 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=794
+[clean-BPC    28.45s] node 3 cg=2 phase=phase2 obj=498.710175 artificial=0.0 cols=794
+[clean-BPC    28.97s] node 3 cg=2 phase=phase2 best_rc=-0.0 found=0 added=0 exhausted=True
+[clean-BPC    30.05s] branch node 3: left=task_vehicle(11,2)=off right=task_vehicle(11,2)=on
+[clean-BPC    30.05s] finish status=TIME_LIMIT primal=627.942924 dual=491.291843 gap=0.217617
+medium: status=TIME_LIMIT, primal=627.942924, dual=491.291843, gap=0.217617, time=30.050649s, nodes=4, rmp=20, pricing=16, routes=794, cuts=5
+clean BPC CSV 已写入：/home/kai/work/gnn_bb/results/20260512_115549_medium_3pb_schedule_capacity_sep_30s.csv

@@ -1379,3 +1379,386 @@ cuts=12
 3PB 增加了分支测试开销，当前 CSV 已单独记录 branching testing 成本；
 它的价值需要用 3600 秒完整结果比较 tree size、gap 和最终证明时间。
 ```
+
+## 9. Robust RCI / RCC Cuts
+
+当前 clean BPC 加入了保守的 robust Rounded Capacity Inequalities：
+
+```text
+x(delta(S)) >= 2 * ceil(d(S) / Q)
+```
+
+在 route-vehicle master 中用 route crossing coefficient 投影，不使用非鲁棒的 subset-row / route-count cut。
+
+当前只在根节点枚举小任务子集，并带 inactive cut purging：
+
+```yaml
+robust_capacity_cuts_enabled: true
+robust_capacity_cut_max_depth: 0
+robust_capacity_cut_max_subset_size: 5
+robust_capacity_cut_max_per_round: 20
+cut_purge_age: 20
+```
+
+20 规模 30 秒短测中：
+
+```text
+robust_capacity_cuts_added=0
+cuts_purged=0
+```
+
+说明当前实例在这个保守 separation 范围内没有明显 violated RCI；因此没有强行加割。
+
+## 10. k-Path / Resource Lower Bound Cut
+
+`bpc/` clean BPC 已加入严格的 k-path/resource lower bound cut：
+
+```text
+x(delta(S)) >= 2 * k(S)
+k(S) = max(ceil(d(S)/Q), chi(G_S))
+```
+
+其中 \(G_S\) 是资源不兼容图：若两个任务不存在任何顺序的同 route 可行 sortie，则在图中连边。每条 route 在 \(S\) 上只能覆盖一个 independent set，所以覆盖 \(S\) 的 route 数至少是 \(\chi(G_S)\)。该 cut 仍使用 route crossing coefficient，是 robust cut，pricing 只需要处理 cut coefficient 和 cut dual。
+
+详细证明和实现备注见：
+
+```text
+bpc/README.md
+```
+
+20 规模 30 秒短测结果：
+
+```text
+resource_lower_bound_cuts_added=0
+```
+
+这表示当前 conservative separation 范围内没有发现被 LP 解违反的严格资源下界 cut；代码不会为了“加割”而添加未违反或不可证明更强的 cut。
+
+## 11. Task-Vehicle Linking
+
+`bpc/` clean BPC 已加入有限 linking row：
+
+```text
+sum_{p in Omega} a[i,p] lambda[p,r] <= y[r]
+    for all i in I, r in R
+```
+
+同时确认并修正文档说明：
+
+```text
+0 <= y[r] <= 1
+```
+
+pricing reduced cost 已同步加入 task-vehicle linking dual `xi[i,r]`：
+
+```text
+rc[p,r] -= sum_{i in p} xi[i,r]
+```
+
+20 规模 30 秒短测结果：
+
+```text
+results/20260512_112330_medium_3pb_task_vehicle_link_30s.csv
+
+status=TIME_LIMIT
+primal=627.942924
+dual=492.686503
+gap=0.215396
+root_relaxation=490.283693
+```
+
+短测显示该约束没有改善当前 root relaxation，且 30 秒内 incumbent 变差；是否保留应以 3600 秒完整对比为准。
+
+## 12. Root LP Fractional Diagnostic
+
+新增根节点 fractional 结构诊断脚本：
+
+```bash
+cd /home/kai/work/gnn_bb
+/home/kai/miniconda3/envs/ecole/bin/python scripts/diagnose_root_fractional.py \
+  --instance medium \
+  --config configs/bpc_clean.yaml \
+  --subset-max-size 6 \
+  --top 12
+```
+
+本次输出：
+
+```text
+results/root_diagnostics/20260512_113217_medium_root_fractional.json
+```
+
+核心结果：
+
+```text
+root objective = 490.283693
+route pool size = 730
+support route-vehicle variables = 19
+fractional route-vehicle variables = 19
+fractional Ryan-Foster pairs = 13
+fractional arcs = 12
+RCI violated count = 0
+k-path/resource violated count = 0
+```
+
+判断：
+
+```text
+当前 root LP 的主要问题不是 capacity/resource subset cut violation，
+而是 route pattern 在车辆和任务配对/弧结构上的 fractional mixing。
+```
+
+所以 RCI 和 k-path/resource cut 不起作用的直接原因是：当前 fractional 解已经满足这些 crossing 下界，没有 violated cut 可加。下一步更应优先加强 branching 或寻找 schedule-aware 的严格 valid inequalities。
+
+## 13. Schedule Capacity Upper-Bound Cut
+
+`bpc/` clean BPC 已加入 schedule-aware valid cut：
+
+```text
+z[i,r] = sum_p a[i,p] lambda[p,r]
+sum_{i in S} z[i,r] <= U(S) y[r]
+```
+
+其中 `U(S)` 由 exact 单车多 sortie schedule oracle 计算；如果 oracle 超过状态上限，直接跳过，不加不确定 cut。
+
+20 规模 30 秒短测：
+
+```text
+results/20260512_114949_medium_3pb_schedule_capacity_30s.csv
+
+schedule_capacity_cuts_added=2
+dual=491.291843
+gap=0.217617
+```
+
+实际触发的 cut：
+
+```text
+S={1,2,4,5,8,12,13,14,15,16}
+U(S)=9
+vehicle=1 violation=0.446856637
+vehicle=2 violation=0.340569913
+```
+
+这说明该 cut 能抓到 root fractional vehicle-task overload；短测中 root objective 尚未提升，下一步应改进 candidate separation，而不是继续扩大容量类 cut。
+
+## 14. Enhanced Schedule Capacity Separation
+
+已增强 schedule capacity cut 的候选分离：
+
+```text
+1. high-mass task combinations
+2. route support union
+3. near-y task set
+```
+
+这些只负责生成候选 `S`；每个 cut 仍必须由 exact oracle 证明 `U(S)` 后才加入，因此不影响精确性。
+
+20 规模 30 秒短测：
+
+```text
+results/20260512_115549_medium_3pb_schedule_capacity_sep_30s.csv
+
+schedule_capacity_cuts_added=5
+dual=491.291843
+gap=0.217617
+```
+
+对比上一版 schedule capacity separation：
+
+```text
+cut 数: 2 -> 5
+node 数: 6 -> 4
+branch_testing_time: 约 10.65s -> 约 7.49s
+root_relaxation: 仍为 490.283693
+```
+
+结论：candidate separation 更会找 cut 了，但这些 cut 仍未切掉 root 最优面。后续需要继续寻找能改变 root bound 的 schedule-aware inequality，或转入 2LBB branching 加速树搜索。
+
+## 15. Long-Run Output Fields
+
+clean BPC 终端输出已补充 cut 对比字段：
+
+```text
+schedule-cap candidates={...}
+cut_added family=schedule_capacity node=... added=...
+finish ... cuts=... sched_cap=...
+summary ... rci=... kpath=... sched_cap=... cuts_purged=... branch_test_time=...
+```
+
+用于 3600 秒实验时直接观察：
+
+- RCI/RCC 是否触发；
+- k-path/resource cut 是否触发；
+- schedule capacity cut 是否触发；
+- cut purging 是否发生；
+- branching testing 时间是否过大。
+
+## 16. Clean BPC Linking / Schedule-Cap Long-Run Ablation
+
+新增 3600 秒消融入口，固定同一 seed 和 BPC 参数，只切换 `task_vehicle_linking_enabled` 与 `schedule_capacity_cuts_enabled`。
+
+目的：判断 20 规模 gap 改善主要来自 task-vehicle linking、schedule-cap cut、两者叠加，还是 branch tree 偶然路径。
+
+默认 variant：
+
+```text
+no_link_no_schedcap
+link_only
+schedcap_only
+link_schedcap
+```
+
+运行 20 规模四组 3600s 对照。该命令不会覆盖历史日志，因为 `RUN_ID` 带时间戳：
+
+```bash
+cd /home/kai/work/gnn_bb
+RUN_ID="$(date +%Y%m%d_%H%M%S)_medium_link_schedcap_ablation_3600"
+mkdir -p results/logs/bpc_ablation_terminal
+
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_bpc_ablation.py \
+  --config configs/bpc_ablation.yaml \
+  --instances medium \
+  --time-limit 3600 \
+  --run-id "$RUN_ID" \
+  2>&1 | tee "results/logs/bpc_ablation_terminal/${RUN_ID}_terminal.log"
+```
+
+输出：
+
+```text
+results/ablation/<RUN_ID>/summary.csv
+results/ablation/<RUN_ID>/logs/<variant>/medium.jsonl
+results/ablation/<RUN_ID>/solutions/<variant>/solution_medium.json
+results/logs/bpc_ablation_terminal/<RUN_ID>_terminal.log
+```
+
+只跑当前主线和 linking-only 对照：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python scripts/run_bpc_ablation.py \
+  --config configs/bpc_ablation.yaml \
+  --instances medium \
+  --variants link_only link_schedcap \
+  --time-limit 3600 \
+  --run-id "$RUN_ID"
+```
+
+## 17. Clean BPC Crossing Cut Unification / Sortie Ordering
+
+更新时间：2026-05-12 20:02:24 CST +0800
+
+本次更新 clean BPC 主线：
+
+- 将 RCI 和 k-path/resource lower bound cut 合并为统一 `CrossingCut`；
+- 同一任务子集 `S` 使用 key `("crossing_cut", frozenset(S))`，只保留 RHS 最大的 cut；
+- 新增相邻车辆 sortie-count ordering：
+
+```text
+sum_p lambda[p,r] >= sum_p lambda[p,r+1]
+```
+
+- 将该 ordering row 的 dual 加入 route pricing reduced cost；
+- 扩展 reduced-cost consistency test，确认 SCIP reduced cost 与手算公式在 `1e-6` 内一致。
+
+验证命令：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_bpc_clean
+/home/kai/miniconda3/envs/ecole/bin/python -m py_compile bpc/*.py scripts/run_bpc_clean.py scripts/diagnose_root_fractional.py tests/test_bpc_clean.py
+```
+
+## 20. Remove Schedule Pair Conflict From Mainline
+
+更新时间：2026-05-13 10:52:35 CST +0800
+
+根据 20 规模 3600 秒对比，`schedule_pair_conflict` cut 虽然数学有效，但没有改善主线表现：dual bound 不变，cut 数和 RMP/branching 开销增加，最终 gap 变差。
+
+当前主线回到：
+
+```text
+task_vehicle_linking_enabled = true
+schedule_capacity_cuts_enabled = true
+schedule_pair_conflict = removed
+```
+
+整数 route assignment 若真实 schedule 不可行，现在直接使用：
+
+```text
+schedule_nogood_core
+schedule_nogood_full
+```
+
+输出字段保留：
+
+```text
+schedule_nogood_cuts_added
+schedule_capacity_cuts_added
+```
+
+验证结果：
+
+```text
+/home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_bpc_clean
+Ran 10 tests in 2.870s
+OK
+
+/home/kai/miniconda3/envs/ecole/bin/python -m py_compile bpc/*.py scripts/run_bpc_clean.py scripts/run_bpc_ablation.py scripts/diagnose_root_fractional.py tests/test_bpc_clean.py
+OK
+```
+
+## 19. Schedule Pair Conflict Cuts
+
+更新时间：2026-05-13 09:01:21 CST +0800
+
+为减少大量后验 schedule no-good cuts，clean BPC 新增 schedule pair conflict cut。
+
+当整数 route assignment 在某辆车上不可排程时，先检查该车辆当前选中的 route pair。如果两条 route `p,q` 任意顺序都不可排程，则优先加入：
+
+```text
+lambda[p,r] + lambda[q,r] <= 1
+```
+
+该 cut 对所有同质车辆添加，使用 canonical route signature 计算 coefficient，不依赖对象 id。找不到 pair conflict 时，才退回原来的 schedule no-good core cut。
+
+新增输出字段：
+
+```text
+schedule_pair_conflict_cuts_added
+schedule_nogood_cuts_added
+```
+
+验证命令：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_bpc_clean
+/home/kai/miniconda3/envs/ecole/bin/python -m py_compile bpc/*.py scripts/run_bpc_clean.py scripts/run_bpc_ablation.py scripts/diagnose_root_fractional.py tests/test_bpc_clean.py
+```
+
+## 18. Revert Sortie-Count Ordering
+
+更新时间：2026-05-13 08:28:15 CST +0800
+
+根据 20 规模 3600 秒对比结果，撤回 sortie-count ordering；保留 `link_schedcap` 作为当前主线。
+
+当前主线保留：
+
+- `task_vehicle_linking_enabled=true`
+- `schedule_capacity_cuts_enabled=true`
+- 统一 `CrossingCut`
+- 车辆启用顺序 `y[r+1] <= y[r]`
+
+当前主线撤回：
+
+```text
+sum_p lambda[p,r] >= sum_p lambda[p,r+1]
+```
+
+原因：该排序改变了 branch tree 和 incumbent 搜索路径，最新对比中 `schedcap_only` 的 primal bound 明显变差，而 crossing cut 本身没有触发。撤回该 row 不影响精确性，只是移除一个对称破除约束。
+
+验证命令：
+
+```bash
+/home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_bpc_clean
+/home/kai/miniconda3/envs/ecole/bin/python -m py_compile bpc/*.py scripts/run_bpc_clean.py scripts/diagnose_root_fractional.py tests/test_bpc_clean.py
+```
