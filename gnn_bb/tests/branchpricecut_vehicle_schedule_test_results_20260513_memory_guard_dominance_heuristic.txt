@@ -1,0 +1,8 @@
+timestamp: 2026-05-13 19:35:39 CST +0800
+command: /home/kai/miniconda3/envs/ecole/bin/python -m py_compile branchpricecut/*.py branchpricecut/scripts/run_vehicle_schedule_bpc.py
+command: /home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_branchpricecut_vehicle_schedule
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 0.118s
+
+OK

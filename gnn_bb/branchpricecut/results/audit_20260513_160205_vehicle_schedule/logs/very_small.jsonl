@@ -1,0 +1,24 @@
+{"event": "incumbent", "node": 0, "objective": 232.270984, "source": "greedy", "time": 0.000403}
+{"event": "start", "initial_columns": 6, "instance": "very_small", "master_cover_mode": "partitioning", "tasks": 4, "time": 0.000465}
+{"depth": 0, "event": "node", "lower_bound": 0.0, "node": 0, "open_nodes": 0, "time": 0.000502}
+{"artificial": 0.0, "cg_iter": 1, "columns": 6, "event": "rmp", "manual_rc_check_max_error": 0.0, "node": 0, "objective": 0.0, "phase": "phase1", "time": 2.086788}
+{"event": "pool_scan", "found": 0, "node": 0, "phase": "phase1", "time": 8e-06}
+{"branch_relevant": 0, "diverse": 0, "event": "route_pool", "historical": 0, "low_cbar": 16, "micro": 0, "node": 0, "per_task": 0, "phase": "phase1", "route_pool_size": 16, "time": 2.087158}
+{"added": 0, "best_rc": 0.0, "event": "schedule_dp", "exhausted": true, "found": 0, "labels": 27, "node": 0, "phase": "phase1", "pruned_beam": 0, "pruned_subset": 45, "time": 0.000775}
+{"added": 0, "best_rc": 0.0, "cg_iter": 1, "event": "exact_pricing", "exhausted": true, "found": 0, "generated_labels": 109, "labels": 110, "node": 0, "phase": "phase1", "queue_peak": 21, "stop_reason": null, "time": 2.089191}
+{"artificial": 0.0, "cg_iter": 1, "columns": 6, "event": "rmp", "manual_rc_check_max_error": 0.0, "node": 0, "objective": 232.270984, "phase": "phase2", "time": 2.091063}
+{"event": "pool_scan", "found": 0, "node": 0, "phase": "phase2", "time": 6e-06}
+{"branch_relevant": 0, "diverse": 0, "event": "route_pool", "historical": 0, "low_cbar": 16, "micro": 0, "node": 0, "per_task": 0, "phase": "phase2", "route_pool_size": 16, "time": 2.091376}
+{"added": 12, "best_rc": -102.541578, "event": "schedule_dp", "exhausted": false, "found": 12, "labels": 37, "node": 0, "phase": "phase2", "pruned_beam": 9, "pruned_subset": 35, "time": 0.000916}
+{"artificial": 0.0, "cg_iter": 2, "columns": 18, "event": "rmp", "manual_rc_check_max_error": 0.0, "node": 0, "objective": 132.270984, "phase": "phase2", "time": 2.094277}
+{"event": "pool_scan", "found": 0, "node": 0, "phase": "phase2", "time": 1e-05}
+{"branch_relevant": 0, "diverse": 0, "event": "route_pool", "historical": 0, "low_cbar": 16, "micro": 0, "node": 0, "per_task": 0, "phase": "phase2", "route_pool_size": 16, "time": 2.094589}
+{"added": 1, "best_rc": -0.114096, "event": "schedule_dp", "exhausted": false, "found": 1, "labels": 27, "node": 0, "phase": "phase2", "pruned_beam": 1, "pruned_subset": 45, "time": 0.000795}
+{"artificial": 0.0, "cg_iter": 3, "columns": 19, "event": "rmp", "manual_rc_check_max_error": 0.0, "node": 0, "objective": 132.270984, "phase": "phase2", "time": 2.09711}
+{"event": "pool_scan", "found": 0, "node": 0, "phase": "phase2", "time": 9e-06}
+{"branch_relevant": 0, "diverse": 0, "event": "route_pool", "historical": 0, "low_cbar": 16, "micro": 0, "node": 0, "per_task": 0, "phase": "phase2", "route_pool_size": 16, "time": 2.097429}
+{"added": 0, "best_rc": 0.0, "event": "schedule_dp", "exhausted": false, "found": 0, "labels": 26, "node": 0, "phase": "phase2", "pruned_beam": 1, "pruned_subset": 46, "time": 0.000728}
+{"added": 0, "best_rc": 0.0, "cg_iter": 3, "event": "exact_pricing", "exhausted": true, "found": 0, "generated_labels": 109, "labels": 110, "node": 0, "phase": "phase2", "queue_peak": 10, "stop_reason": null, "time": 2.099337}
+{"event": "incumbent", "node": 0, "objective": 132.270984, "source": "integral_master", "time": 2.099387}
+{"event": "fathom", "node": 0, "reason": "integral", "time": 2.099407}
+{"dual": 132.270984, "event": "finish", "gap": 0.0, "nodes": 1, "primal": 132.270984, "status": "OPTIMAL", "time": 2.099427}

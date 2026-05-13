@@ -1,0 +1,904 @@
+{
+  "summary": {
+    "status": "OPTIMAL",
+    "primal_bound": 132.270984,
+    "dual_bound": 132.270984,
+    "gap": 0.0
+  },
+  "incumbent": {
+    "objective": 132.270984,
+    "node_id": 0,
+    "schedules": [
+      {
+        "id": 9,
+        "signature": [
+          [
+            3,
+            4
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "tasks": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "cost": 132.270984,
+        "variable_cost": 32.270984,
+        "ready_time": 44.313908,
+        "sorties": [
+          {
+            "tasks": [
+              3,
+              4
+            ],
+            "start_time": 0.0,
+            "return_time": 18.45586,
+            "ready_time": 27.467613,
+            "load": 5.0,
+            "energy": 18.023506,
+            "cost": 19.979948,
+            "service_start": {
+              "3": 4.044943,
+              "4": 9.027754
+            }
+          },
+          {
+            "tasks": [
+              1,
+              2
+            ],
+            "start_time": 27.467613,
+            "return_time": 39.164346,
+            "ready_time": 44.313908,
+            "load": 4.0,
+            "energy": 10.299124,
+            "cost": 12.291036,
+            "service_start": {
+              "1": 29.870345,
+              "2": 33.286161
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "columns": [
+    {
+      "id": 0,
+      "signature": [
+        [
+          1
+        ]
+      ],
+      "tasks": [
+        1
+      ],
+      "cost": 108.085904,
+      "variable_cost": 8.085904,
+      "ready_time": 10.267542,
+      "sorties": [
+        {
+          "tasks": [
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 6.805464,
+          "ready_time": 10.267542,
+          "load": 2.0,
+          "energy": 6.924156,
+          "cost": 8.085904,
+          "service_start": {
+            "1": 2.402732
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "signature": [
+        [
+          2
+        ]
+      ],
+      "tasks": [
+        2
+      ],
+      "cost": 108.874294,
+      "variable_cost": 8.874294,
+      "ready_time": 12.858148,
+      "sorties": [
+        {
+          "tasks": [
+            2
+          ],
+          "start_time": 0.0,
+          "return_time": 8.75637,
+          "ready_time": 12.858148,
+          "load": 2.0,
+          "energy": 8.203556,
+          "cost": 8.874294,
+          "service_start": {
+            "2": 2.878185
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "signature": [
+        [
+          3
+        ]
+      ],
+      "tasks": [
+        3
+      ],
+      "cost": 110.268204,
+      "variable_cost": 10.268204,
+      "ready_time": 15.073097,
+      "sorties": [
+        {
+          "tasks": [
+            3
+          ],
+          "start_time": 0.0,
+          "return_time": 10.089886,
+          "ready_time": 15.073097,
+          "load": 2.0,
+          "energy": 9.966422,
+          "cost": 10.268204,
+          "service_start": {
+            "3": 4.044943
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "signature": [
+        [
+          4
+        ]
+      ],
+      "tasks": [
+        4
+      ],
+      "cost": 117.343366,
+      "variable_cost": 17.343366,
+      "ready_time": 24.155108,
+      "sorties": [
+        {
+          "tasks": [
+            4
+          ],
+          "start_time": 0.0,
+          "return_time": 15.856212,
+          "ready_time": 24.155108,
+          "load": 3.0,
+          "energy": 16.597792,
+          "cost": 17.343366,
+          "service_start": {
+            "4": 6.428106
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "signature": [
+        [
+          1,
+          2
+        ]
+      ],
+      "tasks": [
+        1,
+        2
+      ],
+      "cost": 112.291036,
+      "variable_cost": 12.291036,
+      "ready_time": 16.846295,
+      "sorties": [
+        {
+          "tasks": [
+            1,
+            2
+          ],
+          "start_time": 0.0,
+          "return_time": 11.696733,
+          "ready_time": 16.846295,
+          "load": 4.0,
+          "energy": 10.299124,
+          "cost": 12.291036,
+          "service_start": {
+            "1": 2.402732,
+            "2": 5.818548
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "signature": [
+        [
+          3,
+          4
+        ]
+      ],
+      "tasks": [
+        3,
+        4
+      ],
+      "cost": 119.979948,
+      "variable_cost": 19.979948,
+      "ready_time": 27.467613,
+      "sorties": [
+        {
+          "tasks": [
+            3,
+            4
+          ],
+          "start_time": 0.0,
+          "return_time": 18.45586,
+          "ready_time": 27.467613,
+          "load": 5.0,
+          "energy": 18.023506,
+          "cost": 19.979948,
+          "service_start": {
+            "3": 4.044943,
+            "4": 9.027754
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "signature": [
+        [
+          3,
+          1
+        ]
+      ],
+      "tasks": [
+        1,
+        3
+      ],
+      "cost": 115.81253,
+      "variable_cost": 15.81253,
+      "ready_time": 21.771362,
+      "sorties": [
+        {
+          "tasks": [
+            3,
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 14.63504,
+          "ready_time": 21.771362,
+          "load": 4.0,
+          "energy": 14.272643,
+          "cost": 15.81253,
+          "service_start": {
+            "3": 4.044943,
+            "1": 10.232308
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "signature": [
+        [
+          3
+        ],
+        [
+          1
+        ]
+      ],
+      "tasks": [
+        1,
+        3
+      ],
+      "cost": 118.354108,
+      "variable_cost": 18.354108,
+      "ready_time": 25.340639,
+      "sorties": [
+        {
+          "tasks": [
+            3
+          ],
+          "start_time": 0.0,
+          "return_time": 10.089886,
+          "ready_time": 15.073097,
+          "load": 2.0,
+          "energy": 9.966422,
+          "cost": 10.268204,
+          "service_start": {
+            "3": 4.044943
+          }
+        },
+        {
+          "tasks": [
+            1
+          ],
+          "start_time": 15.073097,
+          "return_time": 21.878561,
+          "ready_time": 25.340639,
+          "load": 2.0,
+          "energy": 6.924156,
+          "cost": 8.085904,
+          "service_start": {
+            "1": 17.475829
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "signature": [
+        [
+          1
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "tasks": [
+        1,
+        3,
+        4
+      ],
+      "cost": 128.065852,
+      "variable_cost": 28.065852,
+      "ready_time": 37.735155,
+      "sorties": [
+        {
+          "tasks": [
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 6.805464,
+          "ready_time": 10.267542,
+          "load": 2.0,
+          "energy": 6.924156,
+          "cost": 8.085904,
+          "service_start": {
+            "1": 2.402732
+          }
+        },
+        {
+          "tasks": [
+            3,
+            4
+          ],
+          "start_time": 10.267542,
+          "return_time": 28.723402,
+          "ready_time": 37.735155,
+          "load": 5.0,
+          "energy": 18.023506,
+          "cost": 19.979948,
+          "service_start": {
+            "3": 14.312485,
+            "4": 19.295296
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "signature": [
+        [
+          3,
+          4
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "tasks": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 132.270984,
+      "variable_cost": 32.270984,
+      "ready_time": 44.313908,
+      "sorties": [
+        {
+          "tasks": [
+            3,
+            4
+          ],
+          "start_time": 0.0,
+          "return_time": 18.45586,
+          "ready_time": 27.467613,
+          "load": 5.0,
+          "energy": 18.023506,
+          "cost": 19.979948,
+          "service_start": {
+            "3": 4.044943,
+            "4": 9.027754
+          }
+        },
+        {
+          "tasks": [
+            1,
+            2
+          ],
+          "start_time": 27.467613,
+          "return_time": 39.164346,
+          "ready_time": 44.313908,
+          "load": 4.0,
+          "energy": 10.299124,
+          "cost": 12.291036,
+          "service_start": {
+            "1": 29.870345,
+            "2": 33.286161
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "signature": [
+        [
+          3
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "tasks": [
+        1,
+        2,
+        3
+      ],
+      "cost": 122.55924,
+      "variable_cost": 22.55924,
+      "ready_time": 31.919392,
+      "sorties": [
+        {
+          "tasks": [
+            3
+          ],
+          "start_time": 0.0,
+          "return_time": 10.089886,
+          "ready_time": 15.073097,
+          "load": 2.0,
+          "energy": 9.966422,
+          "cost": 10.268204,
+          "service_start": {
+            "3": 4.044943
+          }
+        },
+        {
+          "tasks": [
+            1,
+            2
+          ],
+          "start_time": 15.073097,
+          "return_time": 26.76983,
+          "ready_time": 31.919392,
+          "load": 4.0,
+          "energy": 10.299124,
+          "cost": 12.291036,
+          "service_start": {
+            "1": 17.475829,
+            "2": 20.891645
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "signature": [
+        [
+          1
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "tasks": [
+        1,
+        2,
+        3
+      ],
+      "cost": 122.981692,
+      "variable_cost": 22.981692,
+      "ready_time": 31.650757,
+      "sorties": [
+        {
+          "tasks": [
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 6.805464,
+          "ready_time": 10.267542,
+          "load": 2.0,
+          "energy": 6.924156,
+          "cost": 8.085904,
+          "service_start": {
+            "1": 2.402732
+          }
+        },
+        {
+          "tasks": [
+            3,
+            2
+          ],
+          "start_time": 10.267542,
+          "return_time": 24.962219,
+          "ready_time": 31.650757,
+          "load": 4.0,
+          "energy": 13.377075,
+          "cost": 14.895788,
+          "service_start": {
+            "3": 14.312485,
+            "2": 19.084034
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "signature": [
+        [
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "tasks": [
+        1,
+        2,
+        3
+      ],
+      "cost": 122.981692,
+      "variable_cost": 22.981692,
+      "ready_time": 31.650756,
+      "sorties": [
+        {
+          "tasks": [
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 6.805464,
+          "ready_time": 10.267542,
+          "load": 2.0,
+          "energy": 6.924156,
+          "cost": 8.085904,
+          "service_start": {
+            "1": 2.402732
+          }
+        },
+        {
+          "tasks": [
+            2,
+            3
+          ],
+          "start_time": 10.267542,
+          "return_time": 24.962219,
+          "ready_time": 31.650756,
+          "load": 4.0,
+          "energy": 13.377075,
+          "cost": 14.895788,
+          "service_start": {
+            "2": 13.145727,
+            "3": 18.917276
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "signature": [
+        [
+          3,
+          1
+        ],
+        [
+          2
+        ]
+      ],
+      "tasks": [
+        1,
+        2,
+        3
+      ],
+      "cost": 124.686824,
+      "variable_cost": 24.686824,
+      "ready_time": 34.62951,
+      "sorties": [
+        {
+          "tasks": [
+            3,
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 14.63504,
+          "ready_time": 21.771362,
+          "load": 4.0,
+          "energy": 14.272643,
+          "cost": 15.81253,
+          "service_start": {
+            "3": 4.044943,
+            "1": 10.232308
+          }
+        },
+        {
+          "tasks": [
+            2
+          ],
+          "start_time": 21.771362,
+          "return_time": 30.527732,
+          "ready_time": 34.62951,
+          "load": 2.0,
+          "energy": 8.203556,
+          "cost": 8.874294,
+          "service_start": {
+            "2": 24.649547
+          }
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "signature": [
+        [
+          3
+        ],
+        [
+          1,
+          4
+        ]
+      ],
+      "tasks": [
+        1,
+        3,
+        4
+      ],
+      "cost": 130.493334,
+      "variable_cost": 30.493334,
+      "ready_time": 42.165438,
+      "sorties": [
+        {
+          "tasks": [
+            3
+          ],
+          "start_time": 0.0,
+          "return_time": 10.089886,
+          "ready_time": 15.073097,
+          "load": 2.0,
+          "energy": 9.966422,
+          "cost": 10.268204,
+          "service_start": {
+            "3": 4.044943
+          }
+        },
+        {
+          "tasks": [
+            1,
+            4
+          ],
+          "start_time": 15.073097,
+          "return_time": 33.111783,
+          "ready_time": 42.165438,
+          "load": 5.0,
+          "energy": 18.107309,
+          "cost": 20.22513,
+          "service_start": {
+            "1": 17.475829,
+            "4": 23.683677
+          }
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "signature": [
+        [
+          1,
+          4
+        ],
+        [
+          3
+        ]
+      ],
+      "tasks": [
+        1,
+        3,
+        4
+      ],
+      "cost": 130.493334,
+      "variable_cost": 30.493334,
+      "ready_time": 42.165437,
+      "sorties": [
+        {
+          "tasks": [
+            1,
+            4
+          ],
+          "start_time": 0.0,
+          "return_time": 18.038686,
+          "ready_time": 27.09234,
+          "load": 5.0,
+          "energy": 18.107309,
+          "cost": 20.22513,
+          "service_start": {
+            "1": 2.402732,
+            "4": 8.61058
+          }
+        },
+        {
+          "tasks": [
+            3
+          ],
+          "start_time": 27.09234,
+          "return_time": 37.182226,
+          "ready_time": 42.165437,
+          "load": 2.0,
+          "energy": 9.966422,
+          "cost": 10.268204,
+          "service_start": {
+            "3": 31.137283
+          }
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "signature": [
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          2
+        ]
+      ],
+      "tasks": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "cost": 135.655896,
+      "variable_cost": 35.655896,
+      "ready_time": 49.52647,
+      "sorties": [
+        {
+          "tasks": [
+            3,
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 14.63504,
+          "ready_time": 21.771362,
+          "load": 4.0,
+          "energy": 14.272643,
+          "cost": 15.81253,
+          "service_start": {
+            "3": 4.044943,
+            "1": 10.232308
+          }
+        },
+        {
+          "tasks": [
+            4,
+            2
+          ],
+          "start_time": 21.771362,
+          "return_time": 40.627574,
+          "ready_time": 49.52647,
+          "load": 5.0,
+          "energy": 17.797792,
+          "cost": 19.843366,
+          "service_start": {
+            "4": 28.199468,
+            "2": 34.749389
+          }
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "signature": [
+        [
+          3,
+          1
+        ],
+        [
+          4
+        ]
+      ],
+      "tasks": [
+        1,
+        3,
+        4
+      ],
+      "cost": 133.155896,
+      "variable_cost": 33.155896,
+      "ready_time": 45.92647,
+      "sorties": [
+        {
+          "tasks": [
+            3,
+            1
+          ],
+          "start_time": 0.0,
+          "return_time": 14.63504,
+          "ready_time": 21.771362,
+          "load": 4.0,
+          "energy": 14.272643,
+          "cost": 15.81253,
+          "service_start": {
+            "3": 4.044943,
+            "1": 10.232308
+          }
+        },
+        {
+          "tasks": [
+            4
+          ],
+          "start_time": 21.771362,
+          "return_time": 37.627574,
+          "ready_time": 45.92647,
+          "load": 3.0,
+          "energy": 16.597792,
+          "cost": 17.343366,
+          "service_start": {
+            "4": 28.199468
+          }
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "signature": [
+        [
+          1,
+          4
+        ]
+      ],
+      "tasks": [
+        1,
+        4
+      ],
+      "cost": 120.22513,
+      "variable_cost": 20.22513,
+      "ready_time": 27.09234,
+      "sorties": [
+        {
+          "tasks": [
+            1,
+            4
+          ],
+          "start_time": 0.0,
+          "return_time": 18.038686,
+          "ready_time": 27.09234,
+          "load": 5.0,
+          "energy": 18.107309,
+          "cost": 20.22513,
+          "service_start": {
+            "1": 2.402732,
+            "4": 8.61058
+          }
+        }
+      ]
+    }
+  ]
+}

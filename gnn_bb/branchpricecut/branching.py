@@ -26,22 +26,63 @@ class BranchCandidate:
 
 
 def schedule_allowed_by_branch(column: ScheduleColumn, constraints: tuple[BranchConstraint, ...]) -> bool:
-    for constraint in constraints:
-        has_i = constraint.i in column.task_set
-        has_j = constraint.j in column.task_set
-        if constraint.kind == "same" and has_i != has_j:
+    components, separates = same_components(constraints)
+    for component in components:
+        count = sum(1 for task in component if task in column.task_set)
+        if 0 < count < len(component):
             return False
-        if constraint.kind == "separate" and has_i and has_j:
+    for left, right in separates:
+        if any(task in column.task_set for task in left) and any(task in column.task_set for task in right):
             return False
     return True
 
 
 def partial_allowed_by_branch(covered: frozenset[int], constraints: tuple[BranchConstraint, ...]) -> bool:
     # 中文注释：separate 分支可以早过滤；same 分支只有完整 schedule 才能判断，不能过早剪掉只含一个端点的前缀。
-    for constraint in constraints:
-        if constraint.kind == "separate" and constraint.i in covered and constraint.j in covered:
+    _components, separates = same_components(constraints)
+    for left, right in separates:
+        if any(task in covered for task in left) and any(task in covered for task in right):
             return False
     return True
+
+
+def same_components(constraints: tuple[BranchConstraint, ...]) -> tuple[list[frozenset[int]], list[tuple[frozenset[int], frozenset[int]]]]:
+    parent: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        parent.setdefault(x, x)
+        if parent[x] != x:
+            parent[x] = find(parent[x])
+        return parent[x]
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for constraint in constraints:
+        parent.setdefault(constraint.i, constraint.i)
+        parent.setdefault(constraint.j, constraint.j)
+        if constraint.kind == "same":
+            union(constraint.i, constraint.j)
+
+    groups: dict[int, set[int]] = {}
+    for task in list(parent):
+        groups.setdefault(find(task), set()).add(task)
+    components = [frozenset(group) for group in groups.values() if len(group) > 1]
+
+    def component_of(task: int) -> frozenset[int]:
+        root = find(task)
+        return frozenset(groups.get(root, {task}))
+
+    separates: list[tuple[frozenset[int], frozenset[int]]] = []
+    for constraint in constraints:
+        if constraint.kind == "separate":
+            left = component_of(constraint.i)
+            right = component_of(constraint.j)
+            if left != right:
+                separates.append((left, right))
+    return components, separates
 
 
 def generate_rf_candidates(
@@ -67,4 +108,3 @@ def generate_rf_candidates(
                 candidates.append(BranchCandidate(int(i), int(j), value, fractionality))
     candidates.sort(key=lambda item: (-item.fractionality, item.i, item.j))
     return candidates
-

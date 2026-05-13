@@ -1,15 +1,20 @@
-"""中文摘要：实现完整 vehicle schedule column 的 integrated schedule-labeling pricing。"""
+"""中文摘要：封装 vehicle-schedule Layer 3 pricing 与 full-memory fallback。"""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 import heapq
+import os
+import resource
+import sys
 import time
 
 from .branching import BranchConstraint, partial_allowed_by_branch, schedule_allowed_by_branch
 from .columns import ScheduleColumn, Sortie
 from .data import InstanceData
-from .rmp import RMPDuals
+from .ng_dssr import NGDSSRResult, ng_dssr_schedule_pricing
+from .rmp import RMPDuals, manual_reduced_cost
 
 
 @dataclass(order=True)
@@ -24,6 +29,24 @@ class Label:
     current_load: float = field(compare=False)
     current_energy: float = field(compare=False)
     current_cost: float = field(compare=False)
+    total_cost: float = field(compare=False)
+    current_service_start: dict[str, float] = field(compare=False)
+
+
+@dataclass(order=True)
+class RelaxedLabel:
+    priority: float
+    ready_time: float
+    memory_seen: frozenset[int] = field(compare=False)
+    visits: tuple[int, ...] = field(compare=False)
+    completed: tuple[Sortie, ...] = field(compare=False)
+    current_tasks: tuple[int, ...] = field(compare=False)
+    current_node: int = field(compare=False)
+    current_time: float = field(compare=False)
+    current_load: float = field(compare=False)
+    current_energy: float = field(compare=False)
+    current_cost: float = field(compare=False)
+    total_cost: float = field(compare=False)
     current_service_start: dict[str, float] = field(compare=False)
 
 
@@ -36,11 +59,230 @@ class PricingResult:
     generated_labels: int
     queue_peak: int
     stop_reason: str | None
+    certificate: bool = False
+    labels_pruned_by_dominance: int = 0
+    memory_peak_mb: float | None = None
+    algorithm: str = "integrated_exact"
+    dssr_iterations: int = 0
+    dssr_memory_size: int = 0
+    dssr_non_elementary_negative: int = 0
+    ng_size: int = 0
+    certificate_from_relaxation: bool = False
+    full_memory_fallback_called: bool = False
+
+
+class DSSRSchedulePricing:
+    """DSSR/ng-schedule interface.
+
+    The default path is ng-relaxed DSSR. The full-memory elementary labeler
+    remains available as a configurable debug/correctness fallback.
+    """
+
+    def __init__(
+        self,
+        data: InstanceData,
+        existing_columns: list[ScheduleColumn],
+        *,
+        eps: float,
+        max_columns_to_return: int,
+        max_labels: int = 0,
+        max_generated_labels: int = 0,
+        max_queue_size: int = 0,
+        max_candidate_pool: int = 0,
+        max_seconds: float = 0.0,
+        max_memory_mb: float = 0.0,
+        memory_check_interval: int = 4096,
+        enable_dominance: bool = True,
+        relaxed_memory_enabled: bool = False,
+        relaxed_initial_memory_size: int = 0,
+        relaxed_max_iterations: int = 4,
+        relaxed_memory_growth: int = 4,
+        relaxed_iteration_seconds: float = 30.0,
+        relaxed_max_labels: int = 500000,
+        progress_callback: Callable[[dict[str, object]], None] | None = None,
+        progress_interval_seconds: float = 0.0,
+        progress_label_interval: int = 0,
+        exact_pricing_algorithm: str = "ng_dssr",
+        full_memory_fallback_enabled: bool = False,
+        ng_neighborhood_size: int = 8,
+        ng_include_time_compatible: bool = True,
+        ng_include_branch_components: bool = True,
+        dssr_certificate_without_full_memory: bool = True,
+    ) -> None:
+        self.data = data
+        self.existing_columns = existing_columns
+        self.eps = float(eps)
+        self.max_columns_to_return = int(max_columns_to_return)
+        self.max_labels = int(max_labels)
+        self.max_generated_labels = int(max_generated_labels)
+        self.max_queue_size = int(max_queue_size)
+        self.max_candidate_pool = int(max_candidate_pool)
+        self.max_seconds = float(max_seconds)
+        self.max_memory_mb = float(max_memory_mb)
+        self.memory_check_interval = max(1, int(memory_check_interval))
+        self.enable_dominance = bool(enable_dominance)
+        self.relaxed_memory_enabled = bool(relaxed_memory_enabled)
+        self.relaxed_initial_memory_size = max(0, int(relaxed_initial_memory_size))
+        self.relaxed_max_iterations = max(1, int(relaxed_max_iterations))
+        self.relaxed_memory_growth = max(1, int(relaxed_memory_growth))
+        self.relaxed_iteration_seconds = max(0.0, float(relaxed_iteration_seconds))
+        self.relaxed_max_labels = max(0, int(relaxed_max_labels))
+        self.progress_callback = progress_callback
+        self.progress_interval_seconds = float(progress_interval_seconds)
+        self.progress_label_interval = int(progress_label_interval)
+        self.exact_pricing_algorithm = str(exact_pricing_algorithm or "ng_dssr")
+        self.full_memory_fallback_enabled = bool(full_memory_fallback_enabled)
+        self.ng_neighborhood_size = max(1, int(ng_neighborhood_size))
+        self.ng_include_time_compatible = bool(ng_include_time_compatible)
+        self.ng_include_branch_components = bool(ng_include_branch_components)
+        self.dssr_certificate_without_full_memory = bool(dssr_certificate_without_full_memory)
+
+    def run(self, duals: RMPDuals, branch_constraints: tuple[BranchConstraint, ...], *, phase: str) -> PricingResult:
+        algorithm = self.exact_pricing_algorithm.lower()
+        if algorithm == "ng_dssr" and self.relaxed_memory_enabled:
+            started = time.perf_counter()
+            ng_result = ng_dssr_schedule_pricing(
+                self.data,
+                self.existing_columns,
+                duals,
+                branch_constraints,
+                phase=phase,
+                eps=self.eps,
+                max_columns_to_return=self.max_columns_to_return,
+                max_labels=self.max_labels,
+                max_generated_labels=self.max_generated_labels,
+                max_queue_size=self.max_queue_size,
+                max_candidate_pool=self.max_candidate_pool,
+                max_seconds=self.max_seconds,
+                max_memory_mb=self.max_memory_mb,
+                memory_check_interval=self.memory_check_interval,
+                enable_dominance=self.enable_dominance,
+                ng_size=self.ng_neighborhood_size,
+                include_time_compatible=self.ng_include_time_compatible,
+                include_branch_components=self.ng_include_branch_components,
+                initial_memory_size=self.relaxed_initial_memory_size,
+                max_iterations=self.relaxed_max_iterations,
+                memory_growth=self.relaxed_memory_growth,
+                certificate_without_full_memory=self.dssr_certificate_without_full_memory,
+                progress_callback=self.progress_callback,
+                progress_interval_seconds=self.progress_interval_seconds,
+                progress_label_interval=self.progress_label_interval,
+            )
+            result = _from_ng_result(ng_result)
+            if result.columns or result.certificate or not self.full_memory_fallback_enabled:
+                return result
+            remaining = self.max_seconds
+            if remaining > 0.0:
+                remaining = max(0.0, remaining - (time.perf_counter() - started))
+                if remaining <= 0.0:
+                    return result
+            fallback = exact_schedule_pricing(
+                self.data,
+                self.existing_columns,
+                duals,
+                branch_constraints,
+                phase=phase,
+                eps=self.eps,
+                max_columns_to_return=self.max_columns_to_return,
+                max_labels=self.max_labels,
+                max_generated_labels=self.max_generated_labels,
+                max_queue_size=self.max_queue_size,
+                max_candidate_pool=self.max_candidate_pool,
+                max_seconds=remaining,
+                max_memory_mb=self.max_memory_mb,
+                memory_check_interval=self.memory_check_interval,
+                enable_dominance=self.enable_dominance,
+                progress_callback=self.progress_callback,
+                progress_interval_seconds=self.progress_interval_seconds,
+                progress_label_interval=self.progress_label_interval,
+            )
+            fallback.algorithm = "dssr_full_memory_exact"
+            fallback.label_pops += result.label_pops
+            fallback.generated_labels += result.generated_labels
+            fallback.queue_peak = max(result.queue_peak, fallback.queue_peak)
+            fallback.labels_pruned_by_dominance += result.labels_pruned_by_dominance
+            fallback.memory_peak_mb = round(max(float(result.memory_peak_mb or 0.0), float(fallback.memory_peak_mb or 0.0)), 3)
+            fallback.dssr_iterations = result.dssr_iterations
+            fallback.dssr_memory_size = result.dssr_memory_size
+            fallback.dssr_non_elementary_negative = result.dssr_non_elementary_negative
+            fallback.ng_size = result.ng_size
+            fallback.full_memory_fallback_called = True
+            return fallback
+
+        if self.relaxed_memory_enabled:
+            return dssr_relaxed_memory_pricing(
+                self.data,
+                self.existing_columns,
+                duals,
+                branch_constraints,
+                phase=phase,
+                eps=self.eps,
+                max_columns_to_return=self.max_columns_to_return,
+                max_labels=self.max_labels,
+                max_generated_labels=self.max_generated_labels,
+                max_queue_size=self.max_queue_size,
+                max_candidate_pool=self.max_candidate_pool,
+                max_seconds=self.max_seconds,
+                max_memory_mb=self.max_memory_mb,
+                memory_check_interval=self.memory_check_interval,
+                enable_dominance=self.enable_dominance,
+                initial_memory_size=self.relaxed_initial_memory_size,
+                max_iterations=self.relaxed_max_iterations,
+                memory_growth=self.relaxed_memory_growth,
+                relaxed_iteration_seconds=self.relaxed_iteration_seconds,
+                relaxed_max_labels=self.relaxed_max_labels,
+                progress_callback=self.progress_callback,
+                progress_interval_seconds=self.progress_interval_seconds,
+                progress_label_interval=self.progress_label_interval,
+            )
+        result = exact_schedule_pricing(
+            self.data,
+            self.existing_columns,
+            duals,
+            branch_constraints,
+            phase=phase,
+            eps=self.eps,
+            max_columns_to_return=self.max_columns_to_return,
+            max_labels=self.max_labels,
+            max_generated_labels=self.max_generated_labels,
+            max_queue_size=self.max_queue_size,
+            max_candidate_pool=self.max_candidate_pool,
+            max_seconds=self.max_seconds,
+            max_memory_mb=self.max_memory_mb,
+            memory_check_interval=self.memory_check_interval,
+            enable_dominance=self.enable_dominance,
+            progress_callback=self.progress_callback,
+            progress_interval_seconds=self.progress_interval_seconds,
+            progress_label_interval=self.progress_label_interval,
+        )
+        result.algorithm = "dssr_full_memory_exact"
+        return result
 
 
 def reduced_cost(column: ScheduleColumn, duals: RMPDuals, phase: str) -> float:
-    objective_cost = 0.0 if phase == "phase1" else float(column.cost)
-    return objective_cost - sum(float(duals.cover[task]) for task in column.task_set) - float(duals.fleet)
+    return manual_reduced_cost(column, duals, phase)
+
+
+def _from_ng_result(result: NGDSSRResult) -> PricingResult:
+    return PricingResult(
+        columns=result.columns,
+        exhausted=result.exhausted,
+        best_reduced_cost=result.best_reduced_cost,
+        label_pops=result.label_pops,
+        generated_labels=result.generated_labels,
+        queue_peak=result.queue_peak,
+        stop_reason=result.stop_reason,
+        certificate=result.certificate,
+        labels_pruned_by_dominance=result.labels_pruned_by_dominance,
+        memory_peak_mb=result.memory_peak_mb,
+        algorithm=result.algorithm,
+        dssr_iterations=result.dssr_iterations,
+        dssr_memory_size=result.dssr_memory_size,
+        dssr_non_elementary_negative=result.dssr_non_elementary_negative,
+        ng_size=result.ng_size,
+        certificate_from_relaxation=result.certificate_from_relaxation,
+        full_memory_fallback_called=result.full_memory_fallback_called,
+    )
 
 
 def _make_schedule(data: InstanceData, completed: tuple[Sortie, ...]) -> ScheduleColumn:
@@ -61,7 +303,80 @@ def _priority(covered: frozenset[int], cost: float, duals: RMPDuals, phase: str,
     return base - sum(float(duals.cover[task]) for task in covered)
 
 
-def exact_schedule_pricing(
+def _rss_mb() -> float:
+    try:
+        page_size = float(os.sysconf("SC_PAGE_SIZE"))
+        with open("/proc/self/statm", encoding="utf-8") as handle:
+            resident_pages = float(handle.read().split()[1])
+        return resident_pages * page_size / (1024.0 * 1024.0)
+    except (FileNotFoundError, IndexError, OSError, ValueError):
+        usage = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        if sys.platform == "darwin":
+            return usage / (1024.0 * 1024.0)
+        return usage / 1024.0
+
+
+def _dominance_key(label: Label) -> tuple[frozenset[int], frozenset[int], int, int]:
+    return (label.covered, frozenset(label.current_tasks), int(label.current_node), len(label.completed))
+
+
+def _label_dominates(left: Label, right: Label) -> bool:
+    return (
+        left.ready_time <= right.ready_time + 1.0e-9
+        and left.current_time <= right.current_time + 1.0e-9
+        and left.current_load <= right.current_load + 1.0e-9
+        and left.current_energy <= right.current_energy + 1.0e-9
+        and left.current_cost <= right.current_cost + 1.0e-9
+        and left.total_cost <= right.total_cost + 1.0e-9
+    )
+
+
+def _relaxed_reduced_cost(column: ScheduleColumn, duals: RMPDuals, phase: str) -> float:
+    visits = [task for sortie in column.sorties for task in sortie.tasks]
+    objective_cost = 0.0 if phase == "phase1" else float(column.cost)
+    return objective_cost - sum(float(duals.cover[task]) for task in visits) - float(duals.fleet) - float(duals.vehicle_lb)
+
+
+def _relaxed_priority(visits: tuple[int, ...], cost: float, duals: RMPDuals, phase: str, fixed: float) -> float:
+    base = 0.0 if phase == "phase1" else fixed + cost
+    return base - sum(float(duals.cover[task]) for task in visits)
+
+
+def _is_elementary(column: ScheduleColumn) -> bool:
+    visits = [int(task) for sortie in column.sorties for task in sortie.tasks]
+    return len(visits) == len(set(visits))
+
+
+def _repeated_tasks(column: ScheduleColumn) -> set[int]:
+    seen: set[int] = set()
+    repeated: set[int] = set()
+    for sortie in column.sorties:
+        for task in sortie.tasks:
+            task = int(task)
+            if task in seen:
+                repeated.add(task)
+            seen.add(task)
+    return repeated
+
+
+def _relaxed_dominance_key(label: RelaxedLabel, memory: frozenset[int]) -> tuple[frozenset[int], frozenset[int], int, int]:
+    current_memory = frozenset(task for task in label.current_tasks if task in memory)
+    return (label.memory_seen, current_memory, int(label.current_node), len(label.completed))
+
+
+def _relaxed_label_dominates(left: RelaxedLabel, right: RelaxedLabel) -> bool:
+    return (
+        left.priority <= right.priority + 1.0e-9
+        and left.ready_time <= right.ready_time + 1.0e-9
+        and left.current_time <= right.current_time + 1.0e-9
+        and left.current_load <= right.current_load + 1.0e-9
+        and left.current_energy <= right.current_energy + 1.0e-9
+        and left.current_cost <= right.current_cost + 1.0e-9
+        and left.total_cost <= right.total_cost + 1.0e-9
+    )
+
+
+def dssr_relaxed_memory_pricing(
     data: InstanceData,
     existing_columns: list[ScheduleColumn],
     duals: RMPDuals,
@@ -75,22 +390,236 @@ def exact_schedule_pricing(
     max_queue_size: int = 0,
     max_candidate_pool: int = 0,
     max_seconds: float = 0.0,
+    max_memory_mb: float = 0.0,
+    memory_check_interval: int = 4096,
+    enable_dominance: bool = True,
+    initial_memory_size: int = 0,
+    max_iterations: int = 4,
+    memory_growth: int = 4,
+    relaxed_iteration_seconds: float = 30.0,
+    relaxed_max_labels: int = 500000,
+    progress_callback: Callable[[dict[str, object]], None] | None = None,
+    progress_interval_seconds: float = 0.0,
+    progress_label_interval: int = 0,
 ) -> PricingResult:
+    all_tasks = frozenset(int(task) for task in data.tasks)
+    memory = frozenset(int(task) for task in data.tasks[: max(0, int(initial_memory_size))])
+    deadline = time.perf_counter() + float(max_seconds) if max_seconds and max_seconds > 0.0 else None
+    total_labels = 0
+    total_generated = 0
+    total_pruned = 0
+    queue_peak = 0
+    best_rc: float | None = None
+    memory_peak_mb = _rss_mb()
+    non_elementary_negative = 0
+    iterations = 0
+
+    for iteration in range(1, max(1, int(max_iterations)) + 1):
+        iterations = iteration
+        remaining = 0.0 if deadline is None else deadline - time.perf_counter()
+        if deadline is not None and remaining <= 0.0:
+            return PricingResult(
+                [],
+                False,
+                best_rc,
+                total_labels,
+                total_generated,
+                queue_peak,
+                "time_limit",
+                certificate=False,
+                labels_pruned_by_dominance=total_pruned,
+                memory_peak_mb=round(memory_peak_mb, 3),
+                algorithm="dssr_relaxed_memory",
+                dssr_iterations=iterations,
+                dssr_memory_size=len(memory),
+                dssr_non_elementary_negative=non_elementary_negative,
+            )
+
+        iteration_seconds = float(relaxed_iteration_seconds or 0.0)
+        if deadline is not None:
+            iteration_seconds = remaining if iteration_seconds <= 0.0 else min(iteration_seconds, remaining)
+        result, repeated = _relaxed_memory_iteration(
+            data,
+            existing_columns,
+            duals,
+            branch_constraints,
+            memory=memory,
+            phase=phase,
+            eps=eps,
+            max_columns_to_return=max_columns_to_return,
+            max_labels=relaxed_max_labels if relaxed_max_labels > 0 else max_labels,
+            max_generated_labels=max_generated_labels,
+            max_queue_size=max_queue_size,
+            max_candidate_pool=max_candidate_pool,
+            max_seconds=iteration_seconds,
+            max_memory_mb=max_memory_mb,
+            memory_check_interval=memory_check_interval,
+            enable_dominance=enable_dominance,
+            progress_callback=progress_callback,
+            progress_interval_seconds=progress_interval_seconds,
+            progress_label_interval=progress_label_interval,
+        )
+        total_labels += result.label_pops
+        total_generated += result.generated_labels
+        total_pruned += result.labels_pruned_by_dominance
+        queue_peak = max(queue_peak, result.queue_peak)
+        memory_peak_mb = max(memory_peak_mb, float(result.memory_peak_mb or 0.0))
+        if result.best_reduced_cost is not None:
+            best_rc = result.best_reduced_cost if best_rc is None else min(best_rc, result.best_reduced_cost)
+        non_elementary_negative += len(repeated)
+
+        if result.columns:
+            result.label_pops = total_labels
+            result.generated_labels = total_generated
+            result.queue_peak = queue_peak
+            result.labels_pruned_by_dominance = total_pruned
+            result.memory_peak_mb = round(memory_peak_mb, 3)
+            result.algorithm = "dssr_relaxed_memory"
+            result.dssr_iterations = iterations
+            result.dssr_memory_size = len(memory)
+            result.dssr_non_elementary_negative = non_elementary_negative
+            return result
+
+        if not result.exhausted:
+            if memory == all_tasks:
+                result.label_pops = total_labels
+                result.generated_labels = total_generated
+                result.queue_peak = queue_peak
+                result.labels_pruned_by_dominance = total_pruned
+                result.memory_peak_mb = round(memory_peak_mb, 3)
+                result.algorithm = "dssr_full_memory_exact"
+                result.dssr_iterations = iterations
+                result.dssr_memory_size = len(memory)
+                result.dssr_non_elementary_negative = non_elementary_negative
+                return result
+            break
+
+        if result.best_reduced_cost is None or result.best_reduced_cost >= -eps:
+            if memory == all_tasks:
+                result.label_pops = total_labels
+                result.generated_labels = total_generated
+                result.queue_peak = queue_peak
+                result.labels_pruned_by_dominance = total_pruned
+                result.memory_peak_mb = round(memory_peak_mb, 3)
+                result.algorithm = "dssr_full_memory_exact"
+                result.dssr_iterations = iterations
+                result.dssr_memory_size = len(memory)
+                result.dssr_non_elementary_negative = non_elementary_negative
+                return result
+            break
+
+        grow = set(repeated)
+        if len(grow) < int(memory_growth):
+            for task in data.tasks:
+                if int(task) not in memory:
+                    grow.add(int(task))
+                if len(grow) >= int(memory_growth):
+                    break
+        new_memory = frozenset(set(memory) | grow)
+        if new_memory == memory:
+            break
+        memory = new_memory
+        if memory == all_tasks:
+            break
+
+    remaining = 0.0 if deadline is None else deadline - time.perf_counter()
+    if deadline is not None and remaining <= 0.0:
+        return PricingResult(
+            [],
+            False,
+            best_rc,
+            total_labels,
+            total_generated,
+            queue_peak,
+            "time_limit",
+            certificate=False,
+            labels_pruned_by_dominance=total_pruned,
+            memory_peak_mb=round(memory_peak_mb, 3),
+            algorithm="dssr_relaxed_memory",
+            dssr_iterations=iterations,
+            dssr_memory_size=len(memory),
+            dssr_non_elementary_negative=non_elementary_negative,
+        )
+    exact_seconds = max_seconds if deadline is None else max(0.0, remaining)
+    result = exact_schedule_pricing(
+        data,
+        existing_columns,
+        duals,
+        branch_constraints,
+        phase=phase,
+        eps=eps,
+        max_columns_to_return=max_columns_to_return,
+        max_labels=max_labels,
+        max_generated_labels=max_generated_labels,
+        max_queue_size=max_queue_size,
+        max_candidate_pool=max_candidate_pool,
+        max_seconds=exact_seconds,
+        max_memory_mb=max_memory_mb,
+        memory_check_interval=memory_check_interval,
+        enable_dominance=enable_dominance,
+        progress_callback=progress_callback,
+        progress_interval_seconds=progress_interval_seconds,
+        progress_label_interval=progress_label_interval,
+    )
+    result.algorithm = "dssr_full_memory_exact"
+    result.label_pops += total_labels
+    result.generated_labels += total_generated
+    result.queue_peak = max(queue_peak, result.queue_peak)
+    result.labels_pruned_by_dominance += total_pruned
+    result.memory_peak_mb = round(max(memory_peak_mb, float(result.memory_peak_mb or 0.0)), 3)
+    result.dssr_iterations = iterations
+    result.dssr_memory_size = len(all_tasks)
+    result.dssr_non_elementary_negative = non_elementary_negative
+    return result
+
+
+def _relaxed_memory_iteration(
+    data: InstanceData,
+    existing_columns: list[ScheduleColumn],
+    duals: RMPDuals,
+    branch_constraints: tuple[BranchConstraint, ...],
+    *,
+    memory: frozenset[int],
+    phase: str,
+    eps: float,
+    max_columns_to_return: int,
+    max_labels: int,
+    max_generated_labels: int,
+    max_queue_size: int,
+    max_candidate_pool: int,
+    max_seconds: float,
+    max_memory_mb: float,
+    memory_check_interval: int,
+    enable_dominance: bool,
+    progress_callback: Callable[[dict[str, object]], None] | None,
+    progress_interval_seconds: float,
+    progress_label_interval: int,
+) -> tuple[PricingResult, set[int]]:
     existing = {column.signature for column in existing_columns}
     candidates: dict[tuple[tuple[int, ...], ...], tuple[float, ScheduleColumn]] = {}
+    repeated_negative: set[int] = set()
     best_rc: float | None = None
     label_pops = 0
     generated_labels = 0
     queue_peak = 1
+    labels_pruned_by_dominance = 0
     stop_reason: str | None = None
     exhausted = True
     started = time.perf_counter()
     deadline = started + float(max_seconds) if max_seconds and max_seconds > 0.0 else None
+    memory_check_interval = max(1, int(memory_check_interval))
+    memory_peak_mb = _rss_mb()
+    memory_check_counter = 0
+    progress_interval_seconds = max(0.0, float(progress_interval_seconds))
+    progress_label_interval = max(0, int(progress_label_interval))
+    last_progress_time = started
+    last_progress_labels = 0
 
-    start = Label(
+    start = RelaxedLabel(
         priority=0.0,
         ready_time=0.0,
-        covered=frozenset(),
+        memory_seen=frozenset(),
+        visits=tuple(),
         completed=tuple(),
         current_tasks=tuple(),
         current_node=0,
@@ -98,18 +627,88 @@ def exact_schedule_pricing(
         current_load=0.0,
         current_energy=0.0,
         current_cost=0.0,
+        total_cost=0.0,
         current_service_start={},
     )
-    queue: list[Label] = [start]
+    queue: list[RelaxedLabel] = [start]
+    dominance_buckets: dict[tuple[frozenset[int], frozenset[int], int, int], list[RelaxedLabel]] = {}
+    if enable_dominance:
+        dominance_buckets[_relaxed_dominance_key(start, memory)] = [start]
 
     def time_exceeded() -> bool:
         return deadline is not None and time.perf_counter() >= deadline
 
-    def push_label(item: Label) -> bool:
+    def memory_exceeded() -> bool:
+        nonlocal memory_check_counter, memory_peak_mb
+        if max_memory_mb <= 0.0:
+            return False
+        memory_check_counter += 1
+        if memory_check_counter % memory_check_interval != 0:
+            return False
+        memory_peak_mb = max(memory_peak_mb, _rss_mb())
+        return memory_peak_mb >= max_memory_mb
+
+    def emit_progress() -> None:
+        nonlocal last_progress_labels, last_progress_time, memory_peak_mb
+        if progress_callback is None:
+            return
+        now = time.perf_counter()
+        by_time = progress_interval_seconds > 0.0 and now - last_progress_time >= progress_interval_seconds
+        by_labels = progress_label_interval > 0 and label_pops - last_progress_labels >= progress_label_interval
+        if not by_time and not by_labels:
+            return
+        memory_peak_mb = max(memory_peak_mb, _rss_mb())
+        progress_callback(
+            {
+                "elapsed": round(now - started, 6),
+                "labels": label_pops,
+                "generated_labels": generated_labels,
+                "queue_size": len(queue),
+                "queue_peak": queue_peak,
+                "candidate_count": len(candidates),
+                "best_rc": None if best_rc is None else round(best_rc, 6),
+                "labels_pruned_by_dominance": labels_pruned_by_dominance,
+                "memory_peak_mb": round(memory_peak_mb, 3),
+                "dssr_memory_size": len(memory),
+                "algorithm": "dssr_relaxed_memory",
+            }
+        )
+        last_progress_time = now
+        last_progress_labels = label_pops
+
+    def label_is_active(item: RelaxedLabel) -> bool:
+        if not enable_dominance:
+            return True
+        return any(old is item for old in dominance_buckets.get(_relaxed_dominance_key(item, memory), []))
+
+    def dominance_pruned(item: RelaxedLabel) -> bool:
+        nonlocal labels_pruned_by_dominance
+        if not enable_dominance:
+            return False
+        key = _relaxed_dominance_key(item, memory)
+        bucket = dominance_buckets.setdefault(key, [])
+        if any(_relaxed_label_dominates(old, item) for old in bucket):
+            labels_pruned_by_dominance += 1
+            return True
+        keep = []
+        for old in bucket:
+            if _relaxed_label_dominates(item, old):
+                labels_pruned_by_dominance += 1
+                continue
+            keep.append(old)
+        keep.append(item)
+        dominance_buckets[key] = keep
+        return False
+
+    def push_label(item: RelaxedLabel) -> bool:
         nonlocal generated_labels, queue_peak, exhausted, stop_reason
         if time_exceeded():
             exhausted = False
             stop_reason = "time_limit"
+            return False
+        if memory_exceeded():
+            exhausted = False
+            stop_reason = "memory_limit"
             return False
         if max_generated_labels > 0 and generated_labels >= max_generated_labels:
             exhausted = False
@@ -119,6 +718,8 @@ def exact_schedule_pricing(
             exhausted = False
             stop_reason = "queue_limit"
             return False
+        if dominance_pruned(item):
+            return True
         heapq.heappush(queue, item)
         generated_labels += 1
         queue_peak = max(queue_peak, len(queue))
@@ -140,12 +741,19 @@ def exact_schedule_pricing(
             exhausted = False
             stop_reason = "time_limit"
             break
+        if memory_exceeded():
+            exhausted = False
+            stop_reason = "memory_limit"
+            break
         if max_labels > 0 and label_pops >= max_labels:
             exhausted = False
             stop_reason = "label_pop_limit"
             break
         label = heapq.heappop(queue)
+        if not label_is_active(label):
+            continue
         label_pops += 1
+        emit_progress()
 
         if label.current_tasks:
             back = data.arc(label.current_node, 0)
@@ -166,6 +774,315 @@ def exact_schedule_pricing(
                     )
                     completed = (*label.completed, sortie)
                     column = _make_schedule(data, completed)
+                    total_cost = label.total_cost + float(back["cost"])
+                    if schedule_allowed_by_branch(column, branch_constraints) and column.signature not in existing:
+                        rc = _relaxed_reduced_cost(column, duals, phase)
+                        best_rc = rc if best_rc is None else min(best_rc, rc)
+                        if rc < -eps:
+                            if _is_elementary(column):
+                                old = candidates.get(column.signature)
+                                if old is None or rc < old[0]:
+                                    candidates[column.signature] = (rc, column)
+                                    prune_candidate_pool()
+                            else:
+                                repeated_negative.update(_repeated_tasks(column))
+
+                    if len(completed) < data.sortie_limit:
+                        next_label = RelaxedLabel(
+                            priority=_relaxed_priority(label.visits, column.variable_cost, duals, phase, data.fixed_vehicle_cost),
+                            ready_time=ready_time,
+                            memory_seen=label.memory_seen,
+                            visits=label.visits,
+                            completed=completed,
+                            current_tasks=tuple(),
+                            current_node=0,
+                            current_time=ready_time,
+                            current_load=0.0,
+                            current_energy=0.0,
+                            current_cost=0.0,
+                            total_cost=total_cost,
+                            current_service_start={},
+                        )
+                        if not push_label(next_label):
+                            break
+            if stop_reason is not None:
+                break
+
+        for task in data.tasks:
+            task = int(task)
+            if task in label.current_tasks:
+                continue
+            if task in memory and task in label.memory_seen:
+                continue
+            next_visits = (*label.visits, task)
+            unique_prefix = frozenset(next_visits)
+            if not partial_allowed_by_branch(unique_prefix, branch_constraints):
+                continue
+            segment = data.arc(label.current_node, task)
+            arrival = label.current_time + float(segment["tau"])
+            service_start = max(data.task_value(task, "r"), arrival)
+            finish = service_start + data.task_value(task, "sigma")
+            if finish > data.task_value(task, "D") + 1.0e-9:
+                continue
+            next_load = label.current_load + data.task_value(task, "d")
+            if next_load > data.capacity + 1.0e-9:
+                continue
+            next_energy = label.current_energy + float(segment["energy"]) + data.task_value(task, "g")
+            if next_energy > data.energy_limit + 1.0e-9:
+                continue
+            back = data.arc(task, 0)
+            if finish + float(back["tau"]) > data.horizon + 1.0e-9:
+                continue
+            if next_energy + float(back["energy"]) > data.energy_limit + 1.0e-9:
+                continue
+            next_service_start = dict(label.current_service_start)
+            next_service_start[str(task)] = round(service_start, 6)
+            next_cost = label.current_cost + float(segment["cost"]) + data.task_value(task, "c_srv")
+            next_total_cost = label.total_cost + float(segment["cost"]) + data.task_value(task, "c_srv")
+            next_tasks = (*label.current_tasks, task)
+            next_memory_seen = label.memory_seen | ({task} if task in memory else set())
+            if not push_label(
+                RelaxedLabel(
+                    priority=_relaxed_priority(next_visits, next_total_cost, duals, phase, data.fixed_vehicle_cost),
+                    ready_time=label.ready_time,
+                    memory_seen=frozenset(next_memory_seen),
+                    visits=next_visits,
+                    completed=label.completed,
+                    current_tasks=next_tasks,
+                    current_node=task,
+                    current_time=finish,
+                    current_load=next_load,
+                    current_energy=next_energy,
+                    current_cost=next_cost,
+                    total_cost=next_total_cost,
+                    current_service_start=next_service_start,
+                )
+            ):
+                break
+        if stop_reason is not None:
+            break
+
+    selected = sorted(candidates.values(), key=lambda item: item[0])
+    if max_columns_to_return > 0:
+        selected = selected[:max_columns_to_return]
+    memory_peak_mb = max(memory_peak_mb, _rss_mb())
+    return (
+        PricingResult(
+            columns=[column for _rc, column in selected],
+            exhausted=exhausted,
+            best_reduced_cost=best_rc,
+            label_pops=label_pops,
+            generated_labels=generated_labels,
+            queue_peak=queue_peak,
+            stop_reason=stop_reason,
+            certificate=False,
+            labels_pruned_by_dominance=labels_pruned_by_dominance,
+            memory_peak_mb=round(memory_peak_mb, 3),
+            algorithm="dssr_relaxed_memory",
+            dssr_memory_size=len(memory),
+            dssr_non_elementary_negative=len(repeated_negative),
+        ),
+        repeated_negative,
+    )
+
+
+def exact_schedule_pricing(
+    data: InstanceData,
+    existing_columns: list[ScheduleColumn],
+    duals: RMPDuals,
+    branch_constraints: tuple[BranchConstraint, ...],
+    *,
+    phase: str,
+    eps: float,
+    max_columns_to_return: int,
+    max_labels: int = 0,
+    max_generated_labels: int = 0,
+    max_queue_size: int = 0,
+    max_candidate_pool: int = 0,
+    max_seconds: float = 0.0,
+    max_memory_mb: float = 0.0,
+    memory_check_interval: int = 4096,
+    enable_dominance: bool = True,
+    progress_callback: Callable[[dict[str, object]], None] | None = None,
+    progress_interval_seconds: float = 0.0,
+    progress_label_interval: int = 0,
+) -> PricingResult:
+    existing = {column.signature for column in existing_columns}
+    candidates: dict[tuple[tuple[int, ...], ...], tuple[float, ScheduleColumn]] = {}
+    best_rc: float | None = None
+    label_pops = 0
+    generated_labels = 0
+    queue_peak = 1
+    labels_pruned_by_dominance = 0
+    stop_reason: str | None = None
+    exhausted = True
+    started = time.perf_counter()
+    deadline = started + float(max_seconds) if max_seconds and max_seconds > 0.0 else None
+    memory_check_interval = max(1, int(memory_check_interval))
+    memory_peak_mb = _rss_mb()
+    memory_check_counter = 0
+    progress_interval_seconds = max(0.0, float(progress_interval_seconds))
+    progress_label_interval = max(0, int(progress_label_interval))
+    last_progress_time = started
+    last_progress_labels = 0
+
+    start = Label(
+        priority=0.0,
+        ready_time=0.0,
+        covered=frozenset(),
+        completed=tuple(),
+        current_tasks=tuple(),
+        current_node=0,
+        current_time=0.0,
+        current_load=0.0,
+        current_energy=0.0,
+        current_cost=0.0,
+        total_cost=0.0,
+        current_service_start={},
+    )
+    queue: list[Label] = [start]
+    dominance_buckets: dict[tuple[frozenset[int], frozenset[int], int, int], list[Label]] = {}
+    if enable_dominance:
+        dominance_buckets[_dominance_key(start)] = [start]
+
+    def time_exceeded() -> bool:
+        return deadline is not None and time.perf_counter() >= deadline
+
+    def memory_exceeded() -> bool:
+        nonlocal memory_check_counter, memory_peak_mb
+        if max_memory_mb <= 0.0:
+            return False
+        memory_check_counter += 1
+        if memory_check_counter % memory_check_interval != 0:
+            return False
+        memory_peak_mb = max(memory_peak_mb, _rss_mb())
+        return memory_peak_mb >= max_memory_mb
+
+    def emit_progress() -> None:
+        nonlocal last_progress_labels, last_progress_time, memory_peak_mb
+        if progress_callback is None:
+            return
+        now = time.perf_counter()
+        by_time = progress_interval_seconds > 0.0 and now - last_progress_time >= progress_interval_seconds
+        by_labels = progress_label_interval > 0 and label_pops - last_progress_labels >= progress_label_interval
+        if not by_time and not by_labels:
+            return
+        memory_peak_mb = max(memory_peak_mb, _rss_mb())
+        progress_callback(
+            {
+                "elapsed": round(now - started, 6),
+                "labels": label_pops,
+                "generated_labels": generated_labels,
+                "queue_size": len(queue),
+                "queue_peak": queue_peak,
+                "candidate_count": len(candidates),
+                "best_rc": None if best_rc is None else round(best_rc, 6),
+                "labels_pruned_by_dominance": labels_pruned_by_dominance,
+                "memory_peak_mb": round(memory_peak_mb, 3),
+            }
+        )
+        last_progress_time = now
+        last_progress_labels = label_pops
+
+    def label_is_active(item: Label) -> bool:
+        if not enable_dominance:
+            return True
+        return any(old is item for old in dominance_buckets.get(_dominance_key(item), []))
+
+    def dominance_pruned(item: Label) -> bool:
+        nonlocal labels_pruned_by_dominance
+        if not enable_dominance:
+            return False
+        key = _dominance_key(item)
+        bucket = dominance_buckets.setdefault(key, [])
+        if any(_label_dominates(old, item) for old in bucket):
+            labels_pruned_by_dominance += 1
+            return True
+        keep = []
+        for old in bucket:
+            if _label_dominates(item, old):
+                labels_pruned_by_dominance += 1
+                continue
+            keep.append(old)
+        keep.append(item)
+        dominance_buckets[key] = keep
+        return False
+
+    def push_label(item: Label) -> bool:
+        nonlocal generated_labels, queue_peak, exhausted, stop_reason
+        if time_exceeded():
+            exhausted = False
+            stop_reason = "time_limit"
+            return False
+        if memory_exceeded():
+            exhausted = False
+            stop_reason = "memory_limit"
+            return False
+        if max_generated_labels > 0 and generated_labels >= max_generated_labels:
+            exhausted = False
+            stop_reason = "generated_label_limit"
+            return False
+        if max_queue_size > 0 and len(queue) + 1 > max_queue_size:
+            exhausted = False
+            stop_reason = "queue_limit"
+            return False
+        if dominance_pruned(item):
+            return True
+        heapq.heappush(queue, item)
+        generated_labels += 1
+        queue_peak = max(queue_peak, len(queue))
+        return True
+
+    def prune_candidate_pool() -> None:
+        if max_candidate_pool <= 0 or len(candidates) <= max_candidate_pool:
+            return
+        keep = max(1, max_columns_to_return if max_columns_to_return > 0 else max_candidate_pool)
+        keep = min(keep, max_candidate_pool)
+        selected = sorted(candidates.values(), key=lambda item: item[0])[:keep]
+        candidates.clear()
+        candidates.update((column.signature, (rc, column)) for rc, column in selected)
+
+    while queue:
+        if stop_reason is not None:
+            break
+        if time_exceeded():
+            exhausted = False
+            stop_reason = "time_limit"
+            break
+        if memory_exceeded():
+            exhausted = False
+            stop_reason = "memory_limit"
+            break
+        if max_labels > 0 and label_pops >= max_labels:
+            exhausted = False
+            stop_reason = "label_pop_limit"
+            break
+        label = heapq.heappop(queue)
+        if not label_is_active(label):
+            continue
+        label_pops += 1
+        emit_progress()
+
+        if label.current_tasks:
+            back = data.arc(label.current_node, 0)
+            return_time = label.current_time + float(back["tau"])
+            total_energy = label.current_energy + float(back["energy"])
+            if total_energy <= data.energy_limit + 1.0e-9:
+                ready_time = return_time + total_energy / data.rho
+                if ready_time <= data.horizon + 1.0e-9:
+                    sortie = Sortie(
+                        tasks=label.current_tasks,
+                        start_time=round(label.ready_time, 6),
+                        return_time=round(return_time, 6),
+                        ready_time=round(ready_time, 6),
+                        load=round(label.current_load, 6),
+                        energy=round(total_energy, 6),
+                        cost=round(label.current_cost + float(back["cost"]), 6),
+                        service_start=dict(label.current_service_start),
+                    )
+                    completed = (*label.completed, sortie)
+                    column = _make_schedule(data, completed)
+                    total_cost = label.total_cost + float(back["cost"])
                     if schedule_allowed_by_branch(column, branch_constraints) and column.signature not in existing:
                         rc = reduced_cost(column, duals, phase)
                         best_rc = rc if best_rc is None else min(best_rc, rc)
@@ -187,6 +1104,7 @@ def exact_schedule_pricing(
                             current_load=0.0,
                             current_energy=0.0,
                             current_cost=0.0,
+                            total_cost=total_cost,
                             current_service_start={},
                         )
                         if not push_label(next_label):
@@ -220,10 +1138,11 @@ def exact_schedule_pricing(
             next_service_start = dict(label.current_service_start)
             next_service_start[str(task)] = round(service_start, 6)
             next_cost = label.current_cost + float(segment["cost"]) + data.task_value(task, "c_srv")
+            next_total_cost = label.total_cost + float(segment["cost"]) + data.task_value(task, "c_srv")
             next_tasks = (*label.current_tasks, int(task))
             if not push_label(
                 Label(
-                    priority=_priority(next_covered, next_cost, duals, phase, data.fixed_vehicle_cost),
+                    priority=_priority(next_covered, next_total_cost, duals, phase, data.fixed_vehicle_cost),
                     ready_time=label.ready_time,
                     covered=label.covered,
                     completed=label.completed,
@@ -233,6 +1152,7 @@ def exact_schedule_pricing(
                     current_load=next_load,
                     current_energy=next_energy,
                     current_cost=next_cost,
+                    total_cost=next_total_cost,
                     current_service_start=next_service_start,
                 )
             ):
@@ -243,6 +1163,7 @@ def exact_schedule_pricing(
     selected = sorted(candidates.values(), key=lambda item: item[0])
     if max_columns_to_return > 0:
         selected = selected[:max_columns_to_return]
+    memory_peak_mb = max(memory_peak_mb, _rss_mb())
     return PricingResult(
         columns=[column for _rc, column in selected],
         exhausted=exhausted,
@@ -251,4 +1172,7 @@ def exact_schedule_pricing(
         generated_labels=generated_labels,
         queue_peak=queue_peak,
         stop_reason=stop_reason,
+        certificate=exhausted and (best_rc is None or best_rc >= -eps),
+        labels_pruned_by_dominance=labels_pruned_by_dominance,
+        memory_peak_mb=round(memory_peak_mb, 3),
     )

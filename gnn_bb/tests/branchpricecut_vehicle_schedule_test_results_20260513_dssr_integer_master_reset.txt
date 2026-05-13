@@ -1,0 +1,9 @@
+timestamp: 2026-05-13 21:07:02 CST +0800
+command: /home/kai/miniconda3/envs/ecole/bin/python -m py_compile branchpricecut/*.py branchpricecut/scripts/run_vehicle_schedule_bpc.py
+command: /home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_branchpricecut_vehicle_schedule
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 0.154s
+
+OK
+smoke: smoke_20260513_dssr_integer_master_reset status=OPTIMAL primal=132.270984 dual=132.270984 gap=0.0 labels=122 generated_labels=122 queue_peak=12 restricted_master_integer_feasible=1

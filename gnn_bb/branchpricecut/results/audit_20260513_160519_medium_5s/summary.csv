@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_limit,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,pricing_calls,generated_columns,label_pops,generated_labels,pricing_queue_peak,branch_nodes,root_relaxation,log_path,solution_path
+medium,20,3,17,TIME_LIMIT,,,,5.024541,1,1,0,20,0,0,0,0,,/home/kai/work/gnn_bb/branchpricecut/results/audit_20260513_160519_medium_5s/logs/medium.jsonl,/home/kai/work/gnn_bb/branchpricecut/results/audit_20260513_160519_medium_5s/solutions/solution_medium.json

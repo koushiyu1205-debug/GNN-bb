@@ -89,15 +89,16 @@ pricing 要找：
 min_{s in Ω} rc_s
 ```
 
-当前实现使用 integrated schedule-labeling：
+当前实现使用 layered pricing：
 
 ```text
-扩展当前 sortie
-关闭当前 sortie
-开启下一条 sortie
+Layer 0: schedule column pool scan
+Layer 1: portfolio sortie route generation
+Layer 2: heuristic route-to-schedule composition DP
+Layer 3: ng-relaxed DSSR certificate pricing
 ```
 
-这不是先生成所有 sortie route 再组合，而是在一个 labeling 队列里同时维护当前 sortie 和已完成 sorties。
+Layer 0/1/2 只用于快速找 negative reduced-cost schedule columns。只有 Layer 3 `ng_dssr` exhausted 后，当前节点 lower bound 才能用于证明。`ng_dssr` 的 certificate 来自 relaxed superset exhaustive 且 `best_rc >= -epsilon`；full-memory integrated exact fallback 仅在 `full_memory_fallback_enabled=true` 时作为 debug/correctness baseline。
 
 ## 5. Branching
 
@@ -133,9 +134,16 @@ max_generated_labels_per_pricing
 max_queue_size_per_pricing
 max_candidate_pool_per_pricing
 max_pricing_seconds
+max_pricing_memory_mb
+pricing_memory_check_interval
+exact_pricing_enable_dominance
+exact_pricing_algorithm
+full_memory_fallback_enabled
+ng_neighborhood_size
+dssr_certificate_without_full_memory
 ```
 
-这些参数只保护 Python pricing 不无限膨胀。触发保护时，`PricingResult.exhausted=false`，求解器返回 `PRICING_LIMIT`，不会用该节点 LP bound 证明最优。
+`max_generated_labels_per_pricing=0` 表示不使用 generated-label 硬截断。当前证明配置默认 `exact_pricing_algorithm="ng_dssr"` 且 `full_memory_fallback_enabled=false`。触发 queue、memory、label 或 time guard 时，`PricingResult.exhausted=false`，求解器返回 `PRICING_LIMIT`，不会用该节点 LP bound 证明最优。
 
 ## 7. 与旧 bpc/ 的关键区别
 

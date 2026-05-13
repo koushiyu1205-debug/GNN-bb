@@ -1,0 +1,2 @@
+instance,task_count,vehicle_count,sortie_limit,status,primal_bound,dual_bound,gap,solving_time,node_count,rmp_solves,pricing_calls,generated_columns,label_pops,generated_labels,pricing_queue_peak,branch_nodes,root_relaxation,log_path,solution_path
+very_small,4,2,2,OPTIMAL,132.270984,132.270984,0.0,2.09921,1,4,2,13,220,218,21,0,132.270984,/home/kai/work/gnn_bb/branchpricecut/results/audit_20260513_160205_vehicle_schedule/logs/very_small.jsonl,/home/kai/work/gnn_bb/branchpricecut/results/audit_20260513_160205_vehicle_schedule/solutions/solution_very_small.json

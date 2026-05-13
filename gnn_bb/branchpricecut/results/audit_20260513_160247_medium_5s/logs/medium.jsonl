@@ -1,0 +1,8 @@
+{"event": "start", "initial_columns": 20, "instance": "medium", "master_cover_mode": "partitioning", "tasks": 20, "time": 0.000751}
+{"depth": 0, "event": "node", "lower_bound": 0.0, "node": 0, "open_nodes": 0, "time": 0.000824}
+{"artificial": 17.0, "cg_iter": 1, "columns": 20, "event": "rmp", "manual_rc_check_max_error": 0.0, "node": 0, "objective": 17.0, "phase": "phase1", "time": 0.17676}
+{"elapsed": 1.3e-05, "event": "pool_scan", "found": 0, "node": 0, "phase": "phase1", "time": 0.176879}
+{"branch_relevant": 0, "diverse": 300, "event": "route_pool", "historical": 4, "low_cbar": 500, "micro": 200, "node": 0, "per_task": 120, "phase": "phase1", "route_pool_size": 1124, "time": 0.291428}
+{"added": 20, "best_rc": -10.0, "elapsed": 31.267521, "event": "schedule_dp", "exhausted": false, "found": 20, "labels": 200001, "node": 0, "phase": "phase1", "pruned_beam": 199433, "pruned_subset": 366, "time": 31.659698}
+{"event": "fathom", "node": 0, "reason": "infeasible_or_no_lp", "time": 31.66029}
+{"dual": null, "event": "finish", "gap": null, "nodes": 1, "primal": null, "status": "OPTIMAL", "time": 31.66038}

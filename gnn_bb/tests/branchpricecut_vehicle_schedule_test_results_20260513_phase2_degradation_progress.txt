@@ -1,0 +1,9 @@
+timestamp: 2026-05-13 19:46:19 CST +0800
+command: /home/kai/miniconda3/envs/ecole/bin/python -m py_compile branchpricecut/*.py branchpricecut/scripts/run_vehicle_schedule_bpc.py
+command: /home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_branchpricecut_vehicle_schedule
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 0.121s
+
+OK
+smoke: smoke_20260513_heuristic_phase2_progress status=OPTIMAL primal=132.270984 dual=132.270984 gap=0.0 labels=83 generated_labels=82 queue_peak=10
