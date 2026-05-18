@@ -10,6 +10,8 @@ column = 一辆车的完整多 sortie schedule
 
 不退回旧 `bpc/` 的 route-vehicle master。
 
+更新：2026-05-13 22:12:30 后，20 规模默认 proof run 已切到 `master_type="hybrid_route"`，即低维 route-level exact BPC。本文仍作为 `master_type="vehicle_schedule"` baseline/ng-DSSR 路径的设计记录；hybrid 主线见 `vehicle_schedule_bpc_model.md` 和 `branchpricecut/README.md`。
+
 ## 1. 当前 Vehicle-Schedule Master
 
 集合：

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +33,18 @@ from branchpricecut.route_pool import (
     sortie_from_zero,
 )
 from branchpricecut.schedule_dp import DPLabel, compose_schedules_heuristic, label_dominates
+from branchpricecut.solver import solve_vehicle_schedule_bpc
 from branchpricecut.tree import SearchNode, VehicleScheduleBPCTree
+from bpc.branching import BranchConstraint as RouteBranchConstraint
+from bpc.columns import evaluate_route as evaluate_hybrid_route
+from bpc.data import load_bpc_data
+from bpc.logger import BPCLogger as HybridBPCLogger
+from bpc.node import BPCNode
+from bpc.pricing import exact_pricing as hybrid_exact_pricing
+from bpc.rmp import RMPDuals as HybridRMPDuals
+from bpc.schedule_capacity import exact_schedule_task_capacity
+from bpc.tree import CleanBPCTree
+from bpc.validation import check_route_set_schedule_feasible
 
 
 def _has_pyscipopt() -> bool:
@@ -621,6 +634,143 @@ class BranchPriceCutVehicleScheduleTests(unittest.TestCase):
             memory_growth=2,
         )
         self.assertTrue(certificate.certificate)
+
+    @unittest.skipUnless(_has_pyscipopt(), "当前 Python 环境没有 PySCIPOpt")
+    def test_18_hybrid_route_master_dispatch_solves_very_small(self):
+        config = {
+            "master_type": "hybrid_route",
+            "time_limit": 20,
+            "max_nodes": 200,
+            "pricing_eps": 1.0e-6,
+            "integer_tol": 1.0e-6,
+            "max_routes_per_pricing": 200,
+            "hybrid_max_labels_per_pricing": 0,
+            "random_seed": 20260511,
+            "rmp_params": {"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = solve_vehicle_schedule_bpc(
+                self.data,
+                config=config,
+                log_path=root / "hybrid.jsonl",
+                solution_path=root / "solution.json",
+                quiet=True,
+            )
+            solution = json.loads((root / "solution.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(result.master_type, "hybrid_route")
+        self.assertEqual(result.master_cover_mode, "route_vehicle")
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertAlmostEqual(result.primal_bound or 0.0, 132.270984, places=5)
+        self.assertGreater(result.generated_routes, 0)
+        self.assertIn("schedule_checks", solution["solution"])
+        self.assertTrue(all(check["feasible"] for check in solution["solution"]["schedule_checks"].values()))
+
+    def test_19_hybrid_route_pricing_exhaustion_and_limits_are_explicit(self):
+        data = load_bpc_data("very_small")
+        duals = HybridRMPDuals(
+            cover={task: 0.0 for task in data.tasks},
+            task_vehicle={},
+            sortie_count={vehicle: 0.0 for vehicle in data.vehicles},
+            vehicle_time={vehicle: 0.0 for vehicle in data.vehicles},
+            cuts={},
+            branches={},
+        )
+        exhaustive = hybrid_exact_pricing(
+            data,
+            [],
+            duals,
+            cuts=[],
+            branch_constraints=tuple(),
+            phase="phase2",
+            eps=1.0e-6,
+            max_routes_to_return=20,
+            max_labels=0,
+        )
+        self.assertTrue(exhaustive.exhausted)
+        self.assertEqual(exhaustive.routes, [])
+        self.assertIsNotNone(exhaustive.best_reduced_cost)
+        self.assertGreaterEqual(exhaustive.best_reduced_cost or 0.0, -1.0e-6)
+
+        attractive = HybridRMPDuals(
+            cover={task: 1000.0 for task in data.tasks},
+            task_vehicle={},
+            sortie_count={vehicle: 0.0 for vehicle in data.vehicles},
+            vehicle_time={vehicle: 0.0 for vehicle in data.vehicles},
+            cuts={},
+            branches={},
+        )
+        limited = hybrid_exact_pricing(
+            data,
+            [],
+            attractive,
+            cuts=[],
+            branch_constraints=tuple(),
+            phase="phase2",
+            eps=1.0e-6,
+            max_routes_to_return=20,
+            max_labels=1,
+        )
+        self.assertFalse(limited.exhausted)
+
+    def test_20_hybrid_no_good_cut_rejects_infeasible_route_set(self):
+        data = load_bpc_data("medium")
+        first = evaluate_hybrid_route(data, (1,))
+        second = evaluate_hybrid_route(data, (11, 2))
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        assert first is not None and second is not None
+        self.assertFalse(check_route_set_schedule_feasible(data, [first, second]).feasible)
+
+        logger = HybridBPCLogger(None, console=False)
+        tree = CleanBPCTree(
+            data,
+            time_limit=30,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=20,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=logger,
+        )
+        added = tree._add_schedule_conflict_cuts(
+            BPCNode(0.0, 0, 0),
+            source_vehicle=int(data.vehicles[0]),
+            routes=[first, second],
+            kind="schedule_nogood_core",
+        )
+        self.assertEqual(added, len(data.vehicles))
+        for cut in tree.cuts:
+            coeff = sum(cut.coefficient(route, int(cut.vehicle)) for route in (first, second))
+            self.assertGreater(coeff, cut.rhs)
+
+    def test_21_hybrid_schedule_capacity_oracle_bounds_cut_strength(self):
+        data = load_bpc_data("very_small")
+        result = exact_schedule_task_capacity(data, tuple(data.tasks[:3]), max_states=100000)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.exact)
+        self.assertGreaterEqual(result.upper_bound, 1)
+        self.assertLessEqual(result.upper_bound, 3)
+
+    def test_22_hybrid_branching_filters_route_space(self):
+        data = load_bpc_data("very_small")
+        route = evaluate_hybrid_route(data, tuple(data.tasks[:2]))
+        if route is None:
+            route = evaluate_hybrid_route(data, tuple(reversed(data.tasks[:2])))
+        self.assertIsNotNone(route)
+        assert route is not None
+        vehicle = data.vehicles[0]
+        rf_left = RouteBranchConstraint("ryan_separate", route.tasks[0], route.tasks[1])
+        rf_right = RouteBranchConstraint("ryan_together", route.tasks[0], route.tasks[1])
+        from bpc.branching import route_allowed_by_branch as hybrid_route_allowed_by_branch
+
+        self.assertFalse(hybrid_route_allowed_by_branch(route, vehicle, (rf_left,)))
+        self.assertTrue(hybrid_route_allowed_by_branch(route, vehicle, (rf_right,)))
+        self.assertFalse(hybrid_route_allowed_by_branch(route, vehicle, (RouteBranchConstraint("vehicle_use_off", 0, vehicle=vehicle),)))
+        self.assertTrue(hybrid_route_allowed_by_branch(route, vehicle, (RouteBranchConstraint("vehicle_use_on", 0, vehicle=vehicle),)))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+pressed CTRL-C 1 times (5 times for forcing termination)
+Traceback (most recent call last):
+  File "/home/kai/work/gnn_bb/scripts/run_scip_baseline.py", line 84, in <module>
+    main()
+  File "/home/kai/work/gnn_bb/scripts/run_scip_baseline.py", line 73, in main
+    rows.append(result.to_row())
+                ^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/src/gnn_bb/baseline/scip_milp.py", line 33, in to_row
+    def to_row(self) -> dict[str, Any]:
+
+KeyboardInterrupt

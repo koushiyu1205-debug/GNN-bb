@@ -41,6 +41,7 @@ def main() -> None:
         config["time_limit"] = float(args.time_limit)
     if args.max_nodes is not None:
         config["max_nodes"] = int(args.max_nodes)
+    master_type = str(config.get("master_type", "hybrid_route"))
     instances = args.instances or config.get("instances", ["very_small"])
     run_id = args.run_id or datetime.now().strftime("%Y%m%d_%H%M%S_vehicle_schedule_bpc")
     run_root = BRANCHPRICECUT_ROOT / "results" / run_id
@@ -55,7 +56,7 @@ def main() -> None:
         log_path = log_dir / f"{data.name}.jsonl"
         solution_path = solution_dir / f"solution_{data.name}.json"
         print(
-            f"开始 vehicle-schedule BPC: instance={data.name}, tasks={len(data.tasks)}, "
+            f"开始 branchpricecut BPC: master_type={master_type}, instance={data.name}, tasks={len(data.tasks)}, "
             f"vehicles={data.vehicle_count}, time_limit={config['time_limit']}s, log={log_path}",
             flush=True,
         )

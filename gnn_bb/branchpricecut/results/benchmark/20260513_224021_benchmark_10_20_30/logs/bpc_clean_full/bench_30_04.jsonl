@@ -1,0 +1,5 @@
+{"event": "incumbent", "node_id": 0, "objective": 468.607616, "source": "greedy_schedule", "time": 86.694276}
+{"event": "start", "initial_incumbent": 468.607616, "initial_routes": 37, "instance": "bench_30_04", "schedule_capacity_cuts_enabled": true, "task_vehicle_linking_enabled": true, "tasks": 30, "time": 86.694358, "vehicles": 3}
+{"depth": 0, "event": "node_start", "node_id": 0, "node_lb": 0.0, "open_nodes": 0, "time": 86.694375}
+{"artificial_sum": 0.0, "cg_iter": 1, "constraint_count": 126, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 0.0, "phase": "phase1", "route_count": 37, "status": "OPTIMAL", "time": 86.780509, "variable_count": 144}
+{"artificial_sum": 0.0, "cg_iter": 2, "constraint_count": 128, "cut_count": 0, "depth": 0, "event": "rmp", "node_id": 0, "objective": 398.151828, "phase": "phase2", "route_count": 37, "status": "OPTIMAL", "time": 86.786305, "variable_count": 114}

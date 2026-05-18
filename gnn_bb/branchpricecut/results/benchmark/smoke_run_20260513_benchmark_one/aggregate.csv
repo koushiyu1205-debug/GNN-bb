@@ -1,0 +1,2 @@
+variant,size,jobs,solved,time_limit,pricing_failures,errors,valid_gap_count,avg_gap,shifted_geomean_time,shifted_geomean_labels,shifted_geomean_nodes
+hybrid_full,10,2,2,0,0,0,2,0.0,5.688458,131340.975088,2.464102

@@ -1,0 +1,10 @@
+variant,size,jobs,solved,time_limit,pricing_failures,errors,valid_gap_count,avg_gap,shifted_geomean_time,shifted_geomean_labels,shifted_geomean_nodes
+bpc_clean_full,10,10,10,0,0,0,10,0.0,17.431742,310829.342702,11.497729
+bpc_clean_full,20,10,0,10,0,0,10,0.307127,3683.202762,80430664.686367,3.595312
+bpc_clean_full,30,3,0,3,0,0,3,0.309251,3905.511085,80180226.747621,1.0
+hybrid_full,10,10,10,0,0,0,10,0.0,17.38407,310829.342702,11.497729
+hybrid_full,20,10,0,10,0,0,10,0.307127,3684.158995,80238024.557784,3.595312
+hybrid_full,30,3,0,3,0,0,3,0.309251,3890.741596,80180226.747621,1.0
+vehicle_schedule_ng_dssr,10,10,8,0,2,0,8,0.0,78.100815,1288715.001155,1.0
+vehicle_schedule_ng_dssr,20,10,0,7,3,0,0,,3038.064401,27762958.750472,1.0
+vehicle_schedule_ng_dssr,30,3,0,2,1,0,0,,3148.865487,19879550.374633,1.0

@@ -1,0 +1,24 @@
+M bpc/__pycache__/node.cpython-312.pyc
+ M bpc/__pycache__/solver.cpython-312.pyc
+ M bpc/__pycache__/tree.cpython-312.pyc
+ M bpc/node.py
+ M bpc/solver.py
+ M bpc/tree.py
+ M branchpricecut/README.md
+ M branchpricecut/__pycache__/solver.cpython-312.pyc
+ M branchpricecut/config/default.json
+ M branchpricecut/config/medium_prove.json
+ M branchpricecut/docs/vehicle_schedule_bpc_model.md
+ M branchpricecut/docs/vehicle_schedule_two_level_pricing_optimized_design.md
+ M branchpricecut/scripts/run_vehicle_schedule_bpc.py
+ M branchpricecut/solver.py
+ M tests/test_branchpricecut_vehicle_schedule.py
+?? branchpricecut/config/benchmark_10_20_30.json
+?? branchpricecut/config/medium_hybrid_route.json
+?? branchpricecut/results/20260513_221841_medium_hybrid_route/
+?? branchpricecut/results/20260513_221841_medium_hybrid_route_terminal.log
+?? branchpricecut/results/benchmark/
+?? branchpricecut/results/smoke_20260513_hybrid_route_medium_guard/
+?? branchpricecut/results/smoke_20260513_hybrid_route_very_small/
+?? branchpricecut/scripts/run_benchmark.py
+?? src/gnn_bb/baseline/__pycache__/scip_milp.cpython-312.pyc

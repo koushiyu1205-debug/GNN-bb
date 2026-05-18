@@ -1,0 +1,215 @@
+{
+  "instance_dir": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances",
+  "instances": [
+    {
+      "index": 1,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_01.json",
+      "name": "bench_10_01",
+      "seed": 20261601,
+      "size": 10
+    },
+    {
+      "index": 2,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_02.json",
+      "name": "bench_10_02",
+      "seed": 20261602,
+      "size": 10
+    },
+    {
+      "index": 3,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_03.json",
+      "name": "bench_10_03",
+      "seed": 20261603,
+      "size": 10
+    },
+    {
+      "index": 4,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_04.json",
+      "name": "bench_10_04",
+      "seed": 20261604,
+      "size": 10
+    },
+    {
+      "index": 5,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_05.json",
+      "name": "bench_10_05",
+      "seed": 20261605,
+      "size": 10
+    },
+    {
+      "index": 6,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_06.json",
+      "name": "bench_10_06",
+      "seed": 20261606,
+      "size": 10
+    },
+    {
+      "index": 7,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_07.json",
+      "name": "bench_10_07",
+      "seed": 20261607,
+      "size": 10
+    },
+    {
+      "index": 8,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_08.json",
+      "name": "bench_10_08",
+      "seed": 20261608,
+      "size": 10
+    },
+    {
+      "index": 9,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_09.json",
+      "name": "bench_10_09",
+      "seed": 20261609,
+      "size": 10
+    },
+    {
+      "index": 10,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_10_10.json",
+      "name": "bench_10_10",
+      "seed": 20261610,
+      "size": 10
+    },
+    {
+      "index": 1,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_01.json",
+      "name": "bench_20_01",
+      "seed": 20262601,
+      "size": 20
+    },
+    {
+      "index": 2,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_02.json",
+      "name": "bench_20_02",
+      "seed": 20262602,
+      "size": 20
+    },
+    {
+      "index": 3,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_03.json",
+      "name": "bench_20_03",
+      "seed": 20262603,
+      "size": 20
+    },
+    {
+      "index": 4,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_04.json",
+      "name": "bench_20_04",
+      "seed": 20262604,
+      "size": 20
+    },
+    {
+      "index": 5,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_05.json",
+      "name": "bench_20_05",
+      "seed": 20262605,
+      "size": 20
+    },
+    {
+      "index": 6,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_06.json",
+      "name": "bench_20_06",
+      "seed": 20262606,
+      "size": 20
+    },
+    {
+      "index": 7,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_07.json",
+      "name": "bench_20_07",
+      "seed": 20262607,
+      "size": 20
+    },
+    {
+      "index": 8,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_08.json",
+      "name": "bench_20_08",
+      "seed": 20262608,
+      "size": 20
+    },
+    {
+      "index": 9,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_09.json",
+      "name": "bench_20_09",
+      "seed": 20262609,
+      "size": 20
+    },
+    {
+      "index": 10,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_20_10.json",
+      "name": "bench_20_10",
+      "seed": 20262610,
+      "size": 20
+    },
+    {
+      "index": 1,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_01.json",
+      "name": "bench_30_01",
+      "seed": 20263601,
+      "size": 30
+    },
+    {
+      "index": 2,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_02.json",
+      "name": "bench_30_02",
+      "seed": 20263602,
+      "size": 30
+    },
+    {
+      "index": 3,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_03.json",
+      "name": "bench_30_03",
+      "seed": 20263603,
+      "size": 30
+    },
+    {
+      "index": 4,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_04.json",
+      "name": "bench_30_04",
+      "seed": 20263604,
+      "size": 30
+    },
+    {
+      "index": 5,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_05.json",
+      "name": "bench_30_05",
+      "seed": 20263605,
+      "size": 30
+    },
+    {
+      "index": 6,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_06.json",
+      "name": "bench_30_06",
+      "seed": 20263606,
+      "size": 30
+    },
+    {
+      "index": 7,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_07.json",
+      "name": "bench_30_07",
+      "seed": 20263607,
+      "size": 30
+    },
+    {
+      "index": 8,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_08.json",
+      "name": "bench_30_08",
+      "seed": 20263608,
+      "size": 30
+    },
+    {
+      "index": 9,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_09.json",
+      "name": "bench_30_09",
+      "seed": 20263609,
+      "size": 30
+    },
+    {
+      "index": 10,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances/instance_bench_30_10.json",
+      "name": "bench_30_10",
+      "seed": 20263610,
+      "size": 30
+    }
+  ]
+}

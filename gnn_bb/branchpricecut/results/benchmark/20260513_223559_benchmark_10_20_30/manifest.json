@@ -1,0 +1,51 @@
+{
+  "config": {
+    "base_solver_config": "branchpricecut/config/medium_hybrid_route.json",
+    "instance_dir": "branchpricecut/results/benchmark/{run_id}/instances",
+    "instances_per_size": 10,
+    "max_nodes": 100000,
+    "name": "branchpricecut_10_20_30_serious_benchmark",
+    "quiet": true,
+    "resume": true,
+    "seed_base": 20260600,
+    "sizes": [
+      10,
+      20,
+      30
+    ],
+    "time_limit": 3600,
+    "variants": [
+      "bpc_clean_full",
+      "hybrid_full",
+      "vehicle_schedule_ng_dssr",
+      "hybrid_no_schedcap",
+      "hybrid_no_crossing",
+      "hybrid_no_task_vehicle_linking",
+      "hybrid_simple_branching"
+    ],
+    "vehicle_schedule_config": "branchpricecut/config/medium_prove.json"
+  },
+  "created_at": "2026-05-13T22:36:00",
+  "git_diff_stat": "gnn_bb/bpc/__pycache__/node.cpython-312.pyc        | Bin 2675 -> 2786 bytes\n gnn_bb/bpc/__pycache__/solver.cpython-312.pyc      | Bin 11401 -> 11754 bytes\n gnn_bb/bpc/__pycache__/tree.cpython-312.pyc        | Bin 94011 -> 94978 bytes\n gnn_bb/bpc/node.py                                 |   2 +\n gnn_bb/bpc/solver.py                               |   6 +\n gnn_bb/bpc/tree.py                                 |  14 +-\n gnn_bb/branchpricecut/README.md                    | 152 ++++++++++++++--\n .../__pycache__/solver.cpython-312.pyc             | Bin 12663 -> 22831 bytes\n gnn_bb/branchpricecut/config/default.json          |  37 ++++\n gnn_bb/branchpricecut/config/medium_prove.json     |  37 ++++\n .../docs/vehicle_schedule_bpc_model.md             |  65 +++++--\n ..._schedule_two_level_pricing_optimized_design.md |   2 +\n .../scripts/run_vehicle_schedule_bpc.py            |   3 +-\n gnn_bb/branchpricecut/solver.py                    | 192 ++++++++++++++++++++-\n .../tests/test_branchpricecut_vehicle_schedule.py  | 150 ++++++++++++++++\n 15 files changed, 631 insertions(+), 29 deletions(-)",
+  "git_head": "ecedb759d8c65232b9e4e4a7a7e3ef74b8aa919d",
+  "git_status": "M bpc/__pycache__/node.cpython-312.pyc\n M bpc/__pycache__/solver.cpython-312.pyc\n M bpc/__pycache__/tree.cpython-312.pyc\n M bpc/node.py\n M bpc/solver.py\n M bpc/tree.py\n M branchpricecut/README.md\n M branchpricecut/__pycache__/solver.cpython-312.pyc\n M branchpricecut/config/default.json\n M branchpricecut/config/medium_prove.json\n M branchpricecut/docs/vehicle_schedule_bpc_model.md\n M branchpricecut/docs/vehicle_schedule_two_level_pricing_optimized_design.md\n M branchpricecut/scripts/run_vehicle_schedule_bpc.py\n M branchpricecut/solver.py\n M tests/test_branchpricecut_vehicle_schedule.py\n?? branchpricecut/config/benchmark_10_20_30.json\n?? branchpricecut/config/medium_hybrid_route.json\n?? branchpricecut/results/20260513_221841_medium_hybrid_route/\n?? branchpricecut/results/20260513_221841_medium_hybrid_route_terminal.log\n?? branchpricecut/results/benchmark/\n?? branchpricecut/results/smoke_20260513_hybrid_route_medium_guard/\n?? branchpricecut/results/smoke_20260513_hybrid_route_very_small/\n?? branchpricecut/scripts/run_benchmark.py",
+  "instance_dir": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/instances",
+  "job_count": 210,
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "/home/kai/miniconda3/envs/ecole/bin/python",
+  "run_id": "20260513_223559_benchmark_10_20_30",
+  "sizes": [
+    10,
+    20,
+    30
+  ],
+  "variants": [
+    "bpc_clean_full",
+    "hybrid_full",
+    "hybrid_no_crossing",
+    "hybrid_no_schedcap",
+    "hybrid_no_task_vehicle_linking",
+    "hybrid_simple_branching",
+    "vehicle_schedule_ng_dssr"
+  ]
+}

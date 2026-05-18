@@ -1,18 +1,22 @@
 # BranchPriceCut 新主线
 
-更新时间：2026-05-13 21:43:49 CST +0800
+更新时间：2026-05-13 22:12:30 CST +0800
 
-本目录是独立于根目录 `bpc/` 的新实现。目标是构建更接近 You et al. / RouteOpt 思路的 vehicle-schedule Branch-Price-and-Cut：
+本目录现在提供两个求解入口，默认主力是 **hybrid route-level exact BPC**：
 
 ```text
-column = 一辆车完整多 sortie schedule
+master_type = "hybrid_route"      # 主力 exact solver
+master_type = "vehicle_schedule"  # 完整 schedule-column baseline / ng-DSSR 对照
 ```
+
+hybrid 模式复用根目录 `bpc/` 的 route-vehicle master、单 sortie RCSP pricing、schedule checker 和 valid cuts，但统一由 `branchpricecut/scripts/run_vehicle_schedule_bpc.py` 调度，结果仍写入 `branchpricecut/results/`。
 
 ## 目录
 
 ```text
 branchpricecut/
   config/default.json
+  config/medium_hybrid_route.json
   docs/vehicle_schedule_bpc_model.md
   scripts/run_vehicle_schedule_bpc.py
   results/
@@ -33,7 +37,13 @@ branchpricecut/
 
 已实现：
 
-- vehicle-schedule set-partitioning master；
+- hybrid route-vehicle master：`lambda[p,r]` 单 sortie route-vehicle 变量 + `y[r]` 车辆启用变量；
+- hybrid exact route pricing：单 sortie RCSP，节点 bound 只在 route pricing exhausted 后用于证明；
+- integer route assignment exact schedule checker；
+- schedule no-good cuts、crossing cuts、schedule capacity cuts，并把 cut dual 纳入 route reduced cost；
+- route-compatible branching：Ryan-Foster、task-vehicle、arc on/off、vehicle-use；
+- 统一入口 `master_type` 调度，hybrid 结果写入 `branchpricecut/results/`；
+- vehicle-schedule set-partitioning master baseline；
 - Phase-I artificial cover；
 - fleet constraint；
 - partitioning / covering 可配置 master，其中 covering incumbent 会先做 duplicate removal + shortcut rebuild + exact feasibility check；
@@ -48,11 +58,68 @@ branchpricecut/
 
 暂未实现：
 
-- 3PB 完整三阶段测试；
 - 2LBB；
-- cuts；
 - dual stabilization；
-- bucket / bidirectional labeling / compiled labeling engine 等进一步工程加速。
+- route-level compact MILP reformulation；
+- compiled RCSP labeling / bidirectional route pricing。
+
+## 2026-05-13 22:12:30 CST +0800 Hybrid route-level exact BPC
+
+本轮把 `branchpricecut` 的默认主力 exact solver 从完整 schedule-column master 切到 hybrid route-level master：
+
+- `config/default.json` 和 `config/medium_prove.json` 默认 `master_type="hybrid_route"`。
+- 新增 `config/medium_hybrid_route.json`，用于 20 规模 route-level proof run。
+- `solver.py` 增加 hybrid wrapper：把 `branchpricecut.data.InstanceData` 转成 `bpc.data.BPCData`，调用 `bpc.solver.solve_bpc_clean(...)`，再转换成统一 `SolverResult`。
+- `scripts/run_vehicle_schedule_bpc.py` 按 `master_type` 调度；`hybrid_route` 与 `vehicle_schedule` 共用 `branchpricecut/results/<run_id>/` 输出目录。
+- `bpc` 侧补充 summary 字段 `branch_nodes`、`label_pops`、`generated_labels`，solution JSON 中增加每辆车 `schedule_checks`，记录 checker 可行性和 route 执行顺序。
+- 保留完整 schedule-column/ng-DSSR 路径：配置中显式设置 `master_type="vehicle_schedule"` 即可继续跑 baseline。
+
+hybrid exactness 边界：
+
+- RMP column 是单 sortie route，不是完整 schedule。
+- 节点 lower bound 来自 route-level exact pricing exhausted 后的 route-vehicle LP。
+- 整数解必须通过 exact schedule checker；不可排程 route 集会生成 valid schedule no-good cuts 后重新求解。
+- no-good、crossing、schedule-capacity cut dual 都进入 route pricing reduced cost。
+- greedy / repair incumbent 只作为 primal upper bound，不参与 lower-bound 证明。
+
+本轮验证：
+
+```text
+/home/kai/miniconda3/envs/ecole/bin/python -m py_compile branchpricecut/*.py branchpricecut/scripts/run_vehicle_schedule_bpc.py bpc/*.py tests/test_branchpricecut_vehicle_schedule.py
+/home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_bpc_clean tests.test_branchpricecut_vehicle_schedule
+Ran 32 tests in 0.280s
+OK
+```
+
+`very_small` hybrid smoke：
+
+```text
+run_id=smoke_20260513_hybrid_route_very_small
+status=OPTIMAL
+primal_bound=132.270984
+dual_bound=132.270984
+gap=0.0
+nodes=1
+rmp_solves=4
+pricing_calls=3
+label_pops=102
+generated_labels=96
+```
+
+`medium` guard smoke 使用临时配置 `hybrid_max_labels_per_pricing=1000`：
+
+```text
+run_id=smoke_20260513_hybrid_route_medium_guard
+status=PRICING_INCOMPLETE
+nodes=1
+rmp_solves=6
+pricing_calls=5
+label_pops=5000
+generated_labels=5772
+dual_bound=None
+```
+
+该 smoke 只验证中断边界：pricing 未 exhausted 时不输出证明 bound。
 
 ## 2026-05-13 16:26:46 CST +0800 revise_plan 落地内容
 
@@ -113,7 +180,7 @@ branchpricecut/
 9. tiny full enumeration vs CG LP；
 10. schedule-level Ryan-Foster branching coverage classification。
 
-按你的要求，这三项仍不改：
+当时按你的要求，这三项在完整 schedule-column baseline 中仍不改；新的 hybrid route-level 主线已启用 route-compatible branching：
 
 - arc-on / arc-off / route-level branching；
 - `check_schedule_reduced_cost_consistency(phase, num_samples=20)` 的文档签名；
@@ -126,6 +193,7 @@ cd /home/kai/work/gnn_bb
 RUN_ID="$(date +%Y%m%d_%H%M%S)_very_small_vehicle_schedule"
 
 /home/kai/miniconda3/envs/ecole/bin/python branchpricecut/scripts/run_vehicle_schedule_bpc.py \
+  --config branchpricecut/config/default.json \
   --instances very_small \
   --time-limit 300 \
   --run-id "$RUN_ID"
@@ -141,18 +209,82 @@ branchpricecut/results/${RUN_ID}/solutions/solution_very_small.json
 
 ## 运行 20 规模
 
-注意：当前已先用 Layer 0/1/2 快速找列，再用 Layer 3 `ng_dssr` 做 certificate。`ng_dssr` 的证明来自 relaxed superset exhaustive 且无负 reduced-cost column；full-memory exact fallback 默认关闭，只作为 debug/correctness baseline。若 pricing 触发 label、queue、memory 或 time guard 未 exhausted，则不能证明该节点 lower bound。
+默认 20 规模证明使用 hybrid route-level exact BPC。若要回到完整 schedule-column/ng-DSSR baseline，需要把配置中的 `master_type` 改为 `"vehicle_schedule"`。
 
 ```bash
 cd /home/kai/work/gnn_bb
-RUN_ID="$(date +%Y%m%d_%H%M%S)_medium_vehicle_schedule"
+RUN_ID="$(date +%Y%m%d_%H%M%S)_medium_hybrid_route"
 
 /home/kai/miniconda3/envs/ecole/bin/python branchpricecut/scripts/run_vehicle_schedule_bpc.py \
-  --config branchpricecut/config/medium_prove.json \
+  --config branchpricecut/config/medium_hybrid_route.json \
   --instances medium \
   --time-limit 3600 \
   --run-id "$RUN_ID" \
   2>&1 | tee "branchpricecut/results/${RUN_ID}_terminal.log"
+```
+
+## 严肃 Benchmark
+
+固定 benchmark 配置：
+
+```text
+branchpricecut/config/benchmark_10_20_30.json
+```
+
+该配置生成并固定 30 个实例：
+
+```text
+size=10: bench_10_01 ... bench_10_10
+size=20: bench_20_01 ... bench_20_10
+size=30: bench_30_01 ... bench_30_10
+```
+
+默认运行 3 个核心 variant：
+
+```text
+bpc_clean_full
+hybrid_full
+vehicle_schedule_ng_dssr
+```
+
+选择逻辑：
+
+- `hybrid_full`：当前主模型；
+- `bpc_clean_full`：旧 route-level BPC 核心对照；
+- `vehicle_schedule_ng_dssr`：完整 schedule-column/ng-DSSR baseline，对比数学更自然但 pricing 更重的路线。
+
+总计 90 个 job。每个 job 独立 worker 进程运行，完成后立即写：
+
+```text
+branchpricecut/results/benchmark/<RUN_ID>/job_results/<job_id>.json
+branchpricecut/results/benchmark/<RUN_ID>/summary.csv
+branchpricecut/results/benchmark/<RUN_ID>/aggregate.csv
+```
+
+断点续跑规则：重复使用同一个 `RUN_ID` 运行同一命令，会自动跳过已完成 job，继续未完成或中断的 job。`summary.csv` 和 `aggregate.csv` 每个 job 结束后都会重建。
+
+一次性正式命令：
+
+```bash
+cd /home/kai/work/gnn_bb
+RUN_ID="$(date +%Y%m%d_%H%M%S)_benchmark_10_20_30"
+mkdir -p branchpricecut/results/benchmark
+
+/home/kai/miniconda3/envs/ecole/bin/python branchpricecut/scripts/run_benchmark.py \
+  --config branchpricecut/config/benchmark_10_20_30.json \
+  --run-id "$RUN_ID" \
+  2>&1 | tee "branchpricecut/results/benchmark/${RUN_ID}_driver.log"
+```
+
+如果中断，使用同一个 `RUN_ID` 续跑：
+
+```bash
+cd /home/kai/work/gnn_bb
+mkdir -p branchpricecut/results/benchmark
+/home/kai/miniconda3/envs/ecole/bin/python branchpricecut/scripts/run_benchmark.py \
+  --config branchpricecut/config/benchmark_10_20_30.json \
+  --run-id "$RUN_ID" \
+  2>&1 | tee -a "branchpricecut/results/benchmark/${RUN_ID}_driver.log"
 ```
 
 ## 数学模型

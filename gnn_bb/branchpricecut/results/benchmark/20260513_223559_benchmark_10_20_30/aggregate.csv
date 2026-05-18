@@ -1,0 +1,8 @@
+variant,size,jobs,solved,time_limit,pricing_failures,errors,valid_gap_count,avg_gap,shifted_geomean_time,shifted_geomean_labels,shifted_geomean_nodes
+bpc_clean_full,10,2,2,0,0,0,2,0.0,5.739696,131340.975088,2.464102
+hybrid_full,10,2,2,0,0,0,2,0.0,5.814147,131340.975088,2.464102
+hybrid_no_crossing,10,1,1,0,0,0,1,0.0,10.998973,258496.0,9.0
+hybrid_no_schedcap,10,1,1,0,0,0,1,0.0,5.47513,175741.0,3.0
+hybrid_no_task_vehicle_linking,10,1,1,0,0,0,1,0.0,18.9903,332649.0,9.0
+hybrid_simple_branching,10,1,1,0,0,0,1,0.0,7.179036,175741.0,3.0
+vehicle_schedule_ng_dssr,10,1,1,0,0,0,1,0.0,104.459258,1896901.0,1.0

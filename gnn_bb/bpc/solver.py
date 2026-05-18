@@ -27,6 +27,7 @@ class BPCResult:
     rmp_solves: int
     pricing_calls: int
     exact_pricing_calls: int
+    branch_nodes: int
     branch_lp_test_rmp_solves: int
     branch_heuristic_test_rmp_solves: int
     branch_heuristic_test_pricing_calls: int
@@ -42,6 +43,8 @@ class BPCResult:
     cuts_purged: int
     generated_routes: int
     generated_columns: int
+    label_pops: int
+    generated_labels: int
     cuts_added: int
     root_relaxation: float | None
     incumbent_node: int | None
@@ -176,6 +179,7 @@ def solve_bpc_clean(
         rmp_solves=tree_result.stats.rmp_solves,
         pricing_calls=tree_result.stats.pricing_calls,
         exact_pricing_calls=tree_result.stats.exact_pricing_calls,
+        branch_nodes=tree_result.stats.branch_nodes,
         branch_lp_test_rmp_solves=tree_result.stats.branch_lp_test_rmp_solves,
         branch_heuristic_test_rmp_solves=tree_result.stats.branch_heuristic_test_rmp_solves,
         branch_heuristic_test_pricing_calls=tree_result.stats.branch_heuristic_test_pricing_calls,
@@ -191,6 +195,8 @@ def solve_bpc_clean(
         cuts_purged=tree_result.stats.cuts_purged,
         generated_routes=len(tree_result.routes),
         generated_columns=generated_columns,
+        label_pops=tree_result.stats.label_pops,
+        generated_labels=tree_result.stats.generated_labels,
         cuts_added=len(tree_result.cuts),
         root_relaxation=_round(tree_result.stats.root_relaxation),
         incumbent_node=None if tree_result.incumbent is None else tree_result.incumbent.node_id,

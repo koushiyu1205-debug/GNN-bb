@@ -1,0 +1,18 @@
+{
+  "name": "branchpricecut_10_20_30_serious_benchmark",
+  "instance_dir": "branchpricecut/results/benchmark/{run_id}/instances",
+  "sizes": [10, 20, 30],
+  "instances_per_size": 10,
+  "seed_base": 20260600,
+  "time_limit": 3600,
+  "max_nodes": 100000,
+  "variants": [
+    "bpc_clean_full",
+    "hybrid_full",
+    "vehicle_schedule_ng_dssr"
+  ],
+  "base_solver_config": "branchpricecut/config/medium_hybrid_route.json",
+  "vehicle_schedule_config": "branchpricecut/config/medium_prove.json",
+  "resume": true,
+  "quiet": true
+}

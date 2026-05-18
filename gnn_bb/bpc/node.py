@@ -38,6 +38,8 @@ class BPCStats:
     cuts_purged: int = 0
     generated_routes: int = 0
     generated_columns: int = 0
+    label_pops: int = 0
+    generated_labels: int = 0
     cuts_added: int = 0
     branch_nodes: int = 0
     fathomed_infeasible: int = 0

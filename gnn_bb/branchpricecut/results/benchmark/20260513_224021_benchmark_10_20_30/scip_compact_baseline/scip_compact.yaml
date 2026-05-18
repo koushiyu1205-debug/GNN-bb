@@ -1,0 +1,14 @@
+instances: []
+time_limit: 3600
+random_seed: 20260511
+instance_dir: branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances
+results_csv: branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/scip_compact_baseline/unused.csv
+log_dir: branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/scip_compact_baseline/logs
+display_log: false
+write_instance_json: false
+scip_params:
+  display/verblevel: 0
+  randomization/randomseedshift: 20260511
+  randomization/permutationseed: 20260511
+  randomization/lpseed: 20260511
+  parallel/maxnthreads: 1

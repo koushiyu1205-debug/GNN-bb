@@ -1,0 +1,11 @@
+benchmark run_id=20260513_223559_benchmark_10_20_30 total_jobs=210 pending=210 run_root=/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30
+[1/210] bpc_clean_full__bench_10_01 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/bpc_clean_full__bench_10_01.log
+[2/210] hybrid_full__bench_10_01 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/hybrid_full__bench_10_01.log
+[3/210] vehicle_schedule_ng_dssr__bench_10_01 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/vehicle_schedule_ng_dssr__bench_10_01.log
+[4/210] hybrid_no_schedcap__bench_10_01 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/hybrid_no_schedcap__bench_10_01.log
+[5/210] hybrid_no_crossing__bench_10_01 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/hybrid_no_crossing__bench_10_01.log
+[6/210] hybrid_no_task_vehicle_linking__bench_10_01 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/hybrid_no_task_vehicle_linking__bench_10_01.log
+[7/210] hybrid_simple_branching__bench_10_01 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/hybrid_simple_branching__bench_10_01.log
+[8/210] bpc_clean_full__bench_10_02 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/bpc_clean_full__bench_10_02.log
+[9/210] hybrid_full__bench_10_02 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/hybrid_full__bench_10_02.log
+[10/210] vehicle_schedule_ng_dssr__bench_10_02 -> /home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_223559_benchmark_10_20_30/terminal/vehicle_schedule_ng_dssr__bench_10_02.log

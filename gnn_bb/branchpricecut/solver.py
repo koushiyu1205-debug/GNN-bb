@@ -1,4 +1,4 @@
-"""中文摘要：vehicle-schedule BPC 对外求解入口，负责读配置、运行树搜索并整理结果。"""
+"""中文摘要：branchpricecut 对外求解入口，支持 hybrid route master 和 vehicle-schedule baseline。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from .tree import VehicleScheduleBPCTree
 @dataclass
 class SolverResult:
     instance: str
+    master_type: str
     master_cover_mode: str
     task_count: int
     vehicle_count: int
@@ -73,11 +74,183 @@ class SolverResult:
     dssr_certificate_from_relaxation: int
     full_memory_fallback_called: int
     pricing_certificate_layer: str | None
+    generated_routes: int
+    cuts_added: int
+    crossing_cuts_added: int
+    crossing_cuts_upgraded: int
+    robust_capacity_cuts_added: int
+    resource_lower_bound_cuts_added: int
+    schedule_nogood_cuts_added: int
+    schedule_capacity_cuts_added: int
+    cuts_purged: int
+    branch_testing_time: float
     log_path: str
     solution_path: str
 
     def to_row(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _to_hybrid_data(data: InstanceData):
+    from bpc.data import BPCData
+
+    return BPCData(
+        instance=data.instance,
+        pairwise=data.pairwise,
+        instance_path=data.instance_path,
+        name=data.name,
+        tasks=data.tasks,
+        vehicles=tuple(range(1, int(data.vehicle_count) + 1)),
+        sortie_limit=data.sortie_limit,
+        capacity=data.capacity,
+        energy_limit=data.energy_limit,
+        rho=data.rho,
+        fixed_vehicle_cost=data.fixed_vehicle_cost,
+        horizon=data.horizon,
+    )
+
+
+def _hybrid_value(config: dict[str, Any], name: str, fallback: Any) -> Any:
+    return config.get(name, fallback)
+
+
+def _solve_hybrid_route_bpc(
+    data: InstanceData,
+    *,
+    config: dict[str, Any],
+    log_path: str | Path,
+    solution_path: str | Path,
+    quiet: bool,
+) -> SolverResult:
+    from bpc.solver import solve_bpc_clean
+
+    hybrid_data = _to_hybrid_data(data)
+    result = solve_bpc_clean(
+        hybrid_data,
+        time_limit=float(config.get("time_limit", 3600)),
+        max_nodes=int(config.get("max_nodes", 100000)),
+        pricing_eps=float(config.get("pricing_eps", 1.0e-6)),
+        integer_tol=float(config.get("integer_tol", 1.0e-6)),
+        max_routes_per_pricing=int(config.get("max_routes_per_pricing", config.get("max_columns_per_pricing", 200))),
+        max_labels_per_pricing=int(config.get("hybrid_max_labels_per_pricing", config.get("max_labels_per_pricing", 0)) or 0),
+        rmp_params=dict(config.get("rmp_params", {})),
+        log_path=log_path,
+        solution_path=solution_path,
+        seed=int(config["random_seed"]) if config.get("random_seed") is not None else None,
+        quiet=quiet,
+        branching_strategy=str(config.get("branching_strategy", "3pb")),
+        three_pb_pseudocost_candidates=int(_hybrid_value(config, "three_pb_pseudocost_candidates", 6)),
+        three_pb_fractional_candidates=int(_hybrid_value(config, "three_pb_fractional_candidates", 6)),
+        three_pb_lp_candidates=int(_hybrid_value(config, "three_pb_lp_candidates", 3)),
+        three_pb_heuristic_cg_iterations=int(_hybrid_value(config, "three_pb_heuristic_cg_iterations", 3)),
+        three_pb_heuristic_routes_per_iter=int(_hybrid_value(config, "three_pb_heuristic_routes_per_iter", 50)),
+        three_pb_heuristic_max_labels=int(_hybrid_value(config, "three_pb_heuristic_max_labels", 800)),
+        task_vehicle_linking_enabled=bool(_hybrid_value(config, "task_vehicle_linking_enabled", True)),
+        robust_capacity_cuts_enabled=bool(_hybrid_value(config, "robust_capacity_cuts_enabled", True)),
+        robust_capacity_cut_max_depth=int(_hybrid_value(config, "robust_capacity_cut_max_depth", 0)),
+        robust_capacity_cut_max_subset_size=int(_hybrid_value(config, "robust_capacity_cut_max_subset_size", 5)),
+        robust_capacity_cut_max_per_round=int(_hybrid_value(config, "robust_capacity_cut_max_per_round", 20)),
+        robust_capacity_cut_min_violation=float(_hybrid_value(config, "robust_capacity_cut_min_violation", 1.0e-5)),
+        robust_capacity_cut_max_rounds_per_node=int(_hybrid_value(config, "robust_capacity_cut_max_rounds_per_node", 3)),
+        resource_lower_bound_cuts_enabled=bool(_hybrid_value(config, "resource_lower_bound_cuts_enabled", True)),
+        resource_cut_max_depth=int(_hybrid_value(config, "resource_cut_max_depth", 0)),
+        resource_cut_max_subset_size=int(_hybrid_value(config, "resource_cut_max_subset_size", 6)),
+        resource_cut_max_per_round=int(_hybrid_value(config, "resource_cut_max_per_round", 20)),
+        resource_cut_min_violation=float(_hybrid_value(config, "resource_cut_min_violation", 1.0e-5)),
+        resource_cut_max_rounds_per_node=int(_hybrid_value(config, "resource_cut_max_rounds_per_node", 3)),
+        schedule_capacity_cuts_enabled=bool(_hybrid_value(config, "schedule_capacity_cuts_enabled", True)),
+        schedule_capacity_cut_max_depth=int(_hybrid_value(config, "schedule_capacity_cut_max_depth", 0)),
+        schedule_capacity_cut_max_subset_size=int(_hybrid_value(config, "schedule_capacity_cut_max_subset_size", 10)),
+        schedule_capacity_cut_max_per_round=int(_hybrid_value(config, "schedule_capacity_cut_max_per_round", 20)),
+        schedule_capacity_cut_min_violation=float(_hybrid_value(config, "schedule_capacity_cut_min_violation", 1.0e-5)),
+        schedule_capacity_cut_max_rounds_per_node=int(_hybrid_value(config, "schedule_capacity_cut_max_rounds_per_node", 3)),
+        schedule_capacity_oracle_max_states=int(_hybrid_value(config, "schedule_capacity_oracle_max_states", 200000)),
+        schedule_capacity_candidate_top_tasks=int(_hybrid_value(config, "schedule_capacity_candidate_top_tasks", 12)),
+        schedule_capacity_candidate_max_combinations=int(_hybrid_value(config, "schedule_capacity_candidate_max_combinations", 300)),
+        schedule_capacity_route_union_top_routes=int(_hybrid_value(config, "schedule_capacity_route_union_top_routes", 8)),
+        schedule_capacity_route_union_max_routes=int(_hybrid_value(config, "schedule_capacity_route_union_max_routes", 4)),
+        cut_purge_age=int(_hybrid_value(config, "cut_purge_age", 20)),
+        cut_purge_slack=float(_hybrid_value(config, "cut_purge_slack", 1.0e-5)),
+        cut_purge_dual=float(_hybrid_value(config, "cut_purge_dual", 1.0e-8)),
+    )
+
+    exhausted_pricing_calls = result.pricing_calls
+    if result.status == "PRICING_INCOMPLETE" and exhausted_pricing_calls > 0:
+        exhausted_pricing_calls -= 1
+
+    return SolverResult(
+        instance=result.instance,
+        master_type="hybrid_route",
+        master_cover_mode="route_vehicle",
+        task_count=result.task_count,
+        vehicle_count=result.vehicle_count,
+        sortie_limit=result.sortie_count,
+        status=result.status,
+        primal_bound=result.primal_bound,
+        dual_bound=result.dual_bound,
+        gap=result.gap,
+        solving_time=result.solving_time,
+        node_count=result.node_count,
+        rmp_solves=result.rmp_solves,
+        pricing_calls=result.pricing_calls,
+        generated_columns=result.generated_columns,
+        label_pops=result.label_pops,
+        generated_labels=result.generated_labels,
+        pricing_queue_peak=0,
+        branch_nodes=result.branch_nodes,
+        root_relaxation=result.root_relaxation,
+        phase_switch_count=0,
+        manual_rc_check_max_error=0.0,
+        vehicle_lb_dual_effective_value=0.0,
+        pool_scan_columns_found=0,
+        pool_scan_time=0.0,
+        route_pool_size=result.generated_routes,
+        low_cbar_routes_kept=0,
+        per_task_routes_kept=0,
+        route_size_bucket_routes_kept=0,
+        time_flexible_routes_kept=0,
+        micro_routes_kept=0,
+        branch_relevant_routes_kept=0,
+        historical_routes_kept=0,
+        diverse_routes_kept=0,
+        schedule_dp_calls=0,
+        schedule_dp_labels_created=0,
+        schedule_dp_labels_pruned_by_subset_dominance=0,
+        schedule_dp_labels_pruned_by_beam=0,
+        schedule_dp_exhausted=False,
+        schedule_dp_negative_schedules_found=0,
+        schedule_dp_best_rc=None,
+        schedule_dp_time=0.0,
+        heuristic_degradation_skips=0,
+        restricted_master_integer_calls=0,
+        restricted_master_integer_feasible=0,
+        restricted_master_integer_time=0.0,
+        restricted_master_integer_best_objective=None,
+        exact_pricing_calls=result.exact_pricing_calls,
+        exact_pricing_called=result.exact_pricing_calls,
+        exact_pricing_exhausted=exhausted_pricing_calls,
+        exact_pricing_best_rc=None,
+        exact_pricing_time=0.0,
+        ng_dssr_max_ng_size=0,
+        dssr_iterations=0,
+        dssr_memory_size=0,
+        dssr_non_elementary_negative=0,
+        dssr_certificate_from_relaxation=0,
+        full_memory_fallback_called=0,
+        pricing_certificate_layer="route_rcsp",
+        generated_routes=result.generated_routes,
+        cuts_added=result.cuts_added,
+        crossing_cuts_added=result.crossing_cuts_added,
+        crossing_cuts_upgraded=result.crossing_cuts_upgraded,
+        robust_capacity_cuts_added=result.robust_capacity_cuts_added,
+        resource_lower_bound_cuts_added=result.resource_lower_bound_cuts_added,
+        schedule_nogood_cuts_added=result.schedule_nogood_cuts_added,
+        schedule_capacity_cuts_added=result.schedule_capacity_cuts_added,
+        cuts_purged=result.cuts_purged,
+        branch_testing_time=result.branch_testing_time,
+        log_path=result.log_path,
+        solution_path=str(solution_path),
+    )
 
 
 def solve_vehicle_schedule_bpc(
@@ -88,6 +261,12 @@ def solve_vehicle_schedule_bpc(
     solution_path: str | Path,
     quiet: bool = False,
 ) -> SolverResult:
+    master_type = str(config.get("master_type", "hybrid_route")).lower()
+    if master_type == "hybrid_route":
+        return _solve_hybrid_route_bpc(data, config=config, log_path=log_path, solution_path=solution_path, quiet=quiet)
+    if master_type != "vehicle_schedule":
+        raise ValueError(f"未知 master_type: {master_type}")
+
     logger = BPCLogger(log_path, console=not quiet)
     try:
         tree = VehicleScheduleBPCTree(
@@ -140,6 +319,7 @@ def solve_vehicle_schedule_bpc(
 
     return SolverResult(
         instance=data.name,
+        master_type="vehicle_schedule",
         master_cover_mode=str(config.get("master_cover_mode", "partitioning")),
         task_count=len(data.tasks),
         vehicle_count=data.vehicle_count,
@@ -199,6 +379,16 @@ def solve_vehicle_schedule_bpc(
         dssr_certificate_from_relaxation=result.stats.dssr_certificate_from_relaxation,
         full_memory_fallback_called=result.stats.full_memory_fallback_called,
         pricing_certificate_layer=result.stats.pricing_certificate_layer,
+        generated_routes=result.stats.route_pool_size,
+        cuts_added=0,
+        crossing_cuts_added=0,
+        crossing_cuts_upgraded=0,
+        robust_capacity_cuts_added=0,
+        resource_lower_bound_cuts_added=0,
+        schedule_nogood_cuts_added=0,
+        schedule_capacity_cuts_added=0,
+        cuts_purged=0,
+        branch_testing_time=0.0,
         log_path=str(log_path),
         solution_path=str(solution_path),
     )

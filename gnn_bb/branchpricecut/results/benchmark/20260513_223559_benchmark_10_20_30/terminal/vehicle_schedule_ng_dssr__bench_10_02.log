@@ -1,0 +1,39 @@
+
+=== start 2026-05-13T22:39:06 vehicle_schedule_ng_dssr__bench_10_02 ===
+Traceback (most recent call last):
+  File "/home/kai/work/gnn_bb/branchpricecut/scripts/run_benchmark.py", line 747, in <module>
+    main()
+  File "/home/kai/work/gnn_bb/branchpricecut/scripts/run_benchmark.py", line 645, in main
+    raise SystemExit(run_worker(Path(args.worker_job)))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/scripts/run_benchmark.py", line 452, in run_worker
+    result_row = _solve_branchpricecut_job(job)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/scripts/run_benchmark.py", line 426, in _solve_branchpricecut_job
+    result = solve_vehicle_schedule_bpc(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/solver.py", line 295, in solve_vehicle_schedule_bpc
+    result = tree.solve()
+             ^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/tree.py", line 238, in solve
+    solution, certified = self._solve_node_lp(node)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/tree.py", line 428, in _solve_node_lp
+    result, exact_added = self._exact_layer(node, solution.duals, node.branch_constraints, phase, cg_iter)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/tree.py", line 641, in _exact_layer
+    result = pricing.run(duals, branch_constraints, phase=phase)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/pricing.py", line 144, in run
+    ng_result = ng_dssr_schedule_pricing(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/ng_dssr.py", line 269, in ng_dssr_schedule_pricing
+    result, repeated = _ng_relaxed_iteration(
+                       ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/ng_dssr.py", line 666, in _ng_relaxed_iteration
+    segment = data.arc(label.current_node, task)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/branchpricecut/data.py", line 28, in arc
+    def arc(self, i: int, j: int) -> dict[str, Any]:
+
+KeyboardInterrupt

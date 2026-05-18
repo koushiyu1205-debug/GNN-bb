@@ -1,0 +1,16 @@
+gnn_bb/bpc/__pycache__/node.cpython-312.pyc        | Bin 2675 -> 2786 bytes
+ gnn_bb/bpc/__pycache__/solver.cpython-312.pyc      | Bin 11401 -> 11754 bytes
+ gnn_bb/bpc/__pycache__/tree.cpython-312.pyc        | Bin 94011 -> 94978 bytes
+ gnn_bb/bpc/node.py                                 |   2 +
+ gnn_bb/bpc/solver.py                               |   6 +
+ gnn_bb/bpc/tree.py                                 |  14 +-
+ gnn_bb/branchpricecut/README.md                    |  90 ++++++++--
+ .../__pycache__/solver.cpython-312.pyc             | Bin 12663 -> 22831 bytes
+ gnn_bb/branchpricecut/config/default.json          |  37 ++++
+ gnn_bb/branchpricecut/config/medium_prove.json     |  37 ++++
+ .../docs/vehicle_schedule_bpc_model.md             |  65 +++++--
+ ..._schedule_two_level_pricing_optimized_design.md |   2 +
+ .../scripts/run_vehicle_schedule_bpc.py            |   3 +-
+ gnn_bb/branchpricecut/solver.py                    | 192 ++++++++++++++++++++-
+ .../tests/test_branchpricecut_vehicle_schedule.py  | 150 ++++++++++++++++
+ 15 files changed, 569 insertions(+), 29 deletions(-)

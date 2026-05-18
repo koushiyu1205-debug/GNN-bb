@@ -704,6 +704,8 @@ class CleanBPCTree:
             )
             self.stats.pricing_calls += 1
             self.stats.exact_pricing_calls += 1
+            self.stats.label_pops += pricing.label_pops
+            self.stats.generated_labels += pricing.generated_labels
             added = 0
             for route in pricing.routes:
                 before = len(self.pool.routes)
@@ -1608,13 +1610,15 @@ class CleanBPCTree:
 
 
 def incumbent_to_solution(data: BPCData, incumbent: Incumbent | None) -> dict[str, Any]:
-    solution: dict[str, Any] = {"vehicles": {}, "sorties": [], "selected_route_ids": []}
+    solution: dict[str, Any] = {"vehicles": {}, "sorties": [], "selected_route_ids": [], "schedule_checks": {}}
     if incumbent is None:
         return solution
     for vehicle, value in incumbent.y_values.items():
         solution["vehicles"][str(vehicle)] = round(float(value), 6)
     sortie_index = {vehicle: 0 for vehicle in data.vehicles}
+    grouped: dict[int, list[RouteColumn]] = {vehicle: [] for vehicle in data.vehicles}
     for route, vehicle, _value in incumbent.route_values:
+        grouped[vehicle].append(route)
         sortie_index[vehicle] += 1
         solution["selected_route_ids"].append(int(route.id))
         route_data = route_to_json(route)
@@ -1632,4 +1636,12 @@ def incumbent_to_solution(data: BPCData, incumbent: Incumbent | None) -> dict[st
                 "service_start": route_data["service_start"],
             }
         )
+    for vehicle, routes in grouped.items():
+        checked = check_route_set_schedule_feasible(data, routes)
+        order_route_ids = [int(routes[index].id) for index in checked.order] if checked.feasible else []
+        solution["schedule_checks"][str(vehicle)] = {
+            "feasible": bool(checked.feasible),
+            "route_order": order_route_ids,
+            "ready_time": checked.ready_time,
+        }
     return solution
