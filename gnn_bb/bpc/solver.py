@@ -22,6 +22,11 @@ class BPCResult:
     primal_bound: float | None
     dual_bound: float | None
     gap: float | None
+    diagnostic_dual_bound: float | None
+    diagnostic_gap: float | None
+    best_open_node_bound: float | None
+    pending_node_bound: float | None
+    last_certified_node_bound: float | None
     solving_time: float
     node_count: int
     rmp_solves: int
@@ -41,10 +46,13 @@ class BPCResult:
     restricted_master_integer_raw_best_objective: float | None
     restricted_master_integer_rejected: int
     restricted_master_integer_no_good_cuts: int
+    restricted_master_integer_pair_conflict_cuts: int
+    restricted_master_integer_schedule_capacity_cuts: int
     crossing_cuts_added: int
     crossing_cuts_upgraded: int
     robust_capacity_cuts_added: int
     resource_lower_bound_cuts_added: int
+    schedule_pair_conflict_cuts_added: int
     schedule_nogood_cuts_added: int
     schedule_capacity_cuts_added: int
     cuts_purged: int
@@ -91,6 +99,11 @@ def solve_bpc_clean(
     heuristic_pricing_routes_per_round: int = 500,
     heuristic_pricing_selection_mode: str = "diverse",
     exact_pricing_selection_mode: str = "reduced_cost",
+    branch_node_heuristic_boost_enabled: bool = False,
+    branch_node_heuristic_boost_max_labels: int = 800000,
+    branch_node_heuristic_boost_routes_per_round: int = 1000,
+    branch_node_heuristic_boost_min_depth: int = 1,
+    exact_pricing_dominance_enabled: bool = False,
     restricted_master_heuristic_enabled: bool = False,
     restricted_master_time_limit: float = 20.0,
     restricted_master_max_routes: int = 4000,
@@ -151,6 +164,11 @@ def solve_bpc_clean(
             heuristic_pricing_routes_per_round=heuristic_pricing_routes_per_round,
             heuristic_pricing_selection_mode=heuristic_pricing_selection_mode,
             exact_pricing_selection_mode=exact_pricing_selection_mode,
+            branch_node_heuristic_boost_enabled=branch_node_heuristic_boost_enabled,
+            branch_node_heuristic_boost_max_labels=branch_node_heuristic_boost_max_labels,
+            branch_node_heuristic_boost_routes_per_round=branch_node_heuristic_boost_routes_per_round,
+            branch_node_heuristic_boost_min_depth=branch_node_heuristic_boost_min_depth,
+            exact_pricing_dominance_enabled=exact_pricing_dominance_enabled,
             restricted_master_heuristic_enabled=restricted_master_heuristic_enabled,
             restricted_master_time_limit=restricted_master_time_limit,
             restricted_master_max_routes=restricted_master_max_routes,
@@ -207,6 +225,11 @@ def solve_bpc_clean(
         primal_bound=_round(tree_result.primal_bound),
         dual_bound=_round(tree_result.dual_bound),
         gap=_round(tree_result.gap),
+        diagnostic_dual_bound=_round(tree_result.stats.diagnostic_dual_bound),
+        diagnostic_gap=_round(tree_result.stats.diagnostic_gap),
+        best_open_node_bound=_round(tree_result.stats.best_open_node_bound),
+        pending_node_bound=_round(tree_result.stats.pending_node_bound),
+        last_certified_node_bound=_round(tree_result.stats.last_certified_node_bound),
         solving_time=_round(tree_result.solving_time),
         node_count=tree_result.node_count,
         rmp_solves=tree_result.stats.rmp_solves,
@@ -226,10 +249,13 @@ def solve_bpc_clean(
         restricted_master_integer_raw_best_objective=_round(tree_result.stats.restricted_master_integer_raw_best_objective),
         restricted_master_integer_rejected=tree_result.stats.restricted_master_integer_rejected,
         restricted_master_integer_no_good_cuts=tree_result.stats.restricted_master_integer_no_good_cuts,
+        restricted_master_integer_pair_conflict_cuts=tree_result.stats.restricted_master_integer_pair_conflict_cuts,
+        restricted_master_integer_schedule_capacity_cuts=tree_result.stats.restricted_master_integer_schedule_capacity_cuts,
         crossing_cuts_added=tree_result.stats.crossing_cuts_added,
         crossing_cuts_upgraded=tree_result.stats.crossing_cuts_upgraded,
         robust_capacity_cuts_added=tree_result.stats.robust_capacity_cuts_added,
         resource_lower_bound_cuts_added=tree_result.stats.resource_lower_bound_cuts_added,
+        schedule_pair_conflict_cuts_added=tree_result.stats.schedule_pair_conflict_cuts_added,
         schedule_nogood_cuts_added=tree_result.stats.schedule_nogood_cuts_added,
         schedule_capacity_cuts_added=tree_result.stats.schedule_capacity_cuts_added,
         cuts_purged=tree_result.stats.cuts_purged,
@@ -269,6 +295,7 @@ def solve_bpc_clean(
                     "capacity": getattr(cut, "capacity", None),
                     "upper_bound": getattr(cut, "upper_bound", None),
                     "oracle_states": getattr(cut, "oracle_states", None),
+                    "source": getattr(cut, "source", None),
                 }
                 for cut in tree_result.cuts
             ],

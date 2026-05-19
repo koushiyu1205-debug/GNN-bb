@@ -308,6 +308,7 @@ def _parse_log_metrics(path: str | Path) -> dict[str, Any]:
         "total_pricing_label_pops": 0,
         "total_pricing_generated_labels": 0,
         "schedule_nogood_cut_events": 0,
+        "schedule_pair_conflict_cut_events": 0,
         "crossing_cut_events": 0,
         "schedule_capacity_cut_events": 0,
         "branch_rf_count": 0,
@@ -348,11 +349,13 @@ def _parse_log_metrics(path: str | Path) -> dict[str, Any]:
                 metrics["total_pricing_generated_labels"] += int(_as_float(generated) or 0)
             if event == "cut_added":
                 family = str(record.get("family", ""))
-                if family.startswith("schedule_nogood"):
+                if family == "schedule_pair_conflict":
+                    metrics["schedule_pair_conflict_cut_events"] += int(_as_float(record.get("added")) or 1)
+                elif family.startswith("schedule_nogood"):
                     metrics["schedule_nogood_cut_events"] += int(_as_float(record.get("added")) or 1)
                 elif family == "crossing_cut":
                     metrics["crossing_cut_events"] += int(_as_float(record.get("added")) or 1)
-                elif family == "schedule_capacity":
+                elif family.startswith("schedule_capacity"):
                     metrics["schedule_capacity_cut_events"] += int(_as_float(record.get("added")) or 1)
             if event == "branch":
                 text = f"{record.get('left', '')} {record.get('right', '')}"
@@ -384,6 +387,13 @@ def _solve_bpc_clean_job(job: dict[str, Any]) -> dict[str, Any]:
         heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
         heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
         exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
+        branch_node_heuristic_boost_enabled=bool(config.get("branch_node_heuristic_boost_enabled", False)),
+        branch_node_heuristic_boost_max_labels=int(config.get("branch_node_heuristic_boost_max_labels", 800000)),
+        branch_node_heuristic_boost_routes_per_round=int(config.get("branch_node_heuristic_boost_routes_per_round", 1000)),
+        branch_node_heuristic_boost_min_depth=int(config.get("branch_node_heuristic_boost_min_depth", 1)),
+        exact_pricing_dominance_enabled=bool(
+            config.get("exact_pricing_dominance_enabled", config.get("exact_pricing_enable_dominance", False))
+        ),
         restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
         restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
@@ -559,6 +569,8 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "result_primal_bound",
         "result_dual_bound",
         "result_gap",
+        "result_diagnostic_dual_bound",
+        "result_diagnostic_gap",
         "result_solving_time",
         "result_node_count",
         "result_rmp_solves",
@@ -567,6 +579,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "result_generated_labels",
         "result_cuts_added",
         "result_schedule_nogood_cuts_added",
+        "result_schedule_pair_conflict_cuts_added",
         "result_schedule_capacity_cuts_added",
         "result_crossing_cuts_added",
         "metric_time_to_first_incumbent",

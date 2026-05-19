@@ -11,7 +11,7 @@ import heapq
 
 from .branching import BranchConstraint, route_allowed_by_branch, route_branch_coefficient
 from .columns import RouteColumn, evaluate_route, route_work_time_lower_bound
-from .cuts import Cut
+from .cuts import SIGNATURE_CUT_KINDS, Cut
 from .data import BPCData
 from .rmp import RMPDuals
 
@@ -22,6 +22,9 @@ class Label:
     node: int
     sequence: tuple[int, ...]
     visited_mask: int
+    crossing_counts: tuple[int, ...]
+    arc_on_mask: int
+    signature_prefix_mask: int
     time: float
     load: float
     energy: float
@@ -39,6 +42,8 @@ class PricingResult:
     label_pops: int
     generated_labels: int
     negative_routes: int
+    dominance_enabled: bool = False
+    dominance_pruned: int = 0
 
 
 Candidate = tuple[float, RouteColumn]
@@ -75,23 +80,6 @@ def reduced_cost(
         if coeff:
             value -= float(duals.branches.get(index, 0.0)) * coeff
     return value
-
-
-def _sequence_uses_arc(sequence: tuple[int, ...], tail: int, head: int) -> bool:
-    return any(int(left) == int(tail) and int(right) == int(head) for left, right in zip(sequence[:-1], sequence[1:]))
-
-
-def _sequence_crossing_count(sequence: tuple[int, ...], subset: frozenset[int]) -> float:
-    crossings = 0
-    previous_inside = False
-    for task in sequence:
-        inside = int(task) in subset
-        if previous_inside != inside:
-            crossings += 1
-        previous_inside = inside
-    if previous_inside:
-        crossings += 1
-    return float(crossings)
 
 
 def _branch_pricing_state(
@@ -152,6 +140,33 @@ def _route_satisfies_together_constraints(visited_mask: int, together_masks: lis
         if hit and hit != pair_mask:
             return False
     return True
+
+
+def _label_prefix_score(label: Label, *, phase: str, vehicle_time_dual: float, rho: float) -> float:
+    route_cost = 0.0 if phase == "phase1" else float(label.cost)
+    work_time = float(label.travel_time) + float(label.service_time) + float(label.energy) / float(rho)
+    return route_cost - float(label.task_dual_sum) - float(vehicle_time_dual) * work_time
+
+
+def _dominates(left: tuple[float, float, float, float], right: tuple[float, float, float, float], tol: float) -> bool:
+    left_time, left_load, left_energy, left_score = left
+    right_time, right_load, right_energy, right_score = right
+    return (
+        left_time <= right_time + tol
+        and left_load <= right_load + tol
+        and left_energy <= right_energy + tol
+        and left_score <= right_score + tol
+    )
+
+
+def _signature_prefix_masks(signatures: set[tuple[int, ...]]) -> dict[tuple[int, ...], int]:
+    prefix_masks: dict[tuple[int, ...], int] = {}
+    for index, signature in enumerate(sorted(signatures)):
+        bit = 1 << index
+        for length in range(len(signature) + 1):
+            prefix = signature[:length]
+            prefix_masks[prefix] = prefix_masks.get(prefix, 0) | bit
+    return prefix_masks
 
 
 def _append_unique(selected: list[Candidate], seen: set[tuple[int, ...]], item: Candidate, limit: int) -> bool:
@@ -261,12 +276,15 @@ def exact_pricing(
     max_routes_to_return: int,
     max_labels: int = 0,
     selection_mode: str = "reduced_cost",
+    dominance_enabled: bool = False,
 ) -> PricingResult:
     existing_signatures = {route.signature for route in routes}
     candidate_by_signature: dict[tuple[int, ...], tuple[float, RouteColumn]] = {}
     best_reduced_cost: float | None = None
     label_pops = 0
     generated_labels = 0
+    dominance_pruned = 0
+    dominance_tol = 1.0e-9
     exhausted = True
 
     # 中文注释：exactness 来自完整枚举 elementary sequence；下面的预计算只减少字典查询和重复 route 重建。
@@ -291,14 +309,17 @@ def exact_pricing(
             arc_cost[(left, right)] = float(segment["cost"])
 
     cut_specs: list[tuple[str, int | None, frozenset[int], set[tuple[int, ...]], float, int]] = []
+    crossing_specs: list[tuple[frozenset[int], float]] = []
     for cut in cuts:
         dual = float(duals.cuts.get(cut.id, 0.0))
         if dual == 0.0:
             continue
-        if cut.kind in {"schedule_nogood", "schedule_nogood_core"}:
+        if cut.kind in SIGNATURE_CUT_KINDS:
             cut_specs.append((cut.kind, int(cut.vehicle), frozenset(), set(cut.signatures), dual, 0))
         elif cut.kind == "crossing_cut":
-            cut_specs.append((cut.kind, None, frozenset(int(task) for task in cut.tasks), set(), dual, 0))
+            subset = frozenset(int(task) for task in cut.tasks)
+            cut_specs.append((cut.kind, None, subset, set(), dual, len(crossing_specs)))
+            crossing_specs.append((subset, dual))
         elif cut.kind == "schedule_capacity":
             mask = 0
             for task in cut.tasks:
@@ -312,6 +333,7 @@ def exact_pricing(
         for index, constraint in enumerate(branch_constraints)
         if constraint.kind == "arc_on" and constraint.task_j is not None and float(duals.branches.get(index, 0.0)) != 0.0
     ]
+    active_dominance = bool(dominance_enabled)
 
     for vehicle in data.vehicles:
         (
@@ -330,12 +352,24 @@ def exact_pricing(
         }
         sortie_dual = float(duals.sortie_count[vehicle])
         vehicle_time_dual = float(duals.vehicle_time[vehicle])
+        signature_signatures = {
+            signature
+            for kind, cut_vehicle, _cut_tasks, cut_signatures, _cut_dual, _cut_mask in cut_specs
+            if kind in SIGNATURE_CUT_KINDS and int(cut_vehicle or -1) == int(vehicle)
+            for signature in cut_signatures
+        }
+        signature_prefix_masks = _signature_prefix_masks(signature_signatures)
+        initial_signature_prefix_mask = signature_prefix_masks.get(tuple(), 0)
+        dominance: dict[tuple[int, int, tuple[int, ...], int, int], list[tuple[float, float, float, float]]] = {}
         queue: list[Label] = [
             Label(
                 0.0,
                 0,
                 tuple(),
                 0,
+                tuple(0 for _subset, _dual in crossing_specs),
+                0,
+                initial_signature_prefix_mask,
                 0.0,
                 0.0,
                 0.0,
@@ -385,11 +419,27 @@ def exact_pricing(
                 next_service_time = label.service_time + service_time[task]
                 next_task_dual_sum = label.task_dual_sum + task_dual[task]
                 next_visited_mask = label.visited_mask | task_bit
+                if crossing_specs:
+                    crossing_counts = tuple(
+                        count
+                        + int(((int(label.node) in subset) if int(label.node) != 0 else False) != (int(task) in subset))
+                        for count, (subset, _dual) in zip(label.crossing_counts, crossing_specs)
+                    )
+                else:
+                    crossing_counts = tuple()
+                arc_on_mask = label.arc_on_mask
+                for arc_index, (_branch_index, tail, head, _branch_dual) in enumerate(arc_on_duals):
+                    if int(label.node) == int(tail) and int(task) == int(head):
+                        arc_on_mask |= 1 << arc_index
+                signature_prefix_mask = signature_prefix_masks.get(next_sequence, 0)
                 next_label = Label(
                     priority=(0.0 if phase == "phase1" else next_cost) - next_task_dual_sum,
                     node=int(task),
                     sequence=next_sequence,
                     visited_mask=next_visited_mask,
+                    crossing_counts=crossing_counts,
+                    arc_on_mask=arc_on_mask,
+                    signature_prefix_mask=signature_prefix_mask,
                     time=finish,
                     load=next_load,
                     energy=next_energy,
@@ -412,11 +462,14 @@ def exact_pricing(
                     for kind, cut_vehicle, cut_tasks, cut_signatures, cut_dual, cut_mask in cut_specs:
                         if cut_vehicle is not None and int(cut_vehicle) != int(vehicle):
                             continue
-                        if kind in {"schedule_nogood", "schedule_nogood_core"}:
+                        if kind in SIGNATURE_CUT_KINDS:
                             if next_sequence in cut_signatures:
                                 rc -= cut_dual
                         elif kind == "crossing_cut":
-                            coeff = _sequence_crossing_count(next_sequence, cut_tasks)
+                            crossing_index = int(cut_mask)
+                            coeff = float(crossing_counts[crossing_index])
+                            if int(task) in cut_tasks:
+                                coeff += 1.0
                             if coeff:
                                 rc -= cut_dual * coeff
                         elif kind == "schedule_capacity":
@@ -424,8 +477,8 @@ def exact_pricing(
                             if coeff:
                                 rc -= cut_dual * coeff
 
-                    for _index, tail, head, branch_dual in arc_on_duals:
-                        if _sequence_uses_arc(next_sequence, tail, head):
+                    for arc_index, (_index, _tail, _head, branch_dual) in enumerate(arc_on_duals):
+                        if arc_on_mask & (1 << arc_index):
                             rc -= branch_dual
 
                     best_reduced_cost = rc if best_reduced_cost is None else min(best_reduced_cost, rc)
@@ -438,6 +491,24 @@ def exact_pricing(
                                 current = candidate_by_signature.get(route.signature)
                                 if current is None or actual_rc < current[0]:
                                     candidate_by_signature[route.signature] = (actual_rc, route)
+
+                if active_dominance:
+                    key = (next_visited_mask, int(task), crossing_counts, arc_on_mask, signature_prefix_mask)
+                    score = _label_prefix_score(
+                        next_label,
+                        phase=phase,
+                        vehicle_time_dual=vehicle_time_dual,
+                        rho=data.rho,
+                    )
+                    item = (float(finish), float(next_load), float(next_energy), float(score))
+                    bucket = dominance.get(key, [])
+                    if any(_dominates(existing, item, dominance_tol) for existing in bucket):
+                        dominance_pruned += 1
+                        continue
+                    dominance[key] = [
+                        existing for existing in bucket if not _dominates(item, existing, dominance_tol)
+                    ]
+                    dominance[key].append(item)
                 heapq.heappush(queue, next_label)
         if not exhausted:
             break
@@ -455,4 +526,6 @@ def exact_pricing(
         label_pops=label_pops,
         generated_labels=generated_labels,
         negative_routes=len(candidate_by_signature),
+        dominance_enabled=active_dominance,
+        dominance_pruned=dominance_pruned,
     )

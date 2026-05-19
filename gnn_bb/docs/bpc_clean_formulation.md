@@ -144,19 +144,22 @@ rc_I[p,r] = 0
 
 只有 exact pricing 在 true dual 下完整结束，且不存在负 reduced-cost route，当前节点 LP 才被认证。
 
-当前实现保留上述证书条件，但把 `bpc/pricing.py` 内部改为增量 reduced-cost 计算：label 扩展时维护访问 bitmask、资源、服务时间和任务 dual 贡献，直接评估 route reduced cost；只有 route 为负 reduced-cost 候选时才构造完整 `RouteColumn` 并用公共公式复核。该优化不改变完整枚举的 route 集合，也不改变 exactness。
+当前实现保留上述证书条件，但把 `bpc/pricing.py` 内部改为增量 reduced-cost 计算：label 扩展时维护访问 bitmask、资源、服务时间、任务 dual 贡献、active crossing cut 计数和 active `arc_on` 使用 mask，直接评估 route reduced cost；只有 route 为负 reduced-cost 候选时才构造完整 `RouteColumn` 并用公共公式复核。
+
+安全 dominance 只在状态足够完整时启用：
+
+- dominance key 包含 `visited_mask`、当前任务、active crossing cut 计数、active `arc_on` 使用 mask 和 active signature prefix mask；
+- dominance 比较到达时间、载重、能耗和前缀 reduced-cost score；
+- schedule capacity cut 只依赖任务集合和车辆，因此由 `visited_mask` 覆盖；
+- active crossing cut 由 prefix crossing 计数和相同当前任务覆盖；
+- active `arc_on` row 由 `arc_on_mask` 覆盖；
+- schedule pair conflict / no-good / core no-good / full no-good 这类顺序签名 cut 由 `signature_prefix_mask` 覆盖，两个 label 对后续可能命中的 active route signatures 完全一致时才比较。
+
+因此该优化不会把顺序签名相关的负 reduced-cost route 错误剪掉。bounded-label heuristic pricing 和 branch-node heuristic boost 仍只能找列；只有 `exhausted=True` 的完整枚举才能证明没有负 reduced-cost route。
 
 ## 5. Cuts
 
 当前 clean BPC 包含 schedule pair conflict cuts、schedule no-good cuts、统一 crossing cuts 和 schedule capacity upper-bound cuts。统一 crossing cut 合并了 RCI 与 k-path/resource lower bound，同一个任务子集只保留 RHS 最大的版本。
-
-如果两条 route `p,q` 被 exact schedule checker 证明不能由同一辆车共同排程，则对每辆同质车加入：
-
-```text
-lambda[p,r] + lambda[q,r] <= 1
-```
-
-该 cut 使用 route signature 判断系数，不依赖 route 对象 id。
 
 如果整数解中，某辆车选择的 route 集合 `C` 经过 exact schedule checker 证明无法按任意顺序完成，则对每辆同质车加入：
 
@@ -165,6 +168,22 @@ sum_{p in C} lambda[p,r] <= |C| - 1
 ```
 
 这类 cut 只排除原问题不可行组合，因此不破坏 exactness。
+
+当前实现先检查不可排程 witness 中是否存在双向不可排程 route pair。若 `p->q` 与 `q->p` 都不可行，则加入更小的 pair cut：
+
+```text
+lambda[p,r] + lambda[q,r] <= 1
+```
+
+由于同一辆车上两条 sortie 必须存在一个先后顺序，且更晚开始不会修复时间窗/电量/horizon 违反，这个 pair cut 是安全的。
+
+若没有 pair witness，当前实现再尝试更结构化的 schedule-capacity conflict cut：从不可排程 route 集合中提取任务集合 `S`，若 exact schedule oracle 证明一辆车最多只能服务其中 `U(S)<|S|` 个任务，则加入：
+
+```text
+sum_{i in S} z[i,r] <= U(S) y[r]          for all r
+```
+
+只有无法证明这类任务集合上界时，才退回 route-signature no-good cut。
 
 Schedule capacity upper-bound cut：
 
@@ -211,7 +230,7 @@ clean BPC 的证明流程依赖以下条件：
 1. RMP 初始可行由 Phase-I 人工列保证。
 2. reduced cost 公式使用 RMP 的真实 dual。
 3. exact pricing 使用 true dual、branching constraints、cut duals。
-4. heuristic pricing 和 restricted integer master 只用于找列或找 incumbent；不能用于证明节点完成。
+4. heuristic pricing、branch-node heuristic boost 和 restricted integer master 只用于找列或找 incumbent；不能用于证明节点完成，除非对应 pricing 调用本身 `exhausted=True`。
 5. node lower bound 只在 full pricing + cut separation 后使用。
 6. integer incumbent 必须通过 exact schedule checker。
 7. pricing 中断时不能声明节点完成，也不能用该节点 bound 做证明。

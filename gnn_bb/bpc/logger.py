@@ -71,14 +71,16 @@ class BPCLogger:
                 f"{prefix} restricted-MIP node {record['node_id']} status={record.get('status')} "
                 f"obj={record.get('objective')} accepted={record.get('accepted')} "
                 f"routes={record.get('route_pool')} rejected={record.get('rejected_solutions')} "
-                f"ng={record.get('no_good_cuts')} added_cuts={record.get('added_schedule_cuts')} "
+                f"pair={record.get('pair_conflict_cuts')} ng={record.get('no_good_cuts')} "
+                f"sched_cap={record.get('schedule_capacity_cuts')} "
+                f"added_cuts={record.get('added_schedule_cuts')} "
                 f"time={record.get('time')}"
             )
         if event == "cut_added":
             cuts = record.get("cuts") or []
             head = cuts[0] if cuts else {}
             detail = ""
-            if record.get("family") == "schedule_capacity" and head:
+            if str(record.get("family", "")).startswith("schedule_capacity") and head:
                 detail = (
                     f" first(vehicle={head.get('vehicle')}, |S|={len(head.get('tasks', []))}, "
                     f"U={head.get('upper_bound')}, viol={head.get('activity_minus_rhs')})"
@@ -106,8 +108,10 @@ class BPCLogger:
             return (
                 f"{prefix} finish status={record.get('status')} primal={record.get('primal_bound')} "
                 f"dual={record.get('dual_bound')} gap={record.get('gap')} cuts={record.get('cuts')} "
+                f"diag_dual={record.get('diagnostic_dual_bound')} diag_gap={record.get('diagnostic_gap')} "
                 f"crossing={record.get('crossing_cuts_added')} "
                 f"crossing_upgraded={record.get('crossing_cuts_upgraded')} "
+                f"pair={record.get('schedule_pair_conflict_cuts_added')} "
                 f"nogood={record.get('schedule_nogood_cuts_added')} "
                 f"sched_cap={record.get('schedule_capacity_cuts_added')}"
             )

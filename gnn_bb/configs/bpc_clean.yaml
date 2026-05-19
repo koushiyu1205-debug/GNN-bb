@@ -26,8 +26,19 @@ heuristic_pricing_routes_per_round: 600
 heuristic_pricing_selection_mode: diverse
 exact_pricing_selection_mode: diverse
 
+# 分支节点上的增强启发式定价：普通启发式找不到列时，先用更高 label 上限再试一次。
+# 若 boost 没有触发 label 上限，它本身也能作为 certificate；否则仍回到完整 exact pricing。
+branch_node_heuristic_boost_enabled: true
+branch_node_heuristic_boost_max_labels: 900000
+branch_node_heuristic_boost_routes_per_round: 1000
+branch_node_heuristic_boost_min_depth: 1
+
+# 安全 dominance：仅在所有带非零 dual 的 cut / branching 信息都进入 label 状态时启用；
+# 顺序签名 cut 通过 active signature prefix mask 进入 dominance key，因此不再直接关闭 dominance。
+exact_pricing_dominance_enabled: true
+
 # route pool 受限整数主问题：只用于找 incumbent。
-# 开启 schedule-aware 后，MIP 内部会把排程不可行的整数列组合加为临时 no-good 再重解。
+# 开启 schedule-aware 后，MIP 内部按临时 pair cut、schedule-capacity cut、no-good 的顺序排除排程不可行整数候选。
 restricted_master_heuristic_enabled: true
 restricted_master_time_limit: 20.0
 restricted_master_max_routes: 4000

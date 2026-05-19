@@ -2481,3 +2481,81 @@ OK
 /home/kai/miniconda3/envs/ecole/bin/python -m py_compile bpc/*.py scripts/run_bpc_clean.py scripts/run_bpc_ablation.py scripts/diagnose_root_fractional.py tests/test_bpc_clean.py
 OK
 ```
+
+### 2026-05-19 CST +0800
+
+#### 版本备注
+
+新增 conflict-induced schedule-capacity cut 后，继续增强 schedule witness。当前只在 exact schedule checker 已经发现某个整数 route set 不可排程时，针对该 witness 中双向不可排程的 route pair 加 cut；不恢复早期“广泛分离 pair cut”的做法。
+
+#### 代码变化
+
+当前不可排程 route set 的处理顺序更新为：
+
+```text
+1. exact schedule checker 返回不可行 witness；
+2. witness 先压缩为 deletion-minimal core；
+3. 若 core 中存在 p->q 与 q->p 都不可行的 route pair，加入 schedule_pair_conflict：
+   lambda[p,r] + lambda[q,r] <= 1
+4. 若没有 pair witness，再尝试 schedule-capacity conflict cut：
+   sum_{i in S} z[i,r] <= U(S) y[r]
+5. 若仍无法证明结构性 cut，才退回 schedule_nogood_core / schedule_nogood_full。
+```
+
+restricted-MIP 内部也按临时 pair cut、临时 schedule-capacity cut、临时 no-good 的顺序排除不可排程整数候选。RIM 回流主树时，只自动提升 pair / schedule-capacity 这类强 witness cut；弱 no-good 只有在当前 LP 解确实违反时才提升为正式 cut。
+
+#### 有效性说明
+
+同一辆车上两条 sortie 必须存在一个先后顺序。若 `p->q` 与 `q->p` 从最早时间开始都不可行，则在任意更晚的部分 schedule 中也不可行，因此 `lambda[p,r]+lambda[q,r]<=1` 不删除原问题可行整数解。
+
+顺序签名 cut 不再直接关闭安全 dominance。pricing 会把 active signature prefix mask 放进 dominance key；只有两个 label 对后续可能命中的 active route signatures 完全一致，才允许互相支配。
+
+候选集合 `S` 的生成是启发式，只决定“尝试哪个集合”。是否加 schedule-capacity cut 完全由 exact schedule task-capacity oracle 决定。若 oracle 超过状态上限或不能证明 `U(S)<|S|`，则不加结构性 cut。
+
+#### 验证结果
+
+```text
+PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_bpc_clean
+Ran 16 tests in 0.212s
+OK
+
+PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_branchpricecut_vehicle_schedule
+Ran 22 tests in 0.275s
+OK
+```
+
+### 2026-05-19 CST +0800
+
+#### 版本备注
+
+补充 TIME_LIMIT 诊断 bound，并增强 active signature cut 下的安全 dominance。
+
+#### 代码变化
+
+- `finish` 日志和 CSV 新增 `diagnostic_dual_bound`、`diagnostic_gap`、`best_open_node_bound`、`pending_node_bound`、`last_certified_node_bound`；
+- 正式 `dual_bound/gap` 的语义不变，只有严格证书完整时才填写；
+- pricing 的 dominance key 从：
+
+```text
+(visited_mask, current_node, crossing_counts, arc_on_mask)
+```
+
+扩展为：
+
+```text
+(visited_mask, current_node, crossing_counts, arc_on_mask, signature_prefix_mask)
+```
+
+其中 `signature_prefix_mask` 表示当前 partial sequence 仍可能扩展成哪些带非零 dual 的 schedule signature cut。这样有 `schedule_pair_conflict` / `schedule_nogood_core` dual 时也能安全 dominance。
+
+#### 验证结果
+
+```text
+PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_bpc_clean
+Ran 16 tests in 0.212s
+OK
+
+PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/envs/ecole/bin/python -m unittest tests.test_branchpricecut_vehicle_schedule
+Ran 22 tests in 0.275s
+OK
+```

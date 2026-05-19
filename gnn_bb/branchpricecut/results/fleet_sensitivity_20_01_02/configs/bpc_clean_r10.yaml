@@ -12,6 +12,11 @@ heuristic_pricing_max_labels: 120000
 heuristic_pricing_routes_per_round: 600
 heuristic_pricing_selection_mode: diverse
 exact_pricing_selection_mode: diverse
+branch_node_heuristic_boost_enabled: true
+branch_node_heuristic_boost_max_labels: 900000
+branch_node_heuristic_boost_routes_per_round: 1000
+branch_node_heuristic_boost_min_depth: 1
+exact_pricing_dominance_enabled: true
 restricted_master_heuristic_enabled: true
 restricted_master_time_limit: 20.0
 restricted_master_max_routes: 4000

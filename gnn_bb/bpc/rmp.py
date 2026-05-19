@@ -14,7 +14,8 @@ from .branching import BranchConstraint, route_allowed_by_branch, route_branch_c
 from .columns import RouteColumn, route_work_time_lower_bound
 from .cuts import Cut
 from .data import BPCData
-from .validation import check_route_set_schedule_feasible, shrink_infeasible_route_set
+from .schedule_capacity import find_schedule_capacity_conflict
+from .validation import ScheduleInfeasibilityWitness, diagnose_route_set_schedule
 
 
 @dataclass
@@ -56,6 +57,8 @@ class RestrictedIntegerResult:
     raw_objective: float | None = None
     rejected_solutions: int = 0
     no_good_cuts: int = 0
+    pair_conflict_cuts: int = 0
+    schedule_capacity_cuts: int = 0
     rejected_conflicts: tuple[tuple[int, tuple[RouteColumn, ...]], ...] = tuple()
 
     @property
@@ -389,15 +392,14 @@ def _extract_integer_assignment(
 def _first_schedule_conflict(
     data: BPCData,
     assigned: dict[int, list[RouteColumn]],
-) -> tuple[int, list[RouteColumn]] | None:
+) -> tuple[int, ScheduleInfeasibilityWitness] | None:
     for vehicle, vehicle_routes in assigned.items():
         if not vehicle_routes:
             continue
-        check = check_route_set_schedule_feasible(data, vehicle_routes)
-        if check.feasible:
+        witness = diagnose_route_set_schedule(data, vehicle_routes)
+        if witness is None:
             continue
-        conflict = shrink_infeasible_route_set(data, vehicle_routes)
-        return int(vehicle), conflict
+        return int(vehicle), witness
     return None
 
 
@@ -413,6 +415,8 @@ def solve_restricted_integer_master(
     incumbent_bound: float | None = None,
     schedule_aware: bool = True,
     max_no_good_rounds: int = 20,
+    schedule_capacity_oracle_max_states: int = 200000,
+    schedule_capacity_conflict_max_subset_size: int = 10,
 ) -> RestrictedIntegerResult:
     """中文注释：在当前 route pool 上解 binary RMP，并可迭代排除排程不可行的整数解。"""
 
@@ -532,7 +536,11 @@ def solve_restricted_integer_master(
     raw_best_objective: float | None = None
     rejected_solutions = 0
     no_good_cuts = 0
+    pair_conflict_cuts = 0
+    schedule_capacity_cuts = 0
     rejected_conflicts: list[tuple[int, tuple[RouteColumn, ...]]] = []
+    temporary_pair_keys: set[tuple[int, tuple[tuple[int, ...], tuple[int, ...]]]] = set()
+    temporary_capacity_keys: set[tuple[int, tuple[int, ...]]] = set()
     last_status = "UNKNOWN"
     no_good_limit = max(0, int(max_no_good_rounds))
     deadline = started + float(time_limit) if time_limit > 0 else None
@@ -572,6 +580,8 @@ def solve_restricted_integer_master(
                 raw_objective=raw_best_objective,
                 rejected_solutions=rejected_solutions,
                 no_good_cuts=no_good_cuts,
+                pair_conflict_cuts=pair_conflict_cuts,
+                schedule_capacity_cuts=schedule_capacity_cuts,
                 rejected_conflicts=tuple(rejected_conflicts),
             )
 
@@ -588,11 +598,14 @@ def solve_restricted_integer_master(
                 raw_objective=raw_best_objective,
                 rejected_solutions=rejected_solutions,
                 no_good_cuts=no_good_cuts,
+                pair_conflict_cuts=pair_conflict_cuts,
+                schedule_capacity_cuts=schedule_capacity_cuts,
                 rejected_conflicts=tuple(rejected_conflicts),
             )
 
         rejected_solutions += 1
-        conflict_vehicle, conflict_routes = conflict
+        conflict_vehicle, witness = conflict
+        conflict_routes = tuple(witness.routes)
         rejected_conflicts.append((int(conflict_vehicle), tuple(conflict_routes)))
         if rejected_solutions > no_good_limit:
             last_status = "SCHEDULE_REJECTED_LIMIT"
@@ -603,6 +616,65 @@ def solve_restricted_integer_master(
             model.freeTransform()
         except Exception:
             pass
+
+        added_pair = False
+        for pair in witness.pair_conflicts:
+            pair_signatures = pair.signatures
+            signature_set = set(pair_signatures)
+            for vehicle in data.vehicles:
+                key = (int(vehicle), pair_signatures)
+                if key in temporary_pair_keys:
+                    continue
+                pair_terms = [
+                    var
+                    for (route_id, var_vehicle), var in route_vars.items()
+                    if int(var_vehicle) == int(vehicle) and routes[route_id].signature in signature_set
+                ]
+                if len(pair_terms) < 2:
+                    continue
+                model.addCons(
+                    quicksum(pair_terms) <= 1.0,
+                    name=f"tmp_schedule_pair_conflict[{pair_conflict_cuts},{vehicle}]",
+                )
+                temporary_pair_keys.add(key)
+                pair_conflict_cuts += 1
+                added_pair = True
+            if added_pair:
+                break
+        if added_pair:
+            continue
+
+        structural = find_schedule_capacity_conflict(
+            data,
+            conflict_routes,
+            max_subset_size=schedule_capacity_conflict_max_subset_size,
+            max_states=schedule_capacity_oracle_max_states,
+        )
+        if structural is not None:
+            added_structural = False
+            subset = set(structural.tasks)
+            for vehicle in data.vehicles:
+                key = (int(vehicle), structural.tasks)
+                if key in temporary_capacity_keys:
+                    continue
+                terms = [
+                    sum(1 for task in routes[route_id].task_set if int(task) in subset) * var
+                    for (route_id, var_vehicle), var in route_vars.items()
+                    if int(var_vehicle) == int(vehicle)
+                    and sum(1 for task in routes[route_id].task_set if int(task) in subset) > 0
+                ]
+                if not terms:
+                    continue
+                model.addCons(
+                    quicksum(terms) - int(structural.upper_bound) * y[vehicle] <= 0.0,
+                    name=f"tmp_schedule_capacity[{schedule_capacity_cuts},{vehicle}]",
+                )
+                temporary_capacity_keys.add(key)
+                schedule_capacity_cuts += 1
+                added_structural = True
+            if added_structural:
+                continue
+
         added_any = False
         for vehicle in data.vehicles:
             no_good_terms = [
@@ -633,5 +705,7 @@ def solve_restricted_integer_master(
         raw_objective=raw_best_objective,
         rejected_solutions=rejected_solutions,
         no_good_cuts=no_good_cuts,
+        pair_conflict_cuts=pair_conflict_cuts,
+        schedule_capacity_cuts=schedule_capacity_cuts,
         rejected_conflicts=tuple(rejected_conflicts),
     )

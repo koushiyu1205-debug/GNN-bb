@@ -9,6 +9,16 @@ from .columns import RouteColumn
 from .data import BPCData
 
 
+SIGNATURE_CUT_KINDS = frozenset(
+    {
+        "schedule_nogood",
+        "schedule_nogood_core",
+        "schedule_nogood_full",
+        "schedule_pair_conflict",
+    }
+)
+
+
 def normalize_signatures(signatures: list[tuple[int, ...]] | tuple[tuple[int, ...], ...]) -> tuple[tuple[int, ...], ...]:
     return tuple(sorted(tuple(int(task) for task in signature) for signature in signatures))
 
@@ -105,6 +115,8 @@ class ScheduleCapacityCut:
     tasks: tuple[int, ...]
     upper_bound: int
     oracle_states: int
+    source_vehicle: int | None = None
+    source: str = "separation"
     kind: str = "schedule_capacity"
 
     @property
@@ -129,6 +141,31 @@ class ScheduleCapacityCut:
         if int(vehicle) != int(self.vehicle):
             return 0.0
         return -float(self.upper_bound)
+
+
+def make_schedule_capacity_cuts_for_all_vehicles(
+    vehicles: tuple[int, ...],
+    tasks: tuple[int, ...],
+    upper_bound: int,
+    oracle_states: int,
+    first_id: int,
+    *,
+    source_vehicle: int,
+    source: str,
+) -> list[ScheduleCapacityCut]:
+    tasks = tuple(sorted(int(task) for task in tasks))
+    return [
+        ScheduleCapacityCut(
+            id=first_id + index,
+            vehicle=int(vehicle),
+            tasks=tasks,
+            upper_bound=int(upper_bound),
+            oracle_states=int(oracle_states),
+            source_vehicle=int(source_vehicle),
+            source=str(source),
+        )
+        for index, vehicle in enumerate(vehicles)
+    ]
 
 
 Cut = ScheduleNoGoodCut | CrossingCut | ScheduleCapacityCut

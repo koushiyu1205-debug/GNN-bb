@@ -139,6 +139,13 @@ def _solve_hybrid_route_bpc(
         heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
         heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
         exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
+        branch_node_heuristic_boost_enabled=bool(config.get("branch_node_heuristic_boost_enabled", False)),
+        branch_node_heuristic_boost_max_labels=int(config.get("branch_node_heuristic_boost_max_labels", 800000)),
+        branch_node_heuristic_boost_routes_per_round=int(config.get("branch_node_heuristic_boost_routes_per_round", 1000)),
+        branch_node_heuristic_boost_min_depth=int(config.get("branch_node_heuristic_boost_min_depth", 1)),
+        exact_pricing_dominance_enabled=bool(
+            config.get("exact_pricing_dominance_enabled", config.get("exact_pricing_enable_dominance", False))
+        ),
         restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
         restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),

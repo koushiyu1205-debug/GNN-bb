@@ -363,7 +363,7 @@ y[r]=1: RMP 固定 y[r] 下界为 1
 5. objective 按原问题成本计算。
 ```
 
-Primal heuristic 也必须经过同样 schedule feasibility 检查后才允许更新 incumbent。当前 `restricted_integer_master` 是受限列池上的 binary MIP heuristic：它可以在临时 MIP 中加入排程 no-good 来继续寻找更好的候选，但这些临时约束不提供节点 lower bound，也不替代主树中的 exact pricing 或正式 schedule cut separation。RIM 发现的不可排程 core 若回流到主树，则作为正式 valid schedule no-good cut 使用；新增正式 cut 后，当前节点必须重新求解，不能继续使用旧 LP 解做分支或剪枝。
+Primal heuristic 也必须经过同样 schedule feasibility 检查后才允许更新 incumbent。当前 `restricted_integer_master` 是受限列池上的 binary MIP heuristic：它可以在临时 MIP 中先加入双向不可排程的 route-pair cut，再尝试 schedule-capacity cut，最后才退回排程 no-good 来继续寻找更好的候选。这些临时约束不提供节点 lower bound，也不替代主树中的 exact pricing 或正式 schedule cut separation。RIM 发现的强 witness cut 若回流到主树，则作为正式 valid schedule cut 使用；弱 no-good 只有在当前 LP 解违反时才提升为正式 cut。新增正式 cut 后，当前节点必须重新求解，不能继续使用旧 LP 解做分支或剪枝。
 
 ### 引理 8：任意被接受的 incumbent 都是原问题可行解
 

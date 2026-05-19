@@ -1,3 +1,81 @@
+## 2026-05-19 `bpc_clean` tight fleet 优化记录
+
+当前先不做 learning to cut，继续保留 exactness，优先优化 tight fleet 下的 route-vehicle `bpc_clean`。
+
+本轮第一版改动：
+
+- 增强 branch-node heuristic pricing：普通 bounded-label heuristic 在分支节点没有新增列且没有完成枚举时，先运行一次更高 label 上限的 `heuristic_boost`。
+- 安全 dominance：exact pricing 的 label 状态加入 active crossing cut 计数、active `arc_on` 使用 mask 和 active signature prefix mask；dominance 只在相同状态 key 下比较到达时间、载重、能耗和前缀 reduced-cost score。
+- 安全边界：schedule no-good / pair cut 这类顺序签名 cut 通过 active signature prefix mask 进入 key，因此不再直接关闭 dominance。
+- 证明边界不变：heuristic 和 boost 只用于找负 reduced-cost route；只有 `exhausted=True` 的 pricing 调用才能作为节点 certificate。
+- 配置开关：`branch_node_heuristic_boost_enabled`、`branch_node_heuristic_boost_max_labels`、`branch_node_heuristic_boost_routes_per_round`、`branch_node_heuristic_boost_min_depth`、`exact_pricing_dominance_enabled`。
+
+评估重点：
+
+- 日志中 `pricing_kind=heuristic_boost` 是否在分支节点找到列；
+- `dominance_enabled` 是否经常为 true；
+- `dominance_pruned` 是否足够大；
+- `bench_20_01` 的完整 exact pricing 次数和 label pops 是否明显下降；
+- `bench_20_02/03` 在 3600 秒内 gap 是否下降。
+
+## 2026-05-19 `bench_20_02` schedule feasibility 加强
+
+`bench_20_02` 的新日志显示，主要瓶颈不是纯 pricing，而是 route-vehicle master 反复找到低成本但真实 schedule 不可行的整数组合，导致大量 `schedule_nogood_core` cut，并且这些顺序签名 cut 会让安全 dominance 关闭。
+
+本轮改动：
+
+- 新增 conflict-induced schedule-capacity cut：当某辆车的 route 集合不可排程时，先从该 route 集合中生成任务集合候选 `S`；
+- 对每个候选 `S` 调用 exact schedule task-capacity oracle，只有证明 `U(S)<|S|` 时才加 cut；
+- 加入的正式 cut 仍是 `schedule_capacity`：
+
+```text
+sum_{i in S} z[i,r] <= U(S) y[r]
+```
+
+- 该 cut 对所有同质车辆同时加入，能切掉同一车辆服务过多 `S` 内任务的整类组合，而不是只切当前 route signatures；
+- 若 exact oracle 无法证明任务上界，则回退到原来的 deletion-minimal `schedule_nogood_core`；
+- restricted-MIP 内部也先尝试临时 schedule-capacity cut，失败后才加入临时 no-good。
+
+有效性边界：
+
+- 所有 schedule-capacity conflict cut 都必须由 exact oracle 给出 `U(S)`；
+- oracle 超过状态上限或不能证明时不加 cut；
+- heuristic 只负责生成候选 `S`，不决定 cut 是否有效；
+- 节点 bound 仍只在 exact pricing 和启用的 cut separation 完成后使用。
+
+## 2026-05-19 schedule witness 与 RIM cut 提升收紧
+
+本轮先修三个结构问题：
+
+- schedule checker 新增不可行 witness：对不可排程 route set 先压缩为 deletion-minimal core，再寻找双向不可排程的 route pair；
+- 若 route pair `p,q` 满足 `p->q` 和 `q->p` 都不可行，加入更小的 `schedule_pair_conflict`：
+
+```text
+lambda[p,r] + lambda[q,r] <= 1
+```
+
+- RIM 内部排除不可排程整数候选时，顺序改为临时 pair cut、临时 schedule-capacity cut、临时 no-good；
+- RIM 回流主树时，只自动提升 pair / schedule-capacity 这类强 witness cut；弱 no-good 只有在当前 LP 解违反时才提升为正式 cut。
+
+预期效果：
+
+- 减少 `schedule_nogood_core` 的数量；
+- 降低顺序签名 cut 对 dominance 的干扰；
+- 保留 exactness，因为每条正式 cut 都来自 exact schedule witness 或 exact schedule-capacity oracle。
+
+## 2026-05-19 diagnostic bound 与 signature-cut dominance
+
+根据 `bench_20_02` 最新日志，瓶颈从 root no-good 污染转向分支后 certificate pricing。新增两项改动：
+
+- TIME_LIMIT 输出保留 `diagnostic_dual_bound`、`diagnostic_gap`、`best_open_node_bound`、`pending_node_bound` 和 `last_certified_node_bound`，用于判断算法实际进展；正式 `dual_bound/gap` 仍只在严格证书完整时填写；
+- active schedule signature cut 不再直接关闭 dominance；pricing 为每个 label 维护 active signature prefix mask，只有两个 label 对后续可能命中的 active route signatures 完全一致时才允许支配。
+
+验证重点：
+
+- `bench_20_02` 日志中带 no-good/pair cut 的 exact pricing 是否仍出现 `dominance_enabled=true`；
+- `dominance_pruned` 是否明显增加；
+- `diagnostic_gap` 是否能反映 TIME_LIMIT 时的真实搜索进展。
+
 你现在是一个资深 Branch-Price-and-Cut / Column Generation / SCIP / PySCIPOpt / Gurobi / 运筹优化工程师。请在当前 `branchpricecut/` 新主线中实现一个更稳健的 Vehicle-Schedule Branch-Price-and-Cut 框架。
 
 目标：

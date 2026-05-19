@@ -18,6 +18,32 @@ class ScheduleCheckResult:
     ready_time: float | None
 
 
+@dataclass(frozen=True)
+class RoutePairScheduleConflict:
+    """中文注释：两条 sortie route 无论先后顺序都不能排在同一辆车上。"""
+
+    left: RouteColumn
+    right: RouteColumn
+    left_ready_time: float | None
+    right_ready_time: float | None
+    left_then_right_ready_time: float | None
+    right_then_left_ready_time: float | None
+
+    @property
+    def signatures(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        return tuple(sorted((self.left.signature, self.right.signature)))
+
+
+@dataclass(frozen=True)
+class ScheduleInfeasibilityWitness:
+    """中文注释：用于解释整数 route 集合为什么不能形成真实车辆 schedule。"""
+
+    routes: tuple[RouteColumn, ...]
+    pair_conflicts: tuple[RoutePairScheduleConflict, ...]
+    reason: str
+    deletion_minimal: bool
+
+
 def evaluate_route_at_start(data: BPCData, route: RouteColumn, start_time: float) -> dict | None:
     current = 0
     current_time = float(start_time)
@@ -113,6 +139,84 @@ def check_route_set_schedule_feasible(data: BPCData, routes: list[RouteColumn]) 
         cursor = parent[cursor]
     order.reverse()
     return ScheduleCheckResult(True, tuple(order), round(best_value, 6))
+
+
+def route_transition_ready_time(
+    data: BPCData,
+    first: RouteColumn,
+    second: RouteColumn,
+    *,
+    start_time: float = 0.0,
+) -> float | None:
+    """返回 first 后接 second 的车辆 ready time；不可行则返回 None。"""
+
+    first_eval = evaluate_route_at_start(data, first, start_time)
+    if first_eval is None:
+        return None
+    second_eval = evaluate_route_at_start(data, second, float(first_eval["ready_time"]))
+    if second_eval is None:
+        return None
+    return float(second_eval["ready_time"])
+
+
+def find_route_pair_schedule_conflicts(
+    data: BPCData,
+    routes: list[RouteColumn] | tuple[RouteColumn, ...],
+    *,
+    max_pairs: int = 0,
+) -> tuple[RoutePairScheduleConflict, ...]:
+    """找出无论 p->q 还是 q->p 都不可行的 route pair。
+
+    中文注释：如果一对 route 从时间 0 开始的任一先后顺序都不可行，那么在任何更晚
+    的部分 schedule 中也不可行，因此可安全加入 lambda[p,r]+lambda[q,r]<=1。
+    """
+
+    conflicts: list[RoutePairScheduleConflict] = []
+    route_list = list(routes)
+    for left_index, left in enumerate(route_list):
+        left_eval = evaluate_route_at_start(data, left, 0.0)
+        left_ready = None if left_eval is None else float(left_eval["ready_time"])
+        for right in route_list[left_index + 1 :]:
+            right_eval = evaluate_route_at_start(data, right, 0.0)
+            right_ready = None if right_eval is None else float(right_eval["ready_time"])
+            left_then_right = route_transition_ready_time(data, left, right)
+            right_then_left = route_transition_ready_time(data, right, left)
+            if left_then_right is not None or right_then_left is not None:
+                continue
+            conflicts.append(
+                RoutePairScheduleConflict(
+                    left=left,
+                    right=right,
+                    left_ready_time=left_ready,
+                    right_ready_time=right_ready,
+                    left_then_right_ready_time=left_then_right,
+                    right_then_left_ready_time=right_then_left,
+                )
+            )
+            if max_pairs > 0 and len(conflicts) >= max_pairs:
+                return tuple(conflicts)
+    return tuple(conflicts)
+
+
+def diagnose_route_set_schedule(
+    data: BPCData,
+    routes: list[RouteColumn] | tuple[RouteColumn, ...],
+    *,
+    max_pair_conflicts: int = 8,
+) -> ScheduleInfeasibilityWitness | None:
+    """对不可排程 route 集合返回可用于 cut 的结构化 witness。"""
+
+    route_list = list(routes)
+    if check_route_set_schedule_feasible(data, route_list).feasible:
+        return None
+    core = tuple(shrink_infeasible_route_set(data, route_list))
+    pair_conflicts = find_route_pair_schedule_conflicts(data, core, max_pairs=max_pair_conflicts)
+    return ScheduleInfeasibilityWitness(
+        routes=core,
+        pair_conflicts=pair_conflicts,
+        reason="pair_transition" if pair_conflicts else "set_order",
+        deletion_minimal=True,
+    )
 
 
 def shrink_infeasible_route_set(data: BPCData, routes: list[RouteColumn]) -> list[RouteColumn]:

@@ -401,7 +401,8 @@ rc_pr < -epsilon
 label 状态：
 
 ```text
-(current_node, sequence, visited_mask, time, load, energy, travel_time, cost, service_time, task_dual_sum)
+(current_node, sequence, visited_mask, crossing_counts, arc_on_mask,
+ time, load, energy, travel_time, cost, service_time, task_dual_sum)
 ```
 
 扩展任务 `j` 时检查：
@@ -428,15 +429,32 @@ branching partial sequence feasible
 
 - `max_labels_per_pricing = 0` 表示不设 label 上限；
 - 若设置正数且 pricing 未 exhausted，则不能用该节点 bound 做证明；
-- clean 主线默认 exact pricing，不使用 heuristic pricing 证明无负 reduced-cost 列。
+- clean 主线默认完整 exact pricing 负责证明；bounded-label heuristic pricing 只用于找列。
+- 如果 bounded-label 调用自身 `exhausted=True`，说明 label 上限未触发，该轮已经完成完整枚举，可以作为 certificate。
 
 当前性能实现：
 
 - exact pricing 仍逐车辆完整枚举所有满足资源、时间窗和 branching filter 的 elementary sequence；
-- label 扩展时增量维护 route cost、travel time、energy、service time、visited bitmask 和任务 dual 贡献；
+- label 扩展时增量维护 route cost、travel time、energy、service time、visited bitmask、任务 dual 贡献、active crossing cut 计数和 active `arc_on` 使用 mask；
 - reduced cost 使用这些增量状态直接计算，cut dual 和 branch dual 仍逐 route 计入；
 - 只有当 route 的 reduced cost 为负时，才调用 `evaluate_route()` 构造完整 `RouteColumn` 并用公共 `reduced_cost()` 公式复核；
 - 因此该优化只减少重复 route 重建和字典查询，不改变 pricing 可行域、不改变节点证书条件。
+
+当前安全 dominance：
+
+- dominance key 是 `(visited_mask, current_node, crossing_counts, arc_on_mask, signature_prefix_mask)`；
+- 比较维度是到达时间、载重、能耗和前缀 reduced-cost score；
+- active crossing cut 的 prefix crossing 次数进入 key，最终回 depot 的 crossing 由相同 current node 保证一致；
+- active `arc_on` row 的使用状态进入 `arc_on_mask`，避免尚未使用该弧的 label 错误支配已经获得 `arc_on` dual reward 的 label；
+- schedule capacity cut 只依赖任务集合和车辆，已由 `visited_mask` 覆盖；
+- `schedule_pair_conflict`、`schedule_nogood`、`schedule_nogood_core` 和 `schedule_nogood_full` 这类顺序签名 cut 的 active signature prefix mask 进入 key；只有两个 label 对后续可能命中的 active route signatures 完全相同，才允许互相支配。
+
+分支节点增强启发式 pricing：
+
+- 普通 heuristic pricing 使用 `heuristic_pricing_max_labels` 快速找列；
+- 若分支节点深度达到 `branch_node_heuristic_boost_min_depth`，普通 heuristic 没有新增列且没有 exhausted，则再运行一次 `heuristic_boost`；
+- `heuristic_boost` 使用更大的 `branch_node_heuristic_boost_max_labels` 和 `branch_node_heuristic_boost_routes_per_round`；
+- boost 找到列后立即回到 RMP 重解；boost 未 exhausted 时仍必须继续完整 exact pricing；boost exhausted 时可作为 certificate。
 
 ## 9. Cut Families
 
@@ -503,7 +521,13 @@ sum_{p,r} crossing(p,S) lambda_pr >= 2 K(S)
 sum_{p in C'} lambda_pr <= |C'| - 1
 ```
 
-当前实现直接生成 core no-good cut。若 core cut 已存在，则最后尝试 full route set no-good；若仍无法新增 cut，则不能把该节点当作 integral feasible fathom。
+当前实现不会立即生成 core no-good cut，而是先用 schedule checker 返回的 witness 寻找双向不可排程的 route pair。若存在 `p->q` 和 `q->p` 都不可行的 pair，则加入更小的 `schedule_pair_conflict` cut：
+
+```text
+lambda[p,r] + lambda[q,r] <= 1
+```
+
+若没有 pair witness，再尝试 9.4 的结构性 schedule-capacity conflict cut。只有当 exact schedule-capacity oracle 无法从该 conflict 中证明某个任务集合 `S` 满足 `U(S)<|S|` 时，才回退到 core no-good cut。若 core cut 已存在，则最后尝试 full route set no-good；若仍无法新增 cut，则不能把该节点当作 integral feasible fathom。
 
 ### 9.4 Schedule Capacity Upper-Bound Cut
 
@@ -528,6 +552,13 @@ sum_p (sum_{i in S} a_ip) lambda_pr - U(S) y_r <= 0
 其中 `U(S)` 是一辆真实车辆在完整多 sortie schedule 中最多能服务 `S` 内多少个任务。
 
 当前实现用 exact schedule task-capacity oracle 计算 `U(S)`。如果 oracle 超过状态上限或无法证明，则跳过，不加 cut。
+
+Schedule capacity cut 有两个来源：
+
+1. LP separation：从当前分数解的任务-车辆负载中生成候选集合 `S`，若当前 LP 违反上式则加入；
+2. conflict-induced separation：当某辆车的整数 route 集合不可排程时，从该 route 集合的任务并集、route 组合并集和小规模任务组合中生成候选 `S`，若 exact oracle 证明 `U(S)<|S|`，则对所有同质车辆加入同一类 `schedule_capacity` cut。
+
+第二类 cut 比 route-signature no-good 更结构化。它不是只排除当前几条 route，而是排除“同一车辆服务 `S` 中超过 `U(S)` 个任务”的所有 route 组合；同时它仍只依赖任务集合和车辆，pricing 不需要增加顺序签名状态，安全 dominance 也可以继续启用。
 
 有效性：
 
@@ -667,16 +698,13 @@ rc_pr <- rc_pr - delta_ij q_{ij,p}
 4. 若 rc < -epsilon，则加入列。
 ```
 
-当前 pricing 没有 label dominance，因此不需要在 label state 中额外携带“是否已经使用 arc(i,j)”这一位也能保持 exactness。完整枚举会覆盖 `q=0` 和 `q=1` 的所有 route。
-
-但如果后续加入 dominance 或更强剪枝，则必须重新处理 `arc_on`：
+当前 pricing 已加入第一版安全 dominance，因此 label state 中会携带 active `arc_on` 使用 mask：
 
 ```text
-label state 需要携带每个 active arc_on 是否已被使用；
-或 dominance 必须只在相同 active-arc usage mask 下比较。
+arc_on_mask[h] = 1  如果当前前缀已经使用 branching row h 对应的任务弧
 ```
 
-否则一个尚未使用 `arc_on` 的 label 可能错误支配已经使用该弧、因 dual reward 更有潜力的 label，从而漏掉负 reduced-cost column。
+dominance 只在相同 `arc_on_mask` 下比较。完整 reduced cost 仍在 route 完成时扣除 `delta_ij q_{ij,p}`，并在负 reduced-cost 候选处用公共 `reduced_cost()` 公式复核。
 
 ### 11.4 Vehicle-Use Branching
 
@@ -774,14 +802,14 @@ branch_testing_time
    - 在当前 route pool 上解 binary restricted master；
    - 该 MIP 只作为 primal heuristic，不参与 lower bound 证明；
    - 每次得到整数 assignment 后立即运行 exact schedule checker；
-   - 如果某辆车的 route 集合不可排程，就提取不可排程 core，并在该临时 MIP 中对所有同质车辆加入 no-good 约束后继续求解；
-   - RIM 中发现的不可排程 core 是有效 cut，会回流成主树正式 `schedule_nogood_core` cut；一旦新增正式 cut，当前节点必须重新求解；
+   - 如果某辆车的 route 集合不可排程，先在该临时 MIP 中加入双向不可排程 pair cut；若没有 pair witness，再尝试临时 schedule-capacity cut；最后才退回临时 no-good；
+   - RIM 中发现的强 witness cut 会回流成主树正式 cut；弱 no-good 只有在当前 LP 解确实违反时才提升为正式 cut，避免大量不抬升 bound 的全局 no-good 污染 pricing；
    - RIM 使用线性 objective cutoff 过滤不可能改进当前 incumbent 的候选，但不使用 solver objlimit；
    - 只有排程可行且通过 `_set_incumbent_from_assignment` 的解才允许更新 incumbent。
 
 `route_assignment_repair` 和 `restricted_integer_master` 都只改善 primal bound，不影响 dual bound 或节点证明。即使 heuristic 找到 incumbent，若当前节点原 assignment 不可排程，算法仍会加 schedule no-good cut，而不会错误 fathom。
 
-节点 lower bound 只有在当前节点完成 Phase-II RMP、exact pricing certificate 和所有启用 cut separation 后才被标记为已认证。若时间限制在证书完成前触发，不能使用最后一次 RMP LP 作为节点 bound，整体求解状态必须是 `TIME_LIMIT`。
+节点 lower bound 只有在当前节点完成 Phase-II RMP、exact pricing certificate 和所有启用 cut separation 后才被标记为已认证。若时间限制在证书完成前触发，不能使用最后一次 RMP LP 作为正式节点 bound，整体求解状态必须是 `TIME_LIMIT`。输出中额外保留 `diagnostic_dual_bound` 和 `diagnostic_gap`，用于实验分析：它们由已知 open node bound 和中断时的 pending node bound 计算，不替代正式 `dual_bound/gap`。
 
 ### 13.1 Schedule Checker 当前返回的信息
 
@@ -799,19 +827,35 @@ ScheduleCheckResult(
 
 - 若可行，`order` 是 route 列表索引的一个可行执行顺序；
 - 若可行，`ready_time` 是完成该车辆 route 集合后的最早 ready time；
-- 若不可行，当前只返回 `feasible=False, order=(), ready_time=None`。
+- 若不可行，基础返回仍是 `feasible=False, order=(), ready_time=None`。
 
-也就是说，当前 checker 不返回以下失败见证：
+不可行诊断由单独的：
 
 ```text
-不可行时间区间
-哪两个 route 双向顺序都不可能
-DP 失败状态集合
-minimal infeasible subset 的证明树
-pairwise conflict graph
+diagnose_route_set_schedule
 ```
 
-当前 minimal infeasible subset 由：
+生成。它会返回：
+
+```text
+ScheduleInfeasibilityWitness(
+    routes: deletion-minimal core,
+    pair_conflicts: tuple[RoutePairScheduleConflict, ...],
+    reason: "pair_transition" 或 "set_order",
+    deletion_minimal: bool,
+)
+```
+
+其中 `RoutePairScheduleConflict` 记录两条 route 的签名和最早 ready time，并证明：
+
+```text
+p->q 不可行
+q->p 不可行
+```
+
+因此当前可以安全加入 `schedule_pair_conflict`。若没有 pair witness，仍保留 `schedule_capacity` 与 `schedule_nogood_core` 回退。
+
+当前 minimal infeasible subset 仍由：
 
 ```text
 shrink_infeasible_route_set
@@ -825,25 +869,17 @@ shrink_infeasible_route_set
 
 这是一个 order-dependent 的 deletion-minimal core，不是全局最小 cardinality core，也不是 IIS 证书。
 
-因此当前可以安全加入 schedule no-good cut，因为完整 checker 已经证明整个 route 集合不可排程；但当前还不具备高质量 pairwise clique separation 所需的见证信息。
-
-如果后续要做 pairwise clique / interval conflict cuts，应该先增强 schedule checker，使其至少能输出：
+后续如果要进一步做 pairwise clique / interval conflict cuts，还需要继续增强 witness：
 
 ```text
-1. route-pair compatibility matrix:
-   route a before b feasible?
-   route b before a feasible?
-
+1. 完整 route-pair compatibility matrix；
 2. DP failure witness:
    对每个 partial subset 的最早 ready time；
    哪些扩展因时间窗、horizon、能量恢复失败；
-
 3. deletion-minimal core with certificate:
    每条 route 被保留的原因；
    任意删除一条后是否可行的检查结果。
 ```
-
-在这些 witness 没有实现前，不应添加依赖 pairwise infeasibility 结构的强 cut。当前 no-good cut 是安全但偏弱的保守选择。
 
 ## 14. BPC 节点流程
 
@@ -860,6 +896,16 @@ repeat:
 
     if Phase-I artificial sum == 0:
         switch to Phase-II
+        continue
+
+    bounded-label heuristic pricing under true dual
+    if negative reduced-cost columns found:
+        add columns
+        continue
+
+    branch-node heuristic_boost pricing under true dual, if enabled
+    if negative reduced-cost columns found:
+        add columns
         continue
 
     exact pricing under true dual
@@ -968,7 +1014,13 @@ resource_lower_bound_cuts_enabled: true
 schedule_capacity_cuts_enabled: true
 
 max_labels_per_pricing: 0
-max_routes_per_pricing: 200
+max_routes_per_pricing: 500
+root_max_routes_per_pricing: 1200
+heuristic_pricing_enabled: true
+heuristic_pricing_max_labels: 120000
+branch_node_heuristic_boost_enabled: true
+branch_node_heuristic_boost_max_labels: 900000
+exact_pricing_dominance_enabled: true
 ```
 
 消融配置：

@@ -72,6 +72,13 @@ def main() -> None:
             heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
             heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
             exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
+            branch_node_heuristic_boost_enabled=bool(config.get("branch_node_heuristic_boost_enabled", False)),
+            branch_node_heuristic_boost_max_labels=int(config.get("branch_node_heuristic_boost_max_labels", 800000)),
+            branch_node_heuristic_boost_routes_per_round=int(config.get("branch_node_heuristic_boost_routes_per_round", 1000)),
+            branch_node_heuristic_boost_min_depth=int(config.get("branch_node_heuristic_boost_min_depth", 1)),
+            exact_pricing_dominance_enabled=bool(
+                config.get("exact_pricing_dominance_enabled", config.get("exact_pricing_enable_dominance", False))
+            ),
             restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
             restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
             restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
@@ -122,14 +129,19 @@ def main() -> None:
         rows.append(result.to_row())
         print(
             f"{result.instance}: status={result.status}, primal={result.primal_bound}, dual={result.dual_bound}, "
-            f"gap={result.gap}, time={result.solving_time}s, nodes={result.node_count}, "
+            f"gap={result.gap}, diag_dual={result.diagnostic_dual_bound}, diag_gap={result.diagnostic_gap}, "
+            f"time={result.solving_time}s, nodes={result.node_count}, "
             f"rmp={result.rmp_solves}, pricing={result.pricing_calls}, routes={result.generated_routes}, "
             f"cuts={result.cuts_added}, crossing={result.crossing_cuts_added}, "
             f"crossing_upgraded={result.crossing_cuts_upgraded}, rci={result.robust_capacity_cuts_added}, "
-            f"kpath={result.resource_lower_bound_cuts_added}, nogood={result.schedule_nogood_cuts_added}, "
+            f"kpath={result.resource_lower_bound_cuts_added}, pair={result.schedule_pair_conflict_cuts_added}, "
+            f"nogood={result.schedule_nogood_cuts_added}, "
             f"sched_cap={result.schedule_capacity_cuts_added}, "
             f"rim_calls={result.restricted_master_integer_calls}, rim_feasible={result.restricted_master_integer_feasible}, "
-            f"rim_rejected={result.restricted_master_integer_rejected}, rim_ng={result.restricted_master_integer_no_good_cuts}, "
+            f"rim_rejected={result.restricted_master_integer_rejected}, "
+            f"rim_pair={result.restricted_master_integer_pair_conflict_cuts}, "
+            f"rim_ng={result.restricted_master_integer_no_good_cuts}, "
+            f"rim_sched_cap={result.restricted_master_integer_schedule_capacity_cuts}, "
             f"cuts_purged={result.cuts_purged}, branch_test_time={result.branch_testing_time}s",
             flush=True,
         )

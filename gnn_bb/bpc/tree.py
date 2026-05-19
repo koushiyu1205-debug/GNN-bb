@@ -19,14 +19,19 @@ from .cuts import (
     ScheduleNoGoodCut,
     capacity_route_lower_bound,
     make_no_good_cuts_for_all_vehicles,
+    make_schedule_capacity_cuts_for_all_vehicles,
 )
 from .data import BPCData
 from .logger import BPCLogger
 from .node import BPCNode, BPCStats
 from .pricing import PricingResult, exact_pricing
 from .rmp import RMPSolution, RestrictedIntegerResult, solve_restricted_integer_master, solve_rmp_lp
-from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity
-from .validation import check_route_set_schedule_feasible, shrink_infeasible_route_set
+from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity, find_schedule_capacity_conflict
+from .validation import (
+    RoutePairScheduleConflict,
+    check_route_set_schedule_feasible,
+    diagnose_route_set_schedule,
+)
 
 
 @dataclass
@@ -119,6 +124,11 @@ class CleanBPCTree:
         heuristic_pricing_routes_per_round: int = 500,
         heuristic_pricing_selection_mode: str = "diverse",
         exact_pricing_selection_mode: str = "reduced_cost",
+        branch_node_heuristic_boost_enabled: bool = False,
+        branch_node_heuristic_boost_max_labels: int = 800000,
+        branch_node_heuristic_boost_routes_per_round: int = 1000,
+        branch_node_heuristic_boost_min_depth: int = 1,
+        exact_pricing_dominance_enabled: bool = False,
         restricted_master_heuristic_enabled: bool = False,
         restricted_master_time_limit: float = 20.0,
         restricted_master_max_routes: int = 4000,
@@ -174,6 +184,11 @@ class CleanBPCTree:
         self.heuristic_pricing_routes_per_round = int(heuristic_pricing_routes_per_round)
         self.heuristic_pricing_selection_mode = str(heuristic_pricing_selection_mode)
         self.exact_pricing_selection_mode = str(exact_pricing_selection_mode)
+        self.branch_node_heuristic_boost_enabled = bool(branch_node_heuristic_boost_enabled)
+        self.branch_node_heuristic_boost_max_labels = int(branch_node_heuristic_boost_max_labels)
+        self.branch_node_heuristic_boost_routes_per_round = int(branch_node_heuristic_boost_routes_per_round)
+        self.branch_node_heuristic_boost_min_depth = int(branch_node_heuristic_boost_min_depth)
+        self.exact_pricing_dominance_enabled = bool(exact_pricing_dominance_enabled)
         self.restricted_master_heuristic_enabled = bool(restricted_master_heuristic_enabled)
         self.restricted_master_time_limit = float(restricted_master_time_limit)
         self.restricted_master_max_routes = int(restricted_master_max_routes)
@@ -243,6 +258,7 @@ class CleanBPCTree:
         self.next_node_id = 1
         self.start_time = time.perf_counter()
         self.abort_status: str | None = None
+        self.pending_node_bound: float | None = None
 
     def elapsed(self) -> float:
         return time.perf_counter() - self.start_time
@@ -620,10 +636,18 @@ class CleanBPCTree:
             status = "OPTIMAL"
 
         dual = self._global_lower_bound(open_nodes, status)
+        diagnostic_dual = self._diagnostic_lower_bound(open_nodes)
         primal = None if self.incumbent is None else self.incumbent.objective
         gap = None
         if primal is not None and dual is not None and abs(primal) > 1.0e-12:
             gap = max(0.0, (primal - dual) / abs(primal))
+        diagnostic_gap = None
+        if primal is not None and diagnostic_dual is not None and abs(primal) > 1.0e-12:
+            diagnostic_gap = max(0.0, (primal - diagnostic_dual) / abs(primal))
+        self.stats.diagnostic_dual_bound = diagnostic_dual
+        self.stats.diagnostic_gap = diagnostic_gap
+        self.stats.best_open_node_bound = min([node.lower_bound for node in open_nodes], default=None)
+        self.stats.pending_node_bound = self.pending_node_bound
         result = TreeResult(
             status=status,
             primal_bound=primal,
@@ -642,6 +666,13 @@ class CleanBPCTree:
             primal_bound=None if primal is None else round(primal, 6),
             dual_bound=None if dual is None else round(dual, 6),
             gap=None if gap is None else round(gap, 6),
+            diagnostic_dual_bound=None if diagnostic_dual is None else round(diagnostic_dual, 6),
+            diagnostic_gap=None if diagnostic_gap is None else round(diagnostic_gap, 6),
+            best_open_node_bound=None if self.stats.best_open_node_bound is None else round(self.stats.best_open_node_bound, 6),
+            pending_node_bound=None if self.pending_node_bound is None else round(self.pending_node_bound, 6),
+            last_certified_node_bound=None
+            if self.stats.last_certified_node_bound is None
+            else round(self.stats.last_certified_node_bound, 6),
             nodes=self.stats.nodes_processed,
             routes=len(self.pool.routes),
             cuts=len(self.cuts),
@@ -649,6 +680,7 @@ class CleanBPCTree:
             crossing_cuts_upgraded=self.stats.crossing_cuts_upgraded,
             robust_capacity_cuts_added=self.stats.robust_capacity_cuts_added,
             resource_lower_bound_cuts_added=self.stats.resource_lower_bound_cuts_added,
+            schedule_pair_conflict_cuts_added=self.stats.schedule_pair_conflict_cuts_added,
             schedule_nogood_cuts_added=self.stats.schedule_nogood_cuts_added,
             schedule_capacity_cuts_added=self.stats.schedule_capacity_cuts_added,
             cuts_purged=self.stats.cuts_purged,
@@ -666,6 +698,16 @@ class CleanBPCTree:
         values = [node.lower_bound for node in open_nodes]
         if values:
             return min(values)
+        return None
+
+    def _diagnostic_lower_bound(self, open_nodes: list[BPCNode]) -> float | None:
+        values = [node.lower_bound for node in open_nodes]
+        if self.pending_node_bound is not None:
+            values.append(float(self.pending_node_bound))
+        if values:
+            return min(values)
+        if self.abort_status is None and self.incumbent is not None:
+            return self.incumbent.objective
         return None
 
     def _exact_routes_per_pricing(self, node: BPCNode) -> int:
@@ -706,6 +748,7 @@ class CleanBPCTree:
             max_routes_to_return=max_routes_to_return,
             max_labels=max_labels,
             selection_mode=selection_mode,
+            dominance_enabled=self.exact_pricing_dominance_enabled,
         )
         self.stats.pricing_calls += 1
         if pricing_kind == "exact":
@@ -729,6 +772,8 @@ class CleanBPCTree:
             exhausted=pricing.exhausted,
             label_pops=pricing.label_pops,
             generated_labels=pricing.generated_labels,
+            dominance_enabled=pricing.dominance_enabled,
+            dominance_pruned=pricing.dominance_pruned,
         )
         return pricing, added
 
@@ -775,16 +820,53 @@ class CleanBPCTree:
                 break
         return selected
 
-    def _add_restricted_master_conflict_cuts(self, node: BPCNode, result: RestrictedIntegerResult) -> int:
+    def _add_restricted_master_conflict_cuts(
+        self,
+        node: BPCNode,
+        result: RestrictedIntegerResult,
+        solution: RMPSolution,
+    ) -> int:
         added = 0
+        skipped_weak = 0
         for source_vehicle, conflict_routes in result.rejected_conflicts:
             if not conflict_routes:
+                continue
+            witness = diagnose_route_set_schedule(self.data, conflict_routes)
+            if witness is None:
+                continue
+            pair_added = self._add_schedule_pair_conflict_cuts(
+                node,
+                int(source_vehicle),
+                witness.pair_conflicts,
+            )
+            if pair_added:
+                added += pair_added
+                continue
+            structural_added = self._add_schedule_capacity_conflict_cuts(
+                node,
+                int(source_vehicle),
+                list(witness.routes),
+            )
+            if structural_added:
+                added += structural_added
+                continue
+            violated_vehicles = self._violated_schedule_conflict_vehicles(solution, witness.routes)
+            if not violated_vehicles:
+                skipped_weak += 1
                 continue
             added += self._add_schedule_conflict_cuts(
                 node,
                 int(source_vehicle),
-                list(conflict_routes),
+                list(witness.routes),
                 kind="schedule_nogood_core",
+                vehicles=violated_vehicles,
+            )
+        if skipped_weak:
+            self.logger.log(
+                "rim_conflict_skipped",
+                node_id=node.id,
+                skipped=skipped_weak,
+                reason="weak_nogood_not_violated_by_current_lp",
             )
         return added
 
@@ -815,16 +897,20 @@ class CleanBPCTree:
             incumbent_bound=None if self.incumbent is None else self.incumbent.objective,
             schedule_aware=self.restricted_master_schedule_aware,
             max_no_good_rounds=self.restricted_master_max_no_good_rounds,
+            schedule_capacity_oracle_max_states=self.schedule_capacity_oracle_max_states,
+            schedule_capacity_conflict_max_subset_size=self.schedule_capacity_cut_max_subset_size,
         )
         self.stats.restricted_master_integer_calls += 1
         self.stats.restricted_master_integer_time += result.solving_time
         self.stats.restricted_master_integer_rejected += result.rejected_solutions
         self.stats.restricted_master_integer_no_good_cuts += result.no_good_cuts
+        self.stats.restricted_master_integer_pair_conflict_cuts += result.pair_conflict_cuts
+        self.stats.restricted_master_integer_schedule_capacity_cuts += result.schedule_capacity_cuts
         if result.raw_objective is not None:
             current_raw = self.stats.restricted_master_integer_raw_best_objective
             if current_raw is None or result.raw_objective < current_raw - self.integer_tol:
                 self.stats.restricted_master_integer_raw_best_objective = result.raw_objective
-        added_conflict_cuts = self._add_restricted_master_conflict_cuts(node, result)
+        added_conflict_cuts = self._add_restricted_master_conflict_cuts(node, result, solution)
         accepted = False
         if result.objective is not None:
             accepted = self._set_incumbent_from_assignment(result.assigned_routes, node_id=node.id, source="restricted_integer_master")
@@ -846,6 +932,8 @@ class CleanBPCTree:
             schedule_aware=self.restricted_master_schedule_aware,
             rejected_solutions=result.rejected_solutions,
             no_good_cuts=result.no_good_cuts,
+            pair_conflict_cuts=result.pair_conflict_cuts,
+            schedule_capacity_cuts=result.schedule_capacity_cuts,
             added_schedule_cuts=added_conflict_cuts,
             time=round(result.solving_time, 6),
         )
@@ -921,6 +1009,30 @@ class CleanBPCTree:
                     pricing = heuristic_pricing
                     self.stats.exact_pricing_calls += 1
 
+                if (
+                    pricing is None
+                    and phase == "phase2"
+                    and node.depth >= self.branch_node_heuristic_boost_min_depth
+                    and self.branch_node_heuristic_boost_enabled
+                    and self.branch_node_heuristic_boost_max_labels > self.heuristic_pricing_max_labels
+                ):
+                    boosted_pricing, boosted_added = self._run_pricing(
+                        node,
+                        solution,
+                        cg_iter=cg_iter,
+                        phase=phase,
+                        pricing_kind="heuristic_boost",
+                        max_routes_to_return=self.branch_node_heuristic_boost_routes_per_round,
+                        max_labels=self.branch_node_heuristic_boost_max_labels,
+                        selection_mode=self.heuristic_pricing_selection_mode,
+                    )
+                    if boosted_added > 0:
+                        continue
+                    if boosted_pricing.exhausted:
+                        # 中文注释：boost 未触发 label 上限时同样给出完整枚举证明。
+                        pricing = boosted_pricing
+                        self.stats.exact_pricing_calls += 1
+
             if pricing is None:
                 pricing, added = self._run_pricing(
                     node,
@@ -954,17 +1066,20 @@ class CleanBPCTree:
         if not node_certified:
             if self.abort_status is None and not self._time_left():
                 self.abort_status = "TIME_LIMIT"
+                self.pending_node_bound = node.lower_bound
                 self.logger.log("fathom", node_id=node.id, reason="time_limit_before_node_certificate", bound=None)
             return []
         if last_solution is None or not last_solution.optimal or last_solution.objective is None:
             return []
 
         node.lower_bound = float(last_solution.objective)
+        self.stats.last_certified_node_bound = node.lower_bound
         if self.stats.root_relaxation is None and node.id == 0:
             self.stats.root_relaxation = node.lower_bound
 
         if not self._time_left():
             self.abort_status = "TIME_LIMIT"
+            self.pending_node_bound = node.lower_bound
             self.logger.log("fathom", node_id=node.id, reason="time_limit_after_node_certificate", bound=round(node.lower_bound, 6))
             return []
 
@@ -983,6 +1098,7 @@ class CleanBPCTree:
 
         if not self._time_left():
             self.abort_status = "TIME_LIMIT"
+            self.pending_node_bound = node.lower_bound
             self.logger.log("fathom", node_id=node.id, reason="time_limit_after_restricted_master", bound=round(node.lower_bound, 6))
             return []
 
@@ -1671,6 +1787,7 @@ class CleanBPCTree:
                 eps=self.eps,
                 max_routes_to_return=routes_per_iter,
                 max_labels=max_labels,
+                dominance_enabled=self.exact_pricing_dominance_enabled,
             )
             self.stats.branch_heuristic_test_pricing_calls += 1
             iterations += 1
@@ -1769,15 +1886,30 @@ class CleanBPCTree:
             self._set_incumbent_from_assignment(repaired, node_id=node.id, source="route_assignment_repair")
 
         for vehicle, routes in grouped.items():
-            checked = check_route_set_schedule_feasible(self.data, routes)
-            if checked.feasible:
+            witness = diagnose_route_set_schedule(self.data, routes)
+            if witness is None:
                 continue
 
-            conflict = shrink_infeasible_route_set(self.data, routes)
+            pair_added = self._add_schedule_pair_conflict_cuts(
+                node,
+                int(vehicle),
+                witness.pair_conflicts,
+            )
+            if pair_added:
+                return pair_added
+
+            structural_added = self._add_schedule_capacity_conflict_cuts(
+                node,
+                int(vehicle),
+                list(witness.routes),
+            )
+            if structural_added:
+                return structural_added
+
             core_added = self._add_schedule_conflict_cuts(
                 node,
                 int(vehicle),
-                conflict,
+                list(witness.routes),
                 kind="schedule_nogood_core",
             )
             if core_added:
@@ -1807,6 +1939,136 @@ class CleanBPCTree:
             self.logger.log("incumbent", node_id=node.id, objective=round(objective, 6), source="certified_integral")
         return 0
 
+    def _add_schedule_capacity_conflict_cuts(
+        self,
+        node: BPCNode,
+        source_vehicle: int,
+        routes: list[RouteColumn],
+    ) -> int:
+        if not self.schedule_capacity_cuts_enabled:
+            return 0
+        structural = find_schedule_capacity_conflict(
+            self.data,
+            routes,
+            max_subset_size=self.schedule_capacity_cut_max_subset_size,
+            max_states=self.schedule_capacity_oracle_max_states,
+        )
+        if structural is None:
+            return 0
+        new_cuts = make_schedule_capacity_cuts_for_all_vehicles(
+            self.data.vehicles,
+            structural.tasks,
+            structural.upper_bound,
+            structural.states_explored,
+            self._allocate_cut_ids(len(self.data.vehicles)),
+            source_vehicle=source_vehicle,
+            source="schedule_conflict",
+        )
+        added = 0
+        added_payload = []
+        for cut in new_cuts:
+            if cut.key in self.cut_keys:
+                continue
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            self.cuts.append(cut)
+            added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "vehicle": cut.vehicle,
+                    "tasks": list(cut.tasks),
+                    "upper_bound": cut.upper_bound,
+                    "source_vehicle": source_vehicle,
+                    "activity_minus_rhs": len(cut.tasks) - cut.upper_bound,
+                    "oracle_states": cut.oracle_states,
+                    "source": cut.source,
+                }
+            )
+        if added:
+            self.stats.cuts_added += added
+            self.stats.schedule_capacity_cuts_added += added
+            self.logger.log(
+                "cut_added",
+                node_id=node.id,
+                family="schedule_capacity_conflict",
+                source_vehicle=source_vehicle,
+                added=added,
+                route_count=len(routes),
+                cuts=added_payload,
+            )
+        return added
+
+    def _add_schedule_pair_conflict_cuts(
+        self,
+        node: BPCNode,
+        source_vehicle: int,
+        pair_conflicts: tuple[RoutePairScheduleConflict, ...],
+    ) -> int:
+        for pair in pair_conflicts:
+            routes = [pair.left, pair.right]
+            new_cuts = make_no_good_cuts_for_all_vehicles(
+                self.data.vehicles,
+                routes,
+                self._allocate_cut_ids(len(self.data.vehicles)),
+                source_vehicle=source_vehicle,
+                kind="schedule_pair_conflict",
+            )
+            added = 0
+            added_payload = []
+            for cut in new_cuts:
+                if cut.key in self.cut_keys:
+                    continue
+                self.cut_keys.add(cut.key)
+                self.cuts.append(cut)
+                added += 1
+                added_payload.append(
+                    {
+                        "id": cut.id,
+                        "vehicle": cut.vehicle,
+                        "signatures": [list(signature) for signature in cut.signatures],
+                        "source_vehicle": source_vehicle,
+                        "left_ready_time": pair.left_ready_time,
+                        "right_ready_time": pair.right_ready_time,
+                    }
+                )
+            if not added:
+                continue
+            self.stats.cuts_added += added
+            self.stats.schedule_pair_conflict_cuts_added += added
+            self.logger.log(
+                "cut_added",
+                node_id=node.id,
+                family="schedule_pair_conflict",
+                source_vehicle=source_vehicle,
+                added=added,
+                route_count=2,
+                signatures=[list(pair.left.signature), list(pair.right.signature)],
+                cuts=added_payload,
+            )
+            return added
+        return 0
+
+    def _violated_schedule_conflict_vehicles(
+        self,
+        solution: RMPSolution,
+        routes: tuple[RouteColumn, ...] | list[RouteColumn],
+    ) -> tuple[int, ...]:
+        signatures = {route.signature for route in routes}
+        if not signatures:
+            return tuple()
+        rhs = max(0, len(signatures) - 1)
+        violated = []
+        for vehicle in self.data.vehicles:
+            activity = sum(
+                float(value)
+                for route, route_vehicle, value in solution.route_values
+                if int(route_vehicle) == int(vehicle) and route.signature in signatures
+            )
+            if activity > rhs + max(self.integer_tol, 1.0e-6):
+                violated.append(int(vehicle))
+        return tuple(violated)
+
     def _add_schedule_conflict_cuts(
         self,
         node: BPCNode,
@@ -1814,11 +2076,15 @@ class CleanBPCTree:
         routes: list[RouteColumn],
         *,
         kind: str,
+        vehicles: tuple[int, ...] | None = None,
     ) -> int:
+        vehicles = tuple(int(vehicle) for vehicle in (self.data.vehicles if vehicles is None else vehicles))
+        if not vehicles:
+            return 0
         new_cuts = make_no_good_cuts_for_all_vehicles(
-            self.data.vehicles,
+            vehicles,
             routes,
-            self._allocate_cut_ids(len(self.data.vehicles)),
+            self._allocate_cut_ids(len(vehicles)),
             source_vehicle=source_vehicle,
             kind=kind,
         )

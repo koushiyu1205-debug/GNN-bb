@@ -106,6 +106,13 @@ def _solve_one(
         heuristic_pricing_routes_per_round=int(base.get("heuristic_pricing_routes_per_round", 500)),
         heuristic_pricing_selection_mode=str(base.get("heuristic_pricing_selection_mode", "diverse")),
         exact_pricing_selection_mode=str(base.get("exact_pricing_selection_mode", "reduced_cost")),
+        branch_node_heuristic_boost_enabled=bool(base.get("branch_node_heuristic_boost_enabled", False)),
+        branch_node_heuristic_boost_max_labels=int(base.get("branch_node_heuristic_boost_max_labels", 800000)),
+        branch_node_heuristic_boost_routes_per_round=int(base.get("branch_node_heuristic_boost_routes_per_round", 1000)),
+        branch_node_heuristic_boost_min_depth=int(base.get("branch_node_heuristic_boost_min_depth", 1)),
+        exact_pricing_dominance_enabled=bool(
+            base.get("exact_pricing_dominance_enabled", base.get("exact_pricing_enable_dominance", False))
+        ),
         restricted_master_heuristic_enabled=bool(base.get("restricted_master_heuristic_enabled", False)),
         restricted_master_time_limit=float(base.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(base.get("restricted_master_max_routes", 4000)),

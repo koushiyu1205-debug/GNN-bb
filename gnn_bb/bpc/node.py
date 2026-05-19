@@ -36,10 +36,13 @@ class BPCStats:
     restricted_master_integer_raw_best_objective: float | None = None
     restricted_master_integer_rejected: int = 0
     restricted_master_integer_no_good_cuts: int = 0
+    restricted_master_integer_pair_conflict_cuts: int = 0
+    restricted_master_integer_schedule_capacity_cuts: int = 0
     crossing_cuts_added: int = 0
     crossing_cuts_upgraded: int = 0
     robust_capacity_cuts_added: int = 0
     resource_lower_bound_cuts_added: int = 0
+    schedule_pair_conflict_cuts_added: int = 0
     schedule_nogood_cuts_added: int = 0
     schedule_capacity_cuts_added: int = 0
     cuts_purged: int = 0
@@ -54,3 +57,8 @@ class BPCStats:
     fathomed_integral: int = 0
     nodes_processed: int = 0
     root_relaxation: float | None = None
+    diagnostic_dual_bound: float | None = None
+    diagnostic_gap: float | None = None
+    best_open_node_bound: float | None = None
+    pending_node_bound: float | None = None
+    last_certified_node_bound: float | None = None
