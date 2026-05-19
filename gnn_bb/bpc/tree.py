@@ -23,8 +23,8 @@ from .cuts import (
 from .data import BPCData
 from .logger import BPCLogger
 from .node import BPCNode, BPCStats
-from .pricing import exact_pricing
-from .rmp import RMPSolution, solve_rmp_lp
+from .pricing import PricingResult, exact_pricing
+from .rmp import RMPSolution, RestrictedIntegerResult, solve_restricted_integer_master, solve_rmp_lp
 from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity
 from .validation import check_route_set_schedule_feasible, shrink_infeasible_route_set
 
@@ -113,6 +113,19 @@ class CleanBPCTree:
         max_labels_per_pricing: int,
         rmp_params: dict[str, Any] | None,
         logger: BPCLogger,
+        root_max_routes_per_pricing: int = 0,
+        heuristic_pricing_enabled: bool = False,
+        heuristic_pricing_max_labels: int = 100000,
+        heuristic_pricing_routes_per_round: int = 500,
+        heuristic_pricing_selection_mode: str = "diverse",
+        exact_pricing_selection_mode: str = "reduced_cost",
+        restricted_master_heuristic_enabled: bool = False,
+        restricted_master_time_limit: float = 20.0,
+        restricted_master_max_routes: int = 4000,
+        restricted_master_max_calls: int = 20,
+        restricted_master_max_depth: int = 3,
+        restricted_master_schedule_aware: bool = True,
+        restricted_master_max_no_good_rounds: int = 20,
         branching_strategy: str = "3pb",
         three_pb_pseudocost_candidates: int = 6,
         three_pb_fractional_candidates: int = 6,
@@ -155,6 +168,19 @@ class CleanBPCTree:
         self.integer_tol = float(integer_tol)
         self.max_routes_per_pricing = int(max_routes_per_pricing)
         self.max_labels_per_pricing = int(max_labels_per_pricing)
+        self.root_max_routes_per_pricing = int(root_max_routes_per_pricing)
+        self.heuristic_pricing_enabled = bool(heuristic_pricing_enabled)
+        self.heuristic_pricing_max_labels = int(heuristic_pricing_max_labels)
+        self.heuristic_pricing_routes_per_round = int(heuristic_pricing_routes_per_round)
+        self.heuristic_pricing_selection_mode = str(heuristic_pricing_selection_mode)
+        self.exact_pricing_selection_mode = str(exact_pricing_selection_mode)
+        self.restricted_master_heuristic_enabled = bool(restricted_master_heuristic_enabled)
+        self.restricted_master_time_limit = float(restricted_master_time_limit)
+        self.restricted_master_max_routes = int(restricted_master_max_routes)
+        self.restricted_master_max_calls = int(restricted_master_max_calls)
+        self.restricted_master_max_depth = int(restricted_master_max_depth)
+        self.restricted_master_schedule_aware = bool(restricted_master_schedule_aware)
+        self.restricted_master_max_no_good_rounds = int(restricted_master_max_no_good_rounds)
         self.rmp_params = dict(rmp_params or {})
         self.logger = logger
         self.branching_strategy = str(branching_strategy)
@@ -642,10 +668,194 @@ class CleanBPCTree:
             return min(values)
         return None
 
+    def _exact_routes_per_pricing(self, node: BPCNode) -> int:
+        if node.depth == 0 and self.root_max_routes_per_pricing > 0:
+            return self.root_max_routes_per_pricing
+        return self.max_routes_per_pricing
+
+    def _add_pricing_routes(self, pricing: PricingResult) -> int:
+        added = 0
+        for route in pricing.routes:
+            before = len(self.pool.routes)
+            self.pool.add(route)
+            if len(self.pool.routes) > before:
+                added += 1
+        self.stats.generated_routes = len(self.pool.routes)
+        return added
+
+    def _run_pricing(
+        self,
+        node: BPCNode,
+        solution: RMPSolution,
+        *,
+        cg_iter: int,
+        phase: str,
+        pricing_kind: str,
+        max_routes_to_return: int,
+        max_labels: int,
+        selection_mode: str,
+    ) -> tuple[PricingResult, int]:
+        pricing = exact_pricing(
+            self.data,
+            self.pool.routes,
+            solution.duals,
+            self.cuts,
+            node.branch_constraints,
+            phase=phase,
+            eps=self.eps,
+            max_routes_to_return=max_routes_to_return,
+            max_labels=max_labels,
+            selection_mode=selection_mode,
+        )
+        self.stats.pricing_calls += 1
+        if pricing_kind == "exact":
+            self.stats.exact_pricing_calls += 1
+        self.stats.label_pops += pricing.label_pops
+        self.stats.generated_labels += pricing.generated_labels
+        added = self._add_pricing_routes(pricing)
+        self.logger.log(
+            "pricing",
+            node_id=node.id,
+            depth=node.depth,
+            cg_iter=cg_iter,
+            phase=phase,
+            pricing_kind=pricing_kind,
+            selection_mode=selection_mode,
+            max_labels=max_labels,
+            certificate=pricing.exhausted,
+            best_reduced_cost=None if pricing.best_reduced_cost is None else round(pricing.best_reduced_cost, 9),
+            negative_routes=pricing.negative_routes,
+            added_routes=added,
+            exhausted=pricing.exhausted,
+            label_pops=pricing.label_pops,
+            generated_labels=pricing.generated_labels,
+        )
+        return pricing, added
+
+    def _restricted_master_routes(self, solution: RMPSolution) -> list[RouteColumn]:
+        if self.restricted_master_max_routes <= 0 or len(self.pool.routes) <= self.restricted_master_max_routes:
+            return list(self.pool.routes)
+
+        support: dict[tuple[int, ...], float] = {}
+        for route, _vehicle, value in solution.route_values:
+            support[route.signature] = max(support.get(route.signature, 0.0), float(value))
+
+        selected: list[RouteColumn] = []
+        seen: set[tuple[int, ...]] = set()
+
+        def add(route: RouteColumn) -> None:
+            if len(selected) >= self.restricted_master_max_routes:
+                return
+            if route.signature in seen:
+                return
+            selected.append(route)
+            seen.add(route.signature)
+
+        for route, _vehicle, value in sorted(solution.route_values, key=lambda item: (-float(item[2]), item[0].cost, item[0].signature)):
+            if value > self.integer_tol:
+                add(route)
+        for task in self.data.tasks:
+            for route in self.pool.routes:
+                if route.signature == (int(task),):
+                    add(route)
+                    break
+
+        remaining = sorted(
+            self.pool.routes,
+            key=lambda route: (
+                -support.get(route.signature, 0.0),
+                -len(route.tasks),
+                route.cost,
+                route.signature,
+            ),
+        )
+        for route in remaining:
+            add(route)
+            if len(selected) >= self.restricted_master_max_routes:
+                break
+        return selected
+
+    def _add_restricted_master_conflict_cuts(self, node: BPCNode, result: RestrictedIntegerResult) -> int:
+        added = 0
+        for source_vehicle, conflict_routes in result.rejected_conflicts:
+            if not conflict_routes:
+                continue
+            added += self._add_schedule_conflict_cuts(
+                node,
+                int(source_vehicle),
+                list(conflict_routes),
+                kind="schedule_nogood_core",
+            )
+        return added
+
+    def _try_restricted_master_heuristic(self, node: BPCNode, solution: RMPSolution) -> int:
+        if not self.restricted_master_heuristic_enabled:
+            return 0
+        if node.depth > self.restricted_master_max_depth:
+            return 0
+        if self.stats.restricted_master_integer_calls >= self.restricted_master_max_calls:
+            return 0
+        if solution.objective is None:
+            return 0
+        if self.incumbent is not None and solution.objective >= self.incumbent.objective - self.integer_tol:
+            return 0
+        time_limit = min(self.restricted_master_time_limit, max(0.0, self.time_limit - self.elapsed() - 1.0))
+        if time_limit < 1.0:
+            return 0
+
+        routes = self._restricted_master_routes(solution)
+        result = solve_restricted_integer_master(
+            self.data,
+            routes,
+            self.cuts,
+            node.branch_constraints,
+            rmp_params=self.rmp_params,
+            time_limit=time_limit,
+            task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
+            incumbent_bound=None if self.incumbent is None else self.incumbent.objective,
+            schedule_aware=self.restricted_master_schedule_aware,
+            max_no_good_rounds=self.restricted_master_max_no_good_rounds,
+        )
+        self.stats.restricted_master_integer_calls += 1
+        self.stats.restricted_master_integer_time += result.solving_time
+        self.stats.restricted_master_integer_rejected += result.rejected_solutions
+        self.stats.restricted_master_integer_no_good_cuts += result.no_good_cuts
+        if result.raw_objective is not None:
+            current_raw = self.stats.restricted_master_integer_raw_best_objective
+            if current_raw is None or result.raw_objective < current_raw - self.integer_tol:
+                self.stats.restricted_master_integer_raw_best_objective = result.raw_objective
+        added_conflict_cuts = self._add_restricted_master_conflict_cuts(node, result)
+        accepted = False
+        if result.objective is not None:
+            accepted = self._set_incumbent_from_assignment(result.assigned_routes, node_id=node.id, source="restricted_integer_master")
+            if accepted:
+                self.stats.restricted_master_integer_feasible += 1
+                current = self.stats.restricted_master_integer_best_objective
+                if current is None or result.objective < current - self.integer_tol:
+                    self.stats.restricted_master_integer_best_objective = result.objective
+        self.logger.log(
+            "restricted_integer_master",
+            node_id=node.id,
+            depth=node.depth,
+            status=result.status,
+            objective=None if result.objective is None else round(result.objective, 6),
+            raw_objective=None if result.raw_objective is None else round(result.raw_objective, 6),
+            accepted=accepted,
+            selected_routes=result.selected_routes,
+            route_pool=len(routes),
+            schedule_aware=self.restricted_master_schedule_aware,
+            rejected_solutions=result.rejected_solutions,
+            no_good_cuts=result.no_good_cuts,
+            added_schedule_cuts=added_conflict_cuts,
+            time=round(result.solving_time, 6),
+        )
+        return added_conflict_cuts
+
     def _process_node(self, node: BPCNode) -> list[BPCNode]:
         cg_iter = 0
         phase = "phase1"
         last_solution: RMPSolution | None = None
+        node_certified = False
 
         while self._time_left():
             cg_iter += 1
@@ -691,41 +901,37 @@ class CleanBPCTree:
                 phase = "phase2"
                 continue
 
-            pricing = exact_pricing(
-                self.data,
-                self.pool.routes,
-                solution.duals,
-                self.cuts,
-                node.branch_constraints,
-                phase=phase,
-                eps=self.eps,
-                max_routes_to_return=self.max_routes_per_pricing,
-                max_labels=self.max_labels_per_pricing,
-            )
-            self.stats.pricing_calls += 1
-            self.stats.exact_pricing_calls += 1
-            self.stats.label_pops += pricing.label_pops
-            self.stats.generated_labels += pricing.generated_labels
+            pricing: PricingResult | None = None
             added = 0
-            for route in pricing.routes:
-                before = len(self.pool.routes)
-                self.pool.add(route)
-                if len(self.pool.routes) > before:
-                    added += 1
-            self.stats.generated_routes = len(self.pool.routes)
-            self.logger.log(
-                "pricing",
-                node_id=node.id,
-                depth=node.depth,
-                cg_iter=cg_iter,
-                phase=phase,
-                best_reduced_cost=None if pricing.best_reduced_cost is None else round(pricing.best_reduced_cost, 9),
-                negative_routes=pricing.negative_routes,
-                added_routes=added,
-                exhausted=pricing.exhausted,
-                label_pops=pricing.label_pops,
-                generated_labels=pricing.generated_labels,
-            )
+            if self.heuristic_pricing_enabled and self.heuristic_pricing_max_labels > 0:
+                heuristic_pricing, heuristic_added = self._run_pricing(
+                    node,
+                    solution,
+                    cg_iter=cg_iter,
+                    phase=phase,
+                    pricing_kind="heuristic",
+                    max_routes_to_return=self.heuristic_pricing_routes_per_round,
+                    max_labels=self.heuristic_pricing_max_labels,
+                    selection_mode=self.heuristic_pricing_selection_mode,
+                )
+                if heuristic_added > 0:
+                    continue
+                if heuristic_pricing.exhausted:
+                    # 中文注释：label 上限未触发时，该轮启发式调用已经完成完整枚举，可直接作为证明。
+                    pricing = heuristic_pricing
+                    self.stats.exact_pricing_calls += 1
+
+            if pricing is None:
+                pricing, added = self._run_pricing(
+                    node,
+                    solution,
+                    cg_iter=cg_iter,
+                    phase=phase,
+                    pricing_kind="exact",
+                    max_routes_to_return=self._exact_routes_per_pricing(node),
+                    max_labels=self.max_labels_per_pricing,
+                    selection_mode=self.exact_pricing_selection_mode,
+                )
             if added > 0:
                 continue
             if not pricing.exhausted:
@@ -742,14 +948,43 @@ class CleanBPCTree:
             separated = self._separate_schedule_capacity_cuts(node, solution)
             if separated:
                 continue
+            node_certified = True
             break
 
+        if not node_certified:
+            if self.abort_status is None and not self._time_left():
+                self.abort_status = "TIME_LIMIT"
+                self.logger.log("fathom", node_id=node.id, reason="time_limit_before_node_certificate", bound=None)
+            return []
         if last_solution is None or not last_solution.optimal or last_solution.objective is None:
             return []
 
         node.lower_bound = float(last_solution.objective)
         if self.stats.root_relaxation is None and node.id == 0:
             self.stats.root_relaxation = node.lower_bound
+
+        if not self._time_left():
+            self.abort_status = "TIME_LIMIT"
+            self.logger.log("fathom", node_id=node.id, reason="time_limit_after_node_certificate", bound=round(node.lower_bound, 6))
+            return []
+
+        if self._try_restricted_master_heuristic(node, last_solution):
+            return [
+                BPCNode(
+                    priority=node.lower_bound,
+                    id=node.id,
+                    depth=node.depth,
+                    branch_constraints=node.branch_constraints,
+                    parent_id=node.parent_id,
+                    description=node.description,
+                    lower_bound=node.lower_bound,
+                )
+            ]
+
+        if not self._time_left():
+            self.abort_status = "TIME_LIMIT"
+            self.logger.log("fathom", node_id=node.id, reason="time_limit_after_restricted_master", bound=round(node.lower_bound, 6))
+            return []
 
         if self.incumbent is not None and node.lower_bound >= self.incumbent.objective - self.integer_tol:
             self.stats.fathomed_bound += 1

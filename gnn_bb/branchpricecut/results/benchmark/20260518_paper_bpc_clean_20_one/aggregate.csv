@@ -1,0 +1,2 @@
+variant,size,jobs,solved,time_limit,pricing_failures,errors,valid_gap_count,avg_gap,shifted_geomean_time,shifted_geomean_labels,shifted_geomean_nodes
+bpc_clean_full,20,1,1,0,0,0,1,0.0,3593.896707,70880347.0,10.0

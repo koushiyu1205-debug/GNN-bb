@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import argparse
+import csv
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import sys
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[3]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
 from gnn_bb.data.instances import task_ids
-from gnn_bb.data.io_utils import ensure_dir, finite_or_none, round_float
-from gnn_bb.data.terrain import arc_key
+from gnn_bb.data.io_utils import ensure_dir, finite_or_none, read_json, round_float
+from gnn_bb.data.terrain import arc_key, build_task_closure
 
 
 @dataclass
@@ -299,3 +307,59 @@ def solve_scip_baseline(
         seed=seed,
     )
     return result
+
+
+def _write_result_csv(path: Path, result: BaselineResult) -> None:
+    ensure_dir(path.parent)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(BaselineResult.__dataclass_fields__.keys()))
+        writer.writeheader()
+        writer.writerow(result.to_row())
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="运行单个 JSON 实例的纯 SCIP compact MILP baseline。")
+    parser.add_argument("--instance-path", required=True, help="实例 JSON 路径。")
+    parser.add_argument("--time-limit", type=float, default=3600.0, help="SCIP 时间限制，单位秒。")
+    parser.add_argument("--results-csv", help="可选：写出单行结果 CSV。")
+    parser.add_argument("--log-path", help="可选：SCIP 日志路径。")
+    parser.add_argument("--seed", type=int, default=20260511)
+    parser.add_argument("--quiet", action="store_true", help="隐藏 SCIP 控制台日志。")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+    instance_path = Path(args.instance_path)
+    instance = read_json(instance_path)
+    pairwise = build_task_closure(instance, weight="cost")
+    instance_name = str(instance.get("name", instance_path.stem))
+    log_path = Path(args.log_path) if args.log_path else ROOT / "results" / "logs" / "scip_baseline" / f"{instance_name}.log"
+    scip_params = {
+        "display/verblevel": 0 if args.quiet else 4,
+        "randomization/randomseedshift": int(args.seed),
+        "randomization/permutationseed": int(args.seed),
+        "randomization/lpseed": int(args.seed),
+        "parallel/maxnthreads": 1,
+    }
+    result = solve_scip_baseline(
+        instance,
+        pairwise,
+        instance_path=instance_path,
+        time_limit=float(args.time_limit),
+        log_path=log_path,
+        scip_params=scip_params,
+        seed=int(args.seed),
+        verbose=not args.quiet,
+    )
+    if args.results_csv:
+        _write_result_csv(Path(args.results_csv), result)
+    print(
+        f"{result.instance}: status={result.status}, primal={result.primal_bound}, "
+        f"dual={result.dual_bound}, gap={result.gap}, time={result.solving_time}s, "
+        f"nodes={result.node_count}, vars={result.variable_count}, cons={result.constraint_count}"
+    )
+
+
+if __name__ == "__main__":
+    main()

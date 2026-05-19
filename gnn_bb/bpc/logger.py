@@ -37,6 +37,7 @@ class BPCLogger:
             "node_start",
             "rmp",
             "pricing",
+            "restricted_integer_master",
             "schedule_capacity_candidates",
             "cut_added",
             "branch",
@@ -57,13 +58,22 @@ class BPCLogger:
                 f"obj={record.get('objective')} artificial={record.get('artificial_sum')} cols={record.get('route_count')}"
             )
         if event == "pricing":
+            kind = record.get("pricing_kind", "exact")
             return (
-                f"{prefix} node {record['node_id']} cg={record['cg_iter']} phase={record['phase']} "
+                f"{prefix} node {record['node_id']} cg={record['cg_iter']} phase={record['phase']} kind={kind} "
                 f"best_rc={record.get('best_reduced_cost')} found={record.get('negative_routes')} "
-                f"added={record.get('added_routes')} exhausted={record.get('exhausted')}"
+                f"added={record.get('added_routes')} exhausted={record.get('exhausted')} cert={record.get('certificate')}"
             )
         if event == "schedule_capacity_candidates":
             return f"{prefix} node {record['node_id']} schedule-cap candidates={record.get('by_vehicle')}"
+        if event == "restricted_integer_master":
+            return (
+                f"{prefix} restricted-MIP node {record['node_id']} status={record.get('status')} "
+                f"obj={record.get('objective')} accepted={record.get('accepted')} "
+                f"routes={record.get('route_pool')} rejected={record.get('rejected_solutions')} "
+                f"ng={record.get('no_good_cuts')} added_cuts={record.get('added_schedule_cuts')} "
+                f"time={record.get('time')}"
+            )
         if event == "cut_added":
             cuts = record.get("cuts") or []
             head = cuts[0] if cuts else {}

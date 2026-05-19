@@ -1,0 +1,12 @@
+gnn_bb/bpc/logger.py                               |   5 +-
+ gnn_bb/bpc/pricing.py                              | 115 ++++++++++++++++-
+ gnn_bb/bpc/solver.py                               |  12 ++
+ gnn_bb/bpc/tree.py                                 | 142 ++++++++++++++++-----
+ .../branchpricecut/config/benchmark_10_20_30.json  |   2 +-
+ gnn_bb/branchpricecut/scripts/run_benchmark.py     |   6 +
+ gnn_bb/branchpricecut/solver.py                    |   8 +-
+ gnn_bb/configs/bpc_clean.yaml                      |  11 +-
+ gnn_bb/scripts/run_bpc_ablation.py                 |   6 +
+ gnn_bb/scripts/run_bpc_clean.py                    |   6 +
+ gnn_bb/src/gnn_bb/baseline/scip_milp.py            |  68 +++++++++-
+ 11 files changed, 334 insertions(+), 47 deletions(-)

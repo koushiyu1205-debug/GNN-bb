@@ -1,0 +1,35 @@
+{
+  "config": {
+    "base_solver_config": "branchpricecut/config/paper_bpc_clean_baseline.json",
+    "instance_dir": "branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances",
+    "instances_per_size": 1,
+    "max_nodes": 100000,
+    "name": "paper_bpc_clean_20_one",
+    "quiet": false,
+    "resume": true,
+    "seed_base": 20260600,
+    "sizes": [
+      20
+    ],
+    "time_limit": 3600,
+    "variants": [
+      "bpc_clean_full"
+    ],
+    "vehicle_schedule_config": "branchpricecut/config/medium_prove.json"
+  },
+  "created_at": "2026-05-18T11:56:30",
+  "git_diff_stat": "gnn_bb/bpc/logger.py                               |   5 +-\n gnn_bb/bpc/pricing.py                              | 115 ++++++++++++++++-\n gnn_bb/bpc/solver.py                               |  12 ++\n gnn_bb/bpc/tree.py                                 | 142 ++++++++++++++++-----\n .../branchpricecut/config/benchmark_10_20_30.json  |   2 +-\n gnn_bb/branchpricecut/scripts/run_benchmark.py     |   6 +\n gnn_bb/branchpricecut/solver.py                    |   8 +-\n gnn_bb/configs/bpc_clean.yaml                      |  11 +-\n gnn_bb/scripts/run_bpc_ablation.py                 |   6 +\n gnn_bb/scripts/run_bpc_clean.py                    |   6 +\n gnn_bb/src/gnn_bb/baseline/scip_milp.py            |  68 +++++++++-\n 11 files changed, 334 insertions(+), 47 deletions(-)",
+  "git_head": "7eae60536ad6254898b2448d75ee6437ee40c467",
+  "git_status": "M bpc/logger.py\n M bpc/pricing.py\n M bpc/solver.py\n M bpc/tree.py\n M branchpricecut/config/benchmark_10_20_30.json\n M branchpricecut/scripts/run_benchmark.py\n M branchpricecut/solver.py\n M configs/bpc_clean.yaml\n M scripts/run_bpc_ablation.py\n M scripts/run_bpc_clean.py\n M src/gnn_bb/baseline/scip_milp.py\n?? branchpricecut/config/paper_bpc_clean_baseline.json\n?? branchpricecut/docs/paper_grade_bpc_clean_baseline.md\n?? branchpricecut/results/benchmark/20260518_paper_bpc_clean_20_one/",
+  "instance_dir": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances",
+  "job_count": 1,
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "/home/kai/miniconda3/envs/ecole/bin/python",
+  "run_id": "20260518_paper_bpc_clean_20_one",
+  "sizes": [
+    20
+  ],
+  "variants": [
+    "bpc_clean_full"
+  ]
+}

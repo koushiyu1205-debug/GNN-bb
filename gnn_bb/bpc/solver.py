@@ -34,6 +34,13 @@ class BPCResult:
     branch_lp_candidates_tested: int
     branch_heuristic_candidates_tested: int
     branch_testing_time: float
+    restricted_master_integer_calls: int
+    restricted_master_integer_feasible: int
+    restricted_master_integer_time: float
+    restricted_master_integer_best_objective: float | None
+    restricted_master_integer_raw_best_objective: float | None
+    restricted_master_integer_rejected: int
+    restricted_master_integer_no_good_cuts: int
     crossing_cuts_added: int
     crossing_cuts_upgraded: int
     robust_capacity_cuts_added: int
@@ -78,6 +85,19 @@ def solve_bpc_clean(
     solution_path: str | Path | None,
     seed: int | None,
     quiet: bool,
+    root_max_routes_per_pricing: int = 0,
+    heuristic_pricing_enabled: bool = False,
+    heuristic_pricing_max_labels: int = 100000,
+    heuristic_pricing_routes_per_round: int = 500,
+    heuristic_pricing_selection_mode: str = "diverse",
+    exact_pricing_selection_mode: str = "reduced_cost",
+    restricted_master_heuristic_enabled: bool = False,
+    restricted_master_time_limit: float = 20.0,
+    restricted_master_max_routes: int = 4000,
+    restricted_master_max_calls: int = 20,
+    restricted_master_max_depth: int = 3,
+    restricted_master_schedule_aware: bool = True,
+    restricted_master_max_no_good_rounds: int = 20,
     branching_strategy: str = "3pb",
     three_pb_pseudocost_candidates: int = 6,
     three_pb_fractional_candidates: int = 6,
@@ -125,6 +145,19 @@ def solve_bpc_clean(
             max_labels_per_pricing=max_labels_per_pricing,
             rmp_params=rmp_params,
             logger=logger,
+            root_max_routes_per_pricing=root_max_routes_per_pricing,
+            heuristic_pricing_enabled=heuristic_pricing_enabled,
+            heuristic_pricing_max_labels=heuristic_pricing_max_labels,
+            heuristic_pricing_routes_per_round=heuristic_pricing_routes_per_round,
+            heuristic_pricing_selection_mode=heuristic_pricing_selection_mode,
+            exact_pricing_selection_mode=exact_pricing_selection_mode,
+            restricted_master_heuristic_enabled=restricted_master_heuristic_enabled,
+            restricted_master_time_limit=restricted_master_time_limit,
+            restricted_master_max_routes=restricted_master_max_routes,
+            restricted_master_max_calls=restricted_master_max_calls,
+            restricted_master_max_depth=restricted_master_max_depth,
+            restricted_master_schedule_aware=restricted_master_schedule_aware,
+            restricted_master_max_no_good_rounds=restricted_master_max_no_good_rounds,
             branching_strategy=branching_strategy,
             three_pb_pseudocost_candidates=three_pb_pseudocost_candidates,
             three_pb_fractional_candidates=three_pb_fractional_candidates,
@@ -186,6 +219,13 @@ def solve_bpc_clean(
         branch_lp_candidates_tested=tree_result.stats.branch_lp_candidates_tested,
         branch_heuristic_candidates_tested=tree_result.stats.branch_heuristic_candidates_tested,
         branch_testing_time=_round(tree_result.stats.branch_testing_time),
+        restricted_master_integer_calls=tree_result.stats.restricted_master_integer_calls,
+        restricted_master_integer_feasible=tree_result.stats.restricted_master_integer_feasible,
+        restricted_master_integer_time=_round(tree_result.stats.restricted_master_integer_time),
+        restricted_master_integer_best_objective=_round(tree_result.stats.restricted_master_integer_best_objective),
+        restricted_master_integer_raw_best_objective=_round(tree_result.stats.restricted_master_integer_raw_best_objective),
+        restricted_master_integer_rejected=tree_result.stats.restricted_master_integer_rejected,
+        restricted_master_integer_no_good_cuts=tree_result.stats.restricted_master_integer_no_good_cuts,
         crossing_cuts_added=tree_result.stats.crossing_cuts_added,
         crossing_cuts_upgraded=tree_result.stats.crossing_cuts_upgraded,
         robust_capacity_cuts_added=tree_result.stats.robust_capacity_cuts_added,

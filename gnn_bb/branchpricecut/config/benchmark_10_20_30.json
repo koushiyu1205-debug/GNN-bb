@@ -11,7 +11,7 @@
     "hybrid_full",
     "vehicle_schedule_ng_dssr"
   ],
-  "base_solver_config": "branchpricecut/config/medium_hybrid_route.json",
+  "base_solver_config": "branchpricecut/config/paper_bpc_clean_baseline.json",
   "vehicle_schedule_config": "branchpricecut/config/medium_prove.json",
   "resume": true,
   "quiet": true

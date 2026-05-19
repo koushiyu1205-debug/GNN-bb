@@ -1,0 +1,40 @@
+{
+  "instance_dir": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances",
+  "instances": [
+    {
+      "index": 1,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances/instance_bench_20_01.json",
+      "name": "bench_20_01",
+      "seed": 20262601,
+      "size": 20
+    },
+    {
+      "index": 2,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances/instance_bench_20_02.json",
+      "name": "bench_20_02",
+      "seed": 20262602,
+      "size": 20
+    },
+    {
+      "index": 3,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances/instance_bench_20_03.json",
+      "name": "bench_20_03",
+      "seed": 20262603,
+      "size": 20
+    },
+    {
+      "index": 4,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances/instance_bench_20_04.json",
+      "name": "bench_20_04",
+      "seed": 20262604,
+      "size": 20
+    },
+    {
+      "index": 5,
+      "instance_path": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances/instance_bench_20_05.json",
+      "name": "bench_20_05",
+      "seed": 20262605,
+      "size": 20
+    }
+  ]
+}

@@ -1,14 +1,20 @@
-"""中文摘要：本文件用 SCIP 构建并求解当前节点的 Restricted Master LP。SCIP 只负责 LP 和 dual，不负责 BPC 搜索树。"""
+"""中文摘要：本文件用 SCIP 构建并求解当前节点的 Restricted Master。
+
+LP 版本负责提供节点 bound 和 dual；binary 版本只作为 primal heuristic，
+用于在已有 route pool 上找真实可行 incumbent，不参与 lower bound 证明。
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from .branching import BranchConstraint, route_allowed_by_branch, route_branch_coefficient
 from .columns import RouteColumn, route_work_time_lower_bound
 from .cuts import Cut
 from .data import BPCData
+from .validation import check_route_set_schedule_feasible, shrink_infeasible_route_set
 
 
 @dataclass
@@ -36,6 +42,25 @@ class RMPSolution:
     @property
     def optimal(self) -> bool:
         return self.status.lower() == "optimal"
+
+
+@dataclass
+class RestrictedIntegerResult:
+    status: str
+    objective: float | None
+    assigned_routes: dict[int, list[RouteColumn]]
+    solving_time: float
+    variable_count: int
+    constraint_count: int
+    selected_routes: int
+    raw_objective: float | None = None
+    rejected_solutions: int = 0
+    no_good_cuts: int = 0
+    rejected_conflicts: tuple[tuple[int, tuple[RouteColumn, ...]], ...] = tuple()
+
+    @property
+    def feasible(self) -> bool:
+        return self.objective is not None and bool(self.assigned_routes)
 
 
 class _DualCapturePricer:
@@ -335,4 +360,278 @@ def solve_rmp_lp(
         variable_count=model.getNVars(),
         constraint_count=model.getNConss(),
         lambda_reduced_costs=lambda_reduced_costs,
+    )
+
+
+def _solution_value(model, solution, var) -> float:
+    try:
+        return float(model.getSolVal(solution, var))
+    except Exception:
+        return float(model.getVal(var))
+
+
+def _extract_integer_assignment(
+    data: BPCData,
+    routes: list[RouteColumn],
+    route_vars: dict[tuple[int, int], Any],
+    model,
+    solution,
+) -> tuple[dict[int, list[RouteColumn]], int]:
+    assigned: dict[int, list[RouteColumn]] = {int(vehicle): [] for vehicle in data.vehicles}
+    selected_routes = 0
+    for (route_id, vehicle), var in route_vars.items():
+        if _solution_value(model, solution, var) > 0.5:
+            assigned[int(vehicle)].append(routes[route_id])
+            selected_routes += 1
+    return assigned, selected_routes
+
+
+def _first_schedule_conflict(
+    data: BPCData,
+    assigned: dict[int, list[RouteColumn]],
+) -> tuple[int, list[RouteColumn]] | None:
+    for vehicle, vehicle_routes in assigned.items():
+        if not vehicle_routes:
+            continue
+        check = check_route_set_schedule_feasible(data, vehicle_routes)
+        if check.feasible:
+            continue
+        conflict = shrink_infeasible_route_set(data, vehicle_routes)
+        return int(vehicle), conflict
+    return None
+
+
+def solve_restricted_integer_master(
+    data: BPCData,
+    routes: list[RouteColumn],
+    cuts: list[Cut],
+    branch_constraints: tuple[BranchConstraint, ...],
+    *,
+    rmp_params: dict[str, Any] | None = None,
+    time_limit: float = 20.0,
+    task_vehicle_linking_enabled: bool = True,
+    incumbent_bound: float | None = None,
+    schedule_aware: bool = True,
+    max_no_good_rounds: int = 20,
+) -> RestrictedIntegerResult:
+    """中文注释：在当前 route pool 上解 binary RMP，并可迭代排除排程不可行的整数解。"""
+
+    from pyscipopt import Model, quicksum
+
+    # 中文注释：这里不用 SCIP objlimit；排程不可行的低目标解可能提前触发 objlimit 停止。
+    # 下面用线性目标 cutoff 约束过滤不可能改进 incumbent 的候选，同时保留 no-good 迭代能力。
+    started = time.perf_counter()
+    model = Model(f"clean_bpc_restricted_integer_{data.name}")
+    _try_set_param(model, "display/verblevel", 0)
+    _try_set_param(model, "parallel/maxnthreads", 1)
+    if time_limit > 0:
+        _try_set_param(model, "limits/time", float(time_limit))
+    for name, value in (rmp_params or {}).items():
+        if str(name).startswith("display/") or str(name).startswith("parallel/"):
+            _try_set_param(model, name, value)
+
+    y = {}
+    for vehicle in data.vehicles:
+        lb = 0.0
+        ub = 1.0
+        for constraint in branch_constraints:
+            if constraint.kind == "vehicle_use_on" and int(constraint.vehicle) == int(vehicle):
+                lb = 1.0
+            elif constraint.kind == "vehicle_use_off" and int(constraint.vehicle) == int(vehicle):
+                ub = 0.0
+        y[vehicle] = model.addVar(
+            vtype="B",
+            lb=lb,
+            ub=ub,
+            obj=data.fixed_vehicle_cost,
+            name=f"y[{vehicle}]",
+        )
+
+    route_vars: dict[tuple[int, int], Any] = {}
+    for route_index, route in enumerate(routes):
+        for vehicle in data.vehicles:
+            if not route_allowed_by_branch(route, vehicle, branch_constraints):
+                continue
+            route_vars[(route_index, vehicle)] = model.addVar(
+                vtype="B",
+                obj=float(route.cost),
+                name=f"lambda[{route_index},{vehicle}]",
+            )
+
+    for task in data.tasks:
+        terms = [
+            var
+            for (route_id, _vehicle), var in route_vars.items()
+            if int(task) in routes[route_id].task_set
+        ]
+        model.addCons(quicksum(terms) == 1.0, name=f"cover[{task}]")
+
+    if task_vehicle_linking_enabled:
+        for task in data.tasks:
+            for vehicle in data.vehicles:
+                terms = [
+                    var
+                    for (route_id, var_vehicle), var in route_vars.items()
+                    if int(var_vehicle) == int(vehicle) and int(task) in routes[route_id].task_set
+                ]
+                model.addCons(quicksum(terms) - y[vehicle] <= 0.0, name=f"task_vehicle_link[{task},{vehicle}]")
+
+    for vehicle in data.vehicles:
+        vehicle_vars = [
+            (routes[route_id], var)
+            for (route_id, var_vehicle), var in route_vars.items()
+            if int(var_vehicle) == int(vehicle)
+        ]
+        model.addCons(quicksum(var for _route, var in vehicle_vars) - data.sortie_limit * y[vehicle] <= 0.0, name=f"sortie_count[{vehicle}]")
+        model.addCons(
+            quicksum(route_work_time_lower_bound(data, route) * var for route, var in vehicle_vars)
+            - data.horizon * y[vehicle]
+            <= 0.0,
+            name=f"vehicle_time[{vehicle}]",
+        )
+
+    for left, right in zip(data.vehicles[:-1], data.vehicles[1:]):
+        model.addCons(y[right] <= y[left], name=f"vehicle_order[{left}]")
+
+    for cut in cuts:
+        terms = [
+            cut.coefficient(routes[route_id], vehicle) * var
+            for (route_id, vehicle), var in route_vars.items()
+            if cut.coefficient(routes[route_id], vehicle) != 0.0
+        ]
+        y_terms = [
+            cut.y_coefficient(vehicle) * var
+            for vehicle, var in y.items()
+            if hasattr(cut, "y_coefficient") and cut.y_coefficient(vehicle) != 0.0
+        ]
+        expr = quicksum([*terms, *y_terms])
+        if cut.sense == "<=":
+            model.addCons(expr <= cut.rhs, name=f"cut[{cut.id}]")
+        elif cut.sense == ">=":
+            model.addCons(expr >= cut.rhs, name=f"cut[{cut.id}]")
+        else:
+            raise ValueError(f"未知 cut sense: {cut.sense}")
+
+    for index, constraint in enumerate(branch_constraints):
+        if constraint.kind != "arc_on":
+            continue
+        terms = [
+            route_branch_coefficient(routes[route_id], vehicle, constraint) * var
+            for (route_id, vehicle), var in route_vars.items()
+            if route_branch_coefficient(routes[route_id], vehicle, constraint) != 0.0
+        ]
+        model.addCons(quicksum(terms) >= 1.0, name=f"branch_arc_on[{index}]")
+
+    objective_expr = quicksum(
+        [float(data.fixed_vehicle_cost) * var for var in y.values()]
+        + [float(routes[route_id].cost) * var for (route_id, _vehicle), var in route_vars.items()]
+    )
+    if incumbent_bound is not None:
+        model.addCons(objective_expr <= float(incumbent_bound) - 1.0e-6, name="incumbent_cutoff")
+
+    raw_best_objective: float | None = None
+    rejected_solutions = 0
+    no_good_cuts = 0
+    rejected_conflicts: list[tuple[int, tuple[RouteColumn, ...]]] = []
+    last_status = "UNKNOWN"
+    no_good_limit = max(0, int(max_no_good_rounds))
+    deadline = started + float(time_limit) if time_limit > 0 else None
+
+    while True:
+        if deadline is not None:
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0.0:
+                last_status = "TIME_LIMIT"
+                break
+            _try_set_param(model, "limits/time", max(0.001, float(remaining)))
+
+        model.optimize()
+        last_status = _status_name(model.getStatus())
+        solution = None
+        try:
+            if model.getNSols() > 0:
+                solution = model.getBestSol()
+        except Exception:
+            solution = None
+        if solution is None:
+            break
+
+        raw_objective = float(model.getSolObjVal(solution))
+        if raw_best_objective is None or raw_objective < raw_best_objective:
+            raw_best_objective = raw_objective
+        assigned, selected_routes = _extract_integer_assignment(data, routes, route_vars, model, solution)
+        if not schedule_aware:
+            return RestrictedIntegerResult(
+                status=last_status,
+                objective=raw_objective,
+                assigned_routes=assigned,
+                solving_time=time.perf_counter() - started,
+                variable_count=model.getNVars(),
+                constraint_count=model.getNConss(),
+                selected_routes=selected_routes,
+                raw_objective=raw_best_objective,
+                rejected_solutions=rejected_solutions,
+                no_good_cuts=no_good_cuts,
+                rejected_conflicts=tuple(rejected_conflicts),
+            )
+
+        conflict = _first_schedule_conflict(data, assigned)
+        if conflict is None:
+            return RestrictedIntegerResult(
+                status=last_status,
+                objective=raw_objective,
+                assigned_routes=assigned,
+                solving_time=time.perf_counter() - started,
+                variable_count=model.getNVars(),
+                constraint_count=model.getNConss(),
+                selected_routes=selected_routes,
+                raw_objective=raw_best_objective,
+                rejected_solutions=rejected_solutions,
+                no_good_cuts=no_good_cuts,
+                rejected_conflicts=tuple(rejected_conflicts),
+            )
+
+        rejected_solutions += 1
+        conflict_vehicle, conflict_routes = conflict
+        rejected_conflicts.append((int(conflict_vehicle), tuple(conflict_routes)))
+        if rejected_solutions > no_good_limit:
+            last_status = "SCHEDULE_REJECTED_LIMIT"
+            break
+
+        conflict_signatures = {route.signature for route in conflict_routes}
+        try:
+            model.freeTransform()
+        except Exception:
+            pass
+        added_any = False
+        for vehicle in data.vehicles:
+            no_good_terms = [
+                var
+                for (route_id, var_vehicle), var in route_vars.items()
+                if int(var_vehicle) == int(vehicle) and routes[route_id].signature in conflict_signatures
+            ]
+            if not no_good_terms:
+                continue
+            model.addCons(
+                quicksum(no_good_terms) <= max(0, len(conflict_signatures) - 1),
+                name=f"tmp_schedule_nogood[{no_good_cuts},{vehicle}]",
+            )
+            no_good_cuts += 1
+            added_any = True
+        if not added_any:
+            last_status = "SCHEDULE_REJECTED"
+            break
+
+    return RestrictedIntegerResult(
+        status=last_status,
+        objective=None,
+        assigned_routes={},
+        solving_time=time.perf_counter() - started,
+        variable_count=model.getNVars(),
+        constraint_count=model.getNConss(),
+        selected_routes=0,
+        raw_objective=raw_best_objective,
+        rejected_solutions=rejected_solutions,
+        no_good_cuts=no_good_cuts,
+        rejected_conflicts=tuple(rejected_conflicts),
     )

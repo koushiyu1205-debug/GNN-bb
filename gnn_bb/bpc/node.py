@@ -29,6 +29,13 @@ class BPCStats:
     branch_lp_candidates_tested: int = 0
     branch_heuristic_candidates_tested: int = 0
     branch_testing_time: float = 0.0
+    restricted_master_integer_calls: int = 0
+    restricted_master_integer_feasible: int = 0
+    restricted_master_integer_time: float = 0.0
+    restricted_master_integer_best_objective: float | None = None
+    restricted_master_integer_raw_best_objective: float | None = None
+    restricted_master_integer_rejected: int = 0
+    restricted_master_integer_no_good_cuts: int = 0
     crossing_cuts_added: int = 0
     crossing_cuts_upgraded: int = 0
     robust_capacity_cuts_added: int = 0

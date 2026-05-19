@@ -401,7 +401,7 @@ rc_pr < -epsilon
 label 状态：
 
 ```text
-(current_node, sequence, time, load, energy, travel_time, cost)
+(current_node, sequence, visited_mask, time, load, energy, travel_time, cost, service_time, task_dual_sum)
 ```
 
 扩展任务 `j` 时检查：
@@ -429,6 +429,14 @@ branching partial sequence feasible
 - `max_labels_per_pricing = 0` 表示不设 label 上限；
 - 若设置正数且 pricing 未 exhausted，则不能用该节点 bound 做证明；
 - clean 主线默认 exact pricing，不使用 heuristic pricing 证明无负 reduced-cost 列。
+
+当前性能实现：
+
+- exact pricing 仍逐车辆完整枚举所有满足资源、时间窗和 branching filter 的 elementary sequence；
+- label 扩展时增量维护 route cost、travel time、energy、service time、visited bitmask 和任务 dual 贡献；
+- reduced cost 使用这些增量状态直接计算，cut dual 和 branch dual 仍逐 route 计入；
+- 只有当 route 的 reduced cost 为负时，才调用 `evaluate_route()` 构造完整 `RouteColumn` 并用公共 `reduced_cost()` 公式复核；
+- 因此该优化只减少重复 route 重建和字典查询，不改变 pricing 可行域、不改变节点证书条件。
 
 ## 9. Cut Families
 
@@ -762,7 +770,18 @@ branch_testing_time
    - 每次候选都用 exact schedule checker；
    - 若找到可排程 assignment，则作为真实原问题 incumbent。
 
-`route_assignment_repair` 只改善 primal bound，不影响 dual bound 或节点证明。即使 repair 找到 incumbent，若当前节点原 assignment 不可排程，算法仍会加 schedule no-good cut，而不会错误 fathom。
+4. `restricted_integer_master`
+   - 在当前 route pool 上解 binary restricted master；
+   - 该 MIP 只作为 primal heuristic，不参与 lower bound 证明；
+   - 每次得到整数 assignment 后立即运行 exact schedule checker；
+   - 如果某辆车的 route 集合不可排程，就提取不可排程 core，并在该临时 MIP 中对所有同质车辆加入 no-good 约束后继续求解；
+   - RIM 中发现的不可排程 core 是有效 cut，会回流成主树正式 `schedule_nogood_core` cut；一旦新增正式 cut，当前节点必须重新求解；
+   - RIM 使用线性 objective cutoff 过滤不可能改进当前 incumbent 的候选，但不使用 solver objlimit；
+   - 只有排程可行且通过 `_set_incumbent_from_assignment` 的解才允许更新 incumbent。
+
+`route_assignment_repair` 和 `restricted_integer_master` 都只改善 primal bound，不影响 dual bound 或节点证明。即使 heuristic 找到 incumbent，若当前节点原 assignment 不可排程，算法仍会加 schedule no-good cut，而不会错误 fathom。
+
+节点 lower bound 只有在当前节点完成 Phase-II RMP、exact pricing certificate 和所有启用 cut separation 后才被标记为已认证。若时间限制在证书完成前触发，不能使用最后一次 RMP LP 作为节点 bound，整体求解状态必须是 `TIME_LIMIT`。
 
 ### 13.1 Schedule Checker 当前返回的信息
 

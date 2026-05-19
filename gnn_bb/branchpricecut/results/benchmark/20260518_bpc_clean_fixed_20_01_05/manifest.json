@@ -1,0 +1,34 @@
+{
+  "config": {
+    "base_solver_config": "branchpricecut/config/paper_bpc_clean_baseline.json",
+    "instance_dir": "branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances",
+    "instances_per_size": 5,
+    "max_nodes": 100000,
+    "name": "bpc_clean_fixed_20_first5",
+    "quiet": false,
+    "resume": true,
+    "seed_base": 20260600,
+    "sizes": [
+      20
+    ],
+    "time_limit": 3600,
+    "variants": [
+      "bpc_clean_full"
+    ]
+  },
+  "created_at": "2026-05-18T21:39:57",
+  "git_diff_stat": "gnn_bb/bpc/__pycache__/logger.cpython-312.pyc      | Bin 6980 -> 7896 bytes\n gnn_bb/bpc/__pycache__/node.cpython-312.pyc        | Bin 2786 -> 3261 bytes\n gnn_bb/bpc/__pycache__/pricing.cpython-312.pyc     | Bin 8514 -> 12557 bytes\n gnn_bb/bpc/__pycache__/rmp.cpython-312.pyc         | Bin 18808 -> 31882 bytes\n gnn_bb/bpc/__pycache__/solver.cpython-312.pyc      | Bin 11754 -> 14027 bytes\n gnn_bb/bpc/__pycache__/tree.cpython-312.pyc        | Bin 94978 -> 106815 bytes\n gnn_bb/bpc/logger.py                               |  14 +-\n gnn_bb/bpc/node.py                                 |   7 +\n gnn_bb/bpc/pricing.py                              | 115 +++++++-\n gnn_bb/bpc/rmp.py                                  | 301 +++++++++++++++++++-\n gnn_bb/bpc/solver.py                               |  40 +++\n gnn_bb/bpc/tree.py                                 | 307 ++++++++++++++++++---\n .../__pycache__/solver.cpython-312.pyc             | Bin 22831 -> 24541 bytes\n .../branchpricecut/config/benchmark_10_20_30.json  |   2 +-\n gnn_bb/branchpricecut/scripts/run_benchmark.py     |  13 +\n gnn_bb/branchpricecut/solver.py                    |  23 +-\n gnn_bb/configs/bpc_clean.yaml                      |  21 +-\n gnn_bb/docs/bpc_clean_formulation.md               |   6 +-\n gnn_bb/docs/bpc_clean_optimality_proof.md          |   4 +-\n gnn_bb/docs/bpc_current_complete_model.md          |  13 +-\n gnn_bb/scripts/run_bpc_ablation.py                 |  13 +\n gnn_bb/scripts/run_bpc_clean.py                    |  15 +\n gnn_bb/src/gnn_bb/baseline/scip_milp.py            |  68 ++++-\n gnn_bb/tests/test_bpc_clean.py                     | 102 ++++++-\n 24 files changed, 1005 insertions(+), 59 deletions(-)",
+  "git_head": "7eae60536ad6254898b2448d75ee6437ee40c467",
+  "git_status": "M bpc/__pycache__/logger.cpython-312.pyc\n M bpc/__pycache__/node.cpython-312.pyc\n M bpc/__pycache__/pricing.cpython-312.pyc\n M bpc/__pycache__/rmp.cpython-312.pyc\n M bpc/__pycache__/solver.cpython-312.pyc\n M bpc/__pycache__/tree.cpython-312.pyc\n M bpc/logger.py\n M bpc/node.py\n M bpc/pricing.py\n M bpc/rmp.py\n M bpc/solver.py\n M bpc/tree.py\n M branchpricecut/__pycache__/solver.cpython-312.pyc\n M branchpricecut/config/benchmark_10_20_30.json\n M branchpricecut/scripts/run_benchmark.py\n M branchpricecut/solver.py\n M configs/bpc_clean.yaml\n M docs/bpc_clean_formulation.md\n M docs/bpc_clean_optimality_proof.md\n M docs/bpc_current_complete_model.md\n M scripts/run_bpc_ablation.py\n M scripts/run_bpc_clean.py\n M src/gnn_bb/baseline/scip_milp.py\n M tests/test_bpc_clean.py\n?? branchpricecut/config/paper_bpc_clean_baseline.json\n?? branchpricecut/docs/paper_grade_bpc_clean_baseline.md\n?? branchpricecut/results/benchmark/20260518_bpc_clean_fixed_20_01_05/\n?? branchpricecut/results/benchmark/20260518_paper_bpc_clean_20_02_03/\n?? branchpricecut/results/benchmark/20260518_paper_bpc_clean_20_one/\n?? branchpricecut/results/benchmark/20260518_paper_bpc_clean_rim_20_02_03/",
+  "instance_dir": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances",
+  "job_count": 5,
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "/home/kai/miniconda3/envs/ecole/bin/python",
+  "run_id": "20260518_bpc_clean_fixed_20_01_05",
+  "sizes": [
+    20
+  ],
+  "variants": [
+    "bpc_clean_full"
+  ]
+}

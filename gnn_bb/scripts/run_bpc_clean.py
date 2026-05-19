@@ -66,6 +66,19 @@ def main() -> None:
             integer_tol=float(config.get("integer_tol", 1.0e-6)),
             max_routes_per_pricing=int(config.get("max_routes_per_pricing", 200)),
             max_labels_per_pricing=int(config.get("max_labels_per_pricing", 0) or 0),
+            root_max_routes_per_pricing=int(config.get("root_max_routes_per_pricing", 0) or 0),
+            heuristic_pricing_enabled=bool(config.get("heuristic_pricing_enabled", False)),
+            heuristic_pricing_max_labels=int(config.get("heuristic_pricing_max_labels", 100000)),
+            heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
+            heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
+            exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
+            restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
+            restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
+            restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
+            restricted_master_max_calls=int(config.get("restricted_master_max_calls", 20)),
+            restricted_master_max_depth=int(config.get("restricted_master_max_depth", 3)),
+            restricted_master_schedule_aware=bool(config.get("restricted_master_schedule_aware", True)),
+            restricted_master_max_no_good_rounds=int(config.get("restricted_master_max_no_good_rounds", 20)),
             rmp_params=dict(config.get("rmp_params", {})),
             log_path=log_path,
             solution_path=solution_path,
@@ -115,6 +128,8 @@ def main() -> None:
             f"crossing_upgraded={result.crossing_cuts_upgraded}, rci={result.robust_capacity_cuts_added}, "
             f"kpath={result.resource_lower_bound_cuts_added}, nogood={result.schedule_nogood_cuts_added}, "
             f"sched_cap={result.schedule_capacity_cuts_added}, "
+            f"rim_calls={result.restricted_master_integer_calls}, rim_feasible={result.restricted_master_integer_feasible}, "
+            f"rim_rejected={result.restricted_master_integer_rejected}, rim_ng={result.restricted_master_integer_no_good_cuts}, "
             f"cuts_purged={result.cuts_purged}, branch_test_time={result.branch_testing_time}s",
             flush=True,
         )

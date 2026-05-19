@@ -13,9 +13,28 @@ log_level: progress
 pricing_eps: 1.0e-6
 integer_tol: 1.0e-6
 max_nodes: 100000
-max_routes_per_pricing: 200
+max_routes_per_pricing: 500
+root_max_routes_per_pricing: 1200
 # 0 表示 exact pricing 不设 label 上限；若设为正数，中断的 pricing 不能用于证明节点 bound。
 max_labels_per_pricing: 0
+
+# 启发式 route pricing 先用 label 上限快速找负 reduced-cost 列。
+# 若 label 上限触发且找不到新列，仍会继续运行完整 exact pricing；只有完整枚举才能证明节点 bound。
+heuristic_pricing_enabled: true
+heuristic_pricing_max_labels: 120000
+heuristic_pricing_routes_per_round: 600
+heuristic_pricing_selection_mode: diverse
+exact_pricing_selection_mode: diverse
+
+# route pool 受限整数主问题：只用于找 incumbent。
+# 开启 schedule-aware 后，MIP 内部会把排程不可行的整数列组合加为临时 no-good 再重解。
+restricted_master_heuristic_enabled: true
+restricted_master_time_limit: 20.0
+restricted_master_max_routes: 4000
+restricted_master_max_calls: 20
+restricted_master_max_depth: 3
+restricted_master_schedule_aware: true
+restricted_master_max_no_good_rounds: 20
 
 # no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
 branching_strategy: 3pb

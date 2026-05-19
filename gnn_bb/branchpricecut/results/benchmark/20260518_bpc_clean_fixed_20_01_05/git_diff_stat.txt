@@ -1,0 +1,25 @@
+gnn_bb/bpc/__pycache__/logger.cpython-312.pyc      | Bin 6980 -> 7896 bytes
+ gnn_bb/bpc/__pycache__/node.cpython-312.pyc        | Bin 2786 -> 3261 bytes
+ gnn_bb/bpc/__pycache__/pricing.cpython-312.pyc     | Bin 8514 -> 12557 bytes
+ gnn_bb/bpc/__pycache__/rmp.cpython-312.pyc         | Bin 18808 -> 31882 bytes
+ gnn_bb/bpc/__pycache__/solver.cpython-312.pyc      | Bin 11754 -> 14027 bytes
+ gnn_bb/bpc/__pycache__/tree.cpython-312.pyc        | Bin 94978 -> 106815 bytes
+ gnn_bb/bpc/logger.py                               |  14 +-
+ gnn_bb/bpc/node.py                                 |   7 +
+ gnn_bb/bpc/pricing.py                              | 115 +++++++-
+ gnn_bb/bpc/rmp.py                                  | 301 +++++++++++++++++++-
+ gnn_bb/bpc/solver.py                               |  40 +++
+ gnn_bb/bpc/tree.py                                 | 307 ++++++++++++++++++---
+ .../__pycache__/solver.cpython-312.pyc             | Bin 22831 -> 24541 bytes
+ .../branchpricecut/config/benchmark_10_20_30.json  |   2 +-
+ gnn_bb/branchpricecut/scripts/run_benchmark.py     |  13 +
+ gnn_bb/branchpricecut/solver.py                    |  23 +-
+ gnn_bb/configs/bpc_clean.yaml                      |  21 +-
+ gnn_bb/docs/bpc_clean_formulation.md               |   6 +-
+ gnn_bb/docs/bpc_clean_optimality_proof.md          |   4 +-
+ gnn_bb/docs/bpc_current_complete_model.md          |  13 +-
+ gnn_bb/scripts/run_bpc_ablation.py                 |  13 +
+ gnn_bb/scripts/run_bpc_clean.py                    |  15 +
+ gnn_bb/src/gnn_bb/baseline/scip_milp.py            |  68 ++++-
+ gnn_bb/tests/test_bpc_clean.py                     | 102 ++++++-
+ 24 files changed, 1005 insertions(+), 59 deletions(-)

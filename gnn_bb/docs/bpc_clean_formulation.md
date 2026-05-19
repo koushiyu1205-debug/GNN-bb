@@ -27,7 +27,8 @@ vehicle-schedule BPC
 
 - 对 LP / integer RMP 给出的 route-vehicle 解，检查每辆车选中的 route 集合是否能排成真实时间顺序；
 - 如果整数解不可排程，就加入 valid no-good cut 排除该不可行 route 集合；
-- 如果整数解可排程，才作为原问题 incumbent。
+- 如果整数解可排程，才作为原问题 incumbent；
+- restricted integer master 只在当前 route pool 上寻找 primal incumbent；它可以加入临时排程 no-good 排除不可排程整数候选，也可以把已证明不可排程的 core 回流成正式 schedule no-good cut，但不参与节点 lower bound 证明。
 
 只要所有 schedule cuts 都 valid，且 node bound 只在 exact pricing + cut separation 后使用，该框架仍保持精确性。它的代价是 cut 可能很多，LP relaxation 可能比 vehicle-schedule master 弱。
 
@@ -143,6 +144,8 @@ rc_I[p,r] = 0
 
 只有 exact pricing 在 true dual 下完整结束，且不存在负 reduced-cost route，当前节点 LP 才被认证。
 
+当前实现保留上述证书条件，但把 `bpc/pricing.py` 内部改为增量 reduced-cost 计算：label 扩展时维护访问 bitmask、资源、服务时间和任务 dual 贡献，直接评估 route reduced cost；只有 route 为负 reduced-cost 候选时才构造完整 `RouteColumn` 并用公共公式复核。该优化不改变完整枚举的 route 集合，也不改变 exactness。
+
 ## 5. Cuts
 
 当前 clean BPC 包含 schedule pair conflict cuts、schedule no-good cuts、统一 crossing cuts 和 schedule capacity upper-bound cuts。统一 crossing cut 合并了 RCI 与 k-path/resource lower bound，同一个任务子集只保留 RHS 最大的版本。
@@ -208,9 +211,10 @@ clean BPC 的证明流程依赖以下条件：
 1. RMP 初始可行由 Phase-I 人工列保证。
 2. reduced cost 公式使用 RMP 的真实 dual。
 3. exact pricing 使用 true dual、branching constraints、cut duals。
-4. heuristic pricing、pool、ML 暂不进入 clean v1。
+4. heuristic pricing 和 restricted integer master 只用于找列或找 incumbent；不能用于证明节点完成。
 5. node lower bound 只在 full pricing + cut separation 后使用。
 6. integer incumbent 必须通过 exact schedule checker。
 7. pricing 中断时不能声明节点完成，也不能用该节点 bound 做证明。
+8. 时间限制在节点证书完成前触发时，状态必须是 `TIME_LIMIT`。
 
 因此 v1 可能慢，但不是启发式算法。

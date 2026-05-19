@@ -133,6 +133,19 @@ def _solve_hybrid_route_bpc(
         integer_tol=float(config.get("integer_tol", 1.0e-6)),
         max_routes_per_pricing=int(config.get("max_routes_per_pricing", config.get("max_columns_per_pricing", 200))),
         max_labels_per_pricing=int(config.get("hybrid_max_labels_per_pricing", config.get("max_labels_per_pricing", 0)) or 0),
+        root_max_routes_per_pricing=int(config.get("root_max_routes_per_pricing", 0) or 0),
+        heuristic_pricing_enabled=bool(config.get("heuristic_pricing_enabled", False)),
+        heuristic_pricing_max_labels=int(config.get("heuristic_pricing_max_labels", 100000)),
+        heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
+        heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
+        exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
+        restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
+        restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
+        restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
+        restricted_master_max_calls=int(config.get("restricted_master_max_calls", 20)),
+        restricted_master_max_depth=int(config.get("restricted_master_max_depth", 3)),
+        restricted_master_schedule_aware=bool(config.get("restricted_master_schedule_aware", True)),
+        restricted_master_max_no_good_rounds=int(config.get("restricted_master_max_no_good_rounds", 20)),
         rmp_params=dict(config.get("rmp_params", {})),
         log_path=log_path,
         solution_path=solution_path,
@@ -174,7 +187,7 @@ def _solve_hybrid_route_bpc(
         cut_purge_dual=float(_hybrid_value(config, "cut_purge_dual", 1.0e-8)),
     )
 
-    exhausted_pricing_calls = result.pricing_calls
+    exhausted_pricing_calls = result.exact_pricing_calls
     if result.status == "PRICING_INCOMPLETE" and exhausted_pricing_calls > 0:
         exhausted_pricing_calls -= 1
 
@@ -222,10 +235,10 @@ def _solve_hybrid_route_bpc(
         schedule_dp_best_rc=None,
         schedule_dp_time=0.0,
         heuristic_degradation_skips=0,
-        restricted_master_integer_calls=0,
-        restricted_master_integer_feasible=0,
-        restricted_master_integer_time=0.0,
-        restricted_master_integer_best_objective=None,
+        restricted_master_integer_calls=result.restricted_master_integer_calls,
+        restricted_master_integer_feasible=result.restricted_master_integer_feasible,
+        restricted_master_integer_time=result.restricted_master_integer_time,
+        restricted_master_integer_best_objective=result.restricted_master_integer_best_objective,
         exact_pricing_calls=result.exact_pricing_calls,
         exact_pricing_called=result.exact_pricing_calls,
         exact_pricing_exhausted=exhausted_pricing_calls,

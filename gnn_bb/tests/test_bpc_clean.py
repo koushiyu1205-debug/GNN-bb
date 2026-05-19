@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from itertools import permutations
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -17,9 +18,9 @@ if str(SRC) not in sys.path:
 from bpc.columns import RoutePool, evaluate_route
 from bpc.branching import BranchConstraint, route_allowed_by_branch, route_branch_coefficient
 from bpc.cuts import CrossingCut, ScheduleCapacityCut, capacity_route_lower_bound
-from bpc.data import load_bpc_data
-from bpc.pricing import reduced_cost
-from bpc.rmp import solve_rmp_lp
+from bpc.data import BPCData, load_bpc_data
+from bpc.pricing import exact_pricing, reduced_cost
+from bpc.rmp import RMPDuals, solve_restricted_integer_master, solve_rmp_lp
 from bpc.schedule_capacity import exact_schedule_task_capacity
 from bpc.solver import solve_bpc_clean
 
@@ -184,6 +185,104 @@ class CleanBPCTests(unittest.TestCase):
         assert solution.duals is not None
         self.assertEqual(solution.duals.task_vehicle, {})
 
+    def test_restricted_integer_master_rejects_schedule_infeasible_assignment(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        instance = {
+            "name": "rim_conflict_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 2, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 2, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {
+            f"{i}->{j}": {"tau": 0 if i == j else 1, "energy": 0, "cost": 0 if i == j else 1, "path": []}
+            for i in (0, 1, 2)
+            for j in (0, 1, 2)
+        }
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="rim_conflict_smoke",
+            tasks=(1, 2),
+            vehicles=(1,),
+            sortie_limit=2,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=5,
+        )
+        routes = [evaluate_route(data, (1,)), evaluate_route(data, (2,))]
+        self.assertTrue(all(route is not None for route in routes))
+        result = solve_restricted_integer_master(
+            data,
+            [route for route in routes if route is not None],
+            cuts=[],
+            branch_constraints=tuple(),
+            time_limit=5,
+            schedule_aware=True,
+            max_no_good_rounds=3,
+        )
+        self.assertIsNone(result.objective)
+        self.assertEqual(result.raw_objective, 104.0)
+        self.assertEqual(result.rejected_solutions, 1)
+        self.assertEqual(result.no_good_cuts, 1)
+        self.assertEqual(len(result.rejected_conflicts), 1)
+
+    def test_restricted_integer_master_applies_temporary_nogood_to_all_vehicles(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        instance = {
+            "name": "rim_two_vehicle_conflict_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 2, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 2, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {
+            f"{i}->{j}": {"tau": 0 if i == j else 1, "energy": 0, "cost": 0 if i == j else 1, "path": []}
+            for i in (0, 1, 2)
+            for j in (0, 1, 2)
+        }
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="rim_two_vehicle_conflict_smoke",
+            tasks=(1, 2),
+            vehicles=(1, 2),
+            sortie_limit=2,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=5,
+        )
+        routes = [evaluate_route(data, (1,)), evaluate_route(data, (2,))]
+        self.assertTrue(all(route is not None for route in routes))
+        result = solve_restricted_integer_master(
+            data,
+            [route for route in routes if route is not None],
+            cuts=[],
+            branch_constraints=tuple(),
+            time_limit=5,
+            schedule_aware=True,
+            max_no_good_rounds=3,
+        )
+        self.assertEqual(result.objective, 204.0)
+        self.assertEqual(result.raw_objective, 104.0)
+        self.assertEqual(result.rejected_solutions, 1)
+        self.assertEqual(result.no_good_cuts, 2)
+        self.assertEqual(len(result.rejected_conflicts), 1)
+
     def test_existing_lambda_reduced_cost_matches_solver(self):
         try:
             import pyscipopt  # noqa: F401
@@ -258,6 +357,64 @@ class CleanBPCTests(unittest.TestCase):
                     f"solver_rc={solver_reduced_cost}, formula_rc={formula_reduced_cost}"
                 ),
             )
+
+    def test_exact_pricing_matches_bruteforce_negative_routes(self):
+        data = load_bpc_data("very_small")
+        vehicle = data.vehicles[0]
+        cuts = [
+            CrossingCut(
+                id=0,
+                tasks=tuple(sorted(data.tasks[:2])),
+                rhs=2.0,
+                k_bound=1,
+                capacity_bound=1,
+                resource_bound=1,
+                demand=sum(data.task_value(task, "d") for task in data.tasks[:2]),
+                capacity=data.capacity,
+            )
+        ]
+        branch_constraints = (
+            BranchConstraint("ryan_together", data.tasks[0], data.tasks[1]),
+            BranchConstraint("arc_on", data.tasks[0], data.tasks[1]),
+        )
+        duals = RMPDuals(
+            cover={task: 15.0 + task for task in data.tasks},
+            task_vehicle={(task, route_vehicle): 0.1 * task for task in data.tasks for route_vehicle in data.vehicles},
+            sortie_count={route_vehicle: 0.0 for route_vehicle in data.vehicles},
+            vehicle_time={route_vehicle: 0.0 for route_vehicle in data.vehicles},
+            cuts={0: 0.75},
+            branches={0: 0.0, 1: 0.5},
+        )
+
+        expected_best = None
+        expected_negative: set[tuple[int, ...]] = set()
+        for length in range(1, len(data.tasks) + 1):
+            for sequence in permutations(data.tasks, length):
+                route = evaluate_route(data, sequence)
+                if route is None:
+                    continue
+                for route_vehicle in data.vehicles:
+                    if not route_allowed_by_branch(route, route_vehicle, branch_constraints):
+                        continue
+                    rc = reduced_cost(data, route, route_vehicle, duals, cuts, branch_constraints, phase="phase2")
+                    expected_best = rc if expected_best is None else min(expected_best, rc)
+                    if rc < -1.0e-6:
+                        expected_negative.add(route.signature)
+
+        result = exact_pricing(
+            data,
+            routes=[],
+            duals=duals,
+            cuts=cuts,
+            branch_constraints=branch_constraints,
+            phase="phase2",
+            eps=1.0e-6,
+            max_routes_to_return=1000,
+            max_labels=0,
+        )
+        self.assertTrue(result.exhausted)
+        self.assertAlmostEqual(result.best_reduced_cost, expected_best, delta=1.0e-6)
+        self.assertEqual({route.signature for route in result.routes}, expected_negative)
 
     def test_very_small_solves_to_known_optimum(self):
         try:
