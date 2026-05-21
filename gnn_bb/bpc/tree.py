@@ -20,6 +20,7 @@ from .cuts import (
     capacity_route_lower_bound,
     make_no_good_cuts_for_all_vehicles,
     make_schedule_capacity_cuts_for_all_vehicles,
+    normalize_signatures,
 )
 from .data import BPCData
 from .logger import BPCLogger
@@ -31,6 +32,9 @@ from .validation import (
     RoutePairScheduleConflict,
     check_route_set_schedule_feasible,
     diagnose_route_set_schedule,
+    evaluate_route_at_start,
+    exact_route_set_schedule_capacity,
+    route_transition_ready_time,
 )
 
 
@@ -167,9 +171,29 @@ class CleanBPCTree:
         schedule_capacity_candidate_max_combinations: int = 300,
         schedule_capacity_route_union_top_routes: int = 8,
         schedule_capacity_route_union_max_routes: int = 4,
+        schedule_incompatibility_cuts_enabled: bool = True,
+        schedule_incompatibility_cut_max_depth: int = 2,
+        schedule_incompatibility_cut_max_rounds_per_node: int = 2,
+        schedule_incompatibility_cut_max_support_routes: int = 80,
+        schedule_incompatibility_cut_max_per_round: int = 10,
+        schedule_incompatibility_cut_min_violation: float = 5.0e-2,
+        schedule_incompatibility_clique_min_size: int = 3,
+        schedule_incompatibility_clique_seed_count: int = 24,
+        route_set_schedule_packing_cuts_enabled: bool = True,
+        route_set_schedule_packing_cut_max_depth: int = 2,
+        route_set_schedule_packing_cut_max_rounds_per_node: int = 2,
+        route_set_schedule_packing_cut_max_support_routes: int = 40,
+        route_set_schedule_packing_cut_max_routes: int = 16,
+        route_set_schedule_packing_cut_max_per_round: int = 5,
+        route_set_schedule_packing_cut_min_violation: float = 5.0e-2,
+        route_set_schedule_packing_oracle_max_states: int = 200000,
         cut_purge_age: int = 20,
         cut_purge_slack: float = 1.0e-5,
         cut_purge_dual: float = 1.0e-8,
+        schedule_nogood_purge_enabled: bool = True,
+        schedule_nogood_purge_age: int = 8,
+        schedule_nogood_purge_slack: float = 1.0e-4,
+        schedule_nogood_purge_dual: float = 1.0e-8,
     ) -> None:
         self.data = data
         self.time_limit = float(time_limit)
@@ -238,9 +262,29 @@ class CleanBPCTree:
         self.schedule_capacity_candidate_max_combinations = int(schedule_capacity_candidate_max_combinations)
         self.schedule_capacity_route_union_top_routes = int(schedule_capacity_route_union_top_routes)
         self.schedule_capacity_route_union_max_routes = int(schedule_capacity_route_union_max_routes)
+        self.schedule_incompatibility_cuts_enabled = bool(schedule_incompatibility_cuts_enabled)
+        self.schedule_incompatibility_cut_max_depth = int(schedule_incompatibility_cut_max_depth)
+        self.schedule_incompatibility_cut_max_rounds_per_node = int(schedule_incompatibility_cut_max_rounds_per_node)
+        self.schedule_incompatibility_cut_max_support_routes = int(schedule_incompatibility_cut_max_support_routes)
+        self.schedule_incompatibility_cut_max_per_round = int(schedule_incompatibility_cut_max_per_round)
+        self.schedule_incompatibility_cut_min_violation = float(schedule_incompatibility_cut_min_violation)
+        self.schedule_incompatibility_clique_min_size = int(schedule_incompatibility_clique_min_size)
+        self.schedule_incompatibility_clique_seed_count = int(schedule_incompatibility_clique_seed_count)
+        self.route_set_schedule_packing_cuts_enabled = bool(route_set_schedule_packing_cuts_enabled)
+        self.route_set_schedule_packing_cut_max_depth = int(route_set_schedule_packing_cut_max_depth)
+        self.route_set_schedule_packing_cut_max_rounds_per_node = int(route_set_schedule_packing_cut_max_rounds_per_node)
+        self.route_set_schedule_packing_cut_max_support_routes = int(route_set_schedule_packing_cut_max_support_routes)
+        self.route_set_schedule_packing_cut_max_routes = int(route_set_schedule_packing_cut_max_routes)
+        self.route_set_schedule_packing_cut_max_per_round = int(route_set_schedule_packing_cut_max_per_round)
+        self.route_set_schedule_packing_cut_min_violation = float(route_set_schedule_packing_cut_min_violation)
+        self.route_set_schedule_packing_oracle_max_states = int(route_set_schedule_packing_oracle_max_states)
         self.cut_purge_age = int(cut_purge_age)
         self.cut_purge_slack = float(cut_purge_slack)
         self.cut_purge_dual = float(cut_purge_dual)
+        self.schedule_nogood_purge_enabled = bool(schedule_nogood_purge_enabled)
+        self.schedule_nogood_purge_age = int(schedule_nogood_purge_age)
+        self.schedule_nogood_purge_slack = float(schedule_nogood_purge_slack)
+        self.schedule_nogood_purge_dual = float(schedule_nogood_purge_dual)
         self.pseudocosts: dict[str, PseudoCostRecord] = {}
         self.pool = RoutePool()
         self.cuts: list[Cut] = []
@@ -249,7 +293,11 @@ class CleanBPCTree:
         self.cut_rounds_by_node: dict[int, int] = {}
         self.resource_cut_rounds_by_node: dict[int, int] = {}
         self.schedule_capacity_cut_rounds_by_node: dict[int, int] = {}
+        self.schedule_incompatibility_cut_rounds_by_node: dict[int, int] = {}
+        self.route_set_schedule_packing_cut_rounds_by_node: dict[int, int] = {}
+        self.route_set_schedule_packing_cache: dict[tuple[tuple[int, ...], ...], tuple[int, int] | None] = {}
         self.schedule_capacity_cache: dict[tuple[int, ...], ScheduleCapacityResult | None] = {}
+        self.schedule_pair_incompatibility_cache: dict[tuple[tuple[int, ...], tuple[int, ...]], bool] = {}
         self.resource_pair_incompatible: set[tuple[int, int]] | None = None
         self.resource_chromatic_cache: dict[tuple[int, ...], int] = {}
         self.next_cut_id = 0
@@ -271,6 +319,7 @@ class CleanBPCTree:
             route = evaluate_route(self.data, (task,))
             if route is not None:
                 self.pool.add(route)
+        self._build_serial_schedule_incumbent()
         self._build_greedy_incumbent()
 
     def _allocate_cut_id(self) -> int:
@@ -286,10 +335,13 @@ class CleanBPCTree:
     def _build_greedy_incumbent(self) -> None:
         # 中文注释：这个启发式只给 UB，不参与 lower bound 或最优性证明。
         best_assigned: dict[int, list[RouteColumn]] | None = None
-        best_objective = float("inf")
+        best_objective = float("inf") if self.incumbent is None else float(self.incumbent.objective)
         for order in self._construction_orders():
             assigned = self._construct_assignment(order)
             if assigned is None:
+                continue
+            raw_objective = self._assignment_objective(assigned)
+            if raw_objective >= best_objective - self.integer_tol:
                 continue
             assigned = self._improve_assignment(assigned)
             objective = self._assignment_objective(assigned)
@@ -299,6 +351,69 @@ class CleanBPCTree:
         if best_assigned is None:
             return
         self._set_incumbent_from_assignment(best_assigned, node_id=0, source="greedy_schedule")
+
+    def _build_serial_schedule_incumbent(self) -> None:
+        """中文注释：快速构造单车串行 schedule，用于补足 route pool 和早期 UB。"""
+
+        if not self.data.vehicles:
+            return
+        first_vehicle = int(self.data.vehicles[0])
+        for order in self._construction_orders():
+            routes = self._serial_routes_for_order(order)
+            if routes is None:
+                continue
+            assigned = {vehicle: [] for vehicle in self.data.vehicles}
+            assigned[first_vehicle] = routes
+            self._set_incumbent_from_assignment(assigned, node_id=0, source="serial_schedule")
+
+    def _serial_routes_for_order(self, order: tuple[int, ...]) -> list[RouteColumn] | None:
+        if not order:
+            return []
+
+        routes: list[RouteColumn] = []
+        current: list[int] = []
+        ready_time = 0.0
+
+        def close_current() -> bool:
+            nonlocal ready_time, current
+            if not current:
+                return True
+            route = evaluate_route(self.data, tuple(current))
+            if route is None:
+                return False
+            evaluated = evaluate_route_at_start(self.data, route, ready_time)
+            if evaluated is None:
+                return False
+            routes.append(route)
+            ready_time = float(evaluated["ready_time"])
+            current = []
+            return True
+
+        for task in order:
+            candidate_sequence = tuple([*current, int(task)])
+            candidate_route = evaluate_route(self.data, candidate_sequence)
+            candidate_eval = (
+                None if candidate_route is None else evaluate_route_at_start(self.data, candidate_route, ready_time)
+            )
+            if candidate_eval is not None:
+                current = list(candidate_sequence)
+                continue
+
+            if not close_current():
+                return None
+            singleton = evaluate_route(self.data, (int(task),))
+            singleton_eval = None if singleton is None else evaluate_route_at_start(self.data, singleton, ready_time)
+            if singleton_eval is None:
+                return None
+            current = [int(task)]
+
+        if not close_current():
+            return None
+        if len(routes) > self.data.sortie_limit:
+            return None
+        if not check_route_set_schedule_feasible(self.data, routes).feasible:
+            return None
+        return routes
 
     def _construction_orders(self) -> list[tuple[int, ...]]:
         singleton_cost = {}
@@ -349,9 +464,10 @@ class CleanBPCTree:
                     candidate_routes = [*current_routes, route]
                     checked = check_route_set_schedule_feasible(self.data, candidate_routes)
                     if checked.feasible:
+                        fixed_delta = self.data.fixed_vehicle_cost if not current_routes else 0.0
                         score = (
-                            1,
-                            float(route.cost),
+                            float(route.cost) + fixed_delta,
+                            int(not current_routes),
                             float(checked.ready_time or 0.0),
                             vehicle,
                             len(current_routes),
@@ -373,8 +489,8 @@ class CleanBPCTree:
                         continue
                     delta_cost = sum(item.cost for item in candidate_routes) - current_cost
                     score = (
-                        0,
                         float(delta_cost),
+                        0,
                         float(checked.ready_time or 0.0),
                         vehicle,
                         route_index,
@@ -683,6 +799,8 @@ class CleanBPCTree:
             schedule_pair_conflict_cuts_added=self.stats.schedule_pair_conflict_cuts_added,
             schedule_nogood_cuts_added=self.stats.schedule_nogood_cuts_added,
             schedule_capacity_cuts_added=self.stats.schedule_capacity_cuts_added,
+            schedule_clique_conflict_cuts_added=self.stats.schedule_clique_conflict_cuts_added,
+            schedule_route_set_packing_cuts_added=self.stats.schedule_route_set_packing_cuts_added,
             cuts_purged=self.stats.cuts_purged,
             rmp_solves=self.stats.rmp_solves,
             pricing_calls=self.stats.pricing_calls,
@@ -828,11 +946,25 @@ class CleanBPCTree:
     ) -> int:
         added = 0
         skipped_weak = 0
+        diagnostics = {
+            "conflicts_checked": 0,
+            "skipped_without_witness": 0,
+            "pair_conflict_events": 0,
+            "pair_cuts_added": 0,
+            "schedule_capacity_events": 0,
+            "schedule_capacity_cuts_added": 0,
+            "nogood_violated_conflicts": 0,
+            "nogood_cuts_added": 0,
+            "weak_nogood_not_violated": 0,
+        }
         for source_vehicle, conflict_routes in result.rejected_conflicts:
+            diagnostics["conflicts_checked"] += 1
             if not conflict_routes:
+                diagnostics["skipped_without_witness"] += 1
                 continue
             witness = diagnose_route_set_schedule(self.data, conflict_routes)
             if witness is None:
+                diagnostics["skipped_without_witness"] += 1
                 continue
             pair_added = self._add_schedule_pair_conflict_cuts(
                 node,
@@ -840,6 +972,8 @@ class CleanBPCTree:
                 witness.pair_conflicts,
             )
             if pair_added:
+                diagnostics["pair_conflict_events"] += 1
+                diagnostics["pair_cuts_added"] += pair_added
                 added += pair_added
                 continue
             structural_added = self._add_schedule_capacity_conflict_cuts(
@@ -848,25 +982,38 @@ class CleanBPCTree:
                 list(witness.routes),
             )
             if structural_added:
+                diagnostics["schedule_capacity_events"] += 1
+                diagnostics["schedule_capacity_cuts_added"] += structural_added
                 added += structural_added
                 continue
             violated_vehicles = self._violated_schedule_conflict_vehicles(solution, witness.routes)
             if not violated_vehicles:
                 skipped_weak += 1
+                diagnostics["weak_nogood_not_violated"] += 1
                 continue
-            added += self._add_schedule_conflict_cuts(
+            nogood_added = self._add_schedule_conflict_cuts(
                 node,
                 int(source_vehicle),
                 list(witness.routes),
                 kind="schedule_nogood_core",
                 vehicles=violated_vehicles,
             )
+            if nogood_added:
+                diagnostics["nogood_violated_conflicts"] += 1
+                diagnostics["nogood_cuts_added"] += nogood_added
+                added += nogood_added
         if skipped_weak:
             self.logger.log(
                 "rim_conflict_skipped",
                 node_id=node.id,
                 skipped=skipped_weak,
                 reason="weak_nogood_not_violated_by_current_lp",
+            )
+        if diagnostics["conflicts_checked"]:
+            self.logger.log(
+                "rim_conflict_diagnostics",
+                node_id=node.id,
+                **diagnostics,
             )
         return added
 
@@ -980,9 +1127,16 @@ class CleanBPCTree:
                 return []
 
             if phase == "phase2":
-                purged = self._purge_inactive_capacity_cuts(solution)
+                purged_by_kind = self._purge_inactive_cuts(solution)
+                purged = sum(purged_by_kind.values())
                 if purged:
-                    self.logger.log("cut_purged", node_id=node.id, removed=purged, remaining=len(self.cuts))
+                    self.logger.log(
+                        "cut_purged",
+                        node_id=node.id,
+                        removed=purged,
+                        removed_by_kind=purged_by_kind,
+                        remaining=len(self.cuts),
+                    )
                     continue
 
             if phase == "phase1" and solution.artificial_sum <= self.integer_tol:
@@ -1055,6 +1209,12 @@ class CleanBPCTree:
                 self.logger.log("fathom", node_id=node.id, reason="phase1_infeasible", bound=None)
                 return []
             separated = self._separate_crossing_cuts(node, solution)
+            if separated:
+                continue
+            separated = self._separate_route_set_schedule_packing_cuts(node, solution)
+            if separated:
+                continue
+            separated = self._separate_schedule_incompatibility_cuts(node, solution)
             if separated:
                 continue
             separated = self._separate_schedule_capacity_cuts(node, solution)
@@ -1131,7 +1291,10 @@ class CleanBPCTree:
         return [left_node, right_node]
 
     def _cut_activity(self, cut: Cut, solution: RMPSolution) -> float:
-        return sum(cut.coefficient(route, vehicle) * value for route, vehicle, value in solution.route_values)
+        activity = sum(cut.coefficient(route, vehicle) * value for route, vehicle, value in solution.route_values)
+        if hasattr(cut, "y_coefficient"):
+            activity += sum(cut.y_coefficient(vehicle) * value for vehicle, value in solution.y_values.items())
+        return activity
 
     def _cut_slack(self, cut: Cut, solution: RMPSolution) -> float:
         activity = self._cut_activity(cut, solution)
@@ -1141,32 +1304,46 @@ class CleanBPCTree:
             return activity - float(cut.rhs)
         raise ValueError(f"未知 cut sense: {cut.sense}")
 
-    def _purge_inactive_capacity_cuts(self, solution: RMPSolution) -> int:
-        if self.cut_purge_age <= 0 or solution.duals is None:
-            return 0
+    def _purge_inactive_cuts(self, solution: RMPSolution) -> dict[str, int]:
+        if solution.duals is None:
+            return {}
         kept: list[Cut] = []
-        removed = 0
+        removed_by_kind: dict[str, int] = {}
+        purgeable_nogood_kinds = {"schedule_nogood", "schedule_nogood_core", "schedule_nogood_full"}
         for cut in self.cuts:
-            if not isinstance(cut, (CrossingCut, ScheduleCapacityCut)):
+            if isinstance(cut, (CrossingCut, ScheduleCapacityCut)) and self.cut_purge_age > 0:
+                age_limit = self.cut_purge_age
+                slack_limit = self.cut_purge_slack
+                dual_limit = self.cut_purge_dual
+            elif (
+                self.schedule_nogood_purge_enabled
+                and isinstance(cut, ScheduleNoGoodCut)
+                and cut.kind in purgeable_nogood_kinds
+                and self.schedule_nogood_purge_age > 0
+            ):
+                age_limit = self.schedule_nogood_purge_age
+                slack_limit = self.schedule_nogood_purge_slack
+                dual_limit = self.schedule_nogood_purge_dual
+            else:
                 kept.append(cut)
                 continue
             key = cut.key
             slack = self._cut_slack(cut, solution)
             dual_abs = abs(float(solution.duals.cuts.get(cut.id, 0.0)))
-            if slack > self.cut_purge_slack and dual_abs <= self.cut_purge_dual:
+            if slack > slack_limit and dual_abs <= dual_limit:
                 self.cut_inactive_age[key] = self.cut_inactive_age.get(key, 0) + 1
             else:
                 self.cut_inactive_age[key] = 0
-            if self.cut_inactive_age.get(key, 0) >= self.cut_purge_age:
-                removed += 1
+            if self.cut_inactive_age.get(key, 0) >= age_limit:
+                removed_by_kind[cut.kind] = removed_by_kind.get(cut.kind, 0) + 1
                 self.cut_keys.discard(key)
                 self.cut_inactive_age.pop(key, None)
             else:
                 kept.append(cut)
-        if removed:
+        if removed_by_kind:
             self.cuts = kept
-            self.stats.cuts_purged += removed
-        return removed
+            self.stats.cuts_purged += sum(removed_by_kind.values())
+        return removed_by_kind
 
     def _separate_crossing_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
         # 中文注释：统一处理 RCI 和 k-path/resource cut，同一 S 只保留 RHS 最大的一条 crossing cut。
@@ -1376,6 +1553,425 @@ class CleanBPCTree:
 
         return search(0)
 
+    def _separate_route_set_schedule_packing_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        """分离高阶 route-set schedule packing cut。
+
+        中文注释：对候选 route 集 C，用 exact DP 证明同一辆车最多能排 U(C) 条，
+        只在当前 LP 违反 sum_{p in C} lambda[p,r] <= U(C)y[r] 时加 cut。
+        """
+
+        if not self.route_set_schedule_packing_cuts_enabled:
+            return 0
+        if node.depth > self.route_set_schedule_packing_cut_max_depth:
+            return 0
+        rounds = self.route_set_schedule_packing_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.route_set_schedule_packing_cut_max_rounds_per_node:
+            return 0
+
+        min_violation = max(self.integer_tol, self.route_set_schedule_packing_cut_min_violation)
+        candidates: list[tuple[float, int, int, tuple[tuple[int, ...], ...], list[RouteColumn], float, int, int, float]] = []
+        seen_candidate_keys: set[tuple] = set()
+        diagnostics: dict[str, float | int] = {
+            "vehicles_checked": 0,
+            "vehicles_with_support": 0,
+            "support_routes_total": 0,
+            "support_routes_max": 0,
+            "candidate_sets": 0,
+            "candidate_routes_max": 0,
+            "skipped_support_too_small": 0,
+            "skipped_signature_too_small": 0,
+            "oracle_queries": 0,
+            "skipped_oracle_incomplete": 0,
+            "skipped_not_tight": 0,
+            "skipped_not_violated": 0,
+            "skipped_duplicate": 0,
+            "violated_candidates": 0,
+            "oracle_states_total": 0,
+            "oracle_states_max": 0,
+            "max_violation": 0.0,
+            "added": 0,
+        }
+
+        def log_diagnostics(added: int) -> None:
+            diagnostics["added"] = int(added)
+            if int(diagnostics["vehicles_checked"]) == 0:
+                return
+            self.logger.log(
+                "route_set_schedule_packing_diagnostics",
+                node_id=node.id,
+                depth=node.depth,
+                round=rounds + 1,
+                **diagnostics,
+            )
+
+        for vehicle in self.data.vehicles:
+            diagnostics["vehicles_checked"] = int(diagnostics["vehicles_checked"]) + 1
+            support = self._schedule_support_routes(
+                solution,
+                int(vehicle),
+                max_routes=self.route_set_schedule_packing_cut_max_support_routes,
+            )
+            diagnostics["support_routes_total"] = int(diagnostics["support_routes_total"]) + len(support)
+            diagnostics["support_routes_max"] = max(int(diagnostics["support_routes_max"]), len(support))
+            if len(support) < 2:
+                diagnostics["skipped_support_too_small"] = int(diagnostics["skipped_support_too_small"]) + 1
+                continue
+            diagnostics["vehicles_with_support"] = int(diagnostics["vehicles_with_support"]) + 1
+            y_value = float(solution.y_values.get(int(vehicle), 0.0))
+            value_by_signature = {route.signature: float(value) for value, route in support}
+            route_set_candidates = self._route_set_schedule_packing_candidates(support)
+            diagnostics["candidate_sets"] = int(diagnostics["candidate_sets"]) + len(route_set_candidates)
+            for routes in route_set_candidates:
+                diagnostics["candidate_routes_max"] = max(int(diagnostics["candidate_routes_max"]), len(routes))
+                signatures = normalize_signatures(tuple(route.signature for route in routes))
+                if len(signatures) < 2:
+                    diagnostics["skipped_signature_too_small"] = int(diagnostics["skipped_signature_too_small"]) + 1
+                    continue
+                diagnostics["oracle_queries"] = int(diagnostics["oracle_queries"]) + 1
+                upper_bound, states = self._route_set_schedule_packing_bound(routes)
+                if upper_bound is None or states is None:
+                    diagnostics["skipped_oracle_incomplete"] = int(diagnostics["skipped_oracle_incomplete"]) + 1
+                    continue
+                diagnostics["oracle_states_total"] = int(diagnostics["oracle_states_total"]) + int(states)
+                diagnostics["oracle_states_max"] = max(int(diagnostics["oracle_states_max"]), int(states))
+                if upper_bound >= len(signatures):
+                    diagnostics["skipped_not_tight"] = int(diagnostics["skipped_not_tight"]) + 1
+                    continue
+                activity = sum(value_by_signature.get(signature, 0.0) for signature in signatures)
+                violation = activity - float(upper_bound) * y_value
+                if violation <= min_violation:
+                    diagnostics["skipped_not_violated"] = int(diagnostics["skipped_not_violated"]) + 1
+                    continue
+                key = ("schedule_route_set_packing", int(vehicle), signatures, float(upper_bound), True)
+                if key in self.cut_keys or key in seen_candidate_keys:
+                    diagnostics["skipped_duplicate"] = int(diagnostics["skipped_duplicate"]) + 1
+                    continue
+                seen_candidate_keys.add(key)
+                diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
+                diagnostics["max_violation"] = max(float(diagnostics["max_violation"]), float(violation))
+                candidates.append((violation, len(signatures), int(vehicle), signatures, list(routes), activity, upper_bound, states, y_value))
+
+        if not candidates:
+            log_diagnostics(0)
+            return 0
+
+        candidates.sort(key=lambda item: (-item[0], -item[1], item[2], item[3]))
+        added = 0
+        added_payload = []
+        for violation, size, vehicle, signatures, routes, activity, upper_bound, states, y_value in candidates[
+            : max(1, self.route_set_schedule_packing_cut_max_per_round)
+        ]:
+            cut = ScheduleNoGoodCut(
+                id=self._allocate_cut_id(),
+                vehicle=vehicle,
+                signatures=signatures,
+                kind="schedule_route_set_packing",
+                source_vehicle=vehicle,
+                rhs_value=float(upper_bound),
+                scale_by_vehicle_use=True,
+            )
+            if cut.key in self.cut_keys:
+                continue
+            self.cuts.append(cut)
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "vehicle": vehicle,
+                    "route_count": size,
+                    "upper_bound": int(upper_bound),
+                    "signatures": [list(signature) for signature in signatures],
+                    "y": round(y_value, 9),
+                    "activity": round(activity, 9),
+                    "rhs": round(cut.rhs, 9),
+                    "activity_minus_rhs": round(violation, 9),
+                    "oracle_states": states,
+                }
+            )
+
+        if not added:
+            log_diagnostics(0)
+            return 0
+
+        self.route_set_schedule_packing_cut_rounds_by_node[node.id] = rounds + 1
+        self.stats.cuts_added += added
+        self.stats.schedule_route_set_packing_cuts_added += added
+        log_diagnostics(added)
+        self.logger.log(
+            "cut_added",
+            node_id=node.id,
+            family="schedule_route_set_packing",
+            added=added,
+            cuts=added_payload,
+        )
+        return added
+
+    def _route_set_schedule_packing_candidates(
+        self,
+        support: list[tuple[float, RouteColumn]],
+    ) -> list[list[RouteColumn]]:
+        max_routes = min(max(2, self.route_set_schedule_packing_cut_max_routes), len(support))
+        if max_routes < 2:
+            return []
+        candidates: list[list[RouteColumn]] = []
+        seen: set[tuple[tuple[int, ...], ...]] = set()
+        sorted_support = sorted(support, key=lambda item: (-item[0], -len(item[1].task_set), item[1].cycle_time, item[1].signature))
+
+        def add_candidate(routes: list[RouteColumn]) -> None:
+            signatures = normalize_signatures(tuple(route.signature for route in routes))
+            if len(signatures) < 2 or signatures in seen:
+                return
+            seen.add(signatures)
+            candidates.append(list(routes))
+
+        prefix_routes = [route for _value, route in sorted_support[:max_routes]]
+        for size in range(2, len(prefix_routes) + 1):
+            add_candidate(prefix_routes[:size])
+
+        tight_routes = [
+            route
+            for _value, route in sorted(
+                support,
+                key=lambda item: (item[1].cycle_time, item[1].return_time, -item[0], item[1].signature),
+            )[:max_routes]
+        ]
+        for size in range(2, len(tight_routes) + 1):
+            add_candidate(tight_routes[:size])
+
+        dense_routes = [
+            route
+            for _value, route in sorted(
+                support,
+                key=lambda item: (-item[0] * max(1, len(item[1].task_set)), item[1].cycle_time, item[1].signature),
+            )[:max_routes]
+        ]
+        for size in range(2, len(dense_routes) + 1):
+            add_candidate(dense_routes[:size])
+
+        return candidates
+
+    def _route_set_schedule_packing_bound(self, routes: list[RouteColumn]) -> tuple[int | None, int | None]:
+        signatures = normalize_signatures(tuple(route.signature for route in routes))
+        cached = self.route_set_schedule_packing_cache.get(signatures)
+        if cached is not None:
+            return cached
+        if signatures in self.route_set_schedule_packing_cache and cached is None:
+            return (None, None)
+        result = exact_route_set_schedule_capacity(
+            self.data,
+            routes,
+            max_states=self.route_set_schedule_packing_oracle_max_states,
+        )
+        if result is None or not result.exact:
+            self.route_set_schedule_packing_cache[signatures] = None
+            return (None, None)
+        value = (int(result.upper_bound), int(result.states_explored))
+        self.route_set_schedule_packing_cache[signatures] = value
+        return value
+
+    def _separate_schedule_incompatibility_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        """分离 LP 违背的单车 schedule incompatibility pair/clique cut。
+
+        中文注释：若两条 route 从时间 0 开始任一先后顺序都不可行，则在任意更晚的
+        部分 schedule 中也不可行。pairwise clique 中最多只能选一条 route，因此
+        sum lambda[p,r] <= y[r] 是有效 cut。
+        """
+
+        if not self.schedule_incompatibility_cuts_enabled:
+            return 0
+        if node.depth > self.schedule_incompatibility_cut_max_depth:
+            return 0
+        rounds = self.schedule_incompatibility_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.schedule_incompatibility_cut_max_rounds_per_node:
+            return 0
+
+        min_violation = max(self.integer_tol, self.schedule_incompatibility_cut_min_violation)
+        candidates: list[tuple[float, int, int, tuple[tuple[int, ...], ...], str, list[RouteColumn], float, float]] = []
+        seen_candidate_keys: set[tuple] = set()
+
+        for vehicle in self.data.vehicles:
+            support = self._schedule_support_routes(solution, int(vehicle))
+            if len(support) < 2:
+                continue
+            y_value = float(solution.y_values.get(int(vehicle), 0.0))
+            adjacency = self._schedule_incompatibility_adjacency([route for _value, route in support])
+            values = [value for value, _route in support]
+            routes = [route for _value, route in support]
+
+            for left_index in range(len(routes)):
+                for right_index in range(left_index + 1, len(routes)):
+                    if right_index not in adjacency[left_index]:
+                        continue
+                    activity = values[left_index] + values[right_index]
+                    violation = activity - y_value
+                    if violation <= min_violation:
+                        continue
+                    pair_routes = [routes[left_index], routes[right_index]]
+                    signatures = normalize_signatures(tuple(route.signature for route in pair_routes))
+                    key = ("schedule_pair_conflict", int(vehicle), signatures, 1.0, True)
+                    if key in self.cut_keys or key in seen_candidate_keys:
+                        continue
+                    seen_candidate_keys.add(key)
+                    candidates.append((violation, 2, int(vehicle), signatures, "schedule_pair_conflict", pair_routes, activity, y_value))
+
+            for clique_indices in self._greedy_schedule_incompatibility_cliques(values, adjacency):
+                if len(clique_indices) < max(2, self.schedule_incompatibility_clique_min_size):
+                    continue
+                clique_routes = [routes[index] for index in clique_indices]
+                activity = sum(values[index] for index in clique_indices)
+                violation = activity - y_value
+                if violation <= min_violation:
+                    continue
+                signatures = normalize_signatures(tuple(route.signature for route in clique_routes))
+                key = ("schedule_clique_conflict", int(vehicle), signatures, 1.0, True)
+                if key in self.cut_keys or key in seen_candidate_keys:
+                    continue
+                seen_candidate_keys.add(key)
+                candidates.append(
+                    (
+                        violation,
+                        len(clique_indices),
+                        int(vehicle),
+                        signatures,
+                        "schedule_clique_conflict",
+                        clique_routes,
+                        activity,
+                        y_value,
+                    )
+                )
+
+        if not candidates:
+            return 0
+
+        candidates.sort(key=lambda item: (-item[0], -item[1], item[2], item[3]))
+        added_pair = 0
+        added_clique = 0
+        added_payload = []
+        for violation, size, vehicle, signatures, kind, routes, activity, y_value in candidates[
+            : max(1, self.schedule_incompatibility_cut_max_per_round)
+        ]:
+            cut = ScheduleNoGoodCut(
+                id=self._allocate_cut_id(),
+                vehicle=vehicle,
+                signatures=signatures,
+                kind=kind,
+                source_vehicle=vehicle,
+                rhs_value=1.0 if kind == "schedule_clique_conflict" else None,
+                scale_by_vehicle_use=True,
+            )
+            if cut.key in self.cut_keys:
+                continue
+            self.cuts.append(cut)
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            if kind == "schedule_clique_conflict":
+                added_clique += 1
+            else:
+                added_pair += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "vehicle": vehicle,
+                    "kind": kind,
+                    "route_count": size,
+                    "upper_bound": round(cut.upper_bound, 9),
+                    "signatures": [list(signature) for signature in signatures],
+                    "y": round(y_value, 9),
+                    "activity": round(activity, 9),
+                    "rhs": round(cut.rhs, 9),
+                    "activity_minus_rhs": round(violation, 9),
+                }
+            )
+
+        added = added_pair + added_clique
+        if not added:
+            return 0
+
+        self.schedule_incompatibility_cut_rounds_by_node[node.id] = rounds + 1
+        self.stats.cuts_added += added
+        self.stats.schedule_pair_conflict_cuts_added += added_pair
+        self.stats.schedule_clique_conflict_cuts_added += added_clique
+        self.logger.log(
+            "cut_added",
+            node_id=node.id,
+            family="schedule_incompatibility",
+            added=added,
+            pair_added=added_pair,
+            clique_added=added_clique,
+            cuts=added_payload,
+        )
+        return added
+
+    def _schedule_support_routes(
+        self,
+        solution: RMPSolution,
+        vehicle: int,
+        *,
+        max_routes: int | None = None,
+    ) -> list[tuple[float, RouteColumn]]:
+        by_signature: dict[tuple[int, ...], tuple[float, RouteColumn]] = {}
+        for route, route_vehicle, value in solution.route_values:
+            if int(route_vehicle) != int(vehicle) or value <= self.integer_tol:
+                continue
+            current_value, _current_route = by_signature.get(route.signature, (0.0, route))
+            by_signature[route.signature] = (current_value + float(value), route)
+        support = list(by_signature.values())
+        support.sort(key=lambda item: (-item[0], -len(item[1].task_set), item[1].cost, item[1].signature))
+        limit = self.schedule_incompatibility_cut_max_support_routes if max_routes is None else int(max_routes)
+        limit = max(0, limit)
+        return support[:limit] if limit else support
+
+    def _schedule_incompatibility_adjacency(self, routes: list[RouteColumn]) -> list[set[int]]:
+        adjacency = [set() for _route in routes]
+        for left_index, left in enumerate(routes):
+            for right_index in range(left_index + 1, len(routes)):
+                right = routes[right_index]
+                if not self._routes_schedule_pair_incompatible(left, right):
+                    continue
+                adjacency[left_index].add(right_index)
+                adjacency[right_index].add(left_index)
+        return adjacency
+
+    def _routes_schedule_pair_incompatible(self, left: RouteColumn, right: RouteColumn) -> bool:
+        signatures = normalize_signatures((left.signature, right.signature))
+        key = (signatures[0], signatures[1])
+        cached = self.schedule_pair_incompatibility_cache.get(key)
+        if cached is not None:
+            return cached
+        incompatible = (
+            route_transition_ready_time(self.data, left, right) is None
+            and route_transition_ready_time(self.data, right, left) is None
+        )
+        self.schedule_pair_incompatibility_cache[key] = incompatible
+        return incompatible
+
+    def _greedy_schedule_incompatibility_cliques(
+        self,
+        values: list[float],
+        adjacency: list[set[int]],
+    ) -> list[tuple[int, ...]]:
+        seed_count = min(max(0, self.schedule_incompatibility_clique_seed_count), len(values))
+        if seed_count == 0:
+            return []
+        order = sorted(range(len(values)), key=lambda index: (-values[index], -len(adjacency[index]), index))
+        cliques: list[tuple[int, ...]] = []
+        seen: set[tuple[int, ...]] = set()
+        for seed in order[:seed_count]:
+            clique = [seed]
+            for candidate in order:
+                if candidate == seed:
+                    continue
+                if all(candidate in adjacency[item] for item in clique):
+                    clique.append(candidate)
+            clique_tuple = tuple(sorted(clique))
+            if clique_tuple in seen:
+                continue
+            seen.add(clique_tuple)
+            cliques.append(clique_tuple)
+        return cliques
+
     def _separate_schedule_capacity_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
         if not self.schedule_capacity_cuts_enabled:
             return 0
@@ -1392,25 +1988,72 @@ class CleanBPCTree:
             by_vehicle={str(vehicle): len(subsets) for vehicle, subsets in candidate_subsets_by_vehicle.items()},
         )
         candidates: list[tuple[float, int, tuple[int, ...], int, int, float]] = []
+        diagnostics: dict[str, float | int] = {
+            "vehicles_checked": 0,
+            "vehicles_active": 0,
+            "candidate_subsets": 0,
+            "candidate_size_max": 0,
+            "skipped_vehicle_inactive": 0,
+            "skipped_duplicate": 0,
+            "oracle_queries": 0,
+            "skipped_oracle_incomplete": 0,
+            "skipped_not_tight": 0,
+            "skipped_not_violated": 0,
+            "violated_candidates": 0,
+            "oracle_states_total": 0,
+            "oracle_states_max": 0,
+            "max_violation": 0.0,
+            "added": 0,
+        }
+
+        def log_diagnostics(added: int) -> None:
+            diagnostics["added"] = int(added)
+            self.logger.log(
+                "schedule_capacity_diagnostics",
+                node_id=node.id,
+                depth=node.depth,
+                round=rounds + 1,
+                **diagnostics,
+            )
+
         for vehicle in self.data.vehicles:
+            diagnostics["vehicles_checked"] = int(diagnostics["vehicles_checked"]) + 1
             y_value = float(solution.y_values.get(vehicle, 0.0))
             if y_value <= self.integer_tol:
+                diagnostics["skipped_vehicle_inactive"] = int(diagnostics["skipped_vehicle_inactive"]) + 1
                 continue
+            diagnostics["vehicles_active"] = int(diagnostics["vehicles_active"]) + 1
             for tasks in candidate_subsets_by_vehicle.get(int(vehicle), []):
+                diagnostics["candidate_subsets"] = int(diagnostics["candidate_subsets"]) + 1
+                diagnostics["candidate_size_max"] = max(int(diagnostics["candidate_size_max"]), len(tasks))
                 key = ("schedule_capacity", int(vehicle), tasks)
                 if key in self.cut_keys:
+                    diagnostics["skipped_duplicate"] = int(diagnostics["skipped_duplicate"]) + 1
                     continue
+                diagnostics["oracle_queries"] = int(diagnostics["oracle_queries"]) + 1
                 oracle = self._schedule_capacity_bound(tasks)
                 if oracle is None:
+                    diagnostics["skipped_oracle_incomplete"] = int(diagnostics["skipped_oracle_incomplete"]) + 1
                     continue
+                diagnostics["oracle_states_total"] = int(diagnostics["oracle_states_total"]) + int(oracle.states_explored)
+                diagnostics["oracle_states_max"] = max(
+                    int(diagnostics["oracle_states_max"]),
+                    int(oracle.states_explored),
+                )
                 upper_bound = int(oracle.upper_bound)
                 if upper_bound >= len(tasks):
+                    diagnostics["skipped_not_tight"] = int(diagnostics["skipped_not_tight"]) + 1
                     continue
                 activity = self._task_vehicle_mass(solution, tasks, int(vehicle)) - upper_bound * y_value
                 if activity > self.schedule_capacity_cut_min_violation:
+                    diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
+                    diagnostics["max_violation"] = max(float(diagnostics["max_violation"]), float(activity))
                     candidates.append((activity, int(vehicle), tasks, upper_bound, oracle.states_explored, y_value))
+                else:
+                    diagnostics["skipped_not_violated"] = int(diagnostics["skipped_not_violated"]) + 1
 
         if not candidates:
+            log_diagnostics(0)
             return 0
         candidates.sort(key=lambda item: (-item[0], item[1], len(item[2]), item[2]))
         added = 0
@@ -1451,6 +2094,7 @@ class CleanBPCTree:
                 added=added,
                 cuts=added_payload,
             )
+        log_diagnostics(added)
         return added
 
     def _schedule_capacity_candidate_subsets_by_vehicle(self, solution: RMPSolution) -> dict[int, list[tuple[int, ...]]]:
@@ -2060,12 +2704,13 @@ class CleanBPCTree:
         rhs = max(0, len(signatures) - 1)
         violated = []
         for vehicle in self.data.vehicles:
+            y_value = float(solution.y_values.get(int(vehicle), 0.0))
             activity = sum(
                 float(value)
                 for route, route_vehicle, value in solution.route_values
                 if int(route_vehicle) == int(vehicle) and route.signature in signatures
             )
-            if activity > rhs + max(self.integer_tol, 1.0e-6):
+            if activity > rhs * y_value + max(self.integer_tol, 1.0e-6):
                 violated.append(int(vehicle))
         return tuple(violated)
 

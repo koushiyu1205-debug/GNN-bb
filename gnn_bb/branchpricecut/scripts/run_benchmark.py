@@ -82,6 +82,13 @@ def _append_text(path: Path, text: str) -> None:
         handle.flush()
 
 
+def _bool_config(config: dict[str, Any], name: str, default: bool) -> bool:
+    value = config.get(name, default)
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "off", ""}
+    return bool(value)
+
+
 def _run_capture(command: list[str]) -> str:
     try:
         completed = subprocess.run(command, cwd=REPO_ROOT, text=True, capture_output=True, check=False)
@@ -309,6 +316,43 @@ def _parse_log_metrics(path: str | Path) -> dict[str, Any]:
         "total_pricing_generated_labels": 0,
         "schedule_nogood_cut_events": 0,
         "schedule_pair_conflict_cut_events": 0,
+        "schedule_clique_conflict_cut_events": 0,
+        "schedule_route_set_packing_cut_events": 0,
+        "schedule_capacity_diag_events": 0,
+        "schedule_capacity_candidate_subsets": 0,
+        "schedule_capacity_oracle_queries": 0,
+        "schedule_capacity_oracle_incomplete": 0,
+        "schedule_capacity_not_tight": 0,
+        "schedule_capacity_not_violated": 0,
+        "schedule_capacity_duplicates": 0,
+        "schedule_capacity_violated_candidates": 0,
+        "schedule_capacity_added_from_diag": 0,
+        "schedule_capacity_oracle_states_max": 0,
+        "schedule_capacity_max_violation": 0.0,
+        "route_set_schedule_packing_diag_events": 0,
+        "route_set_schedule_packing_candidate_sets": 0,
+        "route_set_schedule_packing_oracle_queries": 0,
+        "route_set_schedule_packing_oracle_incomplete": 0,
+        "route_set_schedule_packing_not_tight": 0,
+        "route_set_schedule_packing_not_violated": 0,
+        "route_set_schedule_packing_duplicates": 0,
+        "route_set_schedule_packing_violated_candidates": 0,
+        "route_set_schedule_packing_added_from_diag": 0,
+        "route_set_schedule_packing_support_routes_max": 0,
+        "route_set_schedule_packing_candidate_routes_max": 0,
+        "route_set_schedule_packing_oracle_states_max": 0,
+        "route_set_schedule_packing_max_violation": 0.0,
+        "rim_conflict_diag_events": 0,
+        "rim_conflict_checked": 0,
+        "rim_conflict_pair_cuts_added": 0,
+        "rim_conflict_schedule_capacity_cuts_added": 0,
+        "rim_conflict_nogood_cuts_added": 0,
+        "rim_conflict_weak_nogood_not_violated": 0,
+        "cut_purged_events": 0,
+        "cut_purged_schedule_nogood_core": 0,
+        "cut_purged_schedule_nogood_full": 0,
+        "cut_purged_crossing_cut": 0,
+        "cut_purged_schedule_capacity": 0,
         "crossing_cut_events": 0,
         "schedule_capacity_cut_events": 0,
         "branch_rf_count": 0,
@@ -351,12 +395,98 @@ def _parse_log_metrics(path: str | Path) -> dict[str, Any]:
                 family = str(record.get("family", ""))
                 if family == "schedule_pair_conflict":
                     metrics["schedule_pair_conflict_cut_events"] += int(_as_float(record.get("added")) or 1)
+                elif family == "schedule_clique_conflict":
+                    metrics["schedule_clique_conflict_cut_events"] += int(_as_float(record.get("added")) or 1)
+                elif family == "schedule_incompatibility":
+                    metrics["schedule_pair_conflict_cut_events"] += int(_as_float(record.get("pair_added")) or 0)
+                    metrics["schedule_clique_conflict_cut_events"] += int(_as_float(record.get("clique_added")) or 0)
+                elif family == "schedule_route_set_packing":
+                    metrics["schedule_route_set_packing_cut_events"] += int(_as_float(record.get("added")) or 1)
                 elif family.startswith("schedule_nogood"):
                     metrics["schedule_nogood_cut_events"] += int(_as_float(record.get("added")) or 1)
                 elif family == "crossing_cut":
                     metrics["crossing_cut_events"] += int(_as_float(record.get("added")) or 1)
                 elif family.startswith("schedule_capacity"):
                     metrics["schedule_capacity_cut_events"] += int(_as_float(record.get("added")) or 1)
+            if event == "route_set_schedule_packing_diagnostics":
+                metrics["route_set_schedule_packing_diag_events"] += 1
+                metrics["route_set_schedule_packing_candidate_sets"] += int(_as_float(record.get("candidate_sets")) or 0)
+                metrics["route_set_schedule_packing_oracle_queries"] += int(_as_float(record.get("oracle_queries")) or 0)
+                metrics["route_set_schedule_packing_oracle_incomplete"] += int(
+                    _as_float(record.get("skipped_oracle_incomplete")) or 0
+                )
+                metrics["route_set_schedule_packing_not_tight"] += int(_as_float(record.get("skipped_not_tight")) or 0)
+                metrics["route_set_schedule_packing_not_violated"] += int(
+                    _as_float(record.get("skipped_not_violated")) or 0
+                )
+                metrics["route_set_schedule_packing_duplicates"] += int(_as_float(record.get("skipped_duplicate")) or 0)
+                metrics["route_set_schedule_packing_violated_candidates"] += int(
+                    _as_float(record.get("violated_candidates")) or 0
+                )
+                metrics["route_set_schedule_packing_added_from_diag"] += int(_as_float(record.get("added")) or 0)
+                metrics["route_set_schedule_packing_support_routes_max"] = max(
+                    int(metrics["route_set_schedule_packing_support_routes_max"]),
+                    int(_as_float(record.get("support_routes_max")) or 0),
+                )
+                metrics["route_set_schedule_packing_candidate_routes_max"] = max(
+                    int(metrics["route_set_schedule_packing_candidate_routes_max"]),
+                    int(_as_float(record.get("candidate_routes_max")) or 0),
+                )
+                metrics["route_set_schedule_packing_oracle_states_max"] = max(
+                    int(metrics["route_set_schedule_packing_oracle_states_max"]),
+                    int(_as_float(record.get("oracle_states_max")) or 0),
+                )
+                metrics["route_set_schedule_packing_max_violation"] = max(
+                    float(metrics["route_set_schedule_packing_max_violation"]),
+                    float(_as_float(record.get("max_violation")) or 0.0),
+                )
+            if event == "schedule_capacity_diagnostics":
+                metrics["schedule_capacity_diag_events"] += 1
+                metrics["schedule_capacity_candidate_subsets"] += int(_as_float(record.get("candidate_subsets")) or 0)
+                metrics["schedule_capacity_oracle_queries"] += int(_as_float(record.get("oracle_queries")) or 0)
+                metrics["schedule_capacity_oracle_incomplete"] += int(
+                    _as_float(record.get("skipped_oracle_incomplete")) or 0
+                )
+                metrics["schedule_capacity_not_tight"] += int(_as_float(record.get("skipped_not_tight")) or 0)
+                metrics["schedule_capacity_not_violated"] += int(_as_float(record.get("skipped_not_violated")) or 0)
+                metrics["schedule_capacity_duplicates"] += int(_as_float(record.get("skipped_duplicate")) or 0)
+                metrics["schedule_capacity_violated_candidates"] += int(
+                    _as_float(record.get("violated_candidates")) or 0
+                )
+                metrics["schedule_capacity_added_from_diag"] += int(_as_float(record.get("added")) or 0)
+                metrics["schedule_capacity_oracle_states_max"] = max(
+                    int(metrics["schedule_capacity_oracle_states_max"]),
+                    int(_as_float(record.get("oracle_states_max")) or 0),
+                )
+                metrics["schedule_capacity_max_violation"] = max(
+                    float(metrics["schedule_capacity_max_violation"]),
+                    float(_as_float(record.get("max_violation")) or 0.0),
+                )
+            if event == "rim_conflict_diagnostics":
+                metrics["rim_conflict_diag_events"] += 1
+                metrics["rim_conflict_checked"] += int(_as_float(record.get("conflicts_checked")) or 0)
+                metrics["rim_conflict_pair_cuts_added"] += int(_as_float(record.get("pair_cuts_added")) or 0)
+                metrics["rim_conflict_schedule_capacity_cuts_added"] += int(
+                    _as_float(record.get("schedule_capacity_cuts_added")) or 0
+                )
+                metrics["rim_conflict_nogood_cuts_added"] += int(_as_float(record.get("nogood_cuts_added")) or 0)
+                metrics["rim_conflict_weak_nogood_not_violated"] += int(
+                    _as_float(record.get("weak_nogood_not_violated")) or 0
+                )
+            if event == "cut_purged":
+                metrics["cut_purged_events"] += 1
+                removed_by_kind = record.get("removed_by_kind") or {}
+                if isinstance(removed_by_kind, dict):
+                    metrics["cut_purged_schedule_nogood_core"] += int(
+                        _as_float(removed_by_kind.get("schedule_nogood_core")) or 0
+                    )
+                    metrics["cut_purged_schedule_nogood_full"] += int(
+                        _as_float(removed_by_kind.get("schedule_nogood_full")) or 0
+                    )
+                    metrics["cut_purged_crossing_cut"] += int(_as_float(removed_by_kind.get("crossing_cut")) or 0)
+                    metrics["cut_purged_schedule_capacity"] += int(
+                        _as_float(removed_by_kind.get("schedule_capacity")) or 0
+                    )
             if event == "branch":
                 text = f"{record.get('left', '')} {record.get('right', '')}"
                 if "RF(" in text or record.get("i") is not None:
@@ -382,24 +512,26 @@ def _solve_bpc_clean_job(job: dict[str, Any]) -> dict[str, Any]:
         max_routes_per_pricing=int(config.get("max_routes_per_pricing", 200)),
         max_labels_per_pricing=int(config.get("hybrid_max_labels_per_pricing", config.get("max_labels_per_pricing", 0)) or 0),
         root_max_routes_per_pricing=int(config.get("root_max_routes_per_pricing", 0) or 0),
-        heuristic_pricing_enabled=bool(config.get("heuristic_pricing_enabled", False)),
+        heuristic_pricing_enabled=_bool_config(config, "heuristic_pricing_enabled", False),
         heuristic_pricing_max_labels=int(config.get("heuristic_pricing_max_labels", 100000)),
         heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
         heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
         exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
-        branch_node_heuristic_boost_enabled=bool(config.get("branch_node_heuristic_boost_enabled", False)),
+        branch_node_heuristic_boost_enabled=_bool_config(config, "branch_node_heuristic_boost_enabled", False),
         branch_node_heuristic_boost_max_labels=int(config.get("branch_node_heuristic_boost_max_labels", 800000)),
         branch_node_heuristic_boost_routes_per_round=int(config.get("branch_node_heuristic_boost_routes_per_round", 1000)),
         branch_node_heuristic_boost_min_depth=int(config.get("branch_node_heuristic_boost_min_depth", 1)),
-        exact_pricing_dominance_enabled=bool(
-            config.get("exact_pricing_dominance_enabled", config.get("exact_pricing_enable_dominance", False))
+        exact_pricing_dominance_enabled=_bool_config(
+            config,
+            "exact_pricing_dominance_enabled",
+            _bool_config(config, "exact_pricing_enable_dominance", False),
         ),
-        restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
+        restricted_master_heuristic_enabled=_bool_config(config, "restricted_master_heuristic_enabled", False),
         restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
         restricted_master_max_calls=int(config.get("restricted_master_max_calls", 20)),
         restricted_master_max_depth=int(config.get("restricted_master_max_depth", 3)),
-        restricted_master_schedule_aware=bool(config.get("restricted_master_schedule_aware", True)),
+        restricted_master_schedule_aware=_bool_config(config, "restricted_master_schedule_aware", True),
         restricted_master_max_no_good_rounds=int(config.get("restricted_master_max_no_good_rounds", 20)),
         rmp_params=dict(config.get("rmp_params", {})),
         log_path=job["log_path"],
@@ -413,20 +545,20 @@ def _solve_bpc_clean_job(job: dict[str, Any]) -> dict[str, Any]:
         three_pb_heuristic_cg_iterations=int(config.get("three_pb_heuristic_cg_iterations", 3)),
         three_pb_heuristic_routes_per_iter=int(config.get("three_pb_heuristic_routes_per_iter", 50)),
         three_pb_heuristic_max_labels=int(config.get("three_pb_heuristic_max_labels", 800)),
-        task_vehicle_linking_enabled=bool(config.get("task_vehicle_linking_enabled", True)),
-        robust_capacity_cuts_enabled=bool(config.get("robust_capacity_cuts_enabled", True)),
+        task_vehicle_linking_enabled=_bool_config(config, "task_vehicle_linking_enabled", True),
+        robust_capacity_cuts_enabled=_bool_config(config, "robust_capacity_cuts_enabled", True),
         robust_capacity_cut_max_depth=int(config.get("robust_capacity_cut_max_depth", 0)),
         robust_capacity_cut_max_subset_size=int(config.get("robust_capacity_cut_max_subset_size", 5)),
         robust_capacity_cut_max_per_round=int(config.get("robust_capacity_cut_max_per_round", 20)),
         robust_capacity_cut_min_violation=float(config.get("robust_capacity_cut_min_violation", 1.0e-5)),
         robust_capacity_cut_max_rounds_per_node=int(config.get("robust_capacity_cut_max_rounds_per_node", 3)),
-        resource_lower_bound_cuts_enabled=bool(config.get("resource_lower_bound_cuts_enabled", True)),
+        resource_lower_bound_cuts_enabled=_bool_config(config, "resource_lower_bound_cuts_enabled", True),
         resource_cut_max_depth=int(config.get("resource_cut_max_depth", 0)),
         resource_cut_max_subset_size=int(config.get("resource_cut_max_subset_size", 6)),
         resource_cut_max_per_round=int(config.get("resource_cut_max_per_round", 20)),
         resource_cut_min_violation=float(config.get("resource_cut_min_violation", 1.0e-5)),
         resource_cut_max_rounds_per_node=int(config.get("resource_cut_max_rounds_per_node", 3)),
-        schedule_capacity_cuts_enabled=bool(config.get("schedule_capacity_cuts_enabled", True)),
+        schedule_capacity_cuts_enabled=_bool_config(config, "schedule_capacity_cuts_enabled", True),
         schedule_capacity_cut_max_depth=int(config.get("schedule_capacity_cut_max_depth", 0)),
         schedule_capacity_cut_max_subset_size=int(config.get("schedule_capacity_cut_max_subset_size", 10)),
         schedule_capacity_cut_max_per_round=int(config.get("schedule_capacity_cut_max_per_round", 20)),
@@ -437,9 +569,29 @@ def _solve_bpc_clean_job(job: dict[str, Any]) -> dict[str, Any]:
         schedule_capacity_candidate_max_combinations=int(config.get("schedule_capacity_candidate_max_combinations", 300)),
         schedule_capacity_route_union_top_routes=int(config.get("schedule_capacity_route_union_top_routes", 8)),
         schedule_capacity_route_union_max_routes=int(config.get("schedule_capacity_route_union_max_routes", 4)),
+        schedule_incompatibility_cuts_enabled=_bool_config(config, "schedule_incompatibility_cuts_enabled", True),
+        schedule_incompatibility_cut_max_depth=int(config.get("schedule_incompatibility_cut_max_depth", 2)),
+        schedule_incompatibility_cut_max_rounds_per_node=int(config.get("schedule_incompatibility_cut_max_rounds_per_node", 2)),
+        schedule_incompatibility_cut_max_support_routes=int(config.get("schedule_incompatibility_cut_max_support_routes", 80)),
+        schedule_incompatibility_cut_max_per_round=int(config.get("schedule_incompatibility_cut_max_per_round", 10)),
+        schedule_incompatibility_cut_min_violation=float(config.get("schedule_incompatibility_cut_min_violation", 5.0e-2)),
+        schedule_incompatibility_clique_min_size=int(config.get("schedule_incompatibility_clique_min_size", 3)),
+        schedule_incompatibility_clique_seed_count=int(config.get("schedule_incompatibility_clique_seed_count", 24)),
+        route_set_schedule_packing_cuts_enabled=_bool_config(config, "route_set_schedule_packing_cuts_enabled", True),
+        route_set_schedule_packing_cut_max_depth=int(config.get("route_set_schedule_packing_cut_max_depth", 2)),
+        route_set_schedule_packing_cut_max_rounds_per_node=int(config.get("route_set_schedule_packing_cut_max_rounds_per_node", 2)),
+        route_set_schedule_packing_cut_max_support_routes=int(config.get("route_set_schedule_packing_cut_max_support_routes", 40)),
+        route_set_schedule_packing_cut_max_routes=int(config.get("route_set_schedule_packing_cut_max_routes", 16)),
+        route_set_schedule_packing_cut_max_per_round=int(config.get("route_set_schedule_packing_cut_max_per_round", 5)),
+        route_set_schedule_packing_cut_min_violation=float(config.get("route_set_schedule_packing_cut_min_violation", 5.0e-2)),
+        route_set_schedule_packing_oracle_max_states=int(config.get("route_set_schedule_packing_oracle_max_states", 200000)),
         cut_purge_age=int(config.get("cut_purge_age", 20)),
         cut_purge_slack=float(config.get("cut_purge_slack", 1.0e-5)),
         cut_purge_dual=float(config.get("cut_purge_dual", 1.0e-8)),
+        schedule_nogood_purge_enabled=_bool_config(config, "schedule_nogood_purge_enabled", True),
+        schedule_nogood_purge_age=int(config.get("schedule_nogood_purge_age", 8)),
+        schedule_nogood_purge_slack=float(config.get("schedule_nogood_purge_slack", 1.0e-4)),
+        schedule_nogood_purge_dual=float(config.get("schedule_nogood_purge_dual", 1.0e-8)),
     )
     return result.to_row()
 
@@ -580,11 +732,39 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "result_cuts_added",
         "result_schedule_nogood_cuts_added",
         "result_schedule_pair_conflict_cuts_added",
+        "result_schedule_clique_conflict_cuts_added",
+        "result_schedule_route_set_packing_cuts_added",
         "result_schedule_capacity_cuts_added",
         "result_crossing_cuts_added",
         "metric_time_to_first_incumbent",
         "metric_time_to_best_incumbent",
         "metric_root_pricing_events",
+        "metric_schedule_clique_conflict_cut_events",
+        "metric_schedule_route_set_packing_cut_events",
+        "metric_schedule_capacity_diag_events",
+        "metric_schedule_capacity_candidate_subsets",
+        "metric_schedule_capacity_oracle_queries",
+        "metric_schedule_capacity_oracle_incomplete",
+        "metric_schedule_capacity_not_tight",
+        "metric_schedule_capacity_not_violated",
+        "metric_schedule_capacity_violated_candidates",
+        "metric_schedule_capacity_max_violation",
+        "metric_schedule_capacity_oracle_states_max",
+        "metric_route_set_schedule_packing_diag_events",
+        "metric_route_set_schedule_packing_candidate_sets",
+        "metric_route_set_schedule_packing_oracle_queries",
+        "metric_route_set_schedule_packing_oracle_incomplete",
+        "metric_route_set_schedule_packing_not_tight",
+        "metric_route_set_schedule_packing_not_violated",
+        "metric_route_set_schedule_packing_duplicates",
+        "metric_route_set_schedule_packing_violated_candidates",
+        "metric_route_set_schedule_packing_max_violation",
+        "metric_route_set_schedule_packing_oracle_states_max",
+        "metric_rim_conflict_checked",
+        "metric_rim_conflict_nogood_cuts_added",
+        "metric_rim_conflict_weak_nogood_not_violated",
+        "metric_cut_purged_schedule_nogood_core",
+        "metric_cut_purged_schedule_nogood_full",
     ]
     for key in preferred:
         if any(key in row for row in rows):

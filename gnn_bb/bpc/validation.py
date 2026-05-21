@@ -44,6 +44,15 @@ class ScheduleInfeasibilityWitness:
     deletion_minimal: bool
 
 
+@dataclass(frozen=True)
+class RouteSetSchedulePackingResult:
+    """中文注释：一组 route 在同一辆车上最多可排程多少条的 exact 证书。"""
+
+    upper_bound: int
+    states_explored: int
+    exact: bool
+
+
 def evaluate_route_at_start(data: BPCData, route: RouteColumn, start_time: float) -> dict | None:
     current = 0
     current_time = float(start_time)
@@ -141,6 +150,69 @@ def check_route_set_schedule_feasible(data: BPCData, routes: list[RouteColumn]) 
     return ScheduleCheckResult(True, tuple(order), round(best_value, 6))
 
 
+def exact_route_set_schedule_capacity(
+    data: BPCData,
+    routes: list[RouteColumn] | tuple[RouteColumn, ...],
+    *,
+    max_states: int = 200000,
+) -> RouteSetSchedulePackingResult | None:
+    """精确计算同一辆车最多能从给定 route 集合中排程多少条。
+
+    中文注释：候选 route 集合来自启发式分离，但这里的 DP 是证明环节。
+    若状态数超过上限则返回 None，调用方不得加 cut。
+    """
+
+    route_list = list(routes)
+    count = len(route_list)
+    if count == 0:
+        return RouteSetSchedulePackingResult(0, 0, True)
+
+    max_count = min(count, int(data.sortie_limit))
+    best_ready: dict[tuple[int, int], float] = {}
+    states_explored = 0
+    best_cardinality = 0
+
+    for index, route in enumerate(route_list):
+        evaluated = evaluate_route_at_start(data, route, 0.0)
+        states_explored += 1
+        if max_states > 0 and states_explored > max_states:
+            return None
+        if evaluated is None:
+            continue
+        key = (1 << index, index)
+        best_ready[key] = float(evaluated["ready_time"])
+        best_cardinality = max(best_cardinality, 1)
+
+    for cardinality in range(1, max_count):
+        items = [
+            (state, ready)
+            for state, ready in best_ready.items()
+            if state[0].bit_count() == cardinality
+        ]
+        if not items:
+            continue
+        for (mask, _last), ready in sorted(items, key=lambda item: (item[1], item[0])):
+            for nxt, route in enumerate(route_list):
+                if mask & (1 << nxt):
+                    continue
+                evaluated = evaluate_route_at_start(data, route, ready)
+                states_explored += 1
+                if max_states > 0 and states_explored > max_states:
+                    return None
+                if evaluated is None:
+                    continue
+                next_mask = mask | (1 << nxt)
+                next_key = (next_mask, nxt)
+                next_ready = float(evaluated["ready_time"])
+                if next_ready + CHECK_TOL < best_ready.get(next_key, float("inf")):
+                    best_ready[next_key] = next_ready
+                    best_cardinality = max(best_cardinality, next_mask.bit_count())
+                    if best_cardinality >= max_count:
+                        return RouteSetSchedulePackingResult(max_count, states_explored, True)
+
+    return RouteSetSchedulePackingResult(best_cardinality, states_explored, True)
+
+
 def route_transition_ready_time(
     data: BPCData,
     first: RouteColumn,
@@ -168,7 +240,7 @@ def find_route_pair_schedule_conflicts(
     """找出无论 p->q 还是 q->p 都不可行的 route pair。
 
     中文注释：如果一对 route 从时间 0 开始的任一先后顺序都不可行，那么在任何更晚
-    的部分 schedule 中也不可行，因此可安全加入 lambda[p,r]+lambda[q,r]<=1。
+    的部分 schedule 中也不可行，因此可安全加入 lambda[p,r]+lambda[q,r]<=y[r]。
     """
 
     conflicts: list[RoutePairScheduleConflict] = []

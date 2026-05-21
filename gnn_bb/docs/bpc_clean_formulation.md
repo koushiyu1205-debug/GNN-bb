@@ -94,7 +94,7 @@ sum_p a[i,p] lambda[p,r] <= y[r]             for all i,r
 sum_p lambda[p,r] <= S_bar y[r]              for all r
 sum_p w[p] lambda[p,r] <= H y[r]             for all r
 y[r+1] <= y[r]
-sum_{p in C} lambda[p,r] <= |C|-1            for schedule no-good cuts
+sum_{p in C} lambda[p,r] <= (|C|-1)y[r]      for schedule no-good cuts
 ```
 
 其中 `w[p]` 是 route 的车辆工作时间下界：
@@ -159,12 +159,12 @@ rc_I[p,r] = 0
 
 ## 5. Cuts
 
-当前 clean BPC 包含 schedule pair conflict cuts、schedule no-good cuts、统一 crossing cuts 和 schedule capacity upper-bound cuts。统一 crossing cut 合并了 RCI 与 k-path/resource lower bound，同一个任务子集只保留 RHS 最大的版本。
+当前 clean BPC 包含 schedule pair conflict cuts、schedule clique conflict cuts、route-set schedule packing cuts、schedule no-good cuts、统一 crossing cuts 和 schedule capacity upper-bound cuts。统一 crossing cut 合并了 RCI 与 k-path/resource lower bound，同一个任务子集只保留 RHS 最大的版本。
 
 如果整数解中，某辆车选择的 route 集合 `C` 经过 exact schedule checker 证明无法按任意顺序完成，则对每辆同质车加入：
 
 ```text
-sum_{p in C} lambda[p,r] <= |C| - 1
+sum_{p in C} lambda[p,r] <= (|C| - 1)y[r]
 ```
 
 这类 cut 只排除原问题不可行组合，因此不破坏 exactness。
@@ -172,10 +172,44 @@ sum_{p in C} lambda[p,r] <= |C| - 1
 当前实现先检查不可排程 witness 中是否存在双向不可排程 route pair。若 `p->q` 与 `q->p` 都不可行，则加入更小的 pair cut：
 
 ```text
-lambda[p,r] + lambda[q,r] <= 1
+lambda[p,r] + lambda[q,r] <= y[r]
 ```
 
 由于同一辆车上两条 sortie 必须存在一个先后顺序，且更晚开始不会修复时间窗/电量/horizon 违反，这个 pair cut 是安全的。
+
+在 fractional LP 解上，当前实现还会受控分离 schedule incompatibility cut。对某辆车 `r`，若 LP 支撑中的多条 route 两两满足双向不可排程，则这些 route 构成一个 incompatibility clique `K`。同一辆真实车辆最多只能选择 clique 中一条 route，因此可加入：
+
+```text
+sum_{p in K} lambda[p,r] <= y[r]
+```
+
+当 `|K|=2` 时就是 pair cut；当 `|K|>=3` 时记为 `schedule_clique_conflict`。该 cut 只使用 exact schedule transition check 证明 pairwise incompatibility，候选 clique 的搜索方式只是分离启发式，不参与有效性证明。为控制列定价状态膨胀，默认只在浅层节点、每个节点少量轮次、每轮少量 violated cut 中启用。
+
+更一般地，当前实现还支持 route-set schedule packing cut。给定同一车辆的一组 route：
+
+```text
+C = {p_1, ..., p_m}
+```
+
+用 exact schedule DP 计算：
+
+```text
+U(C) = 一辆真实车辆最多能从 C 中排程多少条 route
+```
+
+若当前 LP 违反：
+
+```text
+sum_{p in C} lambda[p,r] <= U(C)y[r]
+```
+
+则加入 `schedule_route_set_packing` cut。这个 cut 同时覆盖 pair、clique 和 no-good 的高阶推广：
+
+- pair conflict 是 `|C|=2, U(C)=1`；
+- clique conflict 是 `|C|>=3, U(C)=1`；
+- 不可排程整数 no-good 是 `U(C) <= |C|-1` 的整数解特例。
+
+有效性：`U(C)` 由 exact DP 在真实 route ready time、horizon 和 sortie 数限制下计算。整数解中若 `y[r]=0` 则车辆不能选择 route；若 `y[r]=1` 则同一辆车最多只能从 `C` 中选择 `U(C)` 条 route。因此 `sum lambda <= U(C)y[r]` 不删除任何原问题整数可行解。若 DP 状态数超过上限或无法完成证明，则不加 cut。候选 `C` 的生成可以是启发式，但 cut 的 RHS 必须来自 exact oracle。
 
 若没有 pair witness，当前实现再尝试更结构化的 schedule-capacity conflict cut：从不可排程 route 集合中提取任务集合 `S`，若 exact schedule oracle 证明一辆车最多只能服务其中 `U(S)<|S|` 个任务，则加入：
 

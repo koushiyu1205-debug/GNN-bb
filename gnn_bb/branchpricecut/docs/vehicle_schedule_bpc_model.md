@@ -37,6 +37,8 @@ valid cuts and branch rows
 
 route pricing 是单 sortie RCSP。节点只有在 route pricing exhausted 且没有负 reduced-cost route 时，才能使用该节点 LP lower bound。
 
+当前 hybrid route-level master 额外加入 route-set schedule packing cuts：对某辆车的一组 route `C`，用 exact schedule DP 证明最多可排 `U(C)` 条，若 LP 违反 `sum_{p in C} lambda[p,r] <= U(C)y[r]` 才加 cut。候选集合由启发式产生，但 RHS 中的 `U(C)` 必须由 exact oracle 证明；状态超限时不加 cut。
+
 ## 3. Hybrid Exactness 机制
 
 hybrid 模式不是简单“先解 route master 再检查”。exactness 依赖以下闭环：

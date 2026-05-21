@@ -53,6 +53,8 @@ class BPCResult:
     robust_capacity_cuts_added: int
     resource_lower_bound_cuts_added: int
     schedule_pair_conflict_cuts_added: int
+    schedule_clique_conflict_cuts_added: int
+    schedule_route_set_packing_cuts_added: int
     schedule_nogood_cuts_added: int
     schedule_capacity_cuts_added: int
     cuts_purged: int
@@ -142,9 +144,29 @@ def solve_bpc_clean(
     schedule_capacity_candidate_max_combinations: int = 300,
     schedule_capacity_route_union_top_routes: int = 8,
     schedule_capacity_route_union_max_routes: int = 4,
+    schedule_incompatibility_cuts_enabled: bool = True,
+    schedule_incompatibility_cut_max_depth: int = 2,
+    schedule_incompatibility_cut_max_rounds_per_node: int = 2,
+    schedule_incompatibility_cut_max_support_routes: int = 80,
+    schedule_incompatibility_cut_max_per_round: int = 10,
+    schedule_incompatibility_cut_min_violation: float = 5.0e-2,
+    schedule_incompatibility_clique_min_size: int = 3,
+    schedule_incompatibility_clique_seed_count: int = 24,
+    route_set_schedule_packing_cuts_enabled: bool = True,
+    route_set_schedule_packing_cut_max_depth: int = 2,
+    route_set_schedule_packing_cut_max_rounds_per_node: int = 2,
+    route_set_schedule_packing_cut_max_support_routes: int = 40,
+    route_set_schedule_packing_cut_max_routes: int = 16,
+    route_set_schedule_packing_cut_max_per_round: int = 5,
+    route_set_schedule_packing_cut_min_violation: float = 5.0e-2,
+    route_set_schedule_packing_oracle_max_states: int = 200000,
     cut_purge_age: int = 20,
     cut_purge_slack: float = 1.0e-5,
     cut_purge_dual: float = 1.0e-8,
+    schedule_nogood_purge_enabled: bool = True,
+    schedule_nogood_purge_age: int = 8,
+    schedule_nogood_purge_slack: float = 1.0e-4,
+    schedule_nogood_purge_dual: float = 1.0e-8,
 ) -> BPCResult:
     logger = BPCLogger(log_path, console=not quiet)
     try:
@@ -207,9 +229,29 @@ def solve_bpc_clean(
             schedule_capacity_candidate_max_combinations=schedule_capacity_candidate_max_combinations,
             schedule_capacity_route_union_top_routes=schedule_capacity_route_union_top_routes,
             schedule_capacity_route_union_max_routes=schedule_capacity_route_union_max_routes,
+            schedule_incompatibility_cuts_enabled=schedule_incompatibility_cuts_enabled,
+            schedule_incompatibility_cut_max_depth=schedule_incompatibility_cut_max_depth,
+            schedule_incompatibility_cut_max_rounds_per_node=schedule_incompatibility_cut_max_rounds_per_node,
+            schedule_incompatibility_cut_max_support_routes=schedule_incompatibility_cut_max_support_routes,
+            schedule_incompatibility_cut_max_per_round=schedule_incompatibility_cut_max_per_round,
+            schedule_incompatibility_cut_min_violation=schedule_incompatibility_cut_min_violation,
+            schedule_incompatibility_clique_min_size=schedule_incompatibility_clique_min_size,
+            schedule_incompatibility_clique_seed_count=schedule_incompatibility_clique_seed_count,
+            route_set_schedule_packing_cuts_enabled=route_set_schedule_packing_cuts_enabled,
+            route_set_schedule_packing_cut_max_depth=route_set_schedule_packing_cut_max_depth,
+            route_set_schedule_packing_cut_max_rounds_per_node=route_set_schedule_packing_cut_max_rounds_per_node,
+            route_set_schedule_packing_cut_max_support_routes=route_set_schedule_packing_cut_max_support_routes,
+            route_set_schedule_packing_cut_max_routes=route_set_schedule_packing_cut_max_routes,
+            route_set_schedule_packing_cut_max_per_round=route_set_schedule_packing_cut_max_per_round,
+            route_set_schedule_packing_cut_min_violation=route_set_schedule_packing_cut_min_violation,
+            route_set_schedule_packing_oracle_max_states=route_set_schedule_packing_oracle_max_states,
             cut_purge_age=cut_purge_age,
             cut_purge_slack=cut_purge_slack,
             cut_purge_dual=cut_purge_dual,
+            schedule_nogood_purge_enabled=schedule_nogood_purge_enabled,
+            schedule_nogood_purge_age=schedule_nogood_purge_age,
+            schedule_nogood_purge_slack=schedule_nogood_purge_slack,
+            schedule_nogood_purge_dual=schedule_nogood_purge_dual,
         )
         tree_result = tree.solve()
     finally:
@@ -256,6 +298,8 @@ def solve_bpc_clean(
         robust_capacity_cuts_added=tree_result.stats.robust_capacity_cuts_added,
         resource_lower_bound_cuts_added=tree_result.stats.resource_lower_bound_cuts_added,
         schedule_pair_conflict_cuts_added=tree_result.stats.schedule_pair_conflict_cuts_added,
+        schedule_clique_conflict_cuts_added=tree_result.stats.schedule_clique_conflict_cuts_added,
+        schedule_route_set_packing_cuts_added=tree_result.stats.schedule_route_set_packing_cuts_added,
         schedule_nogood_cuts_added=tree_result.stats.schedule_nogood_cuts_added,
         schedule_capacity_cuts_added=tree_result.stats.schedule_capacity_cuts_added,
         cuts_purged=tree_result.stats.cuts_purged,
@@ -288,6 +332,8 @@ def solve_bpc_clean(
                     "tasks": list(getattr(cut, "tasks", ())),
                     "sense": cut.sense,
                     "rhs": cut.rhs,
+                    "upper_bound": getattr(cut, "upper_bound", None),
+                    "scale_by_vehicle_use": getattr(cut, "scale_by_vehicle_use", None),
                     "k_bound": getattr(cut, "k_bound", None),
                     "capacity_bound": getattr(cut, "capacity_bound", None),
                     "resource_bound": getattr(cut, "resource_bound", None),

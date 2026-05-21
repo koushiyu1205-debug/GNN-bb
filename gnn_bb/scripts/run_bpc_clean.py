@@ -42,6 +42,13 @@ def _write_rows(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
+def _bool_config(config: dict, name: str, default: bool) -> bool:
+    value = config.get(name, default)
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "off", ""}
+    return bool(value)
+
+
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -67,24 +74,26 @@ def main() -> None:
             max_routes_per_pricing=int(config.get("max_routes_per_pricing", 200)),
             max_labels_per_pricing=int(config.get("max_labels_per_pricing", 0) or 0),
             root_max_routes_per_pricing=int(config.get("root_max_routes_per_pricing", 0) or 0),
-            heuristic_pricing_enabled=bool(config.get("heuristic_pricing_enabled", False)),
+            heuristic_pricing_enabled=_bool_config(config, "heuristic_pricing_enabled", False),
             heuristic_pricing_max_labels=int(config.get("heuristic_pricing_max_labels", 100000)),
             heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
             heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
             exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
-            branch_node_heuristic_boost_enabled=bool(config.get("branch_node_heuristic_boost_enabled", False)),
+            branch_node_heuristic_boost_enabled=_bool_config(config, "branch_node_heuristic_boost_enabled", False),
             branch_node_heuristic_boost_max_labels=int(config.get("branch_node_heuristic_boost_max_labels", 800000)),
             branch_node_heuristic_boost_routes_per_round=int(config.get("branch_node_heuristic_boost_routes_per_round", 1000)),
             branch_node_heuristic_boost_min_depth=int(config.get("branch_node_heuristic_boost_min_depth", 1)),
-            exact_pricing_dominance_enabled=bool(
-                config.get("exact_pricing_dominance_enabled", config.get("exact_pricing_enable_dominance", False))
+            exact_pricing_dominance_enabled=_bool_config(
+                config,
+                "exact_pricing_dominance_enabled",
+                _bool_config(config, "exact_pricing_enable_dominance", False),
             ),
-            restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
+            restricted_master_heuristic_enabled=_bool_config(config, "restricted_master_heuristic_enabled", False),
             restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
             restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
             restricted_master_max_calls=int(config.get("restricted_master_max_calls", 20)),
             restricted_master_max_depth=int(config.get("restricted_master_max_depth", 3)),
-            restricted_master_schedule_aware=bool(config.get("restricted_master_schedule_aware", True)),
+            restricted_master_schedule_aware=_bool_config(config, "restricted_master_schedule_aware", True),
             restricted_master_max_no_good_rounds=int(config.get("restricted_master_max_no_good_rounds", 20)),
             rmp_params=dict(config.get("rmp_params", {})),
             log_path=log_path,
@@ -98,20 +107,20 @@ def main() -> None:
             three_pb_heuristic_cg_iterations=int(config.get("three_pb_heuristic_cg_iterations", 3)),
             three_pb_heuristic_routes_per_iter=int(config.get("three_pb_heuristic_routes_per_iter", 50)),
             three_pb_heuristic_max_labels=int(config.get("three_pb_heuristic_max_labels", 800)),
-            task_vehicle_linking_enabled=bool(config.get("task_vehicle_linking_enabled", True)),
-            robust_capacity_cuts_enabled=bool(config.get("robust_capacity_cuts_enabled", True)),
+            task_vehicle_linking_enabled=_bool_config(config, "task_vehicle_linking_enabled", True),
+            robust_capacity_cuts_enabled=_bool_config(config, "robust_capacity_cuts_enabled", True),
             robust_capacity_cut_max_depth=int(config.get("robust_capacity_cut_max_depth", 0)),
             robust_capacity_cut_max_subset_size=int(config.get("robust_capacity_cut_max_subset_size", 5)),
             robust_capacity_cut_max_per_round=int(config.get("robust_capacity_cut_max_per_round", 20)),
             robust_capacity_cut_min_violation=float(config.get("robust_capacity_cut_min_violation", 1.0e-5)),
             robust_capacity_cut_max_rounds_per_node=int(config.get("robust_capacity_cut_max_rounds_per_node", 3)),
-            resource_lower_bound_cuts_enabled=bool(config.get("resource_lower_bound_cuts_enabled", True)),
+            resource_lower_bound_cuts_enabled=_bool_config(config, "resource_lower_bound_cuts_enabled", True),
             resource_cut_max_depth=int(config.get("resource_cut_max_depth", 0)),
             resource_cut_max_subset_size=int(config.get("resource_cut_max_subset_size", 6)),
             resource_cut_max_per_round=int(config.get("resource_cut_max_per_round", 20)),
             resource_cut_min_violation=float(config.get("resource_cut_min_violation", 1.0e-5)),
             resource_cut_max_rounds_per_node=int(config.get("resource_cut_max_rounds_per_node", 3)),
-            schedule_capacity_cuts_enabled=bool(config.get("schedule_capacity_cuts_enabled", True)),
+            schedule_capacity_cuts_enabled=_bool_config(config, "schedule_capacity_cuts_enabled", True),
             schedule_capacity_cut_max_depth=int(config.get("schedule_capacity_cut_max_depth", 0)),
             schedule_capacity_cut_max_subset_size=int(config.get("schedule_capacity_cut_max_subset_size", 10)),
             schedule_capacity_cut_max_per_round=int(config.get("schedule_capacity_cut_max_per_round", 20)),
@@ -122,9 +131,37 @@ def main() -> None:
             schedule_capacity_candidate_max_combinations=int(config.get("schedule_capacity_candidate_max_combinations", 300)),
             schedule_capacity_route_union_top_routes=int(config.get("schedule_capacity_route_union_top_routes", 8)),
             schedule_capacity_route_union_max_routes=int(config.get("schedule_capacity_route_union_max_routes", 4)),
+            schedule_incompatibility_cuts_enabled=_bool_config(config, "schedule_incompatibility_cuts_enabled", True),
+            schedule_incompatibility_cut_max_depth=int(config.get("schedule_incompatibility_cut_max_depth", 2)),
+            schedule_incompatibility_cut_max_rounds_per_node=int(
+                config.get("schedule_incompatibility_cut_max_rounds_per_node", 2)
+            ),
+            schedule_incompatibility_cut_max_support_routes=int(
+                config.get("schedule_incompatibility_cut_max_support_routes", 80)
+            ),
+            schedule_incompatibility_cut_max_per_round=int(config.get("schedule_incompatibility_cut_max_per_round", 10)),
+            schedule_incompatibility_cut_min_violation=float(config.get("schedule_incompatibility_cut_min_violation", 5.0e-2)),
+            schedule_incompatibility_clique_min_size=int(config.get("schedule_incompatibility_clique_min_size", 3)),
+            schedule_incompatibility_clique_seed_count=int(config.get("schedule_incompatibility_clique_seed_count", 24)),
+            route_set_schedule_packing_cuts_enabled=_bool_config(config, "route_set_schedule_packing_cuts_enabled", True),
+            route_set_schedule_packing_cut_max_depth=int(config.get("route_set_schedule_packing_cut_max_depth", 2)),
+            route_set_schedule_packing_cut_max_rounds_per_node=int(
+                config.get("route_set_schedule_packing_cut_max_rounds_per_node", 2)
+            ),
+            route_set_schedule_packing_cut_max_support_routes=int(
+                config.get("route_set_schedule_packing_cut_max_support_routes", 40)
+            ),
+            route_set_schedule_packing_cut_max_routes=int(config.get("route_set_schedule_packing_cut_max_routes", 16)),
+            route_set_schedule_packing_cut_max_per_round=int(config.get("route_set_schedule_packing_cut_max_per_round", 5)),
+            route_set_schedule_packing_cut_min_violation=float(config.get("route_set_schedule_packing_cut_min_violation", 5.0e-2)),
+            route_set_schedule_packing_oracle_max_states=int(config.get("route_set_schedule_packing_oracle_max_states", 200000)),
             cut_purge_age=int(config.get("cut_purge_age", 20)),
             cut_purge_slack=float(config.get("cut_purge_slack", 1.0e-5)),
             cut_purge_dual=float(config.get("cut_purge_dual", 1.0e-8)),
+            schedule_nogood_purge_enabled=_bool_config(config, "schedule_nogood_purge_enabled", True),
+            schedule_nogood_purge_age=int(config.get("schedule_nogood_purge_age", 8)),
+            schedule_nogood_purge_slack=float(config.get("schedule_nogood_purge_slack", 1.0e-4)),
+            schedule_nogood_purge_dual=float(config.get("schedule_nogood_purge_dual", 1.0e-8)),
         )
         rows.append(result.to_row())
         print(
@@ -135,6 +172,8 @@ def main() -> None:
             f"cuts={result.cuts_added}, crossing={result.crossing_cuts_added}, "
             f"crossing_upgraded={result.crossing_cuts_upgraded}, rci={result.robust_capacity_cuts_added}, "
             f"kpath={result.resource_lower_bound_cuts_added}, pair={result.schedule_pair_conflict_cuts_added}, "
+            f"clique={result.schedule_clique_conflict_cuts_added}, "
+            f"route_pack={result.schedule_route_set_packing_cuts_added}, "
             f"nogood={result.schedule_nogood_cuts_added}, "
             f"sched_cap={result.schedule_capacity_cuts_added}, "
             f"rim_calls={result.restricted_master_integer_calls}, rim_feasible={result.restricted_master_integer_feasible}, "

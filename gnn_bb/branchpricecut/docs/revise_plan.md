@@ -842,3 +842,226 @@ V. 最终交付
     不允许 heuristic 层证明 lower bound。
 
     bench_20_01
+
+============================================================
+W. 2026-05-19 当前 bpc_clean 主线补充备注
+============================================================
+
+本轮没有切换到 vehicle-schedule master，也没有做 learning to cut。当前只在根目录 `bpc/` 的 route-vehicle BPC with schedule cuts 主线上加入一个受控的 LP schedule incompatibility separator。
+
+新增内容：
+
+1. 对同一车辆 LP 支撑 route 做 exact transition check；
+2. 若两条 route `p->q` 与 `q->p` 都不可行，且当前 LP 违反，则加入：
+
+       lambda[p,r] + lambda[q,r] <= y[r]
+
+3. 若一组 route 两两双向不可排程，且当前 LP 违反，则加入：
+
+       sum_{p in K} lambda[p,r] <= y[r]
+
+4. `|K|>=3` 的 cut 记录为 `schedule_clique_conflict`；
+5. 新增统计字段 `schedule_clique_conflict_cuts_added` 和 benchmark log metric。
+
+有效性依据：
+
+同一车辆的 sortie 必须存在先后顺序。若两条 route 从时间 0 开始任一先后顺序都不可行，则更晚开始不会使其可行，因此它们不能同时属于同一辆车。pairwise clique 中任意两条都不能共存，所以整组最多选择一条。
+
+该 separator 只在完成 exact pricing certificate 后运行；候选 clique 的构造是启发式，但 cut 的加入由 exact transition check 和 LP violation 决定，不影响最优性证明。
+
+============================================================
+X. 2026-05-19 route-set schedule packing cut 补充
+============================================================
+
+继续保留当前 `bpc_clean` route-vehicle master，不切回现有 vehicle-schedule master。原因是现有 vehicle-schedule master 的 pricing certificate 在 20 规模上过慢；当前优化目标是在 route-vehicle master 中补强 schedule lower bound。
+
+新增高阶 route-set schedule packing cut：
+
+给定同一车辆的一组 route：
+
+    C = {p_1, ..., p_m}
+
+用 exact schedule DP 计算：
+
+    U(C) = 同一辆真实车辆最多能从 C 中排程多少条 route
+
+若当前 LP 违反：
+
+    sum_{p in C} lambda[p,r] <= U(C)y[r]
+
+则加入正式 cut：
+
+    schedule_route_set_packing
+
+精确性边界：
+
+1. 候选 C 的生成是启发式，只决定尝试哪些 route 集合；
+2. RHS 中的 U(C) 必须由 exact_route_set_schedule_capacity 给出；
+3. exact DP 同时考虑 ready time 串接、horizon 和 S_bar；
+4. 若 oracle 超过状态上限，则返回 None，不加 cut；
+5. 因此不会用启发式上界删除任何原问题可行解。
+
+该 cut 是 pair / clique / no-good 的统一加强版：
+
+    pair conflict:        |C|=2, U(C)=1
+    clique conflict:      |C|>=3, U(C)=1
+    integer no-good:      U(C)<=|C|-1
+route-set packing:    1<=U(C)<|C|
+
+============================================================
+Y. 2026-05-19 route-pack skip 诊断补充
+============================================================
+
+补充 `route_set_schedule_packing_diagnostics` 日志事件，用于解释 route-pack separator 为什么没有加 cut 或只加了很少 cut。该事件只记录诊断信息，不改变模型、约束、定价或证明逻辑。
+
+主要字段：
+
+    candidate_sets
+        本轮生成的 route 集合候选数量。
+
+    oracle_queries
+        查询 exact route-set schedule bound 的次数，可能命中缓存。
+
+    skipped_oracle_incomplete
+        exact oracle 超过状态上限或未能证明，直接跳过，不加 cut。
+
+    skipped_not_tight
+        oracle 得到 U(C)>=|C|，该候选没有形成更紧的 schedule packing 约束。
+
+    skipped_not_violated
+        cut 有效但当前 LP 没有超过 violation 阈值。
+
+    skipped_duplicate
+        候选与已有 cut 或本轮已收集候选重复。
+
+    violated_candidates / added
+        exact oracle 证明且 LP 违反的候选数量，以及本轮实际加入 cut 数。
+
+    max_violation / oracle_states_max
+        最大 LP 违反量和单个候选最大 exact DP 状态数。
+
+使用方式：
+
+    如果 not_tight 很高，优先改候选集合生成；
+    如果 not_violated 很高，说明该 family 对当前 LP bound 帮助有限；
+    如果 oracle_incomplete 很高，再考虑缩小候选或优化 exact route-set DP。
+
+============================================================
+Z. 2026-05-20 no-good purge 与 schedule-cap/RIM 诊断
+============================================================
+
+背景：
+
+    最新 bench_20_02 / bench_20_03 输出显示：
+    cut 总数明显增加，但 diagnostic dual 只小幅提升。
+    膨胀主因不是 route-pack，而是 schedule_nogood_core。
+
+本轮修改：
+
+1. 增加弱 no-good purge。
+
+   只清理：
+
+       schedule_nogood
+       schedule_nogood_core
+       schedule_nogood_full
+
+   不清理：
+
+       schedule_pair_conflict
+       schedule_clique_conflict
+       schedule_route_set_packing
+
+   默认参数：
+
+       schedule_nogood_purge_enabled: true
+       schedule_nogood_purge_age: 8
+       schedule_nogood_purge_slack: 1.0e-4
+       schedule_nogood_purge_dual: 1.0e-8
+
+   精确性边界：
+
+       删除已加入的有效 cut 只会放松 LP；
+       RMP 和 pricing 使用同一套 active cut；
+       因此不会错误剪掉原问题可行解。
+
+2. 增加 schedule-capacity skip 诊断。
+
+   新日志事件：
+
+       schedule_capacity_diagnostics
+
+   重点字段：
+
+       candidate_subsets
+       oracle_queries
+       skipped_oracle_incomplete
+       skipped_not_tight
+       skipped_not_violated
+       violated_candidates
+       added
+       max_violation
+       oracle_states_max
+
+3. 增加 RIM 冲突回流诊断。
+
+   新日志事件：
+
+       rim_conflict_diagnostics
+
+   重点字段：
+
+       conflicts_checked
+       pair_cuts_added
+       schedule_capacity_cuts_added
+       nogood_cuts_added
+       weak_nogood_not_violated
+
+下一步判断规则：
+
+    如果 no-good 被大量加入又大量 purge，说明局部 no-good 不应继续加强；
+    如果 schedule-cap not_tight 高，优先改候选集合；
+    如果 schedule-cap oracle_incomplete 高，优先改 oracle；
+    如果 RIM 仍主要回流 no-good，下一步应做更强 schedule-capacity certificate、route pool 上界构造或可证明的一车目标下界。
+
+============================================================
+AA. 2026-05-20 fixed-cost-aware 初始 incumbent
+============================================================
+
+背景：
+
+    重新检查 bench_20_02 / bench_20_03 后发现，当前结果里
+    primal_bound 约 329~333，并不是因为一辆车不可行。
+    相反，同一实例存在一辆车多 sortie 的真实可行解。
+    因此不能安全加入 sum_r y_r >= 2。
+
+问题：
+
+    初始贪心在选择候选插入时主要看 route cost，
+    没有把开启新车辆带来的 F y_r 固定成本计入增量目标。
+    这会让构造启发式偏向“两辆车、短路线”，即使“一辆车、多 sortie”
+    的总目标更低。
+
+本轮修改：
+
+1. _best_greedy_insertion 的候选 score 改为 fixed-cost-aware delta objective。
+
+       插入已有车辆：
+           delta = route cost 增量
+
+       给空车辆开新 route：
+           delta = route cost + F
+
+2. initialize 阶段新增 serial_schedule incumbent。
+
+       按时间窗顺序把任务串成同一车辆的多条 sortie；
+       每条 route 和整车 route set 都必须通过 exact schedule check；
+       通过后加入 route pool 并更新 incumbent。
+
+3. 较慢的 greedy improvement 只有在原始构造目标有机会优于当前 incumbent 时才运行。
+
+精确性：
+
+    这些改动只影响 primal heuristic 和初始 route pool。
+    lower bound 仍只来自 RMP + true-dual exact pricing + valid cuts。
+    因此不会破坏 exactness。

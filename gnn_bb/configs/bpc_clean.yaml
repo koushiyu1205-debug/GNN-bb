@@ -93,10 +93,40 @@ schedule_capacity_candidate_max_combinations: 300
 schedule_capacity_route_union_top_routes: 8
 schedule_capacity_route_union_max_routes: 4
 
-# 只清洗 inactive robust cuts，不清洗 schedule no-good cuts。
+# Schedule incompatibility cuts:
+# 对同一车辆的 LP 支撑 route，若两条 route 任意先后顺序都不可排程，则加入 pair cut；
+# 若一组 route 两两不可排程且 LP 总活动量超过 1，则加入 clique cut：sum lambda[p,r] <= 1。
+schedule_incompatibility_cuts_enabled: true
+schedule_incompatibility_cut_max_depth: 2
+schedule_incompatibility_cut_max_rounds_per_node: 2
+schedule_incompatibility_cut_max_support_routes: 80
+schedule_incompatibility_cut_max_per_round: 10
+schedule_incompatibility_cut_min_violation: 5.0e-2
+schedule_incompatibility_clique_min_size: 3
+schedule_incompatibility_clique_seed_count: 24
+
+# Route-set schedule packing cuts:
+# 对同一车辆的一组 route C，用 exact schedule DP 证明最多可排 U(C) 条；
+# 仅当当前 LP 违反 sum_{p in C} lambda[p,r] <= U(C) 时加入。
+route_set_schedule_packing_cuts_enabled: true
+route_set_schedule_packing_cut_max_depth: 2
+route_set_schedule_packing_cut_max_rounds_per_node: 2
+route_set_schedule_packing_cut_max_support_routes: 40
+route_set_schedule_packing_cut_max_routes: 16
+route_set_schedule_packing_cut_max_per_round: 5
+route_set_schedule_packing_cut_min_violation: 5.0e-2
+route_set_schedule_packing_oracle_max_states: 200000
+
+# 清理 inactive crossing / schedule-capacity cut。
 cut_purge_age: 20
 cut_purge_slack: 1.0e-5
 cut_purge_dual: 1.0e-8
+
+# 只对弱的 schedule no-good 做额外清理；pair / clique / route-pack 结构性 cut 默认保留。
+schedule_nogood_purge_enabled: true
+schedule_nogood_purge_age: 8
+schedule_nogood_purge_slack: 1.0e-4
+schedule_nogood_purge_dual: 1.0e-8
 
 rmp_params:
   display/verblevel: 0

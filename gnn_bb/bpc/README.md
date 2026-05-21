@@ -156,12 +156,12 @@ rc_I(p,r) = 0
 
 #### Cuts
 
-当前只实现 schedule no-good cut。
+早期版本只实现 schedule no-good cut；当前主线已把这类 signature cut 改成带车辆启用变量的形式。
 
 如果整数解中某辆车选择的 route 集合 `Q` 无法排成真实执行顺序，则加入：
 
 ```text
-sum_{p in Q} lambda[p,r] <= |Q| - 1
+sum_{p in Q} lambda[p,r] <= (|Q| - 1)y[r]
 ```
 
 当前实现会对所有同质车辆加入同类 cut。该 cut 只排除 exact schedule checker 已证明不可行的 route 组合，因此不改变原问题可行域。
@@ -2395,7 +2395,7 @@ OK
 ```text
 1. 在该 route set 内寻找双向不可排程的 route pair；
 2. 若找到，加入 schedule_pair_conflict cut：
-   lambda[p,r] + lambda[q,r] <= 1
+   lambda[p,r] + lambda[q,r] <= y[r]
 3. 若找不到 pair conflict，退回 deletion-minimal schedule_nogood_core cut；
 4. 若 core cut 已存在，再退回 full route set no-good；
 5. 若仍无法新增 cut，不允许把该节点当作 integral feasible fathom。
@@ -2426,10 +2426,10 @@ cut_added family=schedule_nogood_core ...
 若 exact schedule checker 证明 `[p,q]` 不可排程，则同一车辆不可能同时执行这两条 route。因此：
 
 ```text
-lambda[p,r] + lambda[q,r] <= 1
+lambda[p,r] + lambda[q,r] <= y[r]
 ```
 
-不会删除任何原问题整数可行解。该 cut 的 coefficient 使用 canonical route signature，避免同一路径不同对象 id 绕过 cut。
+不会删除任何原问题整数可行解。`y[r]=0` 时车辆不能选择 route，`y[r]=1` 时退化为原 pair conflict cut。该 cut 的 coefficient 使用 canonical route signature，避免同一路径不同对象 id 绕过 cut。
 
 #### 验证结果
 
@@ -2496,7 +2496,7 @@ OK
 1. exact schedule checker 返回不可行 witness；
 2. witness 先压缩为 deletion-minimal core；
 3. 若 core 中存在 p->q 与 q->p 都不可行的 route pair，加入 schedule_pair_conflict：
-   lambda[p,r] + lambda[q,r] <= 1
+   lambda[p,r] + lambda[q,r] <= y[r]
 4. 若没有 pair witness，再尝试 schedule-capacity conflict cut：
    sum_{i in S} z[i,r] <= U(S) y[r]
 5. 若仍无法证明结构性 cut，才退回 schedule_nogood_core / schedule_nogood_full。
@@ -2506,7 +2506,7 @@ restricted-MIP 内部也按临时 pair cut、临时 schedule-capacity cut、临�
 
 #### 有效性说明
 
-同一辆车上两条 sortie 必须存在一个先后顺序。若 `p->q` 与 `q->p` 从最早时间开始都不可行，则在任意更晚的部分 schedule 中也不可行，因此 `lambda[p,r]+lambda[q,r]<=1` 不删除原问题可行整数解。
+同一辆车上两条 sortie 必须存在一个先后顺序。若 `p->q` 与 `q->p` 从最早时间开始都不可行，则在任意更晚的部分 schedule 中也不可行，因此 `lambda[p,r]+lambda[q,r]<=y[r]` 不删除原问题可行整数解。
 
 顺序签名 cut 不再直接关闭安全 dominance。pricing 会把 active signature prefix mask 放进 dominance key；只有两个 label 对后续可能命中的 active route signatures 完全一致，才允许互相支配。
 
@@ -2523,6 +2523,246 @@ PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/envs/ecole/bin/python -m unittest
 Ran 22 tests in 0.275s
 OK
 ```
+
+### 2026-05-19 CST +0800
+
+#### 版本备注
+
+新增 LP 违背的 schedule incompatibility pair/clique separator。它只在节点完成 exact pricing certificate 后运行，用于直接切掉 fractional LP 中同一车辆上明显不可共存的 route 混合。
+
+#### Cut 形式
+
+若两条 route `p,q` 满足：
+
+```text
+p -> q 不可行
+q -> p 不可行
+```
+
+则同一车辆不能同时选择它们：
+
+```text
+lambda[p,r] + lambda[q,r] <= y[r]
+```
+
+若一组 route `K` 两两满足上述双向不可排程关系，则：
+
+```text
+sum_{p in K} lambda[p,r] <= y[r]
+```
+
+`|K|=2` 时记录为 `schedule_pair_conflict`，`|K|>=3` 时记录为 `schedule_clique_conflict`。
+
+#### 有效性说明
+
+同一车辆上的 sortie 必须有一个先后顺序。若两条 route 从时间 0 开始两个方向都不可行，则更晚开始不会修复时间窗、返航 horizon 或充电 ready time 违反。因此 pairwise incompatibility clique 中最多能选一条 route。
+
+候选 route 支撑、clique seed 和每轮数量都只是 separation 预算；是否加 cut 由 exact transition check 和 LP violation 决定，不影响 exactness。
+
+#### 新增配置
+
+```yaml
+schedule_incompatibility_cuts_enabled: true
+schedule_incompatibility_cut_max_depth: 2
+schedule_incompatibility_cut_max_rounds_per_node: 2
+schedule_incompatibility_cut_max_support_routes: 80
+schedule_incompatibility_cut_max_per_round: 10
+schedule_incompatibility_cut_min_violation: 5.0e-2
+schedule_incompatibility_clique_min_size: 3
+schedule_incompatibility_clique_seed_count: 24
+```
+
+#### 新增统计
+
+```text
+schedule_clique_conflict_cuts_added
+schedule_clique_conflict_cut_events
+```
+
+### 2026-05-19 CST +0800
+
+#### 版本备注
+
+新增高阶 route-set schedule packing cut。它直接针对 route-vehicle master 的主要松弛：同一辆车上多条 sortie 的真实排程能力被 LP 高估。
+
+#### Cut 形式
+
+对同一车辆的一组 route：
+
+```text
+C = {p_1, ..., p_m}
+```
+
+用 exact DP 计算：
+
+```text
+U(C) = 同一辆真实车辆最多能从 C 中排程多少条 route
+```
+
+若当前 LP 违反：
+
+```text
+sum_{p in C} lambda[p,r] <= U(C)y[r]
+```
+
+则加入 `schedule_route_set_packing` cut。
+
+#### 与已有 cut 的关系
+
+```text
+pair conflict:        |C|=2, U(C)=1
+clique conflict:      |C|>=3, U(C)=1
+integer no-good:      U(C)<=|C|-1
+route-set packing:    1<=U(C)<|C|
+```
+
+因此 route-set packing cut 是 pair / clique / no-good 的高阶推广。它能表达“5 条 route 中最多只能排 3 条”这类 pairwise cut 无法表达的 schedule packing 结构。
+
+#### 精确性说明
+
+候选 `C` 来自当前 LP 的高活动 route 支撑，是启发式分离策略。该启发式不参与证明。
+
+证明只来自：
+
+```text
+bpc.validation.exact_route_set_schedule_capacity
+```
+
+该 oracle 用 exact DP 枚举可排程 route 子集，并同时考虑：
+
+- 每条 route 从当前 ready time 开始是否可行；
+- route 之间的 ready time 串接；
+- horizon；
+- `S_bar` sortie 数上限。
+
+整数解中若 `y[r]=0`，车辆不能选择任何 route；若 `y[r]=1`，同一辆车最多只能从 `C` 中选择 `U(C)` 条 route。因此 `sum lambda <= U(C)y[r]` 是有效不等式。若 oracle 状态数超过上限，则返回 `None`，调用方不加 cut。因此不会用启发式上界破坏 exactness。
+
+#### 新增配置
+
+```yaml
+route_set_schedule_packing_cuts_enabled: true
+route_set_schedule_packing_cut_max_depth: 2
+route_set_schedule_packing_cut_max_rounds_per_node: 2
+route_set_schedule_packing_cut_max_support_routes: 40
+route_set_schedule_packing_cut_max_routes: 16
+route_set_schedule_packing_cut_max_per_round: 5
+route_set_schedule_packing_cut_min_violation: 5.0e-2
+route_set_schedule_packing_oracle_max_states: 200000
+```
+
+#### 新增统计
+
+```text
+schedule_route_set_packing_cuts_added
+schedule_route_set_packing_cut_events
+route_set_schedule_packing_diag_events
+route_set_schedule_packing_candidate_sets
+route_set_schedule_packing_oracle_queries
+route_set_schedule_packing_oracle_incomplete
+route_set_schedule_packing_not_tight
+route_set_schedule_packing_not_violated
+route_set_schedule_packing_violated_candidates
+route_set_schedule_packing_max_violation
+route_set_schedule_packing_oracle_states_max
+```
+
+#### route-pack skip 诊断
+
+每次 route-set schedule packing separator 尝试分离后，日志写入 `route_set_schedule_packing_diagnostics`。终端显示为 `route-pack diag`，用于定位 cut 少或没有 cut 的原因。
+
+核心解释：
+
+- `skipped_oracle_incomplete`：exact oracle 未完成，调用方不加 cut。
+- `skipped_not_tight`：`U(C)>=|C|`，该集合本身不能形成更强约束。
+- `skipped_not_violated`：约束有效，但当前 LP 没有违反阈值。
+- `skipped_duplicate`：与已有 cut 或本轮候选重复。
+- `violated_candidates` 与 `added`：前者是可加候选，后者是受每轮上限后实际加入的 cut。
+
+该诊断不参与求解逻辑，只用于判断下一步该优化候选生成、oracle 速度，还是承认该 cut family 对当前 LP 支撑不够有效。
+
+### 2026-05-20 CST +0800
+
+#### 版本备注
+
+补充弱 no-good cut 清理、schedule-capacity skip 诊断和 RIM 冲突回流诊断。目标是控制 20 规模上 `schedule_nogood_core` 数量膨胀，并判断 schedule-capacity cut 没有加入的真实原因。
+
+#### 弱 no-good 清理
+
+当前只清理以下弱 signature cut：
+
+```text
+schedule_nogood
+schedule_nogood_core
+schedule_nogood_full
+```
+
+不清理以下结构性 cut：
+
+```text
+schedule_pair_conflict
+schedule_clique_conflict
+schedule_route_set_packing
+```
+
+默认配置：
+
+```yaml
+schedule_nogood_purge_enabled: true
+schedule_nogood_purge_age: 8
+schedule_nogood_purge_slack: 1.0e-4
+schedule_nogood_purge_dual: 1.0e-8
+```
+
+清理条件是该 cut 连续多轮 RMP 中 slack 较大且 dual 近 0。清理只会放松 LP，不会删除任何整数可行解；被清理的 cut 会从 `cut_keys` 移除，后续如再次违反可以重新加入。
+
+#### schedule-capacity skip 诊断
+
+新增 `schedule_capacity_diagnostics` 日志事件，终端显示为：
+
+```text
+schedule-cap diag node ... cand=... oracle=... incomplete=... not_tight=... not_viol=... violated=... added=...
+```
+
+用途：
+
+- `incomplete` 高：优先优化 exact oracle 或缩小候选；
+- `not_tight` 高：候选任务集合没有形成强上界；
+- `not_viol` 高：cut 有效但当前 LP 已满足；
+- `violated` 高但 `added` 低：每轮加入上限可能太小。
+
+#### RIM 冲突诊断
+
+新增 `rim_conflict_diagnostics` 日志事件，记录 restricted-MIP 排除的不可排程整数候选如何回流正式 cut：
+
+```text
+pair_cuts_added
+schedule_capacity_cuts_added
+nogood_cuts_added
+weak_nogood_not_violated
+```
+
+如果 `nogood_cuts_added` 持续高而 lower bound 变化小，说明主线仍在靠局部 no-good 修补 route-vehicle LP，应转向更强 schedule-capacity 证书、route pool 上界构造或可证明的一车目标下界。
+
+### 2026-05-20 CST +0800
+
+#### 版本备注
+
+修复初始 incumbent 构造没有显式计入车辆固定成本的问题，并新增快速 serial schedule incumbent。该改动只影响上界和初始 route pool，不改变 lower bound 证明。
+
+#### 修改内容
+
+- `_best_greedy_insertion` 的候选比较改为 fixed-cost-aware delta objective；
+- 若候选需要开启空车辆，则增量目标加入 `F`；
+- `initialize()` 在普通 greedy 前先运行 `serial_schedule` 构造，把通过 exact multi-sortie schedule check 的单车多 sortie 路线加入 route pool；
+- 普通 greedy improvement 只有在原始构造目标有机会优于当前 incumbent 时才继续运行，避免初始化阶段在明显更差的构造上花费几十秒。
+
+#### 精确性边界
+
+这些路线和 incumbent 必须通过真实 schedule check 才会被接受；它们只改善 primal upper bound。节点 lower bound 仍来自 Phase-I/Phase-II RMP、true-dual exact pricing、branching constraints 和 valid cuts。
+
+#### 重要结论
+
+bench_20_02 / bench_20_03 上存在一辆车多 sortie 的真实可行解，因此不能直接加入 `sum_r y_r >= 2`。只有证明一辆车不可行，或证明所有一辆车方案目标值不可能优于当前 incumbent，才能安全排除一辆车区域。
 
 ### 2026-05-19 CST +0800
 

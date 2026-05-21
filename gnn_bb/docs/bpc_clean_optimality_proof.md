@@ -110,7 +110,7 @@ route-vehicle master 只知道某辆车选择了哪些单条 route，并使用 `
 当前 clean BPC 使用 exact schedule checker 检查某辆车选择的 route 集合 `C` 是否可排程。如果 `C` 被证明不可排程，则对每辆同质车辆加入：
 
 ```text
-sum_{p in C} lambda[p,r] <= |C| - 1          for all r in R
+sum_{p in C} lambda[p,r] <= (|C| - 1)y[r]    for all r in R
 ```
 
 ### 引理 3：schedule no-good cut 对原问题有效
@@ -125,13 +125,13 @@ sum_{p in C} lambda[p,r] <= |C| - 1          for all r in R
 lambda[p,r] = 1 for all p in C
 ```
 
-也就是：
+也就是当 `y[r]=1` 时：
 
 ```text
 sum_{p in C} lambda[p,r] <= |C| - 1
 ```
 
-该 cut 只排除原问题不可行的同车 route 组合，不排除任何原问题可行解。
+当 `y[r]=0` 时，该车辆未启用，已有 master 约束使所有 `lambda[p,r]=0`。因此加强形式 `sum_{p in C} lambda[p,r] <= (|C|-1)y[r]` 只排除原问题不可行的同车 route 组合，不排除任何原问题可行解。
 
 证毕。
 

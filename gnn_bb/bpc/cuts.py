@@ -15,6 +15,8 @@ SIGNATURE_CUT_KINDS = frozenset(
         "schedule_nogood_core",
         "schedule_nogood_full",
         "schedule_pair_conflict",
+        "schedule_clique_conflict",
+        "schedule_route_set_packing",
     }
 )
 
@@ -40,10 +42,20 @@ class ScheduleNoGoodCut:
     signatures: tuple[tuple[int, ...], ...]
     kind: str = "schedule_nogood"
     source_vehicle: int | None = None
+    rhs_value: float | None = None
+    scale_by_vehicle_use: bool = True
+
+    @property
+    def upper_bound(self) -> float:
+        if self.rhs_value is not None:
+            return float(self.rhs_value)
+        return float(len(self.signatures) - 1)
 
     @property
     def rhs(self) -> float:
-        return float(len(self.signatures) - 1)
+        if self.scale_by_vehicle_use:
+            return 0.0
+        return self.upper_bound
 
     @property
     def sense(self) -> str:
@@ -51,12 +63,17 @@ class ScheduleNoGoodCut:
 
     @property
     def key(self) -> tuple:
-        return (self.kind, int(self.vehicle), self.signatures)
+        return (self.kind, int(self.vehicle), self.signatures, self.upper_bound, bool(self.scale_by_vehicle_use))
 
     def coefficient(self, route: RouteColumn, vehicle: int) -> float:
         if int(vehicle) != int(self.vehicle):
             return 0.0
         return 1.0 if route.signature in self.signatures else 0.0
+
+    def y_coefficient(self, vehicle: int) -> float:
+        if not self.scale_by_vehicle_use or int(vehicle) != int(self.vehicle):
+            return 0.0
+        return -self.upper_bound
 
 
 def make_no_good_cuts_for_all_vehicles(
@@ -66,6 +83,8 @@ def make_no_good_cuts_for_all_vehicles(
     *,
     source_vehicle: int,
     kind: str,
+    rhs_value: float | None = None,
+    scale_by_vehicle_use: bool = True,
 ) -> list[ScheduleNoGoodCut]:
     signatures = normalize_signatures(tuple(route.signature for route in routes))
     return [
@@ -75,6 +94,8 @@ def make_no_good_cuts_for_all_vehicles(
             signatures=signatures,
             kind=kind,
             source_vehicle=int(source_vehicle),
+            rhs_value=rhs_value,
+            scale_by_vehicle_use=scale_by_vehicle_use,
         )
         for index, vehicle in enumerate(vehicles)
     ]

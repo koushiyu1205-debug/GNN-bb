@@ -43,6 +43,8 @@ class BPCStats:
     robust_capacity_cuts_added: int = 0
     resource_lower_bound_cuts_added: int = 0
     schedule_pair_conflict_cuts_added: int = 0
+    schedule_clique_conflict_cuts_added: int = 0
+    schedule_route_set_packing_cuts_added: int = 0
     schedule_nogood_cuts_added: int = 0
     schedule_capacity_cuts_added: int = 0
     cuts_purged: int = 0

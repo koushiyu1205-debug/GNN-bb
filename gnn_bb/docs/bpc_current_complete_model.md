@@ -463,7 +463,7 @@ branching partial sequence feasible
 若某个整数 RMP 解中，车辆 `r` 选择的 route 集合 `C` 被 exact schedule checker 证明不可排程，则对每辆同质车辆 `r'` 加：
 
 ```text
-sum_{p in C} lambda_{p,r'} <= |C| - 1
+sum_{p in C} lambda_{p,r'} <= (|C| - 1)y_{r'}
 ```
 
 系数：
@@ -518,13 +518,13 @@ sum_{p,r} crossing(p,S) lambda_pr >= 2 K(S)
 若整数 assignment 中某辆车的 route 集合 `C` 不可排程，则对 `shrink_infeasible_route_set` 返回的 deletion-minimal core `C'` 加：
 
 ```text
-sum_{p in C'} lambda_pr <= |C'| - 1
+sum_{p in C'} lambda_pr <= (|C'| - 1)y_r
 ```
 
 当前实现不会立即生成 core no-good cut，而是先用 schedule checker 返回的 witness 寻找双向不可排程的 route pair。若存在 `p->q` 和 `q->p` 都不可行的 pair，则加入更小的 `schedule_pair_conflict` cut：
 
 ```text
-lambda[p,r] + lambda[q,r] <= 1
+lambda[p,r] + lambda[q,r] <= y[r]
 ```
 
 若没有 pair witness，再尝试 9.4 的结构性 schedule-capacity conflict cut。只有当 exact schedule-capacity oracle 无法从该 conflict 中证明某个任务集合 `S` 满足 `U(S)<|S|` 时，才回退到 core no-good cut。若 core cut 已存在，则最后尝试 full route set no-good；若仍无法新增 cut，则不能把该节点当作 integral feasible fathom。
@@ -1012,6 +1012,8 @@ task_vehicle_linking_enabled: true
 robust_capacity_cuts_enabled: true
 resource_lower_bound_cuts_enabled: true
 schedule_capacity_cuts_enabled: true
+schedule_incompatibility_cuts_enabled: true
+route_set_schedule_packing_cuts_enabled: true
 
 max_labels_per_pricing: 0
 max_routes_per_pricing: 500
@@ -1043,14 +1045,249 @@ link_schedcap
 
 当前模型仍有以下局限：
 
-1. route-vehicle master 的 root relaxation 仍弱于 vehicle-schedule master。
-2. schedule no-good cuts 可能很多，且通常只在整数候选解处触发。
-3. robust capacity cut 和 k-path/resource cut 在当前 20 规模实例上经常不触发。
-4. schedule capacity cut 能找到少量 violated cuts，但不一定显著提升 root bound。
-5. 3PB 的 branching testing 时间很大，是当前主要性能瓶颈。
-6. 当前还没有 2LBB；ML 还没有参与候选排序或测试预算控制。
+1. route-vehicle master 的 root relaxation 仍弱于理论上的 vehicle-schedule master。
+2. 当前 vehicle-schedule master 实现的 pricing certificate 在 20 规模上过慢，不能直接作为主线替代。
+3. schedule no-good cuts 可能很多，且通常只在整数候选解处触发。
+4. robust capacity cut 和 k-path/resource cut 在当前 20 规模实例上经常不触发。
+5. schedule capacity cut 能找到少量 violated cuts，但不一定显著提升 root bound。
+6. 3PB 的 branching testing 时间很大，是当前主要性能瓶颈。
+7. 当前还没有 2LBB；ML 还没有参与候选排序或测试预算控制。
 
-## 18. 运行命令
+## 18. 2026-05-19：LP 违背的 schedule incompatibility pair/clique cut
+
+本轮新增一个受控的 fractional schedule cut separator。它不等待 restricted-MIP 或整数 RMP 解给出不可排程 witness，而是在完成 exact pricing certificate 后检查当前 LP 解中同一车辆的高活动 route 支撑。
+
+分离逻辑：
+
+```text
+1. 对每辆车取 LP 活动量最高的 route 支撑，默认最多 80 条；
+2. 对 route pair (p,q) 做 exact transition check；
+3. 若 p->q 与 q->p 都不可行，则这两条 route 不能同时属于同一辆车；
+4. 若活动量 lambda[p,r]+lambda[q,r] > y[r]，则加入 schedule_pair_conflict；
+5. 若一组 route 两两双向不可排程，且 sum lambda[p,r] > y[r]，则加入 schedule_clique_conflict：
+   sum_{p in K} lambda[p,r] <= y[r]。
+```
+
+有效性来自 exact transition check：同一辆车上的两条 sortie 必须存在一个先后顺序；如果从时间 0 开始两个方向都不可行，则更晚开始也不会使其可行。因此 pairwise clique 中任意两条 route 不能共存，整组最多选一条。
+
+默认配置：
+
+```yaml
+schedule_incompatibility_cuts_enabled: true
+schedule_incompatibility_cut_max_depth: 2
+schedule_incompatibility_cut_max_rounds_per_node: 2
+schedule_incompatibility_cut_max_support_routes: 80
+schedule_incompatibility_cut_max_per_round: 10
+schedule_incompatibility_cut_min_violation: 5.0e-2
+schedule_incompatibility_clique_min_size: 3
+schedule_incompatibility_clique_seed_count: 24
+```
+
+新增统计字段：
+
+```text
+schedule_clique_conflict_cuts_added
+metric_schedule_clique_conflict_cut_events
+```
+
+注意：该 separator 只决定尝试哪些 pair/clique；是否加 cut 完全由 exact route transition check 和当前 LP violation 决定。它保持 exactness，但会增加 active signature cut 数量，因此 pricing dominance 继续依赖 `signature_prefix_mask` 来避免错误剪枝。
+
+## 19. 2026-05-19：高阶 route-set schedule packing cut
+
+本轮新增更强的 schedule packing separator。它不再只看 route pair 或 pairwise clique，而是对一组 route `C` 直接计算：
+
+```text
+U(C) = 同一辆真实车辆最多能从 C 中排程多少条 route
+```
+
+若当前 LP 解满足：
+
+```text
+sum_{p in C} lambda[p,r] > U(C)y[r]
+```
+
+则加入：
+
+```text
+sum_{p in C} lambda[p,r] <= U(C)y[r]
+```
+
+实现边界：
+
+```text
+1. 候选 C 来自当前 LP 高活动 route 支撑；
+2. 候选生成是启发式，只影响尝试哪些集合；
+3. RHS 的 U(C) 必须由 exact route-set schedule DP 计算；
+4. exact DP 同时考虑 route ready time、horizon 和 S_bar；
+5. 若 DP 状态数超过上限，返回 None，不加 cut；
+6. cut 只在当前 LP 违反阈值时加入。
+```
+
+该 cut 是 pair/clique/no-good 的高阶统一形式：
+
+```text
+pair conflict:        |C|=2, U(C)=1
+clique conflict:      |C|>=3, U(C)=1
+integer no-good:      U(C)<=|C|-1
+route-set packing:    1<=U(C)<|C|
+```
+
+默认配置：
+
+```yaml
+route_set_schedule_packing_cuts_enabled: true
+route_set_schedule_packing_cut_max_depth: 2
+route_set_schedule_packing_cut_max_rounds_per_node: 2
+route_set_schedule_packing_cut_max_support_routes: 40
+route_set_schedule_packing_cut_max_routes: 16
+route_set_schedule_packing_cut_max_per_round: 5
+route_set_schedule_packing_cut_min_violation: 5.0e-2
+route_set_schedule_packing_oracle_max_states: 200000
+```
+
+新增统计字段：
+
+```text
+schedule_route_set_packing_cuts_added
+metric_schedule_route_set_packing_cut_events
+metric_route_set_schedule_packing_diag_events
+metric_route_set_schedule_packing_candidate_sets
+metric_route_set_schedule_packing_oracle_queries
+metric_route_set_schedule_packing_oracle_incomplete
+metric_route_set_schedule_packing_not_tight
+metric_route_set_schedule_packing_not_violated
+metric_route_set_schedule_packing_duplicates
+metric_route_set_schedule_packing_violated_candidates
+metric_route_set_schedule_packing_max_violation
+metric_route_set_schedule_packing_oracle_states_max
+```
+
+精确性说明：`C` 的选择不参与证明；只要 `U(C)` 是 exact oracle 给出的真实上界，`sum_{p in C} lambda[p,r] <= U(C)y[r]` 就不会删除任何原问题整数可行解。`y[r]=0` 时车辆不能选 route，`y[r]=1` 时同一辆车最多只能从 `C` 中排 `U(C)` 条 route。状态超限时不加 cut，因此不会用启发式上界破坏 exactness。
+
+### 19.1 route-pack skip 诊断
+
+本轮补充 `route_set_schedule_packing_diagnostics` 日志事件。它不改变模型、cut 或最优性证明，只记录 separator 每轮为什么没有继续加 route-pack cut。
+
+终端会出现类似：
+
+```text
+route-pack diag node 0 round=1 vehicles=2/2 support_max=40 cand=90 oracle=90 incomplete=0 not_tight=75 not_viol=10 dup=0 violated=5 added=5 max_viol=0.42 states_max=1234
+```
+
+字段含义：
+
+```text
+candidate_sets: 生成的 route 集合候选数
+oracle_queries: 调用 exact route-set schedule bound 的次数，可能命中缓存
+skipped_oracle_incomplete: exact oracle 超状态上限或未能证明，直接跳过
+skipped_not_tight: U(C)>=|C|，该集合没有给出更紧 schedule packing 约束
+skipped_not_violated: cut 有效但当前 LP 未违反阈值
+skipped_duplicate: 与已有 cut 或本轮候选重复
+violated_candidates: 通过 exact oracle 且 LP 违反的候选数
+added: 本轮实际加入的 cut 数，受 max_per_round 限制
+max_violation: 本轮候选中的最大违反量
+oracle_states_max: 单个候选 exact DP 最大状态数
+```
+
+这个诊断的用途是判断 route-pack separator 的瓶颈：如果 `not_tight` 很高，说明候选集合排程上界太松；如果 `not_violated` 很高，说明 LP 支撑没有明显违反；如果 `oracle_incomplete` 很高，说明 exact oracle 状态上限或候选规模需要调整。
+
+### 19.2 schedule-capacity skip 诊断
+
+本轮补充 `schedule_capacity_diagnostics` 日志事件。它不改变 cut 形式，只记录 schedule-capacity separator 对候选任务集合 `S` 的处理结果。
+
+终端会出现类似：
+
+```text
+schedule-cap diag node 0 round=1 vehicles=2/2 cand=700 oracle=700 incomplete=0 not_tight=690 not_viol=10 dup=0 violated=0 added=0 max_viol=0.0 states_max=12345
+```
+
+字段含义：
+
+```text
+candidate_subsets: 生成的任务集合候选数量
+oracle_queries: 调用 exact schedule task-capacity oracle 的次数
+skipped_oracle_incomplete: oracle 超状态上限或未能证明，跳过
+skipped_not_tight: U(S)>=|S|，该集合没有更强上界
+skipped_not_violated: cut 有效但当前 LP 未违反阈值
+skipped_duplicate: 与已有 schedule-capacity cut 重复
+violated_candidates: oracle 证明且当前 LP 违反的候选数量
+added: 本轮实际加入的 schedule-capacity cut 数量
+max_violation: 最大违反量
+oracle_states_max: 单个候选最大 oracle 状态数
+```
+
+这个诊断用于判断 `schedule_capacity_cuts_added=0` 的原因。如果 `not_tight` 很高，说明当前候选 `S` 对真实单车排程并不紧；如果 `not_violated` 很高，说明 LP 已满足这些上界；如果 `oracle_incomplete` 很高，才优先优化 oracle 或降低候选规模。
+
+### 19.3 弱 schedule no-good cut 清理
+
+`schedule_nogood_core` / `schedule_nogood_full` 是从不可排程整数候选中回流的局部排除 cut。它们保持 exactness，但在 20 规模上可能大量出现、对 bound 提升有限，并增加 RMP 和 pricing 的 active signature cut 负担。
+
+当前新增只针对弱 no-good 的 inactive purge：
+
+```yaml
+schedule_nogood_purge_enabled: true
+schedule_nogood_purge_age: 8
+schedule_nogood_purge_slack: 1.0e-4
+schedule_nogood_purge_dual: 1.0e-8
+```
+
+清理条件：
+
+```text
+1. cut.kind 属于 schedule_nogood / schedule_nogood_core / schedule_nogood_full；
+2. 当前 RMP 中 slack > schedule_nogood_purge_slack；
+3. 当前 RMP dual 绝对值 <= schedule_nogood_purge_dual；
+4. 连续 inactive 次数达到 schedule_nogood_purge_age。
+```
+
+不清理的结构性 cut：
+
+```text
+schedule_pair_conflict
+schedule_clique_conflict
+schedule_route_set_packing
+```
+
+精确性说明：删除一个已经加入的有效 cut 只会放松当前 LP relaxation，不会删除原问题可行解；之后 RMP 和 pricing 使用同一套 active cut，因此节点证书仍然一致。被清理的 no-good 会从 `cut_keys` 中移除，如果后续 LP 或整数候选再次需要它，可以重新加入。
+
+### 19.4 RIM 冲突回流诊断
+
+restricted integer master 仍只作为 primal heuristic，不参与 lower bound 证明。它找到排程不可行整数候选后，按如下顺序尝试回流正式 cut：
+
+```text
+1. 双向不可排程 route pair -> schedule_pair_conflict；
+2. 可证明的任务集合上界 -> schedule_capacity_conflict；
+3. 当前 LP 已违反的弱 no-good -> schedule_nogood_core；
+4. 若弱 no-good 当前 LP 不违反，则跳过，不回流。
+```
+
+新增 `rim_conflict_diagnostics` 日志事件记录：
+
+```text
+conflicts_checked
+pair_cuts_added
+schedule_capacity_cuts_added
+nogood_cuts_added
+weak_nogood_not_violated
+```
+
+这个诊断用于确认 RIM 是否正在大量产生只能靠弱 no-good 排除的局部冲突。如果 `nogood_cuts_added` 很高而 bound 提升小，应优先寻找更强 schedule-capacity 证书、route pool 上界构造或可证明的目标值下界，而不是继续提高 no-good 数量。注意：只有证明一辆车方案不可行，或证明所有一辆车方案目标值都不优于当前 incumbent，才能安全加入 `sum_r y_r >= 2`；仅凭 tight fleet 当前为 2 辆车不能加这个 cut。
+
+### 19.5 固定车成本感知的初始上界
+
+2026-05-20 的 bench_20_02/03 输出暴露了一个上界侧问题：初始贪心在比较“把任务插入已有车辆路线”和“开另一辆车的新路线”时主要比较 route travel cost，没有把 `F y_r` 的固定车辆成本计入候选增量。因此它倾向于用两辆车换取较短行驶路线，导致初始 incumbent 落在约 `329~335`，而同一实例存在一辆车多 sortie 的真实可行解，目标约 `237~246`。
+
+当前修复：
+
+```text
+1. 初始贪心插入的 score 改为 fixed-cost-aware delta objective；
+2. 开启一个快速 serial schedule incumbent：按时间窗顺序把任务串成同一车辆的多条 sortie，若 exact schedule check 通过，就加入初始 route pool 并更新 incumbent；
+3. 较慢的贪心改进只有在原始构造目标已经有机会优于当前 incumbent 时才运行，避免在明显更差的构造上消耗初始化时间。
+```
+
+精确性边界：这些变化只增加 route pool 中的可行列并改善 primal upper bound，不改变 RMP 约束、pricing 可行域、cut 有效性或 node lower bound 证书。任何由 serial/greedy 得到的 incumbent 都必须通过 `_assignment_feasible()`，即 cover、sortie 数和每辆车 exact multi-sortie schedule check。
+
+## 20. 运行命令
 
 20 规模当前主线：
 

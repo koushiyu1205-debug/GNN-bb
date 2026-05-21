@@ -80,6 +80,9 @@ class SolverResult:
     crossing_cuts_upgraded: int
     robust_capacity_cuts_added: int
     resource_lower_bound_cuts_added: int
+    schedule_pair_conflict_cuts_added: int
+    schedule_clique_conflict_cuts_added: int
+    schedule_route_set_packing_cuts_added: int
     schedule_nogood_cuts_added: int
     schedule_capacity_cuts_added: int
     cuts_purged: int
@@ -114,6 +117,13 @@ def _hybrid_value(config: dict[str, Any], name: str, fallback: Any) -> Any:
     return config.get(name, fallback)
 
 
+def _hybrid_bool(config: dict[str, Any], name: str, fallback: bool) -> bool:
+    value = _hybrid_value(config, name, fallback)
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "off", ""}
+    return bool(value)
+
+
 def _solve_hybrid_route_bpc(
     data: InstanceData,
     *,
@@ -134,24 +144,26 @@ def _solve_hybrid_route_bpc(
         max_routes_per_pricing=int(config.get("max_routes_per_pricing", config.get("max_columns_per_pricing", 200))),
         max_labels_per_pricing=int(config.get("hybrid_max_labels_per_pricing", config.get("max_labels_per_pricing", 0)) or 0),
         root_max_routes_per_pricing=int(config.get("root_max_routes_per_pricing", 0) or 0),
-        heuristic_pricing_enabled=bool(config.get("heuristic_pricing_enabled", False)),
+        heuristic_pricing_enabled=_hybrid_bool(config, "heuristic_pricing_enabled", False),
         heuristic_pricing_max_labels=int(config.get("heuristic_pricing_max_labels", 100000)),
         heuristic_pricing_routes_per_round=int(config.get("heuristic_pricing_routes_per_round", 500)),
         heuristic_pricing_selection_mode=str(config.get("heuristic_pricing_selection_mode", "diverse")),
         exact_pricing_selection_mode=str(config.get("exact_pricing_selection_mode", "reduced_cost")),
-        branch_node_heuristic_boost_enabled=bool(config.get("branch_node_heuristic_boost_enabled", False)),
+        branch_node_heuristic_boost_enabled=_hybrid_bool(config, "branch_node_heuristic_boost_enabled", False),
         branch_node_heuristic_boost_max_labels=int(config.get("branch_node_heuristic_boost_max_labels", 800000)),
         branch_node_heuristic_boost_routes_per_round=int(config.get("branch_node_heuristic_boost_routes_per_round", 1000)),
         branch_node_heuristic_boost_min_depth=int(config.get("branch_node_heuristic_boost_min_depth", 1)),
-        exact_pricing_dominance_enabled=bool(
-            config.get("exact_pricing_dominance_enabled", config.get("exact_pricing_enable_dominance", False))
+        exact_pricing_dominance_enabled=_hybrid_bool(
+            config,
+            "exact_pricing_dominance_enabled",
+            _hybrid_bool(config, "exact_pricing_enable_dominance", False),
         ),
-        restricted_master_heuristic_enabled=bool(config.get("restricted_master_heuristic_enabled", False)),
+        restricted_master_heuristic_enabled=_hybrid_bool(config, "restricted_master_heuristic_enabled", False),
         restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
         restricted_master_max_calls=int(config.get("restricted_master_max_calls", 20)),
         restricted_master_max_depth=int(config.get("restricted_master_max_depth", 3)),
-        restricted_master_schedule_aware=bool(config.get("restricted_master_schedule_aware", True)),
+        restricted_master_schedule_aware=_hybrid_bool(config, "restricted_master_schedule_aware", True),
         restricted_master_max_no_good_rounds=int(config.get("restricted_master_max_no_good_rounds", 20)),
         rmp_params=dict(config.get("rmp_params", {})),
         log_path=log_path,
@@ -165,20 +177,20 @@ def _solve_hybrid_route_bpc(
         three_pb_heuristic_cg_iterations=int(_hybrid_value(config, "three_pb_heuristic_cg_iterations", 3)),
         three_pb_heuristic_routes_per_iter=int(_hybrid_value(config, "three_pb_heuristic_routes_per_iter", 50)),
         three_pb_heuristic_max_labels=int(_hybrid_value(config, "three_pb_heuristic_max_labels", 800)),
-        task_vehicle_linking_enabled=bool(_hybrid_value(config, "task_vehicle_linking_enabled", True)),
-        robust_capacity_cuts_enabled=bool(_hybrid_value(config, "robust_capacity_cuts_enabled", True)),
+        task_vehicle_linking_enabled=_hybrid_bool(config, "task_vehicle_linking_enabled", True),
+        robust_capacity_cuts_enabled=_hybrid_bool(config, "robust_capacity_cuts_enabled", True),
         robust_capacity_cut_max_depth=int(_hybrid_value(config, "robust_capacity_cut_max_depth", 0)),
         robust_capacity_cut_max_subset_size=int(_hybrid_value(config, "robust_capacity_cut_max_subset_size", 5)),
         robust_capacity_cut_max_per_round=int(_hybrid_value(config, "robust_capacity_cut_max_per_round", 20)),
         robust_capacity_cut_min_violation=float(_hybrid_value(config, "robust_capacity_cut_min_violation", 1.0e-5)),
         robust_capacity_cut_max_rounds_per_node=int(_hybrid_value(config, "robust_capacity_cut_max_rounds_per_node", 3)),
-        resource_lower_bound_cuts_enabled=bool(_hybrid_value(config, "resource_lower_bound_cuts_enabled", True)),
+        resource_lower_bound_cuts_enabled=_hybrid_bool(config, "resource_lower_bound_cuts_enabled", True),
         resource_cut_max_depth=int(_hybrid_value(config, "resource_cut_max_depth", 0)),
         resource_cut_max_subset_size=int(_hybrid_value(config, "resource_cut_max_subset_size", 6)),
         resource_cut_max_per_round=int(_hybrid_value(config, "resource_cut_max_per_round", 20)),
         resource_cut_min_violation=float(_hybrid_value(config, "resource_cut_min_violation", 1.0e-5)),
         resource_cut_max_rounds_per_node=int(_hybrid_value(config, "resource_cut_max_rounds_per_node", 3)),
-        schedule_capacity_cuts_enabled=bool(_hybrid_value(config, "schedule_capacity_cuts_enabled", True)),
+        schedule_capacity_cuts_enabled=_hybrid_bool(config, "schedule_capacity_cuts_enabled", True),
         schedule_capacity_cut_max_depth=int(_hybrid_value(config, "schedule_capacity_cut_max_depth", 0)),
         schedule_capacity_cut_max_subset_size=int(_hybrid_value(config, "schedule_capacity_cut_max_subset_size", 10)),
         schedule_capacity_cut_max_per_round=int(_hybrid_value(config, "schedule_capacity_cut_max_per_round", 20)),
@@ -189,9 +201,29 @@ def _solve_hybrid_route_bpc(
         schedule_capacity_candidate_max_combinations=int(_hybrid_value(config, "schedule_capacity_candidate_max_combinations", 300)),
         schedule_capacity_route_union_top_routes=int(_hybrid_value(config, "schedule_capacity_route_union_top_routes", 8)),
         schedule_capacity_route_union_max_routes=int(_hybrid_value(config, "schedule_capacity_route_union_max_routes", 4)),
+        schedule_incompatibility_cuts_enabled=_hybrid_bool(config, "schedule_incompatibility_cuts_enabled", True),
+        schedule_incompatibility_cut_max_depth=int(_hybrid_value(config, "schedule_incompatibility_cut_max_depth", 2)),
+        schedule_incompatibility_cut_max_rounds_per_node=int(_hybrid_value(config, "schedule_incompatibility_cut_max_rounds_per_node", 2)),
+        schedule_incompatibility_cut_max_support_routes=int(_hybrid_value(config, "schedule_incompatibility_cut_max_support_routes", 80)),
+        schedule_incompatibility_cut_max_per_round=int(_hybrid_value(config, "schedule_incompatibility_cut_max_per_round", 10)),
+        schedule_incompatibility_cut_min_violation=float(_hybrid_value(config, "schedule_incompatibility_cut_min_violation", 5.0e-2)),
+        schedule_incompatibility_clique_min_size=int(_hybrid_value(config, "schedule_incompatibility_clique_min_size", 3)),
+        schedule_incompatibility_clique_seed_count=int(_hybrid_value(config, "schedule_incompatibility_clique_seed_count", 24)),
+        route_set_schedule_packing_cuts_enabled=_hybrid_bool(config, "route_set_schedule_packing_cuts_enabled", True),
+        route_set_schedule_packing_cut_max_depth=int(_hybrid_value(config, "route_set_schedule_packing_cut_max_depth", 2)),
+        route_set_schedule_packing_cut_max_rounds_per_node=int(_hybrid_value(config, "route_set_schedule_packing_cut_max_rounds_per_node", 2)),
+        route_set_schedule_packing_cut_max_support_routes=int(_hybrid_value(config, "route_set_schedule_packing_cut_max_support_routes", 40)),
+        route_set_schedule_packing_cut_max_routes=int(_hybrid_value(config, "route_set_schedule_packing_cut_max_routes", 16)),
+        route_set_schedule_packing_cut_max_per_round=int(_hybrid_value(config, "route_set_schedule_packing_cut_max_per_round", 5)),
+        route_set_schedule_packing_cut_min_violation=float(_hybrid_value(config, "route_set_schedule_packing_cut_min_violation", 5.0e-2)),
+        route_set_schedule_packing_oracle_max_states=int(_hybrid_value(config, "route_set_schedule_packing_oracle_max_states", 200000)),
         cut_purge_age=int(_hybrid_value(config, "cut_purge_age", 20)),
         cut_purge_slack=float(_hybrid_value(config, "cut_purge_slack", 1.0e-5)),
         cut_purge_dual=float(_hybrid_value(config, "cut_purge_dual", 1.0e-8)),
+        schedule_nogood_purge_enabled=_hybrid_bool(config, "schedule_nogood_purge_enabled", True),
+        schedule_nogood_purge_age=int(_hybrid_value(config, "schedule_nogood_purge_age", 8)),
+        schedule_nogood_purge_slack=float(_hybrid_value(config, "schedule_nogood_purge_slack", 1.0e-4)),
+        schedule_nogood_purge_dual=float(_hybrid_value(config, "schedule_nogood_purge_dual", 1.0e-8)),
     )
 
     exhausted_pricing_calls = result.exact_pricing_calls
@@ -264,6 +296,9 @@ def _solve_hybrid_route_bpc(
         crossing_cuts_upgraded=result.crossing_cuts_upgraded,
         robust_capacity_cuts_added=result.robust_capacity_cuts_added,
         resource_lower_bound_cuts_added=result.resource_lower_bound_cuts_added,
+        schedule_pair_conflict_cuts_added=result.schedule_pair_conflict_cuts_added,
+        schedule_clique_conflict_cuts_added=result.schedule_clique_conflict_cuts_added,
+        schedule_route_set_packing_cuts_added=result.schedule_route_set_packing_cuts_added,
         schedule_nogood_cuts_added=result.schedule_nogood_cuts_added,
         schedule_capacity_cuts_added=result.schedule_capacity_cuts_added,
         cuts_purged=result.cuts_purged,
@@ -405,6 +440,9 @@ def solve_vehicle_schedule_bpc(
         crossing_cuts_upgraded=0,
         robust_capacity_cuts_added=0,
         resource_lower_bound_cuts_added=0,
+        schedule_pair_conflict_cuts_added=0,
+        schedule_clique_conflict_cuts_added=0,
+        schedule_route_set_packing_cuts_added=0,
         schedule_nogood_cuts_added=0,
         schedule_capacity_cuts_added=0,
         cuts_purged=0,

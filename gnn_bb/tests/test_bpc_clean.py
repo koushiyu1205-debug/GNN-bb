@@ -22,11 +22,11 @@ from bpc.data import BPCData, load_bpc_data
 from bpc.logger import BPCLogger
 from bpc.node import BPCNode
 from bpc.pricing import exact_pricing, reduced_cost
-from bpc.rmp import RMPDuals, solve_restricted_integer_master, solve_rmp_lp
+from bpc.rmp import RMPDuals, RMPSolution, solve_restricted_integer_master, solve_rmp_lp
 from bpc.schedule_capacity import exact_schedule_task_capacity, find_schedule_capacity_conflict
 from bpc.solver import solve_bpc_clean
 from bpc.tree import CleanBPCTree
-from bpc.validation import diagnose_route_set_schedule
+from bpc.validation import diagnose_route_set_schedule, exact_route_set_schedule_capacity
 
 
 class CleanBPCTests(unittest.TestCase):
@@ -133,6 +133,177 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(cut.coefficient(route, vehicle), 2.0)
         self.assertEqual(cut.y_coefficient(vehicle), -1.0)
         self.assertEqual(cut.coefficient(route, data.vehicles[-1] + 1), 0.0)
+
+    def test_greedy_insertion_accounts_for_fixed_vehicle_cost(self):
+        instance = {
+            "name": "fixed_cost_greedy_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 200, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 200, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {
+            "0->0": {"tau": 0, "energy": 0, "cost": 0, "path": []},
+            "1->1": {"tau": 0, "energy": 0, "cost": 0, "path": []},
+            "2->2": {"tau": 0, "energy": 0, "cost": 0, "path": []},
+            "0->1": {"tau": 5, "energy": 0, "cost": 5, "path": []},
+            "1->0": {"tau": 5, "energy": 0, "cost": 5, "path": []},
+            "0->2": {"tau": 5, "energy": 0, "cost": 5, "path": []},
+            "2->0": {"tau": 5, "energy": 0, "cost": 5, "path": []},
+            "1->2": {"tau": 70, "energy": 0, "cost": 70, "path": []},
+            "2->1": {"tau": 70, "energy": 0, "cost": 70, "path": []},
+        }
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="fixed_cost_greedy_smoke",
+            tasks=(1, 2),
+            vehicles=(1, 2),
+            sortie_limit=1,
+            capacity=2,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=200,
+        )
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+        )
+        assigned = tree._construct_assignment((1, 2))
+        self.assertIsNotNone(assigned)
+        assert assigned is not None
+        self.assertEqual([vehicle for vehicle, routes in assigned.items() if routes], [1])
+        self.assertEqual(assigned[1][0].tasks, (1, 2))
+        self.assertAlmostEqual(tree._assignment_objective(assigned), 180.0)
+
+    def test_schedule_clique_conflict_cut_has_rhs_one(self):
+        data = load_bpc_data("very_small")
+        routes = [evaluate_route(data, (task,)) for task in data.tasks[:3]]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        cut = ScheduleNoGoodCut(
+            id=0,
+            vehicle=data.vehicles[0],
+            signatures=tuple(route.signature for route in routes),
+            kind="schedule_clique_conflict",
+            rhs_value=1.0,
+        )
+        self.assertEqual(cut.sense, "<=")
+        self.assertEqual(cut.rhs, 0.0)
+        self.assertEqual(cut.upper_bound, 1.0)
+        self.assertEqual(cut.y_coefficient(data.vehicles[0]), -1.0)
+        self.assertEqual(sum(cut.coefficient(route, data.vehicles[0]) for route in routes), 3.0)
+        self.assertEqual(cut.coefficient(routes[0], data.vehicles[-1] + 1), 0.0)
+
+    def test_route_set_schedule_capacity_exact_for_horizon_packing(self):
+        instance = {
+            "name": "route_set_packing_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "3": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {
+            f"{i}->{j}": {"tau": 0 if i == j else 1, "energy": 0, "cost": 0 if i == j else 1, "path": []}
+            for i in (0, 1, 2, 3)
+            for j in (0, 1, 2, 3)
+        }
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="route_set_packing_smoke",
+            tasks=(1, 2, 3),
+            vehicles=(1,),
+            sortie_limit=3,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=5,
+        )
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        result = exact_route_set_schedule_capacity(data, routes, max_states=100000)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.exact)
+        self.assertEqual(result.upper_bound, 2)
+
+    def test_route_set_schedule_packing_separator_adds_high_order_cut(self):
+        instance = {
+            "name": "route_set_packing_separator_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "3": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {
+            f"{i}->{j}": {"tau": 0 if i == j else 1, "energy": 0, "cost": 0 if i == j else 1, "path": []}
+            for i in (0, 1, 2, 3)
+            for j in (0, 1, 2, 3)
+        }
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="route_set_packing_separator_smoke",
+            tasks=(1, 2, 3),
+            vehicles=(1,),
+            sortie_limit=3,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=5,
+        )
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        solution = RMPSolution(
+            status="optimal",
+            objective=0.0,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[(route, 1, 0.45) for route in routes],
+            y_values={1: 0.5},
+            variable_count=0,
+            constraint_count=0,
+        )
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            route_set_schedule_packing_cuts_enabled=True,
+            route_set_schedule_packing_cut_max_support_routes=10,
+            route_set_schedule_packing_cut_max_routes=3,
+            route_set_schedule_packing_cut_min_violation=0.05,
+        )
+        added = tree._separate_route_set_schedule_packing_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 1)
+        self.assertEqual(tree.cuts[0].kind, "schedule_route_set_packing")
+        self.assertEqual(tree.cuts[0].rhs, 0.0)
+        self.assertEqual(tree.cuts[0].upper_bound, 2.0)
+        self.assertEqual(tree.cuts[0].y_coefficient(1), -2.0)
+        self.assertEqual(tree.stats.schedule_route_set_packing_cuts_added, 1)
 
     def test_schedule_capacity_oracle_exact_for_small_subset(self):
         data = load_bpc_data("very_small")
@@ -264,6 +435,73 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(added, len(data.vehicles))
         self.assertTrue(all(isinstance(cut, ScheduleNoGoodCut) for cut in tree.cuts))
         self.assertTrue(all(cut.kind == "schedule_pair_conflict" for cut in tree.cuts))
+
+    def test_schedule_incompatibility_separator_adds_clique_cut(self):
+        instance = {
+            "name": "schedule_incompatibility_clique_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 2, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 2, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "3": {"r": 0, "D": 2, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {}
+        for i in (0, 1, 2, 3):
+            for j in (0, 1, 2, 3):
+                if i == j:
+                    tau = 0
+                elif i == 0 or j == 0:
+                    tau = 1
+                else:
+                    tau = 3
+                pairwise[f"{i}->{j}"] = {"tau": tau, "energy": 0, "cost": tau, "path": []}
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="schedule_incompatibility_clique_smoke",
+            tasks=(1, 2, 3),
+            vehicles=(1,),
+            sortie_limit=3,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=10,
+        )
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        solution = RMPSolution(
+            status="optimal",
+            objective=0.0,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[(route, 1, 0.25) for route in routes],
+            y_values={1: 0.6},
+            variable_count=0,
+            constraint_count=0,
+        )
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            schedule_incompatibility_cuts_enabled=True,
+            schedule_incompatibility_cut_max_support_routes=10,
+            schedule_incompatibility_cut_min_violation=0.05,
+        )
+        added = tree._separate_schedule_incompatibility_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 1)
+        self.assertEqual(tree.cuts[0].kind, "schedule_clique_conflict")
+        self.assertEqual(tree.cuts[0].rhs, 0.0)
+        self.assertEqual(tree.cuts[0].upper_bound, 1.0)
+        self.assertEqual(tree.cuts[0].y_coefficient(1), -1.0)
 
     def test_rmp_has_task_vehicle_linking_duals(self):
         try:
