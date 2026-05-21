@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import heapq
 from itertools import combinations
+from itertools import product
 from itertools import permutations
 import math
 import time
@@ -15,8 +16,11 @@ from .columns import RouteColumn, RoutePool, evaluate_route, route_to_json
 from .cuts import (
     Cut,
     CrossingCut,
+    LimitedMemoryRank1Cut,
     ScheduleCapacityCut,
+    ScheduleSubsetCostLowerBoundCut,
     ScheduleNoGoodCut,
+    SubsetRowCut,
     capacity_route_lower_bound,
     make_no_good_cuts_for_all_vehicles,
     make_schedule_capacity_cuts_for_all_vehicles,
@@ -28,6 +32,8 @@ from .node import BPCNode, BPCStats
 from .pricing import PricingResult, exact_pricing
 from .rmp import RMPSolution, RestrictedIntegerResult, solve_restricted_integer_master, solve_rmp_lp
 from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity, find_schedule_capacity_conflict
+from .schedule_cost import ScheduleSubsetCostResult, exact_schedule_subset_cost
+from .schedule_pack import solve_schedule_pack_node_relaxation
 from .validation import (
     RoutePairScheduleConflict,
     check_route_set_schedule_feasible,
@@ -133,6 +139,16 @@ class CleanBPCTree:
         branch_node_heuristic_boost_routes_per_round: int = 1000,
         branch_node_heuristic_boost_min_depth: int = 1,
         exact_pricing_dominance_enabled: bool = False,
+        pricing_completion_bound_enabled: bool = False,
+        ng_dssr_pricing_enabled: bool = False,
+        ng_dssr_memory_size: int = 6,
+        exact_dssr_pricing_enabled: bool = False,
+        exact_dssr_initial_memory_size: int = 6,
+        exact_dssr_max_iterations: int = 4,
+        exact_dssr_max_labels: int = 0,
+        route_enumeration_enabled: bool = False,
+        route_enumeration_rc_threshold: float = 0.0,
+        route_enumeration_max_routes: int = 0,
         restricted_master_heuristic_enabled: bool = False,
         restricted_master_time_limit: float = 20.0,
         restricted_master_max_routes: int = 4000,
@@ -140,6 +156,7 @@ class CleanBPCTree:
         restricted_master_max_depth: int = 3,
         restricted_master_schedule_aware: bool = True,
         restricted_master_max_no_good_rounds: int = 20,
+        restricted_master_route_pack_conflict_max_events: int = 2,
         branching_strategy: str = "3pb",
         three_pb_pseudocost_candidates: int = 6,
         three_pb_fractional_candidates: int = 6,
@@ -160,7 +177,39 @@ class CleanBPCTree:
         resource_cut_max_per_round: int = 20,
         resource_cut_min_violation: float = 1.0e-5,
         resource_cut_max_rounds_per_node: int = 3,
+        subset_row_cuts_enabled: bool = True,
+        subset_row_cut_max_depth: int = 0,
+        subset_row_cut_max_subset_size: int = 8,
+        subset_row_cut_max_per_round: int = 20,
+        subset_row_cut_min_violation: float = 1.0e-5,
+        subset_row_cut_max_rounds_per_node: int = 3,
+        subset_row_candidate_top_routes: int = 80,
+        subset_row_candidate_max_sets: int = 500,
+        subset_row_k_values: tuple[int, ...] | list[int] = (2, 3),
+        lm_rank1_cuts_enabled: bool = True,
+        lm_rank1_cut_max_depth: int = 0,
+        lm_rank1_cut_max_subset_size: int = 8,
+        lm_rank1_cut_max_per_round: int = 20,
+        lm_rank1_cut_min_violation: float = 1.0e-5,
+        lm_rank1_cut_max_rounds_per_node: int = 3,
+        lm_rank1_candidate_top_routes: int = 100,
+        lm_rank1_candidate_max_sets: int = 700,
+        lm_rank1_denominators: tuple[int, ...] | list[int] = (3, 4),
+        lm_rank1_memory_size: int = 4,
+        lm_rank1_max_patterns_per_set: int = 12,
+        schedule_subset_cost_cuts_enabled: bool = False,
+        schedule_subset_cost_cut_max_depth: int = 0,
+        schedule_subset_cost_cut_max_subset_size: int = 8,
+        schedule_subset_cost_cut_max_per_round: int = 10,
+        schedule_subset_cost_cut_min_violation: float = 1.0e-4,
+        schedule_subset_cost_cut_max_rounds_per_node: int = 2,
+        schedule_subset_cost_oracle_max_states: int = 200000,
+        schedule_subset_cost_candidate_top_tasks: int = 12,
+        schedule_subset_cost_candidate_max_combinations: int = 200,
+        schedule_subset_cost_route_union_top_routes: int = 10,
+        schedule_subset_cost_route_union_max_routes: int = 4,
         schedule_capacity_cuts_enabled: bool = True,
+        schedule_capacity_separation_enabled: bool = False,
         schedule_capacity_cut_max_depth: int = 0,
         schedule_capacity_cut_max_subset_size: int = 10,
         schedule_capacity_cut_max_per_round: int = 20,
@@ -187,6 +236,27 @@ class CleanBPCTree:
         route_set_schedule_packing_cut_max_per_round: int = 5,
         route_set_schedule_packing_cut_min_violation: float = 5.0e-2,
         route_set_schedule_packing_oracle_max_states: int = 200000,
+        schedule_pack_diagnostic_enabled: bool = False,
+        schedule_pack_diagnostic_max_candidate_routes: int = 180,
+        schedule_pack_diagnostic_max_columns: int = 8000,
+        schedule_pack_diagnostic_beam_width: int = 800,
+        schedule_pack_diagnostic_max_sorties: int = 0,
+        schedule_pack_diagnostic_time_limit: float = 60.0,
+        schedule_pack_pricing_batch_size: int = 32,
+        schedule_pack_relaxation_enabled: bool = False,
+        schedule_pack_relaxation_max_depth: int = 2,
+        schedule_pack_relaxation_time_limit: float = 30.0,
+        schedule_pack_relaxation_use_for_priority: bool = True,
+        schedule_pack_full_pricing_enabled: bool = False,
+        schedule_pack_full_pricing_max_depth: int = 0,
+        schedule_pack_full_pricing_max_states: int = 0,
+        schedule_pack_adaptive_enabled: bool = False,
+        schedule_pack_adaptive_gap_abs: float = 10.0,
+        schedule_pack_adaptive_gap_ratio: float = 3.0e-2,
+        schedule_pack_adaptive_skip_if_fathomable: bool = True,
+        route_enumeration_adaptive_enabled: bool = False,
+        route_enumeration_adaptive_gap_abs: float = 10.0,
+        route_enumeration_adaptive_gap_ratio: float = 3.0e-2,
         cut_purge_age: int = 20,
         cut_purge_slack: float = 1.0e-5,
         cut_purge_dual: float = 1.0e-8,
@@ -213,6 +283,16 @@ class CleanBPCTree:
         self.branch_node_heuristic_boost_routes_per_round = int(branch_node_heuristic_boost_routes_per_round)
         self.branch_node_heuristic_boost_min_depth = int(branch_node_heuristic_boost_min_depth)
         self.exact_pricing_dominance_enabled = bool(exact_pricing_dominance_enabled)
+        self.pricing_completion_bound_enabled = bool(pricing_completion_bound_enabled)
+        self.ng_dssr_pricing_enabled = bool(ng_dssr_pricing_enabled)
+        self.ng_dssr_memory_size = int(ng_dssr_memory_size)
+        self.exact_dssr_pricing_enabled = bool(exact_dssr_pricing_enabled)
+        self.exact_dssr_initial_memory_size = int(exact_dssr_initial_memory_size)
+        self.exact_dssr_max_iterations = int(exact_dssr_max_iterations)
+        self.exact_dssr_max_labels = int(exact_dssr_max_labels)
+        self.route_enumeration_enabled = bool(route_enumeration_enabled)
+        self.route_enumeration_rc_threshold = float(route_enumeration_rc_threshold)
+        self.route_enumeration_max_routes = int(route_enumeration_max_routes)
         self.restricted_master_heuristic_enabled = bool(restricted_master_heuristic_enabled)
         self.restricted_master_time_limit = float(restricted_master_time_limit)
         self.restricted_master_max_routes = int(restricted_master_max_routes)
@@ -220,6 +300,7 @@ class CleanBPCTree:
         self.restricted_master_max_depth = int(restricted_master_max_depth)
         self.restricted_master_schedule_aware = bool(restricted_master_schedule_aware)
         self.restricted_master_max_no_good_rounds = int(restricted_master_max_no_good_rounds)
+        self.restricted_master_route_pack_conflict_max_events = int(restricted_master_route_pack_conflict_max_events)
         self.rmp_params = dict(rmp_params or {})
         self.logger = logger
         self.branching_strategy = str(branching_strategy)
@@ -251,7 +332,43 @@ class CleanBPCTree:
             self.robust_capacity_cut_max_rounds_per_node,
             self.resource_cut_max_rounds_per_node,
         )
+        self.subset_row_cuts_enabled = bool(subset_row_cuts_enabled)
+        self.subset_row_cut_max_depth = int(subset_row_cut_max_depth)
+        self.subset_row_cut_max_subset_size = int(subset_row_cut_max_subset_size)
+        self.subset_row_cut_max_per_round = int(subset_row_cut_max_per_round)
+        self.subset_row_cut_min_violation = float(subset_row_cut_min_violation)
+        self.subset_row_cut_max_rounds_per_node = int(subset_row_cut_max_rounds_per_node)
+        self.subset_row_candidate_top_routes = int(subset_row_candidate_top_routes)
+        self.subset_row_candidate_max_sets = int(subset_row_candidate_max_sets)
+        raw_k_values = subset_row_k_values if isinstance(subset_row_k_values, (list, tuple, set)) else (subset_row_k_values,)
+        parsed_k_values = tuple(sorted({int(value) for value in raw_k_values if int(value) >= 2}))
+        self.subset_row_k_values = parsed_k_values or (2,)
+        self.lm_rank1_cuts_enabled = bool(lm_rank1_cuts_enabled)
+        self.lm_rank1_cut_max_depth = int(lm_rank1_cut_max_depth)
+        self.lm_rank1_cut_max_subset_size = int(lm_rank1_cut_max_subset_size)
+        self.lm_rank1_cut_max_per_round = int(lm_rank1_cut_max_per_round)
+        self.lm_rank1_cut_min_violation = float(lm_rank1_cut_min_violation)
+        self.lm_rank1_cut_max_rounds_per_node = int(lm_rank1_cut_max_rounds_per_node)
+        self.lm_rank1_candidate_top_routes = int(lm_rank1_candidate_top_routes)
+        self.lm_rank1_candidate_max_sets = int(lm_rank1_candidate_max_sets)
+        raw_denominators = lm_rank1_denominators if isinstance(lm_rank1_denominators, (list, tuple, set)) else (lm_rank1_denominators,)
+        parsed_denominators = tuple(sorted({int(value) for value in raw_denominators if int(value) >= 3}))
+        self.lm_rank1_denominators = parsed_denominators or (3,)
+        self.lm_rank1_memory_size = int(lm_rank1_memory_size)
+        self.lm_rank1_max_patterns_per_set = int(lm_rank1_max_patterns_per_set)
+        self.schedule_subset_cost_cuts_enabled = bool(schedule_subset_cost_cuts_enabled)
+        self.schedule_subset_cost_cut_max_depth = int(schedule_subset_cost_cut_max_depth)
+        self.schedule_subset_cost_cut_max_subset_size = int(schedule_subset_cost_cut_max_subset_size)
+        self.schedule_subset_cost_cut_max_per_round = int(schedule_subset_cost_cut_max_per_round)
+        self.schedule_subset_cost_cut_min_violation = float(schedule_subset_cost_cut_min_violation)
+        self.schedule_subset_cost_cut_max_rounds_per_node = int(schedule_subset_cost_cut_max_rounds_per_node)
+        self.schedule_subset_cost_oracle_max_states = int(schedule_subset_cost_oracle_max_states)
+        self.schedule_subset_cost_candidate_top_tasks = int(schedule_subset_cost_candidate_top_tasks)
+        self.schedule_subset_cost_candidate_max_combinations = int(schedule_subset_cost_candidate_max_combinations)
+        self.schedule_subset_cost_route_union_top_routes = int(schedule_subset_cost_route_union_top_routes)
+        self.schedule_subset_cost_route_union_max_routes = int(schedule_subset_cost_route_union_max_routes)
         self.schedule_capacity_cuts_enabled = bool(schedule_capacity_cuts_enabled)
+        self.schedule_capacity_separation_enabled = bool(schedule_capacity_separation_enabled)
         self.schedule_capacity_cut_max_depth = int(schedule_capacity_cut_max_depth)
         self.schedule_capacity_cut_max_subset_size = int(schedule_capacity_cut_max_subset_size)
         self.schedule_capacity_cut_max_per_round = int(schedule_capacity_cut_max_per_round)
@@ -278,6 +395,27 @@ class CleanBPCTree:
         self.route_set_schedule_packing_cut_max_per_round = int(route_set_schedule_packing_cut_max_per_round)
         self.route_set_schedule_packing_cut_min_violation = float(route_set_schedule_packing_cut_min_violation)
         self.route_set_schedule_packing_oracle_max_states = int(route_set_schedule_packing_oracle_max_states)
+        self.schedule_pack_diagnostic_enabled = bool(schedule_pack_diagnostic_enabled)
+        self.schedule_pack_diagnostic_max_candidate_routes = int(schedule_pack_diagnostic_max_candidate_routes)
+        self.schedule_pack_diagnostic_max_columns = int(schedule_pack_diagnostic_max_columns)
+        self.schedule_pack_diagnostic_beam_width = int(schedule_pack_diagnostic_beam_width)
+        self.schedule_pack_diagnostic_max_sorties = int(schedule_pack_diagnostic_max_sorties)
+        self.schedule_pack_diagnostic_time_limit = float(schedule_pack_diagnostic_time_limit)
+        self.schedule_pack_pricing_batch_size = int(schedule_pack_pricing_batch_size)
+        self.schedule_pack_relaxation_enabled = bool(schedule_pack_relaxation_enabled)
+        self.schedule_pack_relaxation_max_depth = int(schedule_pack_relaxation_max_depth)
+        self.schedule_pack_relaxation_time_limit = float(schedule_pack_relaxation_time_limit)
+        self.schedule_pack_relaxation_use_for_priority = bool(schedule_pack_relaxation_use_for_priority)
+        self.schedule_pack_full_pricing_enabled = bool(schedule_pack_full_pricing_enabled)
+        self.schedule_pack_full_pricing_max_depth = int(schedule_pack_full_pricing_max_depth)
+        self.schedule_pack_full_pricing_max_states = int(schedule_pack_full_pricing_max_states)
+        self.schedule_pack_adaptive_enabled = bool(schedule_pack_adaptive_enabled)
+        self.schedule_pack_adaptive_gap_abs = float(schedule_pack_adaptive_gap_abs)
+        self.schedule_pack_adaptive_gap_ratio = float(schedule_pack_adaptive_gap_ratio)
+        self.schedule_pack_adaptive_skip_if_fathomable = bool(schedule_pack_adaptive_skip_if_fathomable)
+        self.route_enumeration_adaptive_enabled = bool(route_enumeration_adaptive_enabled)
+        self.route_enumeration_adaptive_gap_abs = float(route_enumeration_adaptive_gap_abs)
+        self.route_enumeration_adaptive_gap_ratio = float(route_enumeration_adaptive_gap_ratio)
         self.cut_purge_age = int(cut_purge_age)
         self.cut_purge_slack = float(cut_purge_slack)
         self.cut_purge_dual = float(cut_purge_dual)
@@ -292,11 +430,17 @@ class CleanBPCTree:
         self.cut_inactive_age: dict[tuple, int] = {}
         self.cut_rounds_by_node: dict[int, int] = {}
         self.resource_cut_rounds_by_node: dict[int, int] = {}
+        self.subset_row_cut_rounds_by_node: dict[int, int] = {}
+        self.lm_rank1_cut_rounds_by_node: dict[int, int] = {}
+        self.schedule_subset_cost_cut_rounds_by_node: dict[int, int] = {}
         self.schedule_capacity_cut_rounds_by_node: dict[int, int] = {}
         self.schedule_incompatibility_cut_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_cut_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_cache: dict[tuple[tuple[int, ...], ...], tuple[int, int] | None] = {}
+        self.schedule_conflict_witness_cache: dict[tuple[tuple[int, ...], ...], Any] = {}
+        self.schedule_conflict_route_pack_cache: dict[tuple[tuple[int, ...], ...], tuple[int | None, int | None, bool]] = {}
         self.schedule_capacity_cache: dict[tuple[int, ...], ScheduleCapacityResult | None] = {}
+        self.schedule_subset_cost_cache: dict[tuple[int, ...], ScheduleSubsetCostResult | None] = {}
         self.schedule_pair_incompatibility_cache: dict[tuple[tuple[int, ...], tuple[int, ...]], bool] = {}
         self.resource_pair_incompatible: set[tuple[int, int]] | None = None
         self.resource_chromatic_cache: dict[tuple[int, ...], int] = {}
@@ -339,9 +483,6 @@ class CleanBPCTree:
         for order in self._construction_orders():
             assigned = self._construct_assignment(order)
             if assigned is None:
-                continue
-            raw_objective = self._assignment_objective(assigned)
-            if raw_objective >= best_objective - self.integer_tol:
                 continue
             assigned = self._improve_assignment(assigned)
             objective = self._assignment_objective(assigned)
@@ -723,6 +864,12 @@ class CleanBPCTree:
             initial_incumbent=None if self.incumbent is None else round(self.incumbent.objective, 6),
             task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
             schedule_capacity_cuts_enabled=self.schedule_capacity_cuts_enabled,
+            schedule_capacity_separation_enabled=self.schedule_capacity_separation_enabled,
+            schedule_pack_diagnostic_enabled=self.schedule_pack_diagnostic_enabled,
+            schedule_pack_relaxation_enabled=self.schedule_pack_relaxation_enabled,
+            schedule_pack_full_pricing_enabled=self.schedule_pack_full_pricing_enabled,
+            schedule_pack_adaptive_enabled=self.schedule_pack_adaptive_enabled,
+            route_enumeration_adaptive_enabled=self.route_enumeration_adaptive_enabled,
         )
 
         status = "UNKNOWN"
@@ -794,14 +941,46 @@ class CleanBPCTree:
             cuts=len(self.cuts),
             crossing_cuts_added=self.stats.crossing_cuts_added,
             crossing_cuts_upgraded=self.stats.crossing_cuts_upgraded,
+            subset_row_cuts_added=self.stats.subset_row_cuts_added,
+            lm_rank1_cuts_added=self.stats.lm_rank1_cuts_added,
             robust_capacity_cuts_added=self.stats.robust_capacity_cuts_added,
             resource_lower_bound_cuts_added=self.stats.resource_lower_bound_cuts_added,
+            schedule_subset_cost_cuts_added=self.stats.schedule_subset_cost_cuts_added,
             schedule_pair_conflict_cuts_added=self.stats.schedule_pair_conflict_cuts_added,
             schedule_nogood_cuts_added=self.stats.schedule_nogood_cuts_added,
             schedule_capacity_cuts_added=self.stats.schedule_capacity_cuts_added,
             schedule_clique_conflict_cuts_added=self.stats.schedule_clique_conflict_cuts_added,
             schedule_route_set_packing_cuts_added=self.stats.schedule_route_set_packing_cuts_added,
             cuts_purged=self.stats.cuts_purged,
+            schedule_pack_diagnostic_status=self.stats.schedule_pack_diagnostic_status,
+            schedule_pack_diagnostic_objective=None
+            if self.stats.schedule_pack_diagnostic_objective is None
+            else round(self.stats.schedule_pack_diagnostic_objective, 6),
+            schedule_pack_diagnostic_gap_vs_root=None
+            if self.stats.schedule_pack_diagnostic_gap_vs_root is None
+            else round(self.stats.schedule_pack_diagnostic_gap_vs_root, 6),
+            schedule_pack_diagnostic_columns=self.stats.schedule_pack_diagnostic_columns,
+            schedule_pack_diagnostic_time=round(self.stats.schedule_pack_diagnostic_time, 6),
+            schedule_pack_relaxation_calls=self.stats.schedule_pack_relaxation_calls,
+            schedule_pack_relaxation_root_objective=None
+            if self.stats.schedule_pack_relaxation_root_objective is None
+            else round(self.stats.schedule_pack_relaxation_root_objective, 6),
+            schedule_pack_relaxation_best_objective=None
+            if self.stats.schedule_pack_relaxation_best_objective is None
+            else round(self.stats.schedule_pack_relaxation_best_objective, 6),
+            schedule_pack_relaxation_time=round(self.stats.schedule_pack_relaxation_time, 6),
+            schedule_pack_relaxation_full_exact=self.stats.schedule_pack_relaxation_full_exact,
+            schedule_pack_relaxation_full_pricing_states=self.stats.schedule_pack_relaxation_full_pricing_states,
+            schedule_pack_relaxation_full_pricing_time=round(self.stats.schedule_pack_relaxation_full_pricing_time, 6),
+            schedule_pack_adaptive_decisions=self.stats.schedule_pack_adaptive_decisions,
+            schedule_pack_adaptive_runs=self.stats.schedule_pack_adaptive_runs,
+            schedule_pack_adaptive_skips=self.stats.schedule_pack_adaptive_skips,
+            schedule_pack_adaptive_easy_skips=self.stats.schedule_pack_adaptive_easy_skips,
+            schedule_pack_adaptive_bound_skips=self.stats.schedule_pack_adaptive_bound_skips,
+            route_enumeration_adaptive_decisions=self.stats.route_enumeration_adaptive_decisions,
+            route_enumeration_adaptive_runs=self.stats.route_enumeration_adaptive_runs,
+            route_enumeration_adaptive_skips=self.stats.route_enumeration_adaptive_skips,
+            route_enumeration_adaptive_easy_skips=self.stats.route_enumeration_adaptive_easy_skips,
             rmp_solves=self.stats.rmp_solves,
             pricing_calls=self.stats.pricing_calls,
             branch_testing_time=round(self.stats.branch_testing_time, 6),
@@ -819,7 +998,7 @@ class CleanBPCTree:
         return None
 
     def _diagnostic_lower_bound(self, open_nodes: list[BPCNode]) -> float | None:
-        values = [node.lower_bound for node in open_nodes]
+        values = [float(node.lower_bound) for node in open_nodes]
         if self.pending_node_bound is not None:
             values.append(float(self.pending_node_bound))
         if values:
@@ -843,6 +1022,313 @@ class CleanBPCTree:
         self.stats.generated_routes = len(self.pool.routes)
         return added
 
+    def _schedule_pack_seed_schedules(self) -> list[list[RouteColumn]]:
+        if self.incumbent is None:
+            return []
+        by_vehicle: dict[int, list[RouteColumn]] = {int(vehicle): [] for vehicle in self.data.vehicles}
+        for route, vehicle, value in self.incumbent.route_values:
+            if float(value) > 0.5:
+                by_vehicle[int(vehicle)].append(route)
+        return [routes for routes in by_vehicle.values() if routes]
+
+    def _schedule_pack_support_values(self, solution: RMPSolution) -> dict[tuple[int, ...], float]:
+        support_values: dict[tuple[int, ...], float] = {}
+        for route, _vehicle, value in solution.route_values:
+            support_values[route.signature] = support_values.get(route.signature, 0.0) + float(value)
+        return support_values
+
+    def _adaptive_gap_snapshot(
+        self,
+        bound: float,
+        *,
+        abs_threshold: float,
+        ratio_threshold: float,
+    ) -> tuple[float | None, float | None, float | None, float]:
+        threshold = max(float(abs_threshold), float(ratio_threshold) * max(1.0, abs(float(bound))))
+        if self.incumbent is None:
+            return None, None, None, threshold
+        incumbent = float(self.incumbent.objective)
+        gap = incumbent - float(bound)
+        ratio = gap / max(1.0, abs(float(bound)))
+        return incumbent, gap, ratio, threshold
+
+    def _schedule_pack_adaptive_allows(
+        self,
+        node: BPCNode,
+        *,
+        root_diagnostic: bool,
+        node_relaxation: bool,
+        node_bound: float,
+    ) -> bool:
+        if not self.schedule_pack_adaptive_enabled:
+            return True
+        self.stats.schedule_pack_adaptive_decisions += 1
+        incumbent, gap, gap_ratio, threshold = self._adaptive_gap_snapshot(
+            node_bound,
+            abs_threshold=self.schedule_pack_adaptive_gap_abs,
+            ratio_threshold=self.schedule_pack_adaptive_gap_ratio,
+        )
+        action = "run"
+        reason = "no_incumbent"
+        if incumbent is not None:
+            if (
+                self.schedule_pack_adaptive_skip_if_fathomable
+                and float(node_bound) >= incumbent - self.integer_tol
+            ):
+                action = "skip"
+                reason = "already_fathomable"
+                self.stats.schedule_pack_adaptive_bound_skips += 1
+            elif float(gap or 0.0) <= threshold + self.integer_tol:
+                action = "skip"
+                reason = "easy_gap"
+                self.stats.schedule_pack_adaptive_easy_skips += 1
+            else:
+                reason = "hard_gap"
+
+        if action == "run":
+            self.stats.schedule_pack_adaptive_runs += 1
+        else:
+            self.stats.schedule_pack_adaptive_skips += 1
+        self.logger.log(
+            "schedule_pack_adaptive",
+            node_id=node.id,
+            depth=node.depth,
+            action=action,
+            reason=reason,
+            root_diagnostic=root_diagnostic,
+            node_relaxation=node_relaxation,
+            node_bound=round(float(node_bound), 6),
+            incumbent=None if incumbent is None else round(incumbent, 6),
+            gap=None if gap is None else round(gap, 6),
+            gap_ratio=None if gap_ratio is None else round(gap_ratio, 6),
+            threshold=round(threshold, 6),
+            threshold_abs=round(self.schedule_pack_adaptive_gap_abs, 6),
+            threshold_ratio=round(self.schedule_pack_adaptive_gap_ratio, 6),
+        )
+        return action == "run"
+
+    def _route_enumeration_adaptive_allows(self, node: BPCNode, solution: RMPSolution) -> bool:
+        if not self.route_enumeration_adaptive_enabled:
+            return True
+        node_bound = float(solution.objective if solution.objective is not None else node.lower_bound)
+        self.stats.route_enumeration_adaptive_decisions += 1
+        incumbent, gap, gap_ratio, threshold = self._adaptive_gap_snapshot(
+            node_bound,
+            abs_threshold=self.route_enumeration_adaptive_gap_abs,
+            ratio_threshold=self.route_enumeration_adaptive_gap_ratio,
+        )
+        action = "run"
+        reason = "no_incumbent"
+        if incumbent is not None:
+            if float(gap or 0.0) <= threshold + self.integer_tol:
+                action = "skip"
+                reason = "easy_gap"
+                self.stats.route_enumeration_adaptive_easy_skips += 1
+            else:
+                reason = "hard_gap"
+        if action == "run":
+            self.stats.route_enumeration_adaptive_runs += 1
+        else:
+            self.stats.route_enumeration_adaptive_skips += 1
+        self.logger.log(
+            "route_enumeration_adaptive",
+            node_id=node.id,
+            depth=node.depth,
+            action=action,
+            reason=reason,
+            node_bound=round(node_bound, 6),
+            incumbent=None if incumbent is None else round(incumbent, 6),
+            gap=None if gap is None else round(gap, 6),
+            gap_ratio=None if gap_ratio is None else round(gap_ratio, 6),
+            threshold=round(threshold, 6),
+            threshold_abs=round(self.route_enumeration_adaptive_gap_abs, 6),
+            threshold_ratio=round(self.route_enumeration_adaptive_gap_ratio, 6),
+        )
+        return action == "run"
+
+    def _run_schedule_pack_relaxation(self, node: BPCNode, solution: RMPSolution) -> None:
+        root_diagnostic = bool(
+            self.schedule_pack_diagnostic_enabled
+            and node.id == 0
+            and self.stats.schedule_pack_diagnostic_status is None
+        )
+        node_relaxation = bool(
+            self.schedule_pack_relaxation_enabled
+            and node.depth <= self.schedule_pack_relaxation_max_depth
+        )
+        if not root_diagnostic and not node_relaxation:
+            return
+        node_bound_for_adaptive = float(solution.objective if solution.objective is not None else node.lower_bound)
+        if not self._schedule_pack_adaptive_allows(
+            node,
+            root_diagnostic=root_diagnostic,
+            node_relaxation=node_relaxation,
+            node_bound=node_bound_for_adaptive,
+        ):
+            if root_diagnostic:
+                self.stats.schedule_pack_diagnostic_status = "SKIPPED_ADAPTIVE"
+                self.logger.log(
+                    "schedule_pack_diagnostic",
+                    node_id=node.id,
+                    status="SKIPPED_ADAPTIVE",
+                    root_route_vehicle_bound=round(node_bound_for_adaptive, 6),
+                    objective=None,
+                    gap_vs_root=None,
+                    columns=0,
+                    candidate_routes=0,
+                    generated_states=0,
+                    solving_time=0.0,
+                    exact_bound=False,
+                )
+            return
+        remaining = max(0.0, self.time_limit - self.elapsed() - 1.0)
+        requested_time_limit = 0.0
+        if root_diagnostic:
+            requested_time_limit = max(requested_time_limit, self.schedule_pack_diagnostic_time_limit)
+        if node_relaxation:
+            requested_time_limit = max(requested_time_limit, self.schedule_pack_relaxation_time_limit)
+        time_limit = min(requested_time_limit, remaining)
+        if time_limit < 1.0:
+            if root_diagnostic:
+                self.stats.schedule_pack_diagnostic_status = "SKIPPED_TIME"
+                self.logger.log(
+                    "schedule_pack_diagnostic",
+                    node_id=node.id,
+                    status="SKIPPED_TIME",
+                    root_route_vehicle_bound=round(float(solution.objective or 0.0), 6),
+                    objective=None,
+                    columns=0,
+                    candidate_routes=0,
+                    generated_states=0,
+                    solving_time=0.0,
+                )
+            return
+
+        result = solve_schedule_pack_node_relaxation(
+            self.data,
+            self.pool.routes,
+            self.cuts,
+            node.branch_constraints,
+            support_values=self._schedule_pack_support_values(solution),
+            seed_schedules=self._schedule_pack_seed_schedules(),
+            max_candidate_routes=self.schedule_pack_diagnostic_max_candidate_routes,
+            max_columns=self.schedule_pack_diagnostic_max_columns,
+            beam_width=self.schedule_pack_diagnostic_beam_width,
+            max_sorties=self.schedule_pack_diagnostic_max_sorties,
+            time_limit=time_limit,
+            pricing_batch_size=self.schedule_pack_pricing_batch_size,
+            rmp_params=self.rmp_params,
+            full_route_space_pricing=bool(
+                self.schedule_pack_full_pricing_enabled
+                and node.depth <= self.schedule_pack_full_pricing_max_depth
+            ),
+            full_pricing_max_states=self.schedule_pack_full_pricing_max_states,
+        )
+        node_bound = float(solution.objective or 0.0)
+        gap_vs_node = None
+        exact_bound_applied = False
+        official_bound = float(node.lower_bound)
+        if result.objective is not None:
+            gap_vs_node = float(result.objective) - node_bound
+            if node_relaxation:
+                node.schedule_pack_relaxation_bound = float(result.objective)
+                current_best = self.stats.schedule_pack_relaxation_best_objective
+                if current_best is None or float(result.objective) > current_best + self.integer_tol:
+                    self.stats.schedule_pack_relaxation_best_objective = float(result.objective)
+                    self.stats.schedule_pack_relaxation_best_gap_vs_node = gap_vs_node
+                if result.exact_over_full_route_space and float(result.objective) > node.lower_bound + self.integer_tol:
+                    node.lower_bound = float(result.objective)
+                    official_bound = node.lower_bound
+                    exact_bound_applied = True
+                    self.stats.last_certified_node_bound = max(
+                        float(self.stats.last_certified_node_bound or node_bound),
+                        node.lower_bound,
+                    )
+                    if node.id == 0:
+                        self.stats.root_relaxation = max(float(self.stats.root_relaxation or node_bound), node.lower_bound)
+        if node_relaxation:
+            self.stats.schedule_pack_relaxation_calls += 1
+            self.stats.schedule_pack_relaxation_time += result.solving_time
+            self.stats.schedule_pack_relaxation_columns += result.column_count
+            if result.exact_over_candidate_routes:
+                self.stats.schedule_pack_relaxation_candidate_exact += 1
+            if result.exact_over_full_route_space:
+                self.stats.schedule_pack_relaxation_full_exact += 1
+            self.stats.schedule_pack_relaxation_full_pricing_states += result.full_pricing_generated_states
+            self.stats.schedule_pack_relaxation_full_pricing_time += result.full_pricing_time
+            if node.id == 0 and self.stats.schedule_pack_relaxation_root_objective is None:
+                self.stats.schedule_pack_relaxation_root_objective = result.objective
+            self.logger.log(
+                "schedule_pack_relaxation",
+                node_id=node.id,
+                depth=node.depth,
+                status=result.status,
+                node_route_vehicle_bound=round(node_bound, 6),
+                objective=None if result.objective is None else round(result.objective, 6),
+                gap_vs_node=None if gap_vs_node is None else round(gap_vs_node, 6),
+                columns=result.column_count,
+                candidate_routes=result.candidate_route_count,
+                generated_states=result.generated_state_count,
+                duplicate_columns=result.skipped_duplicate_columns,
+                infeasible_extensions=result.skipped_infeasible_extensions,
+                single_route_columns=result.single_route_columns,
+                multi_route_columns=result.multi_route_columns,
+                max_route_count=result.max_route_count,
+                max_task_count=result.max_task_count,
+                pricing_iterations=result.pricing_iterations,
+                generated_pricing_columns=result.generated_pricing_columns,
+                best_reduced_cost=None if result.best_reduced_cost is None else round(result.best_reduced_cost, 9),
+                exact_over_candidate_routes=result.exact_over_candidate_routes,
+                exact_over_full_route_space=result.exact_over_full_route_space,
+                full_pricing_generated_states=result.full_pricing_generated_states,
+                full_pricing_route_count=result.full_pricing_route_count,
+                full_pricing_time=round(result.full_pricing_time, 6),
+                seed_columns=result.seed_columns,
+                solving_time=round(result.solving_time, 6),
+                exact_bound=result.exact_over_full_route_space,
+                exact_bound_applied=exact_bound_applied,
+                official_node_bound=round(official_bound, 6),
+                used_for_priority=bool(self.schedule_pack_relaxation_use_for_priority and result.objective is not None),
+            )
+            if result.objective is not None and self.schedule_pack_relaxation_use_for_priority:
+                node.priority = max(float(node.priority), float(result.objective))
+        if root_diagnostic:
+            self.stats.schedule_pack_diagnostic_status = result.status
+            self.stats.schedule_pack_diagnostic_objective = result.objective
+            self.stats.schedule_pack_diagnostic_gap_vs_root = gap_vs_node
+            self.stats.schedule_pack_diagnostic_columns = result.column_count
+            self.stats.schedule_pack_diagnostic_candidate_routes = result.candidate_route_count
+            self.stats.schedule_pack_diagnostic_generated_states = result.generated_state_count
+            self.stats.schedule_pack_diagnostic_time = result.solving_time
+            self.logger.log(
+                "schedule_pack_diagnostic",
+                node_id=node.id,
+                status=result.status,
+                root_route_vehicle_bound=round(node_bound, 6),
+                objective=None if result.objective is None else round(result.objective, 6),
+                gap_vs_root=None if gap_vs_node is None else round(gap_vs_node, 6),
+                columns=result.column_count,
+                candidate_routes=result.candidate_route_count,
+                generated_states=result.generated_state_count,
+                duplicate_columns=result.skipped_duplicate_columns,
+                infeasible_extensions=result.skipped_infeasible_extensions,
+                single_route_columns=result.single_route_columns,
+                multi_route_columns=result.multi_route_columns,
+                max_route_count=result.max_route_count,
+                max_task_count=result.max_task_count,
+                pricing_iterations=result.pricing_iterations,
+                generated_pricing_columns=result.generated_pricing_columns,
+                best_reduced_cost=None if result.best_reduced_cost is None else round(result.best_reduced_cost, 9),
+                exact_over_candidate_routes=result.exact_over_candidate_routes,
+                exact_over_full_route_space=result.exact_over_full_route_space,
+                full_pricing_generated_states=result.full_pricing_generated_states,
+                full_pricing_route_count=result.full_pricing_route_count,
+                full_pricing_time=round(result.full_pricing_time, 6),
+                seed_columns=result.seed_columns,
+                solving_time=round(result.solving_time, 6),
+                exact_bound=result.exact_over_full_route_space,
+            )
+
     def _run_pricing(
         self,
         node: BPCNode,
@@ -855,6 +1341,17 @@ class CleanBPCTree:
         max_labels: int,
         selection_mode: str,
     ) -> tuple[PricingResult, int]:
+        ng_enabled = (
+            bool(self.ng_dssr_pricing_enabled)
+            and pricing_kind in {"heuristic", "heuristic_boost"}
+            and int(max_labels) > 0
+        )
+        enumeration_threshold = None
+        enumeration_limit = 0
+        if self.route_enumeration_enabled and pricing_kind == "exact":
+            if self._route_enumeration_adaptive_allows(node, solution):
+                enumeration_threshold = self.route_enumeration_rc_threshold
+                enumeration_limit = self.route_enumeration_max_routes
         pricing = exact_pricing(
             self.data,
             self.pool.routes,
@@ -867,6 +1364,19 @@ class CleanBPCTree:
             max_labels=max_labels,
             selection_mode=selection_mode,
             dominance_enabled=self.exact_pricing_dominance_enabled,
+            completion_bound_enabled=self.pricing_completion_bound_enabled,
+            ng_relaxation_enabled=ng_enabled,
+            ng_memory_size=self.ng_dssr_memory_size,
+            exact_dssr_pricing_enabled=(
+                bool(self.exact_dssr_pricing_enabled)
+                and pricing_kind == "exact"
+                and phase == "phase2"
+            ),
+            exact_dssr_initial_memory_size=self.exact_dssr_initial_memory_size,
+            exact_dssr_max_iterations=self.exact_dssr_max_iterations,
+            exact_dssr_max_labels=self.exact_dssr_max_labels,
+            route_enumeration_rc_threshold=enumeration_threshold,
+            route_enumeration_max_routes=enumeration_limit,
         )
         self.stats.pricing_calls += 1
         if pricing_kind == "exact":
@@ -892,6 +1402,16 @@ class CleanBPCTree:
             generated_labels=pricing.generated_labels,
             dominance_enabled=pricing.dominance_enabled,
             dominance_pruned=pricing.dominance_pruned,
+            completion_bound_enabled=pricing.completion_bound_enabled,
+            completion_pruned=pricing.completion_pruned,
+            ng_relaxation_enabled=pricing.ng_relaxation_enabled,
+            ng_memory_size=pricing.ng_memory_size,
+            dssr_pricing_enabled=pricing.dssr_pricing_enabled,
+            dssr_iterations=pricing.dssr_iterations,
+            dssr_memory_expansions=pricing.dssr_memory_expansions,
+            dssr_fallback=pricing.dssr_fallback,
+            enumerated_routes=pricing.enumerated_routes,
+            route_enumeration_threshold=pricing.route_enumeration_threshold,
         )
         return pricing, added
 
@@ -951,18 +1471,25 @@ class CleanBPCTree:
             "skipped_without_witness": 0,
             "pair_conflict_events": 0,
             "pair_cuts_added": 0,
+            "route_set_packing_events": 0,
+            "route_set_packing_cuts_added": 0,
+            "route_set_packing_cache_hits": 0,
+            "route_set_packing_oracle_states_max": 0,
+            "route_set_packing_budget_skips": 0,
             "schedule_capacity_events": 0,
             "schedule_capacity_cuts_added": 0,
             "nogood_violated_conflicts": 0,
             "nogood_cuts_added": 0,
             "weak_nogood_not_violated": 0,
         }
+        route_pack_attempt_events = 0
+        route_pack_attempt_budget = max(0, self.restricted_master_route_pack_conflict_max_events)
         for source_vehicle, conflict_routes in result.rejected_conflicts:
             diagnostics["conflicts_checked"] += 1
             if not conflict_routes:
                 diagnostics["skipped_without_witness"] += 1
                 continue
-            witness = diagnose_route_set_schedule(self.data, conflict_routes)
+            witness = self._diagnose_schedule_conflict(conflict_routes)
             if witness is None:
                 diagnostics["skipped_without_witness"] += 1
                 continue
@@ -976,6 +1503,25 @@ class CleanBPCTree:
                 diagnostics["pair_cuts_added"] += pair_added
                 added += pair_added
                 continue
+            if route_pack_attempt_events < route_pack_attempt_budget:
+                route_pack_attempt_events += 1
+                route_pack_added, route_pack_cache_hit, route_pack_states = self._add_schedule_route_set_packing_conflict_cuts(
+                    node,
+                    int(source_vehicle),
+                    list(conflict_routes),
+                )
+                diagnostics["route_set_packing_events"] += 1
+                diagnostics["route_set_packing_cache_hits"] += int(route_pack_cache_hit)
+                diagnostics["route_set_packing_oracle_states_max"] = max(
+                    int(diagnostics["route_set_packing_oracle_states_max"]),
+                    int(route_pack_states or 0),
+                )
+                if route_pack_added:
+                    diagnostics["route_set_packing_cuts_added"] += route_pack_added
+                    added += route_pack_added
+                    continue
+            else:
+                diagnostics["route_set_packing_budget_skips"] += 1
             structural_added = self._add_schedule_capacity_conflict_cuts(
                 node,
                 int(source_vehicle),
@@ -1052,6 +1598,7 @@ class CleanBPCTree:
         self.stats.restricted_master_integer_rejected += result.rejected_solutions
         self.stats.restricted_master_integer_no_good_cuts += result.no_good_cuts
         self.stats.restricted_master_integer_pair_conflict_cuts += result.pair_conflict_cuts
+        self.stats.restricted_master_integer_route_set_packing_cuts += result.route_set_packing_cuts
         self.stats.restricted_master_integer_schedule_capacity_cuts += result.schedule_capacity_cuts
         if result.raw_objective is not None:
             current_raw = self.stats.restricted_master_integer_raw_best_objective
@@ -1080,6 +1627,7 @@ class CleanBPCTree:
             rejected_solutions=result.rejected_solutions,
             no_good_cuts=result.no_good_cuts,
             pair_conflict_cuts=result.pair_conflict_cuts,
+            route_set_packing_cuts=result.route_set_packing_cuts,
             schedule_capacity_cuts=result.schedule_capacity_cuts,
             added_schedule_cuts=added_conflict_cuts,
             time=round(result.solving_time, 6),
@@ -1211,6 +1759,15 @@ class CleanBPCTree:
             separated = self._separate_crossing_cuts(node, solution)
             if separated:
                 continue
+            separated = self._separate_subset_row_cuts(node, solution)
+            if separated:
+                continue
+            separated = self._separate_lm_rank1_cuts(node, solution)
+            if separated:
+                continue
+            separated = self._separate_schedule_subset_cost_cuts(node, solution)
+            if separated:
+                continue
             separated = self._separate_route_set_schedule_packing_cuts(node, solution)
             if separated:
                 continue
@@ -1236,6 +1793,7 @@ class CleanBPCTree:
         self.stats.last_certified_node_bound = node.lower_bound
         if self.stats.root_relaxation is None and node.id == 0:
             self.stats.root_relaxation = node.lower_bound
+        self._run_schedule_pack_relaxation(node, last_solution)
 
         if not self._time_left():
             self.abort_status = "TIME_LIMIT"
@@ -1243,16 +1801,22 @@ class CleanBPCTree:
             self.logger.log("fathom", node_id=node.id, reason="time_limit_after_node_certificate", bound=round(node.lower_bound, 6))
             return []
 
+        if self.incumbent is not None and node.lower_bound >= self.incumbent.objective - self.integer_tol:
+            self.stats.fathomed_bound += 1
+            self.logger.log("fathom", node_id=node.id, reason="bound_after_schedule_pack", bound=round(node.lower_bound, 6))
+            return []
+
         if self._try_restricted_master_heuristic(node, last_solution):
             return [
                 BPCNode(
-                    priority=node.lower_bound,
+                    priority=max(node.lower_bound, node.schedule_pack_relaxation_bound or node.lower_bound),
                     id=node.id,
                     depth=node.depth,
                     branch_constraints=node.branch_constraints,
                     parent_id=node.parent_id,
                     description=node.description,
                     lower_bound=node.lower_bound,
+                    schedule_pack_relaxation_bound=node.schedule_pack_relaxation_bound,
                 )
             ]
 
@@ -1271,7 +1835,18 @@ class CleanBPCTree:
         if integral:
             cuts_added = self._validate_integral_or_cut(node, last_solution)
             if cuts_added:
-                return [BPCNode(priority=node.lower_bound, id=node.id, depth=node.depth, branch_constraints=node.branch_constraints, parent_id=node.parent_id, description=node.description, lower_bound=node.lower_bound)]
+                return [
+                    BPCNode(
+                        priority=max(node.lower_bound, node.schedule_pack_relaxation_bound or node.lower_bound),
+                        id=node.id,
+                        depth=node.depth,
+                        branch_constraints=node.branch_constraints,
+                        parent_id=node.parent_id,
+                        description=node.description,
+                        lower_bound=node.lower_bound,
+                        schedule_pack_relaxation_bound=node.schedule_pack_relaxation_bound,
+                    )
+                ]
             if self.abort_status is not None:
                 return []
             self.stats.fathomed_integral += 1
@@ -1311,7 +1886,19 @@ class CleanBPCTree:
         removed_by_kind: dict[str, int] = {}
         purgeable_nogood_kinds = {"schedule_nogood", "schedule_nogood_core", "schedule_nogood_full"}
         for cut in self.cuts:
-            if isinstance(cut, (CrossingCut, ScheduleCapacityCut)) and self.cut_purge_age > 0:
+            if (
+                isinstance(
+                    cut,
+                    (
+                        CrossingCut,
+                        ScheduleCapacityCut,
+                        ScheduleSubsetCostLowerBoundCut,
+                        SubsetRowCut,
+                        LimitedMemoryRank1Cut,
+                    ),
+                )
+                and self.cut_purge_age > 0
+            ):
                 age_limit = self.cut_purge_age
                 slack_limit = self.cut_purge_slack
                 dual_limit = self.cut_purge_dual
@@ -1461,6 +2048,584 @@ class CleanBPCTree:
                 return index
         return None
 
+    def _separate_subset_row_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        """分离经典 subset-row cuts，补强 route set-partitioning 下界。"""
+
+        if not self.subset_row_cuts_enabled:
+            return 0
+        if node.depth > self.subset_row_cut_max_depth:
+            return 0
+        rounds = self.subset_row_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.subset_row_cut_max_rounds_per_node:
+            return 0
+        self.subset_row_cut_rounds_by_node[node.id] = rounds + 1
+
+        subsets = self._subset_row_candidate_subsets(solution)
+        diagnostics: dict[str, float | int] = {
+            "candidate_subsets": len(subsets),
+            "candidate_size_max": max((len(tasks) for tasks in subsets), default=0),
+            "k_values": len(self.subset_row_k_values),
+            "skipped_duplicate": 0,
+            "skipped_invalid_rhs": 0,
+            "skipped_not_violated": 0,
+            "violated_candidates": 0,
+            "max_violation": 0.0,
+            "added": 0,
+        }
+        candidates: list[tuple[float, tuple[int, ...], int, float, float]] = []
+        seen: set[tuple] = set()
+        for tasks in subsets:
+            for divisor in self.subset_row_k_values:
+                rhs = math.floor(len(tasks) / int(divisor))
+                if rhs <= 0:
+                    diagnostics["skipped_invalid_rhs"] = int(diagnostics["skipped_invalid_rhs"]) + 1
+                    continue
+                key = ("subset_row", tasks, int(divisor))
+                if key in self.cut_keys or key in seen:
+                    diagnostics["skipped_duplicate"] = int(diagnostics["skipped_duplicate"]) + 1
+                    continue
+                seen.add(key)
+                activity = self._subset_row_activity(solution, tasks, int(divisor))
+                violation = activity - float(rhs)
+                if violation <= self.subset_row_cut_min_violation:
+                    diagnostics["skipped_not_violated"] = int(diagnostics["skipped_not_violated"]) + 1
+                    continue
+                diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
+                diagnostics["max_violation"] = max(float(diagnostics["max_violation"]), float(violation))
+                candidates.append((violation, tasks, int(divisor), activity, float(rhs)))
+
+        if not candidates:
+            self.logger.log("subset_row_diagnostics", node_id=node.id, depth=node.depth, round=rounds + 1, **diagnostics)
+            return 0
+
+        candidates.sort(key=lambda item: (-item[0], -len(item[1]), item[2], item[1]))
+        added = 0
+        added_payload = []
+        for violation, tasks, divisor, activity, rhs in candidates[: max(1, self.subset_row_cut_max_per_round)]:
+            cut = SubsetRowCut(id=self._allocate_cut_id(), tasks=tasks, divisor=divisor)
+            if cut.key in self.cut_keys:
+                continue
+            self.cuts.append(cut)
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "tasks": list(tasks),
+                    "divisor": divisor,
+                    "activity": round(activity, 9),
+                    "rhs": round(rhs, 9),
+                    "activity_minus_rhs": round(violation, 9),
+                }
+            )
+
+        diagnostics["added"] = int(added)
+        self.logger.log("subset_row_diagnostics", node_id=node.id, depth=node.depth, round=rounds + 1, **diagnostics)
+        if not added:
+            return 0
+        self.stats.cuts_added += added
+        self.stats.subset_row_cuts_added += added
+        self.logger.log("cut_added", node_id=node.id, family="subset_row", added=added, cuts=added_payload)
+        return added
+
+    def _subset_row_candidate_subsets(self, solution: RMPSolution) -> list[tuple[int, ...]]:
+        max_size = min(self.subset_row_cut_max_subset_size, len(self.data.tasks))
+        if max_size < 2:
+            return []
+        candidates: set[tuple[int, ...]] = set()
+        all_tasks = tuple(sorted(int(task) for task in self.data.tasks))
+        if len(all_tasks) <= max_size:
+            candidates.add(all_tasks)
+
+        support = [
+            (float(value), route)
+            for route, _vehicle, value in solution.route_values
+            if value > self.integer_tol and len(route.task_set) >= 2
+        ]
+        support.sort(key=lambda item: (-item[0] * len(item[1].task_set), -item[0], -len(item[1].task_set), item[1].signature))
+        top_routes = [route for _value, route in support[: max(0, self.subset_row_candidate_top_routes)]]
+
+        def add_tasks(tasks_iterable) -> None:
+            if len(candidates) >= self.subset_row_candidate_max_sets:
+                return
+            tasks = tuple(sorted({int(task) for task in tasks_iterable}))
+            if 2 <= len(tasks) <= max_size:
+                candidates.add(tasks)
+
+        for route in top_routes:
+            route_tasks = tuple(sorted(int(task) for task in route.task_set))
+            add_tasks(route_tasks)
+            if len(route_tasks) > max_size:
+                add_tasks(route_tasks[:max_size])
+            for size in range(3, min(max_size, len(route_tasks)) + 1):
+                for tasks in combinations(route_tasks, size):
+                    add_tasks(tasks)
+                    if len(candidates) >= self.subset_row_candidate_max_sets:
+                        break
+                if len(candidates) >= self.subset_row_candidate_max_sets:
+                    break
+            if len(candidates) >= self.subset_row_candidate_max_sets:
+                break
+
+        max_combo_routes = min(3, len(top_routes))
+        for size in range(2, max_combo_routes + 1):
+            for combo in combinations(top_routes, size):
+                add_tasks(task for route in combo for task in route.task_set)
+                if len(candidates) >= self.subset_row_candidate_max_sets:
+                    break
+            if len(candidates) >= self.subset_row_candidate_max_sets:
+                break
+
+        return sorted(candidates, key=lambda item: (len(item), item))[: max(0, self.subset_row_candidate_max_sets)]
+
+    def _subset_row_activity(self, solution: RMPSolution, tasks: tuple[int, ...], divisor: int) -> float:
+        subset = set(int(task) for task in tasks)
+        return sum(
+            math.floor(sum(1 for task in route.task_set if int(task) in subset) / int(divisor)) * float(value)
+            for route, _vehicle, value in solution.route_values
+        )
+
+    def _separate_lm_rank1_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        """分离第一版 limited-memory rank-1 cut。"""
+
+        if not self.lm_rank1_cuts_enabled:
+            return 0
+        if node.depth > self.lm_rank1_cut_max_depth:
+            return 0
+        rounds = self.lm_rank1_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.lm_rank1_cut_max_rounds_per_node:
+            return 0
+        self.lm_rank1_cut_rounds_by_node[node.id] = rounds + 1
+
+        subsets = self._lm_rank1_candidate_subsets(solution)
+        diagnostics: dict[str, float | int] = {
+            "candidate_subsets": len(subsets),
+            "candidate_size_max": max((len(tasks) for tasks in subsets), default=0),
+            "denominators": len(self.lm_rank1_denominators),
+            "patterns": 0,
+            "skipped_duplicate": 0,
+            "skipped_invalid_rhs": 0,
+            "skipped_not_violated": 0,
+            "violated_candidates": 0,
+            "max_violation": 0.0,
+            "added": 0,
+        }
+        candidates: list[tuple[float, tuple[int, ...], tuple[int, ...], int, float, float, tuple[int, ...]]] = []
+        seen: set[tuple] = set()
+        for tasks in subsets:
+            for denominator in self.lm_rank1_denominators:
+                for multipliers, memory_tasks in self._lm_rank1_multiplier_patterns(solution, tasks, int(denominator)):
+                    diagnostics["patterns"] = int(diagnostics["patterns"]) + 1
+                    rhs = math.floor(sum(multipliers) / int(denominator))
+                    if rhs <= 0:
+                        diagnostics["skipped_invalid_rhs"] = int(diagnostics["skipped_invalid_rhs"]) + 1
+                        continue
+                    key = ("limited_memory_rank1", tasks, multipliers, int(denominator))
+                    if key in self.cut_keys or key in seen:
+                        diagnostics["skipped_duplicate"] = int(diagnostics["skipped_duplicate"]) + 1
+                        continue
+                    seen.add(key)
+                    activity = self._lm_rank1_activity(solution, tasks, multipliers, int(denominator))
+                    violation = activity - float(rhs)
+                    if violation <= self.lm_rank1_cut_min_violation:
+                        diagnostics["skipped_not_violated"] = int(diagnostics["skipped_not_violated"]) + 1
+                        continue
+                    diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
+                    diagnostics["max_violation"] = max(float(diagnostics["max_violation"]), float(violation))
+                    candidates.append((violation, tasks, multipliers, int(denominator), activity, float(rhs), memory_tasks))
+
+        if not candidates:
+            self.logger.log("lm_rank1_diagnostics", node_id=node.id, depth=node.depth, round=rounds + 1, **diagnostics)
+            return 0
+
+        candidates.sort(key=lambda item: (-item[0], -sum(item[2]), -len(item[1]), item[3], item[1], item[2]))
+        added = 0
+        added_payload = []
+        for violation, tasks, multipliers, denominator, activity, rhs, memory_tasks in candidates[
+            : max(1, self.lm_rank1_cut_max_per_round)
+        ]:
+            cut = LimitedMemoryRank1Cut(
+                id=self._allocate_cut_id(),
+                tasks=tasks,
+                multipliers=multipliers,
+                denominator=denominator,
+                memory_tasks=memory_tasks,
+            )
+            if cut.key in self.cut_keys:
+                continue
+            self.cuts.append(cut)
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "tasks": list(tasks),
+                    "multipliers": list(multipliers),
+                    "denominator": denominator,
+                    "memory_tasks": list(memory_tasks),
+                    "activity": round(activity, 9),
+                    "rhs": round(rhs, 9),
+                    "activity_minus_rhs": round(violation, 9),
+                }
+            )
+
+        diagnostics["added"] = int(added)
+        self.logger.log("lm_rank1_diagnostics", node_id=node.id, depth=node.depth, round=rounds + 1, **diagnostics)
+        if not added:
+            return 0
+        self.stats.cuts_added += added
+        self.stats.lm_rank1_cuts_added += added
+        self.logger.log("cut_added", node_id=node.id, family="limited_memory_rank1", added=added, cuts=added_payload)
+        return added
+
+    def _lm_rank1_candidate_subsets(self, solution: RMPSolution) -> list[tuple[int, ...]]:
+        max_size = min(self.lm_rank1_cut_max_subset_size, len(self.data.tasks))
+        if max_size < 2:
+            return []
+        candidates: set[tuple[int, ...]] = set()
+        support = [
+            (float(value), route)
+            for route, _vehicle, value in solution.route_values
+            if value > self.integer_tol and len(route.task_set) >= 2
+        ]
+        support.sort(key=lambda item: (-item[0] * len(item[1].task_set), -item[0], -len(item[1].task_set), item[1].signature))
+        top_routes = [route for _value, route in support[: max(0, self.lm_rank1_candidate_top_routes)]]
+
+        def add_tasks(tasks_iterable) -> None:
+            if len(candidates) >= self.lm_rank1_candidate_max_sets:
+                return
+            tasks = tuple(sorted({int(task) for task in tasks_iterable}))
+            if 2 <= len(tasks) <= max_size:
+                candidates.add(tasks)
+
+        for route in top_routes:
+            route_tasks = tuple(sorted(int(task) for task in route.task_set))
+            add_tasks(route_tasks)
+            for size in range(3, min(max_size, len(route_tasks)) + 1):
+                for tasks in combinations(route_tasks, size):
+                    add_tasks(tasks)
+                    if len(candidates) >= self.lm_rank1_candidate_max_sets:
+                        break
+                if len(candidates) >= self.lm_rank1_candidate_max_sets:
+                    break
+            if len(candidates) >= self.lm_rank1_candidate_max_sets:
+                break
+
+        max_combo_routes = min(4, len(top_routes))
+        for size in range(2, max_combo_routes + 1):
+            for combo in combinations(top_routes, size):
+                add_tasks(task for route in combo for task in route.task_set)
+                if len(candidates) >= self.lm_rank1_candidate_max_sets:
+                    break
+            if len(candidates) >= self.lm_rank1_candidate_max_sets:
+                break
+
+        return sorted(candidates, key=lambda item: (len(item), item))[: max(0, self.lm_rank1_candidate_max_sets)]
+
+    def _lm_rank1_multiplier_patterns(
+        self,
+        solution: RMPSolution,
+        tasks: tuple[int, ...],
+        denominator: int,
+    ) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
+        denominator = max(3, int(denominator))
+        memory_size = max(1, min(int(self.lm_rank1_memory_size), len(tasks)))
+        subset = set(int(task) for task in tasks)
+        pressure = {int(task): 0.0 for task in tasks}
+        for route, _vehicle, value in solution.route_values:
+            hits = [int(task) for task in route.task_set if int(task) in subset]
+            if len(hits) < 2:
+                continue
+            increment = float(value) * float(len(hits) - 1)
+            for task in hits:
+                pressure[task] += increment
+        ordered = sorted(tasks, key=lambda task: (-pressure[int(task)], int(task)))
+        memory_tasks = tuple(sorted(int(task) for task in ordered[:memory_size]))
+        patterns: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
+        seen: set[tuple[int, ...]] = set()
+
+        def add_pattern(weight_by_task: dict[int, int]) -> None:
+            if len(patterns) >= max(1, self.lm_rank1_max_patterns_per_set):
+                return
+            multipliers = tuple(max(1, min(denominator - 1, int(weight_by_task.get(int(task), 1)))) for task in tasks)
+            if multipliers in seen:
+                return
+            if all(value == 1 for value in multipliers) and denominator in self.subset_row_k_values:
+                return
+            seen.add(multipliers)
+            heavy_memory = tuple(sorted(int(task) for task, value in zip(tasks, multipliers) if value > 1))
+            patterns.append((multipliers, heavy_memory or memory_tasks))
+
+        # 中文注释：uniform denominator 不在普通 subset-row 中时也可作为 rank-1 候选。
+        add_pattern({})
+        for task in ordered[:memory_size]:
+            add_pattern({int(task): denominator - 1})
+            if denominator > 3:
+                add_pattern({int(task): 2})
+        for left, right in combinations(ordered[:memory_size], 2):
+            add_pattern({int(left): min(2, denominator - 1), int(right): min(2, denominator - 1)})
+            if denominator > 3:
+                add_pattern({int(left): denominator - 1, int(right): 2})
+                add_pattern({int(left): 2, int(right): denominator - 1})
+            if len(patterns) >= max(1, self.lm_rank1_max_patterns_per_set):
+                break
+        if len(patterns) < max(1, self.lm_rank1_max_patterns_per_set):
+            # 中文注释：规范化的 limited-memory R1C 候选。只在 memory 任务上枚举非均匀
+            # multiplier，并按当前 LP pressure 排序；非 memory 任务保持 multiplier=1。
+            # 这仍是普通 rank-1 CG cut，memory 只限制候选搜索规模，不影响有效性。
+            memory_order = [int(task) for task in ordered[:memory_size]]
+            values = tuple(range(1, denominator))
+            scored_patterns: list[tuple[float, dict[int, int]]] = []
+            for weights in product(values, repeat=len(memory_order)):
+                if all(weight == 1 for weight in weights):
+                    continue
+                weight_by_task = {task: int(weight) for task, weight in zip(memory_order, weights)}
+                multiplier_sum = len(tasks) + sum(int(weight) - 1 for weight in weights)
+                rhs = multiplier_sum // denominator
+                if rhs <= 0:
+                    continue
+                score = sum(float(pressure[task]) * float(int(weight) - 1) for task, weight in zip(memory_order, weights))
+                scored_patterns.append((score, weight_by_task))
+            scored_patterns.sort(
+                key=lambda item: (
+                    -item[0],
+                    -sum(item[1].values()),
+                    tuple(-item[1][task] for task in memory_order),
+                )
+            )
+            for _score, weight_by_task in scored_patterns:
+                add_pattern(weight_by_task)
+                if len(patterns) >= max(1, self.lm_rank1_max_patterns_per_set):
+                    break
+        return patterns
+
+    def _lm_rank1_activity(
+        self,
+        solution: RMPSolution,
+        tasks: tuple[int, ...],
+        multipliers: tuple[int, ...],
+        denominator: int,
+    ) -> float:
+        weight_by_task = {int(task): int(multiplier) for task, multiplier in zip(tasks, multipliers)}
+        return sum(
+            math.floor(sum(weight_by_task.get(int(task), 0) for task in route.task_set) / int(denominator)) * float(value)
+            for route, _vehicle, value in solution.route_values
+        )
+
+    def _separate_schedule_subset_cost_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        """分离成本型单车 schedule lower-bound cut。"""
+
+        if not self.schedule_subset_cost_cuts_enabled:
+            return 0
+        if node.depth > self.schedule_subset_cost_cut_max_depth:
+            return 0
+        rounds = self.schedule_subset_cost_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.schedule_subset_cost_cut_max_rounds_per_node:
+            return 0
+
+        candidate_subsets_by_vehicle = self._schedule_subset_cost_candidate_subsets_by_vehicle(solution)
+        diagnostics: dict[str, float | int] = {
+            "vehicles_checked": 0,
+            "vehicles_active": 0,
+            "candidate_subsets": 0,
+            "candidate_size_max": 0,
+            "skipped_vehicle_inactive": 0,
+            "skipped_duplicate": 0,
+            "oracle_queries": 0,
+            "skipped_oracle_incomplete": 0,
+            "skipped_oracle_infeasible": 0,
+            "skipped_nonpositive_bound": 0,
+            "skipped_not_violated": 0,
+            "violated_candidates": 0,
+            "oracle_states_total": 0,
+            "oracle_states_max": 0,
+            "max_violation": 0.0,
+            "added": 0,
+        }
+        candidates: list[tuple[float, int, tuple[int, ...], float, int, float, float, float]] = []
+        seen: set[tuple] = set()
+        for vehicle in self.data.vehicles:
+            diagnostics["vehicles_checked"] = int(diagnostics["vehicles_checked"]) + 1
+            y_value = float(solution.y_values.get(vehicle, 0.0))
+            if y_value <= self.integer_tol:
+                diagnostics["skipped_vehicle_inactive"] = int(diagnostics["skipped_vehicle_inactive"]) + 1
+                continue
+            diagnostics["vehicles_active"] = int(diagnostics["vehicles_active"]) + 1
+            vehicle_cost = self._vehicle_route_cost(solution, int(vehicle))
+            for tasks in candidate_subsets_by_vehicle.get(int(vehicle), []):
+                diagnostics["candidate_subsets"] = int(diagnostics["candidate_subsets"]) + 1
+                diagnostics["candidate_size_max"] = max(int(diagnostics["candidate_size_max"]), len(tasks))
+                preliminary_key = ("schedule_subset_cost_lb", int(vehicle), tasks)
+                if preliminary_key in seen:
+                    diagnostics["skipped_duplicate"] = int(diagnostics["skipped_duplicate"]) + 1
+                    continue
+                seen.add(preliminary_key)
+                diagnostics["oracle_queries"] = int(diagnostics["oracle_queries"]) + 1
+                oracle = self._schedule_subset_cost_bound(tasks)
+                if oracle is None or not oracle.exact:
+                    diagnostics["skipped_oracle_incomplete"] = int(diagnostics["skipped_oracle_incomplete"]) + 1
+                    continue
+                diagnostics["oracle_states_total"] = int(diagnostics["oracle_states_total"]) + int(oracle.states_explored)
+                diagnostics["oracle_states_max"] = max(int(diagnostics["oracle_states_max"]), int(oracle.states_explored))
+                if not oracle.feasible or oracle.lower_bound is None:
+                    diagnostics["skipped_oracle_infeasible"] = int(diagnostics["skipped_oracle_infeasible"]) + 1
+                    continue
+                lower_bound = float(oracle.lower_bound)
+                if lower_bound <= self.integer_tol:
+                    diagnostics["skipped_nonpositive_bound"] = int(diagnostics["skipped_nonpositive_bound"]) + 1
+                    continue
+                key = ("schedule_subset_cost_lb", int(vehicle), tasks, round(lower_bound, 9))
+                if key in self.cut_keys:
+                    diagnostics["skipped_duplicate"] = int(diagnostics["skipped_duplicate"]) + 1
+                    continue
+                task_mass = self._task_vehicle_mass(solution, tasks, int(vehicle))
+                activity = vehicle_cost - lower_bound * task_mass + lower_bound * float(len(tasks) - 1) * y_value
+                violation = -activity
+                if violation <= self.schedule_subset_cost_cut_min_violation:
+                    diagnostics["skipped_not_violated"] = int(diagnostics["skipped_not_violated"]) + 1
+                    continue
+                diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
+                diagnostics["max_violation"] = max(float(diagnostics["max_violation"]), float(violation))
+                candidates.append(
+                    (
+                        violation,
+                        int(vehicle),
+                        tasks,
+                        lower_bound,
+                        int(oracle.states_explored),
+                        y_value,
+                        vehicle_cost,
+                        task_mass,
+                    )
+                )
+
+        if not candidates:
+            self.logger.log(
+                "schedule_subset_cost_diagnostics",
+                node_id=node.id,
+                depth=node.depth,
+                round=rounds + 1,
+                **diagnostics,
+            )
+            return 0
+
+        candidates.sort(key=lambda item: (-item[0], -len(item[2]), item[1], item[2]))
+        added = 0
+        added_payload = []
+        for violation, vehicle, tasks, lower_bound, states, y_value, vehicle_cost, task_mass in candidates[
+            : max(1, self.schedule_subset_cost_cut_max_per_round)
+        ]:
+            cut = ScheduleSubsetCostLowerBoundCut(
+                id=self._allocate_cut_id(),
+                vehicle=vehicle,
+                tasks=tasks,
+                lower_bound=lower_bound,
+                oracle_states=states,
+            )
+            if cut.key in self.cut_keys:
+                continue
+            self.cuts.append(cut)
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "vehicle": vehicle,
+                    "tasks": list(tasks),
+                    "lower_bound": round(lower_bound, 9),
+                    "y": round(y_value, 9),
+                    "vehicle_route_cost": round(vehicle_cost, 9),
+                    "task_mass": round(task_mass, 9),
+                    "activity_minus_rhs": round(-violation, 9),
+                    "violation": round(violation, 9),
+                    "oracle_states": states,
+                }
+            )
+
+        diagnostics["added"] = int(added)
+        self.logger.log(
+            "schedule_subset_cost_diagnostics",
+            node_id=node.id,
+            depth=node.depth,
+            round=rounds + 1,
+            **diagnostics,
+        )
+        if not added:
+            return 0
+        self.schedule_subset_cost_cut_rounds_by_node[node.id] = rounds + 1
+        self.stats.cuts_added += added
+        self.stats.schedule_subset_cost_cuts_added += added
+        self.logger.log("cut_added", node_id=node.id, family="schedule_subset_cost_lb", added=added, cuts=added_payload)
+        return added
+
+    def _schedule_subset_cost_candidate_subsets_by_vehicle(self, solution: RMPSolution) -> dict[int, list[tuple[int, ...]]]:
+        max_size = min(self.schedule_subset_cost_cut_max_subset_size, len(self.data.tasks))
+        if max_size < 2:
+            return {int(vehicle): [] for vehicle in self.data.vehicles}
+        all_tasks = tuple(sorted(int(task) for task in self.data.tasks))
+        by_vehicle: dict[int, list[tuple[int, ...]]] = {}
+        for vehicle in self.data.vehicles:
+            candidates: set[tuple[int, ...]] = set()
+            if len(all_tasks) <= max_size:
+                candidates.add(all_tasks)
+            task_values = self._vehicle_task_values(solution, int(vehicle))
+            value_by_task = {task: value for value, task in task_values}
+            y_value = float(solution.y_values.get(vehicle, 0.0))
+            ordered = [task for _value, task in task_values[:max_size]]
+            for size in range(2, len(ordered) + 1):
+                candidates.add(tuple(sorted(ordered[:size])))
+
+            top_count = max(max_size, self.schedule_subset_cost_candidate_top_tasks)
+            top_tasks = [task for _value, task in task_values[:top_count]]
+            scored: list[tuple[float, tuple[int, ...]]] = []
+            for size in range(2, min(max_size, len(top_tasks)) + 1):
+                for tasks in combinations(top_tasks, size):
+                    mass = sum(value_by_task.get(task, 0.0) for task in tasks)
+                    score = mass - (size - 1) * y_value
+                    if score > -0.5 * max(1.0, y_value):
+                        scored.append((score, tuple(sorted(int(task) for task in tasks))))
+            scored.sort(key=lambda item: (-item[0], -len(item[1]), item[1]))
+            for _score, tasks in scored[: max(0, self.schedule_subset_cost_candidate_max_combinations)]:
+                candidates.add(tasks)
+
+            self._add_schedule_subset_cost_route_union_candidates(solution, int(vehicle), max_size, candidates)
+            by_vehicle[int(vehicle)] = sorted(candidates, key=lambda item: (len(item), item))
+        return by_vehicle
+
+    def _add_schedule_subset_cost_route_union_candidates(
+        self,
+        solution: RMPSolution,
+        vehicle: int,
+        max_size: int,
+        candidates: set[tuple[int, ...]],
+    ) -> None:
+        support = [
+            (float(value), route)
+            for route, route_vehicle, value in solution.route_values
+            if int(route_vehicle) == int(vehicle) and value > self.integer_tol
+        ]
+        support.sort(key=lambda item: (-item[0] * len(item[1].task_set), -item[0], item[1].cost, item[1].signature))
+        top_routes = [route for _value, route in support[: max(0, self.schedule_subset_cost_route_union_top_routes)]]
+        max_routes = min(max(2, self.schedule_subset_cost_route_union_max_routes), len(top_routes))
+        for size in range(2, max_routes + 1):
+            for combo in combinations(top_routes, size):
+                tasks = tuple(sorted({int(task) for route in combo for task in route.task_set}))
+                if 2 <= len(tasks) <= max_size:
+                    candidates.add(tasks)
+
+    def _schedule_subset_cost_bound(self, tasks: tuple[int, ...]) -> ScheduleSubsetCostResult | None:
+        tasks = tuple(sorted(int(task) for task in tasks))
+        if tasks not in self.schedule_subset_cost_cache:
+            self.schedule_subset_cost_cache[tasks] = exact_schedule_subset_cost(
+                self.data,
+                tasks,
+                max_states=self.schedule_subset_cost_oracle_max_states,
+            )
+        return self.schedule_subset_cost_cache[tasks]
+
     def _ensure_resource_pair_incompatibilities(self) -> set[tuple[int, int]]:
         if self.resource_pair_incompatible is not None:
             return self.resource_pair_incompatible
@@ -1567,6 +2732,7 @@ class CleanBPCTree:
         rounds = self.route_set_schedule_packing_cut_rounds_by_node.get(node.id, 0)
         if rounds >= self.route_set_schedule_packing_cut_max_rounds_per_node:
             return 0
+        self.route_set_schedule_packing_cut_rounds_by_node[node.id] = rounds + 1
 
         min_violation = max(self.integer_tol, self.route_set_schedule_packing_cut_min_violation)
         candidates: list[tuple[float, int, int, tuple[tuple[int, ...], ...], list[RouteColumn], float, int, int, float]] = []
@@ -1695,7 +2861,6 @@ class CleanBPCTree:
             log_diagnostics(0)
             return 0
 
-        self.route_set_schedule_packing_cut_rounds_by_node[node.id] = rounds + 1
         self.stats.cuts_added += added
         self.stats.schedule_route_set_packing_cuts_added += added
         log_diagnostics(added)
@@ -1752,13 +2917,16 @@ class CleanBPCTree:
 
         return candidates
 
-    def _route_set_schedule_packing_bound(self, routes: list[RouteColumn]) -> tuple[int | None, int | None]:
+    def _route_set_schedule_packing_bound_with_cache_status(
+        self,
+        routes: list[RouteColumn] | tuple[RouteColumn, ...],
+    ) -> tuple[int | None, int | None, bool]:
         signatures = normalize_signatures(tuple(route.signature for route in routes))
         cached = self.route_set_schedule_packing_cache.get(signatures)
         if cached is not None:
-            return cached
+            return (cached[0], cached[1], True)
         if signatures in self.route_set_schedule_packing_cache and cached is None:
-            return (None, None)
+            return (None, None, True)
         result = exact_route_set_schedule_capacity(
             self.data,
             routes,
@@ -1766,10 +2934,14 @@ class CleanBPCTree:
         )
         if result is None or not result.exact:
             self.route_set_schedule_packing_cache[signatures] = None
-            return (None, None)
+            return (None, None, False)
         value = (int(result.upper_bound), int(result.states_explored))
         self.route_set_schedule_packing_cache[signatures] = value
-        return value
+        return (value[0], value[1], False)
+
+    def _route_set_schedule_packing_bound(self, routes: list[RouteColumn]) -> tuple[int | None, int | None]:
+        upper_bound, states, _cache_hit = self._route_set_schedule_packing_bound_with_cache_status(routes)
+        return (upper_bound, states)
 
     def _separate_schedule_incompatibility_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
         """分离 LP 违背的单车 schedule incompatibility pair/clique cut。
@@ -1973,7 +3145,7 @@ class CleanBPCTree:
         return cliques
 
     def _separate_schedule_capacity_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
-        if not self.schedule_capacity_cuts_enabled:
+        if not self.schedule_capacity_separation_enabled:
             return 0
         if node.depth > self.schedule_capacity_cut_max_depth:
             return 0
@@ -2183,6 +3355,13 @@ class CleanBPCTree:
         subset = set(int(task) for task in tasks)
         return sum(
             sum(1 for task in route.task_set if int(task) in subset) * value
+            for route, route_vehicle, value in solution.route_values
+            if int(route_vehicle) == int(vehicle)
+        )
+
+    def _vehicle_route_cost(self, solution: RMPSolution, vehicle: int) -> float:
+        return sum(
+            float(route.cost) * float(value)
             for route, route_vehicle, value in solution.route_values
             if int(route_vehicle) == int(vehicle)
         )
@@ -2432,6 +3611,9 @@ class CleanBPCTree:
                 max_routes_to_return=routes_per_iter,
                 max_labels=max_labels,
                 dominance_enabled=self.exact_pricing_dominance_enabled,
+                completion_bound_enabled=self.pricing_completion_bound_enabled,
+                ng_relaxation_enabled=bool(self.ng_dssr_pricing_enabled) and max_labels > 0,
+                ng_memory_size=self.ng_dssr_memory_size,
             )
             self.stats.branch_heuristic_test_pricing_calls += 1
             iterations += 1
@@ -2530,7 +3712,7 @@ class CleanBPCTree:
             self._set_incumbent_from_assignment(repaired, node_id=node.id, source="route_assignment_repair")
 
         for vehicle, routes in grouped.items():
-            witness = diagnose_route_set_schedule(self.data, routes)
+            witness = self._diagnose_schedule_conflict(routes)
             if witness is None:
                 continue
 
@@ -2541,6 +3723,14 @@ class CleanBPCTree:
             )
             if pair_added:
                 return pair_added
+
+            route_pack_added, _cache_hit, _states = self._add_schedule_route_set_packing_conflict_cuts(
+                node,
+                int(vehicle),
+                list(routes),
+            )
+            if route_pack_added:
+                return route_pack_added
 
             structural_added = self._add_schedule_capacity_conflict_cuts(
                 node,
@@ -2582,6 +3772,133 @@ class CleanBPCTree:
             self.incumbent = Incumbent(objective=objective, route_values=selected, y_values=solution.y_values, node_id=node.id)
             self.logger.log("incumbent", node_id=node.id, objective=round(objective, 6), source="certified_integral")
         return 0
+
+    def _diagnose_schedule_conflict(self, routes: list[RouteColumn] | tuple[RouteColumn, ...]):
+        signatures = normalize_signatures(tuple(route.signature for route in routes))
+        if signatures not in self.schedule_conflict_witness_cache:
+            self.schedule_conflict_witness_cache[signatures] = diagnose_route_set_schedule(self.data, routes)
+        return self.schedule_conflict_witness_cache[signatures]
+
+    def _add_schedule_route_set_packing_conflict_cuts(
+        self,
+        node: BPCNode,
+        source_vehicle: int,
+        routes: list[RouteColumn],
+    ) -> tuple[int, bool, int | None]:
+        if not self.route_set_schedule_packing_cuts_enabled:
+            return (0, False, None)
+        signatures = normalize_signatures(tuple(route.signature for route in routes))
+        if len(signatures) < 2:
+            return (0, False, None)
+
+        upper_bound, states, cache_hit = self._route_set_schedule_packing_bound_with_cache_status(routes)
+        self.schedule_conflict_route_pack_cache[signatures] = (upper_bound, states, cache_hit)
+        if upper_bound is None or states is None:
+            self.logger.log(
+                "schedule_route_set_packing_conflict_diagnostics",
+                node_id=node.id,
+                source_vehicle=source_vehicle,
+                route_count=len(signatures),
+                cache_hit=cache_hit,
+                oracle_complete=False,
+                oracle_states=states,
+                upper_bound=upper_bound,
+                added=0,
+            )
+            return (0, cache_hit, states)
+        if int(upper_bound) >= len(signatures):
+            self.logger.log(
+                "schedule_route_set_packing_conflict_diagnostics",
+                node_id=node.id,
+                source_vehicle=source_vehicle,
+                route_count=len(signatures),
+                cache_hit=cache_hit,
+                oracle_complete=True,
+                oracle_states=states,
+                upper_bound=int(upper_bound),
+                skipped_not_tight=True,
+                added=0,
+            )
+            return (0, cache_hit, states)
+        if int(upper_bound) >= len(signatures) - 1:
+            self.logger.log(
+                "schedule_route_set_packing_conflict_diagnostics",
+                node_id=node.id,
+                source_vehicle=source_vehicle,
+                route_count=len(signatures),
+                cache_hit=cache_hit,
+                oracle_complete=True,
+                oracle_states=states,
+                upper_bound=int(upper_bound),
+                skipped_nogood_equivalent=True,
+                added=0,
+            )
+            return (0, cache_hit, states)
+
+        cuts = make_no_good_cuts_for_all_vehicles(
+            self.data.vehicles,
+            routes,
+            self._allocate_cut_ids(len(self.data.vehicles)),
+            source_vehicle=source_vehicle,
+            kind="schedule_route_set_packing",
+            rhs_value=float(upper_bound),
+            scale_by_vehicle_use=True,
+        )
+        added = 0
+        added_payload = []
+        for cut in cuts:
+            if cut.key in self.cut_keys:
+                continue
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            self.cuts.append(cut)
+            added += 1
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "vehicle": cut.vehicle,
+                    "route_count": len(signatures),
+                    "upper_bound": int(upper_bound),
+                    "signatures": [list(signature) for signature in signatures],
+                    "source_vehicle": source_vehicle,
+                    "source": "schedule_conflict",
+                    "cache_hit": cache_hit,
+                    "oracle_states": states,
+                }
+            )
+
+        self.logger.log(
+            "schedule_route_set_packing_conflict_diagnostics",
+            node_id=node.id,
+            source_vehicle=source_vehicle,
+            route_count=len(signatures),
+            cache_hit=cache_hit,
+            oracle_complete=True,
+            oracle_states=states,
+            upper_bound=int(upper_bound),
+            duplicate=added == 0,
+            added=added,
+        )
+        if not added:
+            return (0, cache_hit, states)
+
+        self.stats.cuts_added += added
+        self.stats.schedule_route_set_packing_cuts_added += added
+        self.logger.log(
+            "cut_added",
+            node_id=node.id,
+            family="schedule_route_set_packing",
+            source="schedule_conflict",
+            source_vehicle=source_vehicle,
+            added=added,
+            route_count=len(signatures),
+            upper_bound=int(upper_bound),
+            oracle_states=states,
+            cache_hit=cache_hit,
+            signatures=[list(signature) for signature in signatures],
+            cuts=added_payload,
+        )
+        return (added, cache_hit, states)
 
     def _add_schedule_capacity_conflict_cuts(
         self,

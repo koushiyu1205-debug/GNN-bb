@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/kai/work/gnn_bb/scripts/run_bpc_clean.py", line 258, in <module>
+    main()
+  File "/home/kai/work/gnn_bb/scripts/run_bpc_clean.py", line 75, in main
+    data = load_bpc_data(str(name), instance_dir=config.get("instance_dir", "json/instances"))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/bpc/data.py", line 37, in load_bpc_data
+    instance, instance_path = load_or_build_instance(name, instance_dir=instance_dir, write_if_missing=True)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/src/gnn_bb/data/instances.py", line 209, in load_or_build_instance
+    instance = build_instance_from_legacy(name)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/src/gnn_bb/data/instances.py", line 184, in build_instance_from_legacy
+    instance = standardize_scalable_parameters(builder(name))
+                                               ^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/model/scip-version/src/instance_data.py", line 248, in build_instance
+    raise ValueError(f"未知实例名称：{name}")
+ValueError: 未知实例名称：bench_20_02

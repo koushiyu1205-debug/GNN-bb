@@ -16,6 +16,7 @@ class BPCNode:
     parent_id: int | None = field(compare=False, default=None)
     description: str = field(compare=False, default="root")
     lower_bound: float = field(compare=False, default=0.0)
+    schedule_pack_relaxation_bound: float | None = field(compare=False, default=None)
 
 
 @dataclass
@@ -37,16 +38,46 @@ class BPCStats:
     restricted_master_integer_rejected: int = 0
     restricted_master_integer_no_good_cuts: int = 0
     restricted_master_integer_pair_conflict_cuts: int = 0
+    restricted_master_integer_route_set_packing_cuts: int = 0
     restricted_master_integer_schedule_capacity_cuts: int = 0
     crossing_cuts_added: int = 0
     crossing_cuts_upgraded: int = 0
+    subset_row_cuts_added: int = 0
+    lm_rank1_cuts_added: int = 0
     robust_capacity_cuts_added: int = 0
     resource_lower_bound_cuts_added: int = 0
+    schedule_subset_cost_cuts_added: int = 0
     schedule_pair_conflict_cuts_added: int = 0
     schedule_clique_conflict_cuts_added: int = 0
     schedule_route_set_packing_cuts_added: int = 0
     schedule_nogood_cuts_added: int = 0
     schedule_capacity_cuts_added: int = 0
+    schedule_pack_diagnostic_status: str | None = None
+    schedule_pack_diagnostic_objective: float | None = None
+    schedule_pack_diagnostic_gap_vs_root: float | None = None
+    schedule_pack_diagnostic_columns: int = 0
+    schedule_pack_diagnostic_candidate_routes: int = 0
+    schedule_pack_diagnostic_generated_states: int = 0
+    schedule_pack_diagnostic_time: float = 0.0
+    schedule_pack_relaxation_calls: int = 0
+    schedule_pack_relaxation_time: float = 0.0
+    schedule_pack_relaxation_root_objective: float | None = None
+    schedule_pack_relaxation_best_objective: float | None = None
+    schedule_pack_relaxation_best_gap_vs_node: float | None = None
+    schedule_pack_relaxation_candidate_exact: int = 0
+    schedule_pack_relaxation_full_exact: int = 0
+    schedule_pack_relaxation_full_pricing_states: int = 0
+    schedule_pack_relaxation_full_pricing_time: float = 0.0
+    schedule_pack_relaxation_columns: int = 0
+    schedule_pack_adaptive_decisions: int = 0
+    schedule_pack_adaptive_runs: int = 0
+    schedule_pack_adaptive_skips: int = 0
+    schedule_pack_adaptive_easy_skips: int = 0
+    schedule_pack_adaptive_bound_skips: int = 0
+    route_enumeration_adaptive_decisions: int = 0
+    route_enumeration_adaptive_runs: int = 0
+    route_enumeration_adaptive_skips: int = 0
+    route_enumeration_adaptive_easy_skips: int = 0
     cuts_purged: int = 0
     generated_routes: int = 0
     generated_columns: int = 0

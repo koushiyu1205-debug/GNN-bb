@@ -1,0 +1,223 @@
+# 中文摘要：clean BPC 默认配置。该主线使用根目录 bpc/，SCIP 只求解每个节点的 RMP LP。
+
+python: /home/kai/miniconda3/envs/ecole/bin/python
+instances: ["very_small"]
+time_limit: 3600
+random_seed: 20260511
+instance_dir: json/instances
+results_csv: results/bpc_clean.csv
+log_dir: results/logs/bpc_clean
+solution_dir: results/solutions/bpc_clean
+log_level: progress
+
+pricing_eps: 1.0e-6
+integer_tol: 1.0e-6
+max_nodes: 100000
+max_routes_per_pricing: 500
+root_max_routes_per_pricing: 1200
+# 0 表示 exact pricing 不设 label 上限；若设为正数，中断的 pricing 不能用于证明节点 bound。
+max_labels_per_pricing: 0
+
+# 启发式 route pricing 先用 label 上限快速找负 reduced-cost 列。
+# 若 label 上限触发且找不到新列，仍会继续运行完整 exact pricing；只有完整枚举才能证明节点 bound。
+heuristic_pricing_enabled: true
+heuristic_pricing_max_labels: 120000
+heuristic_pricing_routes_per_round: 600
+heuristic_pricing_selection_mode: diverse
+exact_pricing_selection_mode: diverse
+
+# 分支节点上的增强启发式定价：普通启发式找不到列时，先用更高 label 上限再试一次。
+# 若 boost 没有触发 label 上限，它本身也能作为 certificate；否则仍回到完整 exact pricing。
+branch_node_heuristic_boost_enabled: true
+branch_node_heuristic_boost_max_labels: 900000
+branch_node_heuristic_boost_routes_per_round: 1000
+branch_node_heuristic_boost_min_depth: 1
+
+# 安全 dominance：仅在所有带非零 dual 的 cut / branching 信息都进入 label 状态时启用；
+# 顺序签名 cut 通过 active signature prefix mask 进入 dominance key，因此不再直接关闭 dominance。
+exact_pricing_dominance_enabled: true
+
+# pricing 加速层：
+# 1) completion bound 只在没有 cut dual、arc-on dual、vehicle-time dual 时启用，保持可证明安全；
+# 2) ng-DSSR 第一版只用于启发式定价，仍生成 elementary route，但不会作为节点证书；
+# 3) route enumeration 在 exact pricing 完整结束时额外回收近零 reduced-cost route，用于丰富后续 RMP/RIM。
+pricing_completion_bound_enabled: true
+ng_dssr_pricing_enabled: true
+ng_dssr_memory_size: 6
+route_enumeration_enabled: true
+route_enumeration_rc_threshold: 0.25
+route_enumeration_max_routes: 1200
+
+# route pool 受限整数主问题：只用于找 incumbent。
+# 开启 schedule-aware 后，MIP 内部按临时 pair cut、schedule-capacity cut、no-good 的顺序排除排程不可行整数候选。
+restricted_master_heuristic_enabled: true
+restricted_master_time_limit: 20.0
+restricted_master_max_routes: 4000
+restricted_master_max_calls: 20
+restricted_master_max_depth: 3
+restricted_master_schedule_aware: true
+restricted_master_max_no_good_rounds: 20
+# RIM 回流时，route-set packing conflict 只保留少量“严格强于 no-good”的结构性 cut。
+restricted_master_route_pack_conflict_max_events: 2
+
+# no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
+branching_strategy: 3pb
+three_pb_pseudocost_candidates: 6
+three_pb_fractional_candidates: 6
+three_pb_lp_candidates: 3
+three_pb_heuristic_cg_iterations: 3
+three_pb_heuristic_routes_per_iter: 50
+three_pb_heuristic_max_labels: 800
+
+# task-vehicle linking:
+# sum_p a_ip lambda[p,r] <= y[r]。这是有限 row，用于强化车辆固定成本的 LP 松弛。
+task_vehicle_linking_enabled: true
+
+# 统一 crossing cuts:
+# x(delta(S)) >= 2 K(S), K(S)=max(Kcap(S), Kresource(S))。
+# Kcap=ceil(d(S)/Q)，Kresource 由资源不兼容图 exact coloring 证明。
+# cut manager 对同一 S 只保留 RHS 最大的一条 crossing_cut。
+robust_capacity_cuts_enabled: true
+robust_capacity_cut_max_depth: 0
+robust_capacity_cut_max_subset_size: 5
+robust_capacity_cut_max_per_round: 20
+robust_capacity_cut_min_violation: 1.0e-5
+robust_capacity_cut_max_rounds_per_node: 3
+
+resource_lower_bound_cuts_enabled: true
+resource_cut_max_depth: 0
+resource_cut_max_subset_size: 6
+resource_cut_max_per_round: 20
+resource_cut_min_violation: 1.0e-5
+resource_cut_max_rounds_per_node: 3
+
+# Subset-row cuts:
+# sum floor(|p∩S|/k) lambda[p,r] <= floor(|S|/k)。这是经典 VRP set-partitioning 强化 cut。
+subset_row_cuts_enabled: true
+subset_row_cut_max_depth: 0
+subset_row_cut_max_subset_size: 8
+subset_row_cut_max_per_round: 20
+subset_row_cut_min_violation: 1.0e-5
+subset_row_cut_max_rounds_per_node: 3
+subset_row_candidate_top_routes: 80
+subset_row_candidate_max_sets: 500
+subset_row_k_values: [2, 3]
+
+# Limited-memory rank-1 cuts:
+# 这是 subset-row 的第一版非均匀 multiplier 扩展。
+# 对小任务集 S 和分母 d，加入 sum floor(sum m_i a_ip / d) lambda <= floor(sum m_i / d)。
+# multiplier pattern 只来自有限 memory 任务，cut 有效性来自 set-partitioning CG rounding。
+lm_rank1_cuts_enabled: true
+lm_rank1_cut_max_depth: 0
+lm_rank1_cut_max_subset_size: 8
+lm_rank1_cut_max_per_round: 20
+lm_rank1_cut_min_violation: 1.0e-5
+lm_rank1_cut_max_rounds_per_node: 3
+lm_rank1_candidate_top_routes: 100
+lm_rank1_candidate_max_sets: 700
+lm_rank1_denominators: [3, 4]
+lm_rank1_memory_size: 4
+lm_rank1_max_patterns_per_set: 12
+
+# Schedule subset cost lower-bound cuts:
+# 若车辆 r 完整服务任务集 S，则其真实多 sortie schedule 变量成本至少为 L(S)。
+# L(S) 由 exact 小规模单车 DP 证明；oracle 超限或 S 单车不可行时不加 cut。
+# 2026-05-21 bench_20_02 诊断显示该候选器 1620 次 oracle 查询没有产生 violated cut，
+# 默认关闭，保留为后续重写候选逻辑时的实验开关。
+schedule_subset_cost_cuts_enabled: false
+schedule_subset_cost_cut_max_depth: 0
+schedule_subset_cost_cut_max_subset_size: 8
+schedule_subset_cost_cut_max_per_round: 10
+schedule_subset_cost_cut_min_violation: 1.0e-4
+schedule_subset_cost_cut_max_rounds_per_node: 2
+schedule_subset_cost_oracle_max_states: 200000
+schedule_subset_cost_candidate_top_tasks: 12
+schedule_subset_cost_candidate_max_combinations: 200
+schedule_subset_cost_route_union_top_routes: 10
+schedule_subset_cost_route_union_max_routes: 4
+
+# Schedule capacity upper-bound cuts:
+# sum_i z[i,r] <= U(S) y[r]，U(S) 由 exact 单车多 sortie schedule oracle 证明。
+# oracle 超过状态上限时不加 cut。
+schedule_capacity_cuts_enabled: true
+# LP 层主动分离 schedule-capacity 在 bench_20_02/03 上大量 oracle 查询但 added=0；
+# 默认关闭。RIM / integral validation 中的 schedule-capacity conflict fallback 仍由上面的
+# schedule_capacity_cuts_enabled 控制并保持可用。
+schedule_capacity_separation_enabled: false
+schedule_capacity_cut_max_depth: 0
+schedule_capacity_cut_max_subset_size: 10
+schedule_capacity_cut_max_per_round: 20
+schedule_capacity_cut_min_violation: 1.0e-5
+schedule_capacity_cut_max_rounds_per_node: 3
+schedule_capacity_oracle_max_states: 200000
+schedule_capacity_candidate_top_tasks: 12
+schedule_capacity_candidate_max_combinations: 300
+schedule_capacity_route_union_top_routes: 8
+schedule_capacity_route_union_max_routes: 4
+
+# Schedule incompatibility cuts:
+# 对同一车辆的 LP 支撑 route，若两条 route 任意先后顺序都不可排程，则加入 pair cut；
+# 若一组 route 两两不可排程且 LP 总活动量超过 1，则加入 clique cut：sum lambda[p,r] <= 1。
+schedule_incompatibility_cuts_enabled: true
+schedule_incompatibility_cut_max_depth: 2
+schedule_incompatibility_cut_max_rounds_per_node: 2
+schedule_incompatibility_cut_max_support_routes: 80
+schedule_incompatibility_cut_max_per_round: 10
+schedule_incompatibility_cut_min_violation: 5.0e-2
+schedule_incompatibility_clique_min_size: 3
+schedule_incompatibility_clique_seed_count: 24
+
+# Route-set schedule packing cuts:
+# 对同一车辆的一组 route C，用 exact schedule DP 证明最多可排 U(C) 条；
+# 仅当当前 LP 违反 sum_{p in C} lambda[p,r] <= U(C) 时加入。
+route_set_schedule_packing_cuts_enabled: true
+route_set_schedule_packing_cut_max_depth: 2
+route_set_schedule_packing_cut_max_rounds_per_node: 2
+route_set_schedule_packing_cut_max_support_routes: 40
+route_set_schedule_packing_cut_max_routes: 16
+route_set_schedule_packing_cut_max_per_round: 5
+route_set_schedule_packing_cut_min_violation: 5.0e-2
+route_set_schedule_packing_oracle_max_states: 200000
+
+# Candidate-pool schedule-pack 诊断 / 浅层节点 relaxation：
+# 用当前 route pool 生成一批完整车辆 schedule columns，并解 candidate-pool schedule-pack LP。
+# 下方 relaxation 开关会在 root / 浅层节点复用同一 vehicle-indexed LP，尊重分支和已加 valid cuts。
+# 候选池收敛后，可在 root 做全 route-space exact schedule pricing。
+# 只有 exact_over_full_route_space=true 时才是完整 pricing 证书；
+# 此时 schedule-pack LP 值可作为正式节点下界参与剪枝；否则仍只作为诊断/节点排序信号。
+schedule_pack_diagnostic_enabled: true
+schedule_pack_diagnostic_max_candidate_routes: 180
+schedule_pack_diagnostic_max_columns: 8000
+schedule_pack_diagnostic_beam_width: 800
+schedule_pack_diagnostic_max_sorties: 0
+schedule_pack_diagnostic_time_limit: 60.0
+schedule_pack_pricing_batch_size: 32
+schedule_pack_relaxation_enabled: true
+schedule_pack_relaxation_max_depth: 1
+schedule_pack_relaxation_time_limit: 30.0
+schedule_pack_relaxation_use_for_priority: true
+schedule_pack_full_pricing_enabled: true
+schedule_pack_full_pricing_max_depth: 0
+schedule_pack_full_pricing_max_states: 0
+
+# 清理 inactive crossing / schedule-capacity cut。
+cut_purge_age: 20
+cut_purge_slack: 1.0e-5
+cut_purge_dual: 1.0e-8
+
+# 只对弱的 schedule no-good 做额外清理；pair / clique / route-pack 结构性 cut 默认保留。
+schedule_nogood_purge_enabled: true
+schedule_nogood_purge_age: 8
+schedule_nogood_purge_slack: 1.0e-4
+schedule_nogood_purge_dual: 1.0e-8
+
+rmp_params:
+  display/verblevel: 0
+  randomization/randomseedshift: 20260511
+  randomization/permutationseed: 20260511
+  randomization/lpseed: 20260511
+  parallel/maxnthreads: 1
+  presolving/maxrounds: 0
+  separating/maxrounds: 0
+instance_dir: branchpricecut/results/benchmark/20260513_224021_benchmark_10_20_30/instances
+instances: [bench_20_01, bench_20_02, bench_20_03, bench_20_04, bench_20_05, bench_20_06]

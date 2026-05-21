@@ -1065,3 +1065,330 @@ AA. 2026-05-20 fixed-cost-aware 初始 incumbent
     这些改动只影响 primal heuristic 和初始 route pool。
     lower bound 仍只来自 RMP + true-dual exact pricing + valid cuts。
     因此不会破坏 exactness。
+
+============================================================
+AB. 2026-05-21 conflict-induced route-set packing 回流
+============================================================
+
+背景：
+
+    bench_20_02 / bench_20_03 的完整输出显示：
+    fixed-cost-aware incumbent 已经把 primal gap 从约 30% 降到 3%~5%，
+    但 dual bound 几乎没有同步提升。
+    运行后半段大量时间花在 restricted-MIP 找到排程不可行整数候选、
+    加 schedule_nogood_core、再被 purge 的循环上。
+
+问题：
+
+    当前代码已经有 schedule_route_set_packing cut：
+
+        sum_{p in C} lambda[p,r] <= U(C) y[r]
+
+    其中 U(C) 由 exact_route_set_schedule_capacity 证明。
+    但 RIM 回流和整数解校验遇到不可排程 core 时，
+    没有先尝试这类高阶 route-set 上界，
+    而是从 task-level schedule-capacity 失败后直接退到 schedule_nogood_core。
+
+本轮修改：
+
+1. 新增 _add_schedule_route_set_packing_conflict_cuts()。
+
+       输入原始不可排程整数解中的 full route set C；
+       调用 exact_route_set_schedule_capacity(C)；
+       若 U(C)<|C|-1，对所有同质车辆加入严格强于 no-good 的 schedule_route_set_packing cut；
+       若 oracle 超限、U(C)>=|C|，或 U(C)=|C|-1 只等价于普通 no-good，则不提升为 route-pack conflict。
+
+2. RIM 回流顺序改为：
+
+       pair conflict
+       route-set schedule packing conflict
+       task-level schedule-capacity conflict
+       LP-violated schedule_nogood_core
+
+3. integral validation 顺序同样改为：
+
+       pair conflict
+       route-set schedule packing conflict
+       schedule-capacity conflict
+       schedule_nogood_core
+       schedule_nogood_full
+
+4. restricted-MIP 内部临时 cut 顺序也同步加入 route-set packing。
+
+       这样 RIM 在排除同一个不可排程整数候选时，
+       优先用严格强于 no-good 的 U(C) 上界；若 U(C)=|C|-1，则直接回退到 schedule-capacity / no-good。
+
+5. 增加冲突缓存与日志字段。
+
+       schedule_conflict_witness_cache:
+           缓存不可排程 route set 的 witness；
+
+       route_set_schedule_packing_cache:
+           缓存 exact_route_set_schedule_capacity 的 U(C) 结果；
+
+       schedule_route_set_packing_conflict_diagnostics:
+           记录 route_count、upper_bound、oracle_complete、oracle_states、
+           cache_hit 和 added。
+
+补充修正：
+
+    bench_20_02 的实际输出显示，大量 minimal-core conflict route-pack 都是
+    routes=3,U=2 或 routes=4,U=3，即 U(C)=|C|-1。
+    这类 cut 与普通 no-good 同强度，但之前会对所有车辆加入，
+    导致 root cut 数迅速膨胀而 bound 仍停在 228.39887。
+
+    因此当前实现把 conflict route-pack 的提升条件收紧为
+    U(C)<|C|-1，并在 RIM 中用 full route set 计算 route-pack，
+    pair / schedule-capacity / no-good fallback 仍使用 deletion-minimal core。
+    同时增加 restricted_master_route_pack_conflict_max_events 作为每次
+    RIM 回流的安全预算。该修正不改变 exactness，只改变 valid cut 的选择策略。
+
+精确性：
+
+    route-set packing 的有效性完全来自 exact DP 证明的 U(C)。
+    候选 C 来自启发式或整数不可行 witness，只决定试哪个集合；
+    状态超限时不加 cut。
+    因此该修改不会删除任何原问题可行解，也不会改变 node bound 证书条件。
+
+============================================================
+AC. 2026-05-21 成本型 schedule 下界与 subset-row cut
+============================================================
+
+背景：
+
+    route-pack conflict 的实际输出显示，大量 cut 是 routes=3,U=2
+    或 routes=4,U=3，本质接近普通 no-good，cut 数增加但 root bound
+    基本不动。schedule-capacity 诊断也显示大量候选 not_tight。
+
+判断：
+
+    继续增加局部 no-good、route-pack conflict 或 purge 规则，
+    不能真正推进 lower bound。当前 route-vehicle master 缺的是
+    “同一车辆服务某个任务集合时，真实排程成本至少是多少”的成本信息。
+
+本轮修改：
+
+1. 新增 subset-row cut。
+
+       sum_{p,r} floor(|p∩S|/k) lambda[p,r] <= floor(|S|/k)
+
+   这是标准 VRP set-partitioning 强化 cut，候选 S 来自当前 LP
+   支撑 route 的任务集合和小规模 route union，默认 k=2,3。
+
+2. 新增 schedule subset cost lower-bound cut。
+
+       z[i,r] = sum_p a[i,p] lambda[p,r]
+
+       sum_p c[p] lambda[p,r]
+         - L(S) sum_{i in S} z[i,r]
+         + L(S)(|S|-1)y[r] >= 0
+
+   其中 L(S) 是一辆车真实多 sortie schedule 完整服务 S 的变量成本下界。
+   当前用 exact_schedule_subset_cost() 小规模 DP 精确求 L(S)。
+   oracle 超限、未完成或证明 S 单车不可行时不加 cut。
+
+3. pricing reduced cost 同步支持新 cut。
+
+       subset-row route coefficient:
+           floor(|p∩S|/k)
+
+       schedule cost route coefficient:
+           c[p] - L(S)|p∩S|
+
+   因为成本型 cut 的系数包含 c[p]，当这类 cut 的 dual 非零时，
+   第一版 exact pricing 暂停 dominance，避免旧 label score 漏掉负 reduced-cost route。
+
+4. 新增诊断和统计字段。
+
+       subset_row_diagnostics
+       schedule_subset_cost_diagnostics
+       subset_row_cuts_added
+       schedule_subset_cost_cuts_added
+
+精确性：
+
+    subset-row 是整数 set-partitioning 的 valid inequality。
+    schedule subset cost cut 的 L(S) 必须由 exact oracle 证明；
+    候选 S 只决定尝试哪个 cut，不参与证明。
+    若 oracle 不完整则跳过，因此不会把启发式估计写成证书。
+
+2026-05-21 实测更新：
+
+    bench_20_02 中 subset-row 加入 17 条 cut，root bound 从 228.398870
+    抬到约 228.655122，有小幅正收益，应保留默认启用。
+
+    schedule subset cost cut 做了 1620 次 exact oracle 查询，但 violated=0、
+    added=0，没有产生任何有效 cut，且消耗明显时间。因此当前默认关闭
+    schedule_subset_cost_cuts_enabled，只把代码保留为实验项。
+
+后续方向：
+
+    若要重新启用成本型 schedule 下界，必须先重写候选生成，让候选 S
+    来自当前 LP 的真实成本低估结构，而不是盲目枚举高活动任务集合。
+    在此之前，论文级 baseline 不应承担这部分 oracle 开销。
+
+============================================================
+AD. 2026-05-21 关闭 LP schedule-capacity，加入 lm-rank-1 第一版
+============================================================
+
+背景：
+
+    subsetrow_only 运行显示，bench_20_02 的 gap 改善主要来自 primal upper
+    bound，不是 lower bound 质变；bench_20_03 的 dual 基本不动。
+    同时 LP 层 schedule-capacity separator 在 bench_20_02/03 中做了大量
+    oracle 查询但 added=0。
+
+修改：
+
+1. 默认关闭 LP 层 schedule-capacity separator。
+
+       schedule_capacity_separation_enabled: false
+
+   注意：schedule_capacity_cuts_enabled 仍为 true。RIM 回流和整数解校验中的
+   schedule-capacity conflict fallback 继续保留，只是不再每个 LP 节点主动枚举
+   大量 schedule-capacity 候选。
+
+2. 新增 limited-memory rank-1 cut 第一版。
+
+       sum_{p,r} floor((sum_{i in S} m_i a_ip) / d) lambda[p,r]
+           <= floor((sum_{i in S} m_i) / d)
+
+   其中 d 默认取 3 和 4，m_i 是 1 到 d-1 的整数 multiplier。
+   普通 subset-row 是所有 m_i=1 的特例；lm-rank1 允许小 memory 内部分任务
+   使用更高 multiplier，尝试捕捉普通 subset-row 抓不到的 fractional pattern。
+
+3. pricing reduced cost 同步支持 lm-rank1。
+
+       route coefficient = floor((sum_{i in route∩S} m_i) / d)
+
+精确性：
+
+    lm-rank1 是 set-partitioning cover 等式的 rank-1 CG rounding。
+    memory 只限制候选 multiplier pattern，不参与有效性证明。
+    pricing 对 route 系数精确计算，不使用估计。
+
+风险：
+
+    第一版 multiplier pattern 仍是启发式候选生成，可能加到的 cut 数有限。
+    若 bench_20_02/03 lower bound 仍不明显提升，下一步应增强 rank-1 cut
+    separation 或转向更强的 full schedule column / extended master，而不是恢复
+    LP schedule-capacity oracle。
+
+============================================================
+AE. 2026-05-21 全 route-space exact schedule pricing 第一版
+============================================================
+
+背景：
+
+    candidate-pool schedule-pack CG 在 bench_20_02 root 上给出比 route-vehicle
+    master 明显更高的 schedule-pack 诊断值，但它只在有限候选 route 集合内收敛，
+    不能作为全局 lower bound 证书。
+
+修改：
+
+1. `solve_schedule_pack_node_relaxation()` 新增全 route-space pricing 开关：
+
+       schedule_pack_full_pricing_enabled
+       schedule_pack_full_pricing_max_depth
+       schedule_pack_full_pricing_max_states
+
+2. 当候选 route 集合内无负 reduced-cost schedule column 后，若 full pricing
+   开启，则对每辆车运行 integrated full route-space schedule pricing。
+
+3. full pricing 不再先枚举当前分支节点下全部 elementary sortie route，而是在
+   schedule label 扩展时生成下一条可行 sortie route。schedule label 状态包含：
+
+       已覆盖任务集合
+       已用 route 数
+       车辆 ready time
+       当前 reduced component
+
+   若发现负 reduced-cost schedule，则把新 route 和 schedule column 加回
+   vehicle-indexed schedule-pack LP，并重新求解。
+
+4. 日志与 CSV 增加：
+
+       exact_over_full_route_space
+       full_pricing_route_count
+       full_pricing_generated_states
+       full_pricing_time
+       schedule_pack_relaxation_full_exact
+       schedule_pack_relaxation_full_pricing_states
+       schedule_pack_relaxation_full_pricing_time
+
+精确性：
+
+    只有 full route-space pricing 没有超时、没有触发状态上限，并且所有车辆均无
+    负 reduced-cost schedule column 时，才记录 `exact_over_full_route_space=true`。
+    若状态为 `FULL_PRICING_TIME_LIMIT` 或 `exact_over_full_route_space=false`，
+    该 schedule-pack 值仍不能用于剪枝、不能写入正式 dual bound，也不能作为
+    最优性证明。若非完整 full pricing 已经找到负 reduced-cost 的可行 schedule
+    column，可以先把该列回流 RMP；这只是安全加列，不是无遗漏证书。
+
+2026-05-21 集成式 full pricing 诊断：
+
+    bench_20_02 root-only 300s full-pricing 长测中，full-pricing 状态数从约
+    69009402 降到 32819435，route 生成数从约 1945331 降到 1195168；
+    但 schedule_pack_obj 仍为 232.66585，official lower bound 仍为
+    229.306913，说明该改动改善了搜索规模，但尚未得到可剪枝的 exact
+    schedule-pack bound。
+
+当前策略：
+
+    paper 配置默认只在 root 尝试 full pricing：
+
+       schedule_pack_full_pricing_enabled: true
+       schedule_pack_full_pricing_max_depth: 0
+       schedule_pack_full_pricing_max_states: 0
+
+    这保证不把浅层节点时间大量花在全空间枚举上。若 20 节点 root 上 full pricing
+    频繁超时，下一步应实现更强的双向 / ng-route schedule pricing，而不是把不完整
+    schedule-pack 值当作下界。
+
+2026-05-21 补充：batch schedule-column pricing 与系数缓存
+-----------------------------------------------------------
+
+背景：
+
+    bench_20_02 的 schedule-pack 输出显示候选池内仍存在明显负 reduced-cost
+    schedule column，但旧实现每轮只加入 1 列，导致大量时间消耗在反复重解
+    vehicle-indexed schedule-pack LP 和重复计算 cut / branch 系数上。
+
+修改：
+
+1. `solve_schedule_pack_node_relaxation()` 新增：
+
+       schedule_pack_pricing_batch_size
+
+2. candidate-pool pricing 每轮对所有车辆收集负 reduced-cost schedule columns，
+   按 reduced cost 排序后批量回流前 `schedule_pack_pricing_batch_size` 条。
+
+3. 新增 schedule-pack 系数缓存，复用 route task mask、route-cut 系数和
+   route-branch 系数；LP 重建和 pricing 均使用同一个缓存对象。
+
+4. vehicle-indexed schedule-pack LP 改为持久化 RMP。初始化时建一次 `y`、cover、
+   schedule-use、cut、branch row；后续每批新 schedule column 只调用 PySCIPOpt
+   增量接口加入 `z[column,vehicle]` 变量和对应 row 系数，不再每轮重建完整 LP。
+
+5. schedule-pack pricing 只读取 `OPTIMAL` LP 的 dual，并过滤非有限或极大 dual。
+   若持久化 RMP 增量加列后出现 dual 不可用，会先用当前全部 schedule columns
+   重建一次等价 RMP；若 LP 仍因时间限制或数值问题不能提供可靠 dual，则记录
+   `TIME_LIMIT` / `DUAL_UNAVAILABLE`，不再把 SCIP 内部 `1e100` 量级哨兵值写成
+   真实 reduced cost。
+
+6. 当且仅当节点 schedule-pack relaxation 记录 `exact_over_full_route_space=true`
+   时，将该 LP 值作为正式节点下界：
+
+       node.lower_bound = max(route_vehicle_bound, schedule_pack_bound)
+
+   随后可按普通 bound 规则剪枝。若 full pricing 未完整结束，则该值仍只作为诊断
+   和节点排序信号，不进入正式 dual bound。
+
+精确性：
+
+    该修改只改变负 reduced-cost column 的回流批量和系数计算方式，不改变列的数学
+    定义、valid cuts、分支约束或 exact 标志语义。持久化 RMP 保留所有 cut row，
+    即使当前没有非零 route 系数，也会在未来新增 column 时补入系数；当前为空且满足
+    的 cut row dual 按 0 处理。`exact_over_candidate_routes=true` 仍只表示候选 route
+    集合内完整定价没有负 reduced-cost column；完整证明仍依赖 full route-space
+    pricing 的 `exact_over_full_route_space=true`。

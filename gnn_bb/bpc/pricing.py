@@ -44,9 +44,34 @@ class PricingResult:
     negative_routes: int
     dominance_enabled: bool = False
     dominance_pruned: int = 0
+    completion_bound_enabled: bool = False
+    completion_pruned: int = 0
+    ng_relaxation_enabled: bool = False
+    ng_memory_size: int = 0
+    route_enumeration_threshold: float | None = None
+    enumerated_routes: int = 0
+    dssr_pricing_enabled: bool = False
+    dssr_iterations: int = 0
+    dssr_memory_expansions: int = 0
+    dssr_fallback: bool = False
 
 
 Candidate = tuple[float, RouteColumn]
+
+
+@dataclass(order=True)
+class NgLabel:
+    priority: float
+    node: int
+    sequence: tuple[int, ...]
+    memory_mask: int
+    time: float
+    load: float
+    energy: float
+    travel_time: float
+    cost: float
+    service_time: float
+    task_dual_sum: float
 
 
 def _round(value: float, digits: int = 6) -> float:
@@ -264,6 +289,341 @@ def _select_pricing_candidates(
     return _select_by_reduced_cost(candidates, limit)
 
 
+def _ng_neighborhood_masks(
+    data: BPCData,
+    tasks: tuple[int, ...],
+    task_bits: dict[int, int],
+    *,
+    memory_size: int,
+) -> dict[int, int]:
+    """中文注释：构造 ng-memory 掩码。只用于非证书启发式 dominance，不改变 elementary 可行性。"""
+
+    keep = max(1, min(int(memory_size), len(tasks)))
+    masks: dict[int, int] = {}
+    for task in tasks:
+        ordered = sorted(
+            tasks,
+            key=lambda other: (
+                0.0 if int(other) == int(task) else float(data.arc(int(task), int(other))["cost"]),
+                0.0 if int(other) == int(task) else float(data.arc(int(task), int(other))["tau"]),
+                int(other),
+            ),
+        )
+        mask = 0
+        for neighbor in ordered[:keep]:
+            mask |= task_bits[int(neighbor)]
+        masks[int(task)] = mask
+    return masks
+
+
+def _safe_completion_task_suffix_bound(
+    tasks: tuple[int, ...],
+    *,
+    phase: str,
+    service_cost: dict[int, float],
+    task_dual: dict[int, float],
+) -> tuple[float, ...]:
+    """中文注释：计算每个任务的保守剩余贡献下界。
+
+    该下界只使用任务服务成本和任务 dual，忽略所有非负行驶/返仓成本，因此不会高估任何
+    route completion 的最小 reduced cost。调用方只在没有 cut dual、arc-on dual 和
+    vehicle-time dual 时启用它。这里不再预生成 2^n 个 mask 的大表，避免 20+ 任务时出现
+    不必要的内存膨胀。
+    """
+
+    return tuple(
+        min(0.0, (0.0 if phase == "phase1" else float(service_cost[int(task)])) - float(task_dual[int(task)]))
+        for task in tasks
+    )
+
+
+def _remaining_completion_bound(remaining_mask: int, task_suffix_bound: tuple[float, ...]) -> float:
+    """中文注释：按剩余任务 bit-mask 动态求和，保持安全下界且避免 2^n 存储。"""
+
+    value = 0.0
+    mask = int(remaining_mask)
+    while mask:
+        bit = mask & -mask
+        value += task_suffix_bound[bit.bit_length() - 1]
+        mask ^= bit
+    return value
+
+
+def _is_elementary(sequence: tuple[int, ...]) -> bool:
+    return len(sequence) == len(set(sequence))
+
+
+def _ng_repeated_tasks(sequence: tuple[int, ...]) -> set[int]:
+    seen: set[int] = set()
+    repeated: set[int] = set()
+    for task in sequence:
+        task_int = int(task)
+        if task_int in seen:
+            repeated.add(task_int)
+        seen.add(task_int)
+    return repeated
+
+
+def _ng_dssr_pricing_attempt(
+    data: BPCData,
+    routes: list[RouteColumn],
+    duals: RMPDuals,
+    *,
+    phase: str,
+    eps: float,
+    max_routes_to_return: int,
+    selection_mode: str,
+    initial_memory_size: int,
+    max_iterations: int,
+    max_labels: int,
+) -> PricingResult | None:
+    """中文注释：安全的 root-only ng-DSSR pricing 预检。
+
+    该过程只在没有 active cut 和 branching 的调用点使用。ng-route relaxed pricing 的可行域
+    包含所有 elementary route；因此若完整 relaxed pricing 没有负 reduced-cost route，就能
+    作为 elementary pricing 的证书。若找到负 route 且该 route elementary，则作为合法列回流；
+    若最优负 route 非 elementary，则动态扩大对应任务的 ng memory 后重试。超出迭代或 label
+    预算时返回 None，由调用方回退到原完整 elementary pricing。
+    """
+
+    existing_signatures = {route.signature for route in routes}
+    candidate_by_signature: dict[tuple[int, ...], Candidate] = {}
+    best_reduced_cost: float | None = None
+    total_label_pops = 0
+    total_generated_labels = 0
+    memory_expansions = 0
+
+    tasks = tuple(int(task) for task in data.tasks)
+    if not tasks:
+        return PricingResult(
+            routes=[],
+            exhausted=True,
+            best_reduced_cost=None,
+            label_pops=0,
+            generated_labels=0,
+            negative_routes=0,
+            dominance_enabled=True,
+            ng_relaxation_enabled=True,
+            ng_memory_size=0,
+            dssr_pricing_enabled=True,
+        )
+
+    task_bits = {task: 1 << index for index, task in enumerate(tasks)}
+    all_task_mask = (1 << len(tasks)) - 1
+    ready = {task: data.task_value(task, "r") for task in tasks}
+    due = {task: data.task_value(task, "D") for task in tasks}
+    service_time = {task: data.task_value(task, "sigma") for task in tasks}
+    demand = {task: data.task_value(task, "d") for task in tasks}
+    service_energy = {task: data.task_value(task, "g") for task in tasks}
+    service_cost = {task: data.task_value(task, "c_srv") for task in tasks}
+    arc_tau: dict[tuple[int, int], float] = {}
+    arc_energy: dict[tuple[int, int], float] = {}
+    arc_cost: dict[tuple[int, int], float] = {}
+    for left in (0, *tasks):
+        for right in (0, *tasks):
+            if left == right:
+                continue
+            segment = data.arc(left, right)
+            arc_tau[(left, right)] = float(segment["tau"])
+            arc_energy[(left, right)] = float(segment["energy"])
+            arc_cost[(left, right)] = float(segment["cost"])
+
+    ng_masks = _ng_neighborhood_masks(
+        data,
+        tasks,
+        task_bits,
+        memory_size=max(1, int(initial_memory_size)),
+    )
+
+    iterations = 0
+    while iterations < max(1, int(max_iterations)):
+        iterations += 1
+        iteration_candidates: dict[tuple[int, ...], Candidate] = {}
+        iteration_best_path: tuple[float, tuple[int, ...]] | None = None
+        iteration_repeated: set[int] = set()
+        no_negative_complete = True
+
+        for vehicle in data.vehicles:
+            task_dual = {
+                task: float(duals.cover[task]) + float(duals.task_vehicle.get((int(task), int(vehicle)), 0.0))
+                for task in tasks
+            }
+            sortie_dual = float(duals.sortie_count[vehicle])
+            vehicle_time_dual = float(duals.vehicle_time[vehicle])
+            queue: list[NgLabel] = [
+                NgLabel(
+                    0.0,
+                    0,
+                    tuple(),
+                    0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                )
+            ]
+            dominance: dict[tuple[int, int], list[tuple[float, float, float, float]]] = {}
+
+            while queue:
+                if int(max_labels) > 0 and total_label_pops >= int(max_labels):
+                    return None
+                label = heapq.heappop(queue)
+                total_label_pops += 1
+                for task in tasks:
+                    task_bit = task_bits[task]
+                    if label.memory_mask & task_bit:
+                        continue
+                    next_sequence = (*label.sequence, int(task))
+                    segment_tau = arc_tau[(int(label.node), int(task))]
+                    arrival = label.time + segment_tau
+                    start = max(ready[task], arrival)
+                    finish = start + service_time[task]
+                    if finish > due[task] + 1.0e-9:
+                        continue
+                    next_load = label.load + demand[task]
+                    if next_load > data.capacity + 1.0e-9:
+                        continue
+                    next_energy = label.energy + arc_energy[(int(label.node), int(task))] + service_energy[task]
+                    if next_energy > data.energy_limit + 1.0e-9:
+                        continue
+                    return_time = finish + arc_tau[(int(task), 0)]
+                    total_energy = next_energy + arc_energy[(int(task), 0)]
+                    if return_time > data.horizon + 1.0e-9 or total_energy > data.energy_limit + 1.0e-9:
+                        continue
+
+                    next_cost = label.cost + arc_cost[(int(label.node), int(task))] + service_cost[task]
+                    next_travel_time = label.travel_time + segment_tau
+                    next_service_time = label.service_time + service_time[task]
+                    next_task_dual_sum = label.task_dual_sum + task_dual[task]
+                    next_memory_mask = (int(label.memory_mask) & int(ng_masks[int(task)])) | task_bit
+                    next_label = NgLabel(
+                        priority=(0.0 if phase == "phase1" else next_cost) - next_task_dual_sum,
+                        node=int(task),
+                        sequence=next_sequence,
+                        memory_mask=next_memory_mask,
+                        time=finish,
+                        load=next_load,
+                        energy=next_energy,
+                        travel_time=next_travel_time,
+                        cost=next_cost,
+                        service_time=next_service_time,
+                        task_dual_sum=next_task_dual_sum,
+                    )
+                    total_generated_labels += 1
+
+                    route_cost = 0.0 if phase == "phase1" else _round(next_cost + arc_cost[(int(task), 0)])
+                    route_travel_time = _round(next_travel_time + arc_tau[(int(task), 0)])
+                    route_energy = _round(total_energy)
+                    work_time = route_travel_time + next_service_time + route_energy / data.rho
+                    rc = route_cost - next_task_dual_sum - sortie_dual - vehicle_time_dual * work_time
+                    best_reduced_cost = rc if best_reduced_cost is None else min(best_reduced_cost, rc)
+                    if rc < -eps:
+                        no_negative_complete = False
+                        if iteration_best_path is None or rc < iteration_best_path[0]:
+                            iteration_best_path = (rc, next_sequence)
+                        if _is_elementary(next_sequence) and next_sequence not in existing_signatures:
+                            route = evaluate_route(data, next_sequence)
+                            if route is not None:
+                                actual_rc = reduced_cost(data, route, int(vehicle), duals, [], tuple(), phase=phase)
+                                if actual_rc < -eps:
+                                    current = iteration_candidates.get(route.signature)
+                                    if current is None or actual_rc < current[0]:
+                                        iteration_candidates[route.signature] = (actual_rc, route)
+                        else:
+                            iteration_repeated.update(_ng_repeated_tasks(next_sequence))
+
+                    score = _label_prefix_score(
+                        Label(
+                            priority=next_label.priority,
+                            node=next_label.node,
+                            sequence=next_label.sequence,
+                            visited_mask=0,
+                            crossing_counts=tuple(),
+                            arc_on_mask=0,
+                            signature_prefix_mask=0,
+                            time=next_label.time,
+                            load=next_label.load,
+                            energy=next_label.energy,
+                            travel_time=next_label.travel_time,
+                            cost=next_label.cost,
+                            service_time=next_label.service_time,
+                            task_dual_sum=next_label.task_dual_sum,
+                        ),
+                        phase=phase,
+                        vehicle_time_dual=vehicle_time_dual,
+                        rho=data.rho,
+                    )
+                    key = (int(task), int(next_memory_mask))
+                    item = (float(finish), float(next_load), float(next_energy), float(score))
+                    bucket = dominance.get(key, [])
+                    if any(_dominates(existing, item, 1.0e-9) for existing in bucket):
+                        continue
+                    dominance[key] = [
+                        existing for existing in bucket if not _dominates(item, existing, 1.0e-9)
+                    ]
+                    dominance[key].append(item)
+                    heapq.heappush(queue, next_label)
+
+        if iteration_candidates:
+            candidate_by_signature.update(iteration_candidates)
+            candidates = _select_pricing_candidates(
+                data,
+                candidate_by_signature,
+                limit=int(max_routes_to_return),
+                selection_mode=str(selection_mode),
+            )
+            return PricingResult(
+                routes=[route for _rc, route in candidates],
+                exhausted=False,
+                best_reduced_cost=best_reduced_cost,
+                label_pops=total_label_pops,
+                generated_labels=total_generated_labels,
+                negative_routes=len(candidate_by_signature),
+                dominance_enabled=True,
+                ng_relaxation_enabled=True,
+                ng_memory_size=max(1, int(initial_memory_size)),
+                dssr_pricing_enabled=True,
+                dssr_iterations=iterations,
+                dssr_memory_expansions=memory_expansions,
+            )
+
+        if no_negative_complete:
+            return PricingResult(
+                routes=[],
+                exhausted=True,
+                best_reduced_cost=best_reduced_cost,
+                label_pops=total_label_pops,
+                generated_labels=total_generated_labels,
+                negative_routes=0,
+                dominance_enabled=True,
+                ng_relaxation_enabled=True,
+                ng_memory_size=max(1, int(initial_memory_size)),
+                dssr_pricing_enabled=True,
+                dssr_iterations=iterations,
+                dssr_memory_expansions=memory_expansions,
+            )
+
+        if iteration_best_path is not None:
+            iteration_repeated.update(_ng_repeated_tasks(iteration_best_path[1]))
+        if not iteration_repeated:
+            return None
+        changed = False
+        for repeated_task in iteration_repeated:
+            before = int(ng_masks[int(repeated_task)])
+            after = before | all_task_mask
+            if after != before:
+                ng_masks[int(repeated_task)] = after
+                changed = True
+                memory_expansions += 1
+        if not changed:
+            return None
+
+    return None
+
+
 def exact_pricing(
     data: BPCData,
     routes: list[RouteColumn],
@@ -277,13 +637,27 @@ def exact_pricing(
     max_labels: int = 0,
     selection_mode: str = "reduced_cost",
     dominance_enabled: bool = False,
+    completion_bound_enabled: bool = False,
+    ng_relaxation_enabled: bool = False,
+    ng_memory_size: int = 0,
+    exact_dssr_pricing_enabled: bool = False,
+    exact_dssr_initial_memory_size: int = 6,
+    exact_dssr_max_iterations: int = 4,
+    exact_dssr_max_labels: int = 0,
+    route_enumeration_rc_threshold: float | None = None,
+    route_enumeration_max_routes: int = 0,
 ) -> PricingResult:
     existing_signatures = {route.signature for route in routes}
     candidate_by_signature: dict[tuple[int, ...], tuple[float, RouteColumn]] = {}
+    enumeration_by_signature: dict[tuple[int, ...], tuple[float, RouteColumn]] = {}
     best_reduced_cost: float | None = None
     label_pops = 0
     generated_labels = 0
     dominance_pruned = 0
+    completion_pruned = 0
+    completion_bound_used = False
+    negative_signature_count = 0
+    enumerated_signature_count = 0
     dominance_tol = 1.0e-9
     exhausted = True
 
@@ -308,23 +682,63 @@ def exact_pricing(
             arc_energy[(left, right)] = float(segment["energy"])
             arc_cost[(left, right)] = float(segment["cost"])
 
-    cut_specs: list[tuple[str, int | None, frozenset[int], set[tuple[int, ...]], float, int]] = []
+    cut_specs: list[tuple[str, int | None, frozenset[int], set[tuple[int, ...]], float, int, object]] = []
     crossing_specs: list[tuple[frozenset[int], float]] = []
+    cost_cut_dual_active = False
     for cut in cuts:
         dual = float(duals.cuts.get(cut.id, 0.0))
         if dual == 0.0:
             continue
         if cut.kind in SIGNATURE_CUT_KINDS:
-            cut_specs.append((cut.kind, int(cut.vehicle), frozenset(), set(cut.signatures), dual, 0))
+            cut_specs.append((cut.kind, int(cut.vehicle), frozenset(), set(cut.signatures), dual, 0, 0.0))
         elif cut.kind == "crossing_cut":
             subset = frozenset(int(task) for task in cut.tasks)
-            cut_specs.append((cut.kind, None, subset, set(), dual, len(crossing_specs)))
+            cut_specs.append((cut.kind, None, subset, set(), dual, len(crossing_specs), 0.0))
             crossing_specs.append((subset, dual))
         elif cut.kind == "schedule_capacity":
             mask = 0
             for task in cut.tasks:
                 mask |= task_bits.get(int(task), 0)
-            cut_specs.append((cut.kind, int(cut.vehicle), frozenset(int(task) for task in cut.tasks), set(), dual, mask))
+            cut_specs.append((cut.kind, int(cut.vehicle), frozenset(int(task) for task in cut.tasks), set(), dual, mask, 0.0))
+        elif cut.kind == "subset_row":
+            mask = 0
+            for task in cut.tasks:
+                mask |= task_bits.get(int(task), 0)
+            cut_specs.append((cut.kind, None, frozenset(int(task) for task in cut.tasks), set(), dual, mask, float(cut.divisor)))
+        elif cut.kind == "limited_memory_rank1":
+            mask = 0
+            weights = {}
+            for task, multiplier in zip(cut.tasks, cut.multipliers):
+                task_int = int(task)
+                mask |= task_bits.get(task_int, 0)
+                weights[task_int] = int(multiplier)
+            cut_specs.append(
+                (
+                    cut.kind,
+                    None,
+                    frozenset(int(task) for task in cut.tasks),
+                    set(),
+                    dual,
+                    mask,
+                    (int(cut.denominator), weights),
+                )
+            )
+        elif cut.kind == "schedule_subset_cost_lb":
+            mask = 0
+            for task in cut.tasks:
+                mask |= task_bits.get(int(task), 0)
+            cut_specs.append(
+                (
+                    cut.kind,
+                    int(cut.vehicle),
+                    frozenset(int(task) for task in cut.tasks),
+                    set(),
+                    dual,
+                    mask,
+                    float(cut.lower_bound),
+                )
+            )
+            cost_cut_dual_active = True
         else:
             raise ValueError(f"未知 cut kind: {cut.kind}")
 
@@ -333,7 +747,42 @@ def exact_pricing(
         for index, constraint in enumerate(branch_constraints)
         if constraint.kind == "arc_on" and constraint.task_j is not None and float(duals.branches.get(index, 0.0)) != 0.0
     ]
-    active_dominance = bool(dominance_enabled)
+    dssr_safe = (
+        bool(exact_dssr_pricing_enabled)
+        and int(max_labels) == 0
+        and not cut_specs
+        and not branch_constraints
+        and route_enumeration_rc_threshold is None
+    )
+    dssr_fallback_attempted = False
+    if dssr_safe:
+        dssr_result = _ng_dssr_pricing_attempt(
+            data,
+            routes,
+            duals,
+            phase=phase,
+            eps=eps,
+            max_routes_to_return=max_routes_to_return,
+            selection_mode=selection_mode,
+            initial_memory_size=exact_dssr_initial_memory_size,
+            max_iterations=exact_dssr_max_iterations,
+            max_labels=exact_dssr_max_labels,
+        )
+        if dssr_result is not None:
+            return dssr_result
+        dssr_fallback_attempted = True
+    # 中文注释：成本型 schedule cut 的 route 系数含 route.cost。第一版先在其 dual 非零时关闭
+    # dominance，避免用未重写的 label score 错误剪掉潜在负 reduced-cost route。
+    active_dominance = bool(dominance_enabled) and not cost_cut_dual_active
+    ng_active = active_dominance and bool(ng_relaxation_enabled) and int(ng_memory_size) > 0 and int(max_labels) > 0
+    ng_masks = (
+        _ng_neighborhood_masks(data, tasks, task_bits, memory_size=int(ng_memory_size))
+        if ng_active
+        else {}
+    )
+    enumeration_threshold: float | None = None
+    if route_enumeration_rc_threshold is not None and int(route_enumeration_max_routes) != 0:
+        enumeration_threshold = float(route_enumeration_rc_threshold)
 
     for vehicle in data.vehicles:
         (
@@ -352,9 +801,28 @@ def exact_pricing(
         }
         sortie_dual = float(duals.sortie_count[vehicle])
         vehicle_time_dual = float(duals.vehicle_time[vehicle])
+        # 中文注释：completion bound 只有在剩余贡献下界不受 cut/branch/vehicle-time dual 影响时启用；
+        # 这保证剪枝不会删掉真正的负 reduced-cost route。
+        completion_active = (
+            bool(completion_bound_enabled)
+            and not cut_specs
+            and not arc_on_duals
+            and abs(vehicle_time_dual) <= 1.0e-12
+        )
+        suffix_bound = (
+            _safe_completion_task_suffix_bound(
+                tasks,
+                phase=phase,
+                service_cost=service_cost,
+                task_dual=task_dual,
+            )
+            if completion_active
+            else []
+        )
+        completion_bound_used = completion_bound_used or completion_active
         signature_signatures = {
             signature
-            for kind, cut_vehicle, _cut_tasks, cut_signatures, _cut_dual, _cut_mask in cut_specs
+            for kind, cut_vehicle, _cut_tasks, cut_signatures, _cut_dual, _cut_mask, _cut_aux in cut_specs
             if kind in SIGNATURE_CUT_KINDS and int(cut_vehicle or -1) == int(vehicle)
             for signature in cut_signatures
         }
@@ -450,16 +918,25 @@ def exact_pricing(
                 )
                 generated_labels += 1
 
+                if completion_active:
+                    prefix_route_cost = 0.0 if phase == "phase1" else float(next_cost)
+                    prefix_bound = prefix_route_cost - float(next_task_dual_sum) - sortie_dual
+                    remaining_mask = ((1 << len(tasks)) - 1) ^ int(next_visited_mask)
+                    if prefix_bound + _remaining_completion_bound(remaining_mask, suffix_bound) >= -eps:
+                        completion_pruned += 1
+                        continue
+
                 if next_sequence not in existing_signatures and _route_satisfies_together_constraints(
                     next_visited_mask, together_masks
                 ):
-                    route_cost = 0.0 if phase == "phase1" else _round(next_cost + arc_cost[(int(task), 0)])
+                    actual_route_cost = _round(next_cost + arc_cost[(int(task), 0)])
+                    route_cost = 0.0 if phase == "phase1" else actual_route_cost
                     route_travel_time = _round(next_travel_time + arc_tau[(int(task), 0)])
                     route_energy = _round(total_energy)
                     work_time = route_travel_time + next_service_time + route_energy / data.rho
                     rc = route_cost - next_task_dual_sum - sortie_dual - vehicle_time_dual * work_time
 
-                    for kind, cut_vehicle, cut_tasks, cut_signatures, cut_dual, cut_mask in cut_specs:
+                    for kind, cut_vehicle, cut_tasks, cut_signatures, cut_dual, cut_mask, cut_aux in cut_specs:
                         if cut_vehicle is not None and int(cut_vehicle) != int(vehicle):
                             continue
                         if kind in SIGNATURE_CUT_KINDS:
@@ -476,13 +953,33 @@ def exact_pricing(
                             coeff = float((next_visited_mask & int(cut_mask)).bit_count())
                             if coeff:
                                 rc -= cut_dual * coeff
+                        elif kind == "subset_row":
+                            divisor = max(1, int(cut_aux))
+                            coeff = float((next_visited_mask & int(cut_mask)).bit_count() // divisor)
+                            if coeff:
+                                rc -= cut_dual * coeff
+                        elif kind == "limited_memory_rank1":
+                            denominator, weights = cut_aux
+                            route_weight = 0
+                            for weighted_task, multiplier in weights.items():
+                                if next_visited_mask & task_bits.get(int(weighted_task), 0):
+                                    route_weight += int(multiplier)
+                            coeff = float(route_weight // max(1, int(denominator)))
+                            if coeff:
+                                rc -= cut_dual * coeff
+                        elif kind == "schedule_subset_cost_lb":
+                            covered = float((next_visited_mask & int(cut_mask)).bit_count())
+                            coeff = actual_route_cost - float(cut_aux) * covered
+                            if coeff:
+                                rc -= cut_dual * coeff
 
                     for arc_index, (_index, _tail, _head, branch_dual) in enumerate(arc_on_duals):
                         if arc_on_mask & (1 << arc_index):
                             rc -= branch_dual
 
                     best_reduced_cost = rc if best_reduced_cost is None else min(best_reduced_cost, rc)
-                    if rc < -eps:
+                    should_validate = rc < -eps or (enumeration_threshold is not None and rc <= enumeration_threshold)
+                    if should_validate:
                         route = evaluate_route(data, next_sequence)
                         if route is not None and route_allowed_by_branch(route, vehicle, branch_constraints):
                             actual_rc = reduced_cost(data, route, vehicle, duals, cuts, branch_constraints, phase=phase)
@@ -491,9 +988,18 @@ def exact_pricing(
                                 current = candidate_by_signature.get(route.signature)
                                 if current is None or actual_rc < current[0]:
                                     candidate_by_signature[route.signature] = (actual_rc, route)
+                            elif enumeration_threshold is not None and actual_rc <= enumeration_threshold:
+                                current = enumeration_by_signature.get(route.signature)
+                                if current is None or actual_rc < current[0]:
+                                    enumeration_by_signature[route.signature] = (actual_rc, route)
 
                 if active_dominance:
-                    key = (next_visited_mask, int(task), crossing_counts, arc_on_mask, signature_prefix_mask)
+                    dominance_mask = (
+                        int(next_visited_mask) & int(ng_masks.get(int(task), int(next_visited_mask)))
+                        if ng_active
+                        else int(next_visited_mask)
+                    )
+                    key = (dominance_mask, int(task), crossing_counts, arc_on_mask, signature_prefix_mask)
                     score = _label_prefix_score(
                         next_label,
                         phase=phase,
@@ -513,19 +1019,35 @@ def exact_pricing(
         if not exhausted:
             break
 
+    selected_source = candidate_by_signature if candidate_by_signature else enumeration_by_signature
+    selected_limit = int(max_routes_to_return) if candidate_by_signature else int(route_enumeration_max_routes)
     candidates = _select_pricing_candidates(
         data,
-        candidate_by_signature,
-        limit=int(max_routes_to_return),
+        selected_source,
+        limit=selected_limit,
         selection_mode=str(selection_mode),
     )
+    for rc, _route in candidate_by_signature.values():
+        if rc < -eps:
+            negative_signature_count += 1
+    enumerated_signature_count = len(enumeration_by_signature)
+    if ng_active:
+        exhausted = False
     return PricingResult(
         routes=[route for _rc, route in candidates],
         exhausted=exhausted,
         best_reduced_cost=best_reduced_cost,
         label_pops=label_pops,
         generated_labels=generated_labels,
-        negative_routes=len(candidate_by_signature),
+        negative_routes=negative_signature_count,
         dominance_enabled=active_dominance,
         dominance_pruned=dominance_pruned,
+        completion_bound_enabled=completion_bound_used,
+        completion_pruned=completion_pruned,
+        ng_relaxation_enabled=ng_active,
+        ng_memory_size=int(ng_memory_size) if ng_active else 0,
+        route_enumeration_threshold=enumeration_threshold,
+        enumerated_routes=enumerated_signature_count,
+        dssr_pricing_enabled=bool(dssr_safe),
+        dssr_fallback=dssr_fallback_attempted,
     )

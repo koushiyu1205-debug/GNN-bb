@@ -159,7 +159,7 @@ rc_I[p,r] = 0
 
 ## 5. Cuts
 
-当前 clean BPC 包含 schedule pair conflict cuts、schedule clique conflict cuts、route-set schedule packing cuts、schedule no-good cuts、统一 crossing cuts 和 schedule capacity upper-bound cuts。统一 crossing cut 合并了 RCI 与 k-path/resource lower bound，同一个任务子集只保留 RHS 最大的版本。
+当前 clean BPC 包含 schedule pair conflict cuts、schedule clique conflict cuts、route-set schedule packing cuts、schedule no-good cuts、统一 crossing cuts、subset-row cuts、limited-memory rank-1 cuts 和 schedule capacity conflict fallback。代码中保留了 LP 层 schedule capacity separator 和 schedule subset cost lower-bound cuts，但 2026-05-21 `bench_20_02/03` 诊断显示这些 LP oracle separator 没有产生有效 cut，默认关闭。统一 crossing cut 合并了 RCI 与 k-path/resource lower bound，同一个任务子集只保留 RHS 最大的版本。
 
 如果整数解中，某辆车选择的 route 集合 `C` 经过 exact schedule checker 证明无法按任意顺序完成，则对每辆同质车加入：
 
@@ -211,7 +211,7 @@ sum_{p in C} lambda[p,r] <= U(C)y[r]
 
 有效性：`U(C)` 由 exact DP 在真实 route ready time、horizon 和 sortie 数限制下计算。整数解中若 `y[r]=0` 则车辆不能选择 route；若 `y[r]=1` 则同一辆车最多只能从 `C` 中选择 `U(C)` 条 route。因此 `sum lambda <= U(C)y[r]` 不删除任何原问题整数可行解。若 DP 状态数超过上限或无法完成证明，则不加 cut。候选 `C` 的生成可以是启发式，但 cut 的 RHS 必须来自 exact oracle。
 
-若没有 pair witness，当前实现再尝试更结构化的 schedule-capacity conflict cut：从不可排程 route 集合中提取任务集合 `S`，若 exact schedule oracle 证明一辆车最多只能服务其中 `U(S)<|S|` 个任务，则加入：
+RIM 回流和整数解校验只会把不可排程 route set 中严格强于普通 no-good 的情形提升为 route-set packing conflict cut，即要求 `U(C)<|C|-1`。这里的 `C` 优先取原始不可排程整数解中的 full route set；pair、schedule-capacity 和 no-good fallback 再使用 deletion-minimal core。原因是 deletion-minimal core 通常只会给出 `U(C)=|C|-1`，与普通 no-good 同强度。若 route-set 上界不能加强，当前实现继续尝试 schedule-capacity conflict cut：从不可排程 route 集合中提取任务集合 `S`，若 exact schedule oracle 证明一辆车最多只能服务其中 `U(S)<|S|` 个任务，则加入：
 
 ```text
 sum_{i in S} z[i,r] <= U(S) y[r]          for all r
@@ -230,6 +230,39 @@ sum_{i in S} z[i,r] <= U(S) y[r]          for all r
 其中 `U(S)` 是一辆真实车辆在完整多 sortie schedule 中最多能服务 `S` 内多少个任务。当前实现用 exact labeling oracle 计算；若 oracle 超过状态上限或不能证明，则不加 cut。
 
 有效性：若 `y[r]=0`，车辆 `r` 不服务任何任务；若 `y[r]=1`，左侧是一辆车在 `S` 中服务的任务数，按 `U(S)` 定义不超过该上界。因此该 cut 不删除任何原问题整数可行解。
+
+Subset-row cut：
+
+```text
+sum_{p,r} floor(|p∩S| / k) lambda[p,r] <= floor(|S| / k)
+```
+
+其中 `k>=2`。这是标准 VRP set-partitioning 有效不等式。整数解中，任务集合 `S` 内每个任务恰好被一条 route 覆盖，因此所有 route 对 `S` 的覆盖计数按 `floor(count/k)` 聚合后，不可能超过 `floor(|S|/k)`。该 cut 不依赖 schedule oracle，但能加强 route master 的基础 LP 下界。
+
+Limited-memory rank-1 cut：
+
+```text
+sum_{p,r} floor((sum_{i in S} m_i a_ip) / d) lambda[p,r]
+    <= floor((sum_{i in S} m_i) / d)
+```
+
+其中 `d>=3`，`m_i` 是正整数且 `m_i<d`。这是 set-partitioning cover 等式的 rank-1 Chvatal-Gomory cut。当前实现把非均匀 multiplier pattern 限制在小 memory 任务上生成，所以称为 limited-memory 第一版；memory 只限制候选生成，不影响有效性。pricing 中 route 系数精确计算为 `floor(weight(route∩S)/d)`。
+
+Schedule subset cost lower-bound cut 当前是实验项，默认关闭：
+
+```text
+z[i,r] = sum_p a[i,p] lambda[p,r]
+
+sum_p c[p] lambda[p,r]
+  - L(S) sum_{i in S} z[i,r]
+  + L(S)(|S|-1)y[r] >= 0
+```
+
+其中 `L(S)` 是一辆车真实多 sortie schedule 完整服务任务集 `S` 的变量成本下界。当前实现用 `exact_schedule_subset_cost()` 在小规模 `S` 上精确求最小成本；若 oracle 状态超限、未完成或证明 `S` 单车不可行，则不加该成本 cut。
+
+有效性：整数解中若 `y[r]=0`，车辆 `r` 没有 route，左侧为 0；若 `y[r]=1` 且车辆没有完整服务 `S`，则 `sum_{i in S}z[i,r] <= |S|-1`，在 route 成本非负时左侧非负；若车辆完整服务 `S`，则该车辆所有 route 构成一个真实 schedule，其变量成本至少为 `L(S)`，左侧仍非负。因此该 cut 不删除任何原问题可行整数解。
+
+pricing 处理：`subset_row` 的 route 系数是 `floor(|p∩S|/k)`；`limited_memory_rank1` 的 route 系数是 `floor((sum_i m_i a_ip)/d)`；若实验性 `schedule_subset_cost_lb` 打开，其 route 系数是 `c[p]-L(S)|p∩S|`。这些系数都进入 true-dual reduced cost。由于成本型 cut 系数包含 `c[p]`，当其 dual 非零时，第一版 exact pricing 暂停 dominance，以免旧 label score 剪掉潜在负 reduced-cost route。
 
 ## 6. Branching
 

@@ -47,16 +47,46 @@ class BPCResult:
     restricted_master_integer_rejected: int
     restricted_master_integer_no_good_cuts: int
     restricted_master_integer_pair_conflict_cuts: int
+    restricted_master_integer_route_set_packing_cuts: int
     restricted_master_integer_schedule_capacity_cuts: int
     crossing_cuts_added: int
     crossing_cuts_upgraded: int
+    subset_row_cuts_added: int
+    lm_rank1_cuts_added: int
     robust_capacity_cuts_added: int
     resource_lower_bound_cuts_added: int
+    schedule_subset_cost_cuts_added: int
     schedule_pair_conflict_cuts_added: int
     schedule_clique_conflict_cuts_added: int
     schedule_route_set_packing_cuts_added: int
     schedule_nogood_cuts_added: int
     schedule_capacity_cuts_added: int
+    schedule_pack_diagnostic_status: str | None
+    schedule_pack_diagnostic_objective: float | None
+    schedule_pack_diagnostic_gap_vs_root: float | None
+    schedule_pack_diagnostic_columns: int
+    schedule_pack_diagnostic_candidate_routes: int
+    schedule_pack_diagnostic_generated_states: int
+    schedule_pack_diagnostic_time: float
+    schedule_pack_relaxation_calls: int
+    schedule_pack_relaxation_time: float
+    schedule_pack_relaxation_root_objective: float | None
+    schedule_pack_relaxation_best_objective: float | None
+    schedule_pack_relaxation_best_gap_vs_node: float | None
+    schedule_pack_relaxation_candidate_exact: int
+    schedule_pack_relaxation_full_exact: int
+    schedule_pack_relaxation_full_pricing_states: int
+    schedule_pack_relaxation_full_pricing_time: float
+    schedule_pack_relaxation_columns: int
+    schedule_pack_adaptive_decisions: int
+    schedule_pack_adaptive_runs: int
+    schedule_pack_adaptive_skips: int
+    schedule_pack_adaptive_easy_skips: int
+    schedule_pack_adaptive_bound_skips: int
+    route_enumeration_adaptive_decisions: int
+    route_enumeration_adaptive_runs: int
+    route_enumeration_adaptive_skips: int
+    route_enumeration_adaptive_easy_skips: int
     cuts_purged: int
     generated_routes: int
     generated_columns: int
@@ -106,6 +136,16 @@ def solve_bpc_clean(
     branch_node_heuristic_boost_routes_per_round: int = 1000,
     branch_node_heuristic_boost_min_depth: int = 1,
     exact_pricing_dominance_enabled: bool = False,
+    pricing_completion_bound_enabled: bool = False,
+    ng_dssr_pricing_enabled: bool = False,
+    ng_dssr_memory_size: int = 6,
+    exact_dssr_pricing_enabled: bool = False,
+    exact_dssr_initial_memory_size: int = 6,
+    exact_dssr_max_iterations: int = 4,
+    exact_dssr_max_labels: int = 0,
+    route_enumeration_enabled: bool = False,
+    route_enumeration_rc_threshold: float = 0.0,
+    route_enumeration_max_routes: int = 0,
     restricted_master_heuristic_enabled: bool = False,
     restricted_master_time_limit: float = 20.0,
     restricted_master_max_routes: int = 4000,
@@ -113,6 +153,7 @@ def solve_bpc_clean(
     restricted_master_max_depth: int = 3,
     restricted_master_schedule_aware: bool = True,
     restricted_master_max_no_good_rounds: int = 20,
+    restricted_master_route_pack_conflict_max_events: int = 2,
     branching_strategy: str = "3pb",
     three_pb_pseudocost_candidates: int = 6,
     three_pb_fractional_candidates: int = 6,
@@ -133,7 +174,39 @@ def solve_bpc_clean(
     resource_cut_max_per_round: int = 20,
     resource_cut_min_violation: float = 1.0e-5,
     resource_cut_max_rounds_per_node: int = 3,
+    subset_row_cuts_enabled: bool = True,
+    subset_row_cut_max_depth: int = 0,
+    subset_row_cut_max_subset_size: int = 8,
+    subset_row_cut_max_per_round: int = 20,
+    subset_row_cut_min_violation: float = 1.0e-5,
+    subset_row_cut_max_rounds_per_node: int = 3,
+    subset_row_candidate_top_routes: int = 80,
+    subset_row_candidate_max_sets: int = 500,
+    subset_row_k_values: tuple[int, ...] | list[int] = (2, 3),
+    lm_rank1_cuts_enabled: bool = True,
+    lm_rank1_cut_max_depth: int = 0,
+    lm_rank1_cut_max_subset_size: int = 8,
+    lm_rank1_cut_max_per_round: int = 20,
+    lm_rank1_cut_min_violation: float = 1.0e-5,
+    lm_rank1_cut_max_rounds_per_node: int = 3,
+    lm_rank1_candidate_top_routes: int = 100,
+    lm_rank1_candidate_max_sets: int = 700,
+    lm_rank1_denominators: tuple[int, ...] | list[int] = (3, 4),
+    lm_rank1_memory_size: int = 4,
+    lm_rank1_max_patterns_per_set: int = 12,
+    schedule_subset_cost_cuts_enabled: bool = False,
+    schedule_subset_cost_cut_max_depth: int = 0,
+    schedule_subset_cost_cut_max_subset_size: int = 8,
+    schedule_subset_cost_cut_max_per_round: int = 10,
+    schedule_subset_cost_cut_min_violation: float = 1.0e-4,
+    schedule_subset_cost_cut_max_rounds_per_node: int = 2,
+    schedule_subset_cost_oracle_max_states: int = 200000,
+    schedule_subset_cost_candidate_top_tasks: int = 12,
+    schedule_subset_cost_candidate_max_combinations: int = 200,
+    schedule_subset_cost_route_union_top_routes: int = 10,
+    schedule_subset_cost_route_union_max_routes: int = 4,
     schedule_capacity_cuts_enabled: bool = True,
+    schedule_capacity_separation_enabled: bool = False,
     schedule_capacity_cut_max_depth: int = 0,
     schedule_capacity_cut_max_subset_size: int = 10,
     schedule_capacity_cut_max_per_round: int = 20,
@@ -160,6 +233,27 @@ def solve_bpc_clean(
     route_set_schedule_packing_cut_max_per_round: int = 5,
     route_set_schedule_packing_cut_min_violation: float = 5.0e-2,
     route_set_schedule_packing_oracle_max_states: int = 200000,
+    schedule_pack_diagnostic_enabled: bool = False,
+    schedule_pack_diagnostic_max_candidate_routes: int = 180,
+    schedule_pack_diagnostic_max_columns: int = 8000,
+    schedule_pack_diagnostic_beam_width: int = 800,
+    schedule_pack_diagnostic_max_sorties: int = 0,
+    schedule_pack_diagnostic_time_limit: float = 60.0,
+    schedule_pack_pricing_batch_size: int = 32,
+    schedule_pack_relaxation_enabled: bool = False,
+    schedule_pack_relaxation_max_depth: int = 2,
+    schedule_pack_relaxation_time_limit: float = 30.0,
+    schedule_pack_relaxation_use_for_priority: bool = True,
+    schedule_pack_full_pricing_enabled: bool = False,
+    schedule_pack_full_pricing_max_depth: int = 0,
+    schedule_pack_full_pricing_max_states: int = 0,
+    schedule_pack_adaptive_enabled: bool = False,
+    schedule_pack_adaptive_gap_abs: float = 10.0,
+    schedule_pack_adaptive_gap_ratio: float = 3.0e-2,
+    schedule_pack_adaptive_skip_if_fathomable: bool = True,
+    route_enumeration_adaptive_enabled: bool = False,
+    route_enumeration_adaptive_gap_abs: float = 10.0,
+    route_enumeration_adaptive_gap_ratio: float = 3.0e-2,
     cut_purge_age: int = 20,
     cut_purge_slack: float = 1.0e-5,
     cut_purge_dual: float = 1.0e-8,
@@ -191,6 +285,16 @@ def solve_bpc_clean(
             branch_node_heuristic_boost_routes_per_round=branch_node_heuristic_boost_routes_per_round,
             branch_node_heuristic_boost_min_depth=branch_node_heuristic_boost_min_depth,
             exact_pricing_dominance_enabled=exact_pricing_dominance_enabled,
+            pricing_completion_bound_enabled=pricing_completion_bound_enabled,
+            ng_dssr_pricing_enabled=ng_dssr_pricing_enabled,
+            ng_dssr_memory_size=ng_dssr_memory_size,
+            exact_dssr_pricing_enabled=exact_dssr_pricing_enabled,
+            exact_dssr_initial_memory_size=exact_dssr_initial_memory_size,
+            exact_dssr_max_iterations=exact_dssr_max_iterations,
+            exact_dssr_max_labels=exact_dssr_max_labels,
+            route_enumeration_enabled=route_enumeration_enabled,
+            route_enumeration_rc_threshold=route_enumeration_rc_threshold,
+            route_enumeration_max_routes=route_enumeration_max_routes,
             restricted_master_heuristic_enabled=restricted_master_heuristic_enabled,
             restricted_master_time_limit=restricted_master_time_limit,
             restricted_master_max_routes=restricted_master_max_routes,
@@ -198,6 +302,7 @@ def solve_bpc_clean(
             restricted_master_max_depth=restricted_master_max_depth,
             restricted_master_schedule_aware=restricted_master_schedule_aware,
             restricted_master_max_no_good_rounds=restricted_master_max_no_good_rounds,
+            restricted_master_route_pack_conflict_max_events=restricted_master_route_pack_conflict_max_events,
             branching_strategy=branching_strategy,
             three_pb_pseudocost_candidates=three_pb_pseudocost_candidates,
             three_pb_fractional_candidates=three_pb_fractional_candidates,
@@ -218,7 +323,39 @@ def solve_bpc_clean(
             resource_cut_max_per_round=resource_cut_max_per_round,
             resource_cut_min_violation=resource_cut_min_violation,
             resource_cut_max_rounds_per_node=resource_cut_max_rounds_per_node,
+            subset_row_cuts_enabled=subset_row_cuts_enabled,
+            subset_row_cut_max_depth=subset_row_cut_max_depth,
+            subset_row_cut_max_subset_size=subset_row_cut_max_subset_size,
+            subset_row_cut_max_per_round=subset_row_cut_max_per_round,
+            subset_row_cut_min_violation=subset_row_cut_min_violation,
+            subset_row_cut_max_rounds_per_node=subset_row_cut_max_rounds_per_node,
+            subset_row_candidate_top_routes=subset_row_candidate_top_routes,
+            subset_row_candidate_max_sets=subset_row_candidate_max_sets,
+            subset_row_k_values=subset_row_k_values,
+            lm_rank1_cuts_enabled=lm_rank1_cuts_enabled,
+            lm_rank1_cut_max_depth=lm_rank1_cut_max_depth,
+            lm_rank1_cut_max_subset_size=lm_rank1_cut_max_subset_size,
+            lm_rank1_cut_max_per_round=lm_rank1_cut_max_per_round,
+            lm_rank1_cut_min_violation=lm_rank1_cut_min_violation,
+            lm_rank1_cut_max_rounds_per_node=lm_rank1_cut_max_rounds_per_node,
+            lm_rank1_candidate_top_routes=lm_rank1_candidate_top_routes,
+            lm_rank1_candidate_max_sets=lm_rank1_candidate_max_sets,
+            lm_rank1_denominators=lm_rank1_denominators,
+            lm_rank1_memory_size=lm_rank1_memory_size,
+            lm_rank1_max_patterns_per_set=lm_rank1_max_patterns_per_set,
+            schedule_subset_cost_cuts_enabled=schedule_subset_cost_cuts_enabled,
+            schedule_subset_cost_cut_max_depth=schedule_subset_cost_cut_max_depth,
+            schedule_subset_cost_cut_max_subset_size=schedule_subset_cost_cut_max_subset_size,
+            schedule_subset_cost_cut_max_per_round=schedule_subset_cost_cut_max_per_round,
+            schedule_subset_cost_cut_min_violation=schedule_subset_cost_cut_min_violation,
+            schedule_subset_cost_cut_max_rounds_per_node=schedule_subset_cost_cut_max_rounds_per_node,
+            schedule_subset_cost_oracle_max_states=schedule_subset_cost_oracle_max_states,
+            schedule_subset_cost_candidate_top_tasks=schedule_subset_cost_candidate_top_tasks,
+            schedule_subset_cost_candidate_max_combinations=schedule_subset_cost_candidate_max_combinations,
+            schedule_subset_cost_route_union_top_routes=schedule_subset_cost_route_union_top_routes,
+            schedule_subset_cost_route_union_max_routes=schedule_subset_cost_route_union_max_routes,
             schedule_capacity_cuts_enabled=schedule_capacity_cuts_enabled,
+            schedule_capacity_separation_enabled=schedule_capacity_separation_enabled,
             schedule_capacity_cut_max_depth=schedule_capacity_cut_max_depth,
             schedule_capacity_cut_max_subset_size=schedule_capacity_cut_max_subset_size,
             schedule_capacity_cut_max_per_round=schedule_capacity_cut_max_per_round,
@@ -245,6 +382,27 @@ def solve_bpc_clean(
             route_set_schedule_packing_cut_max_per_round=route_set_schedule_packing_cut_max_per_round,
             route_set_schedule_packing_cut_min_violation=route_set_schedule_packing_cut_min_violation,
             route_set_schedule_packing_oracle_max_states=route_set_schedule_packing_oracle_max_states,
+            schedule_pack_diagnostic_enabled=schedule_pack_diagnostic_enabled,
+            schedule_pack_diagnostic_max_candidate_routes=schedule_pack_diagnostic_max_candidate_routes,
+            schedule_pack_diagnostic_max_columns=schedule_pack_diagnostic_max_columns,
+            schedule_pack_diagnostic_beam_width=schedule_pack_diagnostic_beam_width,
+            schedule_pack_diagnostic_max_sorties=schedule_pack_diagnostic_max_sorties,
+            schedule_pack_diagnostic_time_limit=schedule_pack_diagnostic_time_limit,
+            schedule_pack_pricing_batch_size=schedule_pack_pricing_batch_size,
+            schedule_pack_relaxation_enabled=schedule_pack_relaxation_enabled,
+            schedule_pack_relaxation_max_depth=schedule_pack_relaxation_max_depth,
+            schedule_pack_relaxation_time_limit=schedule_pack_relaxation_time_limit,
+            schedule_pack_relaxation_use_for_priority=schedule_pack_relaxation_use_for_priority,
+            schedule_pack_full_pricing_enabled=schedule_pack_full_pricing_enabled,
+            schedule_pack_full_pricing_max_depth=schedule_pack_full_pricing_max_depth,
+            schedule_pack_full_pricing_max_states=schedule_pack_full_pricing_max_states,
+            schedule_pack_adaptive_enabled=schedule_pack_adaptive_enabled,
+            schedule_pack_adaptive_gap_abs=schedule_pack_adaptive_gap_abs,
+            schedule_pack_adaptive_gap_ratio=schedule_pack_adaptive_gap_ratio,
+            schedule_pack_adaptive_skip_if_fathomable=schedule_pack_adaptive_skip_if_fathomable,
+            route_enumeration_adaptive_enabled=route_enumeration_adaptive_enabled,
+            route_enumeration_adaptive_gap_abs=route_enumeration_adaptive_gap_abs,
+            route_enumeration_adaptive_gap_ratio=route_enumeration_adaptive_gap_ratio,
             cut_purge_age=cut_purge_age,
             cut_purge_slack=cut_purge_slack,
             cut_purge_dual=cut_purge_dual,
@@ -292,16 +450,46 @@ def solve_bpc_clean(
         restricted_master_integer_rejected=tree_result.stats.restricted_master_integer_rejected,
         restricted_master_integer_no_good_cuts=tree_result.stats.restricted_master_integer_no_good_cuts,
         restricted_master_integer_pair_conflict_cuts=tree_result.stats.restricted_master_integer_pair_conflict_cuts,
+        restricted_master_integer_route_set_packing_cuts=tree_result.stats.restricted_master_integer_route_set_packing_cuts,
         restricted_master_integer_schedule_capacity_cuts=tree_result.stats.restricted_master_integer_schedule_capacity_cuts,
         crossing_cuts_added=tree_result.stats.crossing_cuts_added,
         crossing_cuts_upgraded=tree_result.stats.crossing_cuts_upgraded,
+        subset_row_cuts_added=tree_result.stats.subset_row_cuts_added,
+        lm_rank1_cuts_added=tree_result.stats.lm_rank1_cuts_added,
         robust_capacity_cuts_added=tree_result.stats.robust_capacity_cuts_added,
         resource_lower_bound_cuts_added=tree_result.stats.resource_lower_bound_cuts_added,
+        schedule_subset_cost_cuts_added=tree_result.stats.schedule_subset_cost_cuts_added,
         schedule_pair_conflict_cuts_added=tree_result.stats.schedule_pair_conflict_cuts_added,
         schedule_clique_conflict_cuts_added=tree_result.stats.schedule_clique_conflict_cuts_added,
         schedule_route_set_packing_cuts_added=tree_result.stats.schedule_route_set_packing_cuts_added,
         schedule_nogood_cuts_added=tree_result.stats.schedule_nogood_cuts_added,
         schedule_capacity_cuts_added=tree_result.stats.schedule_capacity_cuts_added,
+        schedule_pack_diagnostic_status=tree_result.stats.schedule_pack_diagnostic_status,
+        schedule_pack_diagnostic_objective=_round(tree_result.stats.schedule_pack_diagnostic_objective),
+        schedule_pack_diagnostic_gap_vs_root=_round(tree_result.stats.schedule_pack_diagnostic_gap_vs_root),
+        schedule_pack_diagnostic_columns=tree_result.stats.schedule_pack_diagnostic_columns,
+        schedule_pack_diagnostic_candidate_routes=tree_result.stats.schedule_pack_diagnostic_candidate_routes,
+        schedule_pack_diagnostic_generated_states=tree_result.stats.schedule_pack_diagnostic_generated_states,
+        schedule_pack_diagnostic_time=_round(tree_result.stats.schedule_pack_diagnostic_time),
+        schedule_pack_relaxation_calls=tree_result.stats.schedule_pack_relaxation_calls,
+        schedule_pack_relaxation_time=_round(tree_result.stats.schedule_pack_relaxation_time),
+        schedule_pack_relaxation_root_objective=_round(tree_result.stats.schedule_pack_relaxation_root_objective),
+        schedule_pack_relaxation_best_objective=_round(tree_result.stats.schedule_pack_relaxation_best_objective),
+        schedule_pack_relaxation_best_gap_vs_node=_round(tree_result.stats.schedule_pack_relaxation_best_gap_vs_node),
+        schedule_pack_relaxation_candidate_exact=tree_result.stats.schedule_pack_relaxation_candidate_exact,
+        schedule_pack_relaxation_full_exact=tree_result.stats.schedule_pack_relaxation_full_exact,
+        schedule_pack_relaxation_full_pricing_states=tree_result.stats.schedule_pack_relaxation_full_pricing_states,
+        schedule_pack_relaxation_full_pricing_time=_round(tree_result.stats.schedule_pack_relaxation_full_pricing_time),
+        schedule_pack_relaxation_columns=tree_result.stats.schedule_pack_relaxation_columns,
+        schedule_pack_adaptive_decisions=tree_result.stats.schedule_pack_adaptive_decisions,
+        schedule_pack_adaptive_runs=tree_result.stats.schedule_pack_adaptive_runs,
+        schedule_pack_adaptive_skips=tree_result.stats.schedule_pack_adaptive_skips,
+        schedule_pack_adaptive_easy_skips=tree_result.stats.schedule_pack_adaptive_easy_skips,
+        schedule_pack_adaptive_bound_skips=tree_result.stats.schedule_pack_adaptive_bound_skips,
+        route_enumeration_adaptive_decisions=tree_result.stats.route_enumeration_adaptive_decisions,
+        route_enumeration_adaptive_runs=tree_result.stats.route_enumeration_adaptive_runs,
+        route_enumeration_adaptive_skips=tree_result.stats.route_enumeration_adaptive_skips,
+        route_enumeration_adaptive_easy_skips=tree_result.stats.route_enumeration_adaptive_easy_skips,
         cuts_purged=tree_result.stats.cuts_purged,
         generated_routes=len(tree_result.routes),
         generated_columns=generated_columns,
@@ -339,7 +527,11 @@ def solve_bpc_clean(
                     "resource_bound": getattr(cut, "resource_bound", None),
                     "demand": getattr(cut, "demand", None),
                     "capacity": getattr(cut, "capacity", None),
-                    "upper_bound": getattr(cut, "upper_bound", None),
+                    "lower_bound": getattr(cut, "lower_bound", None),
+                    "divisor": getattr(cut, "divisor", None),
+                    "denominator": getattr(cut, "denominator", None),
+                    "multipliers": list(getattr(cut, "multipliers", ())),
+                    "memory_tasks": list(getattr(cut, "memory_tasks", ())),
                     "oracle_states": getattr(cut, "oracle_states", None),
                     "source": getattr(cut, "source", None),
                 }

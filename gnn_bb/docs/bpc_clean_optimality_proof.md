@@ -363,7 +363,7 @@ y[r]=1: RMP 固定 y[r] 下界为 1
 5. objective 按原问题成本计算。
 ```
 
-Primal heuristic 也必须经过同样 schedule feasibility 检查后才允许更新 incumbent。当前 `restricted_integer_master` 是受限列池上的 binary MIP heuristic：它可以在临时 MIP 中先加入双向不可排程的 route-pair cut，再尝试 schedule-capacity cut，最后才退回排程 no-good 来继续寻找更好的候选。这些临时约束不提供节点 lower bound，也不替代主树中的 exact pricing 或正式 schedule cut separation。RIM 发现的强 witness cut 若回流到主树，则作为正式 valid schedule cut 使用；弱 no-good 只有在当前 LP 解违反时才提升为正式 cut。新增正式 cut 后，当前节点必须重新求解，不能继续使用旧 LP 解做分支或剪枝。
+Primal heuristic 也必须经过同样 schedule feasibility 检查后才允许更新 incumbent。当前 `restricted_integer_master` 是受限列池上的 binary MIP heuristic：它可以在临时 MIP 中先加入双向不可排程的 route-pair cut，再尝试由 exact route-set schedule DP 证明的 route-set packing cut，然后尝试 schedule-capacity cut，最后才退回排程 no-good 来继续寻找更好的候选。这些临时约束不提供节点 lower bound，也不替代主树中的 exact pricing 或正式 schedule cut separation。RIM 发现的强 witness cut 若回流到主树，则作为正式 valid schedule cut 使用；弱 no-good 只有在当前 LP 解违反时才提升为正式 cut。新增正式 cut 后，当前节点必须重新求解，不能继续使用旧 LP 解做分支或剪枝。
 
 ### 引理 8：任意被接受的 incumbent 都是原问题可行解
 
@@ -459,13 +459,15 @@ pricing incomplete => 不声明节点完成，不使用该节点 bound 证明最
 
 ```text
 1. exact_pricing 必须枚举所有满足 branch/cut 逻辑的资源可行 route，或有严格证明的 dominance。
-2. reduced_cost 必须包含 cover、sortie_count、vehicle_time、schedule cut、branching dual。
+2. reduced_cost 必须包含 cover、sortie_count、vehicle_time、schedule cut、subset-row cut、limited-memory rank-1 cut、已启用的成本型 schedule 下界 cut 和 branching dual。
 3. schedule checker 必须是 exact checker，不能用启发式近似判断不可排程。
 4. no-good cut 只能基于已证明不可排程的 route 集合生成。
 5. branching 左右子节点必须同时创建，不能被 ML 或 heuristic 删除。
 6. incumbent 必须通过原问题可行性检查。
 7. 若使用 heuristic pricing、selective pricing、ML ranking、time budget，必须保留 exact fallback；否则不能证明无负 reduced-cost column。
 ```
+
+补充：`subset_row` 是标准 set-partitioning 有效不等式，当前默认启用；`limited_memory_rank1` 是 cover 等式的 rank-1 CG cut，当前默认启用；`schedule_subset_cost_lb` 当前默认关闭，只作为实验项保留。若打开它，`L(S)` 必须来自 exact 单车 schedule cost oracle；若 oracle 超限或未完成，当前实现不加该 cut。由于成本型 cut 的 route 系数包含 `route.cost`，当其 dual 非零时，pricing 第一版关闭 dominance，以保证不会用旧 dominance score 错误剪掉负 reduced-cost route。
 
 ## 13. 当前框架与 vehicle-schedule BPC 的关系
 

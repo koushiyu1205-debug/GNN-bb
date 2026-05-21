@@ -1,0 +1,134 @@
+M bpc/README.md
+ M bpc/__pycache__/cuts.cpython-312.pyc
+ M bpc/__pycache__/cuts.cpython-313.pyc
+ M bpc/__pycache__/logger.cpython-312.pyc
+ M bpc/__pycache__/logger.cpython-313.pyc
+ M bpc/__pycache__/node.cpython-312.pyc
+ M bpc/__pycache__/node.cpython-313.pyc
+ M bpc/__pycache__/pricing.cpython-312.pyc
+ M bpc/__pycache__/pricing.cpython-313.pyc
+ M bpc/__pycache__/rmp.cpython-312.pyc
+ M bpc/__pycache__/rmp.cpython-313.pyc
+ M bpc/__pycache__/schedule_capacity.cpython-313.pyc
+ M bpc/__pycache__/solver.cpython-312.pyc
+ M bpc/__pycache__/solver.cpython-313.pyc
+ M bpc/__pycache__/tree.cpython-312.pyc
+ M bpc/__pycache__/tree.cpython-313.pyc
+ M bpc/__pycache__/validation.cpython-313.pyc
+ M bpc/cuts.py
+ M bpc/logger.py
+ M bpc/node.py
+ M bpc/pricing.py
+ M bpc/rmp.py
+ M bpc/solver.py
+ M bpc/tree.py
+ M branchpricecut/__pycache__/solver.cpython-312.pyc
+ M branchpricecut/config/paper_bpc_clean_baseline.json
+ M branchpricecut/docs/paper_grade_bpc_clean_baseline.md
+ M branchpricecut/docs/revise_plan.md
+ M branchpricecut/scripts/__pycache__/run_benchmark.cpython-312.pyc
+ M branchpricecut/scripts/run_benchmark.py
+ M branchpricecut/solver.py
+ M configs/bpc_clean.yaml
+ M docs/bpc_clean_equivalence_proof.md
+ M docs/bpc_clean_formulation.md
+ M docs/bpc_clean_optimality_proof.md
+ M docs/bpc_current_complete_model.md
+ M scripts/__pycache__/run_bpc_ablation.cpython-312.pyc
+ M scripts/__pycache__/run_bpc_clean.cpython-312.pyc
+ M scripts/__pycache__/run_bpc_clean.cpython-313.pyc
+ M scripts/run_bpc_ablation.py
+ M scripts/run_bpc_clean.py
+ M src/gnn_bb/baseline/__pycache__/config.cpython-312.pyc
+ M src/gnn_bb/baseline/config.py
+ M tests/__pycache__/test_bpc_clean.cpython-312.pyc
+ M tests/__pycache__/test_bpc_clean.cpython-313.pyc
+ M tests/test_bpc_clean.py
+?? bpc/__pycache__/schedule_cost.cpython-312.pyc
+?? bpc/__pycache__/schedule_cost.cpython-313.pyc
+?? bpc/__pycache__/schedule_pack.cpython-312.pyc
+?? bpc/__pycache__/schedule_pack.cpython-313.pyc
+?? bpc/schedule_cost.py
+?? bpc/schedule_pack.py
+?? branchpricecut/results/20260521_100641_bpc_clean_routepack_conflict_20_02_03/
+?? branchpricecut/results/20260521_100657_bpc_clean_routepack_conflict_20_02_03/
+?? branchpricecut/results/20260521_100756_bpc_clean_routepack_conflict_20_02_03/
+?? branchpricecut/results/20260521_112737_bpc_clean_subsetrow_only_20_02_03.csv
+?? branchpricecut/results/20260521_143906_bpc_clean_lmrank1_20_01_03.csv
+?? branchpricecut/results/20260521_175010_bpc_clean_schedpack_cg_bench_20_02.csv
+?? branchpricecut/results/20260521_201350_bpc_clean_persistent_schedpack_bench_20_02_config.json
+?? branchpricecut/results/20260521_205831_rootonly_schedpack_300s_bench_20_02_config.json
+?? branchpricecut/results/20260521_205845_rootonly_schedpack_300s_bench_20_02.csv
+?? branchpricecut/results/20260521_205845_rootonly_schedpack_300s_bench_20_02_config.json
+?? branchpricecut/results/20260521_bpc_clean_pricing_accel_bench20_01_06_config.yaml
+?? branchpricecut/results/20260521_fullprice_addneg_rootonly_bench_20_02.csv
+?? branchpricecut/results/20260521_integrated_fullpricing_rootonly_bench_20_02.csv
+?? branchpricecut/results/benchmark/20260521_223750_bpc_clean_latest_20_01_06/
+?? branchpricecut/results/logs/20260521_111240_bpc_clean_subsetrow_schedcost_20_02_03/
+?? branchpricecut/results/logs/20260521_112737_bpc_clean_subsetrow_only_20_02_03/
+?? branchpricecut/results/logs/20260521_143906_bpc_clean_lmrank1_20_01_03/
+?? branchpricecut/results/logs/20260521_170616_bpc_clean_schedpack_diag_20_02_03/
+?? branchpricecut/results/logs/20260521_175010_bpc_clean_schedpack_cg_bench_20_02/
+?? branchpricecut/results/logs/20260521_191805_bpc_clean_fullpricing_bench_20_02/
+?? branchpricecut/results/logs/20260521_193527_bpc_clean_fullpricing_fix_bench_20_02/
+?? branchpricecut/results/logs/20260521_201350_bpc_clean_persistent_schedpack_bench_20_02/
+?? branchpricecut/results/logs/20260521_204508_bpc_clean_schedpack_exactbound_bench_20_02/
+?? branchpricecut/results/logs/20260521_205845_rootonly_schedpack_300s_bench_20_02/
+?? branchpricecut/results/logs/20260521_bpc_clean_pricing_accel_bench20_01_06/
+?? branchpricecut/results/logs/20260521_fullprice_addneg_rootonly_bench_20_02/
+?? branchpricecut/results/logs/20260521_integrated_fullpricing_rootonly_bench_20_02/
+?? branchpricecut/results/solutions/20260521_112737_bpc_clean_subsetrow_only_20_02_03/
+?? branchpricecut/results/solutions/20260521_143906_bpc_clean_lmrank1_20_01_03/
+?? branchpricecut/results/solutions/20260521_175010_bpc_clean_schedpack_cg_bench_20_02/
+?? branchpricecut/results/solutions/20260521_205845_rootonly_schedpack_300s_bench_20_02/
+?? branchpricecut/results/solutions/20260521_bpc_clean_pricing_accel_bench20_01_06/
+?? branchpricecut/results/solutions/20260521_fullprice_addneg_rootonly_bench_20_02/
+?? branchpricecut/results/solutions/20260521_integrated_fullpricing_rootonly_bench_20_02/
+?? branchpricecut/results/terminal/
+?? results/20260521_181059_smoke_schedpack_relax.csv
+?? results/20260521_181224_smoke_schedpack_relax.csv
+?? results/20260521_181256_smoke_schedpack_relax_json.csv
+?? results/20260521_smoke_integrated_fullpricing.csv
+?? results/logs/20260521_181059_smoke_schedpack_relax/
+?? results/logs/20260521_181224_smoke_schedpack_relax/
+?? results/logs/20260521_181256_smoke_schedpack_relax_json/
+?? results/logs/20260521_smoke_integrated_fullpricing/
+?? results/logs/smoke_lm_rank1/
+?? results/logs/smoke_schedule_cost_subset_row/
+?? results/logs/smoke_schedule_pack_batch/
+?? results/logs/smoke_schedule_pack_cg_20260521_174704/
+?? results/logs/smoke_schedule_pack_diag/
+?? results/logs/smoke_schedule_pack_diag_json/
+?? results/logs/smoke_schedule_pack_exact_bound_20260521_204309/
+?? results/logs/smoke_schedule_pack_exact_bound_20260521_204309_terminal.log
+?? results/logs/smoke_schedule_pack_persistent/
+?? results/logs/smoke_schedule_pack_persistent_final/
+?? results/smoke_lm_rank1.csv
+?? results/smoke_schedule_cost_subset_row.csv
+?? results/smoke_schedule_pack_batch.csv
+?? results/smoke_schedule_pack_cg_20260521_174704.csv
+?? results/smoke_schedule_pack_diag.csv
+?? results/smoke_schedule_pack_diag_json.csv
+?? results/smoke_schedule_pack_exact_bound_20260521_204309.csv
+?? results/smoke_schedule_pack_persistent.csv
+?? results/smoke_schedule_pack_persistent_final.csv
+?? results/solutions/20260521_181059_smoke_schedpack_relax/
+?? results/solutions/20260521_181224_smoke_schedpack_relax/
+?? results/solutions/20260521_181256_smoke_schedpack_relax_json/
+?? results/solutions/20260521_smoke_integrated_fullpricing/
+?? results/solutions/smoke_lm_rank1/
+?? results/solutions/smoke_schedule_cost_subset_row/
+?? results/solutions/smoke_schedule_pack_batch/
+?? results/solutions/smoke_schedule_pack_cg_20260521_174704/
+?? results/solutions/smoke_schedule_pack_diag/
+?? results/solutions/smoke_schedule_pack_diag_json/
+?? results/solutions/smoke_schedule_pack_exact_bound_20260521_204309/
+?? results/solutions/smoke_schedule_pack_persistent/
+?? results/solutions/smoke_schedule_pack_persistent_final/
+?? src/gnn_bb/__pycache__/__init__.cpython-313.pyc
+?? src/gnn_bb/baseline/__pycache__/__init__.cpython-313.pyc
+?? src/gnn_bb/baseline/__pycache__/config.cpython-313.pyc
+?? src/gnn_bb/data/__pycache__/__init__.cpython-313.pyc
+?? src/gnn_bb/data/__pycache__/instances.cpython-313.pyc
+?? src/gnn_bb/data/__pycache__/io_utils.cpython-313.pyc
+?? src/gnn_bb/data/__pycache__/terrain.cpython-313.pyc

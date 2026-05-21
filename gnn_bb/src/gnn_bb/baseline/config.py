@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,10 @@ def load_config(path: str | Path = "configs/scip_baseline.yaml") -> dict[str, An
     config_path = Path(path)
     if not config_path.is_absolute():
         config_path = project_root() / config_path
+    if config_path.suffix.lower() == ".json":
+        with config_path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data or {}
     try:
         import yaml
 
@@ -70,4 +75,3 @@ def load_config(path: str | Path = "configs/scip_baseline.yaml") -> dict[str, An
         return data or {}
     except ModuleNotFoundError:
         return _load_simple_yaml(config_path)
-

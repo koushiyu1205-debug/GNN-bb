@@ -194,6 +194,22 @@ sum_{p in C} lambda_pr <= |C| - 1           for all r in R
 
 如果车辆同质，则对所有车辆 `r in R` 加同一类 cut 是有效的。如果车辆异质，则 cut 应按车辆类型或车辆资源参数分别定义。
 
+### 5.1 route-set schedule packing cut
+
+no-good cut 是 route-set schedule packing cut 的一个特例。对任意 route 集合 `C`，定义：
+
+```text
+U(C) = 一辆真实车辆最多能从 C 中排程的 route 数
+```
+
+若 `U(C)<|C|`，则可加入：
+
+```text
+sum_{p in C} lambda_pr <= U(C) y_r          for all r in R
+```
+
+当 `U(C)=|C|-1` 时，它退化为普通 schedule no-good cut；当 `U(C)` 更小时，它更强。当前代码的 LP separator 仍可在当前 LP 违反且 `U(C)<|C|` 时加入该 cut；但 RIM 回流和整数解校验中的不可排程 conflict 只在 `U(C)<|C|-1` 时提升为 route-set packing conflict，避免把与 no-good 同强度的 cut 大量加入主问题。若 oracle 超过状态上限或无法证明，则不加 cut。
+
 ## 6. 完整扩展模型
 
 定义完整 route-vehicle schedule-cut master：
@@ -442,7 +458,22 @@ sum_r F y_r + sum_r sum_p c_p lambda_pr
 
 如果检查可排程，则该解是原问题可行解。
 
-如果检查不可排程，则必须加入 valid schedule no-good cut 并重新求解当前节点，不能接受该解，也不能用它作为最终最优解。
+如果检查不可排程，则必须加入 valid schedule cut 并重新求解当前节点，不能接受该解，也不能用它作为最终最优解。该 cut 可以是 pair conflict、route-set schedule packing、schedule-capacity conflict 或 no-good；关键是 cut 必须由 exact schedule checker / exact oracle 证明有效。
+
+当前还加入两类默认启用的 LP 强化不等式，并保留一类默认关闭的实验性不等式：
+
+```text
+subset-row:
+sum_{p,r} floor(|p∩S|/k) lambda[p,r] <= floor(|S|/k)
+
+limited-memory rank-1:
+sum_{p,r} floor((sum_{i in S}m_i a_ip)/d) lambda[p,r] <= floor((sum_{i in S}m_i)/d)
+
+schedule subset cost lower bound:
+sum_p c[p]lambda[p,r] - L(S)sum_{i in S}z[i,r] + L(S)(|S|-1)y[r] >= 0
+```
+
+`subset-row` 是 set-partitioning 的标准整数有效不等式，当前默认启用。`limited-memory rank-1` 是 cover 等式的 rank-1 CG rounding；memory 只限制 multiplier pattern 的候选生成，不参与有效性证明。`schedule subset cost lower bound` 默认关闭；若作为实验项打开，其中的 `L(S)` 必须由 exact 单车 schedule cost oracle 证明，oracle 超限或未完成时不加 cut。整数解中，若车辆 `r` 未完整服务 `S`，该不等式在非负 route 成本下自动成立；若完整服务 `S`，车辆真实 schedule 的变量成本至少为 `L(S)`。因此这些 cut 只收紧 LP relaxation，不改变原问题整数可行域。
 
 因此，虽然动态切割版在中间过程中只包含部分 schedule cuts，但只要：
 
@@ -541,7 +572,36 @@ route-vehicle master with schedule cuts:
 
 只要这些条件满足，动态 route-vehicle BPC with schedule cuts 在最终收敛时与原问题等价。
 
-## 15. 简短结论
+## 15. Schedule-Pack Candidate-Pool Relaxation 的证明边界
+
+新增的 `schedule-pack` relaxation 会把 incumbent schedule 作为 seed columns，并在候选 route 集合内做 dual pricing，直到候选集合内没有负 reduced-cost schedule column，或触发时间/列数限制。浅层节点版本使用 vehicle-indexed schedule columns，并尊重节点分支约束和已有 valid cuts。
+
+因此：
+
+```text
+schedule_pack_diagnostic_objective
+schedule_pack_relaxation_root_objective
+schedule_pack_relaxation_best_objective
+```
+
+在 `exact_over_full_route_space=false` 时，不能作为原问题 lower bound，不能用于剪枝，也不能用于证明最优，且不能混入 `dual_bound` 或 `diagnostic_dual_bound`。full route-space pricing 如果已经发现负 reduced-cost 的可行 schedule column，可以把该列安全加入 RMP；这只是在扩大受限主问题列集，不是完整 pricing 证书。只有完整 exact schedule pricing 已经结束，并证明全 route space 中没有负 reduced-cost schedule column，即日志给出 `exact_over_full_route_space=true` 时，schedule-pack master 的 LP 值才可以作为有效下界证书。
+
+当前 full route-space pricing 使用集成式 label search，而不是先枚举所有单 sortie route。该实现仍保持证明边界：route prefix 只按已经发生的载重、服务时间窗和已消耗能量做安全剪枝；同一已覆盖任务集合和 route 数下，较早 ready time 且较低 reduced component 的 label 支配另一个 label。若搜索因时间或状态上限停止，则无论当前找到的 best reduced cost 是负、零还是正，都不能作为“无负列”证明。
+
+当前代码的接入规则是：
+
+```text
+if exact_over_full_route_space:
+    node.lower_bound = max(route_vehicle_bound, schedule_pack_bound)
+else:
+    schedule_pack_bound 只作为诊断和节点排序信号
+```
+
+该规则保持精确性，因为完整 schedule column master 是原问题的 LP 松弛：每个 column 是一辆车可真实执行的一串 sorties；cover、vehicle-use、当前 valid cuts 和分支约束均同步进入该 LP；full route-space pricing 完整结束后，没有遗漏负 reduced-cost schedule column。
+
+若日志中只有 `exact_over_candidate_routes=true`，则只表示候选 route 集合内收敛；由于候选集合可能被截断，它仍不能替代全 route space 的 exact schedule pricing。
+
+## 16. 简短结论
 
 当前模型与原问题的关系是：
 
@@ -556,4 +616,3 @@ route-vehicle master with schedule cuts:
   中间是松弛；
   只要每个不可排程整数解都被切掉，最终证明仍然 exact。
 ```
-

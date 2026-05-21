@@ -49,6 +49,21 @@ def _bool_config(config: dict, name: str, default: bool) -> bool:
     return bool(value)
 
 
+def _int_tuple_config(config: dict, name: str, default: tuple[int, ...]) -> tuple[int, ...]:
+    value = config.get(name, default)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+        items = [item.strip() for item in text.split(",") if item.strip()]
+    elif isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        items = [value]
+    parsed = tuple(sorted({int(item) for item in items if int(item) >= 2}))
+    return parsed or tuple(default)
+
+
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -88,6 +103,16 @@ def main() -> None:
                 "exact_pricing_dominance_enabled",
                 _bool_config(config, "exact_pricing_enable_dominance", False),
             ),
+            pricing_completion_bound_enabled=_bool_config(config, "pricing_completion_bound_enabled", False),
+            ng_dssr_pricing_enabled=_bool_config(config, "ng_dssr_pricing_enabled", False),
+            ng_dssr_memory_size=int(config.get("ng_dssr_memory_size", 6)),
+            exact_dssr_pricing_enabled=_bool_config(config, "exact_dssr_pricing_enabled", False),
+            exact_dssr_initial_memory_size=int(config.get("exact_dssr_initial_memory_size", 6)),
+            exact_dssr_max_iterations=int(config.get("exact_dssr_max_iterations", 4)),
+            exact_dssr_max_labels=int(config.get("exact_dssr_max_labels", 0)),
+            route_enumeration_enabled=_bool_config(config, "route_enumeration_enabled", False),
+            route_enumeration_rc_threshold=float(config.get("route_enumeration_rc_threshold", 0.0)),
+            route_enumeration_max_routes=int(config.get("route_enumeration_max_routes", 0)),
             restricted_master_heuristic_enabled=_bool_config(config, "restricted_master_heuristic_enabled", False),
             restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
             restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),
@@ -95,6 +120,9 @@ def main() -> None:
             restricted_master_max_depth=int(config.get("restricted_master_max_depth", 3)),
             restricted_master_schedule_aware=_bool_config(config, "restricted_master_schedule_aware", True),
             restricted_master_max_no_good_rounds=int(config.get("restricted_master_max_no_good_rounds", 20)),
+            restricted_master_route_pack_conflict_max_events=int(
+                config.get("restricted_master_route_pack_conflict_max_events", 2)
+            ),
             rmp_params=dict(config.get("rmp_params", {})),
             log_path=log_path,
             solution_path=solution_path,
@@ -120,7 +148,39 @@ def main() -> None:
             resource_cut_max_per_round=int(config.get("resource_cut_max_per_round", 20)),
             resource_cut_min_violation=float(config.get("resource_cut_min_violation", 1.0e-5)),
             resource_cut_max_rounds_per_node=int(config.get("resource_cut_max_rounds_per_node", 3)),
+            subset_row_cuts_enabled=_bool_config(config, "subset_row_cuts_enabled", True),
+            subset_row_cut_max_depth=int(config.get("subset_row_cut_max_depth", 0)),
+            subset_row_cut_max_subset_size=int(config.get("subset_row_cut_max_subset_size", 8)),
+            subset_row_cut_max_per_round=int(config.get("subset_row_cut_max_per_round", 20)),
+            subset_row_cut_min_violation=float(config.get("subset_row_cut_min_violation", 1.0e-5)),
+            subset_row_cut_max_rounds_per_node=int(config.get("subset_row_cut_max_rounds_per_node", 3)),
+            subset_row_candidate_top_routes=int(config.get("subset_row_candidate_top_routes", 80)),
+            subset_row_candidate_max_sets=int(config.get("subset_row_candidate_max_sets", 500)),
+            subset_row_k_values=_int_tuple_config(config, "subset_row_k_values", (2, 3)),
+            lm_rank1_cuts_enabled=_bool_config(config, "lm_rank1_cuts_enabled", True),
+            lm_rank1_cut_max_depth=int(config.get("lm_rank1_cut_max_depth", 0)),
+            lm_rank1_cut_max_subset_size=int(config.get("lm_rank1_cut_max_subset_size", 8)),
+            lm_rank1_cut_max_per_round=int(config.get("lm_rank1_cut_max_per_round", 20)),
+            lm_rank1_cut_min_violation=float(config.get("lm_rank1_cut_min_violation", 1.0e-5)),
+            lm_rank1_cut_max_rounds_per_node=int(config.get("lm_rank1_cut_max_rounds_per_node", 3)),
+            lm_rank1_candidate_top_routes=int(config.get("lm_rank1_candidate_top_routes", 100)),
+            lm_rank1_candidate_max_sets=int(config.get("lm_rank1_candidate_max_sets", 700)),
+            lm_rank1_denominators=_int_tuple_config(config, "lm_rank1_denominators", (3, 4)),
+            lm_rank1_memory_size=int(config.get("lm_rank1_memory_size", 4)),
+            lm_rank1_max_patterns_per_set=int(config.get("lm_rank1_max_patterns_per_set", 12)),
+            schedule_subset_cost_cuts_enabled=_bool_config(config, "schedule_subset_cost_cuts_enabled", False),
+            schedule_subset_cost_cut_max_depth=int(config.get("schedule_subset_cost_cut_max_depth", 0)),
+            schedule_subset_cost_cut_max_subset_size=int(config.get("schedule_subset_cost_cut_max_subset_size", 8)),
+            schedule_subset_cost_cut_max_per_round=int(config.get("schedule_subset_cost_cut_max_per_round", 10)),
+            schedule_subset_cost_cut_min_violation=float(config.get("schedule_subset_cost_cut_min_violation", 1.0e-4)),
+            schedule_subset_cost_cut_max_rounds_per_node=int(config.get("schedule_subset_cost_cut_max_rounds_per_node", 2)),
+            schedule_subset_cost_oracle_max_states=int(config.get("schedule_subset_cost_oracle_max_states", 200000)),
+            schedule_subset_cost_candidate_top_tasks=int(config.get("schedule_subset_cost_candidate_top_tasks", 12)),
+            schedule_subset_cost_candidate_max_combinations=int(config.get("schedule_subset_cost_candidate_max_combinations", 200)),
+            schedule_subset_cost_route_union_top_routes=int(config.get("schedule_subset_cost_route_union_top_routes", 10)),
+            schedule_subset_cost_route_union_max_routes=int(config.get("schedule_subset_cost_route_union_max_routes", 4)),
             schedule_capacity_cuts_enabled=_bool_config(config, "schedule_capacity_cuts_enabled", True),
+            schedule_capacity_separation_enabled=_bool_config(config, "schedule_capacity_separation_enabled", False),
             schedule_capacity_cut_max_depth=int(config.get("schedule_capacity_cut_max_depth", 0)),
             schedule_capacity_cut_max_subset_size=int(config.get("schedule_capacity_cut_max_subset_size", 10)),
             schedule_capacity_cut_max_per_round=int(config.get("schedule_capacity_cut_max_per_round", 20)),
@@ -155,6 +215,37 @@ def main() -> None:
             route_set_schedule_packing_cut_max_per_round=int(config.get("route_set_schedule_packing_cut_max_per_round", 5)),
             route_set_schedule_packing_cut_min_violation=float(config.get("route_set_schedule_packing_cut_min_violation", 5.0e-2)),
             route_set_schedule_packing_oracle_max_states=int(config.get("route_set_schedule_packing_oracle_max_states", 200000)),
+            schedule_pack_diagnostic_enabled=_bool_config(config, "schedule_pack_diagnostic_enabled", False),
+            schedule_pack_diagnostic_max_candidate_routes=int(
+                config.get("schedule_pack_diagnostic_max_candidate_routes", 180)
+            ),
+            schedule_pack_diagnostic_max_columns=int(config.get("schedule_pack_diagnostic_max_columns", 8000)),
+            schedule_pack_diagnostic_beam_width=int(config.get("schedule_pack_diagnostic_beam_width", 800)),
+            schedule_pack_diagnostic_max_sorties=int(config.get("schedule_pack_diagnostic_max_sorties", 0)),
+            schedule_pack_diagnostic_time_limit=float(config.get("schedule_pack_diagnostic_time_limit", 60.0)),
+            schedule_pack_pricing_batch_size=int(config.get("schedule_pack_pricing_batch_size", 32)),
+            schedule_pack_relaxation_enabled=_bool_config(config, "schedule_pack_relaxation_enabled", False),
+            schedule_pack_relaxation_max_depth=int(config.get("schedule_pack_relaxation_max_depth", 2)),
+            schedule_pack_relaxation_time_limit=float(config.get("schedule_pack_relaxation_time_limit", 30.0)),
+            schedule_pack_relaxation_use_for_priority=_bool_config(
+                config,
+                "schedule_pack_relaxation_use_for_priority",
+                True,
+            ),
+            schedule_pack_full_pricing_enabled=_bool_config(config, "schedule_pack_full_pricing_enabled", False),
+            schedule_pack_full_pricing_max_depth=int(config.get("schedule_pack_full_pricing_max_depth", 0)),
+            schedule_pack_full_pricing_max_states=int(config.get("schedule_pack_full_pricing_max_states", 0)),
+            schedule_pack_adaptive_enabled=_bool_config(config, "schedule_pack_adaptive_enabled", False),
+            schedule_pack_adaptive_gap_abs=float(config.get("schedule_pack_adaptive_gap_abs", 10.0)),
+            schedule_pack_adaptive_gap_ratio=float(config.get("schedule_pack_adaptive_gap_ratio", 3.0e-2)),
+            schedule_pack_adaptive_skip_if_fathomable=_bool_config(
+                config,
+                "schedule_pack_adaptive_skip_if_fathomable",
+                True,
+            ),
+            route_enumeration_adaptive_enabled=_bool_config(config, "route_enumeration_adaptive_enabled", False),
+            route_enumeration_adaptive_gap_abs=float(config.get("route_enumeration_adaptive_gap_abs", 10.0)),
+            route_enumeration_adaptive_gap_ratio=float(config.get("route_enumeration_adaptive_gap_ratio", 3.0e-2)),
             cut_purge_age=int(config.get("cut_purge_age", 20)),
             cut_purge_slack=float(config.get("cut_purge_slack", 1.0e-5)),
             cut_purge_dual=float(config.get("cut_purge_dual", 1.0e-8)),
@@ -172,6 +263,8 @@ def main() -> None:
             f"cuts={result.cuts_added}, crossing={result.crossing_cuts_added}, "
             f"crossing_upgraded={result.crossing_cuts_upgraded}, rci={result.robust_capacity_cuts_added}, "
             f"kpath={result.resource_lower_bound_cuts_added}, pair={result.schedule_pair_conflict_cuts_added}, "
+            f"subset_row={result.subset_row_cuts_added}, lm_rank1={result.lm_rank1_cuts_added}, "
+            f"sched_cost={result.schedule_subset_cost_cuts_added}, "
             f"clique={result.schedule_clique_conflict_cuts_added}, "
             f"route_pack={result.schedule_route_set_packing_cuts_added}, "
             f"nogood={result.schedule_nogood_cuts_added}, "
@@ -179,8 +272,20 @@ def main() -> None:
             f"rim_calls={result.restricted_master_integer_calls}, rim_feasible={result.restricted_master_integer_feasible}, "
             f"rim_rejected={result.restricted_master_integer_rejected}, "
             f"rim_pair={result.restricted_master_integer_pair_conflict_cuts}, "
+            f"rim_route_pack={result.restricted_master_integer_route_set_packing_cuts}, "
             f"rim_ng={result.restricted_master_integer_no_good_cuts}, "
             f"rim_sched_cap={result.restricted_master_integer_schedule_capacity_cuts}, "
+            f"sched_pack_status={result.schedule_pack_diagnostic_status}, "
+            f"sched_pack_obj={result.schedule_pack_diagnostic_objective}, "
+            f"sched_pack_gap_root={result.schedule_pack_diagnostic_gap_vs_root}, "
+            f"sched_pack_cols={result.schedule_pack_diagnostic_columns}, "
+            f"sched_pack_relax_calls={result.schedule_pack_relaxation_calls}, "
+            f"sched_pack_relax_best={result.schedule_pack_relaxation_best_objective}, "
+            f"sched_pack_full_exact={result.schedule_pack_relaxation_full_exact}, "
+            f"sched_pack_adapt={result.schedule_pack_adaptive_runs}/{result.schedule_pack_adaptive_decisions}, "
+            f"sched_pack_adapt_skip={result.schedule_pack_adaptive_skips}, "
+            f"route_enum_adapt={result.route_enumeration_adaptive_runs}/{result.route_enumeration_adaptive_decisions}, "
+            f"route_enum_adapt_skip={result.route_enumeration_adaptive_skips}, "
             f"cuts_purged={result.cuts_purged}, branch_test_time={result.branch_testing_time}s",
             flush=True,
         )

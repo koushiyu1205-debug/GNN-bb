@@ -1,9 +1,10 @@
-"""中文摘要：本文件定义 clean BPC 的有效 cuts。包含日程 no-good、统一 crossing cut 和 schedule capacity cut。"""
+"""中文摘要：本文件定义 clean BPC 的有效 cuts。包含日程、容量、rank-1 和成本型排程下界 cut。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from math import floor
 
 from .columns import RouteColumn
 from .data import BPCData
@@ -164,6 +165,101 @@ class ScheduleCapacityCut:
         return -float(self.upper_bound)
 
 
+@dataclass(frozen=True)
+class ScheduleSubsetCostLowerBoundCut:
+    """中文注释：若车辆 r 完整服务任务集 S，则其真实变量成本至少为 L(S)。"""
+
+    id: int
+    vehicle: int
+    tasks: tuple[int, ...]
+    lower_bound: float
+    oracle_states: int
+    source: str = "separation"
+    kind: str = "schedule_subset_cost_lb"
+
+    @property
+    def rhs(self) -> float:
+        return 0.0
+
+    @property
+    def sense(self) -> str:
+        return ">="
+
+    @property
+    def key(self) -> tuple:
+        return (self.kind, int(self.vehicle), self.tasks, round(float(self.lower_bound), 9))
+
+    def coefficient(self, route: RouteColumn, vehicle: int) -> float:
+        if int(vehicle) != int(self.vehicle):
+            return 0.0
+        subset = set(self.tasks)
+        covered = sum(1 for task in route.task_set if int(task) in subset)
+        return float(route.cost) - float(self.lower_bound) * float(covered)
+
+    def y_coefficient(self, vehicle: int) -> float:
+        if int(vehicle) != int(self.vehicle):
+            return 0.0
+        return float(self.lower_bound) * float(max(0, len(self.tasks) - 1))
+
+
+@dataclass(frozen=True)
+class SubsetRowCut:
+    """中文注释：经典 VRP subset-row cut：sum floor(|p∩S|/k) lambda <= floor(|S|/k)。"""
+
+    id: int
+    tasks: tuple[int, ...]
+    divisor: int = 2
+    kind: str = "subset_row"
+
+    @property
+    def rhs(self) -> float:
+        return float(floor(len(self.tasks) / int(self.divisor)))
+
+    @property
+    def sense(self) -> str:
+        return "<="
+
+    @property
+    def key(self) -> tuple:
+        return (self.kind, self.tasks, int(self.divisor))
+
+    def coefficient(self, route: RouteColumn, vehicle: int) -> float:
+        del vehicle
+        subset = set(self.tasks)
+        count = sum(1 for task in route.task_set if int(task) in subset)
+        return float(floor(count / int(self.divisor)))
+
+
+@dataclass(frozen=True)
+class LimitedMemoryRank1Cut:
+    """中文注释：小 memory rank-1 CG cut，允许非均匀任务 multiplier。"""
+
+    id: int
+    tasks: tuple[int, ...]
+    multipliers: tuple[int, ...]
+    denominator: int = 3
+    memory_tasks: tuple[int, ...] = tuple()
+    kind: str = "limited_memory_rank1"
+
+    @property
+    def rhs(self) -> float:
+        return float(floor(sum(int(value) for value in self.multipliers) / int(self.denominator)))
+
+    @property
+    def sense(self) -> str:
+        return "<="
+
+    @property
+    def key(self) -> tuple:
+        return (self.kind, self.tasks, self.multipliers, int(self.denominator))
+
+    def coefficient(self, route: RouteColumn, vehicle: int) -> float:
+        del vehicle
+        weight_by_task = {int(task): int(weight) for task, weight in zip(self.tasks, self.multipliers)}
+        route_weight = sum(weight_by_task.get(int(task), 0) for task in route.task_set)
+        return float(floor(route_weight / int(self.denominator)))
+
+
 def make_schedule_capacity_cuts_for_all_vehicles(
     vehicles: tuple[int, ...],
     tasks: tuple[int, ...],
@@ -189,7 +285,14 @@ def make_schedule_capacity_cuts_for_all_vehicles(
     ]
 
 
-Cut = ScheduleNoGoodCut | CrossingCut | ScheduleCapacityCut
+Cut = (
+    ScheduleNoGoodCut
+    | CrossingCut
+    | ScheduleCapacityCut
+    | ScheduleSubsetCostLowerBoundCut
+    | SubsetRowCut
+    | LimitedMemoryRank1Cut
+)
 
 
 def rounded_capacity_rhs(data: BPCData, tasks: tuple[int, ...]) -> float:

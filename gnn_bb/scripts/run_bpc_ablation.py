@@ -72,6 +72,21 @@ def _bool_config(config: dict[str, Any], key: str, default: bool) -> bool:
     return bool(config.get(key, default))
 
 
+def _int_tuple_config(config: dict[str, Any], name: str, default: tuple[int, ...]) -> tuple[int, ...]:
+    value = config.get(name, default)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+        items = [item.strip() for item in text.split(",") if item.strip()]
+    elif isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        items = [value]
+    parsed = tuple(sorted({int(item) for item in items if int(item) >= 2}))
+    return parsed or tuple(default)
+
+
 def _solve_one(
     *,
     data,
@@ -113,6 +128,16 @@ def _solve_one(
         exact_pricing_dominance_enabled=bool(
             base.get("exact_pricing_dominance_enabled", base.get("exact_pricing_enable_dominance", False))
         ),
+        pricing_completion_bound_enabled=_bool_config(base, "pricing_completion_bound_enabled", False),
+        ng_dssr_pricing_enabled=_bool_config(base, "ng_dssr_pricing_enabled", False),
+        ng_dssr_memory_size=int(base.get("ng_dssr_memory_size", 6)),
+        exact_dssr_pricing_enabled=_bool_config(base, "exact_dssr_pricing_enabled", False),
+        exact_dssr_initial_memory_size=int(base.get("exact_dssr_initial_memory_size", 6)),
+        exact_dssr_max_iterations=int(base.get("exact_dssr_max_iterations", 4)),
+        exact_dssr_max_labels=int(base.get("exact_dssr_max_labels", 0)),
+        route_enumeration_enabled=_bool_config(base, "route_enumeration_enabled", False),
+        route_enumeration_rc_threshold=float(base.get("route_enumeration_rc_threshold", 0.0)),
+        route_enumeration_max_routes=int(base.get("route_enumeration_max_routes", 0)),
         restricted_master_heuristic_enabled=bool(base.get("restricted_master_heuristic_enabled", False)),
         restricted_master_time_limit=float(base.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(base.get("restricted_master_max_routes", 4000)),
@@ -120,6 +145,9 @@ def _solve_one(
         restricted_master_max_depth=int(base.get("restricted_master_max_depth", 3)),
         restricted_master_schedule_aware=bool(base.get("restricted_master_schedule_aware", True)),
         restricted_master_max_no_good_rounds=int(base.get("restricted_master_max_no_good_rounds", 20)),
+        restricted_master_route_pack_conflict_max_events=int(
+            base.get("restricted_master_route_pack_conflict_max_events", 2)
+        ),
         rmp_params=dict(base.get("rmp_params", {})),
         log_path=log_path,
         solution_path=solution_path,
@@ -145,7 +173,39 @@ def _solve_one(
         resource_cut_max_per_round=int(base.get("resource_cut_max_per_round", 20)),
         resource_cut_min_violation=float(base.get("resource_cut_min_violation", 1.0e-5)),
         resource_cut_max_rounds_per_node=int(base.get("resource_cut_max_rounds_per_node", 3)),
+        subset_row_cuts_enabled=_bool_config(base, "subset_row_cuts_enabled", True),
+        subset_row_cut_max_depth=int(base.get("subset_row_cut_max_depth", 0)),
+        subset_row_cut_max_subset_size=int(base.get("subset_row_cut_max_subset_size", 8)),
+        subset_row_cut_max_per_round=int(base.get("subset_row_cut_max_per_round", 20)),
+        subset_row_cut_min_violation=float(base.get("subset_row_cut_min_violation", 1.0e-5)),
+        subset_row_cut_max_rounds_per_node=int(base.get("subset_row_cut_max_rounds_per_node", 3)),
+        subset_row_candidate_top_routes=int(base.get("subset_row_candidate_top_routes", 80)),
+        subset_row_candidate_max_sets=int(base.get("subset_row_candidate_max_sets", 500)),
+        subset_row_k_values=_int_tuple_config(base, "subset_row_k_values", (2, 3)),
+        lm_rank1_cuts_enabled=_bool_config(base, "lm_rank1_cuts_enabled", True),
+        lm_rank1_cut_max_depth=int(base.get("lm_rank1_cut_max_depth", 0)),
+        lm_rank1_cut_max_subset_size=int(base.get("lm_rank1_cut_max_subset_size", 8)),
+        lm_rank1_cut_max_per_round=int(base.get("lm_rank1_cut_max_per_round", 20)),
+        lm_rank1_cut_min_violation=float(base.get("lm_rank1_cut_min_violation", 1.0e-5)),
+        lm_rank1_cut_max_rounds_per_node=int(base.get("lm_rank1_cut_max_rounds_per_node", 3)),
+        lm_rank1_candidate_top_routes=int(base.get("lm_rank1_candidate_top_routes", 100)),
+        lm_rank1_candidate_max_sets=int(base.get("lm_rank1_candidate_max_sets", 700)),
+        lm_rank1_denominators=_int_tuple_config(base, "lm_rank1_denominators", (3, 4)),
+        lm_rank1_memory_size=int(base.get("lm_rank1_memory_size", 4)),
+        lm_rank1_max_patterns_per_set=int(base.get("lm_rank1_max_patterns_per_set", 12)),
+        schedule_subset_cost_cuts_enabled=_bool_config(base, "schedule_subset_cost_cuts_enabled", False),
+        schedule_subset_cost_cut_max_depth=int(base.get("schedule_subset_cost_cut_max_depth", 0)),
+        schedule_subset_cost_cut_max_subset_size=int(base.get("schedule_subset_cost_cut_max_subset_size", 8)),
+        schedule_subset_cost_cut_max_per_round=int(base.get("schedule_subset_cost_cut_max_per_round", 10)),
+        schedule_subset_cost_cut_min_violation=float(base.get("schedule_subset_cost_cut_min_violation", 1.0e-4)),
+        schedule_subset_cost_cut_max_rounds_per_node=int(base.get("schedule_subset_cost_cut_max_rounds_per_node", 2)),
+        schedule_subset_cost_oracle_max_states=int(base.get("schedule_subset_cost_oracle_max_states", 200000)),
+        schedule_subset_cost_candidate_top_tasks=int(base.get("schedule_subset_cost_candidate_top_tasks", 12)),
+        schedule_subset_cost_candidate_max_combinations=int(base.get("schedule_subset_cost_candidate_max_combinations", 200)),
+        schedule_subset_cost_route_union_top_routes=int(base.get("schedule_subset_cost_route_union_top_routes", 10)),
+        schedule_subset_cost_route_union_max_routes=int(base.get("schedule_subset_cost_route_union_max_routes", 4)),
         schedule_capacity_cuts_enabled=overrides["schedule_capacity_cuts_enabled"],
+        schedule_capacity_separation_enabled=_bool_config(base, "schedule_capacity_separation_enabled", False),
         schedule_capacity_cut_max_depth=int(base.get("schedule_capacity_cut_max_depth", 0)),
         schedule_capacity_cut_max_subset_size=int(base.get("schedule_capacity_cut_max_subset_size", 10)),
         schedule_capacity_cut_max_per_round=int(base.get("schedule_capacity_cut_max_per_round", 20)),
@@ -172,6 +232,31 @@ def _solve_one(
         route_set_schedule_packing_cut_max_per_round=int(base.get("route_set_schedule_packing_cut_max_per_round", 5)),
         route_set_schedule_packing_cut_min_violation=float(base.get("route_set_schedule_packing_cut_min_violation", 5.0e-2)),
         route_set_schedule_packing_oracle_max_states=int(base.get("route_set_schedule_packing_oracle_max_states", 200000)),
+        schedule_pack_diagnostic_enabled=_bool_config(base, "schedule_pack_diagnostic_enabled", False),
+        schedule_pack_diagnostic_max_candidate_routes=int(base.get("schedule_pack_diagnostic_max_candidate_routes", 180)),
+        schedule_pack_diagnostic_max_columns=int(base.get("schedule_pack_diagnostic_max_columns", 8000)),
+        schedule_pack_diagnostic_beam_width=int(base.get("schedule_pack_diagnostic_beam_width", 800)),
+        schedule_pack_diagnostic_max_sorties=int(base.get("schedule_pack_diagnostic_max_sorties", 0)),
+        schedule_pack_diagnostic_time_limit=float(base.get("schedule_pack_diagnostic_time_limit", 60.0)),
+        schedule_pack_pricing_batch_size=int(base.get("schedule_pack_pricing_batch_size", 32)),
+        schedule_pack_relaxation_enabled=_bool_config(base, "schedule_pack_relaxation_enabled", False),
+        schedule_pack_relaxation_max_depth=int(base.get("schedule_pack_relaxation_max_depth", 2)),
+        schedule_pack_relaxation_time_limit=float(base.get("schedule_pack_relaxation_time_limit", 30.0)),
+        schedule_pack_relaxation_use_for_priority=_bool_config(base, "schedule_pack_relaxation_use_for_priority", True),
+        schedule_pack_full_pricing_enabled=_bool_config(base, "schedule_pack_full_pricing_enabled", False),
+        schedule_pack_full_pricing_max_depth=int(base.get("schedule_pack_full_pricing_max_depth", 0)),
+        schedule_pack_full_pricing_max_states=int(base.get("schedule_pack_full_pricing_max_states", 0)),
+        schedule_pack_adaptive_enabled=_bool_config(base, "schedule_pack_adaptive_enabled", False),
+        schedule_pack_adaptive_gap_abs=float(base.get("schedule_pack_adaptive_gap_abs", 10.0)),
+        schedule_pack_adaptive_gap_ratio=float(base.get("schedule_pack_adaptive_gap_ratio", 3.0e-2)),
+        schedule_pack_adaptive_skip_if_fathomable=_bool_config(
+            base,
+            "schedule_pack_adaptive_skip_if_fathomable",
+            True,
+        ),
+        route_enumeration_adaptive_enabled=_bool_config(base, "route_enumeration_adaptive_enabled", False),
+        route_enumeration_adaptive_gap_abs=float(base.get("route_enumeration_adaptive_gap_abs", 10.0)),
+        route_enumeration_adaptive_gap_ratio=float(base.get("route_enumeration_adaptive_gap_ratio", 3.0e-2)),
         cut_purge_age=int(base.get("cut_purge_age", 20)),
         cut_purge_slack=float(base.get("cut_purge_slack", 1.0e-5)),
         cut_purge_dual=float(base.get("cut_purge_dual", 1.0e-8)),

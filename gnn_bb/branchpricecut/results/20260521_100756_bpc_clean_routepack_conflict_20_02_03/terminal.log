@@ -1,0 +1,555 @@
+开始 clean BPC: instance=bench_20_02, tasks=20, vehicles=2, time_limit=3600s, max_nodes=100000, log=/home/kai/work/gnn_bb/branchpricecut/results/20260521_100756_bpc_clean_routepack_conflict_20_02_03/logs/bench_20_02.jsonl
+[clean-BPC     0.02s] incumbent node 0: obj=276.966512
+[clean-BPC     6.26s] incumbent node 0: obj=237.436094
+[clean-BPC     6.26s] start: {'time': 6.258969, 'event': 'start', 'instance': 'bench_20_02', 'tasks': 20, 'vehicles': 2, 'initial_routes': 30, 'initial_incumbent': 237.436094, 'task_vehicle_linking_enabled': True, 'schedule_capacity_cuts_enabled': True}
+[clean-BPC     6.26s] node 0 d=0 lb=0.0 open=0
+[clean-BPC     8.04s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=30
+[clean-BPC     8.04s] node 0 cg=2 phase=phase2 obj=237.436094 artificial=0.0 cols=30
+[clean-BPC    16.03s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=-37.172232 found=211856 added=600 exhausted=False cert=False
+[clean-BPC    16.05s] node 0 cg=3 phase=phase2 obj=237.436094 artificial=0.0 cols=630
+[clean-BPC    19.57s] node 0 cg=3 phase=phase2 kind=heuristic best_rc=-12.004053 found=28142 added=600 exhausted=False cert=False
+[clean-BPC    19.62s] node 0 cg=4 phase=phase2 obj=236.421558 artificial=0.0 cols=1230
+[clean-BPC    22.73s] node 0 cg=4 phase=phase2 kind=heuristic best_rc=-12.86408 found=11576 added=600 exhausted=False cert=False
+[clean-BPC    22.80s] node 0 cg=5 phase=phase2 obj=230.042712 artificial=0.0 cols=1830
+[clean-BPC    25.75s] node 0 cg=5 phase=phase2 kind=heuristic best_rc=-3.429166 found=291 added=291 exhausted=False cert=False
+[clean-BPC    25.84s] node 0 cg=6 phase=phase2 obj=227.883573 artificial=0.0 cols=2121
+[clean-BPC    28.79s] node 0 cg=6 phase=phase2 kind=heuristic best_rc=-2.593093333 found=60 added=60 exhausted=False cert=False
+[clean-BPC    28.87s] node 0 cg=7 phase=phase2 obj=227.883573 artificial=0.0 cols=2181
+[clean-BPC    31.83s] node 0 cg=7 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC    38.50s] node 0 cg=7 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC    39.43s] cut_added family=crossing_cut node=0 added=2 upgraded=0 first={'id': 0, 'tasks': [8, 10, 14, 17], 'demand': 11.0, 'capacity_bound': 2, 'resource_bound': 1, 'k_bound': 2, 'rhs': 4.0, 'source': 'capacity', 'violation': 0.666666667, 'action': 'add'}
+[clean-BPC    39.54s] node 0 cg=8 phase=phase2 obj=228.114658 artificial=0.0 cols=2181
+[clean-BPC    42.93s] node 0 cg=8 phase=phase2 kind=heuristic best_rc=-0.122286 found=6 added=6 exhausted=False cert=False
+[clean-BPC    43.03s] node 0 cg=9 phase=phase2 obj=228.114658 artificial=0.0 cols=2187
+[clean-BPC    46.31s] node 0 cg=9 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC    54.69s] node 0 cg=9 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC    55.19s] cut_added family=crossing_cut node=0 added=5 upgraded=0 first={'id': 2, 'tasks': [2, 3, 8, 20], 'demand': 10.0, 'capacity_bound': 2, 'resource_bound': 1, 'k_bound': 2, 'rhs': 4.0, 'source': 'capacity', 'violation': 0.666666667, 'action': 'add'}
+[clean-BPC    55.33s] node 0 cg=10 phase=phase2 obj=228.223964 artificial=0.0 cols=2187
+[clean-BPC    58.95s] node 0 cg=10 phase=phase2 kind=heuristic best_rc=-0.686099333 found=134 added=134 exhausted=False cert=False
+[clean-BPC    59.10s] node 0 cg=11 phase=phase2 obj=228.22371 artificial=0.0 cols=2321
+[clean-BPC    62.69s] node 0 cg=11 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC    72.81s] node 0 cg=11 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC    74.08s] cut_added family=crossing_cut node=0 added=3 upgraded=0 first={'id': 7, 'tasks': [9, 11, 14, 17], 'demand': 10.0, 'capacity_bound': 2, 'resource_bound': 1, 'k_bound': 2, 'rhs': 4.0, 'source': 'capacity', 'violation': 0.526315789, 'action': 'add'}
+[clean-BPC    74.25s] node 0 cg=12 phase=phase2 obj=228.39887 artificial=0.0 cols=2321
+[clean-BPC    77.84s] node 0 cg=12 phase=phase2 kind=heuristic best_rc=-0.200393 found=2 added=2 exhausted=False cert=False
+[clean-BPC    78.01s] node 0 cg=13 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC    81.73s] node 0 cg=13 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC    93.93s] node 0 cg=13 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC    94.00s] route-pack diag node 0 round=1 vehicles=2/2 support_max=10 cand=43 oracle=43 incomplete=0 not_tight=10 not_viol=29 dup=0 violated=4 added=4 max_viol=0.3333333333333337 states_max=2802
+[clean-BPC    94.00s] cut_added family=schedule_route_set_packing node=0 added=4 first(vehicle=1, routes=7, U=3, y=0.5, viol=0.333333333, states=467)
+[clean-BPC    94.18s] node 0 cg=14 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC    97.78s] node 0 cg=14 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   109.81s] node 0 cg=14 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   109.87s] route-pack diag node 0 round=2 vehicles=2/2 support_max=10 cand=44 oracle=44 incomplete=0 not_tight=8 not_viol=29 dup=0 violated=7 added=5 max_viol=0.33333333333333326 states_max=2829
+[clean-BPC   109.87s] cut_added family=schedule_route_set_packing node=0 added=5 first(vehicle=1, routes=7, U=3, y=0.5, viol=0.333333333, states=389)
+[clean-BPC   110.04s] node 0 cg=15 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   113.80s] node 0 cg=15 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   126.04s] node 0 cg=15 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   126.05s] node 0 schedule-cap candidates={'1': 351, '2': 349}
+[clean-BPC   151.46s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=700 oracle=700 incomplete=0 not_tight=700 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=107078
+[clean-BPC   157.31s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   157.31s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   157.31s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   157.31s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   157.31s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   157.31s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   157.31s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   157.31s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   157.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=46 added=2
+[clean-BPC   157.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=46, cache_hit=False)
+[clean-BPC   157.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   157.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   157.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   157.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   157.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   157.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   157.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   157.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   157.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=45 added=2
+[clean-BPC   157.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=45, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=45 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=45, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=True states=43 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=True)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   157.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   157.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   157.34s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   157.34s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   157.34s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=1 routepack_states_max=46 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC     5.84s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=5.844655
+[clean-BPC   157.34s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   157.52s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   157.71s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   161.47s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   173.82s] node 0 cg=2 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   173.83s] node 0 schedule-cap candidates={'1': 346, '2': 347}
+[clean-BPC   220.78s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=693 oracle=693 incomplete=0 not_tight=693 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=113662
+[clean-BPC   230.81s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   230.81s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   230.81s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   230.81s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   230.81s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   230.81s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   230.81s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   230.81s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   230.81s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   230.81s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   230.82s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   230.82s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   230.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   230.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   230.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   230.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   230.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   230.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   230.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   230.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   230.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   230.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   230.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   230.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   230.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   230.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   230.83s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=44 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    10.03s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=10.026361
+[clean-BPC   230.83s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   231.04s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   231.24s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   234.85s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   246.75s] node 0 cg=2 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   246.76s] node 0 schedule-cap candidates={'1': 350, '2': 0}
+[clean-BPC   247.92s] schedule-cap diag node 0 round=1 vehicles=1/2 cand=350 oracle=350 incomplete=0 not_tight=350 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=107078
+[clean-BPC   261.51s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   261.51s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   261.51s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   261.51s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   261.51s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   261.51s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   261.51s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   261.51s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   261.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   261.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   261.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   261.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   261.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   261.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   261.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   261.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   261.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   261.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   261.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   261.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   261.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   261.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   261.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   261.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   261.53s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=44 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    13.59s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=13.586436
+[clean-BPC   261.53s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   261.75s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   261.96s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   265.57s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   277.18s] node 0 cg=2 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   277.20s] node 0 schedule-cap candidates={'1': 346, '2': 346}
+[clean-BPC   355.27s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=692 oracle=692 incomplete=0 not_tight=692 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=107078
+[clean-BPC   370.05s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   370.05s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   370.05s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   370.05s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   370.05s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   370.05s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   370.05s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   370.05s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   370.05s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   370.05s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=46 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=46, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   370.06s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   370.06s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   370.07s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   370.07s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   370.07s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   370.07s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   370.07s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   370.07s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   370.07s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   370.07s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   370.07s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   370.07s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   370.07s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=45 added=2
+[clean-BPC   370.07s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=45, cache_hit=False)
+[clean-BPC   370.07s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=46 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    14.77s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=14.770172
+[clean-BPC   370.07s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   370.33s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   370.59s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   374.39s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   386.52s] node 0 cg=2 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   386.53s] node 0 schedule-cap candidates={'1': 349, '2': 338}
+[clean-BPC   389.14s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=687 oracle=687 incomplete=0 not_tight=687 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=113662
+[clean-BPC   404.40s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   404.40s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   404.40s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   404.40s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   404.40s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   404.40s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   404.40s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   404.40s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   404.40s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   404.40s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   404.40s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   404.40s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   404.40s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=45 added=2
+[clean-BPC   404.40s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=45, cache_hit=False)
+[clean-BPC   404.41s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   404.41s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   404.41s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   404.41s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   404.41s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   404.41s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   404.41s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   404.41s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   404.41s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   404.41s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   404.41s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   404.41s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   404.41s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   404.41s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   404.42s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   404.42s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   404.42s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   404.42s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   404.42s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   404.42s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   404.42s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   404.42s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   404.42s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   404.42s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   404.42s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   404.42s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   404.42s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   404.42s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   404.42s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=45 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    15.25s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=15.247023
+[clean-BPC   404.42s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   404.67s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   404.94s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   408.60s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   420.75s] node 0 cg=2 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   420.76s] node 0 schedule-cap candidates={'1': 343, '2': 346}
+[clean-BPC   455.69s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=689 oracle=689 incomplete=0 not_tight=689 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=107078
+[clean-BPC   472.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   472.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   472.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   472.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   472.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   472.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   472.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   472.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   472.72s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   472.72s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   472.72s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=44 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    17.01s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=17.008836
+[clean-BPC   472.72s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   472.98s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   473.27s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   476.82s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   488.19s] node 0 cg=2 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   488.21s] node 0 schedule-cap candidates={'1': 349, '2': 350}
+[clean-BPC   491.12s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=699 oracle=699 incomplete=0 not_tight=699 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=107078
+[clean-BPC   507.51s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   507.51s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   507.51s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   507.51s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   507.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   507.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   507.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   507.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   507.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   507.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   507.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=37 added=2
+[clean-BPC   507.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=37, cache_hit=False)
+[clean-BPC   507.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   507.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   507.52s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   507.52s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   507.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   507.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   507.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   507.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   507.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   507.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   507.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   507.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   507.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   507.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   507.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   507.53s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   507.53s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   507.54s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   507.54s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   507.54s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   507.54s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   507.54s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   507.54s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   507.54s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   507.54s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=46 added=2
+[clean-BPC   507.54s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=46, cache_hit=False)
+[clean-BPC   507.54s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=36 added=2
+[clean-BPC   507.54s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=36, cache_hit=False)
+[clean-BPC   507.54s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   507.54s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   507.54s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=46 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    16.38s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=16.383593
+[clean-BPC   507.54s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   507.83s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   508.13s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   511.72s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   523.77s] node 0 cg=2 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   523.78s] node 0 schedule-cap candidates={'1': 336, '2': 338}
+[clean-BPC   525.17s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=674 oracle=674 incomplete=0 not_tight=674 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=113662
+[clean-BPC   543.69s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   543.69s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   543.69s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   543.69s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   543.69s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   543.69s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   543.69s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   543.69s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   543.69s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   543.69s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   543.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   543.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   543.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   543.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   543.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   543.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   543.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   543.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   543.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   543.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   543.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   543.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   543.70s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   543.70s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=36 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=36, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   543.71s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   543.71s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   543.71s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=44 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    18.52s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=18.517368
+[clean-BPC   543.71s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   544.02s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   544.35s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   548.00s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   559.76s] node 0 cg=2 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   559.77s] node 0 schedule-cap candidates={'1': 350, '2': 346}
+[clean-BPC   578.81s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=696 oracle=696 incomplete=0 not_tight=696 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=107078
+[clean-BPC   597.18s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=True states=37 added=0
+[clean-BPC   598.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=42 added=2
+[clean-BPC   598.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=42, cache_hit=False)
+[clean-BPC   598.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=38 added=2
+[clean-BPC   598.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=38, cache_hit=False)
+[clean-BPC   598.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=12 added=2
+[clean-BPC   598.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=12, cache_hit=False)
+[clean-BPC   598.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   598.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   598.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   598.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   598.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   598.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   598.32s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   598.32s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   598.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   598.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   598.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   598.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   598.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=46 added=2
+[clean-BPC   598.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=46, cache_hit=False)
+[clean-BPC   598.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=51 added=2
+[clean-BPC   598.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=51, cache_hit=False)
+[clean-BPC   598.33s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=49 added=2
+[clean-BPC   598.33s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=49, cache_hit=False)
+[clean-BPC   598.34s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=51 added=2
+[clean-BPC   598.34s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=51, cache_hit=False)
+[clean-BPC   598.34s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=49 added=2
+[clean-BPC   598.34s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=49, cache_hit=False)
+[clean-BPC   598.34s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=50 added=2
+[clean-BPC   598.34s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=50, cache_hit=False)
+[clean-BPC   598.34s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=48 added=2
+[clean-BPC   598.34s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=48, cache_hit=False)
+[clean-BPC   598.35s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=50 added=2
+[clean-BPC   598.35s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=50, cache_hit=False)
+[clean-BPC   598.35s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=49 added=2
+[clean-BPC   598.35s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=49, cache_hit=False)
+[clean-BPC   598.35s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   598.35s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   598.35s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=48 added=2
+[clean-BPC   598.35s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=48, cache_hit=False)
+[clean-BPC   598.35s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=40 routepack_cache=1 routepack_states_max=51 nogood_events=0 nogood_cuts=0 weak_skip=1
+[clean-BPC    18.36s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=40 time=18.361418
+[clean-BPC   598.35s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   598.67s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   599.00s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   602.72s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=0.0 found=0 added=0 exhausted=False cert=False
+[clean-BPC   614.95s] node 0 cg=2 phase=phase2 kind=exact best_rc=0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   614.96s] node 0 schedule-cap candidates={'1': 350, '2': 350}
+[clean-BPC   617.39s] schedule-cap diag node 0 round=1 vehicles=2/2 cand=700 oracle=700 incomplete=0 not_tight=700 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=107078
+[clean-BPC   636.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   636.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   636.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=48 added=2
+[clean-BPC   636.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=48, cache_hit=False)
+[clean-BPC   636.83s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=47 added=2
+[clean-BPC   636.83s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=47, cache_hit=False)
+[clean-BPC   636.84s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=41 added=2
+[clean-BPC   636.84s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=41, cache_hit=False)
+[clean-BPC   636.84s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   636.84s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   636.84s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   636.84s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   636.84s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=45 added=2
+[clean-BPC   636.84s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=45, cache_hit=False)
+[clean-BPC   636.84s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   636.84s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   636.84s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   636.84s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   636.85s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=45 added=2
+[clean-BPC   636.85s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=45, cache_hit=False)
+[clean-BPC   636.85s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=13 added=2
+[clean-BPC   636.85s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=13, cache_hit=False)
+[clean-BPC   636.85s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   636.85s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   636.85s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   636.85s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   636.85s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=40 added=2
+[clean-BPC   636.85s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=40, cache_hit=False)
+[clean-BPC   636.85s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   636.85s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   636.86s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=46 added=2
+[clean-BPC   636.86s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=46, cache_hit=False)
+[clean-BPC   636.86s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=15 added=2
+[clean-BPC   636.86s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=15, cache_hit=False)
+[clean-BPC   636.86s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=43 added=2
+[clean-BPC   636.86s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=43, cache_hit=False)
+[clean-BPC   636.86s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=44 added=2
+[clean-BPC   636.86s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=44, cache_hit=False)
+[clean-BPC   636.86s] route-pack-conflict diag node 0 source_vehicle=1 routes=3 U=2 complete=True cache_hit=False states=14 added=2
+[clean-BPC   636.86s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=3, U=2, states=14, cache_hit=False)
+[clean-BPC   636.86s] route-pack-conflict diag node 0 source_vehicle=1 routes=4 U=3 complete=True cache_hit=False states=39 added=2
+[clean-BPC   636.86s] cut_added family=schedule_route_set_packing node=0 added=2 source=schedule_conflict first(vehicle=1, routes=4, U=3, states=39, cache_hit=False)
+[clean-BPC   636.86s] rim-conflict diag node 0 conflicts=21 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=21 routepack_cuts=42 routepack_cache=0 routepack_states_max=48 nogood_events=0 nogood_cuts=0 weak_skip=0
+[clean-BPC    19.43s] restricted-MIP node 0 status=SCHEDULE_REJECTED_LIMIT obj=None accepted=False routes=2323 rejected=21 pair=0 ng=0 route_pack=40 sched_cap=0 added_cuts=42 time=19.434113
+[clean-BPC   636.86s] node 0 d=0 lb=228.39887 open=0
+[clean-BPC   637.20s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=2323
+[clean-BPC   637.55s] node 0 cg=2 phase=phase2 obj=228.39887 artificial=0.0 cols=2323
+[clean-BPC   641.26s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False

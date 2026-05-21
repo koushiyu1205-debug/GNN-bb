@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/home/kai/work/gnn_bb/src/gnn_bb/baseline/config.py", line 66, in load_config
+    import yaml
+ModuleNotFoundError: No module named 'yaml'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/kai/work/gnn_bb/scripts/run_bpc_clean.py", line 194, in <module>
+    main()
+  File "/home/kai/work/gnn_bb/scripts/run_bpc_clean.py", line 54, in main
+    config = load_config(args.config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/src/gnn_bb/baseline/config.py", line 72, in load_config
+    return _load_simple_yaml(config_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kai/work/gnn_bb/src/gnn_bb/baseline/config.py", line 47, in _load_simple_yaml
+    raise ValueError(f"YAML 第 {line_number} 行缺少冒号：{raw_line}")
+ValueError: YAML 第 1 行缺少冒号：{

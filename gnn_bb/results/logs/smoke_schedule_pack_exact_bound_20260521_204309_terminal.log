@@ -1,0 +1,16 @@
+开始 clean BPC: instance=very_small, tasks=4, vehicles=2, time_limit=20s, max_nodes=20, log=/home/kai/work/gnn_bb/results/logs/smoke_schedule_pack_exact_bound_20260521_204309/very_small.jsonl
+[clean-BPC     0.00s] incumbent node 0: obj=132.270984
+[clean-BPC     0.00s] start: {'time': 0.004891, 'event': 'start', 'instance': 'very_small', 'tasks': 4, 'vehicles': 2, 'initial_routes': 11, 'initial_incumbent': 132.270984, 'task_vehicle_linking_enabled': True, 'schedule_capacity_cuts_enabled': True, 'schedule_capacity_separation_enabled': False, 'schedule_pack_diagnostic_enabled': True, 'schedule_pack_relaxation_enabled': True, 'schedule_pack_full_pricing_enabled': True}
+[clean-BPC     0.00s] node 0 d=0 lb=0.0 open=0
+[clean-BPC     0.09s] node 0 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=11
+[clean-BPC     0.09s] node 0 cg=2 phase=phase2 obj=132.270984 artificial=0.0 cols=11
+[clean-BPC     0.09s] node 0 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC     0.09s] subset-row diag node 0 round=1 cand=3 k=2 dup=0 not_viol=4 violated=0 added=0 max_viol=0.0
+[clean-BPC     0.09s] lm-rank1 diag node 0 round=1 cand=3 denom=2 patterns=44 dup=0 not_viol=38 violated=0 added=0 max_viol=0.0
+[clean-BPC     0.09s] route-pack diag node 0 round=1 vehicles=2/2 support_max=2 cand=2 oracle=2 incomplete=0 not_tight=2 not_viol=0 dup=0 violated=0 added=0 max_viol=0.0 states_max=3
+[clean-BPC     0.10s] schedule-pack relax node 0 d=0 status=OPTIMAL obj=132.270984 node_lb=132.270984 delta=0.0 cols=35 routes=11 cg=1 rc=-0.0 pool_exact=True full_exact=True full_routes=16 full_states=232 time=0.007187 priority=True exact_bound=True applied=False official_lb=132.270984
+[clean-BPC     0.10s] schedule-pack diag node 0 status=OPTIMAL obj=132.270984 root=132.270984 delta=0.0 cols=35 routes=11 states=405 cg=1 rc=-0.0 pool_exact=True full_exact=True full_routes=16 full_states=232 seeds=1 time=0.007187 exact_bound=True
+[clean-BPC     0.10s] fathom node 0: reason=schedule_pack_exact_bound bound=132.270984
+[clean-BPC     0.10s] finish status=OPTIMAL primal=132.270984 dual=132.270984 gap=0.0 cuts=0 diag_dual=132.270984 diag_gap=0.0 crossing=0 crossing_upgraded=0 subset_row=0 lm_rank1=0 sched_cost=0 pair=0 clique=0 route_pack=0 nogood=0 sched_cap=0
+very_small: status=OPTIMAL, primal=132.270984, dual=132.270984, gap=0.0, diag_dual=132.270984, diag_gap=0.0, time=0.09879s, nodes=1, rmp=2, pricing=1, routes=11, cuts=0, crossing=0, crossing_upgraded=0, rci=0, kpath=0, pair=0, subset_row=0, lm_rank1=0, sched_cost=0, clique=0, route_pack=0, nogood=0, sched_cap=0, rim_calls=0, rim_feasible=0, rim_rejected=0, rim_pair=0, rim_route_pack=0, rim_ng=0, rim_sched_cap=0, sched_pack_status=OPTIMAL, sched_pack_obj=132.270984, sched_pack_gap_root=0.0, sched_pack_cols=35, sched_pack_relax_calls=1, sched_pack_relax_best=132.270984, sched_pack_full_exact=1, cuts_purged=0, branch_test_time=0.0s
+clean BPC CSV 已写入：/home/kai/work/gnn_bb/results/smoke_schedule_pack_exact_bound_20260521_204309.csv

@@ -12,10 +12,11 @@ from typing import Any
 
 from .branching import BranchConstraint, route_allowed_by_branch, route_branch_coefficient
 from .columns import RouteColumn, route_work_time_lower_bound
-from .cuts import Cut
+from .cuts import Cut, normalize_signatures
 from .data import BPCData
 from .schedule_capacity import find_schedule_capacity_conflict
 from .validation import ScheduleInfeasibilityWitness, diagnose_route_set_schedule
+from .validation import exact_route_set_schedule_capacity
 
 
 @dataclass
@@ -58,6 +59,7 @@ class RestrictedIntegerResult:
     rejected_solutions: int = 0
     no_good_cuts: int = 0
     pair_conflict_cuts: int = 0
+    route_set_packing_cuts: int = 0
     schedule_capacity_cuts: int = 0
     rejected_conflicts: tuple[tuple[int, tuple[RouteColumn, ...]], ...] = tuple()
 
@@ -392,14 +394,14 @@ def _extract_integer_assignment(
 def _first_schedule_conflict(
     data: BPCData,
     assigned: dict[int, list[RouteColumn]],
-) -> tuple[int, ScheduleInfeasibilityWitness] | None:
+) -> tuple[int, ScheduleInfeasibilityWitness, tuple[RouteColumn, ...]] | None:
     for vehicle, vehicle_routes in assigned.items():
         if not vehicle_routes:
             continue
         witness = diagnose_route_set_schedule(data, vehicle_routes)
         if witness is None:
             continue
-        return int(vehicle), witness
+        return int(vehicle), witness, tuple(vehicle_routes)
     return None
 
 
@@ -537,13 +539,35 @@ def solve_restricted_integer_master(
     rejected_solutions = 0
     no_good_cuts = 0
     pair_conflict_cuts = 0
+    route_set_packing_cuts = 0
     schedule_capacity_cuts = 0
     rejected_conflicts: list[tuple[int, tuple[RouteColumn, ...]]] = []
     temporary_pair_keys: set[tuple[int, tuple[tuple[int, ...], tuple[int, ...]]]] = set()
+    temporary_route_pack_keys: set[tuple[int, tuple[tuple[int, ...], ...], int]] = set()
     temporary_capacity_keys: set[tuple[int, tuple[int, ...]]] = set()
+    route_set_packing_cache: dict[tuple[tuple[int, ...], ...], tuple[int, int] | None] = {}
     last_status = "UNKNOWN"
     no_good_limit = max(0, int(max_no_good_rounds))
     deadline = started + float(time_limit) if time_limit > 0 else None
+
+    def route_set_schedule_bound(conflict_routes: tuple[RouteColumn, ...]) -> tuple[int | None, int | None]:
+        signatures = normalize_signatures(tuple(route.signature for route in conflict_routes))
+        cached = route_set_packing_cache.get(signatures)
+        if cached is not None:
+            return cached
+        if signatures in route_set_packing_cache and cached is None:
+            return (None, None)
+        result = exact_route_set_schedule_capacity(
+            data,
+            conflict_routes,
+            max_states=schedule_capacity_oracle_max_states,
+        )
+        if result is None or not result.exact:
+            route_set_packing_cache[signatures] = None
+            return (None, None)
+        value = (int(result.upper_bound), int(result.states_explored))
+        route_set_packing_cache[signatures] = value
+        return value
 
     while True:
         if deadline is not None:
@@ -581,6 +605,7 @@ def solve_restricted_integer_master(
                 rejected_solutions=rejected_solutions,
                 no_good_cuts=no_good_cuts,
                 pair_conflict_cuts=pair_conflict_cuts,
+                route_set_packing_cuts=route_set_packing_cuts,
                 schedule_capacity_cuts=schedule_capacity_cuts,
                 rejected_conflicts=tuple(rejected_conflicts),
             )
@@ -599,14 +624,15 @@ def solve_restricted_integer_master(
                 rejected_solutions=rejected_solutions,
                 no_good_cuts=no_good_cuts,
                 pair_conflict_cuts=pair_conflict_cuts,
+                route_set_packing_cuts=route_set_packing_cuts,
                 schedule_capacity_cuts=schedule_capacity_cuts,
                 rejected_conflicts=tuple(rejected_conflicts),
             )
 
         rejected_solutions += 1
-        conflict_vehicle, witness = conflict
+        conflict_vehicle, witness, full_conflict_routes = conflict
         conflict_routes = tuple(witness.routes)
-        rejected_conflicts.append((int(conflict_vehicle), tuple(conflict_routes)))
+        rejected_conflicts.append((int(conflict_vehicle), tuple(full_conflict_routes)))
         if rejected_solutions > no_good_limit:
             last_status = "SCHEDULE_REJECTED_LIMIT"
             break
@@ -643,6 +669,32 @@ def solve_restricted_integer_master(
                 break
         if added_pair:
             continue
+
+        conflict_signature_tuple = normalize_signatures(tuple(route.signature for route in full_conflict_routes))
+        route_pack_upper_bound, _route_pack_states = route_set_schedule_bound(full_conflict_routes)
+        if route_pack_upper_bound is not None and route_pack_upper_bound < len(conflict_signature_tuple) - 1:
+            added_route_pack = False
+            signature_set = set(conflict_signature_tuple)
+            for vehicle in data.vehicles:
+                key = (int(vehicle), conflict_signature_tuple, int(route_pack_upper_bound))
+                if key in temporary_route_pack_keys:
+                    continue
+                route_pack_terms = [
+                    var
+                    for (route_id, var_vehicle), var in route_vars.items()
+                    if int(var_vehicle) == int(vehicle) and routes[route_id].signature in signature_set
+                ]
+                if not route_pack_terms:
+                    continue
+                model.addCons(
+                    quicksum(route_pack_terms) - int(route_pack_upper_bound) * y[vehicle] <= 0.0,
+                    name=f"tmp_schedule_route_set_packing[{route_set_packing_cuts},{vehicle}]",
+                )
+                temporary_route_pack_keys.add(key)
+                route_set_packing_cuts += 1
+                added_route_pack = True
+            if added_route_pack:
+                continue
 
         structural = find_schedule_capacity_conflict(
             data,
@@ -706,6 +758,7 @@ def solve_restricted_integer_master(
         rejected_solutions=rejected_solutions,
         no_good_cuts=no_good_cuts,
         pair_conflict_cuts=pair_conflict_cuts,
+        route_set_packing_cuts=route_set_packing_cuts,
         schedule_capacity_cuts=schedule_capacity_cuts,
         rejected_conflicts=tuple(rejected_conflicts),
     )

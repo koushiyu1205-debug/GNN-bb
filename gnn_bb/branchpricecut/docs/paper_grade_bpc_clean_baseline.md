@@ -2,6 +2,12 @@
 
 `bpc_clean_full` 是当前实验应固定使用的论文级 baseline。它是 exact route-vehicle Branch-Price-and-Cut，SCIP 只求每个节点的 RMP LP；它不是还在探索中的 vehicle-schedule master。
 
+## 2026-05-21 默认主线修正
+
+默认配置已恢复为轻主线：关闭 near-zero route enumeration 和 schedule-pack diagnostic/relaxation/full-pricing。原因是当前重配置在 `bench_20_01` 上明显变慢，在 `bench_20_02` 上虽然产生较高 schedule-pack 诊断值，但 full route-space pricing 未完整结束，不能把该值作为正式下界。schedule-pack 与 route enumeration 代码保留为消融实验，不作为 paper-grade baseline 默认路径。
+
+2026-05-21 晚间长测后，limited-memory rank-1 也恢复为轻参数：`lm_rank1_candidate_top_routes=100`、`lm_rank1_denominators=[3,4]`、`lm_rank1_memory_size=4`、`lm_rank1_max_patterns_per_set=12`。重参数在 `bench_20_01` 上产生大量 pattern 诊断但 bound 改善很小，因此只适合消融实验。代码层面同时限制无新增 cut 的重复分离，并把 RIM route-pack conflict 预算改为限制尝试次数，避免 oracle 空转。进一步回归显示 LP route-pack separator 新增 cut 后 obj 基本不动，因此默认关闭 `route_set_schedule_packing_cuts_enabled`。
+
 ## Baseline 契约
 
 - 求解入口：`bpc.solver.solve_bpc_clean`。
@@ -15,7 +21,7 @@
 - 分支节点增强定价：普通 bounded-label heuristic 在分支节点找不到列时，会先运行一次更高 label 上限的 `heuristic_boost`。它仍只负责找列；只有 boost 自身 `exhausted=True` 时，才可作为完整 pricing certificate。
 - 安全 dominance：exact pricing 在 label 状态中携带 `visited_mask`、当前任务、active crossing cut 计数、active `arc_on` 使用 mask 和 active signature prefix mask 后做 dominance；即使存在 schedule pair/no-good 这类顺序签名 cut，也只有两个 label 对后续可能命中的 active route signatures 完全一致时才比较，避免漏列。
 - 分支 baseline：不使用 ML；采用 3PB，包含 pseudocost/fractionality 预筛、受限 child LP testing 和 heuristic-CG child testing。
-- 强化项：task-vehicle linking、统一 crossing/resource cuts、schedule capacity cuts、LP 违背的 route-set schedule packing cuts、schedule incompatibility pair/clique cuts、inactive robust cuts 清洗、节点整数解排班不可行时优先加入双向不可排程 route-pair cut，其次尝试 conflict-induced schedule-capacity cut，无法证明任务上界时再回退 schedule no-good cuts；restricted master 内部同样按 pair cut、schedule-capacity cut、no-good 的顺序加入临时约束。
+- 强化项：task-vehicle linking、统一 crossing/resource cuts、subset-row cuts、limited-memory rank-1 cuts、LP 违背的 route-set schedule packing cuts、schedule incompatibility pair/clique cuts、inactive robust cuts 清洗、节点整数解排班不可行时优先加入双向不可排程 route-pair cut，其次尝试 conflict-induced route-set schedule packing cut，再尝试 conflict-induced schedule-capacity cut，无法证明结构性上界时再回退 schedule no-good cuts；restricted master 内部同样按 pair cut、route-set packing cut、schedule-capacity cut、no-good 的顺序加入临时约束。
 - 初始上界：先做 fixed-cost-aware serial/greedy schedule 构造，把通过 exact multi-sortie schedule check 的可行路线放入初始 route pool。该步骤只改善 primal upper bound，不参与 lower bound 证明。
 
 ## 当前固化参数
@@ -29,20 +35,30 @@
 - `branch_node_heuristic_boost_enabled = true`：分支节点普通启发式找不到列时，先做一次增强启发式 pricing。
 - `branch_node_heuristic_boost_max_labels = 900000`，`branch_node_heuristic_boost_routes_per_round = 1000`，`branch_node_heuristic_boost_min_depth = 1`：boost 从深度 1 开始，扩大 label 上限和单轮列注入上限，目标是减少 `bench_20_01` 分支节点上“heuristic=0、exact 找到大量负列”的情况。
 - `exact_pricing_dominance_enabled = true`：开启安全 dominance；日志字段 `dominance_enabled` 和 `dominance_pruned` 用于确认该轮是否真正启用和剪掉多少 label。
+- `pricing_completion_bound_enabled = true`：在没有 active cut dual、没有 active `arc_on` dual、没有 vehicle-time dual 时，对 route prefix 使用安全 completion bound 剪枝。该 bound 只忽略非负行驶/返仓成本，因此不会误删负 reduced-cost route；当前实现按剩余任务 bit-mask 动态求和，不再预生成 `2^n` 大表。
+- `ng_dssr_pricing_enabled = true`，`ng_dssr_memory_size = 6`：bounded-label heuristic pricing 使用 ng-memory dominance 加速找列；它仍只生成 elementary route，但不允许作为节点 certificate。日志中若出现 `ng=6`，对应轮次应为 `cert=False`。
+- `route_enumeration_enabled = false`：近零非负 reduced-cost route 回收默认关闭。2026-05-21 的 20 节点测试显示，它会显著增加 route pool、RMP 变量数和后续 exact pricing 次数，但对正式下界提升有限；后续只作为消融实验开关保留。
+- `schedule_pack_diagnostic_enabled = false`，`schedule_pack_relaxation_enabled = false`，`schedule_pack_full_pricing_enabled = false`：candidate-pool schedule-pack / full route-space schedule pricing 默认退出论文级主线。当前实现能给出较强诊断值，但 `exact_over_full_route_space=false` 时不能作为正式 lower bound；在 `bench_20_01/02` 上反而增加固定计算成本。
+- `schedule_pack_adaptive_enabled = false`，`route_enumeration_adaptive_enabled = false`：自适应门控代码保留，但默认关闭。它只能避免简单节点支付额外重计算成本，不能解决困难实例上 schedule-pack 诊断值无法转成正式 bound 的核心问题。
 - `restricted_master_heuristic_enabled = true`：在完成节点定价证书后，对当前 route pool 解一个小时间限制的 binary restricted master，主动寻找 incumbent；它只作为 primal heuristic，不参与 lower bound 证明。
 - `restricted_master_schedule_aware = true`：restricted master 每次得到整数 route-vehicle assignment 后，立即对每辆车做 exact schedule check；若某辆车的 route 集合不可排程，就提取 witness。
-- 若 witness 中存在两条 route `p,q` 满足 `p->q` 和 `q->p` 都不可行，RIM 先加入临时 `lambda[p,r]+lambda[q,r]<=y[r]`；若没有 pair witness，再尝试用 exact schedule-capacity oracle 证明某个任务集合 `S` 满足 `U(S)<|S|`，成功时加入 `sum_{i in S} z[i,r] <= U(S)y[r]`；若仍无法证明，才加入 `sum lambda[p,r] <= (|C|-1)y[r]` 临时 no-good。
-- RIM 发现的 pair / schedule-capacity conflict 会回流到主树生成正式 cut；弱 no-good 只有在当前 LP 解确实违反时才提升为正式 cut，避免大量不抬升 bound 的全局 no-good 关闭 dominance。
+- 若 witness 中存在两条 route `p,q` 满足 `p->q` 和 `q->p` 都不可行，RIM 先加入临时 `lambda[p,r]+lambda[q,r]<=y[r]`；若没有 pair witness，再对原始不可排程整数解的 full route set `C` 用 exact route-set schedule DP 证明 `U(C)<|C|-1`，成功时加入严格强于 no-good 的 `sum_{p in C} lambda[p,r] <= U(C)y[r]`；若 `U(C)=|C|-1` 或 route-set 上界不能加强，再尝试用 exact schedule-capacity oracle 证明某个任务集合 `S` 满足 `U(S)<|S|`，成功时加入 `sum_{i in S} z[i,r] <= U(S)y[r]`；若仍无法证明，才回退到 no-good。pair、schedule-capacity 和 no-good fallback 使用 deletion-minimal core。
+- RIM 发现的 pair / route-set packing / schedule-capacity conflict 会回流到主树生成正式 cut；弱 no-good 只有在当前 LP 解确实违反时才提升为正式 cut，避免大量不抬升 bound 的全局 no-good 关闭 dominance。
 - RIM 使用线性 incumbent cutoff 过滤不可能改进当前 incumbent 的整数候选；不使用 SCIP `Objlimit`，避免排程不可行的低目标候选提前终止 no-good 迭代。
 - `restricted_master_max_no_good_rounds = 20`：单次 restricted master 最多排除 20 个排程不可行整数解，避免 primal heuristic 吞掉主 BPC 时间。
 - `restricted_master_time_limit = 20.0`，`restricted_master_max_routes = 4000`：限制单次受限整数主问题的时间和 route pool 规模，避免吞掉主 BPC 时间。
 - `max_labels_per_pricing = 0` / `hybrid_max_labels_per_pricing = 0`：exact pricing 不设 label 上限，用于保留最优性证明。
 - certificate pricing 加速：exact pricing 仍完整枚举 elementary route sequence，但在 label 状态中增量维护访问集合、资源、服务时间、任务 dual 贡献、active crossing cut 计数、active `arc_on` 使用 mask 和 active signature prefix mask；只有发现负 reduced-cost route 时才构造完整 `RouteColumn`。这减少了每个 label 反复调用 `evaluate_route()` 的开销；安全 dominance 不改变列集合的证明逻辑、不改变 reduced cost 公式，也不允许未完成的启发式定价参与证明。
+- subset-row cuts：默认启用 `subset_row_cuts_enabled=true`，对当前 LP 支撑 route 生成小规模任务集合 `S`，加入 `sum floor(|p∩S|/k)lambda <= floor(|S|/k)`，`k` 默认取 2 和 3。这是标准 set-partitioning 强化 cut，目标是提升 route master 基础下界。
+- limited-memory rank-1 cuts：默认启用 `lm_rank1_cuts_enabled=true`。它是 subset-row 的非均匀 multiplier 扩展，形式为 `sum floor((sum_i m_i a_ip)/d)lambda <= floor((sum_i m_i)/d)`，默认 `d in {3,4}`，memory 只限制 multiplier pattern 的候选生成。该 cut 是 cover 等式的 rank-1 CG cut，不依赖 schedule oracle。
+- schedule subset cost lower-bound cuts：代码保留但默认关闭 `schedule_subset_cost_cuts_enabled=false`。2026-05-21 `bench_20_02` 诊断中，该候选器 1620 次 exact oracle 查询没有产生 violated cut，`added=0`，因此不纳入当前 paper-grade baseline。若后续重写候选生成，可重新打开；其有效性仍要求 `L(S)` 来自 exact 单车 schedule cost DP。
+- LP 层 schedule-capacity separator：默认关闭 `schedule_capacity_separation_enabled=false`。2026-05-21 `bench_20_02/03` 中该 separator 大量 oracle 查询但 `added=0`。RIM 和整数解校验中的 schedule-capacity conflict fallback 仍保留，由 `schedule_capacity_cuts_enabled=true` 控制。
 - route-set schedule packing separator：完成 exact pricing certificate 后，在浅层节点对同一车辆的 LP 高活动 route 集合 `C` 运行 exact schedule DP，证明同一辆车最多可排 `U(C)` 条 route；若当前 LP 违反 `sum_{p in C} lambda[p,r] <= U(C)y[r]`，加入正式 `schedule_route_set_packing` cut。候选集合来自启发式，`U(C)` 必须来自 exact oracle；oracle 状态超限时不加 cut。
 - route-pack skip 诊断：separator 每轮额外写出 `route_set_schedule_packing_diagnostics`，记录候选数、oracle 查询数、oracle 未完成、`U(C)>=|C|` 不够紧、LP 未违反、重复候选、违反候选、实际加入数、最大违反量和最大 oracle 状态数。该诊断只用于定位瓶颈，不参与模型或证明。
+- schedule-pack relaxation：根节点完成当前 route-vehicle certificate 后保留 schedule-pack 诊断；浅层节点可运行 vehicle-indexed schedule-pack LP，尊重当前节点分支约束和已有 valid cuts。当前版本会把 incumbent schedule 作为 seed columns，先在候选 route 集合内做 dual pricing；候选集合收敛后，可在 root 节点启用 integrated full route-space schedule pricing。该 pricing 不再先枚举全部 elementary sortie route，而是在 schedule label 扩展时生成下一条可行 sortie route，并用安全 dominance 比较相同已覆盖任务集合和 route 数的 label。若 full pricing 在非完整结束前发现负 reduced-cost 的可行 schedule column，会先把该列回流 RMP；这不构成 exact 证书。只有日志中 `exact_over_full_route_space=true` 时，该 schedule-pack LP 才有完整 pricing 证书；若超时或状态上限触发，则仍只作为诊断和节点排序信号，不混入正式 `dual_bound` / `diagnostic_dual_bound`，也不用于剪枝。
 - schedule-capacity skip 诊断：separator 每轮额外写出 `schedule_capacity_diagnostics`，记录候选任务集合数、oracle 查询数、oracle 未完成、`U(S)>=|S|` 不够紧、LP 未违反、重复候选、违反候选、实际加入数、最大违反量和最大 oracle 状态数。
 - 弱 no-good 清理：`schedule_nogood_core/full` 若连续多轮 slack 大且 dual 近 0，会被清理；pair / clique / route-pack 结构性 cut 默认保留。清理 cut 只会放松 LP，不会破坏 exactness。
-- RIM 冲突诊断：restricted-MIP 排除排程不可行整数候选后，记录正式回流 cut 的来源，包括 pair、schedule-capacity、no-good 以及“弱 no-good 当前 LP 不违反而跳过”的数量。
+- RIM 冲突诊断：restricted-MIP 排除排程不可行整数候选后，记录正式回流 cut 的来源，包括 pair、route-set packing、schedule-capacity、no-good 以及“弱 no-good 当前 LP 不违反而跳过”的数量；route-set packing 还记录 exact DP 状态数和 cache hit。
 - schedule incompatibility separator：完成 exact pricing certificate 后，在浅层节点检查同一车辆 LP 支撑 route。若两条 route 的 `p->q` 和 `q->p` 都不可行，且当前 LP 违反 `lambda[p,r]+lambda[q,r]<=y[r]`，加入正式 pair cut；若一组 route 两两双向不可排程且当前 LP 违反 `sum lambda[p,r]<=y[r]`，加入正式 `schedule_clique_conflict` cut。候选搜索只是启发式，cut 有效性由 exact transition check 证明。
 - 固定车成本感知初始构造：比较插入候选时使用包含 `F y_r` 的增量目标，避免为了较短 route cost 过早开启第二辆车；同时新增快速 serial schedule incumbent。2026-05-20 的检查显示，bench_20_02/03 上存在一辆车多 sortie 可行解，因此不能把 `sum_r y_r >= 2` 当作有效 cut。只有证明一辆车不可行，或证明所有一辆车方案目标值不可能优于当前 incumbent，才能安全排除一辆车分支。
 
@@ -51,13 +67,20 @@
 - `status`, `primal_bound`, `dual_bound`, `gap`, `diagnostic_dual_bound`, `diagnostic_gap`, `solving_time`, `node_count`
 - `rmp_solves`, `pricing_calls`, `exact_pricing_calls`, `generated_routes`, `label_pops`, `generated_labels`
 - `restricted_master_integer_calls`, `restricted_master_integer_feasible`, `restricted_master_integer_time`, `restricted_master_integer_best_objective`
-- `restricted_master_integer_raw_best_objective`, `restricted_master_integer_rejected`, `restricted_master_integer_pair_conflict_cuts`, `restricted_master_integer_no_good_cuts`, `restricted_master_integer_schedule_capacity_cuts`
-- `cuts_added`, `crossing_cuts_added`, `resource_lower_bound_cuts_added`, `robust_capacity_cuts_added`
+- `restricted_master_integer_raw_best_objective`, `restricted_master_integer_rejected`, `restricted_master_integer_pair_conflict_cuts`, `restricted_master_integer_route_set_packing_cuts`, `restricted_master_integer_no_good_cuts`, `restricted_master_integer_schedule_capacity_cuts`
+- `cuts_added`, `crossing_cuts_added`, `resource_lower_bound_cuts_added`, `robust_capacity_cuts_added`, `subset_row_cuts_added`, `lm_rank1_cuts_added`, `schedule_subset_cost_cuts_added`
 - `schedule_pair_conflict_cuts_added`, `schedule_clique_conflict_cuts_added`, `schedule_route_set_packing_cuts_added`, `schedule_capacity_cuts_added`, `schedule_nogood_cuts_added`, `cuts_purged`
 - `metric_route_set_schedule_packing_candidate_sets`, `metric_route_set_schedule_packing_oracle_queries`, `metric_route_set_schedule_packing_oracle_incomplete`, `metric_route_set_schedule_packing_not_tight`, `metric_route_set_schedule_packing_not_violated`, `metric_route_set_schedule_packing_violated_candidates`, `metric_route_set_schedule_packing_max_violation`, `metric_route_set_schedule_packing_oracle_states_max`
 - `metric_schedule_capacity_candidate_subsets`, `metric_schedule_capacity_oracle_queries`, `metric_schedule_capacity_oracle_incomplete`, `metric_schedule_capacity_not_tight`, `metric_schedule_capacity_not_violated`, `metric_schedule_capacity_violated_candidates`, `metric_schedule_capacity_max_violation`, `metric_schedule_capacity_oracle_states_max`
-- `metric_rim_conflict_checked`, `metric_rim_conflict_nogood_cuts_added`, `metric_rim_conflict_weak_nogood_not_violated`, `metric_cut_purged_schedule_nogood_core`, `metric_cut_purged_schedule_nogood_full`
+- `schedule_pack_diagnostic_status`, `schedule_pack_diagnostic_objective`, `schedule_pack_diagnostic_gap_vs_root`, `schedule_pack_diagnostic_columns`, `schedule_pack_diagnostic_candidate_routes`, `schedule_pack_diagnostic_generated_states`, `schedule_pack_diagnostic_time`
+- `schedule_pack_relaxation_calls`, `schedule_pack_relaxation_root_objective`, `schedule_pack_relaxation_best_objective`, `schedule_pack_relaxation_best_gap_vs_node`, `schedule_pack_relaxation_candidate_exact`, `schedule_pack_relaxation_full_exact`, `schedule_pack_relaxation_full_pricing_states`, `schedule_pack_relaxation_full_pricing_time`, `schedule_pack_relaxation_columns`
+- `schedule_pack_adaptive_decisions`, `schedule_pack_adaptive_runs`, `schedule_pack_adaptive_skips`, `schedule_pack_adaptive_easy_skips`, `schedule_pack_adaptive_bound_skips`
+- `route_enumeration_adaptive_decisions`, `route_enumeration_adaptive_runs`, `route_enumeration_adaptive_skips`, `route_enumeration_adaptive_easy_skips`
+- `metric_schedule_pack_adaptive_events`, `metric_schedule_pack_adaptive_runs`, `metric_schedule_pack_adaptive_skips`, `metric_route_enumeration_adaptive_events`, `metric_route_enumeration_adaptive_runs`, `metric_route_enumeration_adaptive_skips`
+- `metric_rim_conflict_checked`, `metric_rim_conflict_route_set_packing_cuts_added`, `metric_rim_conflict_route_set_packing_cache_hits`, `metric_rim_conflict_nogood_cuts_added`, `metric_rim_conflict_weak_nogood_not_violated`, `metric_cut_purged_schedule_nogood_core`, `metric_cut_purged_schedule_nogood_full`
 - `branch_nodes`, `branch_lp_candidates_tested`, `branch_heuristic_candidates_tested`, `branch_testing_time`
+
+当前 schedule-pack relaxation 的 column generation 每轮按 `schedule_pack_pricing_batch_size` 批量加入负 reduced-cost schedule columns，并缓存 route-task mask、route-cut 系数和 route-branch 系数。vehicle-indexed schedule-pack LP 使用持久化 RMP，后续新列只增量加入变量和约束系数，不再每轮重建完整 PySCIPOpt 模型。pricing 只使用 `OPTIMAL` LP 的可靠 dual；若持久化 RMP 增量加列后出现 dual 不可用，会先重建一次等价 RMP；时间限制或数值仍不可用时不再把 SCIP 的极大哨兵值当成真实 reduced cost。只有 `schedule_pack_relaxation_full_exact` 为真时才表示 full route-space pricing 完整结束；此时 schedule-pack LP 值会作为正式节点 lower bound 接入 `node.lower_bound=max(route_vehicle_bound,schedule_pack_bound)` 并允许 bound fathoming。若 full exact 为假，该值仍只作为诊断和节点排序信号。
 
 ## 单实例对比方式
 
