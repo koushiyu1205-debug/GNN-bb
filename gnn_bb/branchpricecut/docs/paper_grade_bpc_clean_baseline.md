@@ -8,6 +8,8 @@
 
 2026-05-21 晚间长测后，limited-memory rank-1 也恢复为轻参数：`lm_rank1_candidate_top_routes=100`、`lm_rank1_denominators=[3,4]`、`lm_rank1_memory_size=4`、`lm_rank1_max_patterns_per_set=12`。重参数在 `bench_20_01` 上产生大量 pattern 诊断但 bound 改善很小，因此只适合消融实验。代码层面同时限制无新增 cut 的重复分离，并把 RIM route-pack conflict 预算改为限制尝试次数，避免 oracle 空转。进一步回归显示 LP route-pack separator 新增 cut 后 obj 基本不动，因此默认关闭 `route_set_schedule_packing_cuts_enabled`。
 
+2026-05-22 重新回退到 356 秒模型主线：禁用 `ng_dssr_pricing_enabled`、`exact_dssr_pricing_enabled`、`pricing_completion_bound_enabled` 和 near-zero route enumeration，恢复 LP route-set packing separator。3PB 候选筛选恢复为原始 fractionality/key 排序，不再额外按候选类型加权；greedy incumbent 不做局部 relocate/重排改进，避免过强初始 UB 改变早期 RMP dual 并缩窄 root route pool。这样保留旧版在 `bench_20_01` 上有效的路径：root route pool 约 `2481`、root RIM 快速 incumbent、`RF(7,10)` 分支。
+
 ## Baseline 契约
 
 - 求解入口：`bpc.solver.solve_bpc_clean`。

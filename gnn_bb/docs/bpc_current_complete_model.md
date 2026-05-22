@@ -16,6 +16,8 @@ configs/bpc_clean.yaml
 
 当前 paper-grade baseline 已恢复为轻主线：默认关闭 `route_enumeration_enabled`、`schedule_pack_diagnostic_enabled`、`schedule_pack_relaxation_enabled`、`schedule_pack_full_pricing_enabled`、`schedule_pack_adaptive_enabled` 和 `route_enumeration_adaptive_enabled`。
 
+2026-05-22 回退校正后，默认也关闭 `ng_dssr_pricing_enabled`、`exact_dssr_pricing_enabled` 和 `pricing_completion_bound_enabled`。原因是 `bench_20_01` 回归显示，ng/DSSR 会减少 root route pool 多样性，使 RIM 从 root 快速找到最优 incumbent 退化为多节点搜索。3PB 候选筛选恢复为原始 fractionality/key 排序，greedy incumbent 不做局部 relocate/重排改进，以贴近 356 秒版本：root route pool 约 `2481`、root RIM 快速 incumbent、`RF(7,10)` 分支。
+
 原因是 20 节点测试显示，重 schedule-pack 在 `bench_20_02` 上能给出较高诊断 LP 值，但 full route-space pricing 没有完整结束，不能把诊断值转成正式 lower bound；在 `bench_20_01` 上还显著增加 route pool、RMP 规模和 exact pricing 次数。
 
 后续默认主线只保留 exact route-vehicle BPC、subset-row、limited-memory rank-1、route-set schedule packing conflict、RIM schedule-aware incumbent 搜索和安全 pricing 加速。schedule-pack 与 near-zero route enumeration 保留为单独消融实验开关。

@@ -1,0 +1,18 @@
+M bpc/README.md
+ M bpc/__pycache__/tree.cpython-312.pyc
+ M bpc/tree.py
+ M branchpricecut/config/paper_bpc_clean_baseline.json
+ M branchpricecut/docs/paper_grade_bpc_clean_baseline.md
+ M branchpricecut/results/logs/20260521_234249_dssr_light_no_routepack_bench_20_01/bench_20_01.jsonl
+ M branchpricecut/results/terminal/20260521_234249_dssr_light_no_routepack_bench_20_01.log
+ M configs/bpc_clean.yaml
+ M docs/bpc_current_complete_model.md
+?? branchpricecut/results/20260522_000549_rollback_300s_rf_branch_bench_20_01.csv
+?? branchpricecut/results/20260522_000549_rollback_300s_rf_branch_bench_20_01_config.json
+?? branchpricecut/results/20260522_235636_rollback_300s_bench_20_01_config.json
+?? branchpricecut/results/benchmark/20260522_rollback_300s_arc_first_bench_20_01/
+?? branchpricecut/results/logs/20260522_000549_rollback_300s_rf_branch_bench_20_01/
+?? branchpricecut/results/logs/20260522_235636_rollback_300s_bench_20_01/
+?? branchpricecut/results/solutions/20260522_000549_rollback_300s_rf_branch_bench_20_01/
+?? branchpricecut/results/terminal/20260522_000549_rollback_300s_rf_branch_bench_20_01.log
+?? branchpricecut/results/terminal/20260522_235636_rollback_300s_bench_20_01.log

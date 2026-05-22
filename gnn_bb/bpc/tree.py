@@ -478,16 +478,22 @@ class CleanBPCTree:
 
     def _build_greedy_incumbent(self) -> None:
         # 中文注释：这个启发式只给 UB，不参与 lower bound 或最优性证明。
+        # 356 秒主线先用 raw greedy objective 过滤，只有 raw 已经优于当前 UB 的
+        # 构造才进入局部改进。对所有构造都做 improve 会给出过强初始 UB，
+        # 改变早期 RMP dual 并缩窄 root route pool。
         best_assigned: dict[int, list[RouteColumn]] | None = None
         best_objective = float("inf") if self.incumbent is None else float(self.incumbent.objective)
         for order in self._construction_orders():
             assigned = self._construct_assignment(order)
             if assigned is None:
                 continue
-            assigned = self._improve_assignment(assigned)
-            objective = self._assignment_objective(assigned)
+            raw_objective = self._assignment_objective(assigned)
+            if raw_objective >= best_objective - self.integer_tol:
+                continue
+            improved = self._improve_assignment(assigned)
+            objective = self._assignment_objective(improved)
             if objective < best_objective - self.integer_tol:
-                best_assigned = assigned
+                best_assigned = improved
                 best_objective = objective
         if best_assigned is None:
             return

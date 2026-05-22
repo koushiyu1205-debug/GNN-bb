@@ -45,3 +45,90 @@
 [clean-BPC   121.23s] node 0 cg=15 phase=phase2 obj=225.921253 artificial=0.0 cols=1617
 [clean-BPC   125.32s] node 0 cg=15 phase=phase2 kind=heuristic best_rc=-0.177238 found=2 added=2 exhausted=False cert=False ng=6
 [clean-BPC   125.45s] node 0 cg=16 phase=phase2 obj=225.921253 artificial=0.0 cols=1619
+[clean-BPC   129.66s] node 0 cg=16 phase=phase2 kind=heuristic best_rc=-0.172577 found=2 added=2 exhausted=False cert=False ng=6
+[clean-BPC   129.81s] node 0 cg=17 phase=phase2 obj=225.921253 artificial=0.0 cols=1621
+[clean-BPC   134.03s] node 0 cg=17 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   157.80s] node 0 cg=17 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   157.80s] subset-row diag node 0 round=3 cand=193 k=2 dup=2 not_viol=384 violated=0 added=0 max_viol=0.0
+[clean-BPC   157.89s] lm-rank1 diag node 0 round=1 cand=193 denom=2 patterns=4237 dup=0 not_viol=4158 violated=0 added=0 max_viol=0.0
+[clean-BPC   195.78s] rim-conflict diag node 0 conflicts=12 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=2 routepack_cuts=0 routepack_cache=0 routepack_states_max=0 routepack_budget_skip=10 nogood_events=0 nogood_cuts=0 weak_skip=12
+[clean-BPC    21.11s] restricted-MIP node 0 status=TIME_LIMIT obj=None accepted=False routes=1621 rejected=12 pair=0 ng=24 route_pack=0 sched_cap=0 added_cuts=0 time=21.105512
+[clean-BPC   198.12s] branch node 0: left=task_vehicle(15,1)=off right=task_vehicle(15,1)=on
+[clean-BPC   198.12s] node 1 d=1 lb=225.921253 open=1
+[clean-BPC   198.24s] node 1 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1621
+[clean-BPC   198.37s] node 1 cg=2 phase=phase2 obj=325.921253 artificial=0.0 cols=1621
+[clean-BPC   201.68s] node 1 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   205.03s] node 1 cg=2 phase=phase2 kind=heuristic_boost best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   219.85s] node 1 cg=2 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   219.85s] fathom node 1: reason=bound_after_schedule_pack bound=325.921253
+[clean-BPC   219.85s] node 2 d=1 lb=225.921253 open=0
+[clean-BPC   219.97s] node 2 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1621
+[clean-BPC   220.09s] node 2 cg=2 phase=phase2 obj=225.921253 artificial=0.0 cols=1621
+[clean-BPC   224.11s] node 2 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   229.34s] node 2 cg=2 phase=phase2 kind=heuristic_boost best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   247.52s] node 2 cg=2 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   285.32s] rim-conflict diag node 2 conflicts=12 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=2 routepack_cuts=0 routepack_cache=0 routepack_states_max=0 routepack_budget_skip=10 nogood_events=0 nogood_cuts=0 weak_skip=12
+[clean-BPC    21.06s] restricted-MIP node 2 status=TIME_LIMIT obj=None accepted=False routes=1621 rejected=12 pair=0 ng=24 route_pack=0 sched_cap=0 added_cuts=0 time=21.05913
+[clean-BPC   288.62s] branch node 2: left=RF(5,7)=separate right=RF(5,7)=same
+[clean-BPC   288.62s] node 3 d=2 lb=225.921253 open=1
+[clean-BPC   288.74s] node 3 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1621
+[clean-BPC   288.87s] node 3 cg=2 phase=phase2 obj=226.074824 artificial=0.0 cols=1621
+[clean-BPC   292.14s] node 3 cg=2 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   295.41s] node 3 cg=2 phase=phase2 kind=heuristic_boost best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   312.06s] node 3 cg=2 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   331.68s] rim-conflict diag node 3 conflicts=10 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=2 routepack_cuts=0 routepack_cache=0 routepack_states_max=0 routepack_budget_skip=8 nogood_events=0 nogood_cuts=0 weak_skip=10
+[clean-BPC   331.69s] incumbent node 3: obj=226.883291
+[clean-BPC     8.05s] restricted-MIP node 3 status=OPTIMAL obj=226.883291 accepted=True routes=1621 rejected=10 pair=0 ng=10 route_pack=10 sched_cap=0 added_cuts=0 time=8.049891
+[clean-BPC   335.61s] branch node 3: left=RF(1,5)=separate right=RF(1,5)=same
+[clean-BPC   335.61s] node 4 d=2 lb=225.921253 open=2
+[clean-BPC   335.69s] node 4 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1621
+[clean-BPC   335.79s] node 4 cg=2 phase=phase2 obj=226.118481 artificial=0.0 cols=1621
+[clean-BPC   337.72s] node 4 cg=2 phase=phase2 kind=heuristic best_rc=-0.364010222 found=6 added=6 exhausted=False cert=False ng=6
+[clean-BPC   337.82s] node 4 cg=3 phase=phase2 obj=226.029945 artificial=0.0 cols=1627
+[clean-BPC   339.22s] node 4 cg=3 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   340.60s] node 4 cg=3 phase=phase2 kind=heuristic_boost best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   351.99s] node 4 cg=3 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   391.63s] rim-conflict diag node 4 conflicts=13 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=2 routepack_cuts=0 routepack_cache=0 routepack_states_max=0 routepack_budget_skip=11 nogood_events=0 nogood_cuts=0 weak_skip=13
+[clean-BPC    20.86s] restricted-MIP node 4 status=TIME_LIMIT obj=None accepted=False routes=1627 rejected=13 pair=0 ng=26 route_pack=0 sched_cap=0 added_cuts=0 time=20.860761
+[clean-BPC   394.57s] branch node 4: left=RF(10,11)=separate right=RF(10,11)=same
+[clean-BPC   394.57s] node 7 d=3 lb=226.029945 open=3
+[clean-BPC   394.65s] node 7 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1627
+[clean-BPC   394.73s] node 7 cg=2 phase=phase2 obj=226.210886 artificial=0.0 cols=1627
+[clean-BPC   395.51s] node 7 cg=2 phase=phase2 kind=heuristic best_rc=-0.250452667 found=6 added=6 exhausted=False cert=False ng=6
+[clean-BPC   395.59s] node 7 cg=3 phase=phase2 obj=226.210886 artificial=0.0 cols=1633
+[clean-BPC   397.45s] node 7 cg=3 phase=phase2 kind=heuristic best_rc=-3.36342 found=29 added=29 exhausted=False cert=False ng=6
+[clean-BPC   397.54s] node 7 cg=4 phase=phase2 obj=226.210886 artificial=0.0 cols=1662
+[clean-BPC   398.85s] node 7 cg=4 phase=phase2 kind=heuristic best_rc=-0.859778 found=23 added=23 exhausted=False cert=False ng=6
+[clean-BPC   398.94s] node 7 cg=5 phase=phase2 obj=226.210886 artificial=0.0 cols=1685
+[clean-BPC   400.68s] node 7 cg=5 phase=phase2 kind=heuristic best_rc=-0.183352 found=2 added=2 exhausted=False cert=False ng=6
+[clean-BPC   400.77s] node 7 cg=6 phase=phase2 obj=226.210886 artificial=0.0 cols=1687
+[clean-BPC   403.85s] node 7 cg=6 phase=phase2 kind=heuristic best_rc=-0.106426 found=2 added=2 exhausted=False cert=False ng=6
+[clean-BPC   403.94s] node 7 cg=7 phase=phase2 obj=226.210886 artificial=0.0 cols=1689
+[clean-BPC   407.61s] node 7 cg=7 phase=phase2 kind=heuristic best_rc=-0.0206308 found=4 added=4 exhausted=False cert=False ng=6
+[clean-BPC   407.70s] node 7 cg=8 phase=phase2 obj=226.210886 artificial=0.0 cols=1693
+[clean-BPC   411.42s] node 7 cg=8 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   415.26s] node 7 cg=8 phase=phase2 kind=heuristic_boost best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   432.14s] node 7 cg=8 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   454.30s] cut_added family=schedule_nogood_core node=7 added=1 source_vehicle=1 route_count=4 signatures=[[1, 4, 6, 3, 11], [9, 10, 15, 8], [5, 12, 13, 7], [2, 14, 17]]
+[clean-BPC   472.19s] rim-conflict diag node 7 conflicts=13 pair_events=0 pair_cuts=0 schedcap_events=0 schedcap_cuts=0 routepack_events=2 routepack_cuts=0 routepack_cache=0 routepack_states_max=0 routepack_budget_skip=11 nogood_events=1 nogood_cuts=1 weak_skip=12
+[clean-BPC    21.42s] restricted-MIP node 7 status=TIME_LIMIT obj=None accepted=False routes=1693 rejected=13 pair=0 ng=26 route_pack=0 sched_cap=0 added_cuts=1 time=21.415631
+[clean-BPC   472.19s] node 8 d=3 lb=226.029945 open=3
+[clean-BPC   472.25s] node 8 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1693
+[clean-BPC   472.31s] node 8 cg=2 phase=phase2 obj=227.310309 artificial=0.0 cols=1693
+[clean-BPC   472.83s] node 8 cg=2 phase=phase2 kind=heuristic best_rc=-0.096268429 found=2 added=2 exhausted=False cert=False ng=6
+[clean-BPC   472.89s] node 8 cg=3 phase=phase2 obj=227.310309 artificial=0.0 cols=1695
+[clean-BPC   474.73s] node 8 cg=3 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   476.56s] node 8 cg=3 phase=phase2 kind=heuristic_boost best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   488.75s] node 8 cg=3 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC   488.75s] fathom node 8: reason=bound_after_schedule_pack bound=227.310309
+[clean-BPC   488.75s] node 5 d=3 lb=226.074824 open=2
+[clean-BPC   488.86s] node 5 cg=1 phase=phase1 obj=0.0 artificial=0.0 cols=1695
+[clean-BPC   489.00s] node 5 cg=2 phase=phase2 obj=226.221689 artificial=0.0 cols=1695
+[clean-BPC   490.84s] node 5 cg=2 phase=phase2 kind=heuristic best_rc=-1.086269746 found=35 added=35 exhausted=False cert=False ng=6
+[clean-BPC   490.98s] node 5 cg=3 phase=phase2 obj=226.221689 artificial=0.0 cols=1730
+[clean-BPC   492.88s] node 5 cg=3 phase=phase2 kind=heuristic best_rc=-0.267733286 found=2 added=2 exhausted=False cert=False ng=6
+[clean-BPC   493.01s] node 5 cg=4 phase=phase2 obj=226.221689 artificial=0.0 cols=1732
+[clean-BPC   494.30s] node 5 cg=4 phase=phase2 kind=heuristic best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   495.62s] node 5 cg=4 phase=phase2 kind=heuristic_boost best_rc=-0.0 found=0 added=0 exhausted=False cert=False ng=6
+[clean-BPC   508.58s] node 5 cg=4 phase=phase2 kind=exact best_rc=-0.0 found=0 added=0 exhausted=True cert=True
+[clean-BPC     0.44s] restricted-MIP node 5 status=INFEASIBLE obj=None accepted=False routes=1732 rejected=0 pair=0 ng=0 route_pack=0 sched_cap=0 added_cuts=0 time=0.437845

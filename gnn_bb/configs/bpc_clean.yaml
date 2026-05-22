@@ -37,17 +37,14 @@ branch_node_heuristic_boost_min_depth: 1
 # 顺序签名 cut 通过 active signature prefix mask 进入 dominance key，因此不再直接关闭 dominance。
 exact_pricing_dominance_enabled: true
 
-# pricing 加速层：
-# 1) completion bound 只在没有 cut dual、arc-on dual、vehicle-time dual 时启用，保持可证明安全；
-# 2) ng-DSSR 第一版只用于启发式定价，仍生成 elementary route，但不会作为节点证书；
-# 3) route enumeration 可在 exact pricing 完整结束时额外回收近零 reduced-cost route，
-#    但 2026-05-21 的 20 节点测试显示它会显著膨胀列池和 pricing 轮数，默认关闭。
-pricing_completion_bound_enabled: true
-ng_dssr_pricing_enabled: true
+# pricing 主线回退：
+# 2026-05-21 回归显示，ng/DSSR 会减少 root route pool 多样性，使 RIM 在
+# bench_20_01 上从 root 快速找到最优解退化为多节点 timeout；completion bound /
+# exact DSSR / near-zero route enumeration 全部退出 paper-grade 默认主线。
+pricing_completion_bound_enabled: false
+ng_dssr_pricing_enabled: false
 ng_dssr_memory_size: 6
-# exact DSSR pricing 只在无 active cut / 无 branching 的安全场景尝试；
-# 若 ng-relaxed pricing 完整且无负列，可直接作为证书，否则自动回退完整 elementary pricing。
-exact_dssr_pricing_enabled: true
+exact_dssr_pricing_enabled: false
 exact_dssr_initial_memory_size: 6
 exact_dssr_max_iterations: 4
 exact_dssr_max_labels: 2500000
@@ -64,7 +61,7 @@ restricted_master_max_calls: 20
 restricted_master_max_depth: 3
 restricted_master_schedule_aware: true
 restricted_master_max_no_good_rounds: 20
-# RIM 回流时，route-set packing conflict 只保留少量“严格强于 no-good”的结构性 cut。
+# 356 秒主线保留小预算 RIM conflict 回流，避免在 rejected integer assignment 上空转。
 restricted_master_route_pack_conflict_max_events: 2
 
 # no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
@@ -177,7 +174,7 @@ schedule_incompatibility_clique_seed_count: 24
 # Route-set schedule packing cuts:
 # 对同一车辆的一组 route C，用 exact schedule DP 证明最多可排 U(C) 条；
 # 仅当当前 LP 违反 sum_{p in C} lambda[p,r] <= U(C) 时加入。
-route_set_schedule_packing_cuts_enabled: false
+route_set_schedule_packing_cuts_enabled: true
 route_set_schedule_packing_cut_max_depth: 2
 route_set_schedule_packing_cut_max_rounds_per_node: 2
 route_set_schedule_packing_cut_max_support_routes: 40

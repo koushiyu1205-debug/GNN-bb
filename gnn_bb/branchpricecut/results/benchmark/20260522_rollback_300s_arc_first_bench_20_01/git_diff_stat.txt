@@ -1,0 +1,10 @@
+gnn_bb/bpc/README.md                               |   2 +
+ gnn_bb/bpc/__pycache__/tree.cpython-312.pyc        | Bin 228493 -> 229419 bytes
+ gnn_bb/bpc/tree.py                                 |  33 ++++++-
+ .../config/paper_bpc_clean_baseline.json           |  10 +-
+ .../docs/paper_grade_bpc_clean_baseline.md         |   2 +
+ .../bench_20_01.jsonl                              | 101 +++++++++++++++++++++
+ ..._234249_dssr_light_no_routepack_bench_20_01.log |  87 ++++++++++++++++++
+ gnn_bb/configs/bpc_clean.yaml                      |  23 ++---
+ gnn_bb/docs/bpc_current_complete_model.md          |   2 +
+ 9 files changed, 237 insertions(+), 23 deletions(-)

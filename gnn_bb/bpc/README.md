@@ -59,9 +59,11 @@ schedule_pack_adaptive_enabled: false
 route_enumeration_adaptive_enabled: false
 ```
 
-保留的主线组件是 exact route-vehicle pricing、启发式/boost pricing、completion bound、ng-DSSR 启发式层、subset-row、limited-memory rank-1、route-set schedule packing conflict、RIM schedule-aware incumbent 搜索。schedule-pack 和 near-zero route enumeration 只作为消融实验开关，不再默认进入 paper-grade baseline。
+保留的主线组件是 exact route-vehicle pricing、启发式/boost pricing、subset-row、limited-memory rank-1、route-set schedule packing conflict、RIM schedule-aware incumbent 搜索。completion bound、ng-DSSR、exact DSSR、schedule-pack 和 near-zero route enumeration 只作为消融实验开关，不再默认进入 paper-grade baseline。
 
 2026-05-21 晚间长测回退说明：`bench_20_01` 上，重 lm-rank-1 参数在 root 产生约 `1.4e4` 个 pattern 诊断，但只加入 3 条 cut，root bound 只从 `225.921253` 到 `225.931210`；RIM route-pack conflict 还出现 12 次 oracle 尝试、0 条新增 cut。默认配置因此恢复为轻 lm-rank-1：`top_routes=100`、`denominators=[3,4]`、`memory_size=4`、`patterns_per_set=12`。同时，subset-row / lm-rank-1 / route-pack 的无新增轮次也计入本节点分离轮次，RIM route-pack conflict 的预算改为限制尝试次数，避免重复做无收益 oracle。继续回归后发现 LP route-pack separator 在 `bench_20_01` 的子节点可连续新增 10 条 cut 但 LP obj 不变，因此默认关闭 `route_set_schedule_packing_cuts_enabled`；该模块保留为消融实验项，主线用 crossing、subset-row、轻 lm-rank1 和 exact pricing 维持可证明下界。
+
+2026-05-22 回退校正：356 秒版本的关键不是 DSSR，而是原始 greedy 初始化带来的较丰富 root route pool、RIM 在 root 快速找出 `226.210886` incumbent、3PB 在原始 fractionality/key 排序下选择 `RF(7,10)`。默认主线禁用 `ng_dssr_pricing_enabled`、`exact_dssr_pricing_enabled`、`pricing_completion_bound_enabled` 和 near-zero route enumeration；恢复 LP route-set packing separator；3PB 候选筛选恢复为原始排序，不再额外按候选类型加权；greedy incumbent 不做局部 relocate/重排改进，避免过强初始 UB 改变早期 RMP dual 并缩窄 root route pool。
 
 ### 2026-05-21 CST +0800：route pricing 四步加速第一版
 
