@@ -215,6 +215,8 @@ def main() -> None:
             route_set_schedule_packing_cut_max_per_round=int(config.get("route_set_schedule_packing_cut_max_per_round", 5)),
             route_set_schedule_packing_cut_min_violation=float(config.get("route_set_schedule_packing_cut_min_violation", 5.0e-2)),
             route_set_schedule_packing_oracle_max_states=int(config.get("route_set_schedule_packing_oracle_max_states", 200000)),
+            fleet_lower_bound_cuts_enabled=_bool_config(config, "fleet_lower_bound_cuts_enabled", False),
+            fleet_lower_bound_oracle_max_states=int(config.get("fleet_lower_bound_oracle_max_states", 500000)),
             schedule_pack_diagnostic_enabled=_bool_config(config, "schedule_pack_diagnostic_enabled", False),
             schedule_pack_diagnostic_max_candidate_routes=int(
                 config.get("schedule_pack_diagnostic_max_candidate_routes", 180)
@@ -246,6 +248,17 @@ def main() -> None:
             route_enumeration_adaptive_enabled=_bool_config(config, "route_enumeration_adaptive_enabled", False),
             route_enumeration_adaptive_gap_abs=float(config.get("route_enumeration_adaptive_gap_abs", 10.0)),
             route_enumeration_adaptive_gap_ratio=float(config.get("route_enumeration_adaptive_gap_ratio", 3.0e-2)),
+            three_pb_candidate_budget_enabled=_bool_config(config, "three_pb_candidate_budget_enabled", False),
+            three_pb_root_pseudocost_candidates=int(config.get("three_pb_root_pseudocost_candidates", 6)),
+            three_pb_root_fractional_candidates=int(config.get("three_pb_root_fractional_candidates", 6)),
+            three_pb_root_lp_candidates=int(config.get("three_pb_root_lp_candidates", 3)),
+            three_pb_nonroot_pseudocost_candidates=int(config.get("three_pb_nonroot_pseudocost_candidates", 4)),
+            three_pb_nonroot_fractional_candidates=int(config.get("three_pb_nonroot_fractional_candidates", 4)),
+            three_pb_nonroot_lp_candidates=int(config.get("three_pb_nonroot_lp_candidates", 2)),
+            three_pb_deep_depth=int(config.get("three_pb_deep_depth", 3)),
+            three_pb_deep_pseudocost_candidates=int(config.get("three_pb_deep_pseudocost_candidates", 3)),
+            three_pb_deep_fractional_candidates=int(config.get("three_pb_deep_fractional_candidates", 3)),
+            three_pb_deep_lp_candidates=int(config.get("three_pb_deep_lp_candidates", 1)),
             cut_purge_age=int(config.get("cut_purge_age", 20)),
             cut_purge_slack=float(config.get("cut_purge_slack", 1.0e-5)),
             cut_purge_dual=float(config.get("cut_purge_dual", 1.0e-8)),
@@ -269,6 +282,10 @@ def main() -> None:
             f"route_pack={result.schedule_route_set_packing_cuts_added}, "
             f"nogood={result.schedule_nogood_cuts_added}, "
             f"sched_cap={result.schedule_capacity_cuts_added}, "
+            f"fleet_lb={result.fleet_lower_bound_cuts_added}/{result.fleet_lower_bound_value}, "
+            f"fleet_oracle_U={result.fleet_lower_bound_oracle_upper_bound}, "
+            f"fleet_oracle_states={result.fleet_lower_bound_oracle_states}, "
+            f"fleet_oracle_exact={result.fleet_lower_bound_oracle_exact}, "
             f"rim_calls={result.restricted_master_integer_calls}, rim_feasible={result.restricted_master_integer_feasible}, "
             f"rim_rejected={result.restricted_master_integer_rejected}, "
             f"rim_pair={result.restricted_master_integer_pair_conflict_cuts}, "

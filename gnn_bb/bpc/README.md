@@ -65,6 +65,12 @@ route_enumeration_adaptive_enabled: false
 
 2026-05-22 回退校正：356 秒版本的关键不是 DSSR，而是原始 greedy 初始化带来的较丰富 root route pool、RIM 在 root 快速找出 `226.210886` incumbent、3PB 在原始 fractionality/key 排序下选择 `RF(7,10)`。默认主线禁用 `ng_dssr_pricing_enabled`、`exact_dssr_pricing_enabled`、`pricing_completion_bound_enabled` 和 near-zero route enumeration；恢复 LP route-set packing separator；3PB 候选筛选恢复为原始排序，不再额外按候选类型加权；greedy incumbent 不做局部 relocate/重排改进，避免过强初始 UB 改变早期 RMP dual 并缩窄 root route pool。
 
+2026-05-22 最高置信度改造第一版：新增 `fleet_lower_bound` cut。若 exact 单车多 sortie schedule-capacity oracle 对全任务集合 `T` 完整证明一辆车最多只能服务 `U(T)<|T|` 个任务，则加入 `sum_r y_r >= ceil(|T|/U(T))`。这个 cut 只含车辆使用变量 `y_r`，不含 route column 系数，因此不改变 route reduced cost；pricing 中显式跳过该 cut 的 dual。若 oracle 超过 `fleet_lower_bound_oracle_max_states`，只记录 `fleet_lower_bound` 诊断并跳过 cut，保持 exactness。`bench_20_04` 初始化诊断显示，当前全任务 oracle 在 50万、100万、200万状态上限下仍未完成，因此 fleet LB 代码已经安全接入，但要让它稳定改善 `bench_20_04`，下一步需要先加速这个单车证书 oracle。
+
+同一版还加入轻量 3PB candidate budget 和更完整的候选日志。root 节点保持 356 秒主线的 `6/6/3` 测试预算，非 root 默认降为 `4/4/2`，深度 `>=3` 默认降为 `3/3/1`。日志 `branch_candidates` 记录 budget、候选类型分布和筛选后类型分布；`branch_selection` 记录按候选类型聚合的 LP/heuristic score、pricing 调用和新增 route 数。该机制只改变 branching candidate 的测试数量和顺序，不参与剪枝、cut 有效性或 pricing certificate，因此不影响精确性；若回归显示搜索顺序变差，可直接关闭 `three_pb_candidate_budget_enabled` 回到原始 3PB。
+
+2026-05-23 长测回滚：`20260522_bpc_clean_fleetlb_budget_long_20_regression` 覆盖 `bench_20_01/02/03/04/05/06/08/10`。结果显示 `fleet_lower_bound` 在所有 20 规模实例上均为 `ORACLE_INCOMPLETE`、`added=0`，只增加初始化开销；3PB candidate budget 虽然显著降低 branch testing time，但改变搜索路径后使 `bench_20_05` 的 incumbent 从 `246.129535` 退化到 `260.779456`，`bench_20_08` 也略退化。因此 paper-grade 默认配置关闭 `fleet_lower_bound_cuts_enabled` 和 `three_pb_candidate_budget_enabled`，保留代码和日志字段作为后续消融实验与 2LBB 数据采集工具。
+
 ### 2026-05-21 CST +0800：route pricing 四步加速第一版
 
 #### 修改内容

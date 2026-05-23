@@ -10,6 +10,10 @@
 
 2026-05-22 重新回退到 356 秒模型主线：禁用 `ng_dssr_pricing_enabled`、`exact_dssr_pricing_enabled`、`pricing_completion_bound_enabled` 和 near-zero route enumeration，恢复 LP route-set packing separator。3PB 候选筛选恢复为原始 fractionality/key 排序，不再额外按候选类型加权；greedy incumbent 不做局部 relocate/重排改进，避免过强初始 UB 改变早期 RMP dual 并缩窄 root route pool。这样保留旧版在 `bench_20_01` 上有效的路径：root route pool 约 `2481`、root RIM 快速 incumbent、`RF(7,10)` 分支。
 
+2026-05-22 新增两个不破坏精确性的实验开关。第一，`fleet_lower_bound_cuts_enabled`：只有当 exact 单车 schedule-capacity oracle 完整证明全任务集合一辆车最多服务 `U<|T|` 个任务时，才加入 `sum_r y_r >= ceil(|T|/U)`；若 oracle 超限则只记录诊断，不加 cut。该 cut 只含 `y_r` 系数，不进入 route pricing reduced cost。第二，`three_pb_candidate_budget_enabled`：root 仍用 356 秒主线预算，非 root 和深层节点减少 3PB 测试候选，并在日志中记录候选类型、LP/heuristic score、pricing 调用和新增 route 数。这个预算只影响分支选择成本和顺序，不影响 lower-bound 证明。
+
+2026-05-23 长测回滚：`20260522_bpc_clean_fleetlb_budget_long_20_regression` 显示，fleet lower-bound oracle 在 `bench_20_01/02/03/04/05/06/08/10` 上全部 `ORACLE_INCOMPLETE`，没有加入任何 cut；3PB candidate budget 虽降低 branch testing time，但 `bench_20_05` 的 incumbent 明显退化，`bench_20_08` 也略退化。因此 paper-grade baseline 默认关闭 `fleet_lower_bound_cuts_enabled=false` 和 `three_pb_candidate_budget_enabled=false`，代码保留为显式消融实验和分支日志采集工具。
+
 ## Baseline 契约
 
 - 求解入口：`bpc.solver.solve_bpc_clean`。
@@ -23,6 +27,7 @@
 - 分支节点增强定价：普通 bounded-label heuristic 在分支节点找不到列时，会先运行一次更高 label 上限的 `heuristic_boost`。它仍只负责找列；只有 boost 自身 `exhausted=True` 时，才可作为完整 pricing certificate。
 - 安全 dominance：exact pricing 在 label 状态中携带 `visited_mask`、当前任务、active crossing cut 计数、active `arc_on` 使用 mask 和 active signature prefix mask 后做 dominance；即使存在 schedule pair/no-good 这类顺序签名 cut，也只有两个 label 对后续可能命中的 active route signatures 完全一致时才比较，避免漏列。
 - 分支 baseline：不使用 ML；采用 3PB，包含 pseudocost/fractionality 预筛、受限 child LP testing 和 heuristic-CG child testing。
+- Fleet lower-bound cut：只接受 exact oracle 证书。`bench_20_04` 的 50万、100万、200万状态初始化诊断目前仍为 `ORACLE_INCOMPLETE`，所以该机制已安全接入，但要实质改善该实例，需要继续优化单车证书 oracle，而不是把未证明的车辆数约束强行加入。
 - 强化项：task-vehicle linking、统一 crossing/resource cuts、subset-row cuts、limited-memory rank-1 cuts、LP 违背的 route-set schedule packing cuts、schedule incompatibility pair/clique cuts、inactive robust cuts 清洗、节点整数解排班不可行时优先加入双向不可排程 route-pair cut，其次尝试 conflict-induced route-set schedule packing cut，再尝试 conflict-induced schedule-capacity cut，无法证明结构性上界时再回退 schedule no-good cuts；restricted master 内部同样按 pair cut、route-set packing cut、schedule-capacity cut、no-good 的顺序加入临时约束。
 - 初始上界：先做 fixed-cost-aware serial/greedy schedule 构造，把通过 exact multi-sortie schedule check 的可行路线放入初始 route pool。该步骤只改善 primal upper bound，不参与 lower bound 证明。
 
@@ -37,8 +42,8 @@
 - `branch_node_heuristic_boost_enabled = true`：分支节点普通启发式找不到列时，先做一次增强启发式 pricing。
 - `branch_node_heuristic_boost_max_labels = 900000`，`branch_node_heuristic_boost_routes_per_round = 1000`，`branch_node_heuristic_boost_min_depth = 1`：boost 从深度 1 开始，扩大 label 上限和单轮列注入上限，目标是减少 `bench_20_01` 分支节点上“heuristic=0、exact 找到大量负列”的情况。
 - `exact_pricing_dominance_enabled = true`：开启安全 dominance；日志字段 `dominance_enabled` 和 `dominance_pruned` 用于确认该轮是否真正启用和剪掉多少 label。
-- `pricing_completion_bound_enabled = true`：在没有 active cut dual、没有 active `arc_on` dual、没有 vehicle-time dual 时，对 route prefix 使用安全 completion bound 剪枝。该 bound 只忽略非负行驶/返仓成本，因此不会误删负 reduced-cost route；当前实现按剩余任务 bit-mask 动态求和，不再预生成 `2^n` 大表。
-- `ng_dssr_pricing_enabled = true`，`ng_dssr_memory_size = 6`：bounded-label heuristic pricing 使用 ng-memory dominance 加速找列；它仍只生成 elementary route，但不允许作为节点 certificate。日志中若出现 `ng=6`，对应轮次应为 `cert=False`。
+- `pricing_completion_bound_enabled = false`：completion bound 代码保留为消融实验开关；默认关闭，避免减少 root route pool 多样性。
+- `ng_dssr_pricing_enabled = false`，`exact_dssr_pricing_enabled = false`：DSSR / ng-DSSR 代码保留为消融实验开关；默认关闭，维持 356 秒轻主线的 route pool 和 RIM 行为。
 - `route_enumeration_enabled = false`：近零非负 reduced-cost route 回收默认关闭。2026-05-21 的 20 节点测试显示，它会显著增加 route pool、RMP 变量数和后续 exact pricing 次数，但对正式下界提升有限；后续只作为消融实验开关保留。
 - `schedule_pack_diagnostic_enabled = false`，`schedule_pack_relaxation_enabled = false`，`schedule_pack_full_pricing_enabled = false`：candidate-pool schedule-pack / full route-space schedule pricing 默认退出论文级主线。当前实现能给出较强诊断值，但 `exact_over_full_route_space=false` 时不能作为正式 lower bound；在 `bench_20_01/02` 上反而增加固定计算成本。
 - `schedule_pack_adaptive_enabled = false`，`route_enumeration_adaptive_enabled = false`：自适应门控代码保留，但默认关闭。它只能避免简单节点支付额外重计算成本，不能解决困难实例上 schedule-pack 诊断值无法转成正式 bound 的核心问题。

@@ -22,6 +22,18 @@ configs/bpc_clean.yaml
 
 后续默认主线只保留 exact route-vehicle BPC、subset-row、limited-memory rank-1、route-set schedule packing conflict、RIM schedule-aware incumbent 搜索和安全 pricing 加速。schedule-pack 与 near-zero route enumeration 保留为单独消融实验开关。
 
+2026-05-22 新增 `fleet_lower_bound` cut。该 cut 的数学形式是：
+
+```text
+sum_r y_r >= L
+```
+
+其中 `L` 只能来自 exact 证书：对全任务集合 `T` 调用单车多 sortie schedule-capacity oracle，如果完整证明一辆车最多服务 `U(T)<|T|` 个任务，则 `L=ceil(|T|/U(T))`。如果 oracle 超过状态上限或没有完整证明，则不加 cut。该 cut 只有 `y_r` 系数，没有任何 route column 系数；pricing reduced cost 不受它影响。当前 `bench_20_04` 初始化诊断显示，全任务 oracle 在 50万、100万、200万状态上限下仍 `ORACLE_INCOMPLETE`，因此这条路线的下一步不是直接提高 cut 数，而是加速 exact 单车证书。
+
+同一版新增 3PB candidate budget。root 预算保持 `6/6/3`，非 root 默认 `4/4/2`，深层默认 `3/3/1`。它只减少分支候选测试数量并记录候选特征，不改变节点 lower bound 的证明逻辑。日志中的 `branch_candidates` 和 `branch_selection` 可直接用于后续 You-style 2LBB 离线排序模型训练。
+
+2026-05-23 长测回滚：`20260522_bpc_clean_fleetlb_budget_long_20_regression` 显示 fleet lower-bound oracle 在 20 规模回归实例上全部未完成，未加入任何 cut；3PB candidate budget 虽减少 branch testing time，但导致 `bench_20_05` 和 `bench_20_08` 的 incumbent 退化。当前 paper-grade 默认重新关闭 `fleet_lower_bound_cuts_enabled` 和 `three_pb_candidate_budget_enabled`。两者保留为显式实验开关，不再默认进入主线。
+
 ## 1. 模型定位
 
 当前实现是：

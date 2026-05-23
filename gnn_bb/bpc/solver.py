@@ -61,6 +61,11 @@ class BPCResult:
     schedule_route_set_packing_cuts_added: int
     schedule_nogood_cuts_added: int
     schedule_capacity_cuts_added: int
+    fleet_lower_bound_cuts_added: int
+    fleet_lower_bound_value: int
+    fleet_lower_bound_oracle_upper_bound: int | None
+    fleet_lower_bound_oracle_states: int
+    fleet_lower_bound_oracle_exact: bool
     schedule_pack_diagnostic_status: str | None
     schedule_pack_diagnostic_objective: float | None
     schedule_pack_diagnostic_gap_vs_root: float | None
@@ -233,6 +238,8 @@ def solve_bpc_clean(
     route_set_schedule_packing_cut_max_per_round: int = 5,
     route_set_schedule_packing_cut_min_violation: float = 5.0e-2,
     route_set_schedule_packing_oracle_max_states: int = 200000,
+    fleet_lower_bound_cuts_enabled: bool = False,
+    fleet_lower_bound_oracle_max_states: int = 500000,
     schedule_pack_diagnostic_enabled: bool = False,
     schedule_pack_diagnostic_max_candidate_routes: int = 180,
     schedule_pack_diagnostic_max_columns: int = 8000,
@@ -254,6 +261,17 @@ def solve_bpc_clean(
     route_enumeration_adaptive_enabled: bool = False,
     route_enumeration_adaptive_gap_abs: float = 10.0,
     route_enumeration_adaptive_gap_ratio: float = 3.0e-2,
+    three_pb_candidate_budget_enabled: bool = False,
+    three_pb_root_pseudocost_candidates: int = 6,
+    three_pb_root_fractional_candidates: int = 6,
+    three_pb_root_lp_candidates: int = 3,
+    three_pb_nonroot_pseudocost_candidates: int = 4,
+    three_pb_nonroot_fractional_candidates: int = 4,
+    three_pb_nonroot_lp_candidates: int = 2,
+    three_pb_deep_depth: int = 3,
+    three_pb_deep_pseudocost_candidates: int = 3,
+    three_pb_deep_fractional_candidates: int = 3,
+    three_pb_deep_lp_candidates: int = 1,
     cut_purge_age: int = 20,
     cut_purge_slack: float = 1.0e-5,
     cut_purge_dual: float = 1.0e-8,
@@ -382,6 +400,8 @@ def solve_bpc_clean(
             route_set_schedule_packing_cut_max_per_round=route_set_schedule_packing_cut_max_per_round,
             route_set_schedule_packing_cut_min_violation=route_set_schedule_packing_cut_min_violation,
             route_set_schedule_packing_oracle_max_states=route_set_schedule_packing_oracle_max_states,
+            fleet_lower_bound_cuts_enabled=fleet_lower_bound_cuts_enabled,
+            fleet_lower_bound_oracle_max_states=fleet_lower_bound_oracle_max_states,
             schedule_pack_diagnostic_enabled=schedule_pack_diagnostic_enabled,
             schedule_pack_diagnostic_max_candidate_routes=schedule_pack_diagnostic_max_candidate_routes,
             schedule_pack_diagnostic_max_columns=schedule_pack_diagnostic_max_columns,
@@ -403,6 +423,17 @@ def solve_bpc_clean(
             route_enumeration_adaptive_enabled=route_enumeration_adaptive_enabled,
             route_enumeration_adaptive_gap_abs=route_enumeration_adaptive_gap_abs,
             route_enumeration_adaptive_gap_ratio=route_enumeration_adaptive_gap_ratio,
+            three_pb_candidate_budget_enabled=three_pb_candidate_budget_enabled,
+            three_pb_root_pseudocost_candidates=three_pb_root_pseudocost_candidates,
+            three_pb_root_fractional_candidates=three_pb_root_fractional_candidates,
+            three_pb_root_lp_candidates=three_pb_root_lp_candidates,
+            three_pb_nonroot_pseudocost_candidates=three_pb_nonroot_pseudocost_candidates,
+            three_pb_nonroot_fractional_candidates=three_pb_nonroot_fractional_candidates,
+            three_pb_nonroot_lp_candidates=three_pb_nonroot_lp_candidates,
+            three_pb_deep_depth=three_pb_deep_depth,
+            three_pb_deep_pseudocost_candidates=three_pb_deep_pseudocost_candidates,
+            three_pb_deep_fractional_candidates=three_pb_deep_fractional_candidates,
+            three_pb_deep_lp_candidates=three_pb_deep_lp_candidates,
             cut_purge_age=cut_purge_age,
             cut_purge_slack=cut_purge_slack,
             cut_purge_dual=cut_purge_dual,
@@ -464,6 +495,11 @@ def solve_bpc_clean(
         schedule_route_set_packing_cuts_added=tree_result.stats.schedule_route_set_packing_cuts_added,
         schedule_nogood_cuts_added=tree_result.stats.schedule_nogood_cuts_added,
         schedule_capacity_cuts_added=tree_result.stats.schedule_capacity_cuts_added,
+        fleet_lower_bound_cuts_added=tree_result.stats.fleet_lower_bound_cuts_added,
+        fleet_lower_bound_value=tree_result.stats.fleet_lower_bound_value,
+        fleet_lower_bound_oracle_upper_bound=tree_result.stats.fleet_lower_bound_oracle_upper_bound,
+        fleet_lower_bound_oracle_states=tree_result.stats.fleet_lower_bound_oracle_states,
+        fleet_lower_bound_oracle_exact=tree_result.stats.fleet_lower_bound_oracle_exact,
         schedule_pack_diagnostic_status=tree_result.stats.schedule_pack_diagnostic_status,
         schedule_pack_diagnostic_objective=_round(tree_result.stats.schedule_pack_diagnostic_objective),
         schedule_pack_diagnostic_gap_vs_root=_round(tree_result.stats.schedule_pack_diagnostic_gap_vs_root),
@@ -528,6 +564,7 @@ def solve_bpc_clean(
                     "demand": getattr(cut, "demand", None),
                     "capacity": getattr(cut, "capacity", None),
                     "lower_bound": getattr(cut, "lower_bound", None),
+                    "oracle_upper_bound": getattr(cut, "oracle_upper_bound", None),
                     "divisor": getattr(cut, "divisor", None),
                     "denominator": getattr(cut, "denominator", None),
                     "multipliers": list(getattr(cut, "multipliers", ())),

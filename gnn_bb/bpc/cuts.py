@@ -203,6 +203,39 @@ class ScheduleSubsetCostLowerBoundCut:
 
 
 @dataclass(frozen=True)
+class FleetLowerBoundCut:
+    """中文注释：exact oracle 证明的全局车辆数下界 cut。"""
+
+    id: int
+    lower_bound: int
+    tasks: tuple[int, ...]
+    oracle_upper_bound: int
+    oracle_states: int
+    source: str = "single_vehicle_schedule_capacity"
+    kind: str = "fleet_lower_bound"
+
+    @property
+    def rhs(self) -> float:
+        return float(self.lower_bound)
+
+    @property
+    def sense(self) -> str:
+        return ">="
+
+    @property
+    def key(self) -> tuple:
+        return (self.kind, int(self.lower_bound), self.tasks)
+
+    def coefficient(self, route: RouteColumn, vehicle: int) -> float:
+        del route, vehicle
+        return 0.0
+
+    def y_coefficient(self, vehicle: int) -> float:
+        del vehicle
+        return 1.0
+
+
+@dataclass(frozen=True)
 class SubsetRowCut:
     """中文注释：经典 VRP subset-row cut：sum floor(|p∩S|/k) lambda <= floor(|S|/k)。"""
 
@@ -290,6 +323,7 @@ Cut = (
     | CrossingCut
     | ScheduleCapacityCut
     | ScheduleSubsetCostLowerBoundCut
+    | FleetLowerBoundCut
     | SubsetRowCut
     | LimitedMemoryRank1Cut
 )

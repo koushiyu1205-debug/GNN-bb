@@ -52,6 +52,11 @@ class BPCStats:
     schedule_route_set_packing_cuts_added: int = 0
     schedule_nogood_cuts_added: int = 0
     schedule_capacity_cuts_added: int = 0
+    fleet_lower_bound_cuts_added: int = 0
+    fleet_lower_bound_value: int = 0
+    fleet_lower_bound_oracle_upper_bound: int | None = None
+    fleet_lower_bound_oracle_states: int = 0
+    fleet_lower_bound_oracle_exact: bool = False
     schedule_pack_diagnostic_status: str | None = None
     schedule_pack_diagnostic_objective: float | None = None
     schedule_pack_diagnostic_gap_vs_root: float | None = None

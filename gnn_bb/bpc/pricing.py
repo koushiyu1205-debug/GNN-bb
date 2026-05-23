@@ -739,6 +739,9 @@ def exact_pricing(
                 )
             )
             cost_cut_dual_active = True
+        elif cut.kind == "fleet_lower_bound":
+            # 中文注释：fleet LB 只含 y_r 系数，不含 route lambda 系数；它不改变 route reduced cost。
+            continue
         else:
             raise ValueError(f"未知 cut kind: {cut.kind}")
 

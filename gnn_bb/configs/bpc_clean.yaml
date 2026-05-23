@@ -72,6 +72,20 @@ three_pb_lp_candidates: 3
 three_pb_heuristic_cg_iterations: 3
 three_pb_heuristic_routes_per_iter: 50
 three_pb_heuristic_max_labels: 800
+# 轻量 2LBB 数据结构：root 保持 356 秒主线预算，非 root / 深层节点减少测试候选。
+# 2026-05-22 长测显示该机制可降低 branch testing time，但会改变搜索路径并损害
+# bench_20_05/08 的 incumbent；默认关闭，保留为分支排序消融实验开关。
+three_pb_candidate_budget_enabled: false
+three_pb_root_pseudocost_candidates: 6
+three_pb_root_fractional_candidates: 6
+three_pb_root_lp_candidates: 3
+three_pb_nonroot_pseudocost_candidates: 4
+three_pb_nonroot_fractional_candidates: 4
+three_pb_nonroot_lp_candidates: 2
+three_pb_deep_depth: 3
+three_pb_deep_pseudocost_candidates: 3
+three_pb_deep_fractional_candidates: 3
+three_pb_deep_lp_candidates: 1
 
 # task-vehicle linking:
 # sum_p a_ip lambda[p,r] <= y[r]。这是有限 row，用于强化车辆固定成本的 LP 松弛。
@@ -158,6 +172,14 @@ schedule_capacity_candidate_top_tasks: 12
 schedule_capacity_candidate_max_combinations: 300
 schedule_capacity_route_union_top_routes: 8
 schedule_capacity_route_union_max_routes: 4
+
+# Exact fleet lower-bound cut:
+# 若 exact 单车多 sortie schedule oracle 证明全部任务中一辆车最多只能服务 U<n 个任务，
+# 则安全加入 sum_r y_r >= ceil(n/U)。oracle 超状态上限时不加 cut。
+# 2026-05-22 长测中所有 20 规模实例均为 ORACLE_INCOMPLETE，未加入 cut，只增加初始化开销；
+# 默认关闭，直到单车证书 oracle 能稳定完成。
+fleet_lower_bound_cuts_enabled: false
+fleet_lower_bound_oracle_max_states: 500000
 
 # Schedule incompatibility cuts:
 # 对同一车辆的 LP 支撑 route，若两条 route 任意先后顺序都不可排程，则加入 pair cut；

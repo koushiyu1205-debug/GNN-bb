@@ -16,6 +16,7 @@ from .columns import RouteColumn, RoutePool, evaluate_route, route_to_json
 from .cuts import (
     Cut,
     CrossingCut,
+    FleetLowerBoundCut,
     LimitedMemoryRank1Cut,
     ScheduleCapacityCut,
     ScheduleSubsetCostLowerBoundCut,
@@ -236,6 +237,8 @@ class CleanBPCTree:
         route_set_schedule_packing_cut_max_per_round: int = 5,
         route_set_schedule_packing_cut_min_violation: float = 5.0e-2,
         route_set_schedule_packing_oracle_max_states: int = 200000,
+        fleet_lower_bound_cuts_enabled: bool = False,
+        fleet_lower_bound_oracle_max_states: int = 500000,
         schedule_pack_diagnostic_enabled: bool = False,
         schedule_pack_diagnostic_max_candidate_routes: int = 180,
         schedule_pack_diagnostic_max_columns: int = 8000,
@@ -257,6 +260,17 @@ class CleanBPCTree:
         route_enumeration_adaptive_enabled: bool = False,
         route_enumeration_adaptive_gap_abs: float = 10.0,
         route_enumeration_adaptive_gap_ratio: float = 3.0e-2,
+        three_pb_candidate_budget_enabled: bool = False,
+        three_pb_root_pseudocost_candidates: int = 6,
+        three_pb_root_fractional_candidates: int = 6,
+        three_pb_root_lp_candidates: int = 3,
+        three_pb_nonroot_pseudocost_candidates: int = 4,
+        three_pb_nonroot_fractional_candidates: int = 4,
+        three_pb_nonroot_lp_candidates: int = 2,
+        three_pb_deep_depth: int = 3,
+        three_pb_deep_pseudocost_candidates: int = 3,
+        three_pb_deep_fractional_candidates: int = 3,
+        three_pb_deep_lp_candidates: int = 1,
         cut_purge_age: int = 20,
         cut_purge_slack: float = 1.0e-5,
         cut_purge_dual: float = 1.0e-8,
@@ -395,6 +409,8 @@ class CleanBPCTree:
         self.route_set_schedule_packing_cut_max_per_round = int(route_set_schedule_packing_cut_max_per_round)
         self.route_set_schedule_packing_cut_min_violation = float(route_set_schedule_packing_cut_min_violation)
         self.route_set_schedule_packing_oracle_max_states = int(route_set_schedule_packing_oracle_max_states)
+        self.fleet_lower_bound_cuts_enabled = bool(fleet_lower_bound_cuts_enabled)
+        self.fleet_lower_bound_oracle_max_states = int(fleet_lower_bound_oracle_max_states)
         self.schedule_pack_diagnostic_enabled = bool(schedule_pack_diagnostic_enabled)
         self.schedule_pack_diagnostic_max_candidate_routes = int(schedule_pack_diagnostic_max_candidate_routes)
         self.schedule_pack_diagnostic_max_columns = int(schedule_pack_diagnostic_max_columns)
@@ -416,6 +432,17 @@ class CleanBPCTree:
         self.route_enumeration_adaptive_enabled = bool(route_enumeration_adaptive_enabled)
         self.route_enumeration_adaptive_gap_abs = float(route_enumeration_adaptive_gap_abs)
         self.route_enumeration_adaptive_gap_ratio = float(route_enumeration_adaptive_gap_ratio)
+        self.three_pb_candidate_budget_enabled = bool(three_pb_candidate_budget_enabled)
+        self.three_pb_root_pseudocost_candidates = int(three_pb_root_pseudocost_candidates)
+        self.three_pb_root_fractional_candidates = int(three_pb_root_fractional_candidates)
+        self.three_pb_root_lp_candidates = int(three_pb_root_lp_candidates)
+        self.three_pb_nonroot_pseudocost_candidates = int(three_pb_nonroot_pseudocost_candidates)
+        self.three_pb_nonroot_fractional_candidates = int(three_pb_nonroot_fractional_candidates)
+        self.three_pb_nonroot_lp_candidates = int(three_pb_nonroot_lp_candidates)
+        self.three_pb_deep_depth = int(three_pb_deep_depth)
+        self.three_pb_deep_pseudocost_candidates = int(three_pb_deep_pseudocost_candidates)
+        self.three_pb_deep_fractional_candidates = int(three_pb_deep_fractional_candidates)
+        self.three_pb_deep_lp_candidates = int(three_pb_deep_lp_candidates)
         self.cut_purge_age = int(cut_purge_age)
         self.cut_purge_slack = float(cut_purge_slack)
         self.cut_purge_dual = float(cut_purge_dual)
@@ -465,6 +492,7 @@ class CleanBPCTree:
                 self.pool.add(route)
         self._build_serial_schedule_incumbent()
         self._build_greedy_incumbent()
+        self._add_exact_fleet_lower_bound_cut()
 
     def _allocate_cut_id(self) -> int:
         cut_id = self.next_cut_id
@@ -475,6 +503,109 @@ class CleanBPCTree:
         first_id = self.next_cut_id
         self.next_cut_id += int(count)
         return first_id
+
+    def _add_exact_fleet_lower_bound_cut(self) -> int:
+        if not self.fleet_lower_bound_cuts_enabled:
+            self.logger.log(
+                "fleet_lower_bound",
+                status="DISABLED",
+                added=0,
+                lower_bound=0,
+                tasks=len(self.data.tasks),
+            )
+            return 0
+        tasks = tuple(sorted(int(task) for task in self.data.tasks))
+        if len(tasks) <= 1:
+            self.logger.log(
+                "fleet_lower_bound",
+                status="TRIVIAL",
+                added=0,
+                lower_bound=1 if tasks else 0,
+                tasks=len(tasks),
+            )
+            return 0
+        started = time.perf_counter()
+        oracle = exact_schedule_task_capacity(
+            self.data,
+            tasks,
+            max_states=max(1, self.fleet_lower_bound_oracle_max_states),
+        )
+        elapsed = time.perf_counter() - started
+        if oracle is None or not oracle.exact:
+            self.stats.fleet_lower_bound_oracle_exact = False
+            self.logger.log(
+                "fleet_lower_bound",
+                status="ORACLE_INCOMPLETE",
+                added=0,
+                lower_bound=0,
+                tasks=len(tasks),
+                oracle_upper_bound=None,
+                oracle_states=0,
+                max_states=self.fleet_lower_bound_oracle_max_states,
+                time=round(elapsed, 6),
+            )
+            return 0
+
+        upper_bound = int(oracle.upper_bound)
+        states = int(oracle.states_explored)
+        self.stats.fleet_lower_bound_oracle_upper_bound = upper_bound
+        self.stats.fleet_lower_bound_oracle_states = states
+        self.stats.fleet_lower_bound_oracle_exact = True
+        if upper_bound >= len(tasks):
+            self.logger.log(
+                "fleet_lower_bound",
+                status="NO_CUT",
+                added=0,
+                lower_bound=1,
+                tasks=len(tasks),
+                oracle_upper_bound=upper_bound,
+                oracle_states=states,
+                max_states=self.fleet_lower_bound_oracle_max_states,
+                time=round(elapsed, 6),
+            )
+            return 0
+        if upper_bound <= 0:
+            lower_bound = len(tasks) + 1
+        else:
+            lower_bound = int(math.ceil(len(tasks) / float(upper_bound)))
+        lower_bound = max(2, lower_bound)
+        cut = FleetLowerBoundCut(
+            id=self._allocate_cut_id(),
+            lower_bound=lower_bound,
+            tasks=tasks,
+            oracle_upper_bound=upper_bound,
+            oracle_states=states,
+        )
+        if cut.key in self.cut_keys:
+            self.logger.log(
+                "fleet_lower_bound",
+                status="DUPLICATE",
+                added=0,
+                lower_bound=lower_bound,
+                tasks=len(tasks),
+                oracle_upper_bound=upper_bound,
+                oracle_states=states,
+                max_states=self.fleet_lower_bound_oracle_max_states,
+                time=round(elapsed, 6),
+            )
+            return 0
+        self.cuts.append(cut)
+        self.cut_keys.add(cut.key)
+        self.stats.fleet_lower_bound_cuts_added += 1
+        self.stats.fleet_lower_bound_value = lower_bound
+        self.stats.cuts_added += 1
+        self.logger.log(
+            "fleet_lower_bound",
+            status="ADDED",
+            added=1,
+            lower_bound=lower_bound,
+            tasks=len(tasks),
+            oracle_upper_bound=upper_bound,
+            oracle_states=states,
+            max_states=self.fleet_lower_bound_oracle_max_states,
+            time=round(elapsed, 6),
+        )
+        return 1
 
     def _build_greedy_incumbent(self) -> None:
         # 中文注释：这个启发式只给 UB，不参与 lower bound 或最优性证明。
@@ -871,6 +1002,8 @@ class CleanBPCTree:
             task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
             schedule_capacity_cuts_enabled=self.schedule_capacity_cuts_enabled,
             schedule_capacity_separation_enabled=self.schedule_capacity_separation_enabled,
+            fleet_lower_bound_cuts_enabled=self.fleet_lower_bound_cuts_enabled,
+            fleet_lower_bound_oracle_max_states=self.fleet_lower_bound_oracle_max_states,
             schedule_pack_diagnostic_enabled=self.schedule_pack_diagnostic_enabled,
             schedule_pack_relaxation_enabled=self.schedule_pack_relaxation_enabled,
             schedule_pack_full_pricing_enabled=self.schedule_pack_full_pricing_enabled,
@@ -957,6 +1090,11 @@ class CleanBPCTree:
             schedule_capacity_cuts_added=self.stats.schedule_capacity_cuts_added,
             schedule_clique_conflict_cuts_added=self.stats.schedule_clique_conflict_cuts_added,
             schedule_route_set_packing_cuts_added=self.stats.schedule_route_set_packing_cuts_added,
+            fleet_lower_bound_cuts_added=self.stats.fleet_lower_bound_cuts_added,
+            fleet_lower_bound_value=self.stats.fleet_lower_bound_value,
+            fleet_lower_bound_oracle_upper_bound=self.stats.fleet_lower_bound_oracle_upper_bound,
+            fleet_lower_bound_oracle_states=self.stats.fleet_lower_bound_oracle_states,
+            fleet_lower_bound_oracle_exact=self.stats.fleet_lower_bound_oracle_exact,
             cuts_purged=self.stats.cuts_purged,
             schedule_pack_diagnostic_status=self.stats.schedule_pack_diagnostic_status,
             schedule_pack_diagnostic_objective=None
@@ -3416,9 +3554,10 @@ class CleanBPCTree:
 
         initialized.sort(key=lambda item: (-self.pseudocosts[item.key].average_score, -item.fractionality, item.key))
         uninitialized.sort(key=lambda item: (-item.fractionality, item.key))
+        pseudocost_budget, fractional_budget, lp_budget = self._three_pb_candidate_budgets(node)
         screened = [
-            *initialized[: max(0, self.three_pb_pseudocost_candidates)],
-            *uninitialized[: max(0, self.three_pb_fractional_candidates)],
+            *initialized[: max(0, pseudocost_budget)],
+            *uninitialized[: max(0, fractional_budget)],
         ]
         if not screened:
             screened = sorted(candidates, key=lambda item: (-item.fractionality, item.key))[:1]
@@ -3431,7 +3570,12 @@ class CleanBPCTree:
             initialized=len(initialized),
             uninitialized=len(uninitialized),
             screened=len(screened),
+            budget_enabled=self.three_pb_candidate_budget_enabled,
+            pseudocost_budget=pseudocost_budget,
+            fractional_budget=fractional_budget,
+            lp_budget=lp_budget,
             by_kind=self._candidate_kind_counts(candidates),
+            screened_by_kind=self._candidate_kind_counts(screened),
             screened_candidates=[candidate.compact() for candidate in screened[:20]],
         )
 
@@ -3442,7 +3586,7 @@ class CleanBPCTree:
         self.stats.branch_lp_candidates_tested += len(lp_results)
 
         lp_results.sort(key=lambda item: (-item.lp_score, item.candidate.key))
-        lp_top = lp_results[: max(1, min(self.three_pb_lp_candidates, len(lp_results)))]
+        lp_top = lp_results[: max(1, min(lp_budget, len(lp_results)))]
 
         heuristic_results: list[BranchTestResult] = []
         for item in lp_top:
@@ -3464,15 +3608,74 @@ class CleanBPCTree:
             lp_tested=len(lp_results),
             heuristic_tested=len(heuristic_results),
             testing_time=round(testing_time, 6),
+            lp_results_by_kind=self._branch_test_summary_by_kind(lp_results),
+            heuristic_results_by_kind=self._branch_test_summary_by_kind(heuristic_results),
             top_results=[self._branch_test_to_log(item) for item in heuristic_results[:20]],
         )
         return selected.candidate.left, selected.candidate.right
+
+    def _three_pb_candidate_budgets(self, node: BPCNode) -> tuple[int, int, int]:
+        if not self.three_pb_candidate_budget_enabled:
+            return (
+                self.three_pb_pseudocost_candidates,
+                self.three_pb_fractional_candidates,
+                self.three_pb_lp_candidates,
+            )
+        if node.depth <= 0:
+            return (
+                self.three_pb_root_pseudocost_candidates,
+                self.three_pb_root_fractional_candidates,
+                self.three_pb_root_lp_candidates,
+            )
+        if node.depth >= self.three_pb_deep_depth:
+            return (
+                self.three_pb_deep_pseudocost_candidates,
+                self.three_pb_deep_fractional_candidates,
+                self.three_pb_deep_lp_candidates,
+            )
+        return (
+            self.three_pb_nonroot_pseudocost_candidates,
+            self.three_pb_nonroot_fractional_candidates,
+            self.three_pb_nonroot_lp_candidates,
+        )
 
     def _candidate_kind_counts(self, candidates: list[BranchCandidate]) -> dict[str, int]:
         counts: dict[str, int] = {}
         for candidate in candidates:
             counts[candidate.kind] = counts.get(candidate.kind, 0) + 1
         return dict(sorted(counts.items()))
+
+    def _branch_test_summary_by_kind(self, results: list[BranchTestResult]) -> dict[str, dict[str, float | int | None]]:
+        summary: dict[str, dict[str, float | int | None]] = {}
+        for result in results:
+            item = summary.setdefault(
+                result.candidate.kind,
+                {
+                    "count": 0,
+                    "best_lp_score": None,
+                    "best_heuristic_score": None,
+                    "added_routes": 0,
+                    "pricing_calls": 0,
+                },
+            )
+            item["count"] = int(item["count"] or 0) + 1
+            best_lp = item["best_lp_score"]
+            if best_lp is None or result.lp_score > float(best_lp):
+                item["best_lp_score"] = round(result.lp_score, 9)
+            best_heuristic = item["best_heuristic_score"]
+            if best_heuristic is None or result.heuristic_score > float(best_heuristic):
+                item["best_heuristic_score"] = round(result.heuristic_score, 9)
+            item["added_routes"] = (
+                int(item["added_routes"] or 0)
+                + result.left_heuristic_added_routes
+                + result.right_heuristic_added_routes
+            )
+            item["pricing_calls"] = (
+                int(item["pricing_calls"] or 0)
+                + result.left_heuristic_iterations
+                + result.right_heuristic_iterations
+            )
+        return dict(sorted(summary.items()))
 
     def _branch_test_to_log(self, result: BranchTestResult) -> dict[str, Any]:
         return {
