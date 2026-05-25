@@ -318,3 +318,13 @@ rmp_params:
   parallel/maxnthreads: 1
   presolving/maxrounds: 0
   separating/maxrounds: 0
+
+# task schedule-capacity root-only override
+task_schedule_capacity_cuts_enabled: true
+task_schedule_capacity_max_depth: 0
+task_schedule_capacity_pair_budget: 100
+task_schedule_capacity_triple_budget: 50
+task_schedule_capacity_small_set_budget: 0
+task_schedule_capacity_node_time_budget: 5.0
+task_schedule_capacity_oracle_max_states: 200000
+task_schedule_capacity_copy_to_all_vehicles: false

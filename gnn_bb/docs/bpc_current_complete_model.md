@@ -14,9 +14,11 @@ configs/bpc_clean.yaml
 
 ## 0. 2026-05-21 默认主线修正
 
-2026-05-25 新增两个保守改动，默认 paper-grade baseline 仍不打开高成本模块：
+2026-05-25 新增 task-level schedule-capacity separator v2，并保持默认 paper-grade baseline 不打开高成本模块：
 
-- `root_schedule_capacity_cuts_enabled: false` 保持默认关闭。其 root/shallow separator 的 pair/triple oracle 前 precheck 已修正为只用 `activity > y_r + eps`，避免漏掉 exact oracle 证明 `U(S)=1` 的 triple cut；oracle incomplete 时绝不加 cut。
+- `task_schedule_capacity_cuts_enabled: false` 保持默认关闭。新的 root/shallow separator 统一替代旧 root pair/triple separator 主体，旧 `root_schedule_capacity_*` 配置仍作为兼容别名。候选来自 top-z task mass、LP support route union、RIM rejected assignment、route-set packing witness、schedule incompatibility witness 和可选 time-window cluster；pair/triple/small-set 都先用 `sum_{i in S} z_{ir} > y_r + eps` 作为 cheap precheck，再在预算内调用 exact task-capacity oracle。这样不会漏掉 exact oracle 证明 `U(S)=1` 且 `y_r < activity <= 2y_r` 的 triple cut。
+- `U(S)` 只在 `exact_schedule_task_capacity()` 完整证明时用于加 cut。oracle incomplete、exact 但不紧、exact 且当前 LP 不违反都会进入 run-local cache/诊断，但不会产生 cut、lower bound 或 fathoming 依据。当前车辆同质，cache key 为排序后的 task tuple；未来异构车辆需要把 vehicle type 加入 key。
+- 新 separator 的 witness 会写入 `branch_candidates` / `branch_selection` 日志，默认只记录，不改变 branching score。只有显式打开 `task_schedule_capacity_branch_signal_apply_enabled` 时，才对相关 RF/task-vehicle 候选加很小的确定性 tie-break boost，且不参与剪枝或 bound。
 - `persistent_rmp_enabled: false` 新增且默认关闭。打开后，`PersistentRMP` 只替换主节点 RMP-CG loop 内的 RMP rebuild；branch testing 仍使用 `solve_rmp_lp`。PersistentRMP 与 `solve_rmp_lp` 使用同一数学模型、同一 SCIP LP dual、同一 reduced-cost 公式；Phase-I/Phase-II 切换和 cut purge 会重建模型，非追加同步会回退到 rebuild。
 
 当前 paper-grade baseline 已恢复为轻主线：默认关闭 `route_enumeration_enabled`、`schedule_pack_diagnostic_enabled`、`schedule_pack_relaxation_enabled`、`schedule_pack_full_pricing_enabled`、`schedule_pack_adaptive_enabled` 和 `route_enumeration_adaptive_enabled`。
@@ -586,14 +588,24 @@ sum_p (sum_{i in S} a_ip) lambda_pr - U(S) y_r <= 0
 
 其中 `U(S)` 是一辆真实车辆在完整多 sortie schedule 中最多能服务 `S` 内多少个任务。
 
-当前实现用 exact schedule task-capacity oracle 计算 `U(S)`。如果 oracle 超过状态上限或无法证明，则跳过，不加 cut。
+当前实现用 exact schedule task-capacity oracle 计算 `U(S)`。如果 oracle 超过状态上限、超过节点时间预算或无法完整证明，则只缓存/记录 incomplete 结果，跳过且不加 cut。incomplete 结果不能作为 cut、lower bound 或 fathoming 依据。
 
-Schedule capacity cut 有两个来源：
+Schedule capacity cut 有三个来源：
 
-1. LP separation：从当前分数解的任务-车辆负载中生成候选集合 `S`，若当前 LP 违反上式则加入；
-2. conflict-induced separation：当某辆车的整数 route 集合不可排程时，从该 route 集合的任务并集、route 组合并集和小规模任务组合中生成候选 `S`，若 exact oracle 证明 `U(S)<|S|`，则对所有同质车辆加入同一类 `schedule_capacity` cut。
+1. task-level LP separation：从当前分数解的 `z_ir`、support routes 和 shallow/root 节点 witness memory 生成 pair/triple/small-set 候选。所有 size 的 cheap precheck 都是 `sum_{i in S} z_ir > y_r + eps`，因为 oracle 可能证明 `U(S)=1`；
+2. conflict-induced separation：当某辆车的整数 route 集合不可排程时，从该 route 集合的任务并集、route 组合并集和小规模任务组合中生成候选 `S`，若 exact oracle 证明 `U(S)<|S|`，则加入同一类 `schedule_capacity` cut；
+3. witness feedback：RIM rejected assignment、route-set schedule packing、schedule pair/clique incompatibility 和 integral validation conflict 会把 route task union 记录到 task-level candidate memory。后续 root/shallow separator 给这些 witness-derived 候选更高优先级，并可把成功的 `S` 写入 branching 诊断。
 
-第二类 cut 比 route-signature no-good 更结构化。它不是只排除当前几条 route，而是排除“同一车辆服务 `S` 中超过 `U(S)` 个任务”的所有 route 组合；同时它仍只依赖任务集合和车辆，pricing 不需要增加顺序签名状态，安全 dominance 也可以继续启用。
+这类 cut 比 route-signature no-good 更结构化。它不是只排除当前几条 route 或某个 route signature 集合，而是排除“同一车辆服务 `S` 中超过 `U(S)` 个任务”的所有 route 组合。route-set schedule packing cut 的对象是 route 集合 `C`，形式为 `sum_{p in C} lambda_pr <= U(C)y_r`；task-level schedule-capacity cut 的对象是任务集合 `S`，对所有包含这些任务的 route 组合都生效，因此更适合把 schedule 可行性的核心容量信息投影回 route-vehicle master。它仍只依赖任务集合和车辆，pricing 不需要增加顺序签名状态，安全 dominance 也可以继续启用。
+
+缓存与预算：
+
+- oracle cache key 当前为排序后的 `tasks tuple S`；车辆同质时 `U(S)` 可跨车辆复用；
+- `exact/incomplete`、`upper_bound`、states、time、hit count、last node 和 source count 都会记录；
+- incomplete、exact-not-tight、exact-tight-but-not-violated 都会缓存，避免同一 run 反复做 expensive oracle；
+- duplicate cut key 会在插入前跳过；
+- 默认只对当前 violated vehicle 加 cut；`task_schedule_capacity_copy_to_all_vehicles: true` 时可把同一个 exact `U(S)` 复制到所有同质车辆，并记录 copy 数量；
+- pair/triple/small-set budgets、max subset size、oracle max states、node time budget、global time ratio、no-add/no-improvement stop 都由配置控制；默认主开关关闭且 small-set budget 为 0。
 
 有效性：
 

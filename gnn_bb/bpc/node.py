@@ -72,6 +72,33 @@ class BPCStats:
     root_schedule_capacity_candidates_generated: int = 0
     root_schedule_capacity_candidates_after_precheck: int = 0
     root_schedule_capacity_best_violation: float = 0.0
+    task_schedule_capacity_cuts_added: int = 0
+    task_schedule_capacity_candidates_generated: int = 0
+    task_schedule_capacity_candidates_after_precheck: int = 0
+    task_schedule_capacity_pair_candidates: int = 0
+    task_schedule_capacity_triple_candidates: int = 0
+    task_schedule_capacity_small_set_candidates: int = 0
+    task_schedule_capacity_candidates_by_source: dict[str, int] = field(default_factory=dict)
+    task_schedule_capacity_prechecked_by_source: dict[str, int] = field(default_factory=dict)
+    task_schedule_capacity_oracle_requests: int = 0
+    task_schedule_capacity_oracle_computations: int = 0
+    task_schedule_capacity_cache_hits: int = 0
+    task_schedule_capacity_oracle_incomplete: int = 0
+    task_schedule_capacity_exact_not_tight: int = 0
+    task_schedule_capacity_exact_tight_not_violated: int = 0
+    task_schedule_capacity_violated_candidates: int = 0
+    task_schedule_capacity_best_violation: float = 0.0
+    task_schedule_capacity_oracle_time: float = 0.0
+    task_schedule_capacity_oracle_states_total: int = 0
+    task_schedule_capacity_oracle_states_max: int = 0
+    task_schedule_capacity_cuts_copied_to_all_vehicles: int = 0
+    task_schedule_capacity_stopped_by_no_add: int = 0
+    task_schedule_capacity_stopped_by_no_improvement: int = 0
+    task_schedule_capacity_stopped_by_node_time_budget: int = 0
+    task_schedule_capacity_stopped_by_global_time_budget: int = 0
+    task_schedule_capacity_branch_signal_candidates: int = 0
+    task_schedule_capacity_branch_signal_applied: int = 0
+    task_schedule_capacity_added_but_no_bound_improvement: int = 0
     route_set_schedule_packing_oracle_queries: int = 0
     route_set_schedule_packing_oracle_time: float = 0.0
     route_set_schedule_packing_cache_hits: int = 0

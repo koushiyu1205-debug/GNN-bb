@@ -37,6 +37,60 @@ SCIP 的职责：
 
 ## 模型记录
 
+### 2026-05-25 CST +0800：task-level schedule-capacity separator v2
+
+本次把 task-level schedule-capacity cut 从旧 root pair/triple 小实验整理成统一 root/shallow separator。cut 形式为：
+
+```text
+z_ir = sum_p a_ip lambda_pr
+sum_{i in S} z_ir <= U(S) y_r
+```
+
+RMP row 等价为：
+
+```text
+sum_p |p ∩ S| lambda_pr - U(S)y_r <= 0
+```
+
+`U(S)` 必须由 `exact_schedule_task_capacity()` 完整证明：一辆真实车辆最多能服务任务集合 `S` 中多少个任务。oracle incomplete、超状态预算或超时间预算时只写 cache/diagnostics，绝不加 cut、绝不作为 lower bound 或 fathoming 依据。当前车辆同质，所以 run-local cache 只按排序后的 task tuple `S` 复用 exact upper bound；未来异构车辆需要把 vehicle type 加入 cache key。
+
+候选生成分层且受预算控制：
+
+- pair：top `z[i,r]`、RIM rejected route union、route-set packing witness、schedule incompatibility witness、route-pack 中重复出现的任务；
+- triple：top task mass、LP support route union、RIM/route-pack/incompatibility witness、可选 time-window cluster；
+- small set `|S|=4..6`：只从 strong witness memory 生成，默认 budget 为 0，不做全组合枚举。
+
+所有 size 的 cheap precheck 都是 `sum_{i in S} z_ir > y_r + eps`，因为 exact oracle 可能证明 `U(S)=1`。这比旧 triple `activity > 2y_r` 更安全，不会漏掉 `y_r < activity <= 2y_r` 的 violated triple。
+
+它和 route-set schedule packing cut 的区别是：route-pack cut 切的是 route 集合 `C`，`sum_{p in C} lambda_pr <= U(C)y_r`；task-level cut 切的是任务集合 `S`，对任意包含这些任务的 route 组合都生效。因此它比 route-signature no-good 更结构化，也能反哺 route-pack/RIM/schedule incompatibility witness。若某个 `S` 成功产生 cut，后续包含它的 route-pack candidate 会降低优先级，但 route-pack separator 本身不会被删除。
+
+新增日志/结果字段覆盖 candidate generated/prechecked、by-source 计数、pair/triple/small 计数、oracle requests/computations/cache hits/incomplete/not-tight/not-violated、violated candidates、cuts added、best violation、oracle time/states、copy-to-all 数量、stop reason 和 branch signal 计数。branch signal 默认只记录在 `branch_candidates` / `branch_selection`，不改变 branch score；只有打开 `task_schedule_capacity_branch_signal_apply_enabled` 才加轻量 deterministic tie-break。
+
+默认配置保持保守：
+
+```text
+task_schedule_capacity_cuts_enabled: false
+task_schedule_capacity_max_depth: 0
+task_schedule_capacity_pair_budget: 100
+task_schedule_capacity_triple_budget: 50
+task_schedule_capacity_small_set_budget: 0
+task_schedule_capacity_oracle_max_states: 200000
+task_schedule_capacity_node_time_budget: 5.0
+task_schedule_capacity_global_time_ratio: 0.05
+task_schedule_capacity_copy_to_all_vehicles: false
+task_schedule_capacity_branch_signal_enabled: true
+task_schedule_capacity_branch_signal_apply_enabled: false
+```
+
+消融入口：
+
+```bash
+python scripts/run_task_schedule_capacity_ablation.py --instances very_small --quiet
+python scripts/run_task_schedule_capacity_ablation.py --instances bench_10_01 bench_20_01 --time-limit 300 --variants baseline root_only root_depth1 pair_only pair_triple witness_only top_z_only
+```
+
+是否进入默认主线要看 root bound、node count、pricing calls、label pops、RIM rejected、route-pack low-improvement cuts、branch path 和 oracle time 的综合结果；若只是增加 cut 或 oracle time 而不改善 bound/search，应继续默认关闭。
+
 ### 2026-05-25 CST +0800：root schedule-cap precheck 修正与 PersistentRMP v1
 
 本次修正 root/shallow schedule-capacity separator 的 oracle 前置过滤：pair 和 triple 都只用 `activity > y_r + eps` 作为必要条件。旧实现用 `activity > (|S|-1)y_r` 过滤 triple，会漏掉 exact oracle 证明 `U(S)=1` 的强 triple cut；现在 `y_r < activity <= 2y_r` 的 triple 会进入 oracle 查询。oracle 未完整证明时仍只记录/缓存，不加 cut。

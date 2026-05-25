@@ -62,6 +62,32 @@ def analyze_csv(path: str | Path) -> list[dict[str, Any]]:
             "restricted_master_route_set_packing_cuts": _int(row.get("restricted_master_integer_route_set_packing_cuts")),
             "restricted_master_schedule_capacity_cuts": _int(row.get("restricted_master_integer_schedule_capacity_cuts")),
             "restricted_master_no_good_cuts": _int(row.get("restricted_master_integer_no_good_cuts")),
+            "task_schedule_capacity_cuts_added": _int(row.get("task_schedule_capacity_cuts_added")),
+            "task_schedule_capacity_candidates_generated": _int(row.get("task_schedule_capacity_candidates_generated")),
+            "task_schedule_capacity_candidates_after_precheck": _int(row.get("task_schedule_capacity_candidates_after_precheck")),
+            "task_schedule_capacity_pair_candidates": _int(row.get("task_schedule_capacity_pair_candidates")),
+            "task_schedule_capacity_triple_candidates": _int(row.get("task_schedule_capacity_triple_candidates")),
+            "task_schedule_capacity_small_set_candidates": _int(row.get("task_schedule_capacity_small_set_candidates")),
+            "task_schedule_capacity_candidates_by_source": row.get("task_schedule_capacity_candidates_by_source"),
+            "task_schedule_capacity_prechecked_by_source": row.get("task_schedule_capacity_prechecked_by_source"),
+            "task_schedule_capacity_oracle_requests": _int(row.get("task_schedule_capacity_oracle_requests")),
+            "task_schedule_capacity_oracle_computations": _int(row.get("task_schedule_capacity_oracle_computations")),
+            "task_schedule_capacity_cache_hits": _int(row.get("task_schedule_capacity_cache_hits")),
+            "task_schedule_capacity_oracle_time": _number(row.get("task_schedule_capacity_oracle_time")) or 0.0,
+            "task_schedule_capacity_oracle_incomplete": _int(row.get("task_schedule_capacity_oracle_incomplete")),
+            "task_schedule_capacity_exact_not_tight": _int(row.get("task_schedule_capacity_exact_not_tight")),
+            "task_schedule_capacity_exact_tight_not_violated": _int(row.get("task_schedule_capacity_exact_tight_not_violated")),
+            "task_schedule_capacity_violated_candidates": _int(row.get("task_schedule_capacity_violated_candidates")),
+            "task_schedule_capacity_best_violation": _number(row.get("task_schedule_capacity_best_violation")) or 0.0,
+            "task_schedule_capacity_oracle_states_total": _int(row.get("task_schedule_capacity_oracle_states_total")),
+            "task_schedule_capacity_oracle_states_max": _int(row.get("task_schedule_capacity_oracle_states_max")),
+            "task_schedule_capacity_cuts_copied_to_all_vehicles": _int(row.get("task_schedule_capacity_cuts_copied_to_all_vehicles")),
+            "task_schedule_capacity_stopped_by_no_add": _int(row.get("task_schedule_capacity_stopped_by_no_add")),
+            "task_schedule_capacity_stopped_by_no_improvement": _int(row.get("task_schedule_capacity_stopped_by_no_improvement")),
+            "task_schedule_capacity_stopped_by_node_time_budget": _int(row.get("task_schedule_capacity_stopped_by_node_time_budget")),
+            "task_schedule_capacity_stopped_by_global_time_budget": _int(row.get("task_schedule_capacity_stopped_by_global_time_budget")),
+            "task_schedule_capacity_branch_signal_candidates": _int(row.get("task_schedule_capacity_branch_signal_candidates")),
+            "task_schedule_capacity_branch_signal_applied": _int(row.get("task_schedule_capacity_branch_signal_applied")),
             "open_nodes_remaining": _int(row.get("open_nodes_remaining")),
             "timeout_pending_node_certified": _bool_or_none(row.get("timeout_pending_node_certified")),
             "official_bound_available": _bool_or_none(row.get("official_bound_available")),
@@ -107,6 +133,11 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
     branch_heuristic_testing = 0
     branch_testing_time = _number(finish.get("branch_testing_time")) or 0.0
     rim = Counter()
+    task_schedcap = Counter()
+    task_schedcap_by_source: Counter[str] = Counter()
+    task_schedcap_prechecked_by_source: Counter[str] = Counter()
+    task_schedcap_time = 0.0
+    task_schedcap_best_violation = 0.0
 
     for record in records:
         event = str(record.get("event", ""))
@@ -141,10 +172,45 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
             family = _diagnostic_family(event)
             cut_families[family]["attempts"] += 1
             cut_families[family]["oracle_queries"] += _int(record.get("oracle_queries"))
+            cut_families[family]["oracle_requests"] += _int(record.get("oracle_requests"))
+            cut_families[family]["oracle_computations"] += _int(record.get("oracle_computations"))
             cut_families[family]["oracle_time_us"] += int(round((_number(record.get("oracle_time")) or 0.0) * 1_000_000))
             cut_families[family]["incomplete"] += _int(record.get("skipped_oracle_incomplete")) + _int(record.get("oracle_incomplete"))
             cut_families[family]["duplicate"] += _int(record.get("skipped_duplicate")) + _int(record.get("duplicate"))
             cut_families[family]["added"] += _int(record.get("added")) + _int(record.get("cuts_added"))
+            if event == "task_schedule_capacity_diagnostics":
+                task_schedcap["generated"] += _int(record.get("candidates_generated"))
+                task_schedcap["prechecked"] += _int(record.get("candidates_after_precheck"))
+                task_schedcap["pair"] += _int(record.get("pair_candidates"))
+                task_schedcap["triple"] += _int(record.get("triple_candidates"))
+                task_schedcap["small"] += _int(record.get("small_set_candidates"))
+                task_schedcap["oracle_requests"] += _int(record.get("oracle_requests"))
+                task_schedcap["oracle_computations"] += _int(record.get("oracle_computations"))
+                task_schedcap["cache_hits"] += _int(record.get("cache_hits"))
+                task_schedcap["incomplete"] += _int(record.get("oracle_incomplete"))
+                task_schedcap["not_tight"] += _int(record.get("exact_not_tight"))
+                task_schedcap["not_violated"] += _int(record.get("exact_tight_not_violated"))
+                task_schedcap["violated"] += _int(record.get("violated_candidates"))
+                task_schedcap["added"] += _int(record.get("cuts_added"))
+                task_schedcap["states_total"] += _int(record.get("oracle_states_total"))
+                task_schedcap["states_max"] = max(int(task_schedcap["states_max"]), _int(record.get("oracle_states_max")))
+                task_schedcap["copied"] += _int(record.get("cuts_copied_to_all_vehicles"))
+                stopped_by = str(record.get("stopped_by") or "")
+                task_schedcap["stopped_by_no_add"] += int(stopped_by == "no_add_rounds")
+                task_schedcap["stopped_by_no_improvement"] += int(stopped_by == "no_improvement_rounds")
+                task_schedcap["stopped_by_node_time_budget"] += int(stopped_by == "node_time_budget")
+                task_schedcap["stopped_by_global_time_budget"] += int(stopped_by == "global_time_budget")
+                task_schedcap["branch_signal_candidates"] += _int(record.get("branch_signal_candidates"))
+                task_schedcap["branch_signal_applied"] += _int(record.get("branch_signal_applied"))
+                task_schedcap_best_violation = max(
+                    task_schedcap_best_violation,
+                    _number(record.get("best_violation")) or 0.0,
+                )
+                for key, value in (record.get("candidates_by_source") or {}).items():
+                    task_schedcap_by_source[str(key)] += _int(value)
+                for key, value in (record.get("prechecked_by_source") or {}).items():
+                    task_schedcap_prechecked_by_source[str(key)] += _int(value)
+                task_schedcap_time += _number(record.get("oracle_time")) or 0.0
         elif event == "cut_roi":
             family = str(record.get("family") or "unknown")
             cut_roi[family]["events"] = int(cut_roi[family]["events"]) + 1
@@ -215,6 +281,55 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
         "restricted_master_schedule_capacity_cuts": int(rim["schedule_capacity_cuts"]),
         "restricted_master_no_good_cuts": int(rim["no_good_cuts"]),
         "rim_conflicts_checked": int(rim["conflicts_checked"]),
+        "task_schedule_capacity_cuts_added": int(task_schedcap["added"]) or _int(finish.get("task_schedule_capacity_cuts_added")),
+        "task_schedule_capacity_candidates_generated": int(task_schedcap["generated"])
+        or _int(finish.get("task_schedule_capacity_candidates_generated")),
+        "task_schedule_capacity_candidates_after_precheck": int(task_schedcap["prechecked"])
+        or _int(finish.get("task_schedule_capacity_candidates_after_precheck")),
+        "task_schedule_capacity_pair_candidates": int(task_schedcap["pair"])
+        or _int(finish.get("task_schedule_capacity_pair_candidates")),
+        "task_schedule_capacity_triple_candidates": int(task_schedcap["triple"])
+        or _int(finish.get("task_schedule_capacity_triple_candidates")),
+        "task_schedule_capacity_small_set_candidates": int(task_schedcap["small"])
+        or _int(finish.get("task_schedule_capacity_small_set_candidates")),
+        "task_schedule_capacity_candidates_by_source": dict(task_schedcap_by_source)
+        or finish.get("task_schedule_capacity_candidates_by_source"),
+        "task_schedule_capacity_prechecked_by_source": dict(task_schedcap_prechecked_by_source)
+        or finish.get("task_schedule_capacity_prechecked_by_source"),
+        "task_schedule_capacity_oracle_requests": int(task_schedcap["oracle_requests"])
+        or _int(finish.get("task_schedule_capacity_oracle_requests")),
+        "task_schedule_capacity_oracle_computations": int(task_schedcap["oracle_computations"])
+        or _int(finish.get("task_schedule_capacity_oracle_computations")),
+        "task_schedule_capacity_cache_hits": int(task_schedcap["cache_hits"]) or _int(finish.get("task_schedule_capacity_cache_hits")),
+        "task_schedule_capacity_oracle_incomplete": int(task_schedcap["incomplete"])
+        or _int(finish.get("task_schedule_capacity_oracle_incomplete")),
+        "task_schedule_capacity_exact_not_tight": int(task_schedcap["not_tight"])
+        or _int(finish.get("task_schedule_capacity_exact_not_tight")),
+        "task_schedule_capacity_exact_tight_not_violated": int(task_schedcap["not_violated"])
+        or _int(finish.get("task_schedule_capacity_exact_tight_not_violated")),
+        "task_schedule_capacity_violated_candidates": int(task_schedcap["violated"])
+        or _int(finish.get("task_schedule_capacity_violated_candidates")),
+        "task_schedule_capacity_best_violation": task_schedcap_best_violation
+        or (_number(finish.get("task_schedule_capacity_best_violation")) or 0.0),
+        "task_schedule_capacity_oracle_time": task_schedcap_time or (_number(finish.get("task_schedule_capacity_oracle_time")) or 0.0),
+        "task_schedule_capacity_oracle_states_total": int(task_schedcap["states_total"])
+        or _int(finish.get("task_schedule_capacity_oracle_states_total")),
+        "task_schedule_capacity_oracle_states_max": int(task_schedcap["states_max"])
+        or _int(finish.get("task_schedule_capacity_oracle_states_max")),
+        "task_schedule_capacity_cuts_copied_to_all_vehicles": int(task_schedcap["copied"])
+        or _int(finish.get("task_schedule_capacity_cuts_copied_to_all_vehicles")),
+        "task_schedule_capacity_stopped_by_no_add": int(task_schedcap["stopped_by_no_add"])
+        or _int(finish.get("task_schedule_capacity_stopped_by_no_add")),
+        "task_schedule_capacity_stopped_by_no_improvement": int(task_schedcap["stopped_by_no_improvement"])
+        or _int(finish.get("task_schedule_capacity_stopped_by_no_improvement")),
+        "task_schedule_capacity_stopped_by_node_time_budget": int(task_schedcap["stopped_by_node_time_budget"])
+        or _int(finish.get("task_schedule_capacity_stopped_by_node_time_budget")),
+        "task_schedule_capacity_stopped_by_global_time_budget": int(task_schedcap["stopped_by_global_time_budget"])
+        or _int(finish.get("task_schedule_capacity_stopped_by_global_time_budget")),
+        "task_schedule_capacity_branch_signal_candidates": int(task_schedcap["branch_signal_candidates"])
+        or _int(finish.get("task_schedule_capacity_branch_signal_candidates")),
+        "task_schedule_capacity_branch_signal_applied": int(task_schedcap["branch_signal_applied"])
+        or _int(finish.get("task_schedule_capacity_branch_signal_applied")),
         "branch_candidate_count": branch_candidate_count,
         "branch_lp_testing": branch_lp_testing or _int(finish.get("branch_lp_candidates_tested")),
         "branch_heuristic_testing": branch_heuristic_testing or _int(finish.get("branch_heuristic_candidates_tested")),

@@ -36,6 +36,13 @@ from .rmp import RMPSolution, RestrictedIntegerResult, solve_restricted_integer_
 from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity, find_schedule_capacity_conflict
 from .schedule_cost import ScheduleSubsetCostResult, exact_schedule_subset_cost
 from .schedule_pack import solve_schedule_pack_node_relaxation
+from .task_schedule_capacity import (
+    TaskScheduleCapacityCacheEntry,
+    TaskScheduleCapacityCandidate,
+    TaskScheduleCapacityWitness,
+    generate_task_schedule_capacity_candidates,
+    witness_from_routes,
+)
 from .validation import (
     RoutePairScheduleConflict,
     check_route_set_schedule_feasible,
@@ -234,6 +241,31 @@ class CleanBPCTree:
         root_schedule_capacity_time_budget: float = 5.0,
         root_schedule_capacity_min_violation: float = 1.0e-5,
         root_schedule_capacity_stop_after_no_add_rounds: int = 1,
+        task_schedule_capacity_cuts_enabled: bool | None = None,
+        task_schedule_capacity_max_depth: int | None = None,
+        task_schedule_capacity_pair_budget: int | None = None,
+        task_schedule_capacity_triple_budget: int | None = None,
+        task_schedule_capacity_small_set_budget: int = 0,
+        task_schedule_capacity_max_subset_size: int = 6,
+        task_schedule_capacity_max_cuts_per_round: int = 20,
+        task_schedule_capacity_oracle_max_states: int | None = None,
+        task_schedule_capacity_node_time_budget: float | None = None,
+        task_schedule_capacity_global_time_ratio: float = 0.05,
+        task_schedule_capacity_min_violation: float | None = None,
+        task_schedule_capacity_copy_to_all_vehicles: bool = False,
+        task_schedule_capacity_use_rim_witness: bool = True,
+        task_schedule_capacity_use_route_pack_witness: bool = True,
+        task_schedule_capacity_use_incompatibility_witness: bool = True,
+        task_schedule_capacity_use_top_z_mass: bool = True,
+        task_schedule_capacity_use_support_route_union: bool = True,
+        task_schedule_capacity_use_time_window_clusters: bool = False,
+        task_schedule_capacity_stop_after_no_add_rounds: int | None = None,
+        task_schedule_capacity_stop_after_no_improve_rounds: int = 2,
+        task_schedule_capacity_cache_incomplete: bool = True,
+        task_schedule_capacity_cache_not_tight: bool = True,
+        task_schedule_capacity_cache_exact_upper_bound: bool = True,
+        task_schedule_capacity_branch_signal_enabled: bool = True,
+        task_schedule_capacity_branch_signal_apply_enabled: bool = False,
         schedule_incompatibility_cuts_enabled: bool = True,
         schedule_incompatibility_cut_max_depth: int = 2,
         schedule_incompatibility_cut_max_rounds_per_node: int = 2,
@@ -423,6 +455,64 @@ class CleanBPCTree:
         self.root_schedule_capacity_time_budget = float(root_schedule_capacity_time_budget)
         self.root_schedule_capacity_min_violation = float(root_schedule_capacity_min_violation)
         self.root_schedule_capacity_stop_after_no_add_rounds = int(root_schedule_capacity_stop_after_no_add_rounds)
+        self.task_schedule_capacity_legacy_alias_mode = task_schedule_capacity_cuts_enabled is None
+        self.task_schedule_capacity_cuts_enabled = (
+            bool(root_schedule_capacity_cuts_enabled)
+            if task_schedule_capacity_cuts_enabled is None
+            else bool(task_schedule_capacity_cuts_enabled)
+        )
+        self.task_schedule_capacity_max_depth = (
+            int(root_schedule_capacity_max_depth)
+            if task_schedule_capacity_max_depth is None
+            else int(task_schedule_capacity_max_depth)
+        )
+        self.task_schedule_capacity_pair_budget = (
+            int(root_schedule_capacity_pair_budget)
+            if task_schedule_capacity_pair_budget is None
+            else int(task_schedule_capacity_pair_budget)
+        )
+        self.task_schedule_capacity_triple_budget = (
+            int(root_schedule_capacity_triple_budget)
+            if task_schedule_capacity_triple_budget is None
+            else int(task_schedule_capacity_triple_budget)
+        )
+        self.task_schedule_capacity_small_set_budget = int(task_schedule_capacity_small_set_budget)
+        self.task_schedule_capacity_max_subset_size = int(task_schedule_capacity_max_subset_size)
+        self.task_schedule_capacity_max_cuts_per_round = int(task_schedule_capacity_max_cuts_per_round)
+        self.task_schedule_capacity_oracle_max_states = (
+            int(root_schedule_capacity_oracle_max_states)
+            if task_schedule_capacity_oracle_max_states is None
+            else int(task_schedule_capacity_oracle_max_states)
+        )
+        self.task_schedule_capacity_node_time_budget = (
+            float(root_schedule_capacity_time_budget)
+            if task_schedule_capacity_node_time_budget is None
+            else float(task_schedule_capacity_node_time_budget)
+        )
+        self.task_schedule_capacity_global_time_ratio = float(task_schedule_capacity_global_time_ratio)
+        self.task_schedule_capacity_min_violation = (
+            float(root_schedule_capacity_min_violation)
+            if task_schedule_capacity_min_violation is None
+            else float(task_schedule_capacity_min_violation)
+        )
+        self.task_schedule_capacity_copy_to_all_vehicles = bool(task_schedule_capacity_copy_to_all_vehicles)
+        self.task_schedule_capacity_use_rim_witness = bool(task_schedule_capacity_use_rim_witness)
+        self.task_schedule_capacity_use_route_pack_witness = bool(task_schedule_capacity_use_route_pack_witness)
+        self.task_schedule_capacity_use_incompatibility_witness = bool(task_schedule_capacity_use_incompatibility_witness)
+        self.task_schedule_capacity_use_top_z_mass = bool(task_schedule_capacity_use_top_z_mass)
+        self.task_schedule_capacity_use_support_route_union = bool(task_schedule_capacity_use_support_route_union)
+        self.task_schedule_capacity_use_time_window_clusters = bool(task_schedule_capacity_use_time_window_clusters)
+        self.task_schedule_capacity_stop_after_no_add_rounds = (
+            int(root_schedule_capacity_stop_after_no_add_rounds)
+            if task_schedule_capacity_stop_after_no_add_rounds is None
+            else int(task_schedule_capacity_stop_after_no_add_rounds)
+        )
+        self.task_schedule_capacity_stop_after_no_improve_rounds = int(task_schedule_capacity_stop_after_no_improve_rounds)
+        self.task_schedule_capacity_cache_incomplete = bool(task_schedule_capacity_cache_incomplete)
+        self.task_schedule_capacity_cache_not_tight = bool(task_schedule_capacity_cache_not_tight)
+        self.task_schedule_capacity_cache_exact_upper_bound = bool(task_schedule_capacity_cache_exact_upper_bound)
+        self.task_schedule_capacity_branch_signal_enabled = bool(task_schedule_capacity_branch_signal_enabled)
+        self.task_schedule_capacity_branch_signal_apply_enabled = bool(task_schedule_capacity_branch_signal_apply_enabled)
         self.schedule_incompatibility_cuts_enabled = bool(schedule_incompatibility_cuts_enabled)
         self.schedule_incompatibility_cut_max_depth = int(schedule_incompatibility_cut_max_depth)
         self.schedule_incompatibility_cut_max_rounds_per_node = int(schedule_incompatibility_cut_max_rounds_per_node)
@@ -499,17 +589,26 @@ class CleanBPCTree:
         self.schedule_subset_cost_cut_rounds_by_node: dict[int, int] = {}
         self.schedule_capacity_cut_rounds_by_node: dict[int, int] = {}
         self.root_schedule_capacity_no_add_rounds_by_node: dict[int, int] = {}
+        self.task_schedule_capacity_cut_rounds_by_node: dict[int, int] = {}
+        self.task_schedule_capacity_no_add_rounds_by_node: dict[int, int] = {}
+        self.task_schedule_capacity_no_improve_rounds_by_node: dict[int, int] = {}
         self.schedule_incompatibility_cut_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_cut_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_no_add_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_no_improve_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_oracle_time_total = 0.0
+        self.task_schedule_capacity_oracle_time_total = 0.0
         self.pending_cut_roi: list[dict[str, Any]] = []
         self.route_set_schedule_packing_cache: dict[tuple[tuple[int, ...], ...], tuple[int, int] | None] = {}
         self.schedule_conflict_witness_cache: dict[tuple[tuple[int, ...], ...], Any] = {}
         self.schedule_conflict_route_pack_cache: dict[tuple[tuple[int, ...], ...], tuple[int | None, int | None, bool]] = {}
         self.schedule_capacity_cache: dict[tuple[int, ...], ScheduleCapacityResult | None] = {}
         self.root_schedule_capacity_cache: dict[tuple[int, ...], ScheduleCapacityResult | None] = {}
+        self.task_schedule_capacity_cache: dict[tuple[int, ...], TaskScheduleCapacityCacheEntry] = {}
+        self.task_schedule_capacity_witness_memory: dict[tuple[int, ...], TaskScheduleCapacityWitness] = {}
+        self.task_schedule_capacity_successful_sets: set[tuple[int, ...]] = set()
+        self.task_schedule_capacity_branch_witnesses: list[dict[str, Any]] = []
+        self.task_schedule_capacity_explained_route_sets: set[tuple[int, ...]] = set()
         self.schedule_subset_cost_cache: dict[tuple[int, ...], ScheduleSubsetCostResult | None] = {}
         self.schedule_pair_incompatibility_cache: dict[tuple[tuple[int, ...], tuple[int, ...]], bool] = {}
         self.resource_pair_incompatible: set[tuple[int, int]] | None = None
@@ -575,6 +674,14 @@ class CleanBPCTree:
                     self.stats.route_set_schedule_packing_added_but_no_bound_improvement += added
                 else:
                     self.route_set_schedule_packing_no_improve_rounds_by_node[node.id] = 0
+            elif family == "task_schedule_capacity":
+                if low_improvement:
+                    self.task_schedule_capacity_no_improve_rounds_by_node[node.id] = (
+                        self.task_schedule_capacity_no_improve_rounds_by_node.get(node.id, 0) + 1
+                    )
+                    self.stats.task_schedule_capacity_added_but_no_bound_improvement += added
+                else:
+                    self.task_schedule_capacity_no_improve_rounds_by_node[node.id] = 0
             self.logger.log(
                 "cut_roi",
                 node_id=node.id,
@@ -635,6 +742,7 @@ class CleanBPCTree:
         elapsed = time.perf_counter() - started
         if oracle is None or not oracle.exact:
             self.stats.fleet_lower_bound_oracle_exact = False
+            states = 0 if oracle is None else int(oracle.states_explored)
             self.logger.log(
                 "fleet_lower_bound",
                 status="ORACLE_INCOMPLETE",
@@ -642,7 +750,7 @@ class CleanBPCTree:
                 lower_bound=0,
                 tasks=len(tasks),
                 oracle_upper_bound=None,
-                oracle_states=0,
+                oracle_states=states,
                 max_states=self.fleet_lower_bound_oracle_max_states,
                 time=round(elapsed, 6),
             )
@@ -1107,6 +1215,11 @@ class CleanBPCTree:
             schedule_capacity_separation_enabled=self.schedule_capacity_separation_enabled,
             root_schedule_capacity_cuts_enabled=self.root_schedule_capacity_cuts_enabled,
             root_schedule_capacity_max_depth=self.root_schedule_capacity_max_depth,
+            task_schedule_capacity_cuts_enabled=self.task_schedule_capacity_cuts_enabled,
+            task_schedule_capacity_max_depth=self.task_schedule_capacity_max_depth,
+            task_schedule_capacity_pair_budget=self.task_schedule_capacity_pair_budget,
+            task_schedule_capacity_triple_budget=self.task_schedule_capacity_triple_budget,
+            task_schedule_capacity_small_set_budget=self.task_schedule_capacity_small_set_budget,
             fleet_lower_bound_cuts_enabled=self.fleet_lower_bound_cuts_enabled,
             fleet_lower_bound_oracle_max_states=self.fleet_lower_bound_oracle_max_states,
             route_set_schedule_packing_roi_guard_enabled=self.route_set_schedule_packing_roi_guard_enabled,
@@ -1217,6 +1330,32 @@ class CleanBPCTree:
             root_schedule_capacity_candidates_generated=self.stats.root_schedule_capacity_candidates_generated,
             root_schedule_capacity_candidates_after_precheck=self.stats.root_schedule_capacity_candidates_after_precheck,
             root_schedule_capacity_best_violation=round(self.stats.root_schedule_capacity_best_violation, 9),
+            task_schedule_capacity_cuts_added=self.stats.task_schedule_capacity_cuts_added,
+            task_schedule_capacity_candidates_generated=self.stats.task_schedule_capacity_candidates_generated,
+            task_schedule_capacity_candidates_after_precheck=self.stats.task_schedule_capacity_candidates_after_precheck,
+            task_schedule_capacity_pair_candidates=self.stats.task_schedule_capacity_pair_candidates,
+            task_schedule_capacity_triple_candidates=self.stats.task_schedule_capacity_triple_candidates,
+            task_schedule_capacity_small_set_candidates=self.stats.task_schedule_capacity_small_set_candidates,
+            task_schedule_capacity_candidates_by_source=self.stats.task_schedule_capacity_candidates_by_source,
+            task_schedule_capacity_prechecked_by_source=self.stats.task_schedule_capacity_prechecked_by_source,
+            task_schedule_capacity_oracle_requests=self.stats.task_schedule_capacity_oracle_requests,
+            task_schedule_capacity_oracle_computations=self.stats.task_schedule_capacity_oracle_computations,
+            task_schedule_capacity_cache_hits=self.stats.task_schedule_capacity_cache_hits,
+            task_schedule_capacity_oracle_incomplete=self.stats.task_schedule_capacity_oracle_incomplete,
+            task_schedule_capacity_exact_not_tight=self.stats.task_schedule_capacity_exact_not_tight,
+            task_schedule_capacity_exact_tight_not_violated=self.stats.task_schedule_capacity_exact_tight_not_violated,
+            task_schedule_capacity_violated_candidates=self.stats.task_schedule_capacity_violated_candidates,
+            task_schedule_capacity_best_violation=round(self.stats.task_schedule_capacity_best_violation, 9),
+            task_schedule_capacity_oracle_time=round(self.stats.task_schedule_capacity_oracle_time, 6),
+            task_schedule_capacity_oracle_states_total=self.stats.task_schedule_capacity_oracle_states_total,
+            task_schedule_capacity_oracle_states_max=self.stats.task_schedule_capacity_oracle_states_max,
+            task_schedule_capacity_cuts_copied_to_all_vehicles=self.stats.task_schedule_capacity_cuts_copied_to_all_vehicles,
+            task_schedule_capacity_stopped_by_no_add=self.stats.task_schedule_capacity_stopped_by_no_add,
+            task_schedule_capacity_stopped_by_no_improvement=self.stats.task_schedule_capacity_stopped_by_no_improvement,
+            task_schedule_capacity_stopped_by_node_time_budget=self.stats.task_schedule_capacity_stopped_by_node_time_budget,
+            task_schedule_capacity_stopped_by_global_time_budget=self.stats.task_schedule_capacity_stopped_by_global_time_budget,
+            task_schedule_capacity_branch_signal_candidates=self.stats.task_schedule_capacity_branch_signal_candidates,
+            task_schedule_capacity_branch_signal_applied=self.stats.task_schedule_capacity_branch_signal_applied,
             schedule_clique_conflict_cuts_added=self.stats.schedule_clique_conflict_cuts_added,
             schedule_route_set_packing_cuts_added=self.stats.schedule_route_set_packing_cuts_added,
             route_set_schedule_packing_oracle_queries=self.stats.route_set_schedule_packing_oracle_queries,
@@ -1792,6 +1931,12 @@ class CleanBPCTree:
             if not conflict_routes:
                 diagnostics["skipped_without_witness"] += 1
                 continue
+            self._record_task_schedule_capacity_witness(
+                list(conflict_routes),
+                source="rim_witness",
+                vehicle=int(source_vehicle),
+                node_id=node.id,
+            )
             witness = self._diagnose_schedule_conflict(conflict_routes)
             if witness is None:
                 diagnostics["skipped_without_witness"] += 1
@@ -3120,7 +3265,319 @@ class CleanBPCTree:
 
         return search(0)
 
+    def _separate_task_schedule_capacity_cuts(
+        self,
+        node: BPCNode,
+        solution: RMPSolution,
+        *,
+        legacy_family: str,
+    ) -> int:
+        if not self.task_schedule_capacity_cuts_enabled and legacy_family == "task_schedule_capacity":
+            return 0
+        if node.depth > self.task_schedule_capacity_max_depth:
+            return 0
+        rounds = self.task_schedule_capacity_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= max(1, self.schedule_capacity_cut_max_rounds_per_node):
+            return 0
+        no_add_rounds = self.task_schedule_capacity_no_add_rounds_by_node.get(node.id, 0)
+        if (
+            self.task_schedule_capacity_stop_after_no_add_rounds >= 0
+            and no_add_rounds >= self.task_schedule_capacity_stop_after_no_add_rounds
+        ):
+            self.stats.task_schedule_capacity_stopped_by_no_add += 1
+            self.logger.log(
+                "task_schedule_capacity_diagnostics",
+                node_id=node.id,
+                depth=node.depth,
+                round=rounds + 1,
+                stopped_by="no_add_rounds",
+                added=0,
+            )
+            return 0
+        no_improve_rounds = self.task_schedule_capacity_no_improve_rounds_by_node.get(node.id, 0)
+        if (
+            self.task_schedule_capacity_stop_after_no_improve_rounds >= 0
+            and no_improve_rounds >= self.task_schedule_capacity_stop_after_no_improve_rounds
+        ):
+            self.stats.task_schedule_capacity_stopped_by_no_improvement += 1
+            self.logger.log(
+                "task_schedule_capacity_diagnostics",
+                node_id=node.id,
+                depth=node.depth,
+                round=rounds + 1,
+                stopped_by="no_improvement_rounds",
+                added=0,
+            )
+            return 0
+        global_budget = max(0.0, self.time_limit * self.task_schedule_capacity_global_time_ratio)
+        if global_budget > 0.0 and self.task_schedule_capacity_oracle_time_total >= global_budget:
+            self.stats.task_schedule_capacity_stopped_by_global_time_budget += 1
+            self.logger.log(
+                "task_schedule_capacity_diagnostics",
+                node_id=node.id,
+                depth=node.depth,
+                round=rounds + 1,
+                stopped_by="global_time_budget",
+                added=0,
+            )
+            return 0
+
+        min_violation = max(self.integer_tol, self.task_schedule_capacity_min_violation)
+        started = time.perf_counter()
+        task_values_by_vehicle = {
+            int(vehicle): self._vehicle_task_values(solution, int(vehicle))
+            for vehicle in self.data.vehicles
+        }
+        support_routes_by_vehicle = {
+            int(vehicle): self._schedule_support_routes(
+                solution,
+                int(vehicle),
+                max_routes=max(
+                    self.route_set_schedule_packing_cut_max_support_routes,
+                    self.schedule_incompatibility_cut_max_support_routes,
+                    self.schedule_capacity_route_union_top_routes,
+                ),
+            )
+            for vehicle in self.data.vehicles
+        }
+        generation = generate_task_schedule_capacity_candidates(
+            self.data,
+            vehicles=tuple(int(vehicle) for vehicle in self.data.vehicles),
+            y_values={int(vehicle): float(value) for vehicle, value in solution.y_values.items()},
+            task_values_by_vehicle=task_values_by_vehicle,
+            support_routes_by_vehicle=support_routes_by_vehicle,
+            witness_memory=self.task_schedule_capacity_witness_memory,
+            min_violation=min_violation,
+            pair_budget=self.task_schedule_capacity_pair_budget,
+            triple_budget=self.task_schedule_capacity_triple_budget,
+            small_set_budget=self.task_schedule_capacity_small_set_budget,
+            max_subset_size=self.task_schedule_capacity_max_subset_size,
+            use_rim_witness=self.task_schedule_capacity_use_rim_witness,
+            use_route_pack_witness=self.task_schedule_capacity_use_route_pack_witness,
+            use_incompatibility_witness=self.task_schedule_capacity_use_incompatibility_witness,
+            use_top_z_mass=self.task_schedule_capacity_use_top_z_mass,
+            use_support_route_union=self.task_schedule_capacity_use_support_route_union,
+            use_time_window_clusters=self.task_schedule_capacity_use_time_window_clusters,
+            successful_task_sets=self.task_schedule_capacity_successful_sets,
+        )
+        diagnostics: dict[str, Any] = {
+            **generation.diagnostics,
+            "oracle_requests": 0,
+            "oracle_computations": 0,
+            "cache_hits": 0,
+            "oracle_incomplete": 0,
+            "exact_not_tight": 0,
+            "exact_tight_not_violated": 0,
+            "duplicate": 0,
+            "violated_candidates": 0,
+            "cuts_added": 0,
+            "cuts_copied_to_all_vehicles": 0,
+            "oracle_time": 0.0,
+            "oracle_states_total": 0,
+            "oracle_states_max": 0,
+            "best_violation": 0.0,
+            "max_oracle_states": self.task_schedule_capacity_oracle_max_states,
+            "node_time_budget": self.task_schedule_capacity_node_time_budget,
+            "global_time_budget": global_budget,
+            "stopped_by": None,
+            "branch_signal_candidates": 0,
+            "branch_signal_applied": 0,
+        }
+        self._accumulate_task_schedule_capacity_generation_stats(diagnostics)
+        if legacy_family == "root_schedule_capacity":
+            self.stats.root_schedule_capacity_candidates_generated += int(diagnostics["candidates_generated"])
+            self.stats.root_schedule_capacity_candidates_after_precheck += int(diagnostics["candidates_after_precheck"])
+        if not generation.candidates:
+            self.task_schedule_capacity_no_add_rounds_by_node[node.id] = no_add_rounds + 1
+            if legacy_family == "root_schedule_capacity":
+                self.root_schedule_capacity_no_add_rounds_by_node[node.id] = no_add_rounds + 1
+            self.logger.log("task_schedule_capacity_diagnostics", node_id=node.id, depth=node.depth, round=rounds + 1, **diagnostics)
+            if legacy_family == "root_schedule_capacity":
+                self.logger.log("root_schedule_capacity_diagnostics", node_id=node.id, depth=node.depth, **self._legacy_root_schedcap_diagnostics(diagnostics))
+            return 0
+
+        self.task_schedule_capacity_cut_rounds_by_node[node.id] = rounds + 1
+        cuts_added = 0
+        added_payload: list[dict[str, Any]] = []
+        for candidate in generation.candidates:
+            if global_budget > 0.0 and self.task_schedule_capacity_oracle_time_total >= global_budget:
+                diagnostics["stopped_by"] = "global_time_budget"
+                self.stats.task_schedule_capacity_stopped_by_global_time_budget += 1
+                break
+            if (
+                self.task_schedule_capacity_node_time_budget > 0.0
+                and time.perf_counter() - started > self.task_schedule_capacity_node_time_budget
+            ):
+                diagnostics["stopped_by"] = "node_time_budget"
+                self.stats.task_schedule_capacity_stopped_by_node_time_budget += 1
+                break
+            if cuts_added >= max(1, self.task_schedule_capacity_max_cuts_per_round):
+                break
+            cut_key = ("schedule_capacity", int(candidate.vehicle), candidate.tasks)
+            if cut_key in self.cut_keys:
+                diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
+                continue
+            diagnostics["oracle_requests"] = int(diagnostics["oracle_requests"]) + 1
+            oracle_entry, cache_hit = self._task_schedule_capacity_bound(candidate.tasks, node_id=node.id, source=candidate.source)
+            if cache_hit:
+                diagnostics["cache_hits"] = int(diagnostics["cache_hits"]) + 1
+            else:
+                diagnostics["oracle_computations"] = int(diagnostics["oracle_computations"]) + 1
+                diagnostics["oracle_time"] = float(diagnostics["oracle_time"]) + float(oracle_entry.oracle_time)
+                self.task_schedule_capacity_oracle_time_total += float(oracle_entry.oracle_time)
+                diagnostics["oracle_states_total"] = int(diagnostics["oracle_states_total"]) + int(oracle_entry.states_explored)
+                diagnostics["oracle_states_max"] = max(int(diagnostics["oracle_states_max"]), int(oracle_entry.states_explored))
+            if oracle_entry.incomplete or not oracle_entry.exact or oracle_entry.upper_bound is None:
+                diagnostics["oracle_incomplete"] = int(diagnostics["oracle_incomplete"]) + 1
+                continue
+            upper_bound = int(oracle_entry.upper_bound)
+            if upper_bound >= len(candidate.tasks):
+                diagnostics["exact_not_tight"] = int(diagnostics["exact_not_tight"]) + 1
+                continue
+            y_value = float(solution.y_values.get(int(candidate.vehicle), 0.0))
+            activity = self._task_vehicle_mass(solution, candidate.tasks, int(candidate.vehicle))
+            violation = activity - float(upper_bound) * y_value
+            diagnostics["best_violation"] = max(float(diagnostics["best_violation"]), float(violation))
+            self.stats.task_schedule_capacity_best_violation = max(
+                float(self.stats.task_schedule_capacity_best_violation),
+                float(violation),
+            )
+            if legacy_family == "root_schedule_capacity":
+                self.stats.root_schedule_capacity_best_violation = max(
+                    float(self.stats.root_schedule_capacity_best_violation),
+                    float(violation),
+                )
+            if violation <= min_violation:
+                diagnostics["exact_tight_not_violated"] = int(diagnostics["exact_tight_not_violated"]) + 1
+                continue
+            diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
+            vehicles_to_add = (
+                [int(vehicle) for vehicle in self.data.vehicles]
+                if self.task_schedule_capacity_copy_to_all_vehicles
+                else [int(candidate.vehicle)]
+            )
+            added_for_candidate = 0
+            for add_vehicle in vehicles_to_add:
+                cut = ScheduleCapacityCut(
+                    id=self._allocate_cut_id(),
+                    vehicle=int(add_vehicle),
+                    tasks=candidate.tasks,
+                    upper_bound=upper_bound,
+                    oracle_states=int(oracle_entry.states_explored),
+                    source_vehicle=int(candidate.vehicle),
+                    source="task_schedule_capacity" if legacy_family != "root_schedule_capacity" else "root_schedule_capacity",
+                )
+                if cut.key in self.cut_keys:
+                    diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
+                    continue
+                self.cuts.append(cut)
+                self.cut_keys.add(cut.key)
+                self.cut_inactive_age[cut.key] = 0
+                added_for_candidate += 1
+                cuts_added += 1
+                add_y = float(solution.y_values.get(int(add_vehicle), 0.0))
+                add_activity = self._task_vehicle_mass(solution, candidate.tasks, int(add_vehicle))
+                added_payload.append(
+                    {
+                        "id": cut.id,
+                        "vehicle": int(add_vehicle),
+                        "source_vehicle": int(candidate.vehicle),
+                        "tasks": list(candidate.tasks),
+                        "upper_bound": upper_bound,
+                        "activity": round(add_activity, 9),
+                        "y": round(add_y, 9),
+                        "activity_minus_rhs": round(add_activity - float(upper_bound) * add_y, 9),
+                        "oracle_states": int(oracle_entry.states_explored),
+                        "oracle_time": round(float(oracle_entry.oracle_time), 6),
+                        "source": candidate.source,
+                        "cache_hit": bool(cache_hit),
+                    }
+                )
+            if added_for_candidate:
+                if self.task_schedule_capacity_copy_to_all_vehicles:
+                    copied = max(0, added_for_candidate - 1)
+                    diagnostics["cuts_copied_to_all_vehicles"] = int(diagnostics["cuts_copied_to_all_vehicles"]) + copied
+                self.task_schedule_capacity_successful_sets.add(candidate.tasks)
+                self.task_schedule_capacity_explained_route_sets.add(candidate.tasks)
+                branch_signal_count_before = len(self.task_schedule_capacity_branch_witnesses)
+                self._record_task_schedule_capacity_branch_signal(candidate, upper_bound, violation, node.id)
+                if len(self.task_schedule_capacity_branch_witnesses) > branch_signal_count_before:
+                    diagnostics["branch_signal_candidates"] = int(diagnostics["branch_signal_candidates"]) + 1
+
+        diagnostics["cuts_added"] = cuts_added
+        diagnostics["oracle_time"] = round(float(diagnostics["oracle_time"]), 6)
+        self._accumulate_task_schedule_capacity_oracle_stats(diagnostics)
+        if legacy_family == "root_schedule_capacity":
+            self.stats.root_schedule_capacity_oracle_queries += int(diagnostics.get("oracle_computations", 0) or 0)
+            self.stats.root_schedule_capacity_oracle_incomplete += int(diagnostics.get("oracle_incomplete", 0) or 0)
+            self.stats.root_schedule_capacity_oracle_time += float(diagnostics.get("oracle_time", 0.0) or 0.0)
+            self.stats.root_schedule_capacity_cache_hits += int(diagnostics.get("cache_hits", 0) or 0)
+        if cuts_added:
+            self.task_schedule_capacity_no_add_rounds_by_node[node.id] = 0
+            if legacy_family == "root_schedule_capacity":
+                self.root_schedule_capacity_no_add_rounds_by_node[node.id] = 0
+            self.stats.cuts_added += cuts_added
+            self.stats.schedule_capacity_cuts_added += cuts_added
+            self.stats.task_schedule_capacity_cuts_added += cuts_added
+            if legacy_family == "root_schedule_capacity":
+                self.stats.root_schedule_capacity_cuts_added += cuts_added
+            self.logger.log(
+                "cut_added",
+                node_id=node.id,
+                family="task_schedule_capacity" if legacy_family != "root_schedule_capacity" else "root_schedule_capacity",
+                added=cuts_added,
+                copied_to_all_vehicles=int(diagnostics["cuts_copied_to_all_vehicles"]),
+                cuts=added_payload,
+            )
+            self._register_cut_roi(node, "task_schedule_capacity", cuts_added, solution.objective)
+        else:
+            self.task_schedule_capacity_no_add_rounds_by_node[node.id] = no_add_rounds + 1
+            if legacy_family == "root_schedule_capacity":
+                self.root_schedule_capacity_no_add_rounds_by_node[node.id] = no_add_rounds + 1
+        self.logger.log("task_schedule_capacity_diagnostics", node_id=node.id, depth=node.depth, round=rounds + 1, **diagnostics)
+        if legacy_family == "root_schedule_capacity":
+            self.logger.log("root_schedule_capacity_diagnostics", node_id=node.id, depth=node.depth, **self._legacy_root_schedcap_diagnostics(diagnostics))
+        return cuts_added
+
+    def _legacy_root_schedcap_diagnostics(self, diagnostics: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "vehicles_checked": int(diagnostics.get("vehicles_checked", 0) or 0),
+            "vehicles_active": int(diagnostics.get("vehicles_active", 0) or 0),
+            "candidates_generated": int(diagnostics.get("candidates_generated", 0) or 0),
+            "candidates_after_precheck": int(diagnostics.get("candidates_after_precheck", 0) or 0),
+            "pair_candidates": int(diagnostics.get("pair_candidates", 0) or 0),
+            "triple_candidates": int(diagnostics.get("triple_candidates", 0) or 0),
+            "oracle_queries": int(diagnostics.get("oracle_computations", 0) or 0),
+            "oracle_incomplete": int(diagnostics.get("oracle_incomplete", 0) or 0),
+            "cache_hits": int(diagnostics.get("cache_hits", 0) or 0),
+            "tight_not_violated": int(diagnostics.get("exact_tight_not_violated", 0) or 0),
+            "not_tight": int(diagnostics.get("exact_not_tight", 0) or 0),
+            "duplicate": int(diagnostics.get("duplicate", 0) or 0),
+            "violated": int(diagnostics.get("violated_candidates", 0) or 0),
+            "cuts_added": int(diagnostics.get("cuts_added", 0) or 0),
+            "oracle_time": diagnostics.get("oracle_time", 0.0),
+            "oracle_states_total": int(diagnostics.get("oracle_states_total", 0) or 0),
+            "oracle_states_max": int(diagnostics.get("oracle_states_max", 0) or 0),
+            "max_oracle_states": self.task_schedule_capacity_oracle_max_states,
+            "best_violation": float(diagnostics.get("best_violation", 0.0) or 0.0),
+        }
+
     def _separate_root_schedule_capacity_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        if self.task_schedule_capacity_cuts_enabled or self.root_schedule_capacity_cuts_enabled:
+            if self.task_schedule_capacity_legacy_alias_mode:
+                self.task_schedule_capacity_cuts_enabled = bool(self.root_schedule_capacity_cuts_enabled)
+                self.task_schedule_capacity_max_depth = int(self.root_schedule_capacity_max_depth)
+                self.task_schedule_capacity_pair_budget = int(self.root_schedule_capacity_pair_budget)
+                self.task_schedule_capacity_triple_budget = int(self.root_schedule_capacity_triple_budget)
+                self.task_schedule_capacity_oracle_max_states = int(self.root_schedule_capacity_oracle_max_states)
+                self.task_schedule_capacity_node_time_budget = float(self.root_schedule_capacity_time_budget)
+                self.task_schedule_capacity_min_violation = float(self.root_schedule_capacity_min_violation)
+                self.task_schedule_capacity_stop_after_no_add_rounds = int(self.root_schedule_capacity_stop_after_no_add_rounds)
+            return self._separate_task_schedule_capacity_cuts(
+                node,
+                solution,
+                legacy_family="root_schedule_capacity",
+            )
         if not self.root_schedule_capacity_cuts_enabled:
             return 0
         if node.depth > self.root_schedule_capacity_max_depth:
@@ -3383,6 +3840,175 @@ class CleanBPCTree:
         self.root_schedule_capacity_cache[tasks] = result
         return (result, False, elapsed)
 
+    def _task_schedule_capacity_bound(
+        self,
+        tasks: tuple[int, ...],
+        *,
+        node_id: int,
+        source: str,
+    ) -> tuple[TaskScheduleCapacityCacheEntry, bool]:
+        tasks = tuple(sorted(int(task) for task in tasks))
+        cached = self.task_schedule_capacity_cache.get(tasks)
+        if cached is not None:
+            cached.record_use(node_id=node_id, source=source, cache_hit=True)
+            return cached, True
+
+        started = time.perf_counter()
+        result = exact_schedule_task_capacity(
+            self.data,
+            tasks,
+            max_states=max(0, self.task_schedule_capacity_oracle_max_states),
+        )
+        elapsed = time.perf_counter() - started
+        if result is None or not result.exact:
+            states_explored = 0 if result is None else int(result.states_explored)
+            feasible = bool(result is not None and int(result.upper_bound) > 0)
+            entry = TaskScheduleCapacityCacheEntry(
+                tasks=tasks,
+                upper_bound=None,
+                states_explored=states_explored,
+                exact=False,
+                incomplete=True,
+                infeasible=False,
+                feasible=feasible,
+                oracle_time=elapsed,
+                last_used_node=int(node_id),
+                source_count={source: 1},
+            )
+            if self.task_schedule_capacity_cache_incomplete:
+                self.task_schedule_capacity_cache[tasks] = entry
+                self.root_schedule_capacity_cache[tasks] = None
+            return entry, False
+
+        upper_bound = int(result.upper_bound)
+        entry = TaskScheduleCapacityCacheEntry(
+            tasks=tasks,
+            upper_bound=upper_bound,
+            states_explored=int(result.states_explored),
+            exact=True,
+            incomplete=False,
+            infeasible=upper_bound <= 0,
+            feasible=upper_bound > 0,
+            oracle_time=elapsed,
+            last_used_node=int(node_id),
+            source_count={source: 1},
+        )
+        should_cache = self.task_schedule_capacity_cache_exact_upper_bound
+        if upper_bound >= len(tasks) and not self.task_schedule_capacity_cache_not_tight:
+            should_cache = False
+        if should_cache:
+            self.task_schedule_capacity_cache[tasks] = entry
+            self.root_schedule_capacity_cache[tasks] = ScheduleCapacityResult(upper_bound, int(result.states_explored), True)
+        return entry, False
+
+    def _record_task_schedule_capacity_witness(
+        self,
+        routes: list[RouteColumn] | tuple[RouteColumn, ...],
+        *,
+        source: str,
+        vehicle: int | None,
+        node_id: int | None,
+        violation: float = 0.0,
+    ) -> None:
+        witness = witness_from_routes(
+            routes,
+            source=source,
+            vehicle=vehicle,
+            node_id=node_id,
+            violation=violation,
+        )
+        if witness is None:
+            return
+        existing = self.task_schedule_capacity_witness_memory.get(witness.tasks)
+        if existing is None:
+            self.task_schedule_capacity_witness_memory[witness.tasks] = witness
+        else:
+            existing.merge(witness)
+
+    def _record_task_schedule_capacity_branch_signal(
+        self,
+        candidate: TaskScheduleCapacityCandidate,
+        upper_bound: int,
+        violation: float,
+        node_id: int,
+    ) -> None:
+        if not self.task_schedule_capacity_branch_signal_enabled:
+            return
+        payload = {
+            "node_id": int(node_id),
+            "vehicle": int(candidate.vehicle),
+            "tasks": list(candidate.tasks),
+            "size": candidate.size,
+            "upper_bound": int(upper_bound),
+            "violation": round(float(violation), 9),
+            "source": candidate.source,
+        }
+        self.task_schedule_capacity_branch_witnesses.append(payload)
+        self.task_schedule_capacity_branch_witnesses = self.task_schedule_capacity_branch_witnesses[-100:]
+        self.stats.task_schedule_capacity_branch_signal_candidates += 1
+
+    def _task_schedule_capacity_branch_summary(self) -> dict[str, Any]:
+        if not self.task_schedule_capacity_branch_signal_enabled:
+            return {"enabled": False, "candidates": 0, "recent": []}
+        recent = self.task_schedule_capacity_branch_witnesses[-10:]
+        return {
+            "enabled": True,
+            "apply_enabled": self.task_schedule_capacity_branch_signal_apply_enabled,
+            "candidates": len(self.task_schedule_capacity_branch_witnesses),
+            "applied": int(self.stats.task_schedule_capacity_branch_signal_applied),
+            "recent": recent,
+        }
+
+    def _task_schedule_capacity_branch_boost(self, candidate: BranchCandidate) -> float:
+        if not self.task_schedule_capacity_branch_signal_apply_enabled:
+            return 0.0
+        score = 0.0
+        for witness in self.task_schedule_capacity_branch_witnesses[-30:]:
+            tasks = set(int(task) for task in witness.get("tasks", []))
+            if candidate.kind == "ryan_foster" and candidate.left.task_j is not None:
+                pair = {int(candidate.left.task_i), int(candidate.left.task_j)}
+                if pair.issubset(tasks):
+                    score = max(score, 1.0e-6)
+            elif candidate.kind == "task_vehicle":
+                if int(candidate.left.task_i) in tasks and int(candidate.left.vehicle) == int(witness.get("vehicle")):
+                    score = max(score, 5.0e-7)
+        if score > 0.0:
+            self.stats.task_schedule_capacity_branch_signal_applied += 1
+        return score
+
+    def _accumulate_task_schedule_capacity_generation_stats(self, diagnostics: dict[str, Any]) -> None:
+        self.stats.task_schedule_capacity_candidates_generated += int(diagnostics.get("candidates_generated", 0) or 0)
+        self.stats.task_schedule_capacity_candidates_after_precheck += int(diagnostics.get("candidates_after_precheck", 0) or 0)
+        self.stats.task_schedule_capacity_pair_candidates += int(diagnostics.get("pair_candidates", 0) or 0)
+        self.stats.task_schedule_capacity_triple_candidates += int(diagnostics.get("triple_candidates", 0) or 0)
+        self.stats.task_schedule_capacity_small_set_candidates += int(diagnostics.get("small_set_candidates", 0) or 0)
+        for key, value in (diagnostics.get("candidates_by_source") or {}).items():
+            self.stats.task_schedule_capacity_candidates_by_source[str(key)] = (
+                self.stats.task_schedule_capacity_candidates_by_source.get(str(key), 0) + int(value)
+            )
+        for key, value in (diagnostics.get("prechecked_by_source") or {}).items():
+            self.stats.task_schedule_capacity_prechecked_by_source[str(key)] = (
+                self.stats.task_schedule_capacity_prechecked_by_source.get(str(key), 0) + int(value)
+            )
+
+    def _accumulate_task_schedule_capacity_oracle_stats(self, diagnostics: dict[str, Any]) -> None:
+        self.stats.task_schedule_capacity_oracle_requests += int(diagnostics.get("oracle_requests", 0) or 0)
+        self.stats.task_schedule_capacity_oracle_computations += int(diagnostics.get("oracle_computations", 0) or 0)
+        self.stats.task_schedule_capacity_cache_hits += int(diagnostics.get("cache_hits", 0) or 0)
+        self.stats.task_schedule_capacity_oracle_incomplete += int(diagnostics.get("oracle_incomplete", 0) or 0)
+        self.stats.task_schedule_capacity_exact_not_tight += int(diagnostics.get("exact_not_tight", 0) or 0)
+        self.stats.task_schedule_capacity_exact_tight_not_violated += int(diagnostics.get("exact_tight_not_violated", 0) or 0)
+        self.stats.task_schedule_capacity_violated_candidates += int(diagnostics.get("violated_candidates", 0) or 0)
+        self.stats.task_schedule_capacity_oracle_time += float(diagnostics.get("oracle_time", 0.0) or 0.0)
+        self.stats.task_schedule_capacity_oracle_states_total += int(diagnostics.get("oracle_states_total", 0) or 0)
+        self.stats.task_schedule_capacity_oracle_states_max = max(
+            int(self.stats.task_schedule_capacity_oracle_states_max),
+            int(diagnostics.get("oracle_states_max", 0) or 0),
+        )
+        self.stats.task_schedule_capacity_cuts_copied_to_all_vehicles += int(
+            diagnostics.get("cuts_copied_to_all_vehicles", 0) or 0
+        )
+
     def _separate_route_set_schedule_packing_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
         """分离高阶 route-set schedule packing cut。
 
@@ -3525,6 +4151,13 @@ class CleanBPCTree:
                 seen_candidate_keys.add(key)
                 diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
                 diagnostics["max_violation"] = max(float(diagnostics["max_violation"]), float(violation))
+                self._record_task_schedule_capacity_witness(
+                    list(routes),
+                    source="route_pack_witness",
+                    vehicle=int(vehicle),
+                    node_id=node.id,
+                    violation=float(violation),
+                )
                 candidates.append((violation, len(signatures), int(vehicle), signatures, list(routes), activity, upper_bound, states, y_value))
 
         if not candidates:
@@ -3639,6 +4272,11 @@ class CleanBPCTree:
         for size in range(2, len(dense_routes) + 1):
             add_candidate(dense_routes[:size])
 
+        def explained_penalty(routes: list[RouteColumn]) -> int:
+            task_union = {int(task) for route in routes for task in route.task_set}
+            return int(any(set(tasks).issubset(task_union) for tasks in self.task_schedule_capacity_successful_sets))
+
+        candidates.sort(key=lambda routes: (explained_penalty(routes), len(routes), normalize_signatures(tuple(route.signature for route in routes))))
         return candidates
 
     def _route_set_schedule_packing_bound_with_cache_status(
@@ -3710,6 +4348,13 @@ class CleanBPCTree:
                     if key in self.cut_keys or key in seen_candidate_keys:
                         continue
                     seen_candidate_keys.add(key)
+                    self._record_task_schedule_capacity_witness(
+                        pair_routes,
+                        source="incompatibility_witness",
+                        vehicle=int(vehicle),
+                        node_id=node.id,
+                        violation=float(violation),
+                    )
                     candidates.append((violation, 2, int(vehicle), signatures, "schedule_pair_conflict", pair_routes, activity, y_value))
 
             for clique_indices in self._greedy_schedule_incompatibility_cliques(values, adjacency):
@@ -3725,6 +4370,13 @@ class CleanBPCTree:
                 if key in self.cut_keys or key in seen_candidate_keys:
                     continue
                 seen_candidate_keys.add(key)
+                self._record_task_schedule_capacity_witness(
+                    clique_routes,
+                    source="incompatibility_witness",
+                    vehicle=int(vehicle),
+                    node_id=node.id,
+                    violation=float(violation),
+                )
                 candidates.append(
                     (
                         violation,
@@ -3869,6 +4521,14 @@ class CleanBPCTree:
         return cliques
 
     def _separate_schedule_capacity_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        if self.task_schedule_capacity_cuts_enabled:
+            return 0
+        if self.schedule_capacity_separation_enabled:
+            return self._separate_task_schedule_capacity_cuts(
+                node,
+                solution,
+                legacy_family="schedule_capacity",
+            )
         if not self.schedule_capacity_separation_enabled:
             return 0
         if node.depth > self.schedule_capacity_cut_max_depth:
@@ -4093,11 +4753,12 @@ class CleanBPCTree:
     def _schedule_capacity_bound(self, tasks: tuple[int, ...]) -> ScheduleCapacityResult | None:
         tasks = tuple(sorted(int(task) for task in tasks))
         if tasks not in self.schedule_capacity_cache:
-            self.schedule_capacity_cache[tasks] = exact_schedule_task_capacity(
+            result = exact_schedule_task_capacity(
                 self.data,
                 tasks,
                 max_states=self.schedule_capacity_oracle_max_states,
             )
+            self.schedule_capacity_cache[tasks] = result if result is not None and result.exact else None
         return self.schedule_capacity_cache[tasks]
 
     def _choose_branch(self, node: BPCNode, solution: RMPSolution) -> tuple[BranchConstraint, BranchConstraint] | None:
@@ -4132,8 +4793,14 @@ class CleanBPCTree:
             else:
                 uninitialized.append(candidate)
 
-        initialized.sort(key=lambda item: (-self.pseudocosts[item.key].average_score, -item.fractionality, item.key))
-        uninitialized.sort(key=lambda item: (-item.fractionality, item.key))
+        initialized.sort(
+            key=lambda item: (
+                -(self.pseudocosts[item.key].average_score + self._task_schedule_capacity_branch_boost(item)),
+                -item.fractionality,
+                item.key,
+            )
+        )
+        uninitialized.sort(key=lambda item: (-(item.fractionality + self._task_schedule_capacity_branch_boost(item)), item.key))
         pseudocost_budget, fractional_budget, lp_budget = self._three_pb_candidate_budgets(node)
         screened = [
             *initialized[: max(0, pseudocost_budget)],
@@ -4157,6 +4824,7 @@ class CleanBPCTree:
             by_kind=self._candidate_kind_counts(candidates),
             screened_by_kind=self._candidate_kind_counts(screened),
             screened_candidates=[candidate.compact() for candidate in screened[:20]],
+            schedule_capacity_witness_summary=self._task_schedule_capacity_branch_summary(),
         )
 
         testing_started = time.perf_counter()
@@ -4175,7 +4843,15 @@ class CleanBPCTree:
         testing_time = time.perf_counter() - testing_started
         self.stats.branch_testing_time += testing_time
 
-        selected = max(heuristic_results, key=lambda item: (item.heuristic_score, item.lp_score, item.candidate.fractionality, item.candidate.key))
+        selected = max(
+            heuristic_results,
+            key=lambda item: (
+                item.heuristic_score + self._task_schedule_capacity_branch_boost(item.candidate),
+                item.lp_score,
+                item.candidate.fractionality,
+                item.candidate.key,
+            ),
+        )
         for result in lp_results:
             self.pseudocosts.setdefault(result.candidate.key, PseudoCostRecord()).update(result.lp_score)
 
@@ -4191,6 +4867,7 @@ class CleanBPCTree:
             lp_results_by_kind=self._branch_test_summary_by_kind(lp_results),
             heuristic_results_by_kind=self._branch_test_summary_by_kind(heuristic_results),
             top_results=[self._branch_test_to_log(item) for item in heuristic_results[:20]],
+            schedule_capacity_witness_summary=self._task_schedule_capacity_branch_summary(),
         )
         return selected.candidate.left, selected.candidate.right
 
@@ -4504,6 +5181,12 @@ class CleanBPCTree:
             witness = self._diagnose_schedule_conflict(routes)
             if witness is None:
                 continue
+            self._record_task_schedule_capacity_witness(
+                list(routes),
+                source="rim_witness",
+                vehicle=int(vehicle),
+                node_id=node.id,
+            )
 
             pair_added = self._add_schedule_pair_conflict_cuts(
                 node,
@@ -4580,6 +5263,12 @@ class CleanBPCTree:
         signatures = normalize_signatures(tuple(route.signature for route in routes))
         if len(signatures) < 2:
             return (0, False, None)
+        self._record_task_schedule_capacity_witness(
+            routes,
+            source="route_pack_witness",
+            vehicle=source_vehicle,
+            node_id=node.id,
+        )
 
         upper_bound, states, cache_hit = self._route_set_schedule_packing_bound_with_cache_status(routes)
         self.schedule_conflict_route_pack_cache[signatures] = (upper_bound, states, cache_hit)

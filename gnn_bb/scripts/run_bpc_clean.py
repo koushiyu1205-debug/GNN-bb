@@ -205,6 +205,83 @@ def main() -> None:
             root_schedule_capacity_stop_after_no_add_rounds=int(
                 config.get("root_schedule_capacity_stop_after_no_add_rounds", 1)
             ),
+            task_schedule_capacity_cuts_enabled=_bool_config(config, "task_schedule_capacity_cuts_enabled", False)
+            if "task_schedule_capacity_cuts_enabled" in config
+            else None,
+            task_schedule_capacity_max_depth=int(config.get("task_schedule_capacity_max_depth", config.get("root_schedule_capacity_max_depth", 0)))
+            if "task_schedule_capacity_max_depth" in config
+            else None,
+            task_schedule_capacity_pair_budget=int(
+                config.get("task_schedule_capacity_pair_budget", config.get("root_schedule_capacity_pair_budget", 100))
+            )
+            if "task_schedule_capacity_pair_budget" in config
+            else None,
+            task_schedule_capacity_triple_budget=int(
+                config.get("task_schedule_capacity_triple_budget", config.get("root_schedule_capacity_triple_budget", 50))
+            )
+            if "task_schedule_capacity_triple_budget" in config
+            else None,
+            task_schedule_capacity_small_set_budget=int(config.get("task_schedule_capacity_small_set_budget", 0)),
+            task_schedule_capacity_max_subset_size=int(config.get("task_schedule_capacity_max_subset_size", 6)),
+            task_schedule_capacity_max_cuts_per_round=int(config.get("task_schedule_capacity_max_cuts_per_round", 20)),
+            task_schedule_capacity_oracle_max_states=int(
+                config.get("task_schedule_capacity_oracle_max_states", config.get("root_schedule_capacity_oracle_max_states", 200000))
+            )
+            if "task_schedule_capacity_oracle_max_states" in config
+            else None,
+            task_schedule_capacity_node_time_budget=float(
+                config.get("task_schedule_capacity_node_time_budget", config.get("root_schedule_capacity_time_budget", 5.0))
+            )
+            if "task_schedule_capacity_node_time_budget" in config
+            else None,
+            task_schedule_capacity_global_time_ratio=float(config.get("task_schedule_capacity_global_time_ratio", 0.05)),
+            task_schedule_capacity_min_violation=float(
+                config.get("task_schedule_capacity_min_violation", config.get("root_schedule_capacity_min_violation", 1.0e-5))
+            )
+            if "task_schedule_capacity_min_violation" in config
+            else None,
+            task_schedule_capacity_copy_to_all_vehicles=_bool_config(config, "task_schedule_capacity_copy_to_all_vehicles", False),
+            task_schedule_capacity_use_rim_witness=_bool_config(config, "task_schedule_capacity_use_rim_witness", True),
+            task_schedule_capacity_use_route_pack_witness=_bool_config(config, "task_schedule_capacity_use_route_pack_witness", True),
+            task_schedule_capacity_use_incompatibility_witness=_bool_config(
+                config,
+                "task_schedule_capacity_use_incompatibility_witness",
+                True,
+            ),
+            task_schedule_capacity_use_top_z_mass=_bool_config(config, "task_schedule_capacity_use_top_z_mass", True),
+            task_schedule_capacity_use_support_route_union=_bool_config(
+                config,
+                "task_schedule_capacity_use_support_route_union",
+                True,
+            ),
+            task_schedule_capacity_use_time_window_clusters=_bool_config(
+                config,
+                "task_schedule_capacity_use_time_window_clusters",
+                False,
+            ),
+            task_schedule_capacity_stop_after_no_add_rounds=int(
+                config.get("task_schedule_capacity_stop_after_no_add_rounds", config.get("root_schedule_capacity_stop_after_no_add_rounds", 1))
+            )
+            if "task_schedule_capacity_stop_after_no_add_rounds" in config
+            else None,
+            task_schedule_capacity_stop_after_no_improve_rounds=int(config.get("task_schedule_capacity_stop_after_no_improve_rounds", 2)),
+            task_schedule_capacity_cache_incomplete=_bool_config(config, "task_schedule_capacity_cache_incomplete", True),
+            task_schedule_capacity_cache_not_tight=_bool_config(config, "task_schedule_capacity_cache_not_tight", True),
+            task_schedule_capacity_cache_exact_upper_bound=_bool_config(
+                config,
+                "task_schedule_capacity_cache_exact_upper_bound",
+                True,
+            ),
+            task_schedule_capacity_branch_signal_enabled=_bool_config(
+                config,
+                "task_schedule_capacity_branch_signal_enabled",
+                True,
+            ),
+            task_schedule_capacity_branch_signal_apply_enabled=_bool_config(
+                config,
+                "task_schedule_capacity_branch_signal_apply_enabled",
+                False,
+            ),
             schedule_incompatibility_cuts_enabled=_bool_config(config, "schedule_incompatibility_cuts_enabled", True),
             schedule_incompatibility_cut_max_depth=int(config.get("schedule_incompatibility_cut_max_depth", 2)),
             schedule_incompatibility_cut_max_rounds_per_node=int(
@@ -311,6 +388,10 @@ def main() -> None:
             f"route_pack={result.schedule_route_set_packing_cuts_added}, "
             f"nogood={result.schedule_nogood_cuts_added}, "
             f"sched_cap={result.schedule_capacity_cuts_added}, "
+            f"task_sched_cap={result.task_schedule_capacity_cuts_added}, "
+            f"task_sched_cap_oracle={result.task_schedule_capacity_oracle_computations}/"
+            f"{result.task_schedule_capacity_oracle_requests}, "
+            f"task_sched_cap_cache={result.task_schedule_capacity_cache_hits}, "
             f"fleet_lb={result.fleet_lower_bound_cuts_added}/{result.fleet_lower_bound_value}, "
             f"fleet_oracle_U={result.fleet_lower_bound_oracle_upper_bound}, "
             f"fleet_oracle_states={result.fleet_lower_bound_oracle_states}, "

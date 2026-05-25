@@ -2,6 +2,34 @@
 
 本文只记录后续性能方向，不改变当前 route-vehicle clean BPC 主线。
 
+## Task-Level Schedule-Capacity Separator
+
+当前 route-vehicle master 的主要松弛之一是：单条 sortie route 各自可行，但同一车辆上的多条 sortie 未必能排成真实 schedule。task-level schedule-capacity cut 把 exact 单车多 sortie oracle 的容量证书投影回 master：
+
+```text
+z_ir = sum_p a_ip lambda_pr
+sum_{i in S} z_ir <= U(S) y_r
+```
+
+其中 `U(S)` 必须由 `exact_schedule_task_capacity()` 完整证明。oracle incomplete 时只写缓存和诊断，不加 cut、不更新 bound、不参与 fathoming。当前车辆同质，因此 run-local cache 用排序后的 `S` 复用 exact `U(S)`；若未来支持异构车辆，cache key 必须加入 vehicle type。
+
+实现边界：
+- separator 默认关闭：`task_schedule_capacity_cuts_enabled: false`；
+- pair/triple/small-set 候选分层生成，cheap precheck 统一为 `activity > y_r + eps`，避免漏掉 `U(S)=1` 的 triple；
+- small set 只从 RIM、route-pack、schedule incompatibility 等 strong witness 生成，默认 budget 为 0；
+- candidate memory 从 route-set schedule packing、RIM rejected assignment、integral validation conflict 和 schedule incompatibility witness 接收 route task union；
+- 成功的 task-level cut 会写入 branching witness summary，默认只记录，不改变 branch path；实际 tie-break boost 需要显式打开 `task_schedule_capacity_branch_signal_apply_enabled`；
+- 该方向不改 pricing reduced-cost 公式，不引入 PersistentRMP/native pricing，也不替换 vehicle-schedule master。
+
+消融入口：
+
+```bash
+python scripts/run_task_schedule_capacity_ablation.py --instances very_small --quiet
+python scripts/run_task_schedule_capacity_ablation.py --instances bench_10_01 bench_20_01 --time-limit 300 --variants baseline root_only pair_triple witness_only
+```
+
+判断是否值得进入默认主线时，优先看 root bound、node count、pricing calls、label pops、RIM rejected count、route-pack low-improvement cut 数量、branch path 和 oracle time。若 root/shallow bound 没有提升但 oracle time 或 cut 数量明显上升，应继续保持默认关闭。
+
 ## Persistent RMP / Incremental RMP
 
 当前 `solve_rmp_lp` 每轮重新构建 SCIP 模型。hard instances 中 RMP solve 和 branch testing RMP 次数很多，模型重建开销会被重复支付。

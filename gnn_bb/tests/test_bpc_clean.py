@@ -43,11 +43,18 @@ from bpc.schedule_capacity import exact_schedule_task_capacity, find_schedule_ca
 from bpc.schedule_cost import exact_schedule_subset_cost
 from bpc.schedule_pack import solve_schedule_pack_node_relaxation, solve_schedule_pack_restricted_lp
 from bpc.solver import solve_bpc_clean
+from bpc.task_schedule_capacity import generate_task_schedule_capacity_candidates, witness_from_routes
 from bpc.tree import CleanBPCTree
 from bpc.validation import diagnose_route_set_schedule, exact_route_set_schedule_capacity
 
 
 class CleanBPCTests(unittest.TestCase):
+    def _require_pyscipopt(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except Exception:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
     def test_single_task_route_evaluates(self):
         data = load_bpc_data("very_small")
         route = evaluate_route(data, (1,))
@@ -268,11 +275,11 @@ class CleanBPCTests(unittest.TestCase):
                 "3": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
             },
         }
-        pairwise = {
-            f"{i}->{j}": {"tau": 0 if i == j else 1, "energy": 0, "cost": 0 if i == j else 1, "path": []}
-            for i in (0, 1, 2, 3)
-            for j in (0, 1, 2, 3)
-        }
+        pairwise = {}
+        for i in (0, 1, 2, 3):
+            for j in (0, 1, 2, 3):
+                tau = 0 if i == j else (1 if i == 0 or j == 0 else 10)
+                pairwise[f"{i}->{j}"] = {"tau": tau, "energy": 0, "cost": tau, "path": []}
         data = BPCData(
             instance=instance,
             pairwise=pairwise,
@@ -297,6 +304,7 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(result.upper_bound, 2)
 
     def test_schedule_pack_diagnostic_solves_restricted_lp(self):
+        self._require_pyscipopt()
         data = load_bpc_data("very_small")
         routes = [evaluate_route(data, (task,)) for task in data.tasks]
         self.assertTrue(all(route is not None for route in routes))
@@ -314,6 +322,7 @@ class CleanBPCTests(unittest.TestCase):
         self.assertGreater(result.column_count, 0)
 
     def test_schedule_pack_full_route_space_pricing_marks_exact_on_small_instance(self):
+        self._require_pyscipopt()
         data = load_bpc_data("very_small")
         routes = [evaluate_route(data, (task,)) for task in data.tasks]
         self.assertTrue(all(route is not None for route in routes))
@@ -335,6 +344,7 @@ class CleanBPCTests(unittest.TestCase):
         self.assertGreaterEqual(result.full_pricing_route_count, len(routes))
 
     def test_schedule_pack_skips_vacuous_cut_without_dual_error(self):
+        self._require_pyscipopt()
         data = load_bpc_data("very_small")
         routes = [evaluate_route(data, (task,)) for task in data.tasks]
         self.assertTrue(all(route is not None for route in routes))
@@ -362,11 +372,11 @@ class CleanBPCTests(unittest.TestCase):
                 "3": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
             },
         }
-        pairwise = {
-            f"{i}->{j}": {"tau": 0 if i == j else 1, "energy": 0, "cost": 0 if i == j else 1, "path": []}
-            for i in (0, 1, 2, 3)
-            for j in (0, 1, 2, 3)
-        }
+        pairwise = {}
+        for i in (0, 1, 2, 3):
+            for j in (0, 1, 2, 3):
+                tau = 0 if i == j else (1 if i == 0 or j == 0 else 10)
+                pairwise[f"{i}->{j}"] = {"tau": tau, "energy": 0, "cost": tau, "path": []}
         data = BPCData(
             instance=instance,
             pairwise=pairwise,
@@ -417,7 +427,14 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(tree.cuts[0].y_coefficient(1), -2.0)
         self.assertEqual(tree.stats.schedule_route_set_packing_cuts_added, 1)
 
-    def _root_schedule_capacity_fixture(self, *, max_states: int = 200000, y_value: float = 1.0, lambda_value: float = 0.6):
+    def _root_schedule_capacity_fixture(
+        self,
+        *,
+        max_states: int = 200000,
+        y_value: float = 1.0,
+        lambda_value: float = 0.6,
+        vehicles: tuple[int, ...] = (1,),
+    ):
         instance = {
             "name": "root_schedule_capacity_smoke",
             "tasks": {
@@ -437,7 +454,7 @@ class CleanBPCTests(unittest.TestCase):
             instance_path=Path("synthetic"),
             name="root_schedule_capacity_smoke",
             tasks=(1, 2, 3),
-            vehicles=(1,),
+            vehicles=vehicles,
             sortie_limit=3,
             capacity=10,
             energy_limit=10,
@@ -453,8 +470,8 @@ class CleanBPCTests(unittest.TestCase):
             objective=0.0,
             duals=None,
             artificial_sum=0.0,
-            route_values=[(route, 1, lambda_value) for route in routes],
-            y_values={1: y_value},
+            route_values=[(route, vehicle, lambda_value) for vehicle in vehicles for route in routes],
+            y_values={vehicle: y_value for vehicle in vehicles},
             variable_count=0,
             constraint_count=0,
         )
@@ -498,7 +515,7 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(len(triple_cuts), 1)
         self.assertEqual(triple_cuts[0].upper_bound, 1)
         self.assertGreater(tree.stats.root_schedule_capacity_oracle_queries, 0)
-        self.assertLessEqual(tree.stats.root_schedule_capacity_candidates_generated, tree.root_schedule_capacity_triple_budget)
+        self.assertGreater(tree.stats.root_schedule_capacity_candidates_after_precheck, 0)
 
     def test_root_schedule_capacity_incomplete_oracle_does_not_add_cut(self):
         tree, solution = self._root_schedule_capacity_fixture(max_states=0)
@@ -534,6 +551,191 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(second, 0)
         self.assertEqual(tree.stats.root_schedule_capacity_oracle_queries, queries_after_first)
         self.assertEqual(len(tree.root_schedule_capacity_cache), cache_size_after_first)
+
+    def test_task_schedule_capacity_exact_not_tight_cached_without_cut(self):
+        instance = {
+            "name": "task_schedcap_not_tight",
+            "tasks": {
+                "1": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {
+            f"{i}->{j}": {"tau": 0 if i == j else 1, "energy": 0, "cost": 0 if i == j else 1, "path": []}
+            for i in (0, 1, 2)
+            for j in (0, 1, 2)
+        }
+        data = BPCData(instance, pairwise, Path("synthetic"), "task_schedcap_not_tight", (1, 2), (1,), 2, 10, 10, 1, 100, 20)
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        solution = RMPSolution("optimal", 0.0, None, 0.0, [(route, 1, 0.6) for route in routes], {1: 1.0}, 0, 0)
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            task_schedule_capacity_cuts_enabled=True,
+            task_schedule_capacity_pair_budget=10,
+            task_schedule_capacity_triple_budget=0,
+        )
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(tree.stats.task_schedule_capacity_exact_not_tight, 1)
+        self.assertIn((1, 2), tree.task_schedule_capacity_cache)
+
+    def test_task_schedule_capacity_exact_tight_not_violated(self):
+        instance = {
+            "name": "task_schedcap_tight_not_violated",
+            "tasks": {
+                "1": {"r": 0, "D": 20, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 20, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "3": {"r": 0, "D": 20, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {}
+        for i in (0, 1, 2, 3):
+            for j in (0, 1, 2, 3):
+                tau = 0 if i == j else (1 if i == 0 or j == 0 else 10)
+                pairwise[f"{i}->{j}"] = {"tau": tau, "energy": 0, "cost": tau, "path": []}
+        data = BPCData(instance, pairwise, Path("synthetic"), "task_schedcap_tight_not_violated", (1, 2, 3), (1,), 2, 10, 10, 1, 100, 4)
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        solution = RMPSolution("optimal", 0.0, None, 0.0, [(route, 1, 0.4) for route in routes], {1: 1.0}, 0, 0)
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            task_schedule_capacity_cuts_enabled=True,
+            task_schedule_capacity_pair_budget=0,
+            task_schedule_capacity_triple_budget=10,
+        )
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(tree.stats.task_schedule_capacity_exact_tight_not_violated, 1)
+        self.assertEqual(tree.task_schedule_capacity_cache[(1, 2, 3)].upper_bound, 2)
+
+    def test_task_schedule_capacity_reuses_exact_cache_across_vehicles(self):
+        tree, solution = self._root_schedule_capacity_fixture(vehicles=(1, 2))
+        solution = RMPSolution(
+            solution.status,
+            solution.objective,
+            solution.duals,
+            solution.artificial_sum,
+            [(route, vehicle, value) for route, vehicle, value in solution.route_values if 3 not in route.task_set],
+            solution.y_values,
+            solution.variable_count,
+            solution.constraint_count,
+        )
+        tree.task_schedule_capacity_cuts_enabled = True
+        tree.task_schedule_capacity_pair_budget = 2
+        tree.task_schedule_capacity_triple_budget = 0
+        tree.task_schedule_capacity_max_cuts_per_round = 2
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 2)
+        self.assertEqual(tree.stats.task_schedule_capacity_oracle_computations, 1)
+        self.assertGreaterEqual(tree.stats.task_schedule_capacity_cache_hits, 1)
+
+    def test_task_schedule_capacity_copy_to_all_vehicles(self):
+        tree, solution = self._root_schedule_capacity_fixture(vehicles=(1, 2))
+        solution = RMPSolution(
+            solution.status,
+            solution.objective,
+            solution.duals,
+            solution.artificial_sum,
+            [(route, vehicle, value) for route, vehicle, value in solution.route_values if vehicle == 1],
+            {1: 1.0, 2: 1.0},
+            solution.variable_count,
+            solution.constraint_count,
+        )
+        tree.task_schedule_capacity_cuts_enabled = True
+        tree.task_schedule_capacity_copy_to_all_vehicles = True
+        tree.task_schedule_capacity_pair_budget = 1
+        tree.task_schedule_capacity_triple_budget = 0
+        tree.task_schedule_capacity_max_cuts_per_round = 2
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 2)
+        self.assertEqual({cut.vehicle for cut in tree.cuts}, {1, 2})
+        self.assertEqual(tree.stats.task_schedule_capacity_cuts_copied_to_all_vehicles, 1)
+
+    def test_task_schedule_capacity_no_copy_only_violated_vehicle(self):
+        tree, solution = self._root_schedule_capacity_fixture(vehicles=(1, 2))
+        solution = RMPSolution(
+            solution.status,
+            solution.objective,
+            solution.duals,
+            solution.artificial_sum,
+            [(route, vehicle, value) for route, vehicle, value in solution.route_values if vehicle == 1],
+            {1: 1.0, 2: 1.0},
+            solution.variable_count,
+            solution.constraint_count,
+        )
+        tree.task_schedule_capacity_cuts_enabled = True
+        tree.task_schedule_capacity_copy_to_all_vehicles = False
+        tree.task_schedule_capacity_pair_budget = 1
+        tree.task_schedule_capacity_triple_budget = 0
+        tree.task_schedule_capacity_max_cuts_per_round = 1
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 1)
+        self.assertEqual({cut.vehicle for cut in tree.cuts}, {1})
+
+    def test_task_schedule_capacity_witness_candidate_priority(self):
+        tree, solution = self._root_schedule_capacity_fixture(lambda_value=0.6)
+        routes = [route for route, _vehicle, _value in solution.route_values]
+        witness = witness_from_routes(routes[:3], source="rim_witness", vehicle=1, node_id=0)
+        self.assertIsNotNone(witness)
+        assert witness is not None
+        generation = generate_task_schedule_capacity_candidates(
+            tree.data,
+            vehicles=(1,),
+            y_values={1: 1.0},
+            task_values_by_vehicle={1: tree._vehicle_task_values(solution, 1)},
+            support_routes_by_vehicle={1: []},
+            witness_memory={witness.tasks: witness},
+            min_violation=1.0e-6,
+            pair_budget=10,
+            triple_budget=10,
+            small_set_budget=1,
+            max_subset_size=3,
+            use_rim_witness=True,
+            use_route_pack_witness=True,
+            use_incompatibility_witness=True,
+            use_time_window_clusters=False,
+        )
+        self.assertTrue(generation.candidates)
+        self.assertTrue(generation.candidates[0].from_rim_conflict)
+
+    def test_task_schedule_capacity_default_off(self):
+        tree, solution = self._root_schedule_capacity_fixture()
+        tree.task_schedule_capacity_cuts_enabled = False
+        tree.root_schedule_capacity_cuts_enabled = False
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(tree.cuts, [])
+
+    def test_task_schedule_capacity_branch_signal_recorded(self):
+        tree, solution = self._root_schedule_capacity_fixture()
+        tree.task_schedule_capacity_cuts_enabled = True
+        tree.task_schedule_capacity_branch_signal_enabled = True
+        tree.task_schedule_capacity_pair_budget = 10
+        tree.task_schedule_capacity_triple_budget = 0
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertGreaterEqual(added, 1)
+        summary = tree._task_schedule_capacity_branch_summary()
+        self.assertTrue(summary["enabled"])
+        self.assertGreater(summary["candidates"], 0)
 
     def test_subset_row_separator_adds_violated_cut(self):
         instance = {
@@ -1948,6 +2150,40 @@ class CleanBPCTests(unittest.TestCase):
                 solution_path=root / "solution.json",
                 seed=20260511,
                 quiet=True,
+            )
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertAlmostEqual(result.primal_bound, 132.270984, places=5)
+        self.assertEqual(result.gap, 0.0)
+
+    def test_very_small_task_schedule_capacity_small_budget_same_optimum(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data = load_bpc_data("very_small")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = solve_bpc_clean(
+                data,
+                time_limit=20,
+                max_nodes=200,
+                pricing_eps=1.0e-6,
+                integer_tol=1.0e-6,
+                max_routes_per_pricing=200,
+                max_labels_per_pricing=0,
+                rmp_params={"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0},
+                log_path=root / "clean_task_schedcap.jsonl",
+                solution_path=root / "solution_task_schedcap.json",
+                seed=20260511,
+                quiet=True,
+                task_schedule_capacity_cuts_enabled=True,
+                task_schedule_capacity_pair_budget=4,
+                task_schedule_capacity_triple_budget=2,
+                task_schedule_capacity_small_set_budget=0,
+                task_schedule_capacity_max_depth=0,
+                task_schedule_capacity_node_time_budget=1.0,
+                task_schedule_capacity_oracle_max_states=10000,
             )
         self.assertEqual(result.status, "OPTIMAL")
         self.assertAlmostEqual(result.primal_bound, 132.270984, places=5)

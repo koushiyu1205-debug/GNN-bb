@@ -1,0 +1,12 @@
+# 中文摘要：task-level schedule-capacity separator 小型消融配置。
+
+base_config: configs/bpc_clean.yaml
+instances: ["very_small"]
+time_limit: 300
+max_nodes: 100000
+run_id: task_schedcap_ablation
+
+# variants 由 scripts/run_task_schedule_capacity_ablation.py 解释：
+# baseline, root_only, root_depth1, pair_only, pair_triple, witness_only, top_z_only
+variants: ["baseline", "root_only", "root_depth1", "pair_only", "pair_triple", "witness_only", "top_z_only"]
+

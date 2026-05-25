@@ -56,7 +56,8 @@ def exact_schedule_task_capacity(
 ) -> ScheduleCapacityResult | None:
     """返回一辆车在真实多 sortie schedule 中最多能服务 tasks 里的多少个任务。
 
-    中文注释：这是 exact labeling。状态数超过 max_states 时返回 None，表示没有证明更强上界，调用方不能加 cut。
+    中文注释：这是 exact labeling。状态数超过 max_states 时返回 exact=False，
+    此时 upper_bound 只是已搜索到的诊断值，不是有效上界，调用方不能加 cut。
     """
 
     tasks = tuple(sorted(int(task) for task in tasks))
@@ -76,7 +77,7 @@ def exact_schedule_task_capacity(
         label = queue.pop()
         explored += 1
         if explored > max_states:
-            return None
+            return ScheduleCapacityResult(best, explored, False)
         best = max(best, label.mask.bit_count())
 
         closed = _close_current_sortie(data, label)

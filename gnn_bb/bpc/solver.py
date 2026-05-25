@@ -79,6 +79,32 @@ class BPCResult:
     root_schedule_capacity_candidates_generated: int
     root_schedule_capacity_candidates_after_precheck: int
     root_schedule_capacity_best_violation: float
+    task_schedule_capacity_cuts_added: int
+    task_schedule_capacity_candidates_generated: int
+    task_schedule_capacity_candidates_after_precheck: int
+    task_schedule_capacity_pair_candidates: int
+    task_schedule_capacity_triple_candidates: int
+    task_schedule_capacity_small_set_candidates: int
+    task_schedule_capacity_candidates_by_source: dict[str, int]
+    task_schedule_capacity_prechecked_by_source: dict[str, int]
+    task_schedule_capacity_oracle_requests: int
+    task_schedule_capacity_oracle_computations: int
+    task_schedule_capacity_cache_hits: int
+    task_schedule_capacity_oracle_incomplete: int
+    task_schedule_capacity_exact_not_tight: int
+    task_schedule_capacity_exact_tight_not_violated: int
+    task_schedule_capacity_violated_candidates: int
+    task_schedule_capacity_best_violation: float
+    task_schedule_capacity_oracle_time: float
+    task_schedule_capacity_oracle_states_total: int
+    task_schedule_capacity_oracle_states_max: int
+    task_schedule_capacity_cuts_copied_to_all_vehicles: int
+    task_schedule_capacity_stopped_by_no_add: int
+    task_schedule_capacity_stopped_by_no_improvement: int
+    task_schedule_capacity_stopped_by_node_time_budget: int
+    task_schedule_capacity_stopped_by_global_time_budget: int
+    task_schedule_capacity_branch_signal_candidates: int
+    task_schedule_capacity_branch_signal_applied: int
     route_set_schedule_packing_oracle_queries: int
     route_set_schedule_packing_oracle_time: float
     route_set_schedule_packing_cache_hits: int
@@ -256,6 +282,31 @@ def solve_bpc_clean(
     root_schedule_capacity_time_budget: float = 5.0,
     root_schedule_capacity_min_violation: float = 1.0e-5,
     root_schedule_capacity_stop_after_no_add_rounds: int = 1,
+    task_schedule_capacity_cuts_enabled: bool | None = None,
+    task_schedule_capacity_max_depth: int | None = None,
+    task_schedule_capacity_pair_budget: int | None = None,
+    task_schedule_capacity_triple_budget: int | None = None,
+    task_schedule_capacity_small_set_budget: int = 0,
+    task_schedule_capacity_max_subset_size: int = 6,
+    task_schedule_capacity_max_cuts_per_round: int = 20,
+    task_schedule_capacity_oracle_max_states: int | None = None,
+    task_schedule_capacity_node_time_budget: float | None = None,
+    task_schedule_capacity_global_time_ratio: float = 0.05,
+    task_schedule_capacity_min_violation: float | None = None,
+    task_schedule_capacity_copy_to_all_vehicles: bool = False,
+    task_schedule_capacity_use_rim_witness: bool = True,
+    task_schedule_capacity_use_route_pack_witness: bool = True,
+    task_schedule_capacity_use_incompatibility_witness: bool = True,
+    task_schedule_capacity_use_top_z_mass: bool = True,
+    task_schedule_capacity_use_support_route_union: bool = True,
+    task_schedule_capacity_use_time_window_clusters: bool = False,
+    task_schedule_capacity_stop_after_no_add_rounds: int | None = None,
+    task_schedule_capacity_stop_after_no_improve_rounds: int = 2,
+    task_schedule_capacity_cache_incomplete: bool = True,
+    task_schedule_capacity_cache_not_tight: bool = True,
+    task_schedule_capacity_cache_exact_upper_bound: bool = True,
+    task_schedule_capacity_branch_signal_enabled: bool = True,
+    task_schedule_capacity_branch_signal_apply_enabled: bool = False,
     schedule_incompatibility_cuts_enabled: bool = True,
     schedule_incompatibility_cut_max_depth: int = 2,
     schedule_incompatibility_cut_max_rounds_per_node: int = 2,
@@ -435,6 +486,31 @@ def solve_bpc_clean(
             root_schedule_capacity_time_budget=root_schedule_capacity_time_budget,
             root_schedule_capacity_min_violation=root_schedule_capacity_min_violation,
             root_schedule_capacity_stop_after_no_add_rounds=root_schedule_capacity_stop_after_no_add_rounds,
+            task_schedule_capacity_cuts_enabled=task_schedule_capacity_cuts_enabled,
+            task_schedule_capacity_max_depth=task_schedule_capacity_max_depth,
+            task_schedule_capacity_pair_budget=task_schedule_capacity_pair_budget,
+            task_schedule_capacity_triple_budget=task_schedule_capacity_triple_budget,
+            task_schedule_capacity_small_set_budget=task_schedule_capacity_small_set_budget,
+            task_schedule_capacity_max_subset_size=task_schedule_capacity_max_subset_size,
+            task_schedule_capacity_max_cuts_per_round=task_schedule_capacity_max_cuts_per_round,
+            task_schedule_capacity_oracle_max_states=task_schedule_capacity_oracle_max_states,
+            task_schedule_capacity_node_time_budget=task_schedule_capacity_node_time_budget,
+            task_schedule_capacity_global_time_ratio=task_schedule_capacity_global_time_ratio,
+            task_schedule_capacity_min_violation=task_schedule_capacity_min_violation,
+            task_schedule_capacity_copy_to_all_vehicles=task_schedule_capacity_copy_to_all_vehicles,
+            task_schedule_capacity_use_rim_witness=task_schedule_capacity_use_rim_witness,
+            task_schedule_capacity_use_route_pack_witness=task_schedule_capacity_use_route_pack_witness,
+            task_schedule_capacity_use_incompatibility_witness=task_schedule_capacity_use_incompatibility_witness,
+            task_schedule_capacity_use_top_z_mass=task_schedule_capacity_use_top_z_mass,
+            task_schedule_capacity_use_support_route_union=task_schedule_capacity_use_support_route_union,
+            task_schedule_capacity_use_time_window_clusters=task_schedule_capacity_use_time_window_clusters,
+            task_schedule_capacity_stop_after_no_add_rounds=task_schedule_capacity_stop_after_no_add_rounds,
+            task_schedule_capacity_stop_after_no_improve_rounds=task_schedule_capacity_stop_after_no_improve_rounds,
+            task_schedule_capacity_cache_incomplete=task_schedule_capacity_cache_incomplete,
+            task_schedule_capacity_cache_not_tight=task_schedule_capacity_cache_not_tight,
+            task_schedule_capacity_cache_exact_upper_bound=task_schedule_capacity_cache_exact_upper_bound,
+            task_schedule_capacity_branch_signal_enabled=task_schedule_capacity_branch_signal_enabled,
+            task_schedule_capacity_branch_signal_apply_enabled=task_schedule_capacity_branch_signal_apply_enabled,
             schedule_incompatibility_cuts_enabled=schedule_incompatibility_cuts_enabled,
             schedule_incompatibility_cut_max_depth=schedule_incompatibility_cut_max_depth,
             schedule_incompatibility_cut_max_rounds_per_node=schedule_incompatibility_cut_max_rounds_per_node,
@@ -569,6 +645,32 @@ def solve_bpc_clean(
         root_schedule_capacity_candidates_generated=tree_result.stats.root_schedule_capacity_candidates_generated,
         root_schedule_capacity_candidates_after_precheck=tree_result.stats.root_schedule_capacity_candidates_after_precheck,
         root_schedule_capacity_best_violation=_round(tree_result.stats.root_schedule_capacity_best_violation, 9),
+        task_schedule_capacity_cuts_added=tree_result.stats.task_schedule_capacity_cuts_added,
+        task_schedule_capacity_candidates_generated=tree_result.stats.task_schedule_capacity_candidates_generated,
+        task_schedule_capacity_candidates_after_precheck=tree_result.stats.task_schedule_capacity_candidates_after_precheck,
+        task_schedule_capacity_pair_candidates=tree_result.stats.task_schedule_capacity_pair_candidates,
+        task_schedule_capacity_triple_candidates=tree_result.stats.task_schedule_capacity_triple_candidates,
+        task_schedule_capacity_small_set_candidates=tree_result.stats.task_schedule_capacity_small_set_candidates,
+        task_schedule_capacity_candidates_by_source=dict(tree_result.stats.task_schedule_capacity_candidates_by_source),
+        task_schedule_capacity_prechecked_by_source=dict(tree_result.stats.task_schedule_capacity_prechecked_by_source),
+        task_schedule_capacity_oracle_requests=tree_result.stats.task_schedule_capacity_oracle_requests,
+        task_schedule_capacity_oracle_computations=tree_result.stats.task_schedule_capacity_oracle_computations,
+        task_schedule_capacity_cache_hits=tree_result.stats.task_schedule_capacity_cache_hits,
+        task_schedule_capacity_oracle_incomplete=tree_result.stats.task_schedule_capacity_oracle_incomplete,
+        task_schedule_capacity_exact_not_tight=tree_result.stats.task_schedule_capacity_exact_not_tight,
+        task_schedule_capacity_exact_tight_not_violated=tree_result.stats.task_schedule_capacity_exact_tight_not_violated,
+        task_schedule_capacity_violated_candidates=tree_result.stats.task_schedule_capacity_violated_candidates,
+        task_schedule_capacity_best_violation=_round(tree_result.stats.task_schedule_capacity_best_violation, 9),
+        task_schedule_capacity_oracle_time=_round(tree_result.stats.task_schedule_capacity_oracle_time),
+        task_schedule_capacity_oracle_states_total=tree_result.stats.task_schedule_capacity_oracle_states_total,
+        task_schedule_capacity_oracle_states_max=tree_result.stats.task_schedule_capacity_oracle_states_max,
+        task_schedule_capacity_cuts_copied_to_all_vehicles=tree_result.stats.task_schedule_capacity_cuts_copied_to_all_vehicles,
+        task_schedule_capacity_stopped_by_no_add=tree_result.stats.task_schedule_capacity_stopped_by_no_add,
+        task_schedule_capacity_stopped_by_no_improvement=tree_result.stats.task_schedule_capacity_stopped_by_no_improvement,
+        task_schedule_capacity_stopped_by_node_time_budget=tree_result.stats.task_schedule_capacity_stopped_by_node_time_budget,
+        task_schedule_capacity_stopped_by_global_time_budget=tree_result.stats.task_schedule_capacity_stopped_by_global_time_budget,
+        task_schedule_capacity_branch_signal_candidates=tree_result.stats.task_schedule_capacity_branch_signal_candidates,
+        task_schedule_capacity_branch_signal_applied=tree_result.stats.task_schedule_capacity_branch_signal_applied,
         route_set_schedule_packing_oracle_queries=tree_result.stats.route_set_schedule_packing_oracle_queries,
         route_set_schedule_packing_oracle_time=_round(tree_result.stats.route_set_schedule_packing_oracle_time),
         route_set_schedule_packing_cache_hits=tree_result.stats.route_set_schedule_packing_cache_hits,

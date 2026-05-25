@@ -41,6 +41,7 @@ class BPCLogger:
             "schedule_capacity_candidates",
             "schedule_capacity_diagnostics",
             "root_schedule_capacity_diagnostics",
+            "task_schedule_capacity_diagnostics",
             "subset_row_diagnostics",
             "lm_rank1_diagnostics",
             "schedule_subset_cost_diagnostics",
@@ -122,6 +123,20 @@ class BPCLogger:
                 f"not_viol={record.get('tight_not_violated')} dup={record.get('duplicate')} "
                 f"viol={record.get('violated')} added={record.get('cuts_added')} "
                 f"best_viol={record.get('best_violation')} time={record.get('oracle_time')}"
+            )
+        if event == "task_schedule_capacity_diagnostics":
+            stopped = record.get("stopped_by")
+            stopped_text = "" if not stopped else f" stopped={stopped}"
+            return (
+                f"{prefix} task-schedule-cap diag node {record['node_id']} round={record.get('round')} "
+                f"cand={record.get('candidates_generated')}/{record.get('candidates_after_precheck')} "
+                f"pair={record.get('pair_candidates')} triple={record.get('triple_candidates')} "
+                f"small={record.get('small_set_candidates')} oracle={record.get('oracle_computations')}/"
+                f"{record.get('oracle_requests')} cache={record.get('cache_hits')} "
+                f"incomplete={record.get('oracle_incomplete')} not_tight={record.get('exact_not_tight')} "
+                f"not_viol={record.get('exact_tight_not_violated')} viol={record.get('violated_candidates')} "
+                f"added={record.get('cuts_added', record.get('added'))} best_viol={record.get('best_violation')} "
+                f"states_max={record.get('oracle_states_max')} time={record.get('oracle_time')}{stopped_text}"
             )
         if event == "subset_row_diagnostics":
             return (
