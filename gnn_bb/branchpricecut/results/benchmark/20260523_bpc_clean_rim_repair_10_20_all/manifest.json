@@ -1,0 +1,37 @@
+{
+  "config": {
+    "base_solver_config": "branchpricecut/config/paper_bpc_clean_baseline.json",
+    "instance_dir": "branchpricecut/results/benchmark/{run_id}/instances",
+    "instances_per_size": 10,
+    "max_nodes": 100000,
+    "name": "bpc_clean_10_20_regression",
+    "quiet": true,
+    "resume": true,
+    "seed_base": 20260600,
+    "sizes": [
+      10,
+      20
+    ],
+    "time_limit": 3600,
+    "variants": [
+      "bpc_clean_full"
+    ],
+    "vehicle_schedule_config": "branchpricecut/config/medium_prove.json"
+  },
+  "created_at": "2026-05-23T19:27:56",
+  "git_diff_stat": "gnn_bb/bpc/README.md                               |   2 +\n gnn_bb/bpc/__pycache__/node.cpython-312.pyc        | Bin 6288 -> 6654 bytes\n gnn_bb/bpc/__pycache__/rmp.cpython-312.pyc         | Bin 37612 -> 46515 bytes\n gnn_bb/bpc/__pycache__/solver.cpython-312.pyc      | Bin 31357 -> 32449 bytes\n gnn_bb/bpc/__pycache__/tree.cpython-312.pyc        | Bin 237140 -> 239001 bytes\n gnn_bb/bpc/node.py                                 |   5 +\n gnn_bb/bpc/rmp.py                                  | 169 ++++++++++++++++++++-\n gnn_bb/bpc/solver.py                               |  16 ++\n gnn_bb/bpc/tree.py                                 |  24 ++-\n .../__pycache__/solver.cpython-312.pyc             | Bin 29793 -> 31532 bytes\n .../config/paper_bpc_clean_baseline.json           |   3 +\n .../docs/paper_grade_bpc_clean_baseline.md         |   5 +-\n gnn_bb/branchpricecut/scripts/run_benchmark.py     |   3 +\n gnn_bb/branchpricecut/solver.py                    |   3 +\n gnn_bb/configs/bpc_clean.yaml                      |   5 +\n gnn_bb/docs/bpc_current_complete_model.md          |   3 +\n gnn_bb/scripts/run_bpc_ablation.py                 |   3 +\n gnn_bb/scripts/run_bpc_clean.py                    |   5 +\n 18 files changed, 242 insertions(+), 4 deletions(-)",
+  "git_head": "d482ee3e1240ae974797859a30f4b24f50c9da44",
+  "git_status": "M bpc/README.md\n M bpc/__pycache__/node.cpython-312.pyc\n M bpc/__pycache__/rmp.cpython-312.pyc\n M bpc/__pycache__/solver.cpython-312.pyc\n M bpc/__pycache__/tree.cpython-312.pyc\n M bpc/node.py\n M bpc/rmp.py\n M bpc/solver.py\n M bpc/tree.py\n M branchpricecut/__pycache__/solver.cpython-312.pyc\n M branchpricecut/config/paper_bpc_clean_baseline.json\n M branchpricecut/docs/paper_grade_bpc_clean_baseline.md\n M branchpricecut/scripts/run_benchmark.py\n M branchpricecut/solver.py\n M configs/bpc_clean.yaml\n M docs/bpc_current_complete_model.md\n M scripts/run_bpc_ablation.py\n M scripts/run_bpc_clean.py\n?? branchpricecut/config/benchmark_bpc_clean_10_20.json\n?? branchpricecut/results/benchmark/20260523_bpc_clean_rim_repair_10_20_all/\n?? results/smoke/bpc_clean_rim_repair_very_small.csv\n?? results/smoke/logs/bpc_clean_rim_repair/\n?? results/smoke/solutions/bpc_clean_rim_repair/",
+  "instance_dir": "/home/kai/work/gnn_bb/branchpricecut/results/benchmark/20260523_bpc_clean_rim_repair_10_20_all/instances",
+  "job_count": 20,
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "/home/kai/miniconda3/envs/ecole/bin/python",
+  "run_id": "20260523_bpc_clean_rim_repair_10_20_all",
+  "sizes": [
+    10,
+    20
+  ],
+  "variants": [
+    "bpc_clean_full"
+  ]
+}

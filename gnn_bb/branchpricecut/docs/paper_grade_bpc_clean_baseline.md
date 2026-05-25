@@ -14,6 +14,8 @@
 
 2026-05-23 长测回滚：`20260522_bpc_clean_fleetlb_budget_long_20_regression` 显示，fleet lower-bound oracle 在 `bench_20_01/02/03/04/05/06/08/10` 上全部 `ORACLE_INCOMPLETE`，没有加入任何 cut；3PB candidate budget 虽降低 branch testing time，但 `bench_20_05` 的 incumbent 明显退化，`bench_20_08` 也略退化。因此 paper-grade baseline 默认关闭 `fleet_lower_bound_cuts_enabled=false` 和 `three_pb_candidate_budget_enabled=false`，代码保留为显式消融实验和分支日志采集工具。
 
+2026-05-23 新增 RIM route-assignment repair。restricted integer master 得到低目标整数 route 集合但当前车辆分配不可排程时，先固定这组选中 route，只重新分配到同质车辆上；修复后的 assignment 必须通过 exact schedule check 且优于 incumbent 才更新上界。该机制只改善 primal bound，不改变 route-vehicle LP、pricing certificate 或任何 lower-bound 证明；失败时继续按原 conflict cut 流程处理。
+
 ## Baseline 契约
 
 - 求解入口：`bpc.solver.solve_bpc_clean`。
@@ -49,6 +51,7 @@
 - `schedule_pack_adaptive_enabled = false`，`route_enumeration_adaptive_enabled = false`：自适应门控代码保留，但默认关闭。它只能避免简单节点支付额外重计算成本，不能解决困难实例上 schedule-pack 诊断值无法转成正式 bound 的核心问题。
 - `restricted_master_heuristic_enabled = true`：在完成节点定价证书后，对当前 route pool 解一个小时间限制的 binary restricted master，主动寻找 incumbent；它只作为 primal heuristic，不参与 lower bound 证明。
 - `restricted_master_schedule_aware = true`：restricted master 每次得到整数 route-vehicle assignment 后，立即对每辆车做 exact schedule check；若某辆车的 route 集合不可排程，就提取 witness。
+- `restricted_master_repair_enabled = true`：RIM 对低目标但不可排程的整数 route 集合做一次受预算限制的车辆重分配修复。修复只接受 exact schedule feasible 的 assignment，并在日志/CSV 中记录 `restricted_master_integer_repair_attempts`、`restricted_master_integer_repair_successes`、`restricted_master_integer_repair_time`、`restricted_master_integer_repair_states` 和 `restricted_master_integer_repair_best_objective`。
 - 若 witness 中存在两条 route `p,q` 满足 `p->q` 和 `q->p` 都不可行，RIM 先加入临时 `lambda[p,r]+lambda[q,r]<=y[r]`；若没有 pair witness，再对原始不可排程整数解的 full route set `C` 用 exact route-set schedule DP 证明 `U(C)<|C|-1`，成功时加入严格强于 no-good 的 `sum_{p in C} lambda[p,r] <= U(C)y[r]`；若 `U(C)=|C|-1` 或 route-set 上界不能加强，再尝试用 exact schedule-capacity oracle 证明某个任务集合 `S` 满足 `U(S)<|S|`，成功时加入 `sum_{i in S} z[i,r] <= U(S)y[r]`；若仍无法证明，才回退到 no-good。pair、schedule-capacity 和 no-good fallback 使用 deletion-minimal core。
 - RIM 发现的 pair / route-set packing / schedule-capacity conflict 会回流到主树生成正式 cut；弱 no-good 只有在当前 LP 解确实违反时才提升为正式 cut，避免大量不抬升 bound 的全局 no-good 关闭 dominance。
 - RIM 使用线性 incumbent cutoff 过滤不可能改进当前 incumbent 的整数候选；不使用 SCIP `Objlimit`，避免排程不可行的低目标候选提前终止 no-good 迭代。
@@ -74,7 +77,7 @@
 - `status`, `primal_bound`, `dual_bound`, `gap`, `diagnostic_dual_bound`, `diagnostic_gap`, `solving_time`, `node_count`
 - `rmp_solves`, `pricing_calls`, `exact_pricing_calls`, `generated_routes`, `label_pops`, `generated_labels`
 - `restricted_master_integer_calls`, `restricted_master_integer_feasible`, `restricted_master_integer_time`, `restricted_master_integer_best_objective`
-- `restricted_master_integer_raw_best_objective`, `restricted_master_integer_rejected`, `restricted_master_integer_pair_conflict_cuts`, `restricted_master_integer_route_set_packing_cuts`, `restricted_master_integer_no_good_cuts`, `restricted_master_integer_schedule_capacity_cuts`
+- `restricted_master_integer_raw_best_objective`, `restricted_master_integer_rejected`, `restricted_master_integer_pair_conflict_cuts`, `restricted_master_integer_route_set_packing_cuts`, `restricted_master_integer_no_good_cuts`, `restricted_master_integer_schedule_capacity_cuts`, `restricted_master_integer_repair_attempts`, `restricted_master_integer_repair_successes`, `restricted_master_integer_repair_best_objective`
 - `cuts_added`, `crossing_cuts_added`, `resource_lower_bound_cuts_added`, `robust_capacity_cuts_added`, `subset_row_cuts_added`, `lm_rank1_cuts_added`, `schedule_subset_cost_cuts_added`
 - `schedule_pair_conflict_cuts_added`, `schedule_clique_conflict_cuts_added`, `schedule_route_set_packing_cuts_added`, `schedule_capacity_cuts_added`, `schedule_nogood_cuts_added`, `cuts_purged`
 - `metric_route_set_schedule_packing_candidate_sets`, `metric_route_set_schedule_packing_oracle_queries`, `metric_route_set_schedule_packing_oracle_incomplete`, `metric_route_set_schedule_packing_not_tight`, `metric_route_set_schedule_packing_not_violated`, `metric_route_set_schedule_packing_violated_candidates`, `metric_route_set_schedule_packing_max_violation`, `metric_route_set_schedule_packing_oracle_states_max`

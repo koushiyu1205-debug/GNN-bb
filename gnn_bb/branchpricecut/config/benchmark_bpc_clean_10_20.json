@@ -1,0 +1,16 @@
+{
+  "name": "bpc_clean_10_20_regression",
+  "instance_dir": "branchpricecut/results/benchmark/{run_id}/instances",
+  "sizes": [10, 20],
+  "instances_per_size": 10,
+  "seed_base": 20260600,
+  "time_limit": 3600,
+  "max_nodes": 100000,
+  "variants": [
+    "bpc_clean_full"
+  ],
+  "base_solver_config": "branchpricecut/config/paper_bpc_clean_baseline.json",
+  "vehicle_schedule_config": "branchpricecut/config/medium_prove.json",
+  "resume": true,
+  "quiet": true
+}

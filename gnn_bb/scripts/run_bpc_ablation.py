@@ -148,6 +148,9 @@ def _solve_one(
         restricted_master_route_pack_conflict_max_events=int(
             base.get("restricted_master_route_pack_conflict_max_events", 2)
         ),
+        restricted_master_repair_enabled=_bool_config(base, "restricted_master_repair_enabled", True),
+        restricted_master_repair_max_attempts=int(base.get("restricted_master_repair_max_attempts", 3)),
+        restricted_master_repair_max_states=int(base.get("restricted_master_repair_max_states", 50000)),
         rmp_params=dict(base.get("rmp_params", {})),
         log_path=log_path,
         solution_path=solution_path,

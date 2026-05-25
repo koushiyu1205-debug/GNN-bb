@@ -158,6 +158,9 @@ class CleanBPCTree:
         restricted_master_schedule_aware: bool = True,
         restricted_master_max_no_good_rounds: int = 20,
         restricted_master_route_pack_conflict_max_events: int = 2,
+        restricted_master_repair_enabled: bool = True,
+        restricted_master_repair_max_attempts: int = 3,
+        restricted_master_repair_max_states: int = 50000,
         branching_strategy: str = "3pb",
         three_pb_pseudocost_candidates: int = 6,
         three_pb_fractional_candidates: int = 6,
@@ -315,6 +318,9 @@ class CleanBPCTree:
         self.restricted_master_schedule_aware = bool(restricted_master_schedule_aware)
         self.restricted_master_max_no_good_rounds = int(restricted_master_max_no_good_rounds)
         self.restricted_master_route_pack_conflict_max_events = int(restricted_master_route_pack_conflict_max_events)
+        self.restricted_master_repair_enabled = bool(restricted_master_repair_enabled)
+        self.restricted_master_repair_max_attempts = int(restricted_master_repair_max_attempts)
+        self.restricted_master_repair_max_states = int(restricted_master_repair_max_states)
         self.rmp_params = dict(rmp_params or {})
         self.logger = logger
         self.branching_strategy = str(branching_strategy)
@@ -1736,6 +1742,9 @@ class CleanBPCTree:
             max_no_good_rounds=self.restricted_master_max_no_good_rounds,
             schedule_capacity_oracle_max_states=self.schedule_capacity_oracle_max_states,
             schedule_capacity_conflict_max_subset_size=self.schedule_capacity_cut_max_subset_size,
+            repair_enabled=self.restricted_master_repair_enabled,
+            repair_max_attempts=self.restricted_master_repair_max_attempts,
+            repair_max_states=self.restricted_master_repair_max_states,
         )
         self.stats.restricted_master_integer_calls += 1
         self.stats.restricted_master_integer_time += result.solving_time
@@ -1744,6 +1753,14 @@ class CleanBPCTree:
         self.stats.restricted_master_integer_pair_conflict_cuts += result.pair_conflict_cuts
         self.stats.restricted_master_integer_route_set_packing_cuts += result.route_set_packing_cuts
         self.stats.restricted_master_integer_schedule_capacity_cuts += result.schedule_capacity_cuts
+        self.stats.restricted_master_integer_repair_attempts += result.repair_attempts
+        self.stats.restricted_master_integer_repair_successes += result.repair_successes
+        self.stats.restricted_master_integer_repair_time += result.repair_time
+        self.stats.restricted_master_integer_repair_states += result.repair_states
+        if result.repair_best_objective is not None:
+            current_repair = self.stats.restricted_master_integer_repair_best_objective
+            if current_repair is None or result.repair_best_objective < current_repair - self.integer_tol:
+                self.stats.restricted_master_integer_repair_best_objective = result.repair_best_objective
         if result.raw_objective is not None:
             current_raw = self.stats.restricted_master_integer_raw_best_objective
             if current_raw is None or result.raw_objective < current_raw - self.integer_tol:
@@ -1751,7 +1768,7 @@ class CleanBPCTree:
         added_conflict_cuts = self._add_restricted_master_conflict_cuts(node, result, solution)
         accepted = False
         if result.objective is not None:
-            accepted = self._set_incumbent_from_assignment(result.assigned_routes, node_id=node.id, source="restricted_integer_master")
+            accepted = self._set_incumbent_from_assignment(result.assigned_routes, node_id=node.id, source=result.source)
             if accepted:
                 self.stats.restricted_master_integer_feasible += 1
                 current = self.stats.restricted_master_integer_best_objective
@@ -1773,6 +1790,11 @@ class CleanBPCTree:
             pair_conflict_cuts=result.pair_conflict_cuts,
             route_set_packing_cuts=result.route_set_packing_cuts,
             schedule_capacity_cuts=result.schedule_capacity_cuts,
+            repair_attempts=result.repair_attempts,
+            repair_successes=result.repair_successes,
+            repair_time=round(result.repair_time, 6),
+            repair_states=result.repair_states,
+            repair_best_objective=None if result.repair_best_objective is None else round(result.repair_best_objective, 6),
             added_schedule_cuts=added_conflict_cuts,
             time=round(result.solving_time, 6),
         )

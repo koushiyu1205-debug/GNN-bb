@@ -1,0 +1,23 @@
+M bpc/README.md
+ M bpc/__pycache__/node.cpython-312.pyc
+ M bpc/__pycache__/rmp.cpython-312.pyc
+ M bpc/__pycache__/solver.cpython-312.pyc
+ M bpc/__pycache__/tree.cpython-312.pyc
+ M bpc/node.py
+ M bpc/rmp.py
+ M bpc/solver.py
+ M bpc/tree.py
+ M branchpricecut/__pycache__/solver.cpython-312.pyc
+ M branchpricecut/config/paper_bpc_clean_baseline.json
+ M branchpricecut/docs/paper_grade_bpc_clean_baseline.md
+ M branchpricecut/scripts/run_benchmark.py
+ M branchpricecut/solver.py
+ M configs/bpc_clean.yaml
+ M docs/bpc_current_complete_model.md
+ M scripts/run_bpc_ablation.py
+ M scripts/run_bpc_clean.py
+?? branchpricecut/config/benchmark_bpc_clean_10_20.json
+?? branchpricecut/results/benchmark/20260523_bpc_clean_rim_repair_10_20_all/
+?? results/smoke/bpc_clean_rim_repair_very_small.csv
+?? results/smoke/logs/bpc_clean_rim_repair/
+?? results/smoke/solutions/bpc_clean_rim_repair/

@@ -15,7 +15,7 @@ from .columns import RouteColumn, route_work_time_lower_bound
 from .cuts import Cut, normalize_signatures
 from .data import BPCData
 from .schedule_capacity import find_schedule_capacity_conflict
-from .validation import ScheduleInfeasibilityWitness, diagnose_route_set_schedule
+from .validation import ScheduleInfeasibilityWitness, check_route_set_schedule_feasible, diagnose_route_set_schedule
 from .validation import exact_route_set_schedule_capacity
 
 
@@ -62,6 +62,12 @@ class RestrictedIntegerResult:
     route_set_packing_cuts: int = 0
     schedule_capacity_cuts: int = 0
     rejected_conflicts: tuple[tuple[int, tuple[RouteColumn, ...]], ...] = tuple()
+    source: str = "restricted_integer_master"
+    repair_attempts: int = 0
+    repair_successes: int = 0
+    repair_time: float = 0.0
+    repair_states: int = 0
+    repair_best_objective: float | None = None
 
     @property
     def feasible(self) -> bool:
@@ -391,6 +397,87 @@ def _extract_integer_assignment(
     return assigned, selected_routes
 
 
+def _assignment_objective(data: BPCData, assigned: dict[int, list[RouteColumn]]) -> float:
+    used = sum(1 for routes in assigned.values() if routes)
+    return sum(route.cost for routes in assigned.values() for route in routes) + used * data.fixed_vehicle_cost
+
+
+def _assignment_feasible(data: BPCData, assigned: dict[int, list[RouteColumn]]) -> bool:
+    covered: list[int] = []
+    for routes in assigned.values():
+        if len(routes) > data.sortie_limit:
+            return False
+        if not check_route_set_schedule_feasible(data, routes).feasible:
+            return False
+        for route in routes:
+            covered.extend(int(task) for task in route.tasks)
+    return sorted(covered) == sorted(int(task) for task in data.tasks) and len(covered) == len(set(covered))
+
+
+def _repair_route_assignment(
+    data: BPCData,
+    routes: list[RouteColumn],
+    *,
+    incumbent_bound: float | None,
+    max_states: int,
+) -> tuple[dict[int, list[RouteColumn]] | None, float | None, int]:
+    """中文注释：只重新分配 route 到车辆；成功结果必须满足原问题排程可行性。"""
+
+    if not routes:
+        return None, None, 0
+    if len(routes) > len(data.vehicles) * int(data.sortie_limit):
+        return None, None, 0
+    ordered_routes = sorted(routes, key=lambda route: (-len(route.tasks), -route.cycle_time, route.signature))
+    assigned: dict[int, list[RouteColumn]] = {int(vehicle): [] for vehicle in data.vehicles}
+    best: dict[int, list[RouteColumn]] | None = None
+    best_objective = float("inf") if incumbent_bound is None else float(incumbent_bound)
+    fixed_route_cost = sum(route.cost for route in ordered_routes)
+    visited = 0
+    state_limit = max(1, int(max_states))
+
+    def search(index: int) -> None:
+        nonlocal best, best_objective, visited
+        visited += 1
+        if visited > state_limit:
+            return
+        used = sum(1 for vehicle_routes in assigned.values() if vehicle_routes)
+        lower_bound = fixed_route_cost + used * data.fixed_vehicle_cost
+        if lower_bound >= best_objective - 1.0e-6:
+            return
+        if index == len(ordered_routes):
+            candidate = {vehicle: list(items) for vehicle, items in assigned.items()}
+            if not _assignment_feasible(data, candidate):
+                return
+            objective = _assignment_objective(data, candidate)
+            if objective < best_objective - 1.0e-6:
+                best_objective = objective
+                best = candidate
+            return
+
+        route = ordered_routes[index]
+        tried_empty_vehicle = False
+        vehicles = sorted(data.vehicles, key=lambda vehicle: (len(assigned[int(vehicle)]) == 0, len(assigned[int(vehicle)]), int(vehicle)))
+        for vehicle_raw in vehicles:
+            vehicle = int(vehicle_raw)
+            if len(assigned[vehicle]) >= data.sortie_limit:
+                continue
+            if not assigned[vehicle]:
+                if tried_empty_vehicle:
+                    continue
+                tried_empty_vehicle = True
+            candidate_routes = [*assigned[vehicle], route]
+            if not check_route_set_schedule_feasible(data, candidate_routes).feasible:
+                continue
+            assigned[vehicle].append(route)
+            search(index + 1)
+            assigned[vehicle].pop()
+
+    search(0)
+    if best is None:
+        return None, None, visited
+    return best, best_objective, visited
+
+
 def _first_schedule_conflict(
     data: BPCData,
     assigned: dict[int, list[RouteColumn]],
@@ -419,6 +506,9 @@ def solve_restricted_integer_master(
     max_no_good_rounds: int = 20,
     schedule_capacity_oracle_max_states: int = 200000,
     schedule_capacity_conflict_max_subset_size: int = 10,
+    repair_enabled: bool = True,
+    repair_max_attempts: int = 3,
+    repair_max_states: int = 50000,
 ) -> RestrictedIntegerResult:
     """中文注释：在当前 route pool 上解 binary RMP，并可迭代排除排程不可行的整数解。"""
 
@@ -541,6 +631,12 @@ def solve_restricted_integer_master(
     pair_conflict_cuts = 0
     route_set_packing_cuts = 0
     schedule_capacity_cuts = 0
+    repair_attempts = 0
+    repair_successes = 0
+    repair_time = 0.0
+    repair_states = 0
+    repair_best_objective: float | None = None
+    repair_seen: set[tuple[tuple[int, ...], ...]] = set()
     rejected_conflicts: list[tuple[int, tuple[RouteColumn, ...]]] = []
     temporary_pair_keys: set[tuple[int, tuple[tuple[int, ...], tuple[int, ...]]]] = set()
     temporary_route_pack_keys: set[tuple[int, tuple[tuple[int, ...], ...], int]] = set()
@@ -608,6 +704,11 @@ def solve_restricted_integer_master(
                 route_set_packing_cuts=route_set_packing_cuts,
                 schedule_capacity_cuts=schedule_capacity_cuts,
                 rejected_conflicts=tuple(rejected_conflicts),
+                repair_attempts=repair_attempts,
+                repair_successes=repair_successes,
+                repair_time=repair_time,
+                repair_states=repair_states,
+                repair_best_objective=repair_best_objective,
             )
 
         conflict = _first_schedule_conflict(data, assigned)
@@ -627,11 +728,70 @@ def solve_restricted_integer_master(
                 route_set_packing_cuts=route_set_packing_cuts,
                 schedule_capacity_cuts=schedule_capacity_cuts,
                 rejected_conflicts=tuple(rejected_conflicts),
+                repair_attempts=repair_attempts,
+                repair_successes=repair_successes,
+                repair_time=repair_time,
+                repair_states=repair_states,
+                repair_best_objective=repair_best_objective,
             )
 
-        rejected_solutions += 1
         conflict_vehicle, witness, full_conflict_routes = conflict
         conflict_routes = tuple(witness.routes)
+        selected_route_list = [route for vehicle_routes in assigned.values() for route in vehicle_routes]
+        selected_signature_key = normalize_signatures(tuple(route.signature for route in selected_route_list))
+        if (
+            repair_enabled
+            and repair_attempts < max(0, int(repair_max_attempts))
+            and selected_signature_key not in repair_seen
+            and (
+                incumbent_bound is None
+                or raw_objective < float(incumbent_bound) + float(data.fixed_vehicle_cost) - 1.0e-6
+            )
+        ):
+            repair_seen.add(selected_signature_key)
+            repair_attempts += 1
+            repair_started = time.perf_counter()
+            repaired = _repair_route_assignment(
+                data,
+                selected_route_list,
+                incumbent_bound=incumbent_bound,
+                max_states=repair_max_states,
+            )
+            repair_time += time.perf_counter() - repair_started
+            repaired_assigned, repaired_objective, states = repaired
+            repair_states += int(states)
+            if repaired_assigned is not None and repaired_objective is not None:
+                repair_successes += 1
+                repair_best_objective = (
+                    repaired_objective
+                    if repair_best_objective is None
+                    else min(float(repair_best_objective), float(repaired_objective))
+                )
+                rejected_solutions += 1
+                return RestrictedIntegerResult(
+                    status="REPAIRED",
+                    objective=repaired_objective,
+                    assigned_routes=repaired_assigned,
+                    solving_time=time.perf_counter() - started,
+                    variable_count=model.getNVars(),
+                    constraint_count=model.getNConss(),
+                    selected_routes=selected_routes,
+                    raw_objective=raw_best_objective,
+                    rejected_solutions=rejected_solutions,
+                    no_good_cuts=no_good_cuts,
+                    pair_conflict_cuts=pair_conflict_cuts,
+                    route_set_packing_cuts=route_set_packing_cuts,
+                    schedule_capacity_cuts=schedule_capacity_cuts,
+                    rejected_conflicts=tuple(rejected_conflicts),
+                    source="restricted_integer_master_repair",
+                    repair_attempts=repair_attempts,
+                    repair_successes=repair_successes,
+                    repair_time=repair_time,
+                    repair_states=repair_states,
+                    repair_best_objective=repair_best_objective,
+                )
+
+        rejected_solutions += 1
         rejected_conflicts.append((int(conflict_vehicle), tuple(full_conflict_routes)))
         if rejected_solutions > no_good_limit:
             last_status = "SCHEDULE_REJECTED_LIMIT"
@@ -761,4 +921,9 @@ def solve_restricted_integer_master(
         route_set_packing_cuts=route_set_packing_cuts,
         schedule_capacity_cuts=schedule_capacity_cuts,
         rejected_conflicts=tuple(rejected_conflicts),
+        repair_attempts=repair_attempts,
+        repair_successes=repair_successes,
+        repair_time=repair_time,
+        repair_states=repair_states,
+        repair_best_objective=repair_best_objective,
     )

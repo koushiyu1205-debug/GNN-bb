@@ -34,6 +34,8 @@ sum_r y_r >= L
 
 2026-05-23 长测回滚：`20260522_bpc_clean_fleetlb_budget_long_20_regression` 显示 fleet lower-bound oracle 在 20 规模回归实例上全部未完成，未加入任何 cut；3PB candidate budget 虽减少 branch testing time，但导致 `bench_20_05` 和 `bench_20_08` 的 incumbent 退化。当前 paper-grade 默认重新关闭 `fleet_lower_bound_cuts_enabled` 和 `three_pb_candidate_budget_enabled`。两者保留为显式实验开关，不再默认进入主线。
 
+2026-05-23 新增 RIM route-assignment repair。restricted integer master 找到低目标整数 route 集合但原车辆分配不可排程时，不再只加入冲突 cut 后放弃该候选，而是尝试在同一组选中 route 上重新分配车辆。修复后的 assignment 必须重新通过 exact schedule check，且目标值优于 incumbent 才会作为上界更新。该机制只改变 primal incumbent，不参与 lower-bound 证明；失败时仍按原顺序回流 pair、route-set packing、schedule-capacity 或 no-good cut。
+
 ## 1. 模型定位
 
 当前实现是：
@@ -830,6 +832,7 @@ branch_testing_time
    - 在当前 route pool 上解 binary restricted master；
    - 该 MIP 只作为 primal heuristic，不参与 lower bound 证明；
    - 每次得到整数 assignment 后立即运行 exact schedule checker；
+   - 若整数 route 集合目标足够低但原车辆分配不可排程，先尝试 `restricted_master_repair`：固定这组选中 route，只重排 route 到车辆的 assignment；修复结果必须通过 exact schedule check 才能更新 incumbent；
    - 如果某辆车的 route 集合不可排程，先在该临时 MIP 中加入双向不可排程 pair cut；若没有 pair witness，再尝试临时 schedule-capacity cut；最后才退回临时 no-good；
    - RIM 中发现的强 witness cut 会回流成主树正式 cut；弱 no-good 只有在当前 LP 解确实违反时才提升为正式 cut，避免大量不抬升 bound 的全局 no-good 污染 pricing；
    - RIM 使用线性 objective cutoff 过滤不可能改进当前 incumbent 的候选，但不使用 solver objlimit；

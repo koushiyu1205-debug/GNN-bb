@@ -123,6 +123,9 @@ def main() -> None:
             restricted_master_route_pack_conflict_max_events=int(
                 config.get("restricted_master_route_pack_conflict_max_events", 2)
             ),
+            restricted_master_repair_enabled=_bool_config(config, "restricted_master_repair_enabled", True),
+            restricted_master_repair_max_attempts=int(config.get("restricted_master_repair_max_attempts", 3)),
+            restricted_master_repair_max_states=int(config.get("restricted_master_repair_max_states", 50000)),
             rmp_params=dict(config.get("rmp_params", {})),
             log_path=log_path,
             solution_path=solution_path,
@@ -292,6 +295,8 @@ def main() -> None:
             f"rim_route_pack={result.restricted_master_integer_route_set_packing_cuts}, "
             f"rim_ng={result.restricted_master_integer_no_good_cuts}, "
             f"rim_sched_cap={result.restricted_master_integer_schedule_capacity_cuts}, "
+            f"rim_repair={result.restricted_master_integer_repair_successes}/{result.restricted_master_integer_repair_attempts}, "
+            f"rim_repair_best={result.restricted_master_integer_repair_best_objective}, "
             f"sched_pack_status={result.schedule_pack_diagnostic_status}, "
             f"sched_pack_obj={result.schedule_pack_diagnostic_objective}, "
             f"sched_pack_gap_root={result.schedule_pack_diagnostic_gap_vs_root}, "

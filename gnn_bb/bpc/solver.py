@@ -49,6 +49,11 @@ class BPCResult:
     restricted_master_integer_pair_conflict_cuts: int
     restricted_master_integer_route_set_packing_cuts: int
     restricted_master_integer_schedule_capacity_cuts: int
+    restricted_master_integer_repair_attempts: int
+    restricted_master_integer_repair_successes: int
+    restricted_master_integer_repair_time: float
+    restricted_master_integer_repair_states: int
+    restricted_master_integer_repair_best_objective: float | None
     crossing_cuts_added: int
     crossing_cuts_upgraded: int
     subset_row_cuts_added: int
@@ -159,6 +164,9 @@ def solve_bpc_clean(
     restricted_master_schedule_aware: bool = True,
     restricted_master_max_no_good_rounds: int = 20,
     restricted_master_route_pack_conflict_max_events: int = 2,
+    restricted_master_repair_enabled: bool = True,
+    restricted_master_repair_max_attempts: int = 3,
+    restricted_master_repair_max_states: int = 50000,
     branching_strategy: str = "3pb",
     three_pb_pseudocost_candidates: int = 6,
     three_pb_fractional_candidates: int = 6,
@@ -321,6 +329,9 @@ def solve_bpc_clean(
             restricted_master_schedule_aware=restricted_master_schedule_aware,
             restricted_master_max_no_good_rounds=restricted_master_max_no_good_rounds,
             restricted_master_route_pack_conflict_max_events=restricted_master_route_pack_conflict_max_events,
+            restricted_master_repair_enabled=restricted_master_repair_enabled,
+            restricted_master_repair_max_attempts=restricted_master_repair_max_attempts,
+            restricted_master_repair_max_states=restricted_master_repair_max_states,
             branching_strategy=branching_strategy,
             three_pb_pseudocost_candidates=three_pb_pseudocost_candidates,
             three_pb_fractional_candidates=three_pb_fractional_candidates,
@@ -483,6 +494,11 @@ def solve_bpc_clean(
         restricted_master_integer_pair_conflict_cuts=tree_result.stats.restricted_master_integer_pair_conflict_cuts,
         restricted_master_integer_route_set_packing_cuts=tree_result.stats.restricted_master_integer_route_set_packing_cuts,
         restricted_master_integer_schedule_capacity_cuts=tree_result.stats.restricted_master_integer_schedule_capacity_cuts,
+        restricted_master_integer_repair_attempts=tree_result.stats.restricted_master_integer_repair_attempts,
+        restricted_master_integer_repair_successes=tree_result.stats.restricted_master_integer_repair_successes,
+        restricted_master_integer_repair_time=_round(tree_result.stats.restricted_master_integer_repair_time),
+        restricted_master_integer_repair_states=tree_result.stats.restricted_master_integer_repair_states,
+        restricted_master_integer_repair_best_objective=_round(tree_result.stats.restricted_master_integer_repair_best_objective),
         crossing_cuts_added=tree_result.stats.crossing_cuts_added,
         crossing_cuts_upgraded=tree_result.stats.crossing_cuts_upgraded,
         subset_row_cuts_added=tree_result.stats.subset_row_cuts_added,

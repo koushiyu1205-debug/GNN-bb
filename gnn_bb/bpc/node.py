@@ -40,6 +40,11 @@ class BPCStats:
     restricted_master_integer_pair_conflict_cuts: int = 0
     restricted_master_integer_route_set_packing_cuts: int = 0
     restricted_master_integer_schedule_capacity_cuts: int = 0
+    restricted_master_integer_repair_attempts: int = 0
+    restricted_master_integer_repair_successes: int = 0
+    restricted_master_integer_repair_time: float = 0.0
+    restricted_master_integer_repair_states: int = 0
+    restricted_master_integer_repair_best_objective: float | None = None
     crossing_cuts_added: int = 0
     crossing_cuts_upgraded: int = 0
     subset_row_cuts_added: int = 0

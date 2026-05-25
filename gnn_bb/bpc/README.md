@@ -71,6 +71,8 @@ route_enumeration_adaptive_enabled: false
 
 2026-05-23 长测回滚：`20260522_bpc_clean_fleetlb_budget_long_20_regression` 覆盖 `bench_20_01/02/03/04/05/06/08/10`。结果显示 `fleet_lower_bound` 在所有 20 规模实例上均为 `ORACLE_INCOMPLETE`、`added=0`，只增加初始化开销；3PB candidate budget 虽然显著降低 branch testing time，但改变搜索路径后使 `bench_20_05` 的 incumbent 从 `246.129535` 退化到 `260.779456`，`bench_20_08` 也略退化。因此 paper-grade 默认配置关闭 `fleet_lower_bound_cuts_enabled` 和 `three_pb_candidate_budget_enabled`，保留代码和日志字段作为后续消融实验与 2LBB 数据采集工具。
 
+2026-05-23 RIM route-assignment repair：restricted integer master 找到低目标整数 route 集合但当前车辆分配不可排程时，先在同一组选中 route 上尝试重新分配同质车辆。修复后的 assignment 必须通过 exact schedule check 且优于 incumbent 才更新上界；失败时继续按 pair、route-set packing、schedule-capacity、no-good 的原 conflict 流程处理。该机制只影响 primal bound，不参与 lower-bound 证明。日志/CSV 新增 `restricted_master_integer_repair_attempts`、`restricted_master_integer_repair_successes`、`restricted_master_integer_repair_time`、`restricted_master_integer_repair_states` 和 `restricted_master_integer_repair_best_objective`。
+
 ### 2026-05-21 CST +0800：route pricing 四步加速第一版
 
 #### 修改内容

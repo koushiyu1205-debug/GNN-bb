@@ -63,6 +63,11 @@ restricted_master_schedule_aware: true
 restricted_master_max_no_good_rounds: 20
 # 356 秒主线保留小预算 RIM conflict 回流，避免在 rejected integer assignment 上空转。
 restricted_master_route_pack_conflict_max_events: 2
+# RIM repair：binary RMP 得到排程不可行但目标有希望的 route 集合时，先尝试重新分配到车辆。
+# 只更新原问题可行 incumbent，不参与 lower bound 证明。
+restricted_master_repair_enabled: true
+restricted_master_repair_max_attempts: 3
+restricted_master_repair_max_states: 50000
 
 # no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
 branching_strategy: 3pb

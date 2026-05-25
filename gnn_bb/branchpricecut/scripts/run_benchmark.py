@@ -603,6 +603,9 @@ def _solve_bpc_clean_job(job: dict[str, Any]) -> dict[str, Any]:
         restricted_master_route_pack_conflict_max_events=int(
             config.get("restricted_master_route_pack_conflict_max_events", 2)
         ),
+        restricted_master_repair_enabled=_bool_config(config, "restricted_master_repair_enabled", True),
+        restricted_master_repair_max_attempts=int(config.get("restricted_master_repair_max_attempts", 3)),
+        restricted_master_repair_max_states=int(config.get("restricted_master_repair_max_states", 50000)),
         rmp_params=dict(config.get("rmp_params", {})),
         log_path=job["log_path"],
         solution_path=job["solution_path"],
