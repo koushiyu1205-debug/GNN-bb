@@ -209,6 +209,24 @@ route_set_schedule_packing_cut_max_routes: 16
 route_set_schedule_packing_cut_max_per_round: 5
 route_set_schedule_packing_cut_min_violation: 5.0e-2
 route_set_schedule_packing_oracle_max_states: 200000
+route_set_schedule_packing_roi_guard_enabled: true
+route_set_schedule_packing_stop_after_no_add_rounds: 1
+route_set_schedule_packing_min_objective_improvement: 1.0e-7
+route_set_schedule_packing_stop_after_no_improve_rounds: 2
+route_set_schedule_packing_global_time_limit_ratio: 0.10
+
+# Root/shallow schedule-capacity cuts:
+# 默认关闭。启用时只在浅层节点生成 pair/triple 候选，并且只有 exact oracle 完整证明 U(S)
+# 且当前 LP violation 超过阈值时才加入 sum_p |p∩S| lambda[p,r] <= U(S)y[r]。
+# oracle incomplete / not-tight / duplicate 都会缓存或跳过，绝不用于剪枝。
+root_schedule_capacity_cuts_enabled: false
+root_schedule_capacity_max_depth: 0
+root_schedule_capacity_pair_budget: 100
+root_schedule_capacity_triple_budget: 50
+root_schedule_capacity_oracle_max_states: 200000
+root_schedule_capacity_time_budget: 5.0
+root_schedule_capacity_min_violation: 1.0e-5
+root_schedule_capacity_stop_after_no_add_rounds: 1
 
 # Candidate-pool schedule-pack 诊断 / 浅层节点 relaxation：
 # 用当前 route pool 生成一批完整车辆 schedule columns，并解 candidate-pool schedule-pack LP。

@@ -1617,3 +1617,15 @@ mkdir -p results/logs/bpc_ablation_terminal
   --run-id "$RUN_ID" \
   2>&1 | tee "results/logs/bpc_ablation_terminal/${RUN_ID}_terminal.log"
 ```
+
+## 23. 2026-05-25 性能诊断与保守改造
+
+本次只做保守增量：
+
+- 新增 JSONL/CSV 分析器，输出 root relaxation、incumbent timing、per-node RMP/pricing、pricing labels、cut attempts/added/oracle time/incomplete/duplicate/ROI、RIM conflict、branch testing、fathom reason、open-node timeline 和 timeout certificate 状态；
+- 新增默认关闭的 root/shallow schedule-capacity separator。它只使用 pair/triple 候选，并且只有 `exact_schedule_task_capacity` 完整证明 `U(S)` 时才加入
+  `sum_p |p∩S| lambda[p,r] <= U(S)y[r]`；
+- route-set schedule packing separator 只增加 ROI 日志和停止规则，不重写候选器；
+- `docs/bpc_performance_design.md` 记录 Persistent RMP、高性能 exact pricing kernel、dual stabilization 和 2LBB/ML branch ranking 的后续设计，不在本次实现。
+
+精确性边界不变：incomplete pricing/oracle、诊断 bound、ROI 指标和 heuristic/ML 信号都不能参与 official lower bound 或 fathoming。

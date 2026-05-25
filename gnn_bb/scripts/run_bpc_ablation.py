@@ -230,6 +230,14 @@ def _solve_one(
         schedule_capacity_candidate_max_combinations=int(base.get("schedule_capacity_candidate_max_combinations", 300)),
         schedule_capacity_route_union_top_routes=int(base.get("schedule_capacity_route_union_top_routes", 8)),
         schedule_capacity_route_union_max_routes=int(base.get("schedule_capacity_route_union_max_routes", 4)),
+        root_schedule_capacity_cuts_enabled=_bool_config(base, "root_schedule_capacity_cuts_enabled", False),
+        root_schedule_capacity_max_depth=int(base.get("root_schedule_capacity_max_depth", 0)),
+        root_schedule_capacity_pair_budget=int(base.get("root_schedule_capacity_pair_budget", 100)),
+        root_schedule_capacity_triple_budget=int(base.get("root_schedule_capacity_triple_budget", 50)),
+        root_schedule_capacity_oracle_max_states=int(base.get("root_schedule_capacity_oracle_max_states", 200000)),
+        root_schedule_capacity_time_budget=float(base.get("root_schedule_capacity_time_budget", 5.0)),
+        root_schedule_capacity_min_violation=float(base.get("root_schedule_capacity_min_violation", 1.0e-5)),
+        root_schedule_capacity_stop_after_no_add_rounds=int(base.get("root_schedule_capacity_stop_after_no_add_rounds", 1)),
         schedule_incompatibility_cuts_enabled=_bool_config(base, "schedule_incompatibility_cuts_enabled", True),
         schedule_incompatibility_cut_max_depth=int(base.get("schedule_incompatibility_cut_max_depth", 2)),
         schedule_incompatibility_cut_max_rounds_per_node=int(base.get("schedule_incompatibility_cut_max_rounds_per_node", 2)),
@@ -246,6 +254,19 @@ def _solve_one(
         route_set_schedule_packing_cut_max_per_round=int(base.get("route_set_schedule_packing_cut_max_per_round", 5)),
         route_set_schedule_packing_cut_min_violation=float(base.get("route_set_schedule_packing_cut_min_violation", 5.0e-2)),
         route_set_schedule_packing_oracle_max_states=int(base.get("route_set_schedule_packing_oracle_max_states", 200000)),
+        route_set_schedule_packing_roi_guard_enabled=_bool_config(base, "route_set_schedule_packing_roi_guard_enabled", True),
+        route_set_schedule_packing_stop_after_no_add_rounds=int(
+            base.get("route_set_schedule_packing_stop_after_no_add_rounds", 1)
+        ),
+        route_set_schedule_packing_min_objective_improvement=float(
+            base.get("route_set_schedule_packing_min_objective_improvement", 1.0e-7)
+        ),
+        route_set_schedule_packing_stop_after_no_improve_rounds=int(
+            base.get("route_set_schedule_packing_stop_after_no_improve_rounds", 2)
+        ),
+        route_set_schedule_packing_global_time_limit_ratio=float(
+            base.get("route_set_schedule_packing_global_time_limit_ratio", 0.10)
+        ),
         fleet_lower_bound_cuts_enabled=_bool_config(base, "fleet_lower_bound_cuts_enabled", False),
         fleet_lower_bound_oracle_max_states=int(base.get("fleet_lower_bound_oracle_max_states", 500000)),
         schedule_pack_diagnostic_enabled=_bool_config(base, "schedule_pack_diagnostic_enabled", False),

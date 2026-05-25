@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -29,6 +30,7 @@ from bpc.cuts import (
 from bpc.data import BPCData, load_bpc_data
 from bpc.logger import BPCLogger
 from bpc.node import BPCNode
+from bpc.perf_stats import analyze_jsonl
 from bpc.pricing import exact_pricing, reduced_cost
 from bpc.rmp import RMPDuals, RMPSolution, solve_restricted_integer_master, solve_rmp_lp
 from bpc.schedule_capacity import exact_schedule_task_capacity, find_schedule_capacity_conflict
@@ -408,6 +410,104 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(tree.cuts[0].upper_bound, 2.0)
         self.assertEqual(tree.cuts[0].y_coefficient(1), -2.0)
         self.assertEqual(tree.stats.schedule_route_set_packing_cuts_added, 1)
+
+    def _root_schedule_capacity_fixture(self, *, max_states: int = 200000, y_value: float = 1.0, lambda_value: float = 0.6):
+        instance = {
+            "name": "root_schedule_capacity_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 1, "sigma": 1, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 1, "sigma": 1, "d": 1, "g": 0, "c_srv": 0},
+                "3": {"r": 0, "D": 1, "sigma": 1, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {
+            f"{i}->{j}": {"tau": 0, "energy": 0, "cost": 1 if i != j else 0, "path": []}
+            for i in (0, 1, 2, 3)
+            for j in (0, 1, 2, 3)
+        }
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="root_schedule_capacity_smoke",
+            tasks=(1, 2, 3),
+            vehicles=(1,),
+            sortie_limit=3,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=3,
+        )
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        solution = RMPSolution(
+            status="optimal",
+            objective=0.0,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[(route, 1, lambda_value) for route in routes],
+            y_values={1: y_value},
+            variable_count=0,
+            constraint_count=0,
+        )
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            root_schedule_capacity_cuts_enabled=True,
+            root_schedule_capacity_max_depth=0,
+            root_schedule_capacity_pair_budget=10,
+            root_schedule_capacity_triple_budget=10,
+            root_schedule_capacity_oracle_max_states=max_states,
+            root_schedule_capacity_time_budget=5.0,
+            root_schedule_capacity_min_violation=1.0e-5,
+        )
+        return tree, solution
+
+    def test_root_schedule_capacity_separator_adds_exact_violated_cut(self):
+        tree, solution = self._root_schedule_capacity_fixture()
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertGreaterEqual(added, 1)
+        self.assertIsInstance(tree.cuts[0], ScheduleCapacityCut)
+        self.assertEqual(tree.cuts[0].upper_bound, 1)
+        self.assertEqual(tree.cuts[0].source, "root_schedule_capacity")
+        self.assertEqual(tree.stats.root_schedule_capacity_cuts_added, added)
+
+    def test_root_schedule_capacity_incomplete_oracle_does_not_add_cut(self):
+        tree, solution = self._root_schedule_capacity_fixture(max_states=0)
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(len(tree.cuts), 0)
+        self.assertGreater(tree.stats.root_schedule_capacity_oracle_incomplete, 0)
+        self.assertIn((1, 2), tree.root_schedule_capacity_cache)
+        self.assertIsNone(tree.root_schedule_capacity_cache[(1, 2)])
+
+    def test_root_schedule_capacity_precheck_skips_oracle(self):
+        tree, solution = self._root_schedule_capacity_fixture(y_value=1.0, lambda_value=0.2)
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(tree.stats.root_schedule_capacity_oracle_queries, 0)
+        self.assertEqual(tree.root_schedule_capacity_cache, {})
+
+    def test_root_schedule_capacity_duplicate_skips_second_oracle(self):
+        tree, solution = self._root_schedule_capacity_fixture()
+        node = BPCNode(0.0, 0, 0)
+        first = tree._separate_root_schedule_capacity_cuts(node, solution)
+        queries_after_first = tree.stats.root_schedule_capacity_oracle_queries
+        cache_size_after_first = len(tree.root_schedule_capacity_cache)
+        second = tree._separate_root_schedule_capacity_cuts(node, solution)
+        self.assertGreaterEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertEqual(tree.stats.root_schedule_capacity_oracle_queries, queries_after_first)
+        self.assertEqual(len(tree.root_schedule_capacity_cache), cache_size_after_first)
 
     def test_subset_row_separator_adds_violated_cut(self):
         instance = {
@@ -1102,12 +1202,32 @@ class CleanBPCTests(unittest.TestCase):
             schedule_aware=True,
             max_no_good_rounds=3,
         )
+        self.assertEqual(result.status, "REPAIRED")
         self.assertEqual(result.objective, 204.0)
         self.assertEqual(result.raw_objective, 104.0)
         self.assertEqual(result.rejected_solutions, 1)
-        self.assertEqual(result.pair_conflict_cuts, 2)
+        self.assertEqual(result.repair_attempts, 1)
+        self.assertEqual(result.repair_successes, 1)
+        self.assertEqual(result.pair_conflict_cuts, 0)
         self.assertEqual(result.no_good_cuts, 0)
-        self.assertEqual(len(result.rejected_conflicts), 1)
+        self.assertEqual(len(result.rejected_conflicts), 0)
+
+        pair_cut_result = solve_restricted_integer_master(
+            data,
+            [route for route in routes if route is not None],
+            cuts=[],
+            branch_constraints=tuple(),
+            time_limit=5,
+            schedule_aware=True,
+            max_no_good_rounds=3,
+            repair_enabled=False,
+        )
+        self.assertEqual(pair_cut_result.objective, 204.0)
+        self.assertEqual(pair_cut_result.raw_objective, 104.0)
+        self.assertEqual(pair_cut_result.rejected_solutions, 1)
+        self.assertEqual(pair_cut_result.pair_conflict_cuts, 2)
+        self.assertEqual(pair_cut_result.no_good_cuts, 0)
+        self.assertEqual(len(pair_cut_result.rejected_conflicts), 1)
 
     def test_restricted_integer_master_prefers_route_pack_before_nogood(self):
         try:
@@ -1160,6 +1280,72 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(result.route_set_packing_cuts, 1)
         self.assertEqual(result.no_good_cuts, 0)
         self.assertEqual(len(result.rejected_conflicts), 1)
+
+    def test_analyze_bpc_logs_reports_timeout_certificate_and_hardness(self):
+        records = [
+            {"time": 0.0, "event": "start", "instance": "sample_hard", "initial_incumbent": 200.0},
+            {"time": 1.0, "event": "incumbent", "node_id": 0, "objective": 180.0},
+            {
+                "time": 2.0,
+                "event": "rmp",
+                "node_id": 0,
+                "depth": 0,
+                "phase": "phase2",
+                "objective": 120.0,
+            },
+            {
+                "time": 3.0,
+                "event": "pricing",
+                "node_id": 0,
+                "pricing_kind": "exact",
+                "label_pops": 12000000,
+                "generated_labels": 13000000,
+                "best_reduced_cost": -1.0,
+                "added_routes": 0,
+                "certificate": True,
+            },
+            {
+                "time": 4.0,
+                "event": "restricted_integer_master",
+                "node_id": 0,
+                "rejected_solutions": 2,
+                "pair_conflict_cuts": 1,
+                "route_set_packing_cuts": 0,
+                "schedule_capacity_cuts": 0,
+                "no_good_cuts": 0,
+            },
+            {"time": 5.0, "event": "fathom", "node_id": 0, "reason": "time_limit_after_node_certificate"},
+            {
+                "time": 5.0,
+                "event": "timeout_diagnostics",
+                "timeout_pending_node_certified": True,
+                "official_bound_available": False,
+                "diagnostic_bound": 120.0,
+            },
+            {
+                "time": 5.0,
+                "event": "finish",
+                "status": "TIME_LIMIT",
+                "primal_bound": 180.0,
+                "dual_bound": None,
+                "diagnostic_dual_bound": 120.0,
+                "diagnostic_gap": 0.333333,
+                "root_relaxation": 120.0,
+                "time_to_first_incumbent": 1.0,
+                "time_to_best_incumbent": 1.0,
+                "open_nodes_remaining": 1,
+                "timeout_pending_node_certified": True,
+                "official_bound_available": False,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "sample.jsonl"
+            path.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
+            summary = analyze_jsonl(path)
+        self.assertTrue(summary["timeout_pending_node_certified"])
+        self.assertFalse(summary["official_bound_available"])
+        self.assertIn("proof-hard", summary["hardness_tags"])
+        self.assertIn("schedule-conflict-hard", summary["hardness_tags"])
 
     def test_existing_lambda_reduced_cost_matches_solver(self):
         try:

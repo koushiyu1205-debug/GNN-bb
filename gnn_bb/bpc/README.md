@@ -2596,6 +2596,24 @@ Ran 22 tests in 0.275s
 OK
 ```
 
+### 2026-05-25 CST +0800
+
+#### 版本备注
+
+新增 clean BPC 性能诊断和保守 separator 保护：
+
+- 新增 `bpc/perf_stats.py` 与 `scripts/analyze_bpc_logs.py`，用于从 JSONL/CSV 汇总 root bound、incumbent timing、pricing labels、cut ROI、RIM conflict、branch testing、fathom reason 和 timeout certificate 状态；
+- `finish`/JSONL 扩展 `time_to_first_incumbent`、`time_to_best_incumbent`、`open_nodes_remaining`、`fathom_reasons`、`timeout_pending_node_certified`、`official_bound_available`；
+- 新增默认关闭的 root/shallow schedule-capacity separator，只生成 pair/triple 候选，且只有 exact oracle 完整证明 `U(S)` 后才加入 task-level capacity cut；
+- route-set schedule packing separator 增加 oracle time/cache/ROI 日志和无收益自动停止，不使用任何诊断 bound 剪枝；
+- 后续方向见 `docs/bpc_performance_design.md`。
+
+分析示例：
+
+```bash
+python scripts/analyze_bpc_logs.py results/logs/bpc_clean/bench_20_02.jsonl --pretty
+```
+
 ### 2026-05-19 CST +0800
 
 #### 版本备注

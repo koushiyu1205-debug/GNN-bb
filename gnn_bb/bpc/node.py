@@ -45,6 +45,13 @@ class BPCStats:
     restricted_master_integer_repair_time: float = 0.0
     restricted_master_integer_repair_states: int = 0
     restricted_master_integer_repair_best_objective: float | None = None
+    time_to_first_incumbent: float | None = None
+    time_to_best_incumbent: float | None = None
+    best_incumbent_value: float | None = None
+    open_nodes_remaining: int = 0
+    timeout_pending_node_certified: bool | None = None
+    official_bound_available: bool = True
+    fathom_reasons: dict[str, int] = field(default_factory=dict)
     crossing_cuts_added: int = 0
     crossing_cuts_upgraded: int = 0
     subset_row_cuts_added: int = 0
@@ -57,6 +64,18 @@ class BPCStats:
     schedule_route_set_packing_cuts_added: int = 0
     schedule_nogood_cuts_added: int = 0
     schedule_capacity_cuts_added: int = 0
+    root_schedule_capacity_cuts_added: int = 0
+    root_schedule_capacity_oracle_queries: int = 0
+    root_schedule_capacity_oracle_incomplete: int = 0
+    root_schedule_capacity_oracle_time: float = 0.0
+    root_schedule_capacity_cache_hits: int = 0
+    root_schedule_capacity_candidates_generated: int = 0
+    root_schedule_capacity_candidates_after_precheck: int = 0
+    root_schedule_capacity_best_violation: float = 0.0
+    route_set_schedule_packing_oracle_queries: int = 0
+    route_set_schedule_packing_oracle_time: float = 0.0
+    route_set_schedule_packing_cache_hits: int = 0
+    route_set_schedule_packing_added_but_no_bound_improvement: int = 0
     fleet_lower_bound_cuts_added: int = 0
     fleet_lower_bound_value: int = 0
     fleet_lower_bound_oracle_upper_bound: int | None = None

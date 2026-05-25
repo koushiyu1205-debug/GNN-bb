@@ -40,6 +40,7 @@ class BPCLogger:
             "restricted_integer_master",
             "schedule_capacity_candidates",
             "schedule_capacity_diagnostics",
+            "root_schedule_capacity_diagnostics",
             "subset_row_diagnostics",
             "lm_rank1_diagnostics",
             "schedule_subset_cost_diagnostics",
@@ -52,9 +53,12 @@ class BPCLogger:
             "rim_conflict_diagnostics",
             "cut_purged",
             "cut_added",
+            "cut_roi",
             "branch",
             "fathom",
             "incumbent",
+            "node_end",
+            "timeout_diagnostics",
             "finish",
         }:
             print(self._format_console(record), flush=True)
@@ -105,6 +109,16 @@ class BPCLogger:
                 f"added={record.get('added')} max_viol={record.get('max_violation')} "
                 f"states_max={record.get('oracle_states_max')}"
             )
+        if event == "root_schedule_capacity_diagnostics":
+            return (
+                f"{prefix} root-schedule-cap diag node {record['node_id']} "
+                f"cand={record.get('candidates_generated')}/{record.get('candidates_after_precheck')} "
+                f"oracle={record.get('oracle_queries')} incomplete={record.get('oracle_incomplete')} "
+                f"cache={record.get('cache_hits')} not_tight={record.get('not_tight')} "
+                f"not_viol={record.get('tight_not_violated')} dup={record.get('duplicate')} "
+                f"viol={record.get('violated')} added={record.get('cuts_added')} "
+                f"best_viol={record.get('best_violation')} time={record.get('oracle_time')}"
+            )
         if event == "subset_row_diagnostics":
             return (
                 f"{prefix} subset-row diag node {record['node_id']} round={record.get('round')} "
@@ -132,6 +146,8 @@ class BPCLogger:
                 f"states_max={record.get('oracle_states_max')}"
             )
         if event == "route_set_schedule_packing_diagnostics":
+            disabled = record.get("disabled_by_roi_guard")
+            disabled_text = "" if not disabled else f" disabled={disabled}"
             return (
                 f"{prefix} route-pack diag node {record['node_id']} round={record.get('round')} "
                 f"vehicles={record.get('vehicles_with_support')}/{record.get('vehicles_checked')} "
@@ -140,7 +156,8 @@ class BPCLogger:
                 f"not_tight={record.get('skipped_not_tight')} not_viol={record.get('skipped_not_violated')} "
                 f"dup={record.get('skipped_duplicate')} violated={record.get('violated_candidates')} "
                 f"added={record.get('added')} max_viol={record.get('max_violation')} "
-                f"states_max={record.get('oracle_states_max')}"
+                f"states_max={record.get('oracle_states_max')} cache={record.get('cache_hits')} "
+                f"time={record.get('oracle_time')}{disabled_text}"
             )
         if event == "schedule_route_set_packing_conflict_diagnostics":
             return (
@@ -284,6 +301,24 @@ class BPCLogger:
             )
         if event == "branch":
             return f"{prefix} branch node {record['node_id']}: left={record.get('left')} right={record.get('right')}"
+        if event == "cut_roi":
+            return (
+                f"{prefix} cut-roi node {record['node_id']} family={record.get('family')} "
+                f"added={record.get('added')} delta={record.get('objective_improvement')} "
+                f"low={record.get('low_improvement')}"
+            )
+        if event == "node_end":
+            return (
+                f"{prefix} node-end {record['node_id']} children={record.get('children')} "
+                f"open={record.get('open_nodes')} lb={record.get('certified_lower_bound')} "
+                f"inc={record.get('incumbent')}"
+            )
+        if event == "timeout_diagnostics":
+            return (
+                f"{prefix} timeout diag pending={record.get('pending_node_bound')} "
+                f"certified={record.get('timeout_pending_node_certified')} "
+                f"official={record.get('official_bound')} diagnostic={record.get('diagnostic_bound')}"
+            )
         if event == "fathom":
             return f"{prefix} fathom node {record['node_id']}: reason={record.get('reason')} bound={record.get('bound')}"
         if event == "incumbent":

@@ -27,6 +27,11 @@ class BPCResult:
     best_open_node_bound: float | None
     pending_node_bound: float | None
     last_certified_node_bound: float | None
+    time_to_first_incumbent: float | None
+    time_to_best_incumbent: float | None
+    open_nodes_remaining: int
+    timeout_pending_node_certified: bool | None
+    official_bound_available: bool
     solving_time: float
     node_count: int
     rmp_solves: int
@@ -66,6 +71,18 @@ class BPCResult:
     schedule_route_set_packing_cuts_added: int
     schedule_nogood_cuts_added: int
     schedule_capacity_cuts_added: int
+    root_schedule_capacity_cuts_added: int
+    root_schedule_capacity_oracle_queries: int
+    root_schedule_capacity_oracle_incomplete: int
+    root_schedule_capacity_oracle_time: float
+    root_schedule_capacity_cache_hits: int
+    root_schedule_capacity_candidates_generated: int
+    root_schedule_capacity_candidates_after_precheck: int
+    root_schedule_capacity_best_violation: float
+    route_set_schedule_packing_oracle_queries: int
+    route_set_schedule_packing_oracle_time: float
+    route_set_schedule_packing_cache_hits: int
+    route_set_schedule_packing_added_but_no_bound_improvement: int
     fleet_lower_bound_cuts_added: int
     fleet_lower_bound_value: int
     fleet_lower_bound_oracle_upper_bound: int | None
@@ -230,6 +247,14 @@ def solve_bpc_clean(
     schedule_capacity_candidate_max_combinations: int = 300,
     schedule_capacity_route_union_top_routes: int = 8,
     schedule_capacity_route_union_max_routes: int = 4,
+    root_schedule_capacity_cuts_enabled: bool = False,
+    root_schedule_capacity_max_depth: int = 0,
+    root_schedule_capacity_pair_budget: int = 100,
+    root_schedule_capacity_triple_budget: int = 50,
+    root_schedule_capacity_oracle_max_states: int = 200000,
+    root_schedule_capacity_time_budget: float = 5.0,
+    root_schedule_capacity_min_violation: float = 1.0e-5,
+    root_schedule_capacity_stop_after_no_add_rounds: int = 1,
     schedule_incompatibility_cuts_enabled: bool = True,
     schedule_incompatibility_cut_max_depth: int = 2,
     schedule_incompatibility_cut_max_rounds_per_node: int = 2,
@@ -246,6 +271,11 @@ def solve_bpc_clean(
     route_set_schedule_packing_cut_max_per_round: int = 5,
     route_set_schedule_packing_cut_min_violation: float = 5.0e-2,
     route_set_schedule_packing_oracle_max_states: int = 200000,
+    route_set_schedule_packing_roi_guard_enabled: bool = True,
+    route_set_schedule_packing_stop_after_no_add_rounds: int = 1,
+    route_set_schedule_packing_min_objective_improvement: float = 1.0e-7,
+    route_set_schedule_packing_stop_after_no_improve_rounds: int = 2,
+    route_set_schedule_packing_global_time_limit_ratio: float = 0.10,
     fleet_lower_bound_cuts_enabled: bool = False,
     fleet_lower_bound_oracle_max_states: int = 500000,
     schedule_pack_diagnostic_enabled: bool = False,
@@ -395,6 +425,14 @@ def solve_bpc_clean(
             schedule_capacity_candidate_max_combinations=schedule_capacity_candidate_max_combinations,
             schedule_capacity_route_union_top_routes=schedule_capacity_route_union_top_routes,
             schedule_capacity_route_union_max_routes=schedule_capacity_route_union_max_routes,
+            root_schedule_capacity_cuts_enabled=root_schedule_capacity_cuts_enabled,
+            root_schedule_capacity_max_depth=root_schedule_capacity_max_depth,
+            root_schedule_capacity_pair_budget=root_schedule_capacity_pair_budget,
+            root_schedule_capacity_triple_budget=root_schedule_capacity_triple_budget,
+            root_schedule_capacity_oracle_max_states=root_schedule_capacity_oracle_max_states,
+            root_schedule_capacity_time_budget=root_schedule_capacity_time_budget,
+            root_schedule_capacity_min_violation=root_schedule_capacity_min_violation,
+            root_schedule_capacity_stop_after_no_add_rounds=root_schedule_capacity_stop_after_no_add_rounds,
             schedule_incompatibility_cuts_enabled=schedule_incompatibility_cuts_enabled,
             schedule_incompatibility_cut_max_depth=schedule_incompatibility_cut_max_depth,
             schedule_incompatibility_cut_max_rounds_per_node=schedule_incompatibility_cut_max_rounds_per_node,
@@ -411,6 +449,11 @@ def solve_bpc_clean(
             route_set_schedule_packing_cut_max_per_round=route_set_schedule_packing_cut_max_per_round,
             route_set_schedule_packing_cut_min_violation=route_set_schedule_packing_cut_min_violation,
             route_set_schedule_packing_oracle_max_states=route_set_schedule_packing_oracle_max_states,
+            route_set_schedule_packing_roi_guard_enabled=route_set_schedule_packing_roi_guard_enabled,
+            route_set_schedule_packing_stop_after_no_add_rounds=route_set_schedule_packing_stop_after_no_add_rounds,
+            route_set_schedule_packing_min_objective_improvement=route_set_schedule_packing_min_objective_improvement,
+            route_set_schedule_packing_stop_after_no_improve_rounds=route_set_schedule_packing_stop_after_no_improve_rounds,
+            route_set_schedule_packing_global_time_limit_ratio=route_set_schedule_packing_global_time_limit_ratio,
             fleet_lower_bound_cuts_enabled=fleet_lower_bound_cuts_enabled,
             fleet_lower_bound_oracle_max_states=fleet_lower_bound_oracle_max_states,
             schedule_pack_diagnostic_enabled=schedule_pack_diagnostic_enabled,
@@ -472,6 +515,11 @@ def solve_bpc_clean(
         best_open_node_bound=_round(tree_result.stats.best_open_node_bound),
         pending_node_bound=_round(tree_result.stats.pending_node_bound),
         last_certified_node_bound=_round(tree_result.stats.last_certified_node_bound),
+        time_to_first_incumbent=_round(tree_result.stats.time_to_first_incumbent),
+        time_to_best_incumbent=_round(tree_result.stats.time_to_best_incumbent),
+        open_nodes_remaining=tree_result.stats.open_nodes_remaining,
+        timeout_pending_node_certified=tree_result.stats.timeout_pending_node_certified,
+        official_bound_available=tree_result.stats.official_bound_available,
         solving_time=_round(tree_result.solving_time),
         node_count=tree_result.node_count,
         rmp_solves=tree_result.stats.rmp_solves,
@@ -511,6 +559,20 @@ def solve_bpc_clean(
         schedule_route_set_packing_cuts_added=tree_result.stats.schedule_route_set_packing_cuts_added,
         schedule_nogood_cuts_added=tree_result.stats.schedule_nogood_cuts_added,
         schedule_capacity_cuts_added=tree_result.stats.schedule_capacity_cuts_added,
+        root_schedule_capacity_cuts_added=tree_result.stats.root_schedule_capacity_cuts_added,
+        root_schedule_capacity_oracle_queries=tree_result.stats.root_schedule_capacity_oracle_queries,
+        root_schedule_capacity_oracle_incomplete=tree_result.stats.root_schedule_capacity_oracle_incomplete,
+        root_schedule_capacity_oracle_time=_round(tree_result.stats.root_schedule_capacity_oracle_time),
+        root_schedule_capacity_cache_hits=tree_result.stats.root_schedule_capacity_cache_hits,
+        root_schedule_capacity_candidates_generated=tree_result.stats.root_schedule_capacity_candidates_generated,
+        root_schedule_capacity_candidates_after_precheck=tree_result.stats.root_schedule_capacity_candidates_after_precheck,
+        root_schedule_capacity_best_violation=_round(tree_result.stats.root_schedule_capacity_best_violation, 9),
+        route_set_schedule_packing_oracle_queries=tree_result.stats.route_set_schedule_packing_oracle_queries,
+        route_set_schedule_packing_oracle_time=_round(tree_result.stats.route_set_schedule_packing_oracle_time),
+        route_set_schedule_packing_cache_hits=tree_result.stats.route_set_schedule_packing_cache_hits,
+        route_set_schedule_packing_added_but_no_bound_improvement=(
+            tree_result.stats.route_set_schedule_packing_added_but_no_bound_improvement
+        ),
         fleet_lower_bound_cuts_added=tree_result.stats.fleet_lower_bound_cuts_added,
         fleet_lower_bound_value=tree_result.stats.fleet_lower_bound_value,
         fleet_lower_bound_oracle_upper_bound=tree_result.stats.fleet_lower_bound_oracle_upper_bound,
