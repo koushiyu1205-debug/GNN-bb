@@ -37,6 +37,18 @@ SCIP 的职责：
 
 ## 模型记录
 
+### 2026-05-25 CST +0800：root schedule-cap precheck 修正与 PersistentRMP v1
+
+本次修正 root/shallow schedule-capacity separator 的 oracle 前置过滤：pair 和 triple 都只用 `activity > y_r + eps` 作为必要条件。旧实现用 `activity > (|S|-1)y_r` 过滤 triple，会漏掉 exact oracle 证明 `U(S)=1` 的强 triple cut；现在 `y_r < activity <= 2y_r` 的 triple 会进入 oracle 查询。oracle 未完整证明时仍只记录/缓存，不加 cut。
+
+root schedule-capacity 的候选预算也前移到生成阶段。pair 只从当前 LP task mass 排名前列生成；triple 只来自 top task mass、LP support route union 和有限高 activity 组合。该 separator 仍默认关闭：
+
+```text
+root_schedule_capacity_cuts_enabled: false
+```
+
+新增 `persistent_rmp_enabled: false`。打开后，每个节点内的主 RMP-CG loop 使用 `PersistentRMP` 复用 SCIP LP 并增量追加 route/cut；默认 baseline 不变。第一阶段不改 branch testing，不把 persistent model 传给 child node；Phase-I 到 Phase-II、cut purge 或非追加同步都会 rebuild。该改动只降低建模 overhead，不改变 RMP 数学模型、cut validity、pricing reduced cost、lower-bound certificate 或 fathoming 规则；pricing 仍是当前 Python exact pricing。
+
 ### 2026-05-21 CST +0800：默认配置恢复为轻主线
 
 #### 修改原因

@@ -14,6 +14,11 @@ configs/bpc_clean.yaml
 
 ## 0. 2026-05-21 默认主线修正
 
+2026-05-25 新增两个保守改动，默认 paper-grade baseline 仍不打开高成本模块：
+
+- `root_schedule_capacity_cuts_enabled: false` 保持默认关闭。其 root/shallow separator 的 pair/triple oracle 前 precheck 已修正为只用 `activity > y_r + eps`，避免漏掉 exact oracle 证明 `U(S)=1` 的 triple cut；oracle incomplete 时绝不加 cut。
+- `persistent_rmp_enabled: false` 新增且默认关闭。打开后，`PersistentRMP` 只替换主节点 RMP-CG loop 内的 RMP rebuild；branch testing 仍使用 `solve_rmp_lp`。PersistentRMP 与 `solve_rmp_lp` 使用同一数学模型、同一 SCIP LP dual、同一 reduced-cost 公式；Phase-I/Phase-II 切换和 cut purge 会重建模型，非追加同步会回退到 rebuild。
+
 当前 paper-grade baseline 已恢复为轻主线：默认关闭 `route_enumeration_enabled`、`schedule_pack_diagnostic_enabled`、`schedule_pack_relaxation_enabled`、`schedule_pack_full_pricing_enabled`、`schedule_pack_adaptive_enabled` 和 `route_enumeration_adaptive_enabled`。
 
 2026-05-22 回退校正后，默认也关闭 `ng_dssr_pricing_enabled`、`exact_dssr_pricing_enabled` 和 `pricing_completion_bound_enabled`。原因是 `bench_20_01` 回归显示，ng/DSSR 会减少 root route pool 多样性，使 RIM 从 root 快速找到最优 incumbent 退化为多节点搜索。3PB 候选筛选恢复为原始 fractionality/key 排序，greedy incumbent 不做局部 relocate/重排改进，以贴近 356 秒版本：root route pool 约 `2481`、root RIM 快速 incumbent、`RF(7,10)` 分支。

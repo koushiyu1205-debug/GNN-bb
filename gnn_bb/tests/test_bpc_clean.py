@@ -15,6 +15,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+_gnn_bb_pkg = sys.modules.get("gnn_bb")
+if _gnn_bb_pkg is not None and hasattr(_gnn_bb_pkg, "__path__"):
+    _src_pkg = str(SRC / "gnn_bb")
+    if _src_pkg not in list(_gnn_bb_pkg.__path__):
+        _gnn_bb_pkg.__path__.append(_src_pkg)
 
 from bpc.columns import RoutePool, evaluate_route
 from bpc.branching import BranchConstraint, route_allowed_by_branch, route_branch_coefficient
@@ -31,6 +36,7 @@ from bpc.data import BPCData, load_bpc_data
 from bpc.logger import BPCLogger
 from bpc.node import BPCNode
 from bpc.perf_stats import analyze_jsonl
+from bpc.persistent_rmp import PersistentRMP
 from bpc.pricing import exact_pricing, reduced_cost
 from bpc.rmp import RMPDuals, RMPSolution, solve_restricted_integer_master, solve_rmp_lp
 from bpc.schedule_capacity import exact_schedule_task_capacity, find_schedule_capacity_conflict
@@ -474,21 +480,41 @@ class CleanBPCTests(unittest.TestCase):
 
     def test_root_schedule_capacity_separator_adds_exact_violated_cut(self):
         tree, solution = self._root_schedule_capacity_fixture()
+        tree.root_schedule_capacity_triple_budget = 0
         added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
         self.assertGreaterEqual(added, 1)
         self.assertIsInstance(tree.cuts[0], ScheduleCapacityCut)
+        self.assertEqual(len(tree.cuts[0].tasks), 2)
         self.assertEqual(tree.cuts[0].upper_bound, 1)
         self.assertEqual(tree.cuts[0].source, "root_schedule_capacity")
         self.assertEqual(tree.stats.root_schedule_capacity_cuts_added, added)
 
+    def test_root_schedule_capacity_triple_u1_not_filtered_by_old_precheck(self):
+        tree, solution = self._root_schedule_capacity_fixture(y_value=1.0, lambda_value=0.4)
+        tree.root_schedule_capacity_pair_budget = 0
+        added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertGreaterEqual(added, 1)
+        triple_cuts = [cut for cut in tree.cuts if isinstance(cut, ScheduleCapacityCut) and len(cut.tasks) == 3]
+        self.assertEqual(len(triple_cuts), 1)
+        self.assertEqual(triple_cuts[0].upper_bound, 1)
+        self.assertGreater(tree.stats.root_schedule_capacity_oracle_queries, 0)
+        self.assertLessEqual(tree.stats.root_schedule_capacity_candidates_generated, tree.root_schedule_capacity_triple_budget)
+
     def test_root_schedule_capacity_incomplete_oracle_does_not_add_cut(self):
         tree, solution = self._root_schedule_capacity_fixture(max_states=0)
+        tree.root_schedule_capacity_stop_after_no_add_rounds = 10
         added = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
         self.assertEqual(added, 0)
         self.assertEqual(len(tree.cuts), 0)
         self.assertGreater(tree.stats.root_schedule_capacity_oracle_incomplete, 0)
         self.assertIn((1, 2), tree.root_schedule_capacity_cache)
         self.assertIsNone(tree.root_schedule_capacity_cache[(1, 2)])
+        cache_hits_before = tree.stats.root_schedule_capacity_cache_hits
+        queries_before = tree.stats.root_schedule_capacity_oracle_queries
+        added_again = tree._separate_root_schedule_capacity_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added_again, 0)
+        self.assertGreater(tree.stats.root_schedule_capacity_cache_hits, cache_hits_before)
+        self.assertEqual(tree.stats.root_schedule_capacity_oracle_queries, queries_before)
 
     def test_root_schedule_capacity_precheck_skips_oracle(self):
         tree, solution = self._root_schedule_capacity_fixture(y_value=1.0, lambda_value=0.2)
@@ -1108,6 +1134,231 @@ class CleanBPCTests(unittest.TestCase):
         self.assertIsNotNone(solution.duals)
         assert solution.duals is not None
         self.assertEqual(solution.duals.task_vehicle, {})
+
+    def _very_small_singleton_routes(self):
+        data = load_bpc_data("very_small")
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        return data, [route for route in routes if route is not None]
+
+    def _first_pair_route(self, data):
+        for left in data.tasks:
+            for right in data.tasks:
+                if left == right:
+                    continue
+                route = evaluate_route(data, (left, right))
+                if route is not None:
+                    return route
+        self.fail("expected at least one feasible pair route")
+
+    def _assert_lambda_reduced_cost_formula(
+        self,
+        data: BPCData,
+        routes,
+        cuts,
+        branch_constraints,
+        phase: str,
+        solution: RMPSolution,
+    ) -> None:
+        self.assertIsNotNone(solution.duals)
+        self.assertIsNotNone(solution.lambda_reduced_costs)
+        assert solution.duals is not None
+        assert solution.lambda_reduced_costs is not None
+        for (route_index, route_vehicle), solver_reduced_cost in solution.lambda_reduced_costs.items():
+            formula_reduced_cost = reduced_cost(
+                data,
+                routes[route_index],
+                route_vehicle,
+                solution.duals,
+                list(cuts),
+                tuple(branch_constraints),
+                phase=phase,
+            )
+            self.assertAlmostEqual(solver_reduced_cost, formula_reduced_cost, delta=1.0e-6)
+
+    def _assert_rmp_close(
+        self,
+        persistent_solution: RMPSolution,
+        rebuild_solution: RMPSolution,
+        *,
+        data: BPCData,
+        routes,
+        cuts,
+        branch_constraints,
+        phase: str,
+    ) -> None:
+        self.assertEqual(persistent_solution.status, rebuild_solution.status)
+        self.assertEqual(persistent_solution.optimal, rebuild_solution.optimal)
+        self.assertAlmostEqual(persistent_solution.objective or 0.0, rebuild_solution.objective or 0.0, delta=1.0e-6)
+        self.assertAlmostEqual(persistent_solution.artificial_sum, rebuild_solution.artificial_sum, delta=1.0e-6)
+        self.assertEqual(set(persistent_solution.y_values), set(rebuild_solution.y_values))
+        for vehicle, value in persistent_solution.y_values.items():
+            self.assertAlmostEqual(value, rebuild_solution.y_values[vehicle], delta=1.0e-6)
+        self._assert_lambda_reduced_cost_formula(
+            data,
+            routes,
+            cuts,
+            branch_constraints,
+            phase,
+            persistent_solution,
+        )
+
+    def test_persistent_rmp_phase1_matches_rebuild(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data, routes = self._very_small_singleton_routes()
+        params = {"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0}
+        persistent = PersistentRMP(data, routes, [], tuple(), phase="phase1", rmp_params=params)
+        persistent_solution = persistent.solve(capture_lambda_reduced_costs=True)
+        rebuild_solution = solve_rmp_lp(data, routes, [], tuple(), phase="phase1", rmp_params=params)
+        self._assert_rmp_close(
+            persistent_solution,
+            rebuild_solution,
+            data=data,
+            routes=routes,
+            cuts=[],
+            branch_constraints=tuple(),
+            phase="phase1",
+        )
+
+    def test_persistent_rmp_phase2_matches_rebuild(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data, routes = self._very_small_singleton_routes()
+        params = {"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0}
+        persistent = PersistentRMP(data, routes, [], tuple(), phase="phase2", rmp_params=params)
+        persistent_solution = persistent.solve(capture_lambda_reduced_costs=True)
+        rebuild_solution = solve_rmp_lp(data, routes, [], tuple(), phase="phase2", rmp_params=params)
+        self._assert_rmp_close(
+            persistent_solution,
+            rebuild_solution,
+            data=data,
+            routes=routes,
+            cuts=[],
+            branch_constraints=tuple(),
+            phase="phase2",
+        )
+
+    def test_persistent_rmp_incremental_route_matches_rebuild(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data, routes = self._very_small_singleton_routes()
+        pair_route = self._first_pair_route(data)
+        params = {"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0}
+        persistent = PersistentRMP(data, routes, [], tuple(), phase="phase2", rmp_params=params)
+        persistent.solve()
+        extended_routes = [*routes, pair_route]
+        persistent.sync(extended_routes, [])
+        persistent_solution = persistent.solve(capture_lambda_reduced_costs=True)
+        rebuild_solution = solve_rmp_lp(data, extended_routes, [], tuple(), phase="phase2", rmp_params=params)
+        self._assert_rmp_close(
+            persistent_solution,
+            rebuild_solution,
+            data=data,
+            routes=extended_routes,
+            cuts=[],
+            branch_constraints=tuple(),
+            phase="phase2",
+        )
+
+    def test_persistent_rmp_incremental_cut_matches_rebuild(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data, routes = self._very_small_singleton_routes()
+        pair_route = self._first_pair_route(data)
+        routes = [*routes, pair_route]
+        vehicle = data.vehicles[0]
+        cut = ScheduleCapacityCut(
+            id=777,
+            vehicle=vehicle,
+            tasks=tuple(sorted(pair_route.tasks)),
+            upper_bound=len(pair_route.tasks),
+            oracle_states=1,
+        )
+        params = {"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0}
+        persistent = PersistentRMP(data, routes, [], tuple(), phase="phase2", rmp_params=params)
+        persistent.solve()
+        persistent.sync(routes, [cut])
+        persistent_solution = persistent.solve(capture_lambda_reduced_costs=True)
+        rebuild_solution = solve_rmp_lp(data, routes, [cut], tuple(), phase="phase2", rmp_params=params)
+        self._assert_rmp_close(
+            persistent_solution,
+            rebuild_solution,
+            data=data,
+            routes=routes,
+            cuts=[cut],
+            branch_constraints=tuple(),
+            phase="phase2",
+        )
+
+    def test_persistent_rmp_lambda_reduced_cost_matches_formula(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data, singleton_routes = self._very_small_singleton_routes()
+        pair_route = self._first_pair_route(data)
+        pool = RoutePool()
+        for route in singleton_routes:
+            pool.add(route)
+        pool.add(pair_route)
+        routes = pool.routes
+        vehicle = data.vehicles[0]
+        cuts = [
+            ScheduleCapacityCut(
+                id=0,
+                vehicle=vehicle,
+                tasks=tuple(sorted(pair_route.tasks)),
+                upper_bound=len(pair_route.tasks),
+                oracle_states=1,
+            ),
+            SubsetRowCut(id=1, tasks=tuple(sorted(pair_route.tasks)), divisor=2),
+        ]
+        branch_constraints = (BranchConstraint("arc_on", pair_route.tasks[0], pair_route.tasks[1]),)
+        params = {"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0}
+        persistent = PersistentRMP(data, routes, cuts, branch_constraints, phase="phase2", rmp_params=params)
+        solution = persistent.solve(capture_lambda_reduced_costs=True)
+        self.assertTrue(solution.optimal)
+        self._assert_lambda_reduced_cost_formula(data, routes, cuts, branch_constraints, "phase2", solution)
+
+    def test_very_small_persistent_rmp_enabled_optimal(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data = load_bpc_data("very_small")
+        result = solve_bpc_clean(
+            data,
+            time_limit=30,
+            max_nodes=200,
+            pricing_eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=200,
+            max_labels_per_pricing=0,
+            rmp_params={"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0},
+            log_path=None,
+            solution_path=None,
+            seed=None,
+            quiet=True,
+            persistent_rmp_enabled=True,
+        )
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertAlmostEqual(result.primal_bound or 0.0, 132.270984, delta=1.0e-6)
+        self.assertAlmostEqual(result.gap or 0.0, 0.0, delta=1.0e-9)
 
     def test_restricted_integer_master_rejects_schedule_infeasible_assignment(self):
         try:

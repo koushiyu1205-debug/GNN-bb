@@ -30,6 +30,7 @@ from .cuts import (
 from .data import BPCData
 from .logger import BPCLogger
 from .node import BPCNode, BPCStats
+from .persistent_rmp import PersistentRMP, PersistentRMPRequiresRebuild
 from .pricing import PricingResult, exact_pricing
 from .rmp import RMPSolution, RestrictedIntegerResult, solve_restricted_integer_master, solve_rmp_lp
 from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity, find_schedule_capacity_conflict
@@ -150,6 +151,7 @@ class CleanBPCTree:
         route_enumeration_enabled: bool = False,
         route_enumeration_rc_threshold: float = 0.0,
         route_enumeration_max_routes: int = 0,
+        persistent_rmp_enabled: bool = False,
         restricted_master_heuristic_enabled: bool = False,
         restricted_master_time_limit: float = 20.0,
         restricted_master_max_routes: int = 4000,
@@ -323,6 +325,7 @@ class CleanBPCTree:
         self.route_enumeration_enabled = bool(route_enumeration_enabled)
         self.route_enumeration_rc_threshold = float(route_enumeration_rc_threshold)
         self.route_enumeration_max_routes = int(route_enumeration_max_routes)
+        self.persistent_rmp_enabled = bool(persistent_rmp_enabled)
         self.restricted_master_heuristic_enabled = bool(restricted_master_heuristic_enabled)
         self.restricted_master_time_limit = float(restricted_master_time_limit)
         self.restricted_master_max_routes = int(restricted_master_max_routes)
@@ -1112,6 +1115,7 @@ class CleanBPCTree:
             schedule_pack_full_pricing_enabled=self.schedule_pack_full_pricing_enabled,
             schedule_pack_adaptive_enabled=self.schedule_pack_adaptive_enabled,
             route_enumeration_adaptive_enabled=self.route_enumeration_adaptive_enabled,
+            persistent_rmp_enabled=self.persistent_rmp_enabled,
         )
 
         status = "UNKNOWN"
@@ -1954,19 +1958,92 @@ class CleanBPCTree:
         phase = "phase1"
         last_solution: RMPSolution | None = None
         node_certified = False
+        persistent_rmp: PersistentRMP | None = None
+        persistent_rmp_disabled = False
+
+        def solve_current_rmp() -> tuple[RMPSolution, str]:
+            nonlocal persistent_rmp, persistent_rmp_disabled
+            if not self.persistent_rmp_enabled or persistent_rmp_disabled:
+                return (
+                    solve_rmp_lp(
+                        self.data,
+                        self.pool.routes,
+                        self.cuts,
+                        node.branch_constraints,
+                        phase=phase,
+                        rmp_params=self.rmp_params,
+                        verbose=False,
+                        task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
+                    ),
+                    "rebuild",
+                )
+            try:
+                if persistent_rmp is None or persistent_rmp.phase != phase:
+                    persistent_rmp = PersistentRMP(
+                        self.data,
+                        self.pool.routes,
+                        self.cuts,
+                        node.branch_constraints,
+                        phase=phase,
+                        rmp_params=self.rmp_params,
+                        verbose=False,
+                        task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
+                    )
+                    return (persistent_rmp.solve(), "persistent_rebuild")
+                persistent_rmp.sync(self.pool.routes, self.cuts)
+                return (persistent_rmp.solve(), "persistent")
+            except PersistentRMPRequiresRebuild:
+                try:
+                    persistent_rmp = PersistentRMP(
+                        self.data,
+                        self.pool.routes,
+                        self.cuts,
+                        node.branch_constraints,
+                        phase=phase,
+                        rmp_params=self.rmp_params,
+                        verbose=False,
+                        task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
+                    )
+                    return (persistent_rmp.solve(), "persistent_rebuild")
+                except Exception as exc:
+                    self.logger.log(
+                        "persistent_rmp_fallback",
+                        node_id=node.id,
+                        depth=node.depth,
+                        phase=phase,
+                        reason=type(exc).__name__,
+                        message=str(exc),
+                    )
+                    persistent_rmp = None
+                    persistent_rmp_disabled = True
+            except Exception as exc:
+                self.logger.log(
+                    "persistent_rmp_fallback",
+                    node_id=node.id,
+                    depth=node.depth,
+                    phase=phase,
+                    reason=type(exc).__name__,
+                    message=str(exc),
+                )
+                persistent_rmp = None
+                persistent_rmp_disabled = True
+            return (
+                solve_rmp_lp(
+                    self.data,
+                    self.pool.routes,
+                    self.cuts,
+                    node.branch_constraints,
+                    phase=phase,
+                    rmp_params=self.rmp_params,
+                    verbose=False,
+                    task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
+                ),
+                "rebuild_fallback",
+            )
 
         while self._time_left():
             cg_iter += 1
-            solution = solve_rmp_lp(
-                self.data,
-                self.pool.routes,
-                self.cuts,
-                node.branch_constraints,
-                phase=phase,
-                rmp_params=self.rmp_params,
-                verbose=False,
-                task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
-            )
+            solution, rmp_backend = solve_current_rmp()
             self.stats.rmp_solves += 1
             last_solution = solution
             self.logger.log(
@@ -1982,6 +2059,7 @@ class CleanBPCTree:
                 cut_count=len(self.cuts),
                 variable_count=solution.variable_count,
                 constraint_count=solution.constraint_count,
+                backend=rmp_backend,
             )
             self._complete_pending_cut_roi(node, solution)
 
@@ -2001,10 +2079,12 @@ class CleanBPCTree:
                         removed_by_kind=purged_by_kind,
                         remaining=len(self.cuts),
                     )
+                    persistent_rmp = None
                     continue
 
             if phase == "phase1" and solution.artificial_sum <= self.integer_tol:
                 phase = "phase2"
+                persistent_rmp = None
                 continue
 
             pricing: PricingResult | None = None
@@ -3080,8 +3160,8 @@ class CleanBPCTree:
                 return
             diagnostics["candidates_generated"] = int(diagnostics["candidates_generated"]) + 1
             activity = self._task_vehicle_mass(solution, tasks, vehicle)
-            violation_if_tight = activity - float(len(tasks) - 1) * y_value
-            if violation_if_tight <= min_violation:
+            score = activity - y_value
+            if score <= min_violation:
                 return
             diagnostics["candidates_after_precheck"] = int(diagnostics["candidates_after_precheck"]) + 1
             if source == "pair":
@@ -3090,8 +3170,8 @@ class CleanBPCTree:
                 diagnostics["triple_candidates"] = int(diagnostics["triple_candidates"]) + 1
             key = (int(vehicle), tasks)
             previous = candidates.get(key)
-            if previous is None or violation_if_tight > previous[0]:
-                candidates[key] = (float(violation_if_tight), float(activity))
+            if previous is None or score > previous[0]:
+                candidates[key] = (float(score), float(activity))
 
         for vehicle in self.data.vehicles:
             vehicle = int(vehicle)
@@ -3101,23 +3181,77 @@ class CleanBPCTree:
                 continue
             diagnostics["vehicles_active"] = int(diagnostics["vehicles_active"]) + 1
             task_values = self._vehicle_task_values(solution, vehicle)
-            positive_tasks = [task for value, task in task_values if value > self.integer_tol]
-            for tasks in combinations(positive_tasks, 2):
-                maybe_add_candidate(vehicle, tasks, y_value, "pair")
-            top_tasks = [task for _value, task in task_values[: max(3, self.schedule_capacity_candidate_top_tasks)]]
-            triple_scores: list[tuple[float, tuple[int, ...]]] = []
-            for tasks in combinations(top_tasks, 3):
+            value_by_task = {int(task): float(value) for value, task in task_values}
+
+            pair_budget = max(0, self.root_schedule_capacity_pair_budget)
+            if pair_budget > 0:
+                pair_scan_budget = 3 * pair_budget
+                pair_top_count = min(
+                    len(task_values),
+                    max(2, int(math.ceil(math.sqrt(2.0 * pair_scan_budget))) + 2),
+                )
+                pair_tasks = [task for _value, task in task_values[:pair_top_count]]
+                pair_scores: list[tuple[float, tuple[int, ...]]] = []
+                for tasks in combinations(pair_tasks, 2):
+                    tasks = tuple(sorted(int(task) for task in tasks))
+                    activity = value_by_task.get(tasks[0], 0.0) + value_by_task.get(tasks[1], 0.0)
+                    pair_scores.append((activity - y_value, tasks))
+                pair_scores.sort(key=lambda item: (-item[0], item[1]))
+                for _score, tasks in pair_scores[:pair_budget]:
+                    maybe_add_candidate(vehicle, tasks, y_value, "pair")
+
+            triple_budget = max(0, self.root_schedule_capacity_triple_budget)
+            if triple_budget <= 0:
+                continue
+            triple_scan_budget = 3 * triple_budget
+            triple_scores_by_tasks: dict[tuple[int, ...], float] = {}
+
+            def add_triple_score(tasks: tuple[int, ...]) -> None:
                 tasks = tuple(sorted(int(task) for task in tasks))
+                if len(tasks) != 3:
+                    return
                 activity = self._task_vehicle_mass(solution, tasks, vehicle)
-                triple_scores.append((activity - 2.0 * y_value, tasks))
+                score = activity - y_value
+                triple_scores_by_tasks[tasks] = max(triple_scores_by_tasks.get(tasks, -float("inf")), score)
+
+            top_count = min(
+                len(task_values),
+                max(3, self.schedule_capacity_candidate_top_tasks),
+            )
+            top_tasks = [task for _value, task in task_values[:top_count]]
+            combo_top_count = top_count
+            if triple_scan_budget > 0:
+                combo_top_count = min(
+                    top_count,
+                    max(3, int(math.ceil((6.0 * triple_scan_budget) ** (1.0 / 3.0))) + 2),
+                )
+            for tasks in combinations(top_tasks[:combo_top_count], 3):
+                add_triple_score(tasks)
+
             support = self._schedule_support_routes(solution, vehicle, max_routes=self.schedule_capacity_route_union_top_routes)
-            for _value, route in support:
-                if len(route.task_set) == 3:
-                    tasks = tuple(sorted(int(task) for task in route.task_set))
-                    activity = self._task_vehicle_mass(solution, tasks, vehicle)
-                    triple_scores.append((activity - 2.0 * y_value, tasks))
+            support_routes = [route for _value, route in support]
+            for route in support_routes:
+                add_triple_score(tuple(sorted(int(task) for task in route.task_set)))
+            max_route_union = min(max(2, self.schedule_capacity_route_union_max_routes), len(support_routes))
+            for size in range(2, max_route_union + 1):
+                for route_combo in combinations(support_routes[: max(0, self.schedule_capacity_route_union_top_routes)], size):
+                    tasks = tuple(sorted({int(task) for route in route_combo for task in route.task_set}))
+                    add_triple_score(tasks)
+
+            wider_top_count = min(len(task_values), max(combo_top_count, combo_top_count + 3))
+            wider_tasks = [task for _value, task in task_values[:wider_top_count]]
+            high_activity_scores: list[tuple[float, tuple[int, ...]]] = []
+            for tasks in combinations(wider_tasks, 3):
+                tasks = tuple(sorted(int(task) for task in tasks))
+                activity = sum(value_by_task.get(task, 0.0) for task in tasks)
+                high_activity_scores.append((activity - y_value, tasks))
+            high_activity_scores.sort(key=lambda item: (-item[0], item[1]))
+            for _score, tasks in high_activity_scores[:triple_scan_budget]:
+                add_triple_score(tasks)
+
+            triple_scores = [(score, tasks) for tasks, score in triple_scores_by_tasks.items()]
             triple_scores.sort(key=lambda item: (-item[0], item[1]))
-            for _score, tasks in triple_scores[: max(0, self.root_schedule_capacity_triple_budget)]:
+            for _score, tasks in triple_scores[:triple_budget]:
                 maybe_add_candidate(vehicle, tasks, y_value, "triple")
 
         self.stats.root_schedule_capacity_candidates_generated += int(diagnostics["candidates_generated"])
@@ -3153,14 +3287,15 @@ class CleanBPCTree:
             if cut_key in self.cut_keys:
                 diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
                 continue
-            diagnostics["oracle_queries"] = int(diagnostics["oracle_queries"]) + 1
             oracle, cache_hit, oracle_time = self._root_schedule_capacity_bound(tasks)
             diagnostics["oracle_time"] = float(diagnostics["oracle_time"]) + oracle_time
-            self.stats.root_schedule_capacity_oracle_queries += 1
             self.stats.root_schedule_capacity_oracle_time += oracle_time
             if cache_hit:
                 diagnostics["cache_hits"] = int(diagnostics["cache_hits"]) + 1
                 self.stats.root_schedule_capacity_cache_hits += 1
+            else:
+                diagnostics["oracle_queries"] = int(diagnostics["oracle_queries"]) + 1
+                self.stats.root_schedule_capacity_oracle_queries += 1
             if oracle is None:
                 diagnostics["oracle_incomplete"] = int(diagnostics["oracle_incomplete"]) + 1
                 self.stats.root_schedule_capacity_oracle_incomplete += 1

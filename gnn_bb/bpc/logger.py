@@ -54,6 +54,7 @@ class BPCLogger:
             "cut_purged",
             "cut_added",
             "cut_roi",
+            "persistent_rmp_fallback",
             "branch",
             "fathom",
             "incumbent",
@@ -69,9 +70,12 @@ class BPCLogger:
         if event == "node_start":
             return f"{prefix} node {record['node_id']} d={record['depth']} lb={record.get('node_lb')} open={record.get('open_nodes')}"
         if event == "rmp":
+            backend = record.get("backend")
+            backend_text = "" if backend is None else f" backend={backend}"
             return (
                 f"{prefix} node {record['node_id']} cg={record['cg_iter']} phase={record['phase']} "
                 f"obj={record.get('objective')} artificial={record.get('artificial_sum')} cols={record.get('route_count')}"
+                f"{backend_text}"
             )
         if event == "pricing":
             kind = record.get("pricing_kind", "exact")
@@ -306,6 +310,11 @@ class BPCLogger:
                 f"{prefix} cut-roi node {record['node_id']} family={record.get('family')} "
                 f"added={record.get('added')} delta={record.get('objective_improvement')} "
                 f"low={record.get('low_improvement')}"
+            )
+        if event == "persistent_rmp_fallback":
+            return (
+                f"{prefix} persistent-rmp fallback node {record.get('node_id')} phase={record.get('phase')} "
+                f"reason={record.get('reason')}"
             )
         if event == "node_end":
             return (

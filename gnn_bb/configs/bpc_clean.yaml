@@ -52,6 +52,10 @@ route_enumeration_enabled: false
 route_enumeration_rc_threshold: 0.25
 route_enumeration_max_routes: 1200
 
+# PersistentRMP v1：节点内复用主 RMP-CG loop 的 SCIP LP，减少重复建模开销。
+# 默认关闭；branch testing 仍使用原 solve_rmp_lp；Phase-I/Phase-II 切换和 cut purge 会重建。
+persistent_rmp_enabled: false
+
 # route pool 受限整数主问题：只用于找 incumbent。
 # 开启 schedule-aware 后，MIP 内部按临时 pair cut、schedule-capacity cut、no-good 的顺序排除排程不可行整数候选。
 restricted_master_heuristic_enabled: true

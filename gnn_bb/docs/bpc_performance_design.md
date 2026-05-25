@@ -6,25 +6,42 @@
 
 当前 `solve_rmp_lp` 每轮重新构建 SCIP 模型。hard instances 中 RMP solve 和 branch testing RMP 次数很多，模型重建开销会被重复支付。
 
-建议设计 `PersistentRMP`：
-- 以节点为生命周期保留 SCIP 模型、变量、约束和 dual capture；
-- 增量添加 route columns、cuts、branch rows；
-- 每轮 LP 后读取真实 dual，仍调用现有 exact pricing 证书；
-- 只降低建模 overhead，不改变 master、pricing、cut 有效性或 lower bound 语义。
+2026-05-25 已实现第一阶段 `bpc.persistent_rmp.PersistentRMP`，默认仍关闭：
 
-不在本次实现的原因：需要重构 RMP 变量索引、cut 生命周期、branch 测试临时约束和 dual capture，风险高于本次小步改造目标。
+```text
+persistent_rmp_enabled: false
+```
+
+第一阶段边界：
+- 只替换 `CleanBPCTree._process_node` 中主节点的 RMP-CG loop；
+- branch testing 的 `_restricted_child_lp_gain` 和 `_heuristic_child_gain` 仍调用原 `solve_rmp_lp`；
+- 每个 processed node 内部单独持有 persistent model，不传给 child node；
+- Phase-I 切到 Phase-II 时重建；
+- cut purge 后重建；
+- route columns 和 cuts 仅在同一 phase、同一 branch constraints 内追加同步；
+- dual 仍来自 SCIP 当前 LP，pricing 仍使用当前 Python exact pricing；
+- `lambda_reduced_costs` 仍来自 SCIP variable redcost，并通过 reduced-cost consistency 测试审计。
+
+该实现是工程优化，不改变 RMP 数学模型、cut validity、pricing reduced cost、lower-bound certificate 或 fathoming 规则。persistent sync/solve 失败时，当前节点记录 `persistent_rmp_fallback` 并回退到原 rebuild RMP。
+
+后续完整 Persistent RMP 仍可继续设计：
+- 更细粒度复用 branch testing 的临时 RMP；
+- 更系统的 cut lifecycle 和 basis warm-start；
+- 更明确地区分可增量同步与必须 rebuild 的模型变更。
+
+这些后续项暂未实现，因为 branch testing 路径敏感，且容易混入 temporary branch rows/cuts 的生命周期风险；当前阶段先验证主节点 CG loop 的 objective、dual 和 reduced-cost 一致性。
 
 ## High-Performance Exact Pricing Kernel
 
 20 规模 timeout 中 Python labeling 的 `label_pops` 可到 6e7 到 1e8+。此时瓶颈主要是 exact pricing certificate，而不是单纯 RMP 求解。
 
-建议保留 Python 层的 tree、RMP、cut manager、logger，把 exact pricing 内核数组化：
+长期可以保留 Python 层的 tree、RMP、cut manager、logger，把 exact pricing 内核数组化：
 - Cython 或 pybind11/C++ 实现 label storage、dominance、extension；
 - 输入真实 dual、branch constraints、valid cuts；
 - 输出 negative routes 与 exhausted certificate；
 - certificate 必须对应 true dual 下完整枚举，不能用 heuristic/relaxed dual 代替。
 
-不在本次实现的原因：需要严格对齐 reduced cost 公式和 dominance 语义，应单独配套 regression tests 与 profile。
+本阶段明确不实现 pybind11/C++ 或其他 native pricing backend。原因是 native pricing kernel 会显著增加构建、debug 和 exactness audit 成本；当前优先把 RMP 增量化做好。Python exact pricing fallback 保留为唯一 pricing backend，reduced cost 公式未改。
 
 ## Dual Stabilization
 
@@ -44,4 +61,3 @@ Dual stabilization 只能作为 column generation 加速器：
 - 必须保留 fallback 到现有 3PB。
 
 不在本次实现的原因：branching 改动路径敏感，可能改善 testing time 但恶化 incumbent 或搜索树。应先用新增日志确认 branch-hard 实例，再做受控消融。
-

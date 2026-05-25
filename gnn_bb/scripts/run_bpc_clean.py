@@ -113,6 +113,7 @@ def main() -> None:
             route_enumeration_enabled=_bool_config(config, "route_enumeration_enabled", False),
             route_enumeration_rc_threshold=float(config.get("route_enumeration_rc_threshold", 0.0)),
             route_enumeration_max_routes=int(config.get("route_enumeration_max_routes", 0)),
+            persistent_rmp_enabled=_bool_config(config, "persistent_rmp_enabled", False),
             restricted_master_heuristic_enabled=_bool_config(config, "restricted_master_heuristic_enabled", False),
             restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
             restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),

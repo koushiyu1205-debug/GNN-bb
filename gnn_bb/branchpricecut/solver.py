@@ -158,6 +158,7 @@ def _solve_hybrid_route_bpc(
             "exact_pricing_dominance_enabled",
             _hybrid_bool(config, "exact_pricing_enable_dominance", False),
         ),
+        persistent_rmp_enabled=_hybrid_bool(config, "persistent_rmp_enabled", False),
         restricted_master_heuristic_enabled=_hybrid_bool(config, "restricted_master_heuristic_enabled", False),
         restricted_master_time_limit=float(config.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(config.get("restricted_master_max_routes", 4000)),

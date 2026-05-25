@@ -138,6 +138,7 @@ def _solve_one(
         route_enumeration_enabled=_bool_config(base, "route_enumeration_enabled", False),
         route_enumeration_rc_threshold=float(base.get("route_enumeration_rc_threshold", 0.0)),
         route_enumeration_max_routes=int(base.get("route_enumeration_max_routes", 0)),
+        persistent_rmp_enabled=_bool_config(base, "persistent_rmp_enabled", False),
         restricted_master_heuristic_enabled=bool(base.get("restricted_master_heuristic_enabled", False)),
         restricted_master_time_limit=float(base.get("restricted_master_time_limit", 20.0)),
         restricted_master_max_routes=int(base.get("restricted_master_max_routes", 4000)),
