@@ -127,6 +127,15 @@ def main() -> None:
             restricted_master_repair_enabled=_bool_config(config, "restricted_master_repair_enabled", True),
             restricted_master_repair_max_attempts=int(config.get("restricted_master_repair_max_attempts", 3)),
             restricted_master_repair_max_states=int(config.get("restricted_master_repair_max_states", 50000)),
+            restricted_master_adaptive_enabled=_bool_config(config, "restricted_master_adaptive_enabled", False),
+            restricted_master_adaptive_min_depth=int(config.get("restricted_master_adaptive_min_depth", 1)),
+            restricted_master_adaptive_after_failures=int(config.get("restricted_master_adaptive_after_failures", 2)),
+            restricted_master_adaptive_reduced_time_limit=float(
+                config.get("restricted_master_adaptive_reduced_time_limit", 5.0)
+            ),
+            restricted_master_adaptive_skip_after_failures=int(
+                config.get("restricted_master_adaptive_skip_after_failures", 4)
+            ),
             rmp_params=dict(config.get("rmp_params", {})),
             log_path=log_path,
             solution_path=solution_path,
@@ -321,6 +330,34 @@ def main() -> None:
             route_set_schedule_packing_global_time_limit_ratio=float(
                 config.get("route_set_schedule_packing_global_time_limit_ratio", 0.10)
             ),
+            weighted_route_schedule_packing_cuts_enabled=_bool_config(
+                config,
+                "weighted_route_schedule_packing_cuts_enabled",
+                False,
+            ),
+            weighted_route_schedule_packing_max_depth=int(config.get("weighted_route_schedule_packing_max_depth", 1)),
+            weighted_route_schedule_packing_max_rounds_per_node=int(
+                config.get("weighted_route_schedule_packing_max_rounds_per_node", 1)
+            ),
+            weighted_route_schedule_packing_max_candidates=int(
+                config.get("weighted_route_schedule_packing_max_candidates", 20)
+            ),
+            weighted_route_schedule_packing_max_cuts_per_round=int(
+                config.get("weighted_route_schedule_packing_max_cuts_per_round", 5)
+            ),
+            weighted_route_schedule_packing_max_routes=int(config.get("weighted_route_schedule_packing_max_routes", 16)),
+            weighted_route_schedule_packing_oracle_max_states=int(
+                config.get("weighted_route_schedule_packing_oracle_max_states", 200000)
+            ),
+            weighted_route_schedule_packing_min_violation=float(
+                config.get("weighted_route_schedule_packing_min_violation", 5.0e-2)
+            ),
+            weighted_route_schedule_packing_node_time_budget=float(
+                config.get("weighted_route_schedule_packing_node_time_budget", 5.0)
+            ),
+            weighted_route_schedule_packing_global_time_ratio=float(
+                config.get("weighted_route_schedule_packing_global_time_ratio", 0.05)
+            ),
             fleet_lower_bound_cuts_enabled=_bool_config(config, "fleet_lower_bound_cuts_enabled", False),
             fleet_lower_bound_oracle_max_states=int(config.get("fleet_lower_bound_oracle_max_states", 500000)),
             schedule_pack_diagnostic_enabled=_bool_config(config, "schedule_pack_diagnostic_enabled", False),
@@ -354,6 +391,62 @@ def main() -> None:
             route_enumeration_adaptive_enabled=_bool_config(config, "route_enumeration_adaptive_enabled", False),
             route_enumeration_adaptive_gap_abs=float(config.get("route_enumeration_adaptive_gap_abs", 10.0)),
             route_enumeration_adaptive_gap_ratio=float(config.get("route_enumeration_adaptive_gap_ratio", 3.0e-2)),
+            route_pool_hygiene_diagnostics_enabled=_bool_config(
+                config,
+                "route_pool_hygiene_diagnostics_enabled",
+                False,
+            ),
+            route_pool_hygiene_diagnostics_min_routes=int(
+                config.get("route_pool_hygiene_diagnostics_min_routes", 0)
+            ),
+            route_pool_hygiene_near_duplicate_abs_tol=float(
+                config.get("route_pool_hygiene_near_duplicate_abs_tol", 1.0e-6)
+            ),
+            route_pool_hygiene_near_duplicate_rel_tol=float(
+                config.get("route_pool_hygiene_near_duplicate_rel_tol", 1.0e-4)
+            ),
+            route_pool_hygiene_sample_groups=int(config.get("route_pool_hygiene_sample_groups", 5)),
+            route_pool_hygiene_admission_enabled=_bool_config(
+                config,
+                "route_pool_hygiene_admission_enabled",
+                False,
+            ),
+            route_pool_hygiene_admission_max_per_task_set=int(
+                config.get("route_pool_hygiene_admission_max_per_task_set", 0)
+            ),
+            route_pool_hygiene_admission_min_depth=int(
+                config.get("route_pool_hygiene_admission_min_depth", 0)
+            ),
+            route_pool_hygiene_admission_protect_active_task_sets=_bool_config(
+                config,
+                "route_pool_hygiene_admission_protect_active_task_sets",
+                True,
+            ),
+            route_pool_hygiene_admission_protect_cut_task_sets=_bool_config(
+                config,
+                "route_pool_hygiene_admission_protect_cut_task_sets",
+                True,
+            ),
+            route_pool_hygiene_admission_protect_incumbent_task_sets=_bool_config(
+                config,
+                "route_pool_hygiene_admission_protect_incumbent_task_sets",
+                True,
+            ),
+            route_pool_hygiene_admission_protect_branch_task_sets=_bool_config(
+                config,
+                "route_pool_hygiene_admission_protect_branch_task_sets",
+                True,
+            ),
+            route_pool_restart_enabled=_bool_config(config, "route_pool_restart_enabled", False),
+            route_pool_restart_max_routes=int(config.get("route_pool_restart_max_routes", 0)),
+            route_pool_restart_min_global_routes=int(config.get("route_pool_restart_min_global_routes", 0)),
+            route_pool_restart_keep_recent_rounds=int(config.get("route_pool_restart_keep_recent_rounds", 2)),
+            route_pool_restart_max_routes_per_task_set=int(
+                config.get("route_pool_restart_max_routes_per_task_set", 6)
+            ),
+            route_pool_restart_active_value_tol=float(config.get("route_pool_restart_active_value_tol", 1.0e-8)),
+            route_pool_restart_keep_cut_signatures=_bool_config(config, "route_pool_restart_keep_cut_signatures", False),
+            route_pool_restart_cleanup_enabled=_bool_config(config, "route_pool_restart_cleanup_enabled", False),
             three_pb_candidate_budget_enabled=_bool_config(config, "three_pb_candidate_budget_enabled", False),
             three_pb_root_pseudocost_candidates=int(config.get("three_pb_root_pseudocost_candidates", 6)),
             three_pb_root_fractional_candidates=int(config.get("three_pb_root_fractional_candidates", 6)),
@@ -386,6 +479,7 @@ def main() -> None:
             f"sched_cost={result.schedule_subset_cost_cuts_added}, "
             f"clique={result.schedule_clique_conflict_cuts_added}, "
             f"route_pack={result.schedule_route_set_packing_cuts_added}, "
+            f"weighted_route_pack={result.weighted_route_schedule_packing_cuts_added}, "
             f"nogood={result.schedule_nogood_cuts_added}, "
             f"sched_cap={result.schedule_capacity_cuts_added}, "
             f"task_sched_cap={result.task_schedule_capacity_cuts_added}, "
@@ -415,6 +509,15 @@ def main() -> None:
             f"sched_pack_adapt_skip={result.schedule_pack_adaptive_skips}, "
             f"route_enum_adapt={result.route_enumeration_adaptive_runs}/{result.route_enumeration_adaptive_decisions}, "
             f"route_enum_adapt_skip={result.route_enumeration_adaptive_skips}, "
+            f"route_pool_restart={result.route_pool_restart_nodes}/{result.route_pool_restart_rounds}, "
+            f"route_pool_omitted_max={result.route_pool_restart_routes_omitted_max}, "
+            f"route_pool_recovered={result.route_pool_restart_pricing_recovered_routes}, "
+            f"route_pool_hygiene_diag={result.route_pool_hygiene_diagnostic_events}, "
+            f"route_pool_near_dup={result.route_pool_hygiene_near_duplicate_routes_max}, "
+            f"route_pool_admission_filtered={result.route_pool_hygiene_admission_filtered}, "
+            f"route_pool_admission_protected={result.route_pool_hygiene_admission_protected}, "
+            f"rim_adapt_skip={result.restricted_master_adaptive_skips}, "
+            f"rim_adapt_reduce={result.restricted_master_adaptive_time_limit_reductions}, "
             f"cuts_purged={result.cuts_purged}, branch_test_time={result.branch_testing_time}s",
             flush=True,
         )

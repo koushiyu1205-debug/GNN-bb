@@ -72,6 +72,15 @@ restricted_master_route_pack_conflict_max_events: 2
 restricted_master_repair_enabled: true
 restricted_master_repair_max_attempts: 3
 restricted_master_repair_max_states: 50000
+# Adaptive RIM gate:
+# 默认关闭。RIM 只提供 incumbent / valid conflict cuts，不参与 lower-bound 证明；
+# 因此连续 TIME_LIMIT 且没有 accepted incumbent 时，实验配置可以降预算或跳过深层 RIM，
+# 用来诊断 20 规模中 RIM 反复超时是否是主要耗时。
+restricted_master_adaptive_enabled: false
+restricted_master_adaptive_min_depth: 1
+restricted_master_adaptive_after_failures: 2
+restricted_master_adaptive_reduced_time_limit: 5.0
+restricted_master_adaptive_skip_after_failures: 4
 
 # no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
 branching_strategy: 3pb
@@ -219,6 +228,23 @@ route_set_schedule_packing_min_objective_improvement: 1.0e-7
 route_set_schedule_packing_stop_after_no_improve_rounds: 2
 route_set_schedule_packing_global_time_limit_ratio: 0.10
 
+# Weighted route-schedule packing cuts:
+# 默认关闭。该 cut 只对当前有限 route support 中的 signature 有非零系数：
+#   sum alpha_p lambda[p,r] <= beta(C,alpha) y[r]
+# beta 必须由 exact weighted route-set schedule oracle 完整证明；incomplete 时不加 cut。
+# 因为未来新列系数为 0，启用本项不会修改 pricing reduced-cost 公式。
+# alpha 默认使用 conflict_core 与离散 conflict/incompat 权重；不再把 lp_value 作为主力权重。
+weighted_route_schedule_packing_cuts_enabled: false
+weighted_route_schedule_packing_max_depth: 1
+weighted_route_schedule_packing_max_rounds_per_node: 1
+weighted_route_schedule_packing_max_candidates: 20
+weighted_route_schedule_packing_max_cuts_per_round: 5
+weighted_route_schedule_packing_max_routes: 16
+weighted_route_schedule_packing_oracle_max_states: 200000
+weighted_route_schedule_packing_min_violation: 5.0e-2
+weighted_route_schedule_packing_node_time_budget: 5.0
+weighted_route_schedule_packing_global_time_ratio: 0.05
+
 # Root/shallow schedule-capacity cuts:
 # 默认关闭。启用时只在浅层节点生成 pair/triple 候选，并且只有 exact oracle 完整证明 U(S)
 # 且当前 LP violation 超过阈值时才加入 sum_p |p∩S| lambda[p,r] <= U(S)y[r]。
@@ -298,6 +324,39 @@ schedule_pack_adaptive_skip_if_fathomable: true
 route_enumeration_adaptive_enabled: false
 route_enumeration_adaptive_gap_abs: 10.0
 route_enumeration_adaptive_gap_ratio: 0.03
+
+# Route-pool hygiene:
+# 默认关闭，保留当前 bench_20_01 最好模型行为。diagnostics 只统计同一 task_set 下
+# 近似重复 route 的规模；admission cap 只作用于 heuristic/boost pricing，并且一旦过滤
+# 负 reduced-cost route 就强制回到 exact pricing certificate，不改变 official bound。
+route_pool_hygiene_diagnostics_enabled: false
+route_pool_hygiene_diagnostics_min_routes: 0
+route_pool_hygiene_near_duplicate_abs_tol: 1.0e-6
+route_pool_hygiene_near_duplicate_rel_tol: 1.0e-4
+route_pool_hygiene_sample_groups: 5
+route_pool_hygiene_admission_enabled: false
+route_pool_hygiene_admission_max_per_task_set: 0
+# 保护感知 admission：若做消融，建议至少从 depth>=1 开始，避免改变 root route pool
+# 和 bench_20_01 当前最好搜索路径。active/cut/incumbent/branch 相关 task-set 默认保护。
+route_pool_hygiene_admission_min_depth: 1
+route_pool_hygiene_admission_protect_active_task_sets: true
+route_pool_hygiene_admission_protect_cut_task_sets: true
+route_pool_hygiene_admission_protect_incumbent_task_sets: true
+route_pool_hygiene_admission_protect_branch_task_sets: true
+
+# Exact-safe 节点局部 route-pool restart：
+# 只限制当前节点 RMP/CG 使用的本地 route 列集合；全局 route pool 不删除。
+# 被本地省略的 route 若在当前 dual 下有负 reduced cost，exact pricing 会把它重新生成回本地池，
+# 因此不能用来跳过最终 pricing certificate，也不改变 full column space。
+# 默认关闭；用于诊断列生成 tailing-off 和 route-pool 退化是否是 20 规模瓶颈。
+route_pool_restart_enabled: false
+route_pool_restart_max_routes: 0
+route_pool_restart_min_global_routes: 0
+route_pool_restart_keep_recent_rounds: 2
+route_pool_restart_max_routes_per_task_set: 6
+route_pool_restart_active_value_tol: 1.0e-8
+route_pool_restart_keep_cut_signatures: false
+route_pool_restart_cleanup_enabled: false
 
 # 清理 inactive crossing / schedule-capacity cut。
 cut_purge_age: 20

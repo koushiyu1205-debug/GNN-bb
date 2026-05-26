@@ -268,6 +268,34 @@ def _solve_one(
         route_set_schedule_packing_global_time_limit_ratio=float(
             base.get("route_set_schedule_packing_global_time_limit_ratio", 0.10)
         ),
+        weighted_route_schedule_packing_cuts_enabled=_bool_config(
+            base,
+            "weighted_route_schedule_packing_cuts_enabled",
+            False,
+        ),
+        weighted_route_schedule_packing_max_depth=int(base.get("weighted_route_schedule_packing_max_depth", 1)),
+        weighted_route_schedule_packing_max_rounds_per_node=int(
+            base.get("weighted_route_schedule_packing_max_rounds_per_node", 1)
+        ),
+        weighted_route_schedule_packing_max_candidates=int(
+            base.get("weighted_route_schedule_packing_max_candidates", 20)
+        ),
+        weighted_route_schedule_packing_max_cuts_per_round=int(
+            base.get("weighted_route_schedule_packing_max_cuts_per_round", 5)
+        ),
+        weighted_route_schedule_packing_max_routes=int(base.get("weighted_route_schedule_packing_max_routes", 16)),
+        weighted_route_schedule_packing_oracle_max_states=int(
+            base.get("weighted_route_schedule_packing_oracle_max_states", 200000)
+        ),
+        weighted_route_schedule_packing_min_violation=float(
+            base.get("weighted_route_schedule_packing_min_violation", 5.0e-2)
+        ),
+        weighted_route_schedule_packing_node_time_budget=float(
+            base.get("weighted_route_schedule_packing_node_time_budget", 5.0)
+        ),
+        weighted_route_schedule_packing_global_time_ratio=float(
+            base.get("weighted_route_schedule_packing_global_time_ratio", 0.05)
+        ),
         fleet_lower_bound_cuts_enabled=_bool_config(base, "fleet_lower_bound_cuts_enabled", False),
         fleet_lower_bound_oracle_max_states=int(base.get("fleet_lower_bound_oracle_max_states", 500000)),
         schedule_pack_diagnostic_enabled=_bool_config(base, "schedule_pack_diagnostic_enabled", False),

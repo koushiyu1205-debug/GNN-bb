@@ -30,6 +30,47 @@ python scripts/run_task_schedule_capacity_ablation.py --instances bench_10_01 be
 
 判断是否值得进入默认主线时，优先看 root bound、node count、pricing calls、label pops、RIM rejected count、route-pack low-improvement cut 数量、branch path 和 oracle time。若 root/shallow bound 没有提升但 oracle time 或 cut 数量明显上升，应继续保持默认关闭。
 
+## Weighted Route-Schedule Packing Separator
+
+`weighted_route_schedule_packing` 是现有 route-set schedule packing cut 的 finite-support 强化版，默认关闭。uniform route-pack cut 使用：
+
+```text
+sum_{p in C} lambda_pr <= U(C)y_r
+```
+
+weighted 版本允许当前有限 route support 上的非负权重：
+
+```text
+sum_{p in C} alpha_p lambda_pr <= beta(C, alpha)y_r
+beta(C, alpha) = max_{single-vehicle feasible schedule s subset C} sum_{p in s} alpha_p
+```
+
+`beta(C, alpha)` 必须由 `exact_weighted_route_set_schedule_capacity()` 完整证明。oracle incomplete 时只缓存和写 `weighted_route_schedule_packing_diagnostics`，不加 cut、不更新 lower bound、不参与 fathoming。该 cut 只对当前 `C` 中的 route signature 有非零系数；新 pricing route 的系数为 0，因此不改 reduced-cost 公式，也不扩展 pricing 状态。
+
+第一版候选只来自 strong witness 和同车高 lambda support：LP route-pack support、RIM rejected assignment、schedule incompatibility witness、integral validation conflict 和 route-set packing violated support。`lp_value` 已降级，不再作为主力 alpha；当前主力 pattern 是 `conflict_core`、`conflict_score_discrete`、`incompat_degree_discrete` 和 `lp_x_conflict_discrete`，权重只取 `{1,2,3}`。成功的 weighted cut 会让包含同一 route core 的 uniform route-pack candidate 降低优先级，但不会删除 uniform separator。
+
+为了判断 finite-support cut 为什么没有推高 RMP bound，新增 `route_pack_roi_diagnostics`。它在 route-pack cut 后的下一次 RMP 和下一次 pricing 后记录 active support 替换情况，并分类为 `same_pool_degeneracy`、`pricing_mousehole`、`objective_degeneracy_no_support_change` 或 `mixed`。如果主要是 `same_pool_degeneracy`，离散 conflict alpha 还有价值；如果主要是 `pricing_mousehole`，应减少 finite-support 投入，转向 task-level / SRC / pricing-aware cut。
+
+默认配置保持消融级别：
+
+```text
+weighted_route_schedule_packing_cuts_enabled: false
+weighted_route_schedule_packing_max_depth: 1
+weighted_route_schedule_packing_max_candidates: 20
+weighted_route_schedule_packing_max_routes: 16
+weighted_route_schedule_packing_oracle_max_states: 200000
+weighted_route_schedule_packing_min_violation: 5.0e-2
+```
+
+消融入口：
+
+```bash
+python scripts/run_weighted_route_schedule_packing_ablation.py --instances very_small --quiet
+python scripts/run_weighted_route_schedule_packing_ablation.py --instances bench_20_02 --time-limit 1800 --variants baseline weighted_root_only weighted_root_depth1 --quiet
+```
+
+判断重点是 root bound 是否提升、route-pack low-improvement cut 是否减少、node count/pricing calls/label pops 是否下降，以及 weighted oracle time 是否可接受。如果只是新增 cut 但 `post_cut_objective_improvement` 仍为 0，应继续默认关闭并调整 alpha/candidate 设计。
+
 ## Persistent RMP / Incremental RMP
 
 当前 `solve_rmp_lp` 每轮重新构建 SCIP 模型。hard instances 中 RMP solve 和 branch testing RMP 次数很多，模型重建开销会被重复支付。

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from itertools import permutations
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -30,6 +31,7 @@ from bpc.cuts import (
     ScheduleNoGoodCut,
     ScheduleSubsetCostLowerBoundCut,
     SubsetRowCut,
+    WeightedScheduleRouteSetPackingCut,
     capacity_route_lower_bound,
 )
 from bpc.data import BPCData, load_bpc_data
@@ -37,15 +39,15 @@ from bpc.logger import BPCLogger
 from bpc.node import BPCNode
 from bpc.perf_stats import analyze_jsonl
 from bpc.persistent_rmp import PersistentRMP
-from bpc.pricing import exact_pricing, reduced_cost
-from bpc.rmp import RMPDuals, RMPSolution, solve_restricted_integer_master, solve_rmp_lp
+from bpc.pricing import PricingResult, exact_pricing, reduced_cost
+from bpc.rmp import RMPDuals, RMPSolution, RestrictedIntegerResult, solve_restricted_integer_master, solve_rmp_lp
 from bpc.schedule_capacity import exact_schedule_task_capacity, find_schedule_capacity_conflict
 from bpc.schedule_cost import exact_schedule_subset_cost
 from bpc.schedule_pack import solve_schedule_pack_node_relaxation, solve_schedule_pack_restricted_lp
 from bpc.solver import solve_bpc_clean
 from bpc.task_schedule_capacity import generate_task_schedule_capacity_candidates, witness_from_routes
 from bpc.tree import CleanBPCTree
-from bpc.validation import diagnose_route_set_schedule, exact_route_set_schedule_capacity
+from bpc.validation import diagnose_route_set_schedule, exact_route_set_schedule_capacity, exact_weighted_route_set_schedule_capacity
 
 
 class CleanBPCTests(unittest.TestCase):
@@ -302,6 +304,443 @@ class CleanBPCTests(unittest.TestCase):
         assert result is not None
         self.assertTrue(result.exact)
         self.assertEqual(result.upper_bound, 2)
+
+    def test_weighted_route_set_schedule_capacity_exact_for_horizon_packing(self):
+        data, routes, _solution, _tree = self._weighted_route_set_packing_fixture()
+        result = exact_weighted_route_set_schedule_capacity(data, routes, (1.0, 0.5, 0.25), max_states=100000)
+        self.assertTrue(result.exact)
+        self.assertAlmostEqual(result.upper_bound, 1.5)
+
+    def test_weighted_route_set_packing_cut_coefficients(self):
+        data, routes, _solution, _tree = self._weighted_route_set_packing_fixture()
+        signatures = tuple(route.signature for route in routes)
+        cut = WeightedScheduleRouteSetPackingCut(
+            id=7,
+            vehicle=1,
+            signatures=signatures,
+            weights=(1.0, 0.5, 0.25),
+            upper_bound=1.5,
+            oracle_states=12,
+        )
+        self.assertEqual(cut.sense, "<=")
+        self.assertEqual(cut.rhs, 0.0)
+        self.assertAlmostEqual(cut.y_coefficient(1), -1.5)
+        self.assertAlmostEqual(cut.coefficient(routes[0], 1), 1.0)
+        self.assertAlmostEqual(cut.coefficient(routes[1], 1), 0.5)
+        self.assertEqual(cut.coefficient(routes[0], data.vehicles[-1] + 1), 0.0)
+
+    def _weighted_route_set_packing_fixture(
+        self,
+        *,
+        route_values: tuple[float, float, float] = (0.6, 0.3, 0.3),
+        y_value: float = 0.5,
+        max_states: int = 200000,
+    ):
+        instance = {
+            "name": "weighted_route_set_packing_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "3": {"r": 0, "D": 10, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {}
+        for i in (0, 1, 2, 3):
+            for j in (0, 1, 2, 3):
+                tau = 0 if i == j else (1 if i == 0 or j == 0 else 10)
+                pairwise[f"{i}->{j}"] = {"tau": tau, "energy": 0, "cost": tau, "path": []}
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="weighted_route_set_packing_smoke",
+            tasks=(1, 2, 3),
+            vehicles=(1,),
+            sortie_limit=3,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=5,
+        )
+        routes = [evaluate_route(data, (task,)) for task in data.tasks]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        solution = RMPSolution(
+            status="optimal",
+            objective=0.0,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[(route, 1, value) for route, value in zip(routes, route_values)],
+            y_values={1: y_value},
+            variable_count=0,
+            constraint_count=0,
+        )
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            weighted_route_schedule_packing_cuts_enabled=True,
+            weighted_route_schedule_packing_max_depth=1,
+            weighted_route_schedule_packing_max_rounds_per_node=2,
+            weighted_route_schedule_packing_max_candidates=20,
+            weighted_route_schedule_packing_max_cuts_per_round=2,
+            weighted_route_schedule_packing_max_routes=3,
+            weighted_route_schedule_packing_oracle_max_states=max_states,
+            weighted_route_schedule_packing_min_violation=0.05,
+        )
+        for route in routes:
+            tree.pool.add(route)
+        return data, routes, solution, tree
+
+    def test_weighted_route_set_schedule_packing_separator_adds_cut(self):
+        _data, _routes, solution, tree = self._weighted_route_set_packing_fixture()
+        added = tree._separate_weighted_route_schedule_packing_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 1)
+        self.assertIsInstance(tree.cuts[0], WeightedScheduleRouteSetPackingCut)
+        self.assertEqual(tree.cuts[0].kind, "weighted_schedule_route_set_packing")
+        self.assertGreater(tree.stats.weighted_route_schedule_packing_best_violation, 0.0)
+        self.assertEqual(tree.stats.weighted_route_schedule_packing_cuts_added, 1)
+
+    def test_weighted_route_set_schedule_packing_incomplete_cached_without_cut(self):
+        _data, routes, solution, tree = self._weighted_route_set_packing_fixture(max_states=1)
+        added = tree._separate_weighted_route_schedule_packing_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(tree.cuts, [])
+        self.assertGreater(tree.stats.weighted_route_schedule_packing_oracle_incomplete, 0)
+        signatures, _ordered = tree._weighted_route_signature_routes(routes)
+        weights = tuple(1.0 for _signature in signatures)
+        self.assertIn((signatures, weights), tree.weighted_route_schedule_packing_cache)
+        self.assertIsNone(tree.weighted_route_schedule_packing_cache[(signatures, weights)])
+
+    def test_weighted_route_set_schedule_packing_exact_not_violated(self):
+        _data, _routes, solution, tree = self._weighted_route_set_packing_fixture(
+            route_values=(0.55, 0.55, 0.55),
+            y_value=1.0,
+        )
+        added = tree._separate_weighted_route_schedule_packing_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(tree.cuts, [])
+        self.assertGreater(tree.stats.weighted_route_schedule_packing_exact_not_violated, 0)
+
+    def test_weighted_route_set_schedule_packing_duplicate_skips_second_cut(self):
+        _data, _routes, solution, tree = self._weighted_route_set_packing_fixture()
+        node = BPCNode(0.0, 0, 0)
+        self.assertEqual(tree._separate_weighted_route_schedule_packing_cuts(node, solution), 1)
+        self.assertEqual(tree._separate_weighted_route_schedule_packing_cuts(node, solution), 0)
+        self.assertGreater(tree.stats.weighted_route_schedule_packing_duplicate_skips, 0)
+
+    def test_weighted_route_set_schedule_packing_cache_normalizes_scaled_weights(self):
+        _data, routes, _solution, tree = self._weighted_route_set_packing_fixture()
+        first = tree._weighted_route_schedule_packing_bound_with_cache_status(routes, (1.0, 0.5, 0.25))
+        second = tree._weighted_route_schedule_packing_bound_with_cache_status(routes, (2.0, 1.0, 0.5))
+        self.assertFalse(first[2])
+        self.assertTrue(second[2])
+        self.assertAlmostEqual(first[0], second[0])
+
+    def test_weighted_route_set_schedule_packing_does_not_emit_lp_value_by_default(self):
+        _data, routes, solution, tree = self._weighted_route_set_packing_fixture()
+        signatures = tuple(route.signature for route in routes)
+        value_by_signature = {route.signature: value for route, _vehicle, value in solution.route_values}
+        patterns = tree._weighted_route_schedule_packing_candidate_patterns(
+            routes,
+            value_by_signature,
+            {signatures[0]: 3, signatures[1]: 1, signatures[2]: 0},
+            source="route_pack_witness",
+        )
+        names = {name for name, _weights in patterns}
+        self.assertNotIn("lp_value", names)
+        self.assertIn("conflict_core", names)
+        self.assertIn("conflict_score_discrete", names)
+        for _name, weights in patterns:
+            self.assertTrue(set(weights).issubset({1.0, 2.0, 3.0}))
+
+    def test_route_pack_roi_classifies_same_pool_degeneracy(self):
+        _data, _routes, solution, tree = self._weighted_route_set_packing_fixture()
+        context = {
+            "vehicles": (1,),
+            "cut_core_signatures": ((1,), (2,)),
+            "cut_core_task_union": (1, 2),
+            "pre_support_signatures": ((1,), (2,)),
+            "pre_pool_signatures": ((1,), (2,), (1, 3)),
+            "pre_pool_size": 3,
+            "alpha_patterns": ("uniform",),
+        }
+        payload = tree._route_pack_roi_diagnostics_payload(
+            context,
+            stage="post_rmp",
+            post_rmp_support_signatures=((1, 3),),
+            new_pricing_signatures=tuple(),
+            before_objective=10.0,
+            after_objective=10.0,
+            objective_improvement=0.0,
+            low_improvement=True,
+        )
+        self.assertEqual(payload["classification"], "same_pool_degeneracy")
+        self.assertEqual(payload["same_pool_replacement_count"], 1)
+        self.assertEqual(payload["pricing_replacement_count"], 0)
+
+    def test_route_pack_roi_classifies_pricing_mousehole(self):
+        _data, _routes, solution, tree = self._weighted_route_set_packing_fixture()
+        context = {
+            "vehicles": (1,),
+            "cut_core_signatures": ((1,), (2,)),
+            "cut_core_task_union": (1, 2),
+            "pre_support_signatures": ((1,), (2,)),
+            "pre_pool_signatures": ((1,), (2,)),
+            "pre_pool_size": 2,
+            "alpha_patterns": ("uniform",),
+        }
+        payload = tree._route_pack_roi_diagnostics_payload(
+            context,
+            stage="post_pricing",
+            post_rmp_support_signatures=((3,),),
+            new_pricing_signatures=((1, 3),),
+            before_objective=10.0,
+            after_objective=10.5,
+            objective_improvement=0.5,
+            low_improvement=False,
+        )
+        self.assertEqual(payload["classification"], "pricing_mousehole")
+        self.assertEqual(payload["pricing_replacement_count"], 1)
+
+    def test_route_pack_roi_classifies_objective_degeneracy_without_support_change(self):
+        _data, _routes, solution, tree = self._weighted_route_set_packing_fixture()
+        context = {
+            "vehicles": (1,),
+            "cut_core_signatures": ((1,), (2,)),
+            "cut_core_task_union": (1, 2),
+            "pre_support_signatures": ((1,), (2,)),
+            "pre_pool_signatures": ((1,), (2,)),
+            "pre_pool_size": 2,
+            "alpha_patterns": ("uniform",),
+        }
+        payload = tree._route_pack_roi_diagnostics_payload(
+            context,
+            stage="post_rmp",
+            post_rmp_support_signatures=((1,), (2,)),
+            new_pricing_signatures=tuple(),
+            before_objective=10.0,
+            after_objective=10.0,
+            objective_improvement=0.0,
+            low_improvement=True,
+        )
+        self.assertEqual(payload["classification"], "objective_degeneracy_no_support_change")
+
+    def _route_pool_hygiene_fixture(self):
+        instance = {
+            "name": "route_pool_hygiene_smoke",
+            "tasks": {
+                "1": {"r": 0, "D": 100, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "2": {"r": 0, "D": 100, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+                "3": {"r": 0, "D": 100, "sigma": 0, "d": 1, "g": 0, "c_srv": 0},
+            },
+        }
+        pairwise = {}
+        for i in (0, 1, 2, 3):
+            for j in (0, 1, 2, 3):
+                tau = 0 if i == j else 1
+                pairwise[f"{i}->{j}"] = {"tau": tau, "energy": 0, "cost": tau, "path": []}
+        data = BPCData(
+            instance=instance,
+            pairwise=pairwise,
+            instance_path=Path("synthetic"),
+            name="route_pool_hygiene_smoke",
+            tasks=(1, 2, 3),
+            vehicles=(1,),
+            sortie_limit=3,
+            capacity=10,
+            energy_limit=10,
+            rho=1,
+            fixed_vehicle_cost=100,
+            horizon=100,
+        )
+        routes = [evaluate_route(data, sequence) for sequence in ((1, 2), (2, 1), (1, 3))]
+        self.assertTrue(all(route is not None for route in routes))
+        routes = [route for route in routes if route is not None]
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            route_pool_hygiene_diagnostics_enabled=True,
+            route_pool_hygiene_admission_enabled=True,
+            route_pool_hygiene_admission_max_per_task_set=1,
+        )
+        return data, routes, tree
+
+    def test_route_pool_hygiene_profile_detects_same_task_set_degeneracy(self):
+        _data, routes, tree = self._route_pool_hygiene_fixture()
+        payload = tree._route_pool_hygiene_profile(routes)
+        self.assertEqual(payload["route_count"], 3)
+        self.assertEqual(payload["task_set_groups"], 2)
+        self.assertEqual(payload["multi_route_groups"], 1)
+        self.assertEqual(payload["near_duplicate_groups"], 1)
+        self.assertEqual(payload["near_duplicate_routes"], 1)
+        self.assertEqual(payload["max_group_size"], 2)
+
+    def test_route_pool_hygiene_admission_filters_only_heuristic_and_forces_exact(self):
+        _data, routes, tree = self._route_pool_hygiene_fixture()
+        pricing = PricingResult(
+            routes=routes,
+            exhausted=True,
+            best_reduced_cost=-1.0,
+            label_pops=10,
+            generated_labels=20,
+            negative_routes=len(routes),
+        )
+        filtered, payload = tree._apply_route_pool_hygiene_admission(pricing, pricing_kind="heuristic")
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["filtered_routes"], 1)
+        self.assertEqual(len(filtered.routes), 2)
+        self.assertFalse(filtered.exhausted)
+        self.assertEqual(tree.stats.route_pool_hygiene_admission_filtered, 1)
+        self.assertEqual(tree.stats.route_pool_hygiene_admission_forced_exact, 1)
+
+        exact_pricing_result, exact_payload = tree._apply_route_pool_hygiene_admission(pricing, pricing_kind="exact")
+        self.assertIsNone(exact_payload)
+        self.assertIs(exact_pricing_result, pricing)
+        self.assertTrue(exact_pricing_result.exhausted)
+        self.assertEqual(len(exact_pricing_result.routes), 3)
+
+    def test_route_pool_hygiene_admission_respects_min_depth(self):
+        _data, routes, tree = self._route_pool_hygiene_fixture()
+        tree.route_pool_hygiene_admission_min_depth = 1
+        pricing = PricingResult(
+            routes=routes,
+            exhausted=True,
+            best_reduced_cost=-1.0,
+            label_pops=10,
+            generated_labels=20,
+            negative_routes=len(routes),
+        )
+
+        root_filtered, root_payload = tree._apply_route_pool_hygiene_admission(
+            pricing,
+            pricing_kind="heuristic",
+            node=BPCNode(0.0, 0, 0),
+        )
+        self.assertIs(root_filtered, pricing)
+        self.assertIsNone(root_payload)
+
+        child_filtered, child_payload = tree._apply_route_pool_hygiene_admission(
+            pricing,
+            pricing_kind="heuristic",
+            node=BPCNode(0.0, 1, 1),
+        )
+        self.assertIsNotNone(child_payload)
+        assert child_payload is not None
+        self.assertEqual(child_payload["filtered_routes"], 1)
+        self.assertEqual(len(child_filtered.routes), 2)
+        self.assertFalse(child_filtered.exhausted)
+
+    def test_route_pool_hygiene_admission_protects_active_task_sets(self):
+        data, routes, tree = self._route_pool_hygiene_fixture()
+        extra = evaluate_route(data, (3, 1))
+        self.assertIsNotNone(extra)
+        assert extra is not None
+        pricing = PricingResult(
+            routes=[routes[0], routes[1], routes[2], extra],
+            exhausted=True,
+            best_reduced_cost=-1.0,
+            label_pops=10,
+            generated_labels=20,
+            negative_routes=4,
+        )
+        solution = RMPSolution(
+            status="optimal",
+            objective=0.0,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[(routes[0], 1, 0.5)],
+            y_values={1: 1.0},
+            variable_count=0,
+            constraint_count=0,
+        )
+        filtered, payload = tree._apply_route_pool_hygiene_admission(
+            pricing,
+            pricing_kind="heuristic",
+            node=BPCNode(0.0, 1, 1),
+            solution=solution,
+        )
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["protected_routes"], 2)
+        self.assertEqual(payload["protected_task_set_count"], 1)
+        self.assertEqual(payload["filtered_routes"], 1)
+        self.assertEqual(len(filtered.routes), 3)
+        self.assertIn(routes[0], filtered.routes)
+        self.assertIn(routes[1], filtered.routes)
+        self.assertEqual(tree.stats.route_pool_hygiene_admission_protected, 2)
+
+    def test_restricted_master_adaptive_reduces_budget_and_then_skips(self):
+        _data, routes, tree = self._route_pool_hygiene_fixture()
+        for route in routes:
+            tree.pool.add(route)
+        tree.restricted_master_heuristic_enabled = True
+        tree.time_limit = 100.0
+        tree.restricted_master_time_limit = 20.0
+        tree.restricted_master_max_depth = 10
+        tree.restricted_master_max_calls = 10
+        tree.restricted_master_adaptive_enabled = True
+        tree.restricted_master_adaptive_min_depth = 1
+        tree.restricted_master_adaptive_after_failures = 1
+        tree.restricted_master_adaptive_reduced_time_limit = 3.0
+        tree.restricted_master_adaptive_skip_after_failures = 2
+        solution = RMPSolution(
+            status="optimal",
+            objective=100.0,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[],
+            y_values={1: 0.0},
+            variable_count=0,
+            constraint_count=0,
+        )
+        time_limits: list[float] = []
+
+        def fake_rim(*args, **kwargs):
+            time_limits.append(float(kwargs["time_limit"]))
+            return RestrictedIntegerResult(
+                status="TIME_LIMIT",
+                objective=None,
+                assigned_routes={},
+                solving_time=float(kwargs["time_limit"]),
+                variable_count=0,
+                constraint_count=0,
+                selected_routes=0,
+            )
+
+        node = BPCNode(0.0, 1, 1)
+        with patch("bpc.tree.solve_restricted_integer_master", side_effect=fake_rim):
+            self.assertEqual(tree._try_restricted_master_heuristic(node, solution), 0)
+            self.assertEqual(tree._try_restricted_master_heuristic(node, solution), 0)
+            self.assertEqual(tree._try_restricted_master_heuristic(node, solution), 0)
+
+        self.assertEqual(time_limits, [20.0, 3.0])
+        self.assertEqual(tree.stats.restricted_master_integer_calls, 2)
+        self.assertEqual(tree.stats.restricted_master_adaptive_time_limit_reductions, 1)
+        self.assertEqual(tree.stats.restricted_master_adaptive_skips, 1)
+        self.assertEqual(tree.stats.restricted_master_adaptive_failure_streak_max, 2)
+
+    def test_weighted_route_set_schedule_packing_default_off(self):
+        _data, _routes, solution, tree = self._weighted_route_set_packing_fixture()
+        tree.weighted_route_schedule_packing_cuts_enabled = False
+        added = tree._separate_weighted_route_schedule_packing_cuts(BPCNode(0.0, 0, 0), solution)
+        self.assertEqual(added, 0)
+        self.assertEqual(tree.cuts, [])
 
     def test_schedule_pack_diagnostic_solves_restricted_lp(self):
         self._require_pyscipopt()
@@ -2184,6 +2623,38 @@ class CleanBPCTests(unittest.TestCase):
                 task_schedule_capacity_max_depth=0,
                 task_schedule_capacity_node_time_budget=1.0,
                 task_schedule_capacity_oracle_max_states=10000,
+            )
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertAlmostEqual(result.primal_bound, 132.270984, places=5)
+        self.assertEqual(result.gap, 0.0)
+
+    def test_very_small_route_pool_restart_same_optimum(self):
+        try:
+            import pyscipopt  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("当前 Python 环境没有 PySCIPOpt")
+
+        data = load_bpc_data("very_small")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = solve_bpc_clean(
+                data,
+                time_limit=20,
+                max_nodes=200,
+                pricing_eps=1.0e-6,
+                integer_tol=1.0e-6,
+                max_routes_per_pricing=200,
+                max_labels_per_pricing=0,
+                rmp_params={"display/verblevel": 0, "presolving/maxrounds": 0, "separating/maxrounds": 0},
+                log_path=root / "clean_route_pool_restart.jsonl",
+                solution_path=root / "solution_route_pool_restart.json",
+                seed=20260511,
+                quiet=True,
+                route_pool_restart_enabled=True,
+                route_pool_restart_max_routes=8,
+                route_pool_restart_min_global_routes=8,
+                route_pool_restart_max_routes_per_task_set=2,
+                route_pool_restart_keep_recent_rounds=1,
             )
         self.assertEqual(result.status, "OPTIMAL")
         self.assertAlmostEqual(result.primal_bound, 132.270984, places=5)

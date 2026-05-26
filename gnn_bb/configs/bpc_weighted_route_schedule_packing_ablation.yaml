@@ -1,0 +1,11 @@
+# 中文摘要：finite-support weighted route-schedule packing separator 小型消融配置。
+
+base_config: configs/bpc_clean.yaml
+instances: ["very_small"]
+time_limit: 300
+max_nodes: 100000
+run_id: weighted_route_pack_ablation
+
+# variants 由 scripts/run_weighted_route_schedule_packing_ablation.py 解释：
+# baseline, weighted_root_only, weighted_root_depth1, weighted_tiny_budget, weighted_strong_witness
+variants: ["baseline", "weighted_root_only", "weighted_root_depth1", "weighted_tiny_budget", "weighted_strong_witness"]

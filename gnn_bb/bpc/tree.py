@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import heapq
 from itertools import combinations
 from itertools import product
@@ -11,7 +11,14 @@ import math
 import time
 from typing import Any
 
-from .branching import BranchCandidate, BranchConstraint, choose_branch, generate_branch_candidates
+from .branching import (
+    BranchCandidate,
+    BranchConstraint,
+    choose_branch,
+    generate_branch_candidates,
+    route_allowed_by_branch,
+    route_branch_coefficient,
+)
 from .columns import RouteColumn, RoutePool, evaluate_route, route_to_json
 from .cuts import (
     Cut,
@@ -22,6 +29,7 @@ from .cuts import (
     ScheduleSubsetCostLowerBoundCut,
     ScheduleNoGoodCut,
     SubsetRowCut,
+    WeightedScheduleRouteSetPackingCut,
     capacity_route_lower_bound,
     make_no_good_cuts_for_all_vehicles,
     make_schedule_capacity_cuts_for_all_vehicles,
@@ -49,6 +57,7 @@ from .validation import (
     diagnose_route_set_schedule,
     evaluate_route_at_start,
     exact_route_set_schedule_capacity,
+    exact_weighted_route_set_schedule_capacity,
     route_transition_ready_time,
 )
 
@@ -170,6 +179,11 @@ class CleanBPCTree:
         restricted_master_repair_enabled: bool = True,
         restricted_master_repair_max_attempts: int = 3,
         restricted_master_repair_max_states: int = 50000,
+        restricted_master_adaptive_enabled: bool = False,
+        restricted_master_adaptive_min_depth: int = 1,
+        restricted_master_adaptive_after_failures: int = 2,
+        restricted_master_adaptive_reduced_time_limit: float = 5.0,
+        restricted_master_adaptive_skip_after_failures: int = 4,
         branching_strategy: str = "3pb",
         three_pb_pseudocost_candidates: int = 6,
         three_pb_fractional_candidates: int = 6,
@@ -287,6 +301,16 @@ class CleanBPCTree:
         route_set_schedule_packing_min_objective_improvement: float = 1.0e-7,
         route_set_schedule_packing_stop_after_no_improve_rounds: int = 2,
         route_set_schedule_packing_global_time_limit_ratio: float = 0.10,
+        weighted_route_schedule_packing_cuts_enabled: bool = False,
+        weighted_route_schedule_packing_max_depth: int = 1,
+        weighted_route_schedule_packing_max_rounds_per_node: int = 1,
+        weighted_route_schedule_packing_max_candidates: int = 20,
+        weighted_route_schedule_packing_max_cuts_per_round: int = 5,
+        weighted_route_schedule_packing_max_routes: int = 16,
+        weighted_route_schedule_packing_oracle_max_states: int = 200000,
+        weighted_route_schedule_packing_min_violation: float = 5.0e-2,
+        weighted_route_schedule_packing_node_time_budget: float = 5.0,
+        weighted_route_schedule_packing_global_time_ratio: float = 0.05,
         fleet_lower_bound_cuts_enabled: bool = False,
         fleet_lower_bound_oracle_max_states: int = 500000,
         schedule_pack_diagnostic_enabled: bool = False,
@@ -310,6 +334,26 @@ class CleanBPCTree:
         route_enumeration_adaptive_enabled: bool = False,
         route_enumeration_adaptive_gap_abs: float = 10.0,
         route_enumeration_adaptive_gap_ratio: float = 3.0e-2,
+        route_pool_hygiene_diagnostics_enabled: bool = False,
+        route_pool_hygiene_diagnostics_min_routes: int = 0,
+        route_pool_hygiene_near_duplicate_abs_tol: float = 1.0e-6,
+        route_pool_hygiene_near_duplicate_rel_tol: float = 1.0e-4,
+        route_pool_hygiene_sample_groups: int = 5,
+        route_pool_hygiene_admission_enabled: bool = False,
+        route_pool_hygiene_admission_max_per_task_set: int = 0,
+        route_pool_hygiene_admission_min_depth: int = 0,
+        route_pool_hygiene_admission_protect_active_task_sets: bool = True,
+        route_pool_hygiene_admission_protect_cut_task_sets: bool = True,
+        route_pool_hygiene_admission_protect_incumbent_task_sets: bool = True,
+        route_pool_hygiene_admission_protect_branch_task_sets: bool = True,
+        route_pool_restart_enabled: bool = False,
+        route_pool_restart_max_routes: int = 0,
+        route_pool_restart_min_global_routes: int = 0,
+        route_pool_restart_keep_recent_rounds: int = 2,
+        route_pool_restart_max_routes_per_task_set: int = 6,
+        route_pool_restart_active_value_tol: float = 1.0e-8,
+        route_pool_restart_keep_cut_signatures: bool = False,
+        route_pool_restart_cleanup_enabled: bool = False,
         three_pb_candidate_budget_enabled: bool = False,
         three_pb_root_pseudocost_candidates: int = 6,
         three_pb_root_fractional_candidates: int = 6,
@@ -369,6 +413,12 @@ class CleanBPCTree:
         self.restricted_master_repair_enabled = bool(restricted_master_repair_enabled)
         self.restricted_master_repair_max_attempts = int(restricted_master_repair_max_attempts)
         self.restricted_master_repair_max_states = int(restricted_master_repair_max_states)
+        self.restricted_master_adaptive_enabled = bool(restricted_master_adaptive_enabled)
+        self.restricted_master_adaptive_min_depth = int(restricted_master_adaptive_min_depth)
+        self.restricted_master_adaptive_after_failures = int(restricted_master_adaptive_after_failures)
+        self.restricted_master_adaptive_reduced_time_limit = float(restricted_master_adaptive_reduced_time_limit)
+        self.restricted_master_adaptive_skip_after_failures = int(restricted_master_adaptive_skip_after_failures)
+        self._restricted_master_adaptive_failure_streak = 0
         self.rmp_params = dict(rmp_params or {})
         self.logger = logger
         self.branching_strategy = str(branching_strategy)
@@ -536,6 +586,16 @@ class CleanBPCTree:
             route_set_schedule_packing_stop_after_no_improve_rounds
         )
         self.route_set_schedule_packing_global_time_limit_ratio = float(route_set_schedule_packing_global_time_limit_ratio)
+        self.weighted_route_schedule_packing_cuts_enabled = bool(weighted_route_schedule_packing_cuts_enabled)
+        self.weighted_route_schedule_packing_max_depth = int(weighted_route_schedule_packing_max_depth)
+        self.weighted_route_schedule_packing_max_rounds_per_node = int(weighted_route_schedule_packing_max_rounds_per_node)
+        self.weighted_route_schedule_packing_max_candidates = int(weighted_route_schedule_packing_max_candidates)
+        self.weighted_route_schedule_packing_max_cuts_per_round = int(weighted_route_schedule_packing_max_cuts_per_round)
+        self.weighted_route_schedule_packing_max_routes = int(weighted_route_schedule_packing_max_routes)
+        self.weighted_route_schedule_packing_oracle_max_states = int(weighted_route_schedule_packing_oracle_max_states)
+        self.weighted_route_schedule_packing_min_violation = float(weighted_route_schedule_packing_min_violation)
+        self.weighted_route_schedule_packing_node_time_budget = float(weighted_route_schedule_packing_node_time_budget)
+        self.weighted_route_schedule_packing_global_time_ratio = float(weighted_route_schedule_packing_global_time_ratio)
         self.fleet_lower_bound_cuts_enabled = bool(fleet_lower_bound_cuts_enabled)
         self.fleet_lower_bound_oracle_max_states = int(fleet_lower_bound_oracle_max_states)
         self.schedule_pack_diagnostic_enabled = bool(schedule_pack_diagnostic_enabled)
@@ -559,6 +619,34 @@ class CleanBPCTree:
         self.route_enumeration_adaptive_enabled = bool(route_enumeration_adaptive_enabled)
         self.route_enumeration_adaptive_gap_abs = float(route_enumeration_adaptive_gap_abs)
         self.route_enumeration_adaptive_gap_ratio = float(route_enumeration_adaptive_gap_ratio)
+        self.route_pool_hygiene_diagnostics_enabled = bool(route_pool_hygiene_diagnostics_enabled)
+        self.route_pool_hygiene_diagnostics_min_routes = int(route_pool_hygiene_diagnostics_min_routes)
+        self.route_pool_hygiene_near_duplicate_abs_tol = float(route_pool_hygiene_near_duplicate_abs_tol)
+        self.route_pool_hygiene_near_duplicate_rel_tol = float(route_pool_hygiene_near_duplicate_rel_tol)
+        self.route_pool_hygiene_sample_groups = int(route_pool_hygiene_sample_groups)
+        self.route_pool_hygiene_admission_enabled = bool(route_pool_hygiene_admission_enabled)
+        self.route_pool_hygiene_admission_max_per_task_set = int(route_pool_hygiene_admission_max_per_task_set)
+        self.route_pool_hygiene_admission_min_depth = int(route_pool_hygiene_admission_min_depth)
+        self.route_pool_hygiene_admission_protect_active_task_sets = bool(
+            route_pool_hygiene_admission_protect_active_task_sets
+        )
+        self.route_pool_hygiene_admission_protect_cut_task_sets = bool(
+            route_pool_hygiene_admission_protect_cut_task_sets
+        )
+        self.route_pool_hygiene_admission_protect_incumbent_task_sets = bool(
+            route_pool_hygiene_admission_protect_incumbent_task_sets
+        )
+        self.route_pool_hygiene_admission_protect_branch_task_sets = bool(
+            route_pool_hygiene_admission_protect_branch_task_sets
+        )
+        self.route_pool_restart_enabled = bool(route_pool_restart_enabled)
+        self.route_pool_restart_max_routes = int(route_pool_restart_max_routes)
+        self.route_pool_restart_min_global_routes = int(route_pool_restart_min_global_routes)
+        self.route_pool_restart_keep_recent_rounds = int(route_pool_restart_keep_recent_rounds)
+        self.route_pool_restart_max_routes_per_task_set = int(route_pool_restart_max_routes_per_task_set)
+        self.route_pool_restart_active_value_tol = float(route_pool_restart_active_value_tol)
+        self.route_pool_restart_keep_cut_signatures = bool(route_pool_restart_keep_cut_signatures)
+        self.route_pool_restart_cleanup_enabled = bool(route_pool_restart_cleanup_enabled)
         self.three_pb_candidate_budget_enabled = bool(three_pb_candidate_budget_enabled)
         self.three_pb_root_pseudocost_candidates = int(three_pb_root_pseudocost_candidates)
         self.three_pb_root_fractional_candidates = int(three_pb_root_fractional_candidates)
@@ -597,9 +685,18 @@ class CleanBPCTree:
         self.route_set_schedule_packing_no_add_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_no_improve_rounds_by_node: dict[int, int] = {}
         self.route_set_schedule_packing_oracle_time_total = 0.0
+        self.weighted_route_schedule_packing_cut_rounds_by_node: dict[int, int] = {}
+        self.weighted_route_schedule_packing_oracle_time_total = 0.0
         self.task_schedule_capacity_oracle_time_total = 0.0
         self.pending_cut_roi: list[dict[str, Any]] = []
+        self.route_pack_roi_pricing_watch: list[dict[str, Any]] = []
         self.route_set_schedule_packing_cache: dict[tuple[tuple[int, ...], ...], tuple[int, int] | None] = {}
+        self.weighted_route_schedule_packing_cache: dict[
+            tuple[tuple[tuple[int, ...], ...], tuple[float, ...]],
+            tuple[float, int] | None,
+        ] = {}
+        self.weighted_route_schedule_packing_witness_memory: dict[tuple[tuple[int, ...], ...], dict[str, Any]] = {}
+        self.weighted_route_schedule_packing_successful_sets: set[tuple[tuple[int, ...], ...]] = set()
         self.schedule_conflict_witness_cache: dict[tuple[tuple[int, ...], ...], Any] = {}
         self.schedule_conflict_route_pack_cache: dict[tuple[tuple[int, ...], ...], tuple[int | None, int | None, bool]] = {}
         self.schedule_capacity_cache: dict[tuple[int, ...], ScheduleCapacityResult | None] = {}
@@ -640,7 +737,15 @@ class CleanBPCTree:
         self.stats.fathom_reasons[reason] = self.stats.fathom_reasons.get(reason, 0) + 1
         self.logger.log("fathom", node_id=node_id, reason=reason, bound=None if bound is None else round(bound, 6))
 
-    def _register_cut_roi(self, node: BPCNode, family: str, added: int, before_objective: float | None) -> None:
+    def _register_cut_roi(
+        self,
+        node: BPCNode,
+        family: str,
+        added: int,
+        before_objective: float | None,
+        *,
+        roi_context: dict[str, Any] | None = None,
+    ) -> None:
         if added <= 0 or before_objective is None:
             return
         self.pending_cut_roi.append(
@@ -649,6 +754,7 @@ class CleanBPCTree:
                 "family": str(family),
                 "added": int(added),
                 "before_objective": float(before_objective),
+                "roi_context": roi_context,
             }
         )
 
@@ -666,6 +772,7 @@ class CleanBPCTree:
             family = str(item["family"])
             added = int(item["added"])
             low_improvement = improvement < self.route_set_schedule_packing_min_objective_improvement
+            roi_context = item.get("roi_context")
             if family == "schedule_route_set_packing":
                 if low_improvement:
                     self.route_set_schedule_packing_no_improve_rounds_by_node[node.id] = (
@@ -674,6 +781,9 @@ class CleanBPCTree:
                     self.stats.route_set_schedule_packing_added_but_no_bound_improvement += added
                 else:
                     self.route_set_schedule_packing_no_improve_rounds_by_node[node.id] = 0
+            elif family == "weighted_schedule_route_set_packing":
+                if low_improvement:
+                    self.stats.weighted_route_schedule_packing_added_but_no_bound_improvement += added
             elif family == "task_schedule_capacity":
                 if low_improvement:
                     self.task_schedule_capacity_no_improve_rounds_by_node[node.id] = (
@@ -692,7 +802,216 @@ class CleanBPCTree:
                 objective_improvement=round(improvement, 9),
                 low_improvement=bool(low_improvement),
             )
+            if family in {"schedule_route_set_packing", "weighted_schedule_route_set_packing"} and roi_context:
+                post_support = self._route_pack_roi_support_signatures(solution, roi_context.get("vehicles"))
+                diagnostics = self._route_pack_roi_diagnostics_payload(
+                    roi_context,
+                    stage="post_rmp",
+                    post_rmp_support_signatures=post_support,
+                    new_pricing_signatures=tuple(),
+                    before_objective=before,
+                    after_objective=after,
+                    objective_improvement=improvement,
+                    low_improvement=bool(low_improvement),
+                )
+                self.logger.log("route_pack_roi_diagnostics", node_id=node.id, family=family, **diagnostics)
+                self.route_pack_roi_pricing_watch.append(
+                    {
+                        "node_id": int(node.id),
+                        "family": family,
+                        "roi_context": roi_context,
+                        "post_rmp_support_signatures": post_support,
+                        "before_objective": before,
+                        "after_objective": after,
+                        "objective_improvement": improvement,
+                        "low_improvement": bool(low_improvement),
+                    }
+                )
         self.pending_cut_roi = remaining
+
+    def _route_pack_roi_support_signatures(
+        self,
+        solution: RMPSolution,
+        vehicles: Any = None,
+    ) -> tuple[tuple[int, ...], ...]:
+        vehicle_filter = None if vehicles is None else {int(vehicle) for vehicle in vehicles}
+        signatures = {
+            route.signature
+            for route, vehicle, value in solution.route_values
+            if float(value) > self.integer_tol and (vehicle_filter is None or int(vehicle) in vehicle_filter)
+        }
+        return normalize_signatures(tuple(signatures))
+
+    def _route_pack_roi_task_union(self, signatures: tuple[tuple[int, ...], ...]) -> tuple[int, ...]:
+        return tuple(sorted({int(task) for signature in signatures for task in signature}))
+
+    def _route_pack_roi_context(
+        self,
+        *,
+        solution: RMPSolution,
+        vehicles: list[int] | tuple[int, ...],
+        cut_signatures: tuple[tuple[int, ...], ...],
+        alpha_patterns: list[str] | tuple[str, ...] = (),
+    ) -> dict[str, Any]:
+        normalized = normalize_signatures(cut_signatures)
+        vehicle_tuple = tuple(sorted({int(vehicle) for vehicle in vehicles}))
+        return {
+            "vehicles": vehicle_tuple,
+            "cut_core_signatures": normalized,
+            "cut_core_task_union": self._route_pack_roi_task_union(normalized),
+            "pre_support_signatures": self._route_pack_roi_support_signatures(solution, vehicle_tuple),
+            "pre_pool_signatures": normalize_signatures(tuple(self.pool.by_signature)),
+            "pre_pool_size": len(self.pool.routes),
+            "alpha_patterns": tuple(str(pattern) for pattern in alpha_patterns if str(pattern)),
+        }
+
+    def _route_pack_roi_overlap(self, signature: tuple[int, ...], core_tasks: set[int]) -> float:
+        task_set = {int(task) for task in signature}
+        if not task_set or not core_tasks:
+            return 0.0
+        return len(task_set & core_tasks) / float(max(1, min(len(task_set), len(core_tasks))))
+
+    def _route_pack_roi_replacement_metrics(
+        self,
+        *,
+        context: dict[str, Any],
+        candidate_signatures: tuple[tuple[int, ...], ...],
+        require_old_pool: bool,
+        exclude_pre_support: bool,
+    ) -> tuple[int, float, tuple[tuple[int, ...], ...]]:
+        core_tasks = {int(task) for task in context.get("cut_core_task_union", ())}
+        pre_support = {tuple(signature) for signature in context.get("pre_support_signatures", ())}
+        old_pool = {tuple(signature) for signature in context.get("pre_pool_signatures", ())}
+        core_signatures = {tuple(signature) for signature in context.get("cut_core_signatures", ())}
+        replacements: list[tuple[int, ...]] = []
+        max_overlap = 0.0
+        for signature in candidate_signatures:
+            signature = tuple(int(task) for task in signature)
+            if signature in core_signatures:
+                continue
+            if exclude_pre_support and signature in pre_support:
+                continue
+            if require_old_pool and signature not in old_pool:
+                continue
+            overlap = self._route_pack_roi_overlap(signature, core_tasks)
+            max_overlap = max(max_overlap, overlap)
+            if overlap >= 0.5:
+                replacements.append(signature)
+        return len(replacements), max_overlap, normalize_signatures(tuple(replacements))
+
+    def _route_pack_roi_classification(
+        self,
+        *,
+        low_improvement: bool,
+        pre_support_signatures: tuple[tuple[int, ...], ...],
+        post_rmp_support_signatures: tuple[tuple[int, ...], ...],
+        same_pool_replacement_count: int,
+        pricing_replacement_count: int,
+    ) -> str:
+        if pricing_replacement_count > 0 and same_pool_replacement_count > 0:
+            return "mixed"
+        if pricing_replacement_count > 0:
+            return "pricing_mousehole"
+        if same_pool_replacement_count > 0:
+            return "same_pool_degeneracy"
+        if low_improvement:
+            pre_set = set(pre_support_signatures)
+            post_set = set(post_rmp_support_signatures)
+            overlap = len(pre_set & post_set) / float(max(1, len(pre_set | post_set)))
+            if overlap >= 0.8:
+                return "objective_degeneracy_no_support_change"
+        return "mixed"
+
+    def _route_pack_roi_diagnostics_payload(
+        self,
+        context: dict[str, Any],
+        *,
+        stage: str,
+        post_rmp_support_signatures: tuple[tuple[int, ...], ...],
+        new_pricing_signatures: tuple[tuple[int, ...], ...],
+        before_objective: float,
+        after_objective: float,
+        objective_improvement: float,
+        low_improvement: bool,
+    ) -> dict[str, Any]:
+        pre_support = normalize_signatures(tuple(context.get("pre_support_signatures", ())))
+        post_support = normalize_signatures(post_rmp_support_signatures)
+        new_pricing = normalize_signatures(new_pricing_signatures)
+        same_pool_count, max_old_overlap, same_pool_signatures = self._route_pack_roi_replacement_metrics(
+            context=context,
+            candidate_signatures=post_support,
+            require_old_pool=True,
+            exclude_pre_support=True,
+        )
+        pricing_count, max_new_overlap, pricing_signatures = self._route_pack_roi_replacement_metrics(
+            context=context,
+            candidate_signatures=new_pricing,
+            require_old_pool=False,
+            exclude_pre_support=True,
+        )
+        classification = self._route_pack_roi_classification(
+            low_improvement=bool(low_improvement),
+            pre_support_signatures=pre_support,
+            post_rmp_support_signatures=post_support,
+            same_pool_replacement_count=same_pool_count,
+            pricing_replacement_count=pricing_count,
+        )
+        return {
+            "stage": str(stage),
+            "classification": classification,
+            "vehicles": list(context.get("vehicles", ())),
+            "cut_core_signature_count": len(context.get("cut_core_signatures", ())),
+            "cut_core_signatures": [list(signature) for signature in context.get("cut_core_signatures", ())],
+            "cut_core_task_union": list(context.get("cut_core_task_union", ())),
+            "alpha_patterns": list(context.get("alpha_patterns", ())),
+            "pre_pool_size": int(context.get("pre_pool_size", 0) or 0),
+            "pre_support_signatures": [list(signature) for signature in pre_support],
+            "post_rmp_support_signatures": [list(signature) for signature in post_support],
+            "new_pricing_signatures": [list(signature) for signature in new_pricing],
+            "same_pool_replacement_count": int(same_pool_count),
+            "same_pool_replacement_signatures": [list(signature) for signature in same_pool_signatures],
+            "pricing_replacement_count": int(pricing_count),
+            "pricing_replacement_signatures": [list(signature) for signature in pricing_signatures],
+            "max_task_overlap_old_pool": round(float(max_old_overlap), 6),
+            "max_task_overlap_new_pricing": round(float(max_new_overlap), 6),
+            "before_objective": round(float(before_objective), 9),
+            "after_objective": round(float(after_objective), 9),
+            "objective_improvement": round(float(objective_improvement), 9),
+            "low_improvement": bool(low_improvement),
+        }
+
+    def _complete_route_pack_roi_pricing_watch(
+        self,
+        node: BPCNode,
+        *,
+        new_routes: list[RouteColumn],
+    ) -> None:
+        if not self.route_pack_roi_pricing_watch:
+            return
+        new_signatures = normalize_signatures(tuple(route.signature for route in new_routes))
+        remaining: list[dict[str, Any]] = []
+        for item in self.route_pack_roi_pricing_watch:
+            if int(item.get("node_id", -1)) != int(node.id):
+                remaining.append(item)
+                continue
+            context = item["roi_context"]
+            diagnostics = self._route_pack_roi_diagnostics_payload(
+                context,
+                stage="post_pricing",
+                post_rmp_support_signatures=item.get("post_rmp_support_signatures", ()),
+                new_pricing_signatures=new_signatures,
+                before_objective=float(item.get("before_objective", 0.0)),
+                after_objective=float(item.get("after_objective", 0.0)),
+                objective_improvement=float(item.get("objective_improvement", 0.0)),
+                low_improvement=bool(item.get("low_improvement", False)),
+            )
+            self.logger.log(
+                "route_pack_roi_diagnostics",
+                node_id=node.id,
+                family=str(item.get("family", "route_pack")),
+                **diagnostics,
+            )
+        self.route_pack_roi_pricing_watch = remaining
 
     def initialize(self) -> None:
         for task in self.data.tasks:
@@ -1220,6 +1539,9 @@ class CleanBPCTree:
             task_schedule_capacity_pair_budget=self.task_schedule_capacity_pair_budget,
             task_schedule_capacity_triple_budget=self.task_schedule_capacity_triple_budget,
             task_schedule_capacity_small_set_budget=self.task_schedule_capacity_small_set_budget,
+            weighted_route_schedule_packing_cuts_enabled=self.weighted_route_schedule_packing_cuts_enabled,
+            weighted_route_schedule_packing_max_depth=self.weighted_route_schedule_packing_max_depth,
+            weighted_route_schedule_packing_max_candidates=self.weighted_route_schedule_packing_max_candidates,
             fleet_lower_bound_cuts_enabled=self.fleet_lower_bound_cuts_enabled,
             fleet_lower_bound_oracle_max_states=self.fleet_lower_bound_oracle_max_states,
             route_set_schedule_packing_roi_guard_enabled=self.route_set_schedule_packing_roi_guard_enabled,
@@ -1228,6 +1550,34 @@ class CleanBPCTree:
             schedule_pack_full_pricing_enabled=self.schedule_pack_full_pricing_enabled,
             schedule_pack_adaptive_enabled=self.schedule_pack_adaptive_enabled,
             route_enumeration_adaptive_enabled=self.route_enumeration_adaptive_enabled,
+            route_pool_hygiene_diagnostics_enabled=self.route_pool_hygiene_diagnostics_enabled,
+            route_pool_hygiene_diagnostics_min_routes=self.route_pool_hygiene_diagnostics_min_routes,
+            route_pool_hygiene_admission_enabled=self.route_pool_hygiene_admission_enabled,
+            route_pool_hygiene_admission_max_per_task_set=self.route_pool_hygiene_admission_max_per_task_set,
+            route_pool_hygiene_admission_min_depth=self.route_pool_hygiene_admission_min_depth,
+            route_pool_hygiene_admission_protect_active_task_sets=(
+                self.route_pool_hygiene_admission_protect_active_task_sets
+            ),
+            route_pool_hygiene_admission_protect_cut_task_sets=(
+                self.route_pool_hygiene_admission_protect_cut_task_sets
+            ),
+            route_pool_hygiene_admission_protect_incumbent_task_sets=(
+                self.route_pool_hygiene_admission_protect_incumbent_task_sets
+            ),
+            route_pool_hygiene_admission_protect_branch_task_sets=(
+                self.route_pool_hygiene_admission_protect_branch_task_sets
+            ),
+            restricted_master_adaptive_enabled=self.restricted_master_adaptive_enabled,
+            restricted_master_adaptive_min_depth=self.restricted_master_adaptive_min_depth,
+            restricted_master_adaptive_after_failures=self.restricted_master_adaptive_after_failures,
+            restricted_master_adaptive_reduced_time_limit=self.restricted_master_adaptive_reduced_time_limit,
+            restricted_master_adaptive_skip_after_failures=self.restricted_master_adaptive_skip_after_failures,
+            route_pool_restart_enabled=self.route_pool_restart_enabled,
+            route_pool_restart_max_routes=self.route_pool_restart_max_routes,
+            route_pool_restart_min_global_routes=self.route_pool_restart_min_global_routes,
+            route_pool_restart_keep_recent_rounds=self.route_pool_restart_keep_recent_rounds,
+            route_pool_restart_max_routes_per_task_set=self.route_pool_restart_max_routes_per_task_set,
+            route_pool_restart_cleanup_enabled=self.route_pool_restart_cleanup_enabled,
             persistent_rmp_enabled=self.persistent_rmp_enabled,
         )
 
@@ -1364,6 +1714,45 @@ class CleanBPCTree:
             route_set_schedule_packing_added_but_no_bound_improvement=(
                 self.stats.route_set_schedule_packing_added_but_no_bound_improvement
             ),
+            weighted_route_schedule_packing_cuts_added=self.stats.weighted_route_schedule_packing_cuts_added,
+            weighted_route_schedule_packing_candidates_generated=(
+                self.stats.weighted_route_schedule_packing_candidates_generated
+            ),
+            weighted_route_schedule_packing_candidates_after_precheck=(
+                self.stats.weighted_route_schedule_packing_candidates_after_precheck
+            ),
+            weighted_route_schedule_packing_candidates_by_source=(
+                self.stats.weighted_route_schedule_packing_candidates_by_source
+            ),
+            weighted_route_schedule_packing_candidates_by_alpha=(
+                self.stats.weighted_route_schedule_packing_candidates_by_alpha
+            ),
+            weighted_route_schedule_packing_oracle_requests=self.stats.weighted_route_schedule_packing_oracle_requests,
+            weighted_route_schedule_packing_oracle_computations=(
+                self.stats.weighted_route_schedule_packing_oracle_computations
+            ),
+            weighted_route_schedule_packing_cache_hits=self.stats.weighted_route_schedule_packing_cache_hits,
+            weighted_route_schedule_packing_oracle_incomplete=self.stats.weighted_route_schedule_packing_oracle_incomplete,
+            weighted_route_schedule_packing_exact_not_violated=(
+                self.stats.weighted_route_schedule_packing_exact_not_violated
+            ),
+            weighted_route_schedule_packing_violated_candidates=(
+                self.stats.weighted_route_schedule_packing_violated_candidates
+            ),
+            weighted_route_schedule_packing_best_violation=round(
+                self.stats.weighted_route_schedule_packing_best_violation,
+                9,
+            ),
+            weighted_route_schedule_packing_oracle_time=round(self.stats.weighted_route_schedule_packing_oracle_time, 6),
+            weighted_route_schedule_packing_oracle_states_total=(
+                self.stats.weighted_route_schedule_packing_oracle_states_total
+            ),
+            weighted_route_schedule_packing_oracle_states_max=self.stats.weighted_route_schedule_packing_oracle_states_max,
+            weighted_route_schedule_packing_added_but_no_bound_improvement=(
+                self.stats.weighted_route_schedule_packing_added_but_no_bound_improvement
+            ),
+            weighted_route_schedule_packing_stopped_by_budget=self.stats.weighted_route_schedule_packing_stopped_by_budget,
+            weighted_route_schedule_packing_duplicate_skips=self.stats.weighted_route_schedule_packing_duplicate_skips,
             fleet_lower_bound_cuts_added=self.stats.fleet_lower_bound_cuts_added,
             fleet_lower_bound_value=self.stats.fleet_lower_bound_value,
             fleet_lower_bound_oracle_upper_bound=self.stats.fleet_lower_bound_oracle_upper_bound,
@@ -1399,6 +1788,28 @@ class CleanBPCTree:
             route_enumeration_adaptive_runs=self.stats.route_enumeration_adaptive_runs,
             route_enumeration_adaptive_skips=self.stats.route_enumeration_adaptive_skips,
             route_enumeration_adaptive_easy_skips=self.stats.route_enumeration_adaptive_easy_skips,
+            route_pool_restart_nodes=self.stats.route_pool_restart_nodes,
+            route_pool_restart_rounds=self.stats.route_pool_restart_rounds,
+            route_pool_restart_routes_omitted_total=self.stats.route_pool_restart_routes_omitted_total,
+            route_pool_restart_routes_omitted_max=self.stats.route_pool_restart_routes_omitted_max,
+            route_pool_restart_pricing_recovered_routes=self.stats.route_pool_restart_pricing_recovered_routes,
+            route_pool_restart_protected_routes_max=self.stats.route_pool_restart_protected_routes_max,
+            route_pool_hygiene_diagnostic_events=self.stats.route_pool_hygiene_diagnostic_events,
+            route_pool_hygiene_task_set_groups_max=self.stats.route_pool_hygiene_task_set_groups_max,
+            route_pool_hygiene_multi_route_groups_max=self.stats.route_pool_hygiene_multi_route_groups_max,
+            route_pool_hygiene_near_duplicate_groups_max=self.stats.route_pool_hygiene_near_duplicate_groups_max,
+            route_pool_hygiene_near_duplicate_routes_max=self.stats.route_pool_hygiene_near_duplicate_routes_max,
+            route_pool_hygiene_max_group_size=self.stats.route_pool_hygiene_max_group_size,
+            route_pool_hygiene_admission_evaluated=self.stats.route_pool_hygiene_admission_evaluated,
+            route_pool_hygiene_admission_admitted=self.stats.route_pool_hygiene_admission_admitted,
+            route_pool_hygiene_admission_filtered=self.stats.route_pool_hygiene_admission_filtered,
+            route_pool_hygiene_admission_protected=self.stats.route_pool_hygiene_admission_protected,
+            route_pool_hygiene_admission_forced_exact=self.stats.route_pool_hygiene_admission_forced_exact,
+            restricted_master_adaptive_skips=self.stats.restricted_master_adaptive_skips,
+            restricted_master_adaptive_time_limit_reductions=(
+                self.stats.restricted_master_adaptive_time_limit_reductions
+            ),
+            restricted_master_adaptive_failure_streak_max=self.stats.restricted_master_adaptive_failure_streak_max,
             rmp_solves=self.stats.rmp_solves,
             pricing_calls=self.stats.pricing_calls,
             exact_pricing_calls=self.stats.exact_pricing_calls,
@@ -1454,15 +1865,460 @@ class CleanBPCTree:
             return self.root_max_routes_per_pricing
         return self.max_routes_per_pricing
 
-    def _add_pricing_routes(self, pricing: PricingResult) -> int:
-        added = 0
+    def _add_pricing_routes(
+        self,
+        pricing: PricingResult,
+        *,
+        route_pool: RoutePool | None = None,
+        route_birth_iter: dict[tuple[int, ...], int] | None = None,
+        birth_iter: int = 0,
+    ) -> tuple[int, int]:
+        pool = self.pool if route_pool is None else route_pool
+        local_added = 0
+        global_added = 0
         for route in pricing.routes:
-            before = len(self.pool.routes)
-            self.pool.add(route)
-            if len(self.pool.routes) > before:
-                added += 1
+            global_before = len(self.pool.routes)
+            stored = self.pool.add(route)
+            if len(self.pool.routes) > global_before:
+                global_added += 1
+            if pool is self.pool:
+                if len(self.pool.routes) > global_before:
+                    local_added += 1
+                    if route_birth_iter is not None:
+                        route_birth_iter[stored.signature] = int(birth_iter)
+            else:
+                local_before = len(pool.routes)
+                pool.add(stored)
+                if len(pool.routes) > local_before:
+                    local_added += 1
+                    if route_birth_iter is not None:
+                        route_birth_iter[stored.signature] = int(birth_iter)
         self.stats.generated_routes = len(self.pool.routes)
-        return added
+        if route_pool is not None and route_pool is not self.pool and local_added > global_added:
+            self.stats.route_pool_restart_pricing_recovered_routes += local_added - global_added
+        return local_added, global_added
+
+    def _new_route_pool_from(self, routes: list[RouteColumn] | tuple[RouteColumn, ...]) -> RoutePool:
+        pool = RoutePool()
+        for route in routes:
+            pool.add(route)
+        return pool
+
+    def _route_pool_restart_active(self) -> bool:
+        return (
+            self.route_pool_restart_enabled
+            and self.route_pool_restart_max_routes > 0
+            and len(self.pool.routes) > max(0, self.route_pool_restart_min_global_routes)
+        )
+
+    def _route_allowed_for_any_vehicle(self, route: RouteColumn, node: BPCNode) -> bool:
+        return any(route_allowed_by_branch(route, int(vehicle), node.branch_constraints) for vehicle in self.data.vehicles)
+
+    def _route_pool_restart_reasons(
+        self,
+        node: BPCNode,
+        solution: RMPSolution | None,
+        route_birth_iter: dict[tuple[int, ...], int] | None,
+        cg_iter: int,
+    ) -> dict[tuple[int, ...], set[str]]:
+        reasons: dict[tuple[int, ...], set[str]] = {}
+
+        def mark(route: RouteColumn, reason: str) -> None:
+            reasons.setdefault(route.signature, set()).add(reason)
+
+        for route in self.pool.routes:
+            if len(route.tasks) == 1:
+                mark(route, "singleton")
+        if self.incumbent is not None:
+            for route, _vehicle, value in self.incumbent.route_values:
+                if value > 0.5:
+                    mark(route, "incumbent")
+        if solution is not None:
+            for route, _vehicle, value in solution.route_values:
+                if abs(float(value)) > self.route_pool_restart_active_value_tol:
+                    mark(route, "active")
+        if route_birth_iter is not None and self.route_pool_restart_keep_recent_rounds >= 0:
+            keep_recent = int(self.route_pool_restart_keep_recent_rounds)
+            for route in self.pool.routes:
+                born = route_birth_iter.get(route.signature)
+                if born is not None and int(cg_iter) - int(born) <= keep_recent:
+                    mark(route, "recent")
+
+        arc_on_constraints = [constraint for constraint in node.branch_constraints if constraint.kind == "arc_on"]
+        if arc_on_constraints:
+            for constraint in arc_on_constraints:
+                matches = [
+                    route
+                    for route in self.pool.routes
+                    if self._route_allowed_for_any_vehicle(route, node)
+                    and any(
+                        route_branch_coefficient(route, int(vehicle), constraint) != 0.0
+                        for vehicle in self.data.vehicles
+                    )
+                ]
+                for route in sorted(matches, key=lambda item: (item.cost, len(item.tasks), item.signature))[:20]:
+                    mark(route, "branch_arc_on")
+
+        for cut in self.cuts:
+            if isinstance(cut, WeightedScheduleRouteSetPackingCut) or self.route_pool_restart_keep_cut_signatures:
+                for signature in getattr(cut, "signatures", ()):
+                    route = self.pool.by_signature.get(tuple(signature))
+                    if route is not None:
+                        mark(route, "cut_signature")
+        return reasons
+
+    def _select_route_pool_restart_routes(
+        self,
+        node: BPCNode,
+        solution: RMPSolution | None,
+        route_birth_iter: dict[tuple[int, ...], int] | None,
+        cg_iter: int,
+    ) -> tuple[list[RouteColumn], dict[str, int]]:
+        max_routes = max(1, int(self.route_pool_restart_max_routes))
+        reasons = self._route_pool_restart_reasons(node, solution, route_birth_iter, cg_iter)
+        active_value: dict[tuple[int, ...], float] = {}
+        if solution is not None:
+            for route, _vehicle, value in solution.route_values:
+                active_value[route.signature] = max(active_value.get(route.signature, 0.0), abs(float(value)))
+
+        selected: list[RouteColumn] = []
+        seen: set[tuple[int, ...]] = set()
+
+        def add(route: RouteColumn) -> None:
+            if route.signature in seen:
+                return
+            selected.append(route)
+            seen.add(route.signature)
+
+        protected_routes = [
+            route
+            for route in self.pool.routes
+            if route.signature in reasons and self._route_allowed_for_any_vehicle(route, node)
+        ]
+        for route in sorted(protected_routes, key=lambda item: (item.id, item.signature)):
+            add(route)
+
+        max_per_task_set = max(0, int(self.route_pool_restart_max_routes_per_task_set))
+        task_set_count: dict[frozenset[int], int] = {}
+        for route in selected:
+            task_set_count[route.task_set] = task_set_count.get(route.task_set, 0) + 1
+
+        def score(route: RouteColumn) -> tuple:
+            born = -1 if route_birth_iter is None else route_birth_iter.get(route.signature, -1)
+            return (
+                -active_value.get(route.signature, 0.0),
+                -int(born),
+                -len(route.tasks),
+                float(route.cost),
+                route.signature,
+            )
+
+        for route in sorted(self.pool.routes, key=score):
+            if len(selected) >= max_routes:
+                break
+            if route.signature in seen:
+                continue
+            if not self._route_allowed_for_any_vehicle(route, node):
+                continue
+            if max_per_task_set > 0 and task_set_count.get(route.task_set, 0) >= max_per_task_set:
+                continue
+            add(route)
+            task_set_count[route.task_set] = task_set_count.get(route.task_set, 0) + 1
+
+        reason_counts: dict[str, int] = {}
+        for signature in seen:
+            for reason in reasons.get(signature, ()):
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        reason_counts["selected"] = len(selected)
+        reason_counts["protected"] = len([signature for signature in seen if signature in reasons])
+        return selected, reason_counts
+
+    def _initial_node_route_pool(self, node: BPCNode) -> tuple[RoutePool | None, dict[tuple[int, ...], int] | None]:
+        if not self._route_pool_restart_active() or len(self.pool.routes) <= self.route_pool_restart_max_routes:
+            return None, None
+        selected, reason_counts = self._select_route_pool_restart_routes(node, None, None, 0)
+        local_pool = self._new_route_pool_from(selected)
+        birth_iter = {route.signature: 0 for route in local_pool.routes}
+        omitted = max(0, len(self.pool.routes) - len(local_pool.routes))
+        self.stats.route_pool_restart_nodes += 1
+        self.stats.route_pool_restart_rounds += 1
+        self.stats.route_pool_restart_routes_omitted_total += omitted
+        self.stats.route_pool_restart_routes_omitted_max = max(self.stats.route_pool_restart_routes_omitted_max, omitted)
+        self.stats.route_pool_restart_protected_routes_max = max(
+            self.stats.route_pool_restart_protected_routes_max,
+            int(reason_counts.get("protected", 0)),
+        )
+        self.logger.log(
+            "route_pool_restart",
+            node_id=node.id,
+            depth=node.depth,
+            stage="node_start",
+            global_routes=len(self.pool.routes),
+            local_routes=len(local_pool.routes),
+            omitted_routes=omitted,
+            max_routes=self.route_pool_restart_max_routes,
+            reason_counts=reason_counts,
+        )
+        return local_pool, birth_iter
+
+    def _cleanup_node_route_pool(
+        self,
+        node: BPCNode,
+        route_pool: RoutePool | None,
+        solution: RMPSolution,
+        route_birth_iter: dict[tuple[int, ...], int] | None,
+        cg_iter: int,
+    ) -> bool:
+        if route_pool is None or route_birth_iter is None:
+            return False
+        if len(route_pool.routes) <= self.route_pool_restart_max_routes:
+            return False
+        selected, reason_counts = self._select_route_pool_restart_routes(node, solution, route_birth_iter, cg_iter)
+        selected_signatures = {route.signature for route in selected}
+        if len(selected_signatures) >= len(route_pool.routes):
+            return False
+        before = len(route_pool.routes)
+        replacement = self._new_route_pool_from(selected)
+        route_pool.routes = replacement.routes
+        route_pool.by_signature = replacement.by_signature
+        for signature in list(route_birth_iter):
+            if signature not in route_pool.by_signature:
+                route_birth_iter.pop(signature, None)
+        omitted = max(0, len(self.pool.routes) - len(route_pool.routes))
+        removed_local = before - len(route_pool.routes)
+        self.stats.route_pool_restart_rounds += 1
+        self.stats.route_pool_restart_routes_omitted_total += omitted
+        self.stats.route_pool_restart_routes_omitted_max = max(self.stats.route_pool_restart_routes_omitted_max, omitted)
+        self.stats.route_pool_restart_protected_routes_max = max(
+            self.stats.route_pool_restart_protected_routes_max,
+            int(reason_counts.get("protected", 0)),
+        )
+        self.logger.log(
+            "route_pool_restart",
+            node_id=node.id,
+            depth=node.depth,
+            stage="cleanup",
+            cg_iter=cg_iter,
+            global_routes=len(self.pool.routes),
+            local_before=before,
+            local_routes=len(route_pool.routes),
+            removed_local_routes=removed_local,
+            omitted_routes=omitted,
+            max_routes=self.route_pool_restart_max_routes,
+            reason_counts=reason_counts,
+        )
+        return True
+
+    def _route_pool_hygiene_profile(
+        self,
+        routes: list[RouteColumn] | tuple[RouteColumn, ...],
+    ) -> dict[str, Any]:
+        by_task_set: dict[tuple[int, ...], list[RouteColumn]] = {}
+        for route in routes:
+            key = tuple(sorted(int(task) for task in route.task_set))
+            by_task_set.setdefault(key, []).append(route)
+
+        multi_groups = [items for items in by_task_set.values() if len(items) > 1]
+        near_duplicate_groups = 0
+        near_duplicate_routes = 0
+        max_group_size = 0
+        max_near_duplicate_group_size = 0
+        max_cost_spread = 0.0
+        samples: list[dict[str, Any]] = []
+        sample_limit = max(0, int(self.route_pool_hygiene_sample_groups))
+        for task_set, items in sorted(
+            by_task_set.items(),
+            key=lambda pair: (-len(pair[1]), pair[0]),
+        ):
+            if len(items) <= 1:
+                continue
+            ordered = sorted(items, key=lambda route: (float(route.cost), route.signature))
+            min_cost = float(ordered[0].cost)
+            max_cost = max(float(route.cost) for route in ordered)
+            threshold = (
+                min_cost
+                + max(0.0, float(self.route_pool_hygiene_near_duplicate_abs_tol))
+                + max(0.0, float(self.route_pool_hygiene_near_duplicate_rel_tol)) * max(1.0, abs(min_cost))
+            )
+            near = [route for route in ordered if float(route.cost) <= threshold + 1.0e-12]
+            max_group_size = max(max_group_size, len(items))
+            max_cost_spread = max(max_cost_spread, max_cost - min_cost)
+            if len(near) > 1:
+                near_duplicate_groups += 1
+                near_duplicate_routes += len(near) - 1
+                max_near_duplicate_group_size = max(max_near_duplicate_group_size, len(near))
+            if len(samples) < sample_limit:
+                samples.append(
+                    {
+                        "task_set": list(task_set),
+                        "group_size": len(items),
+                        "near_duplicate_count": len(near),
+                        "min_cost": round(min_cost, 6),
+                        "max_cost": round(max_cost, 6),
+                        "cost_spread": round(max_cost - min_cost, 6),
+                        "best_signatures": [list(route.signature) for route in ordered[: min(5, len(ordered))]],
+                    }
+                )
+
+        return {
+            "route_count": len(routes),
+            "task_set_groups": len(by_task_set),
+            "multi_route_groups": len(multi_groups),
+            "near_duplicate_groups": int(near_duplicate_groups),
+            "near_duplicate_routes": int(near_duplicate_routes),
+            "max_group_size": int(max_group_size),
+            "max_near_duplicate_group_size": int(max_near_duplicate_group_size),
+            "max_cost_spread": round(float(max_cost_spread), 6),
+            "samples": samples,
+        }
+
+    def _log_route_pool_hygiene_diagnostics(
+        self,
+        node: BPCNode | None,
+        *,
+        stage: str,
+        routes: list[RouteColumn] | tuple[RouteColumn, ...] | None = None,
+    ) -> None:
+        if not self.route_pool_hygiene_diagnostics_enabled:
+            return
+        route_list = self.pool.routes if routes is None else list(routes)
+        if len(route_list) < max(0, int(self.route_pool_hygiene_diagnostics_min_routes)):
+            return
+        payload = self._route_pool_hygiene_profile(route_list)
+        self.stats.route_pool_hygiene_diagnostic_events += 1
+        self.stats.route_pool_hygiene_task_set_groups_max = max(
+            self.stats.route_pool_hygiene_task_set_groups_max,
+            int(payload["task_set_groups"]),
+        )
+        self.stats.route_pool_hygiene_multi_route_groups_max = max(
+            self.stats.route_pool_hygiene_multi_route_groups_max,
+            int(payload["multi_route_groups"]),
+        )
+        self.stats.route_pool_hygiene_near_duplicate_groups_max = max(
+            self.stats.route_pool_hygiene_near_duplicate_groups_max,
+            int(payload["near_duplicate_groups"]),
+        )
+        self.stats.route_pool_hygiene_near_duplicate_routes_max = max(
+            self.stats.route_pool_hygiene_near_duplicate_routes_max,
+            int(payload["near_duplicate_routes"]),
+        )
+        self.stats.route_pool_hygiene_max_group_size = max(
+            self.stats.route_pool_hygiene_max_group_size,
+            int(payload["max_group_size"]),
+        )
+        self.logger.log(
+            "route_pool_hygiene_diagnostics",
+            node_id=None if node is None else int(node.id),
+            depth=None if node is None else int(node.depth),
+            stage=str(stage),
+            **payload,
+        )
+
+    def _apply_route_pool_hygiene_admission(
+        self,
+        pricing: PricingResult,
+        *,
+        pricing_kind: str,
+        node: BPCNode | None = None,
+        solution: RMPSolution | None = None,
+    ) -> tuple[PricingResult, dict[str, Any] | None]:
+        if (
+            not self.route_pool_hygiene_admission_enabled
+            or pricing_kind not in {"heuristic", "heuristic_boost"}
+            or self.route_pool_hygiene_admission_max_per_task_set <= 0
+            or not pricing.routes
+        ):
+            return pricing, None
+        if node is not None and int(node.depth) < max(0, int(self.route_pool_hygiene_admission_min_depth)):
+            return pricing, None
+
+        max_per_task_set = max(1, int(self.route_pool_hygiene_admission_max_per_task_set))
+        protected_task_sets = self._route_pool_hygiene_admission_protected_task_sets(node, solution)
+        counts: dict[tuple[int, ...], int] = {}
+        admitted: list[RouteColumn] = []
+        filtered: list[RouteColumn] = []
+        capped_groups: set[tuple[int, ...]] = set()
+        protected_routes = 0
+        for route in pricing.routes:
+            task_set = tuple(sorted(int(task) for task in route.task_set))
+            if len(task_set) <= 1:
+                admitted.append(route)
+                continue
+            if task_set in protected_task_sets:
+                admitted.append(route)
+                protected_routes += 1
+                continue
+            count = counts.get(task_set, 0)
+            if count < max_per_task_set:
+                admitted.append(route)
+                counts[task_set] = count + 1
+            else:
+                filtered.append(route)
+                capped_groups.add(task_set)
+
+        self.stats.route_pool_hygiene_admission_evaluated += len(pricing.routes)
+        self.stats.route_pool_hygiene_admission_admitted += len(admitted)
+        self.stats.route_pool_hygiene_admission_filtered += len(filtered)
+        self.stats.route_pool_hygiene_admission_protected += protected_routes
+        if not filtered:
+            return pricing, None
+
+        # 中文注释：过滤过 heuristic 负列后，不能把该 heuristic 调用当作完整证书使用。
+        filtered_pricing = replace(pricing, routes=admitted, exhausted=False, negative_routes=len(admitted))
+        self.stats.route_pool_hygiene_admission_forced_exact += int(bool(pricing.exhausted))
+        return filtered_pricing, {
+            "evaluated_routes": len(pricing.routes),
+            "admitted_routes": len(admitted),
+            "filtered_routes": len(filtered),
+            "protected_routes": int(protected_routes),
+            "protected_task_set_count": len(protected_task_sets),
+            "capped_group_count": len(capped_groups),
+            "max_per_task_set": max_per_task_set,
+            "min_depth": max(0, int(self.route_pool_hygiene_admission_min_depth)),
+            "forced_exact_certificate": bool(pricing.exhausted),
+            "sample_filtered_signatures": [list(route.signature) for route in filtered[:10]],
+        }
+
+    def _route_pool_hygiene_admission_protected_task_sets(
+        self,
+        node: BPCNode | None,
+        solution: RMPSolution | None,
+    ) -> set[tuple[int, ...]]:
+        protected: set[tuple[int, ...]] = set()
+
+        def mark(route: RouteColumn) -> None:
+            if len(route.task_set) > 1:
+                protected.add(tuple(sorted(int(task) for task in route.task_set)))
+
+        if self.route_pool_hygiene_admission_protect_incumbent_task_sets and self.incumbent is not None:
+            for route, _vehicle, value in self.incumbent.route_values:
+                if float(value) > 0.5:
+                    mark(route)
+
+        if self.route_pool_hygiene_admission_protect_active_task_sets and solution is not None:
+            for route, _vehicle, value in solution.route_values:
+                if abs(float(value)) > self.route_pool_restart_active_value_tol:
+                    mark(route)
+
+        if self.route_pool_hygiene_admission_protect_cut_task_sets:
+            for cut in self.cuts:
+                for signature in getattr(cut, "signatures", ()):
+                    if len(signature) > 1:
+                        protected.add(tuple(sorted(int(task) for task in signature)))
+
+        if self.route_pool_hygiene_admission_protect_branch_task_sets and node is not None and node.branch_constraints:
+            branch_tasks: set[int] = set()
+            for constraint in node.branch_constraints:
+                if constraint.task_i is not None:
+                    branch_tasks.add(int(constraint.task_i))
+                if constraint.task_j is not None:
+                    branch_tasks.add(int(constraint.task_j))
+            if branch_tasks:
+                for route in self.pool.routes:
+                    if route.task_set & branch_tasks:
+                        mark(route)
+
+        return protected
 
     def _schedule_pack_seed_schedules(self) -> list[list[RouteColumn]]:
         if self.incumbent is None:
@@ -1782,7 +2638,10 @@ class CleanBPCTree:
         max_routes_to_return: int,
         max_labels: int,
         selection_mode: str,
+        route_pool: RoutePool | None = None,
+        route_birth_iter: dict[tuple[int, ...], int] | None = None,
     ) -> tuple[PricingResult, int]:
+        pricing_pool = self.pool if route_pool is None else route_pool
         ng_enabled = (
             bool(self.ng_dssr_pricing_enabled)
             and pricing_kind in {"heuristic", "heuristic_boost"}
@@ -1796,7 +2655,7 @@ class CleanBPCTree:
                 enumeration_limit = self.route_enumeration_max_routes
         pricing = exact_pricing(
             self.data,
-            self.pool.routes,
+            pricing_pool.routes,
             solution.duals,
             self.cuts,
             node.branch_constraints,
@@ -1825,7 +2684,42 @@ class CleanBPCTree:
             self.stats.exact_pricing_calls += 1
         self.stats.label_pops += pricing.label_pops
         self.stats.generated_labels += pricing.generated_labels
-        added = self._add_pricing_routes(pricing)
+        pricing, admission_payload = self._apply_route_pool_hygiene_admission(
+            pricing,
+            pricing_kind=pricing_kind,
+            node=node,
+            solution=solution,
+        )
+        before_signatures = set(pricing_pool.by_signature)
+        added, global_added = self._add_pricing_routes(
+            pricing,
+            route_pool=pricing_pool,
+            route_birth_iter=route_birth_iter,
+            birth_iter=cg_iter,
+        )
+        new_routes = [
+            pricing_pool.by_signature[signature]
+            for signature in sorted(set(pricing_pool.by_signature) - before_signatures)
+        ]
+        self._complete_route_pack_roi_pricing_watch(node, new_routes=new_routes)
+        if added > 0:
+            self._log_route_pool_hygiene_diagnostics(
+                node,
+                stage=f"after_{pricing_kind}_pricing",
+                routes=pricing_pool.routes,
+            )
+        if admission_payload is not None:
+            self.logger.log(
+                "route_pool_hygiene_admission",
+                node_id=node.id,
+                depth=node.depth,
+                cg_iter=cg_iter,
+                phase=phase,
+                pricing_kind=pricing_kind,
+                added_routes=added,
+                global_added_routes=global_added,
+                **admission_payload,
+            )
         self.logger.log(
             "pricing",
             node_id=node.id,
@@ -1839,7 +2733,14 @@ class CleanBPCTree:
             best_reduced_cost=None if pricing.best_reduced_cost is None else round(pricing.best_reduced_cost, 9),
             negative_routes=pricing.negative_routes,
             added_routes=added,
+            global_added_routes=global_added,
+            hygiene_admission_filtered=0 if admission_payload is None else admission_payload["filtered_routes"],
+            hygiene_admission_forced_exact=(
+                False if admission_payload is None else admission_payload["forced_exact_certificate"]
+            ),
             exhausted=pricing.exhausted,
+            route_count=len(pricing_pool.routes),
+            global_route_count=len(self.pool.routes),
             label_pops=pricing.label_pops,
             generated_labels=pricing.generated_labels,
             dominance_enabled=pricing.dominance_enabled,
@@ -1937,6 +2838,12 @@ class CleanBPCTree:
                 vehicle=int(source_vehicle),
                 node_id=node.id,
             )
+            self._record_weighted_route_schedule_packing_witness(
+                list(conflict_routes),
+                source="rim_witness",
+                vehicle=int(source_vehicle),
+                node_id=node.id,
+            )
             witness = self._diagnose_schedule_conflict(conflict_routes)
             if witness is None:
                 diagnostics["skipped_without_witness"] += 1
@@ -2022,7 +2929,36 @@ class CleanBPCTree:
             return 0
         if self.incumbent is not None and solution.objective >= self.incumbent.objective - self.integer_tol:
             return 0
+        adaptive_active = (
+            self.restricted_master_adaptive_enabled
+            and int(node.depth) >= max(0, int(self.restricted_master_adaptive_min_depth))
+        )
+        failure_streak = int(self._restricted_master_adaptive_failure_streak)
+        skip_after = int(self.restricted_master_adaptive_skip_after_failures)
+        if adaptive_active and skip_after > 0 and failure_streak >= skip_after:
+            self.stats.restricted_master_adaptive_skips += 1
+            self.logger.log(
+                "restricted_integer_master_adaptive_skip",
+                node_id=node.id,
+                depth=node.depth,
+                failure_streak=failure_streak,
+                skip_after=skip_after,
+            )
+            return 0
         time_limit = min(self.restricted_master_time_limit, max(0.0, self.time_limit - self.elapsed() - 1.0))
+        adaptive_reduced = False
+        reduce_after = int(self.restricted_master_adaptive_after_failures)
+        reduced_time_limit = float(self.restricted_master_adaptive_reduced_time_limit)
+        if (
+            adaptive_active
+            and reduce_after > 0
+            and failure_streak >= reduce_after
+            and reduced_time_limit > 0.0
+            and reduced_time_limit < time_limit
+        ):
+            time_limit = reduced_time_limit
+            adaptive_reduced = True
+            self.stats.restricted_master_adaptive_time_limit_reductions += 1
         if time_limit < 1.0:
             return 0
 
@@ -2072,6 +3008,17 @@ class CleanBPCTree:
                 current = self.stats.restricted_master_integer_best_objective
                 if current is None or result.objective < current - self.integer_tol:
                     self.stats.restricted_master_integer_best_objective = result.objective
+        if adaptive_active:
+            status = str(result.status).upper()
+            failed = (not accepted) and status == "TIME_LIMIT"
+            if failed:
+                self._restricted_master_adaptive_failure_streak += 1
+            else:
+                self._restricted_master_adaptive_failure_streak = 0
+            self.stats.restricted_master_adaptive_failure_streak_max = max(
+                self.stats.restricted_master_adaptive_failure_streak_max,
+                int(self._restricted_master_adaptive_failure_streak),
+            )
         self.logger.log(
             "restricted_integer_master",
             node_id=node.id,
@@ -2095,6 +3042,10 @@ class CleanBPCTree:
             repair_best_objective=None if result.repair_best_objective is None else round(result.repair_best_objective, 6),
             added_schedule_cuts=added_conflict_cuts,
             time=round(result.solving_time, 6),
+            adaptive_enabled=adaptive_active,
+            adaptive_time_limit=round(time_limit, 6),
+            adaptive_reduced=adaptive_reduced,
+            adaptive_failure_streak=self._restricted_master_adaptive_failure_streak,
         )
         return added_conflict_cuts
 
@@ -2105,14 +3056,19 @@ class CleanBPCTree:
         node_certified = False
         persistent_rmp: PersistentRMP | None = None
         persistent_rmp_disabled = False
+        node_route_pool, route_birth_iter = self._initial_node_route_pool(node)
+        self._log_route_pool_hygiene_diagnostics(node, stage="node_start")
 
         def solve_current_rmp() -> tuple[RMPSolution, str]:
             nonlocal persistent_rmp, persistent_rmp_disabled
+            rmp_routes = self.pool.routes if node_route_pool is None else node_route_pool.routes
+            if node_route_pool is not None:
+                persistent_rmp_disabled = True
             if not self.persistent_rmp_enabled or persistent_rmp_disabled:
                 return (
                     solve_rmp_lp(
                         self.data,
-                        self.pool.routes,
+                        rmp_routes,
                         self.cuts,
                         node.branch_constraints,
                         phase=phase,
@@ -2126,7 +3082,7 @@ class CleanBPCTree:
                 if persistent_rmp is None or persistent_rmp.phase != phase:
                     persistent_rmp = PersistentRMP(
                         self.data,
-                        self.pool.routes,
+                        rmp_routes,
                         self.cuts,
                         node.branch_constraints,
                         phase=phase,
@@ -2135,13 +3091,13 @@ class CleanBPCTree:
                         task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
                     )
                     return (persistent_rmp.solve(), "persistent_rebuild")
-                persistent_rmp.sync(self.pool.routes, self.cuts)
+                persistent_rmp.sync(rmp_routes, self.cuts)
                 return (persistent_rmp.solve(), "persistent")
             except PersistentRMPRequiresRebuild:
                 try:
                     persistent_rmp = PersistentRMP(
                         self.data,
-                        self.pool.routes,
+                        rmp_routes,
                         self.cuts,
                         node.branch_constraints,
                         phase=phase,
@@ -2175,7 +3131,7 @@ class CleanBPCTree:
             return (
                 solve_rmp_lp(
                     self.data,
-                    self.pool.routes,
+                    rmp_routes,
                     self.cuts,
                     node.branch_constraints,
                     phase=phase,
@@ -2201,6 +3157,8 @@ class CleanBPCTree:
                 objective=None if solution.objective is None else round(solution.objective, 6),
                 artificial_sum=round(solution.artificial_sum, 6),
                 route_count=len(self.pool.routes),
+                local_route_count=len(self.pool.routes) if node_route_pool is None else len(node_route_pool.routes),
+                route_pool_restart_enabled=node_route_pool is not None,
                 cut_count=len(self.cuts),
                 variable_count=solution.variable_count,
                 constraint_count=solution.constraint_count,
@@ -2214,6 +3172,15 @@ class CleanBPCTree:
                 return []
 
             if phase == "phase2":
+                if self.route_pool_restart_cleanup_enabled and self._cleanup_node_route_pool(
+                    node,
+                    node_route_pool,
+                    solution,
+                    route_birth_iter,
+                    cg_iter,
+                ):
+                    persistent_rmp = None
+                    continue
                 purged_by_kind = self._purge_inactive_cuts(solution)
                 purged = sum(purged_by_kind.values())
                 if purged:
@@ -2244,6 +3211,8 @@ class CleanBPCTree:
                     max_routes_to_return=self.heuristic_pricing_routes_per_round,
                     max_labels=self.heuristic_pricing_max_labels,
                     selection_mode=self.heuristic_pricing_selection_mode,
+                    route_pool=node_route_pool,
+                    route_birth_iter=route_birth_iter,
                 )
                 if heuristic_added > 0:
                     continue
@@ -2268,6 +3237,8 @@ class CleanBPCTree:
                         max_routes_to_return=self.branch_node_heuristic_boost_routes_per_round,
                         max_labels=self.branch_node_heuristic_boost_max_labels,
                         selection_mode=self.heuristic_pricing_selection_mode,
+                        route_pool=node_route_pool,
+                        route_birth_iter=route_birth_iter,
                     )
                     if boosted_added > 0:
                         continue
@@ -2286,6 +3257,8 @@ class CleanBPCTree:
                     max_routes_to_return=self._exact_routes_per_pricing(node),
                     max_labels=self.max_labels_per_pricing,
                     selection_mode=self.exact_pricing_selection_mode,
+                    route_pool=node_route_pool,
+                    route_birth_iter=route_birth_iter,
                 )
             if added > 0:
                 continue
@@ -2313,6 +3286,9 @@ class CleanBPCTree:
             if separated:
                 continue
             separated = self._separate_route_set_schedule_packing_cuts(node, solution)
+            if separated:
+                continue
+            separated = self._separate_weighted_route_schedule_packing_cuts(node, solution)
             if separated:
                 continue
             separated = self._separate_schedule_incompatibility_cuts(node, solution)
@@ -4009,6 +4985,517 @@ class CleanBPCTree:
             diagnostics.get("cuts_copied_to_all_vehicles", 0) or 0
         )
 
+    def _record_weighted_route_schedule_packing_witness(
+        self,
+        routes: list[RouteColumn] | tuple[RouteColumn, ...],
+        *,
+        source: str,
+        vehicle: int | None,
+        node_id: int | None,
+        violation: float = 0.0,
+    ) -> None:
+        signatures, ordered_routes = self._weighted_route_signature_routes(routes)
+        if len(signatures) < 2:
+            return
+        existing = self.weighted_route_schedule_packing_witness_memory.get(signatures)
+        if existing is None:
+            self.weighted_route_schedule_packing_witness_memory[signatures] = {
+                "routes": ordered_routes,
+                "source_count": {str(source): 1},
+                "vehicles": set() if vehicle is None else {int(vehicle)},
+                "last_node": None if node_id is None else int(node_id),
+                "max_violation": float(violation),
+            }
+            return
+        existing["routes"] = ordered_routes
+        source_count = existing.setdefault("source_count", {})
+        source_count[str(source)] = int(source_count.get(str(source), 0)) + 1
+        if vehicle is not None:
+            existing.setdefault("vehicles", set()).add(int(vehicle))
+        if node_id is not None:
+            existing["last_node"] = int(node_id)
+        existing["max_violation"] = max(float(existing.get("max_violation", 0.0)), float(violation))
+
+    def _weighted_route_signature_routes(
+        self,
+        routes: list[RouteColumn] | tuple[RouteColumn, ...],
+    ) -> tuple[tuple[tuple[int, ...], ...], list[RouteColumn]]:
+        route_by_signature: dict[tuple[int, ...], RouteColumn] = {}
+        for route in routes:
+            route_by_signature.setdefault(route.signature, route)
+        signatures = normalize_signatures(tuple(route_by_signature))
+        return signatures, [route_by_signature[signature] for signature in signatures]
+
+    def _normalized_weighted_route_weights(
+        self,
+        signatures: tuple[tuple[int, ...], ...],
+        weight_by_signature: dict[tuple[int, ...], float],
+    ) -> tuple[float, ...]:
+        raw = [max(0.0, float(weight_by_signature.get(signature, 0.0))) for signature in signatures]
+        peak = max(raw, default=0.0)
+        if peak <= 1.0e-12:
+            return tuple(0.0 for _signature in signatures)
+        normalized = []
+        for weight in raw:
+            value = 0.0 if weight <= 1.0e-12 else weight / peak
+            normalized.append(round(float(value), 9))
+        return tuple(normalized)
+
+    def _weighted_route_schedule_packing_bound_with_cache_status(
+        self,
+        routes: list[RouteColumn] | tuple[RouteColumn, ...],
+        weights: tuple[float, ...],
+    ) -> tuple[float | None, int | None, bool]:
+        weight_by_original_signature = {
+            route.signature: float(weight)
+            for route, weight in zip(routes, weights)
+        }
+        signatures, ordered_routes = self._weighted_route_signature_routes(routes)
+        normalized_weights = self._normalized_weighted_route_weights(
+            signatures,
+            weight_by_original_signature,
+        )
+        key = (signatures, normalized_weights)
+        cached = self.weighted_route_schedule_packing_cache.get(key)
+        if cached is not None:
+            return (cached[0], cached[1], True)
+        if key in self.weighted_route_schedule_packing_cache and cached is None:
+            return (None, None, True)
+        result = exact_weighted_route_set_schedule_capacity(
+            self.data,
+            ordered_routes,
+            normalized_weights,
+            max_states=self.weighted_route_schedule_packing_oracle_max_states,
+        )
+        if not result.exact:
+            self.weighted_route_schedule_packing_cache[key] = None
+            return (None, int(result.states_explored), False)
+        value = (float(result.upper_bound), int(result.states_explored))
+        self.weighted_route_schedule_packing_cache[key] = value
+        return (value[0], value[1], False)
+
+    def _weighted_route_conflict_frequency(self) -> dict[tuple[int, ...], int]:
+        frequency: dict[tuple[int, ...], int] = {}
+        for signatures, payload in self.weighted_route_schedule_packing_witness_memory.items():
+            count = sum(int(value) for value in (payload.get("source_count") or {}).values())
+            count = max(1, count)
+            for signature in signatures:
+                frequency[signature] = frequency.get(signature, 0) + count
+        return frequency
+
+    def _discrete_weighted_route_scores(
+        self,
+        signatures: tuple[tuple[int, ...], ...],
+        score_by_signature: dict[tuple[int, ...], float],
+    ) -> tuple[float, ...]:
+        scores = [max(0.0, float(score_by_signature.get(signature, 0.0))) for signature in signatures]
+        peak = max(scores, default=0.0)
+        if peak <= 1.0e-12:
+            return tuple(1.0 for _signature in signatures)
+        weights = []
+        for score in scores:
+            ratio = score / peak if peak > 0.0 else 0.0
+            if ratio >= 2.0 / 3.0:
+                weights.append(3.0)
+            elif ratio >= 1.0 / 3.0:
+                weights.append(2.0)
+            else:
+                weights.append(1.0)
+        return tuple(weights)
+
+    def _weighted_route_incompatibility_scores(
+        self,
+        routes: list[RouteColumn],
+        value_by_signature: dict[tuple[int, ...], float],
+    ) -> dict[tuple[int, ...], float]:
+        scores = {route.signature: 0.0 for route in routes}
+        for left_index, left in enumerate(routes):
+            for right in routes[left_index + 1 :]:
+                left_right = route_transition_ready_time(self.data, left, right, start_time=0.0)
+                right_left = route_transition_ready_time(self.data, right, left, start_time=0.0)
+                if left_right is not None or right_left is not None:
+                    continue
+                scores[left.signature] += 1.0 + float(value_by_signature.get(right.signature, 0.0))
+                scores[right.signature] += 1.0 + float(value_by_signature.get(left.signature, 0.0))
+        return scores
+
+    def _expand_weighted_route_core_with_pool(
+        self,
+        routes: list[RouteColumn],
+        value_by_signature: dict[tuple[int, ...], float],
+    ) -> list[RouteColumn]:
+        if len(routes) >= max(2, self.weighted_route_schedule_packing_max_routes):
+            return list(routes[: max(2, self.weighted_route_schedule_packing_max_routes)])
+        core_tasks = {int(task) for route in routes for task in route.task_set}
+        if not core_tasks:
+            return list(routes)
+        existing = {route.signature for route in routes}
+        expanded = list(routes)
+        candidates = []
+        for route in self.pool.routes:
+            if route.signature in existing:
+                continue
+            overlap = len(set(route.task_set) & core_tasks) / float(max(1, min(len(route.task_set), len(core_tasks))))
+            if overlap < 0.5:
+                continue
+            candidates.append((overlap, float(value_by_signature.get(route.signature, 0.0)), -len(route.task_set), route.signature, route))
+        for _overlap, _value, _size, _signature, route in sorted(
+            candidates,
+            key=lambda item: (-item[0], -item[1], item[2], item[3]),
+        ):
+            if len(expanded) >= max(2, self.weighted_route_schedule_packing_max_routes):
+                break
+            expanded.append(route)
+            existing.add(route.signature)
+        return expanded
+
+    def _weighted_route_schedule_packing_candidate_patterns(
+        self,
+        routes: list[RouteColumn],
+        value_by_signature: dict[tuple[int, ...], float],
+        conflict_frequency: dict[tuple[int, ...], int],
+        *,
+        source: str,
+    ) -> list[tuple[str, tuple[float, ...]]]:
+        signatures = normalize_signatures(tuple(route.signature for route in routes))
+        patterns: list[tuple[str, tuple[float, ...]]] = []
+        core_weights = tuple(1.0 for _signature in signatures)
+        patterns.append(("conflict_core", core_weights))
+
+        conflict_score = self._discrete_weighted_route_scores(
+            signatures,
+            {signature: float(conflict_frequency.get(signature, 0)) for signature in signatures},
+        )
+        if any(weight != 1.0 for weight in conflict_score):
+            patterns.append(("conflict_score_discrete", conflict_score))
+
+        incompat_score = self._discrete_weighted_route_scores(
+            signatures,
+            self._weighted_route_incompatibility_scores(routes, value_by_signature),
+        )
+        if any(weight != 1.0 for weight in incompat_score):
+            patterns.append(("incompat_degree_discrete", incompat_score))
+
+        lp_x_conflict = self._discrete_weighted_route_scores(
+            signatures,
+            {
+                signature: float(value_by_signature.get(signature, 0.0)) * float(conflict_frequency.get(signature, 0))
+                for signature in signatures
+            },
+        )
+        if any(conflict_frequency.get(signature, 0) > 0 for signature in signatures) and any(
+            weight != 1.0 for weight in lp_x_conflict
+        ):
+            patterns.append(("lp_x_conflict_discrete", lp_x_conflict))
+
+        seen: set[tuple[float, ...]] = set()
+        unique: list[tuple[str, tuple[float, ...]]] = []
+        for pattern, weights in patterns:
+            if weights in seen:
+                continue
+            seen.add(weights)
+            unique.append((pattern, weights))
+        return unique
+
+    def _separate_weighted_route_schedule_packing_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
+        """分离有限 support 上的 weighted route-schedule packing cut。"""
+
+        if not self.weighted_route_schedule_packing_cuts_enabled:
+            return 0
+        if node.depth > self.weighted_route_schedule_packing_max_depth:
+            return 0
+        rounds = self.weighted_route_schedule_packing_cut_rounds_by_node.get(node.id, 0)
+        if rounds >= self.weighted_route_schedule_packing_max_rounds_per_node:
+            return 0
+
+        min_violation = max(self.integer_tol, self.weighted_route_schedule_packing_min_violation)
+        global_budget = max(0.0, self.time_limit * self.weighted_route_schedule_packing_global_time_ratio)
+        if global_budget > 0.0 and self.weighted_route_schedule_packing_oracle_time_total >= global_budget:
+            self.stats.weighted_route_schedule_packing_stopped_by_budget += 1
+            self.logger.log(
+                "weighted_route_schedule_packing_diagnostics",
+                node_id=node.id,
+                depth=node.depth,
+                round=rounds + 1,
+                stopped_by="global_time_budget",
+                added=0,
+            )
+            return 0
+
+        diagnostics: dict[str, Any] = {
+            "vehicles_checked": 0,
+            "vehicles_with_support": 0,
+            "candidate_sets": 0,
+            "candidates_after_precheck": 0,
+            "candidates_by_source": {},
+            "candidates_by_alpha": {},
+            "oracle_requests": 0,
+            "oracle_computations": 0,
+            "cache_hits": 0,
+            "oracle_incomplete": 0,
+            "exact_not_violated": 0,
+            "duplicate": 0,
+            "violated_candidates": 0,
+            "cuts_added": 0,
+            "best_violation": 0.0,
+            "oracle_time": 0.0,
+            "oracle_states_total": 0,
+            "oracle_states_max": 0,
+            "stopped_by": None,
+        }
+        started = time.perf_counter()
+        self.weighted_route_schedule_packing_cut_rounds_by_node[node.id] = rounds + 1
+
+        support_by_vehicle = {
+            int(vehicle): self._schedule_support_routes(
+                solution,
+                int(vehicle),
+                max_routes=max(self.route_set_schedule_packing_cut_max_support_routes, self.weighted_route_schedule_packing_max_routes),
+            )
+            for vehicle in self.data.vehicles
+        }
+        support_values_by_vehicle = {
+            vehicle: {route.signature: float(value) for value, route in support}
+            for vehicle, support in support_by_vehicle.items()
+        }
+        route_by_signature = {route.signature: route for route in self.pool.routes}
+        for support in support_by_vehicle.values():
+            for _value, route in support:
+                route_by_signature.setdefault(route.signature, route)
+        for signatures, payload in self.weighted_route_schedule_packing_witness_memory.items():
+            for route in payload.get("routes") or []:
+                if route.signature in signatures:
+                    route_by_signature.setdefault(route.signature, route)
+        conflict_frequency = self._weighted_route_conflict_frequency()
+
+        raw_candidates: list[tuple[float, float, int, str, str, tuple[tuple[int, ...], ...], list[RouteColumn], tuple[float, ...], float, float]] = []
+        seen_precheck: set[tuple] = set()
+
+        def count_by(mapping_name: str, key: str) -> None:
+            bucket = diagnostics[mapping_name]
+            bucket[key] = int(bucket.get(key, 0)) + 1
+
+        def consider(
+            *,
+            vehicle: int,
+            routes: list[RouteColumn],
+            source: str,
+            source_strength: float,
+        ) -> None:
+            signatures, ordered_routes = self._weighted_route_signature_routes(routes)
+            if len(signatures) < 2:
+                return
+            if len(signatures) > max(2, self.weighted_route_schedule_packing_max_routes):
+                signatures = signatures[: max(2, self.weighted_route_schedule_packing_max_routes)]
+                ordered_routes = [route_by_signature[signature] for signature in signatures if signature in route_by_signature]
+            if any(signature not in route_by_signature for signature in signatures):
+                return
+            value_by_signature = support_values_by_vehicle.get(int(vehicle), {})
+            if source != "support_top":
+                ordered_routes = self._expand_weighted_route_core_with_pool(ordered_routes, value_by_signature)
+                signatures, ordered_routes = self._weighted_route_signature_routes(ordered_routes)
+            y_value = float(solution.y_values.get(int(vehicle), 0.0))
+            for alpha_pattern, weights in self._weighted_route_schedule_packing_candidate_patterns(
+                ordered_routes,
+                value_by_signature,
+                conflict_frequency,
+                source=source,
+            ):
+                diagnostics["candidate_sets"] = int(diagnostics["candidate_sets"]) + 1
+                count_by("candidates_by_source", source)
+                count_by("candidates_by_alpha", alpha_pattern)
+                if not any(weight > 0.0 for weight in weights):
+                    continue
+                activity = sum(
+                    float(weight) * float(value_by_signature.get(signature, 0.0))
+                    for signature, weight in zip(signatures, weights)
+                )
+                cheap_lower_beta = max(weights, default=0.0)
+                potential = activity - cheap_lower_beta * y_value
+                if potential <= min_violation:
+                    continue
+                key = (int(vehicle), signatures, weights)
+                if key in seen_precheck:
+                    diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
+                    continue
+                seen_precheck.add(key)
+                diagnostics["candidates_after_precheck"] = int(diagnostics["candidates_after_precheck"]) + 1
+                score = potential + source_strength - 0.001 * float(len(signatures))
+                raw_candidates.append(
+                    (score, potential, int(vehicle), source, alpha_pattern, signatures, ordered_routes, weights, activity, y_value)
+                )
+
+        for vehicle in self.data.vehicles:
+            vehicle = int(vehicle)
+            diagnostics["vehicles_checked"] = int(diagnostics["vehicles_checked"]) + 1
+            support = support_by_vehicle[vehicle]
+            if len(support) >= 2:
+                diagnostics["vehicles_with_support"] = int(diagnostics["vehicles_with_support"]) + 1
+                for routes in self._route_set_schedule_packing_candidates(support):
+                    consider(vehicle=vehicle, routes=list(routes), source="support_top", source_strength=0.0)
+
+        for signatures, payload in self.weighted_route_schedule_packing_witness_memory.items():
+            routes = [route_by_signature[signature] for signature in signatures if signature in route_by_signature]
+            if len(routes) < 2:
+                continue
+            source_count = payload.get("source_count") or {}
+            source = max(source_count, key=lambda key: int(source_count[key])) if source_count else "witness"
+            strength = 10.0 + 0.1 * sum(int(value) for value in source_count.values())
+            vehicles = payload.get("vehicles") or set(int(vehicle) for vehicle in self.data.vehicles)
+            for vehicle in sorted(int(item) for item in vehicles):
+                if vehicle not in support_values_by_vehicle:
+                    continue
+                consider(vehicle=vehicle, routes=routes, source=str(source), source_strength=strength)
+
+        self.stats.weighted_route_schedule_packing_candidates_generated += int(diagnostics["candidate_sets"])
+        self.stats.weighted_route_schedule_packing_candidates_after_precheck += int(diagnostics["candidates_after_precheck"])
+        for key, value in diagnostics["candidates_by_source"].items():
+            self.stats.weighted_route_schedule_packing_candidates_by_source[str(key)] = (
+                self.stats.weighted_route_schedule_packing_candidates_by_source.get(str(key), 0) + int(value)
+            )
+        for key, value in diagnostics["candidates_by_alpha"].items():
+            self.stats.weighted_route_schedule_packing_candidates_by_alpha[str(key)] = (
+                self.stats.weighted_route_schedule_packing_candidates_by_alpha.get(str(key), 0) + int(value)
+            )
+
+        raw_candidates.sort(key=lambda item: (-item[0], -item[1], item[2], item[3], item[4], item[5]))
+        added = 0
+        added_payload: list[dict[str, Any]] = []
+        for _score, _potential, vehicle, source, alpha_pattern, signatures, routes, weights, activity, y_value in raw_candidates[
+            : max(0, self.weighted_route_schedule_packing_max_candidates)
+        ]:
+            if added >= max(1, self.weighted_route_schedule_packing_max_cuts_per_round):
+                break
+            if (
+                self.weighted_route_schedule_packing_node_time_budget > 0.0
+                and time.perf_counter() - started > self.weighted_route_schedule_packing_node_time_budget
+            ):
+                diagnostics["stopped_by"] = "node_time_budget"
+                self.stats.weighted_route_schedule_packing_stopped_by_budget += 1
+                break
+            if global_budget > 0.0 and self.weighted_route_schedule_packing_oracle_time_total >= global_budget:
+                diagnostics["stopped_by"] = "global_time_budget"
+                self.stats.weighted_route_schedule_packing_stopped_by_budget += 1
+                break
+
+            diagnostics["oracle_requests"] = int(diagnostics["oracle_requests"]) + 1
+            oracle_started = time.perf_counter()
+            beta, states, cache_hit = self._weighted_route_schedule_packing_bound_with_cache_status(routes, weights)
+            oracle_time = time.perf_counter() - oracle_started
+            if cache_hit:
+                diagnostics["cache_hits"] = int(diagnostics["cache_hits"]) + 1
+                self.stats.weighted_route_schedule_packing_cache_hits += 1
+            else:
+                diagnostics["oracle_computations"] = int(diagnostics["oracle_computations"]) + 1
+                diagnostics["oracle_time"] = float(diagnostics["oracle_time"]) + oracle_time
+                self.weighted_route_schedule_packing_oracle_time_total += oracle_time
+                self.stats.weighted_route_schedule_packing_oracle_time += oracle_time
+            self.stats.weighted_route_schedule_packing_oracle_requests += 1
+            if beta is None or states is None:
+                diagnostics["oracle_incomplete"] = int(diagnostics["oracle_incomplete"]) + 1
+                self.stats.weighted_route_schedule_packing_oracle_incomplete += 1
+                continue
+            diagnostics["oracle_states_total"] = int(diagnostics["oracle_states_total"]) + int(states)
+            diagnostics["oracle_states_max"] = max(int(diagnostics["oracle_states_max"]), int(states))
+            self.stats.weighted_route_schedule_packing_oracle_states_total += int(states)
+            self.stats.weighted_route_schedule_packing_oracle_states_max = max(
+                int(self.stats.weighted_route_schedule_packing_oracle_states_max),
+                int(states),
+            )
+            violation = activity - float(beta) * y_value
+            diagnostics["best_violation"] = max(float(diagnostics["best_violation"]), float(violation))
+            self.stats.weighted_route_schedule_packing_best_violation = max(
+                float(self.stats.weighted_route_schedule_packing_best_violation),
+                float(violation),
+            )
+            if violation <= min_violation:
+                diagnostics["exact_not_violated"] = int(diagnostics["exact_not_violated"]) + 1
+                self.stats.weighted_route_schedule_packing_exact_not_violated += 1
+                continue
+            cut = WeightedScheduleRouteSetPackingCut(
+                id=self._allocate_cut_id(),
+                vehicle=int(vehicle),
+                signatures=signatures,
+                weights=weights,
+                upper_bound=float(beta),
+                oracle_states=int(states),
+                source_vehicle=int(vehicle),
+                source=str(source),
+                alpha_pattern=str(alpha_pattern),
+            )
+            if cut.key in self.cut_keys:
+                diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
+                self.stats.weighted_route_schedule_packing_duplicate_skips += 1
+                continue
+            self.cuts.append(cut)
+            self.cut_keys.add(cut.key)
+            self.cut_inactive_age[cut.key] = 0
+            added += 1
+            diagnostics["violated_candidates"] = int(diagnostics["violated_candidates"]) + 1
+            self.stats.weighted_route_schedule_packing_violated_candidates += 1
+            self.weighted_route_schedule_packing_successful_sets.add(signatures)
+            added_payload.append(
+                {
+                    "id": cut.id,
+                    "vehicle": int(vehicle),
+                    "route_count": len(signatures),
+                    "signatures": [list(signature) for signature in signatures],
+                    "weights": [round(float(weight), 9) for weight in weights],
+                    "upper_bound": round(float(beta), 9),
+                    "activity": round(float(activity), 9),
+                    "y": round(float(y_value), 9),
+                    "activity_minus_rhs": round(float(violation), 9),
+                    "oracle_states": int(states),
+                    "oracle_time": round(float(oracle_time), 6),
+                    "source": str(source),
+                    "alpha_pattern": str(alpha_pattern),
+                    "cache_hit": bool(cache_hit),
+                }
+            )
+
+        diagnostics["cuts_added"] = added
+        diagnostics["oracle_time"] = round(float(diagnostics["oracle_time"]), 6)
+        self.stats.weighted_route_schedule_packing_oracle_computations += int(diagnostics["oracle_computations"])
+        if added:
+            self.stats.cuts_added += added
+            self.stats.weighted_route_schedule_packing_cuts_added += added
+            roi_signatures = normalize_signatures(
+                tuple(
+                    tuple(signature)
+                    for payload in added_payload
+                    for signature in payload.get("signatures", ())
+                )
+            )
+            roi_vehicles = [int(payload["vehicle"]) for payload in added_payload]
+            roi_patterns = tuple(str(payload.get("alpha_pattern", "")) for payload in added_payload)
+            self._register_cut_roi(
+                node,
+                "weighted_schedule_route_set_packing",
+                added,
+                solution.objective,
+                roi_context=self._route_pack_roi_context(
+                    solution=solution,
+                    vehicles=roi_vehicles,
+                    cut_signatures=roi_signatures,
+                    alpha_patterns=roi_patterns,
+                ),
+            )
+            self.logger.log(
+                "cut_added",
+                node_id=node.id,
+                family="weighted_schedule_route_set_packing",
+                added=added,
+                cuts=added_payload,
+            )
+        self.logger.log(
+            "weighted_route_schedule_packing_diagnostics",
+            node_id=node.id,
+            depth=node.depth,
+            round=rounds + 1,
+            **diagnostics,
+        )
+        return added
+
     def _separate_route_set_schedule_packing_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
         """分离高阶 route-set schedule packing cut。
 
@@ -4158,6 +5645,13 @@ class CleanBPCTree:
                     node_id=node.id,
                     violation=float(violation),
                 )
+                self._record_weighted_route_schedule_packing_witness(
+                    list(routes),
+                    source="route_pack_witness",
+                    vehicle=int(vehicle),
+                    node_id=node.id,
+                    violation=float(violation),
+                )
                 candidates.append((violation, len(signatures), int(vehicle), signatures, list(routes), activity, upper_bound, states, y_value))
 
         if not candidates:
@@ -4220,7 +5714,26 @@ class CleanBPCTree:
         self.stats.schedule_route_set_packing_cuts_added += added
         diagnostics["oracle_time"] = round(float(diagnostics["oracle_time"]), 6)
         log_diagnostics(added)
-        self._register_cut_roi(node, "schedule_route_set_packing", added, solution.objective)
+        roi_signatures = normalize_signatures(
+            tuple(
+                tuple(signature)
+                for payload in added_payload
+                for signature in payload.get("signatures", ())
+            )
+        )
+        roi_vehicles = [int(payload["vehicle"]) for payload in added_payload]
+        self._register_cut_roi(
+            node,
+            "schedule_route_set_packing",
+            added,
+            solution.objective,
+            roi_context=self._route_pack_roi_context(
+                solution=solution,
+                vehicles=roi_vehicles,
+                cut_signatures=roi_signatures,
+                alpha_patterns=("uniform",),
+            ),
+        )
         self.logger.log(
             "cut_added",
             node_id=node.id,
@@ -4274,7 +5787,10 @@ class CleanBPCTree:
 
         def explained_penalty(routes: list[RouteColumn]) -> int:
             task_union = {int(task) for route in routes for task in route.task_set}
-            return int(any(set(tasks).issubset(task_union) for tasks in self.task_schedule_capacity_successful_sets))
+            signatures = set(normalize_signatures(tuple(route.signature for route in routes)))
+            task_explained = any(set(tasks).issubset(task_union) for tasks in self.task_schedule_capacity_successful_sets)
+            route_explained = any(set(weighted).issubset(signatures) for weighted in self.weighted_route_schedule_packing_successful_sets)
+            return int(task_explained or route_explained)
 
         candidates.sort(key=lambda routes: (explained_penalty(routes), len(routes), normalize_signatures(tuple(route.signature for route in routes))))
         return candidates
@@ -4355,6 +5871,13 @@ class CleanBPCTree:
                         node_id=node.id,
                         violation=float(violation),
                     )
+                    self._record_weighted_route_schedule_packing_witness(
+                        pair_routes,
+                        source="incompatibility_witness",
+                        vehicle=int(vehicle),
+                        node_id=node.id,
+                        violation=float(violation),
+                    )
                     candidates.append((violation, 2, int(vehicle), signatures, "schedule_pair_conflict", pair_routes, activity, y_value))
 
             for clique_indices in self._greedy_schedule_incompatibility_cliques(values, adjacency):
@@ -4371,6 +5894,13 @@ class CleanBPCTree:
                     continue
                 seen_candidate_keys.add(key)
                 self._record_task_schedule_capacity_witness(
+                    clique_routes,
+                    source="incompatibility_witness",
+                    vehicle=int(vehicle),
+                    node_id=node.id,
+                    violation=float(violation),
+                )
+                self._record_weighted_route_schedule_packing_witness(
                     clique_routes,
                     source="incompatibility_witness",
                     vehicle=int(vehicle),
@@ -5187,6 +6717,12 @@ class CleanBPCTree:
                 vehicle=int(vehicle),
                 node_id=node.id,
             )
+            self._record_weighted_route_schedule_packing_witness(
+                list(routes),
+                source="rim_witness",
+                vehicle=int(vehicle),
+                node_id=node.id,
+            )
 
             pair_added = self._add_schedule_pair_conflict_cuts(
                 node,
@@ -5264,6 +6800,12 @@ class CleanBPCTree:
         if len(signatures) < 2:
             return (0, False, None)
         self._record_task_schedule_capacity_witness(
+            routes,
+            source="route_pack_witness",
+            vehicle=source_vehicle,
+            node_id=node.id,
+        )
+        self._record_weighted_route_schedule_packing_witness(
             routes,
             source="route_pack_witness",
             vehicle=source_vehicle,

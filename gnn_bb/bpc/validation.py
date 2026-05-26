@@ -53,6 +53,15 @@ class RouteSetSchedulePackingResult:
     exact: bool
 
 
+@dataclass(frozen=True)
+class WeightedRouteSetSchedulePackingResult:
+    """中文注释：一组 route 在同一辆车上最多可排程多少加权 route 的 exact 证书。"""
+
+    upper_bound: float
+    states_explored: int
+    exact: bool
+
+
 def evaluate_route_at_start(data: BPCData, route: RouteColumn, start_time: float) -> dict | None:
     current = 0
     current_time = float(start_time)
@@ -211,6 +220,75 @@ def exact_route_set_schedule_capacity(
                         return RouteSetSchedulePackingResult(max_count, states_explored, True)
 
     return RouteSetSchedulePackingResult(best_cardinality, states_explored, True)
+
+
+def exact_weighted_route_set_schedule_capacity(
+    data: BPCData,
+    routes: list[RouteColumn] | tuple[RouteColumn, ...],
+    weights: list[float] | tuple[float, ...],
+    *,
+    max_states: int = 200000,
+) -> WeightedRouteSetSchedulePackingResult:
+    """精确计算同一辆车最多能排程的 route 权重和。
+
+    中文注释：候选 route 与权重只来自当前有限 support。若状态数超过上限，
+    返回 exact=False，调用方不能用该 upper_bound 加 cut。
+    """
+
+    weighted_routes = [
+        (route, max(0.0, float(weight)))
+        for route, weight in zip(routes, weights)
+        if max(0.0, float(weight)) > CHECK_TOL
+    ]
+    if not weighted_routes:
+        return WeightedRouteSetSchedulePackingResult(0.0, 0, True)
+
+    route_list = [route for route, _weight in weighted_routes]
+    weight_list = [weight for _route, weight in weighted_routes]
+    count = len(route_list)
+    max_count = min(count, int(data.sortie_limit))
+    best_ready: dict[tuple[int, int], float] = {}
+    states_explored = 0
+    best_weight = 0.0
+
+    for index, route in enumerate(route_list):
+        evaluated = evaluate_route_at_start(data, route, 0.0)
+        states_explored += 1
+        if max_states > 0 and states_explored > max_states:
+            return WeightedRouteSetSchedulePackingResult(best_weight, states_explored, False)
+        if evaluated is None:
+            continue
+        key = (1 << index, index)
+        best_ready[key] = float(evaluated["ready_time"])
+        best_weight = max(best_weight, float(weight_list[index]))
+
+    for cardinality in range(1, max_count):
+        items = [
+            (state, ready)
+            for state, ready in best_ready.items()
+            if state[0].bit_count() == cardinality
+        ]
+        if not items:
+            continue
+        for (mask, _last), ready in sorted(items, key=lambda item: (item[1], item[0])):
+            for nxt, route in enumerate(route_list):
+                if mask & (1 << nxt):
+                    continue
+                evaluated = evaluate_route_at_start(data, route, ready)
+                states_explored += 1
+                if max_states > 0 and states_explored > max_states:
+                    return WeightedRouteSetSchedulePackingResult(best_weight, states_explored, False)
+                if evaluated is None:
+                    continue
+                next_mask = mask | (1 << nxt)
+                next_key = (next_mask, nxt)
+                next_ready = float(evaluated["ready_time"])
+                if next_ready + CHECK_TOL < best_ready.get(next_key, float("inf")):
+                    best_ready[next_key] = next_ready
+                    route_weight = sum(weight for bit, weight in enumerate(weight_list) if next_mask & (1 << bit))
+                    best_weight = max(best_weight, float(route_weight))
+
+    return WeightedRouteSetSchedulePackingResult(best_weight, states_explored, True)
 
 
 def route_transition_ready_time(

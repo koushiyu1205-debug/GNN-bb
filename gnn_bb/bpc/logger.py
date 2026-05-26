@@ -46,6 +46,8 @@ class BPCLogger:
             "lm_rank1_diagnostics",
             "schedule_subset_cost_diagnostics",
             "route_set_schedule_packing_diagnostics",
+            "weighted_route_schedule_packing_diagnostics",
+            "route_pack_roi_diagnostics",
             "schedule_route_set_packing_conflict_diagnostics",
             "schedule_pack_diagnostic",
             "schedule_pack_relaxation",
@@ -178,6 +180,31 @@ class BPCLogger:
                 f"states_max={record.get('oracle_states_max')} cache={record.get('cache_hits')} "
                 f"time={record.get('oracle_time')}{disabled_text}"
             )
+        if event == "weighted_route_schedule_packing_diagnostics":
+            stopped = record.get("stopped_by")
+            stopped_text = "" if not stopped else f" stopped={stopped}"
+            return (
+                f"{prefix} weighted-route-pack diag node {record['node_id']} round={record.get('round')} "
+                f"vehicles={record.get('vehicles_with_support')}/{record.get('vehicles_checked')} "
+                f"cand={record.get('candidate_sets')}/{record.get('candidates_after_precheck')} "
+                f"oracle={record.get('oracle_computations')}/{record.get('oracle_requests')} "
+                f"cache={record.get('cache_hits')} incomplete={record.get('oracle_incomplete')} "
+                f"not_viol={record.get('exact_not_violated')} dup={record.get('duplicate')} "
+                f"violated={record.get('violated_candidates')} added={record.get('cuts_added', record.get('added'))} "
+                f"best_viol={record.get('best_violation')} states_max={record.get('oracle_states_max')} "
+                f"time={record.get('oracle_time')}{stopped_text}"
+            )
+        if event == "route_pack_roi_diagnostics":
+            return (
+                f"{prefix} route-pack-roi node {record.get('node_id')} family={record.get('family')} "
+                f"stage={record.get('stage')} class={record.get('classification')} "
+                f"core={record.get('cut_core_signature_count')} "
+                f"same_pool={record.get('same_pool_replacement_count')} "
+                f"pricing={record.get('pricing_replacement_count')} "
+                f"old_overlap={record.get('max_task_overlap_old_pool')} "
+                f"new_overlap={record.get('max_task_overlap_new_pricing')} "
+                f"delta={record.get('objective_improvement')}"
+            )
         if event == "schedule_route_set_packing_conflict_diagnostics":
             return (
                 f"{prefix} route-pack-conflict diag node {record['node_id']} "
@@ -298,6 +325,12 @@ class BPCLogger:
                         f"U={head.get('upper_bound')}, y={head.get('y')}, viol={head.get('activity_minus_rhs')}, "
                         f"states={head.get('oracle_states')})"
                     )
+            elif str(record.get("family", "")) == "weighted_schedule_route_set_packing" and head:
+                detail = (
+                    f" first(vehicle={head.get('vehicle')}, routes={head.get('route_count')}, "
+                    f"beta={head.get('upper_bound')}, alpha={head.get('alpha_pattern')}, "
+                    f"viol={head.get('activity_minus_rhs')}, states={head.get('oracle_states')})"
+                )
             elif str(record.get("family", "")) == "schedule_incompatibility" and head:
                 detail = (
                     f" pair={record.get('pair_added')} clique={record.get('clique_added')} "
@@ -360,6 +393,7 @@ class BPCLogger:
                 f"pair={record.get('schedule_pair_conflict_cuts_added')} "
                 f"clique={record.get('schedule_clique_conflict_cuts_added')} "
                 f"route_pack={record.get('schedule_route_set_packing_cuts_added')} "
+                f"weighted_route_pack={record.get('weighted_route_schedule_packing_cuts_added')} "
                 f"nogood={record.get('schedule_nogood_cuts_added')} "
                 f"sched_cap={record.get('schedule_capacity_cuts_added')} "
                 f"sched_pack_adapt={record.get('schedule_pack_adaptive_runs')}/"

@@ -77,6 +77,58 @@ class ScheduleNoGoodCut:
         return -self.upper_bound
 
 
+@dataclass(frozen=True)
+class WeightedScheduleRouteSetPackingCut:
+    """中文注释：有限 route support 上的 weighted schedule packing cut。"""
+
+    id: int
+    vehicle: int
+    signatures: tuple[tuple[int, ...], ...]
+    weights: tuple[float, ...]
+    upper_bound: float
+    oracle_states: int
+    source_vehicle: int | None = None
+    source: str = "separation"
+    alpha_pattern: str = "lp_value"
+    kind: str = "weighted_schedule_route_set_packing"
+
+    def __post_init__(self) -> None:
+        if len(self.signatures) != len(self.weights):
+            raise ValueError("weighted route-set packing cut requires one weight per signature")
+
+    @property
+    def rhs(self) -> float:
+        return 0.0
+
+    @property
+    def sense(self) -> str:
+        return "<="
+
+    @property
+    def key(self) -> tuple:
+        return (
+            self.kind,
+            int(self.vehicle),
+            self.signatures,
+            tuple(round(float(weight), 9) for weight in self.weights),
+            round(float(self.upper_bound), 9),
+        )
+
+    @property
+    def weight_by_signature(self) -> dict[tuple[int, ...], float]:
+        return {signature: float(weight) for signature, weight in zip(self.signatures, self.weights)}
+
+    def coefficient(self, route: RouteColumn, vehicle: int) -> float:
+        if int(vehicle) != int(self.vehicle):
+            return 0.0
+        return self.weight_by_signature.get(route.signature, 0.0)
+
+    def y_coefficient(self, vehicle: int) -> float:
+        if int(vehicle) != int(self.vehicle):
+            return 0.0
+        return -float(self.upper_bound)
+
+
 def make_no_good_cuts_for_all_vehicles(
     vehicles: tuple[int, ...],
     routes: list[RouteColumn],
@@ -320,6 +372,7 @@ def make_schedule_capacity_cuts_for_all_vehicles(
 
 Cut = (
     ScheduleNoGoodCut
+    | WeightedScheduleRouteSetPackingCut
     | CrossingCut
     | ScheduleCapacityCut
     | ScheduleSubsetCostLowerBoundCut

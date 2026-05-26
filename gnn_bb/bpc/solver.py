@@ -59,6 +59,9 @@ class BPCResult:
     restricted_master_integer_repair_time: float
     restricted_master_integer_repair_states: int
     restricted_master_integer_repair_best_objective: float | None
+    restricted_master_adaptive_skips: int
+    restricted_master_adaptive_time_limit_reductions: int
+    restricted_master_adaptive_failure_streak_max: int
     crossing_cuts_added: int
     crossing_cuts_upgraded: int
     subset_row_cuts_added: int
@@ -109,6 +112,24 @@ class BPCResult:
     route_set_schedule_packing_oracle_time: float
     route_set_schedule_packing_cache_hits: int
     route_set_schedule_packing_added_but_no_bound_improvement: int
+    weighted_route_schedule_packing_cuts_added: int
+    weighted_route_schedule_packing_candidates_generated: int
+    weighted_route_schedule_packing_candidates_after_precheck: int
+    weighted_route_schedule_packing_candidates_by_source: dict[str, int]
+    weighted_route_schedule_packing_candidates_by_alpha: dict[str, int]
+    weighted_route_schedule_packing_oracle_requests: int
+    weighted_route_schedule_packing_oracle_computations: int
+    weighted_route_schedule_packing_cache_hits: int
+    weighted_route_schedule_packing_oracle_incomplete: int
+    weighted_route_schedule_packing_exact_not_violated: int
+    weighted_route_schedule_packing_violated_candidates: int
+    weighted_route_schedule_packing_best_violation: float
+    weighted_route_schedule_packing_oracle_time: float
+    weighted_route_schedule_packing_oracle_states_total: int
+    weighted_route_schedule_packing_oracle_states_max: int
+    weighted_route_schedule_packing_added_but_no_bound_improvement: int
+    weighted_route_schedule_packing_stopped_by_budget: int
+    weighted_route_schedule_packing_duplicate_skips: int
     fleet_lower_bound_cuts_added: int
     fleet_lower_bound_value: int
     fleet_lower_bound_oracle_upper_bound: int | None
@@ -140,6 +161,23 @@ class BPCResult:
     route_enumeration_adaptive_runs: int
     route_enumeration_adaptive_skips: int
     route_enumeration_adaptive_easy_skips: int
+    route_pool_restart_nodes: int
+    route_pool_restart_rounds: int
+    route_pool_restart_routes_omitted_total: int
+    route_pool_restart_routes_omitted_max: int
+    route_pool_restart_pricing_recovered_routes: int
+    route_pool_restart_protected_routes_max: int
+    route_pool_hygiene_diagnostic_events: int
+    route_pool_hygiene_task_set_groups_max: int
+    route_pool_hygiene_multi_route_groups_max: int
+    route_pool_hygiene_near_duplicate_groups_max: int
+    route_pool_hygiene_near_duplicate_routes_max: int
+    route_pool_hygiene_max_group_size: int
+    route_pool_hygiene_admission_evaluated: int
+    route_pool_hygiene_admission_admitted: int
+    route_pool_hygiene_admission_filtered: int
+    route_pool_hygiene_admission_protected: int
+    route_pool_hygiene_admission_forced_exact: int
     cuts_purged: int
     generated_routes: int
     generated_columns: int
@@ -211,6 +249,11 @@ def solve_bpc_clean(
     restricted_master_repair_enabled: bool = True,
     restricted_master_repair_max_attempts: int = 3,
     restricted_master_repair_max_states: int = 50000,
+    restricted_master_adaptive_enabled: bool = False,
+    restricted_master_adaptive_min_depth: int = 1,
+    restricted_master_adaptive_after_failures: int = 2,
+    restricted_master_adaptive_reduced_time_limit: float = 5.0,
+    restricted_master_adaptive_skip_after_failures: int = 4,
     branching_strategy: str = "3pb",
     three_pb_pseudocost_candidates: int = 6,
     three_pb_fractional_candidates: int = 6,
@@ -328,6 +371,16 @@ def solve_bpc_clean(
     route_set_schedule_packing_min_objective_improvement: float = 1.0e-7,
     route_set_schedule_packing_stop_after_no_improve_rounds: int = 2,
     route_set_schedule_packing_global_time_limit_ratio: float = 0.10,
+    weighted_route_schedule_packing_cuts_enabled: bool = False,
+    weighted_route_schedule_packing_max_depth: int = 1,
+    weighted_route_schedule_packing_max_rounds_per_node: int = 1,
+    weighted_route_schedule_packing_max_candidates: int = 20,
+    weighted_route_schedule_packing_max_cuts_per_round: int = 5,
+    weighted_route_schedule_packing_max_routes: int = 16,
+    weighted_route_schedule_packing_oracle_max_states: int = 200000,
+    weighted_route_schedule_packing_min_violation: float = 5.0e-2,
+    weighted_route_schedule_packing_node_time_budget: float = 5.0,
+    weighted_route_schedule_packing_global_time_ratio: float = 0.05,
     fleet_lower_bound_cuts_enabled: bool = False,
     fleet_lower_bound_oracle_max_states: int = 500000,
     schedule_pack_diagnostic_enabled: bool = False,
@@ -351,6 +404,26 @@ def solve_bpc_clean(
     route_enumeration_adaptive_enabled: bool = False,
     route_enumeration_adaptive_gap_abs: float = 10.0,
     route_enumeration_adaptive_gap_ratio: float = 3.0e-2,
+    route_pool_hygiene_diagnostics_enabled: bool = False,
+    route_pool_hygiene_diagnostics_min_routes: int = 0,
+    route_pool_hygiene_near_duplicate_abs_tol: float = 1.0e-6,
+    route_pool_hygiene_near_duplicate_rel_tol: float = 1.0e-4,
+    route_pool_hygiene_sample_groups: int = 5,
+    route_pool_hygiene_admission_enabled: bool = False,
+    route_pool_hygiene_admission_max_per_task_set: int = 0,
+    route_pool_hygiene_admission_min_depth: int = 0,
+    route_pool_hygiene_admission_protect_active_task_sets: bool = True,
+    route_pool_hygiene_admission_protect_cut_task_sets: bool = True,
+    route_pool_hygiene_admission_protect_incumbent_task_sets: bool = True,
+    route_pool_hygiene_admission_protect_branch_task_sets: bool = True,
+    route_pool_restart_enabled: bool = False,
+    route_pool_restart_max_routes: int = 0,
+    route_pool_restart_min_global_routes: int = 0,
+    route_pool_restart_keep_recent_rounds: int = 2,
+    route_pool_restart_max_routes_per_task_set: int = 6,
+    route_pool_restart_active_value_tol: float = 1.0e-8,
+    route_pool_restart_keep_cut_signatures: bool = False,
+    route_pool_restart_cleanup_enabled: bool = False,
     three_pb_candidate_budget_enabled: bool = False,
     three_pb_root_pseudocost_candidates: int = 6,
     three_pb_root_fractional_candidates: int = 6,
@@ -415,6 +488,11 @@ def solve_bpc_clean(
             restricted_master_repair_enabled=restricted_master_repair_enabled,
             restricted_master_repair_max_attempts=restricted_master_repair_max_attempts,
             restricted_master_repair_max_states=restricted_master_repair_max_states,
+            restricted_master_adaptive_enabled=restricted_master_adaptive_enabled,
+            restricted_master_adaptive_min_depth=restricted_master_adaptive_min_depth,
+            restricted_master_adaptive_after_failures=restricted_master_adaptive_after_failures,
+            restricted_master_adaptive_reduced_time_limit=restricted_master_adaptive_reduced_time_limit,
+            restricted_master_adaptive_skip_after_failures=restricted_master_adaptive_skip_after_failures,
             branching_strategy=branching_strategy,
             three_pb_pseudocost_candidates=three_pb_pseudocost_candidates,
             three_pb_fractional_candidates=three_pb_fractional_candidates,
@@ -532,6 +610,16 @@ def solve_bpc_clean(
             route_set_schedule_packing_min_objective_improvement=route_set_schedule_packing_min_objective_improvement,
             route_set_schedule_packing_stop_after_no_improve_rounds=route_set_schedule_packing_stop_after_no_improve_rounds,
             route_set_schedule_packing_global_time_limit_ratio=route_set_schedule_packing_global_time_limit_ratio,
+            weighted_route_schedule_packing_cuts_enabled=weighted_route_schedule_packing_cuts_enabled,
+            weighted_route_schedule_packing_max_depth=weighted_route_schedule_packing_max_depth,
+            weighted_route_schedule_packing_max_rounds_per_node=weighted_route_schedule_packing_max_rounds_per_node,
+            weighted_route_schedule_packing_max_candidates=weighted_route_schedule_packing_max_candidates,
+            weighted_route_schedule_packing_max_cuts_per_round=weighted_route_schedule_packing_max_cuts_per_round,
+            weighted_route_schedule_packing_max_routes=weighted_route_schedule_packing_max_routes,
+            weighted_route_schedule_packing_oracle_max_states=weighted_route_schedule_packing_oracle_max_states,
+            weighted_route_schedule_packing_min_violation=weighted_route_schedule_packing_min_violation,
+            weighted_route_schedule_packing_node_time_budget=weighted_route_schedule_packing_node_time_budget,
+            weighted_route_schedule_packing_global_time_ratio=weighted_route_schedule_packing_global_time_ratio,
             fleet_lower_bound_cuts_enabled=fleet_lower_bound_cuts_enabled,
             fleet_lower_bound_oracle_max_states=fleet_lower_bound_oracle_max_states,
             schedule_pack_diagnostic_enabled=schedule_pack_diagnostic_enabled,
@@ -555,6 +643,32 @@ def solve_bpc_clean(
             route_enumeration_adaptive_enabled=route_enumeration_adaptive_enabled,
             route_enumeration_adaptive_gap_abs=route_enumeration_adaptive_gap_abs,
             route_enumeration_adaptive_gap_ratio=route_enumeration_adaptive_gap_ratio,
+            route_pool_hygiene_diagnostics_enabled=route_pool_hygiene_diagnostics_enabled,
+            route_pool_hygiene_diagnostics_min_routes=route_pool_hygiene_diagnostics_min_routes,
+            route_pool_hygiene_near_duplicate_abs_tol=route_pool_hygiene_near_duplicate_abs_tol,
+            route_pool_hygiene_near_duplicate_rel_tol=route_pool_hygiene_near_duplicate_rel_tol,
+            route_pool_hygiene_sample_groups=route_pool_hygiene_sample_groups,
+            route_pool_hygiene_admission_enabled=route_pool_hygiene_admission_enabled,
+            route_pool_hygiene_admission_max_per_task_set=route_pool_hygiene_admission_max_per_task_set,
+            route_pool_hygiene_admission_min_depth=route_pool_hygiene_admission_min_depth,
+            route_pool_hygiene_admission_protect_active_task_sets=(
+                route_pool_hygiene_admission_protect_active_task_sets
+            ),
+            route_pool_hygiene_admission_protect_cut_task_sets=route_pool_hygiene_admission_protect_cut_task_sets,
+            route_pool_hygiene_admission_protect_incumbent_task_sets=(
+                route_pool_hygiene_admission_protect_incumbent_task_sets
+            ),
+            route_pool_hygiene_admission_protect_branch_task_sets=(
+                route_pool_hygiene_admission_protect_branch_task_sets
+            ),
+            route_pool_restart_enabled=route_pool_restart_enabled,
+            route_pool_restart_max_routes=route_pool_restart_max_routes,
+            route_pool_restart_min_global_routes=route_pool_restart_min_global_routes,
+            route_pool_restart_keep_recent_rounds=route_pool_restart_keep_recent_rounds,
+            route_pool_restart_max_routes_per_task_set=route_pool_restart_max_routes_per_task_set,
+            route_pool_restart_active_value_tol=route_pool_restart_active_value_tol,
+            route_pool_restart_keep_cut_signatures=route_pool_restart_keep_cut_signatures,
+            route_pool_restart_cleanup_enabled=route_pool_restart_cleanup_enabled,
             three_pb_candidate_budget_enabled=three_pb_candidate_budget_enabled,
             three_pb_root_pseudocost_candidates=three_pb_root_pseudocost_candidates,
             three_pb_root_fractional_candidates=three_pb_root_fractional_candidates,
@@ -625,6 +739,11 @@ def solve_bpc_clean(
         restricted_master_integer_repair_time=_round(tree_result.stats.restricted_master_integer_repair_time),
         restricted_master_integer_repair_states=tree_result.stats.restricted_master_integer_repair_states,
         restricted_master_integer_repair_best_objective=_round(tree_result.stats.restricted_master_integer_repair_best_objective),
+        restricted_master_adaptive_skips=tree_result.stats.restricted_master_adaptive_skips,
+        restricted_master_adaptive_time_limit_reductions=(
+            tree_result.stats.restricted_master_adaptive_time_limit_reductions
+        ),
+        restricted_master_adaptive_failure_streak_max=tree_result.stats.restricted_master_adaptive_failure_streak_max,
         crossing_cuts_added=tree_result.stats.crossing_cuts_added,
         crossing_cuts_upgraded=tree_result.stats.crossing_cuts_upgraded,
         subset_row_cuts_added=tree_result.stats.subset_row_cuts_added,
@@ -677,6 +796,43 @@ def solve_bpc_clean(
         route_set_schedule_packing_added_but_no_bound_improvement=(
             tree_result.stats.route_set_schedule_packing_added_but_no_bound_improvement
         ),
+        weighted_route_schedule_packing_cuts_added=tree_result.stats.weighted_route_schedule_packing_cuts_added,
+        weighted_route_schedule_packing_candidates_generated=tree_result.stats.weighted_route_schedule_packing_candidates_generated,
+        weighted_route_schedule_packing_candidates_after_precheck=(
+            tree_result.stats.weighted_route_schedule_packing_candidates_after_precheck
+        ),
+        weighted_route_schedule_packing_candidates_by_source=dict(
+            tree_result.stats.weighted_route_schedule_packing_candidates_by_source
+        ),
+        weighted_route_schedule_packing_candidates_by_alpha=dict(
+            tree_result.stats.weighted_route_schedule_packing_candidates_by_alpha
+        ),
+        weighted_route_schedule_packing_oracle_requests=tree_result.stats.weighted_route_schedule_packing_oracle_requests,
+        weighted_route_schedule_packing_oracle_computations=(
+            tree_result.stats.weighted_route_schedule_packing_oracle_computations
+        ),
+        weighted_route_schedule_packing_cache_hits=tree_result.stats.weighted_route_schedule_packing_cache_hits,
+        weighted_route_schedule_packing_oracle_incomplete=tree_result.stats.weighted_route_schedule_packing_oracle_incomplete,
+        weighted_route_schedule_packing_exact_not_violated=(
+            tree_result.stats.weighted_route_schedule_packing_exact_not_violated
+        ),
+        weighted_route_schedule_packing_violated_candidates=(
+            tree_result.stats.weighted_route_schedule_packing_violated_candidates
+        ),
+        weighted_route_schedule_packing_best_violation=_round(
+            tree_result.stats.weighted_route_schedule_packing_best_violation,
+            9,
+        ),
+        weighted_route_schedule_packing_oracle_time=_round(tree_result.stats.weighted_route_schedule_packing_oracle_time),
+        weighted_route_schedule_packing_oracle_states_total=(
+            tree_result.stats.weighted_route_schedule_packing_oracle_states_total
+        ),
+        weighted_route_schedule_packing_oracle_states_max=tree_result.stats.weighted_route_schedule_packing_oracle_states_max,
+        weighted_route_schedule_packing_added_but_no_bound_improvement=(
+            tree_result.stats.weighted_route_schedule_packing_added_but_no_bound_improvement
+        ),
+        weighted_route_schedule_packing_stopped_by_budget=tree_result.stats.weighted_route_schedule_packing_stopped_by_budget,
+        weighted_route_schedule_packing_duplicate_skips=tree_result.stats.weighted_route_schedule_packing_duplicate_skips,
         fleet_lower_bound_cuts_added=tree_result.stats.fleet_lower_bound_cuts_added,
         fleet_lower_bound_value=tree_result.stats.fleet_lower_bound_value,
         fleet_lower_bound_oracle_upper_bound=tree_result.stats.fleet_lower_bound_oracle_upper_bound,
@@ -708,6 +864,23 @@ def solve_bpc_clean(
         route_enumeration_adaptive_runs=tree_result.stats.route_enumeration_adaptive_runs,
         route_enumeration_adaptive_skips=tree_result.stats.route_enumeration_adaptive_skips,
         route_enumeration_adaptive_easy_skips=tree_result.stats.route_enumeration_adaptive_easy_skips,
+        route_pool_restart_nodes=tree_result.stats.route_pool_restart_nodes,
+        route_pool_restart_rounds=tree_result.stats.route_pool_restart_rounds,
+        route_pool_restart_routes_omitted_total=tree_result.stats.route_pool_restart_routes_omitted_total,
+        route_pool_restart_routes_omitted_max=tree_result.stats.route_pool_restart_routes_omitted_max,
+        route_pool_restart_pricing_recovered_routes=tree_result.stats.route_pool_restart_pricing_recovered_routes,
+        route_pool_restart_protected_routes_max=tree_result.stats.route_pool_restart_protected_routes_max,
+        route_pool_hygiene_diagnostic_events=tree_result.stats.route_pool_hygiene_diagnostic_events,
+        route_pool_hygiene_task_set_groups_max=tree_result.stats.route_pool_hygiene_task_set_groups_max,
+        route_pool_hygiene_multi_route_groups_max=tree_result.stats.route_pool_hygiene_multi_route_groups_max,
+        route_pool_hygiene_near_duplicate_groups_max=tree_result.stats.route_pool_hygiene_near_duplicate_groups_max,
+        route_pool_hygiene_near_duplicate_routes_max=tree_result.stats.route_pool_hygiene_near_duplicate_routes_max,
+        route_pool_hygiene_max_group_size=tree_result.stats.route_pool_hygiene_max_group_size,
+        route_pool_hygiene_admission_evaluated=tree_result.stats.route_pool_hygiene_admission_evaluated,
+        route_pool_hygiene_admission_admitted=tree_result.stats.route_pool_hygiene_admission_admitted,
+        route_pool_hygiene_admission_filtered=tree_result.stats.route_pool_hygiene_admission_filtered,
+        route_pool_hygiene_admission_protected=tree_result.stats.route_pool_hygiene_admission_protected,
+        route_pool_hygiene_admission_forced_exact=tree_result.stats.route_pool_hygiene_admission_forced_exact,
         cuts_purged=tree_result.stats.cuts_purged,
         generated_routes=len(tree_result.routes),
         generated_columns=generated_columns,
@@ -735,6 +908,7 @@ def solve_bpc_clean(
                     "kind": cut.kind,
                     "source_vehicle": getattr(cut, "source_vehicle", None),
                     "signatures": [list(signature) for signature in getattr(cut, "signatures", ())],
+                    "weights": list(getattr(cut, "weights", ())),
                     "tasks": list(getattr(cut, "tasks", ())),
                     "sense": cut.sense,
                     "rhs": cut.rhs,
@@ -753,6 +927,7 @@ def solve_bpc_clean(
                     "memory_tasks": list(getattr(cut, "memory_tasks", ())),
                     "oracle_states": getattr(cut, "oracle_states", None),
                     "source": getattr(cut, "source", None),
+                    "alpha_pattern": getattr(cut, "alpha_pattern", None),
                 }
                 for cut in tree_result.cuts
             ],

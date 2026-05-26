@@ -742,6 +742,12 @@ def exact_pricing(
         elif cut.kind == "fleet_lower_bound":
             # 中文注释：fleet LB 只含 y_r 系数，不含 route lambda 系数；它不改变 route reduced cost。
             continue
+        elif cut.kind == "weighted_schedule_route_set_packing":
+            # 中文注释：weighted route-pack cut 是有限 support cut，只约束当前 route pool 中
+            # 已存在的 signatures。新生成列系数为 0，因此 exact pricing 不加入其 dual。
+            if not set(cut.signatures).issubset(existing_signatures):
+                raise ValueError("weighted route-set packing cut references a route outside the current pool")
+            continue
         else:
             raise ValueError(f"未知 cut kind: {cut.kind}")
 

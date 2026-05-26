@@ -37,6 +37,78 @@ SCIP 的职责：
 
 ## 模型记录
 
+### 2026-05-25 CST +0800：route-pool hygiene 诊断与 heuristic admission cap
+
+本次新增默认关闭的 route-pool hygiene 组件，用来诊断和缓解 20 规模中观察到的退化：同一任务集合下存在多条成本接近的 route，LP/cut/branch 可在这些 route 之间替换，导致 cut 掉 A 后换成 B、objective 不动。
+
+安全边界：
+
+- `configs/bpc_clean.yaml` 默认保持 `route_pool_hygiene_*` 全部关闭，因此当前 bench_20_01 最好模型路径不变；
+- 不按 “same task_set 且成本更低” 永久删除 route，因为 route signature 会影响 arc branching、schedule no-good、route-set packing、schedule incompatibility、cut coefficient 和 schedule compatibility；
+- exact pricing 不做 admission 过滤，不修改 reduced-cost 公式，也不跳过最终 certificate；
+- admission cap 只作用于 heuristic / heuristic_boost pricing。若 heuristic 调用产生了被过滤的负 reduced-cost route，即使该调用本身 exhaustive，也会强制标记为非证书，让主循环回到 exact pricing。
+
+新增日志：
+
+- `route_pool_hygiene_diagnostics`：统计 task-set group 数、multi-route group 数、近似重复 route 数、最大 group size 和样例；
+- `route_pool_hygiene_admission`：记录 heuristic pricing 中评估、接纳、过滤的 route 数，以及是否因为过滤而强制回到 exact certificate。
+
+### 2026-05-25 CST +0800：weighted route-schedule packing separator
+
+本次新增默认关闭的 finite-support weighted route-schedule packing cut。它是已有 route-set schedule packing cut 的加权推广，不替代 uniform route-pack separator。
+
+uniform 版本为：
+
+```text
+sum_{p in C} lambda[p,r] <= U(C)y[r]
+```
+
+weighted 版本为：
+
+```text
+sum_{p in C} alpha_p lambda[p,r] <= beta(C, alpha)y[r]
+beta(C, alpha) = max_{真实单车 schedule s subset C} sum_{p in s} alpha_p
+```
+
+其中 `C` 只来自当前 route pool/support 或 strong witness memory，`alpha_p >= 0`。`beta(C, alpha)` 必须由 `exact_weighted_route_set_schedule_capacity()` 完整证明；oracle incomplete、超状态预算或当前 LP 不违反时都不加 cut，不更新 lower bound，不参与 fathoming。
+
+实现边界：
+
+- 新 cut family 为 `weighted_schedule_route_set_packing`，继续走 RMP cut 机制；
+- 只有当前 `C` 内 route signature 有非零系数，未来 pricing 生成的新 signature route 系数为 0；
+- 因此本次不改 pricing reduced-cost 公式；若以后希望新 route 继承非零权重，必须同步扩展 pricing coefficient 和 reduced-cost consistency tests；
+- 候选来自 LP route-pack support、RIM rejected assignment、schedule incompatibility witness、integral validation conflict、route-set packing violated support 和同车高 lambda support，不做全 route 组合枚举；
+- `lp_value` 不再作为主力 alpha；当前使用 `conflict_core`、`conflict_score_discrete`、`incompat_degree_discrete`、`lp_x_conflict_discrete`，离散权重只取 `{1,2,3}`；
+- incomplete oracle 结果按 `(signatures, normalized_alpha)` 缓存，避免同一 run 内重复 expensive oracle；
+- 如果 weighted cut 成功解释了某个 route core，后续 uniform route-pack candidate 只降低优先级，不删除。
+- 新增 `route_pack_roi_diagnostics`，在 route-pack cut 后的下一次 RMP / pricing 诊断 `post_cut_objective_improvement=0.0` 来自旧 pool 退化替代、pricing 新 route 绕过，还是 support 基本不变。
+
+默认配置保持消融级别：
+
+```text
+weighted_route_schedule_packing_cuts_enabled: false
+weighted_route_schedule_packing_max_depth: 1
+weighted_route_schedule_packing_max_rounds_per_node: 1
+weighted_route_schedule_packing_max_candidates: 20
+weighted_route_schedule_packing_max_cuts_per_round: 5
+weighted_route_schedule_packing_max_routes: 16
+weighted_route_schedule_packing_oracle_max_states: 200000
+weighted_route_schedule_packing_min_violation: 5.0e-2
+weighted_route_schedule_packing_node_time_budget: 5.0
+weighted_route_schedule_packing_global_time_ratio: 0.05
+```
+
+新增日志/结果字段包括 candidate generated/prechecked、by-source/by-alpha 计数、oracle requests/computations/cache hits/incomplete、exact not violated、violated candidates、cuts added、best violation、oracle time/states、duplicate skips 和 budget stop。`cut_added` payload 记录 vehicle、signatures、weights、`beta`、activity、`y`、violation、oracle states/time、source、alpha pattern 和 cache hit。`route_pack_roi_diagnostics` 额外记录 `same_pool_degeneracy`、`pricing_mousehole`、`objective_degeneracy_no_support_change` 或 `mixed` 分类。
+
+消融命令示例：
+
+```bash
+python scripts/run_weighted_route_schedule_packing_ablation.py --instances very_small --quiet
+python scripts/run_weighted_route_schedule_packing_ablation.py --instances bench_20_02 --time-limit 1800 --variants baseline weighted_root_only weighted_root_depth1 --quiet
+```
+
+该功能是否值得进入主线，应看 root bound、node count、pricing calls、label pops、RIM rejected、route-pack low-improvement cuts、branch path 和 oracle time。若只增加 cut/oracle time 但 root bound 不动，继续默认关闭。
+
 ### 2026-05-25 CST +0800：task-level schedule-capacity separator v2
 
 本次把 task-level schedule-capacity cut 从旧 root pair/triple 小实验整理成统一 root/shallow separator。cut 形式为：

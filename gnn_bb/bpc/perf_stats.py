@@ -62,6 +62,13 @@ def analyze_csv(path: str | Path) -> list[dict[str, Any]]:
             "restricted_master_route_set_packing_cuts": _int(row.get("restricted_master_integer_route_set_packing_cuts")),
             "restricted_master_schedule_capacity_cuts": _int(row.get("restricted_master_integer_schedule_capacity_cuts")),
             "restricted_master_no_good_cuts": _int(row.get("restricted_master_integer_no_good_cuts")),
+            "restricted_master_adaptive_skips": _int(row.get("restricted_master_adaptive_skips")),
+            "restricted_master_adaptive_time_limit_reductions": _int(
+                row.get("restricted_master_adaptive_time_limit_reductions")
+            ),
+            "restricted_master_adaptive_failure_streak_max": _int(
+                row.get("restricted_master_adaptive_failure_streak_max")
+            ),
             "task_schedule_capacity_cuts_added": _int(row.get("task_schedule_capacity_cuts_added")),
             "task_schedule_capacity_candidates_generated": _int(row.get("task_schedule_capacity_candidates_generated")),
             "task_schedule_capacity_candidates_after_precheck": _int(row.get("task_schedule_capacity_candidates_after_precheck")),
@@ -88,6 +95,78 @@ def analyze_csv(path: str | Path) -> list[dict[str, Any]]:
             "task_schedule_capacity_stopped_by_global_time_budget": _int(row.get("task_schedule_capacity_stopped_by_global_time_budget")),
             "task_schedule_capacity_branch_signal_candidates": _int(row.get("task_schedule_capacity_branch_signal_candidates")),
             "task_schedule_capacity_branch_signal_applied": _int(row.get("task_schedule_capacity_branch_signal_applied")),
+            "weighted_route_schedule_packing_cuts_added": _int(row.get("weighted_route_schedule_packing_cuts_added")),
+            "weighted_route_schedule_packing_candidates_generated": _int(
+                row.get("weighted_route_schedule_packing_candidates_generated")
+            ),
+            "weighted_route_schedule_packing_candidates_after_precheck": _int(
+                row.get("weighted_route_schedule_packing_candidates_after_precheck")
+            ),
+            "weighted_route_schedule_packing_candidates_by_source": row.get(
+                "weighted_route_schedule_packing_candidates_by_source"
+            ),
+            "weighted_route_schedule_packing_candidates_by_alpha": row.get(
+                "weighted_route_schedule_packing_candidates_by_alpha"
+            ),
+            "weighted_route_schedule_packing_oracle_requests": _int(
+                row.get("weighted_route_schedule_packing_oracle_requests")
+            ),
+            "weighted_route_schedule_packing_oracle_computations": _int(
+                row.get("weighted_route_schedule_packing_oracle_computations")
+            ),
+            "weighted_route_schedule_packing_cache_hits": _int(row.get("weighted_route_schedule_packing_cache_hits")),
+            "weighted_route_schedule_packing_oracle_incomplete": _int(
+                row.get("weighted_route_schedule_packing_oracle_incomplete")
+            ),
+            "weighted_route_schedule_packing_exact_not_violated": _int(
+                row.get("weighted_route_schedule_packing_exact_not_violated")
+            ),
+            "weighted_route_schedule_packing_violated_candidates": _int(
+                row.get("weighted_route_schedule_packing_violated_candidates")
+            ),
+            "weighted_route_schedule_packing_best_violation": _number(
+                row.get("weighted_route_schedule_packing_best_violation")
+            )
+            or 0.0,
+            "weighted_route_schedule_packing_oracle_time": _number(row.get("weighted_route_schedule_packing_oracle_time"))
+            or 0.0,
+            "weighted_route_schedule_packing_oracle_states_total": _int(
+                row.get("weighted_route_schedule_packing_oracle_states_total")
+            ),
+            "weighted_route_schedule_packing_oracle_states_max": _int(
+                row.get("weighted_route_schedule_packing_oracle_states_max")
+            ),
+            "weighted_route_schedule_packing_added_but_no_bound_improvement": _int(
+                row.get("weighted_route_schedule_packing_added_but_no_bound_improvement")
+            ),
+            "weighted_route_schedule_packing_stopped_by_budget": _int(
+                row.get("weighted_route_schedule_packing_stopped_by_budget")
+            ),
+            "weighted_route_schedule_packing_duplicate_skips": _int(row.get("weighted_route_schedule_packing_duplicate_skips")),
+            "route_pack_roi_classifications": row.get("route_pack_roi_classifications"),
+            "route_pack_roi_same_pool_degeneracy": _int(row.get("route_pack_roi_same_pool_degeneracy")),
+            "route_pack_roi_pricing_mousehole": _int(row.get("route_pack_roi_pricing_mousehole")),
+            "route_pack_roi_objective_degeneracy_no_support_change": _int(
+                row.get("route_pack_roi_objective_degeneracy_no_support_change")
+            ),
+            "route_pack_roi_mixed": _int(row.get("route_pack_roi_mixed")),
+            "route_pool_restart_nodes": _int(row.get("route_pool_restart_nodes")),
+            "route_pool_restart_rounds": _int(row.get("route_pool_restart_rounds")),
+            "route_pool_restart_routes_omitted_total": _int(row.get("route_pool_restart_routes_omitted_total")),
+            "route_pool_restart_routes_omitted_max": _int(row.get("route_pool_restart_routes_omitted_max")),
+            "route_pool_restart_pricing_recovered_routes": _int(row.get("route_pool_restart_pricing_recovered_routes")),
+            "route_pool_restart_protected_routes_max": _int(row.get("route_pool_restart_protected_routes_max")),
+            "route_pool_hygiene_diagnostic_events": _int(row.get("route_pool_hygiene_diagnostic_events")),
+            "route_pool_hygiene_task_set_groups_max": _int(row.get("route_pool_hygiene_task_set_groups_max")),
+            "route_pool_hygiene_multi_route_groups_max": _int(row.get("route_pool_hygiene_multi_route_groups_max")),
+            "route_pool_hygiene_near_duplicate_groups_max": _int(row.get("route_pool_hygiene_near_duplicate_groups_max")),
+            "route_pool_hygiene_near_duplicate_routes_max": _int(row.get("route_pool_hygiene_near_duplicate_routes_max")),
+            "route_pool_hygiene_max_group_size": _int(row.get("route_pool_hygiene_max_group_size")),
+            "route_pool_hygiene_admission_evaluated": _int(row.get("route_pool_hygiene_admission_evaluated")),
+            "route_pool_hygiene_admission_admitted": _int(row.get("route_pool_hygiene_admission_admitted")),
+            "route_pool_hygiene_admission_filtered": _int(row.get("route_pool_hygiene_admission_filtered")),
+            "route_pool_hygiene_admission_protected": _int(row.get("route_pool_hygiene_admission_protected")),
+            "route_pool_hygiene_admission_forced_exact": _int(row.get("route_pool_hygiene_admission_forced_exact")),
             "open_nodes_remaining": _int(row.get("open_nodes_remaining")),
             "timeout_pending_node_certified": _bool_or_none(row.get("timeout_pending_node_certified")),
             "official_bound_available": _bool_or_none(row.get("official_bound_available")),
@@ -138,6 +217,14 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
     task_schedcap_prechecked_by_source: Counter[str] = Counter()
     task_schedcap_time = 0.0
     task_schedcap_best_violation = 0.0
+    weighted_route_pack = Counter()
+    weighted_route_pack_by_source: Counter[str] = Counter()
+    weighted_route_pack_by_alpha: Counter[str] = Counter()
+    weighted_route_pack_time = 0.0
+    weighted_route_pack_best_violation = 0.0
+    route_pack_roi_classifications: Counter[str] = Counter()
+    route_pool_restart = Counter()
+    route_pool_hygiene = Counter()
 
     for record in records:
         event = str(record.get("event", ""))
@@ -211,6 +298,36 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
                 for key, value in (record.get("prechecked_by_source") or {}).items():
                     task_schedcap_prechecked_by_source[str(key)] += _int(value)
                 task_schedcap_time += _number(record.get("oracle_time")) or 0.0
+            elif event == "weighted_route_schedule_packing_diagnostics":
+                weighted_route_pack["generated"] += _int(record.get("candidate_sets"))
+                weighted_route_pack["prechecked"] += _int(record.get("candidates_after_precheck"))
+                weighted_route_pack["oracle_requests"] += _int(record.get("oracle_requests"))
+                weighted_route_pack["oracle_computations"] += _int(record.get("oracle_computations"))
+                weighted_route_pack["cache_hits"] += _int(record.get("cache_hits"))
+                weighted_route_pack["incomplete"] += _int(record.get("oracle_incomplete"))
+                weighted_route_pack["not_violated"] += _int(record.get("exact_not_violated"))
+                weighted_route_pack["violated"] += _int(record.get("violated_candidates"))
+                weighted_route_pack["added"] += _int(record.get("cuts_added")) + _int(record.get("added"))
+                weighted_route_pack["states_total"] += _int(record.get("oracle_states_total"))
+                weighted_route_pack["states_max"] = max(
+                    int(weighted_route_pack["states_max"]),
+                    _int(record.get("oracle_states_max")),
+                )
+                weighted_route_pack["stopped_by_budget"] += int(
+                    str(record.get("stopped_by") or "") in {"node_time_budget", "global_time_budget"}
+                )
+                weighted_route_pack["duplicate"] += _int(record.get("duplicate"))
+                weighted_route_pack_best_violation = max(
+                    weighted_route_pack_best_violation,
+                    _number(record.get("best_violation")) or 0.0,
+                )
+                weighted_route_pack_time += _number(record.get("oracle_time")) or 0.0
+                for key, value in (record.get("candidates_by_source") or {}).items():
+                    weighted_route_pack_by_source[str(key)] += _int(value)
+                for key, value in (record.get("candidates_by_alpha") or {}).items():
+                    weighted_route_pack_by_alpha[str(key)] += _int(value)
+            elif event == "route_pack_roi_diagnostics":
+                route_pack_roi_classifications[str(record.get("classification") or "unknown")] += 1
         elif event == "cut_roi":
             family = str(record.get("family") or "unknown")
             cut_roi[family]["events"] = int(cut_roi[family]["events"]) + 1
@@ -223,6 +340,13 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
             rim["route_set_packing_cuts"] += _int(record.get("route_set_packing_cuts"))
             rim["schedule_capacity_cuts"] += _int(record.get("schedule_capacity_cuts"))
             rim["no_good_cuts"] += _int(record.get("no_good_cuts"))
+            rim["adaptive_time_limit_reductions"] += int(bool(record.get("adaptive_reduced")))
+            rim["adaptive_failure_streak_max"] = max(
+                int(rim["adaptive_failure_streak_max"]),
+                _int(record.get("adaptive_failure_streak")),
+            )
+        elif event == "restricted_integer_master_adaptive_skip":
+            rim["adaptive_skips"] += 1
         elif event == "rim_conflict_diagnostics":
             rim["conflicts_checked"] += _int(record.get("conflicts_checked"))
             rim["route_set_packing_events"] += _int(record.get("route_set_packing_events"))
@@ -235,6 +359,47 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
             branch_testing_time += _number(record.get("testing_time")) or 0.0
         elif event == "fathom":
             fathom_reasons[str(record.get("reason") or "unknown")] += 1
+        elif event == "route_pool_restart":
+            route_pool_restart["rounds"] += 1
+            route_pool_restart["omitted_total"] += _int(record.get("omitted_routes"))
+            route_pool_restart["omitted_max"] = max(
+                int(route_pool_restart["omitted_max"]),
+                _int(record.get("omitted_routes")),
+            )
+            route_pool_restart["protected_max"] = max(
+                int(route_pool_restart["protected_max"]),
+                _int((record.get("reason_counts") or {}).get("protected")),
+            )
+            if str(record.get("stage")) == "node_start":
+                route_pool_restart["nodes"] += 1
+        elif event == "route_pool_hygiene_diagnostics":
+            route_pool_hygiene["diagnostic_events"] += 1
+            route_pool_hygiene["task_set_groups_max"] = max(
+                int(route_pool_hygiene["task_set_groups_max"]),
+                _int(record.get("task_set_groups")),
+            )
+            route_pool_hygiene["multi_route_groups_max"] = max(
+                int(route_pool_hygiene["multi_route_groups_max"]),
+                _int(record.get("multi_route_groups")),
+            )
+            route_pool_hygiene["near_duplicate_groups_max"] = max(
+                int(route_pool_hygiene["near_duplicate_groups_max"]),
+                _int(record.get("near_duplicate_groups")),
+            )
+            route_pool_hygiene["near_duplicate_routes_max"] = max(
+                int(route_pool_hygiene["near_duplicate_routes_max"]),
+                _int(record.get("near_duplicate_routes")),
+            )
+            route_pool_hygiene["max_group_size"] = max(
+                int(route_pool_hygiene["max_group_size"]),
+                _int(record.get("max_group_size")),
+            )
+        elif event == "route_pool_hygiene_admission":
+            route_pool_hygiene["admission_evaluated"] += _int(record.get("evaluated_routes"))
+            route_pool_hygiene["admission_admitted"] += _int(record.get("admitted_routes"))
+            route_pool_hygiene["admission_filtered"] += _int(record.get("filtered_routes"))
+            route_pool_hygiene["admission_protected"] += _int(record.get("protected_routes"))
+            route_pool_hygiene["admission_forced_exact"] += int(bool(record.get("forced_exact_certificate")))
         elif event in {"node_start", "node_end"}:
             open_nodes_timeline.append(
                 {
@@ -280,6 +445,12 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
         "restricted_master_route_set_packing_cuts": int(rim["route_set_packing_cuts"]),
         "restricted_master_schedule_capacity_cuts": int(rim["schedule_capacity_cuts"]),
         "restricted_master_no_good_cuts": int(rim["no_good_cuts"]),
+        "restricted_master_adaptive_skips": int(rim["adaptive_skips"])
+        or _int(finish.get("restricted_master_adaptive_skips")),
+        "restricted_master_adaptive_time_limit_reductions": int(rim["adaptive_time_limit_reductions"])
+        or _int(finish.get("restricted_master_adaptive_time_limit_reductions")),
+        "restricted_master_adaptive_failure_streak_max": int(rim["adaptive_failure_streak_max"])
+        or _int(finish.get("restricted_master_adaptive_failure_streak_max")),
         "rim_conflicts_checked": int(rim["conflicts_checked"]),
         "task_schedule_capacity_cuts_added": int(task_schedcap["added"]) or _int(finish.get("task_schedule_capacity_cuts_added")),
         "task_schedule_capacity_candidates_generated": int(task_schedcap["generated"])
@@ -330,6 +501,83 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
         or _int(finish.get("task_schedule_capacity_branch_signal_candidates")),
         "task_schedule_capacity_branch_signal_applied": int(task_schedcap["branch_signal_applied"])
         or _int(finish.get("task_schedule_capacity_branch_signal_applied")),
+        "weighted_route_schedule_packing_cuts_added": int(weighted_route_pack["added"])
+        or _int(finish.get("weighted_route_schedule_packing_cuts_added")),
+        "weighted_route_schedule_packing_candidates_generated": int(weighted_route_pack["generated"])
+        or _int(finish.get("weighted_route_schedule_packing_candidates_generated")),
+        "weighted_route_schedule_packing_candidates_after_precheck": int(weighted_route_pack["prechecked"])
+        or _int(finish.get("weighted_route_schedule_packing_candidates_after_precheck")),
+        "weighted_route_schedule_packing_candidates_by_source": dict(weighted_route_pack_by_source)
+        or finish.get("weighted_route_schedule_packing_candidates_by_source"),
+        "weighted_route_schedule_packing_candidates_by_alpha": dict(weighted_route_pack_by_alpha)
+        or finish.get("weighted_route_schedule_packing_candidates_by_alpha"),
+        "weighted_route_schedule_packing_oracle_requests": int(weighted_route_pack["oracle_requests"])
+        or _int(finish.get("weighted_route_schedule_packing_oracle_requests")),
+        "weighted_route_schedule_packing_oracle_computations": int(weighted_route_pack["oracle_computations"])
+        or _int(finish.get("weighted_route_schedule_packing_oracle_computations")),
+        "weighted_route_schedule_packing_cache_hits": int(weighted_route_pack["cache_hits"])
+        or _int(finish.get("weighted_route_schedule_packing_cache_hits")),
+        "weighted_route_schedule_packing_oracle_incomplete": int(weighted_route_pack["incomplete"])
+        or _int(finish.get("weighted_route_schedule_packing_oracle_incomplete")),
+        "weighted_route_schedule_packing_exact_not_violated": int(weighted_route_pack["not_violated"])
+        or _int(finish.get("weighted_route_schedule_packing_exact_not_violated")),
+        "weighted_route_schedule_packing_violated_candidates": int(weighted_route_pack["violated"])
+        or _int(finish.get("weighted_route_schedule_packing_violated_candidates")),
+        "weighted_route_schedule_packing_best_violation": weighted_route_pack_best_violation
+        or (_number(finish.get("weighted_route_schedule_packing_best_violation")) or 0.0),
+        "weighted_route_schedule_packing_oracle_time": weighted_route_pack_time
+        or (_number(finish.get("weighted_route_schedule_packing_oracle_time")) or 0.0),
+        "weighted_route_schedule_packing_oracle_states_total": int(weighted_route_pack["states_total"])
+        or _int(finish.get("weighted_route_schedule_packing_oracle_states_total")),
+        "weighted_route_schedule_packing_oracle_states_max": int(weighted_route_pack["states_max"])
+        or _int(finish.get("weighted_route_schedule_packing_oracle_states_max")),
+        "weighted_route_schedule_packing_added_but_no_bound_improvement": _int(
+            finish.get("weighted_route_schedule_packing_added_but_no_bound_improvement")
+        ),
+        "weighted_route_schedule_packing_stopped_by_budget": int(weighted_route_pack["stopped_by_budget"])
+        or _int(finish.get("weighted_route_schedule_packing_stopped_by_budget")),
+        "weighted_route_schedule_packing_duplicate_skips": int(weighted_route_pack["duplicate"])
+        or _int(finish.get("weighted_route_schedule_packing_duplicate_skips")),
+        "route_pack_roi_classifications": dict(route_pack_roi_classifications),
+        "route_pack_roi_same_pool_degeneracy": int(route_pack_roi_classifications["same_pool_degeneracy"]),
+        "route_pack_roi_pricing_mousehole": int(route_pack_roi_classifications["pricing_mousehole"]),
+        "route_pack_roi_objective_degeneracy_no_support_change": int(
+            route_pack_roi_classifications["objective_degeneracy_no_support_change"]
+        ),
+        "route_pack_roi_mixed": int(route_pack_roi_classifications["mixed"]),
+        "route_pool_restart_nodes": int(route_pool_restart["nodes"]) or _int(finish.get("route_pool_restart_nodes")),
+        "route_pool_restart_rounds": int(route_pool_restart["rounds"]) or _int(finish.get("route_pool_restart_rounds")),
+        "route_pool_restart_routes_omitted_total": int(route_pool_restart["omitted_total"])
+        or _int(finish.get("route_pool_restart_routes_omitted_total")),
+        "route_pool_restart_routes_omitted_max": int(route_pool_restart["omitted_max"])
+        or _int(finish.get("route_pool_restart_routes_omitted_max")),
+        "route_pool_restart_pricing_recovered_routes": _int(
+            finish.get("route_pool_restart_pricing_recovered_routes")
+        ),
+        "route_pool_restart_protected_routes_max": int(route_pool_restart["protected_max"])
+        or _int(finish.get("route_pool_restart_protected_routes_max")),
+        "route_pool_hygiene_diagnostic_events": int(route_pool_hygiene["diagnostic_events"])
+        or _int(finish.get("route_pool_hygiene_diagnostic_events")),
+        "route_pool_hygiene_task_set_groups_max": int(route_pool_hygiene["task_set_groups_max"])
+        or _int(finish.get("route_pool_hygiene_task_set_groups_max")),
+        "route_pool_hygiene_multi_route_groups_max": int(route_pool_hygiene["multi_route_groups_max"])
+        or _int(finish.get("route_pool_hygiene_multi_route_groups_max")),
+        "route_pool_hygiene_near_duplicate_groups_max": int(route_pool_hygiene["near_duplicate_groups_max"])
+        or _int(finish.get("route_pool_hygiene_near_duplicate_groups_max")),
+        "route_pool_hygiene_near_duplicate_routes_max": int(route_pool_hygiene["near_duplicate_routes_max"])
+        or _int(finish.get("route_pool_hygiene_near_duplicate_routes_max")),
+        "route_pool_hygiene_max_group_size": int(route_pool_hygiene["max_group_size"])
+        or _int(finish.get("route_pool_hygiene_max_group_size")),
+        "route_pool_hygiene_admission_evaluated": int(route_pool_hygiene["admission_evaluated"])
+        or _int(finish.get("route_pool_hygiene_admission_evaluated")),
+        "route_pool_hygiene_admission_admitted": int(route_pool_hygiene["admission_admitted"])
+        or _int(finish.get("route_pool_hygiene_admission_admitted")),
+        "route_pool_hygiene_admission_filtered": int(route_pool_hygiene["admission_filtered"])
+        or _int(finish.get("route_pool_hygiene_admission_filtered")),
+        "route_pool_hygiene_admission_protected": int(route_pool_hygiene["admission_protected"])
+        or _int(finish.get("route_pool_hygiene_admission_protected")),
+        "route_pool_hygiene_admission_forced_exact": int(route_pool_hygiene["admission_forced_exact"])
+        or _int(finish.get("route_pool_hygiene_admission_forced_exact")),
         "branch_candidate_count": branch_candidate_count,
         "branch_lp_testing": branch_lp_testing or _int(finish.get("branch_lp_candidates_tested")),
         "branch_heuristic_testing": branch_heuristic_testing or _int(finish.get("branch_heuristic_candidates_tested")),

@@ -19,6 +19,7 @@ configs/bpc_clean.yaml
 - `task_schedule_capacity_cuts_enabled: false` 保持默认关闭。新的 root/shallow separator 统一替代旧 root pair/triple separator 主体，旧 `root_schedule_capacity_*` 配置仍作为兼容别名。候选来自 top-z task mass、LP support route union、RIM rejected assignment、route-set packing witness、schedule incompatibility witness 和可选 time-window cluster；pair/triple/small-set 都先用 `sum_{i in S} z_{ir} > y_r + eps` 作为 cheap precheck，再在预算内调用 exact task-capacity oracle。这样不会漏掉 exact oracle 证明 `U(S)=1` 且 `y_r < activity <= 2y_r` 的 triple cut。
 - `U(S)` 只在 `exact_schedule_task_capacity()` 完整证明时用于加 cut。oracle incomplete、exact 但不紧、exact 且当前 LP 不违反都会进入 run-local cache/诊断，但不会产生 cut、lower bound 或 fathoming 依据。当前车辆同质，cache key 为排序后的 task tuple；未来异构车辆需要把 vehicle type 加入 key。
 - 新 separator 的 witness 会写入 `branch_candidates` / `branch_selection` 日志，默认只记录，不改变 branching score。只有显式打开 `task_schedule_capacity_branch_signal_apply_enabled` 时，才对相关 RF/task-vehicle 候选加很小的确定性 tie-break boost，且不参与剪枝或 bound。
+- 同日新增 `weighted_route_schedule_packing` finite-support separator，默认关闭。它是 route-set schedule packing 的加权推广：只对当前 route pool/support 中的有限 signatures 给非零 `alpha_p`，`beta(C,alpha)` 必须由 exact weighted route-set schedule oracle 完整证明；新 pricing route 系数为 0，因此不改 reduced-cost 公式。
 - `persistent_rmp_enabled: false` 新增且默认关闭。打开后，`PersistentRMP` 只替换主节点 RMP-CG loop 内的 RMP rebuild；branch testing 仍使用 `solve_rmp_lp`。PersistentRMP 与 `solve_rmp_lp` 使用同一数学模型、同一 SCIP LP dual、同一 reduced-cost 公式；Phase-I/Phase-II 切换和 cut purge 会重建模型，非追加同步会回退到 rebuild。
 
 当前 paper-grade baseline 已恢复为轻主线：默认关闭 `route_enumeration_enabled`、`schedule_pack_diagnostic_enabled`、`schedule_pack_relaxation_enabled`、`schedule_pack_full_pricing_enabled`、`schedule_pack_adaptive_enabled` 和 `route_enumeration_adaptive_enabled`。
@@ -1212,7 +1213,71 @@ metric_route_set_schedule_packing_oracle_states_max
 
 精确性说明：`C` 的选择不参与证明；只要 `U(C)` 是 exact oracle 给出的真实上界，`sum_{p in C} lambda[p,r] <= U(C)y[r]` 就不会删除任何原问题整数可行解。`y[r]=0` 时车辆不能选 route，`y[r]=1` 时同一辆车最多只能从 `C` 中排 `U(C)` 条 route。状态超限时不加 cut，因此不会用启发式上界破坏 exactness。
 
-### 19.1 route-pack skip 诊断
+### 19.1 weighted route-set schedule packing cut
+
+2026-05-25 新增 weighted route-schedule packing separator，作为上一节 uniform route-pack cut 的有限 support 强化版，而不是替代品。数学形式为：
+
+```text
+sum_{p in C} alpha_p lambda[p,r] <= beta(C, alpha)y[r]
+beta(C, alpha) = max over feasible single-vehicle schedules s subset C of sum_{p in s} alpha_p
+```
+
+其中 `alpha_p >= 0`，`C` 只包含当前 route pool/support 或 witness memory 中的 route signatures。`beta(C, alpha)` 由 `exact_weighted_route_set_schedule_capacity()` 计算；该 oracle 在同一辆真实车辆的多 sortie schedule 可行域上最大化权重和，并考虑 route ready time、horizon、`S_bar`。如果状态数超过 `weighted_route_schedule_packing_oracle_max_states`，返回 incomplete，调用方只缓存和记录诊断，不加 cut。
+
+与 uniform cut 的关系：
+
+```text
+uniform route-pack: alpha_p = 1 for p in C
+weighted route-pack: alpha_p 可按 LP value / witness conflict frequency 调整
+```
+
+当前实现不再把 `lp_value` 作为主力 alpha，因为它会把当前 fractional activity 变成近似 `sum lambda^2`，很难产生 violation。主力 alpha pattern 固定为小整数权重：
+
+```text
+conflict_core:            core route alpha_p = 1
+conflict_score_discrete:  alpha_p in {1,2,3}, 来自 witness 重复/冲突频率
+incompat_degree_discrete: alpha_p in {1,2,3}, 来自当前候选 route incompatibility degree
+lp_x_conflict_discrete:   alpha_p in {1,2,3}, 来自 lambda * conflict_frequency 的分桶
+```
+
+cache key 为排序后的 route signatures 加归一化、round 后的 alpha vector。当前 cut 对所有未来新 signature route 的系数为 0；若 pricing 枚举到已有 signature，该 route 本来就已在 pool 中，duplicate suppression 不会新增列。因此本版本不改变 pricing reduced-cost 公式，也不要求扩展 reduced-cost consistency tests。若未来希望让新 route 也继承非零 alpha，必须同步扩展 pricing coefficient 逻辑和 consistency 测试。
+
+同版新增 `route_pack_roi_diagnostics`。uniform 或 weighted route-pack cut 加入后，下一次同节点 RMP 会比较 cut 前后的 active support；下一次 pricing 会比较新生成 route 与 cut core task union 的重叠。诊断分类为：
+
+```text
+same_pool_degeneracy: 旧 route pool 内已有高重叠替代 route，cut 后 objective 不动
+pricing_mousehole: pricing 生成高重叠新 signature 绕过 finite-support cut
+objective_degeneracy_no_support_change: support 基本不变且 objective 不动
+mixed: 上述信号混合或不够明确
+```
+
+该诊断不改变模型，只用于决定后续是否继续投资 weighted finite-support cut。如果主要是 `pricing_mousehole`，下一步应转向 task-level schedule-capacity、SRC 或其他 pricing-aware cut。
+
+新增配置默认关闭：
+
+```yaml
+weighted_route_schedule_packing_cuts_enabled: false
+weighted_route_schedule_packing_max_depth: 1
+weighted_route_schedule_packing_max_rounds_per_node: 1
+weighted_route_schedule_packing_max_candidates: 20
+weighted_route_schedule_packing_max_cuts_per_round: 5
+weighted_route_schedule_packing_max_routes: 16
+weighted_route_schedule_packing_oracle_max_states: 200000
+weighted_route_schedule_packing_min_violation: 5.0e-2
+weighted_route_schedule_packing_node_time_budget: 5.0
+weighted_route_schedule_packing_global_time_ratio: 0.05
+```
+
+新增日志/统计字段包括 generated/prechecked candidate 数、by-source/by-alpha 计数、oracle requests/computations/cache hits/incomplete、exact not violated、violated candidates、cuts added、best violation、oracle time/states、duplicate skips 和 budget stop。每条 `cut_added` payload 记录 vehicle、signatures、weights、beta、activity、`y`、violation、oracle states/time、source、alpha pattern 和 cache hit。
+
+消融入口：
+
+```bash
+python scripts/run_weighted_route_schedule_packing_ablation.py --instances very_small --quiet
+python scripts/run_weighted_route_schedule_packing_ablation.py --instances bench_20_02 --time-limit 1800 --variants baseline weighted_root_only weighted_root_depth1 --quiet
+```
+
+### 19.2 route-pack skip 诊断
 
 本轮补充 `route_set_schedule_packing_diagnostics` 日志事件。它不改变模型、cut 或最优性证明，只记录 separator 每轮为什么没有继续加 route-pack cut。
 
@@ -1239,7 +1304,7 @@ oracle_states_max: 单个候选 exact DP 最大状态数
 
 这个诊断的用途是判断 route-pack separator 的瓶颈：如果 `not_tight` 很高，说明候选集合排程上界太松；如果 `not_violated` 很高，说明 LP 支撑没有明显违反；如果 `oracle_incomplete` 很高，说明 exact oracle 状态上限或候选规模需要调整。
 
-### 19.2 schedule-capacity skip 诊断
+### 19.3 schedule-capacity skip 诊断
 
 本轮补充 `schedule_capacity_diagnostics` 日志事件。它不改变 cut 形式，只记录 schedule-capacity separator 对候选任务集合 `S` 的处理结果。
 
