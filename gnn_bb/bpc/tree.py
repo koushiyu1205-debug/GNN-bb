@@ -4539,282 +4539,22 @@ class CleanBPCTree:
         }
 
     def _separate_root_schedule_capacity_cuts(self, node: BPCNode, solution: RMPSolution) -> int:
-        if self.task_schedule_capacity_cuts_enabled or self.root_schedule_capacity_cuts_enabled:
-            if self.task_schedule_capacity_legacy_alias_mode:
-                self.task_schedule_capacity_cuts_enabled = bool(self.root_schedule_capacity_cuts_enabled)
-                self.task_schedule_capacity_max_depth = int(self.root_schedule_capacity_max_depth)
-                self.task_schedule_capacity_pair_budget = int(self.root_schedule_capacity_pair_budget)
-                self.task_schedule_capacity_triple_budget = int(self.root_schedule_capacity_triple_budget)
-                self.task_schedule_capacity_oracle_max_states = int(self.root_schedule_capacity_oracle_max_states)
-                self.task_schedule_capacity_node_time_budget = float(self.root_schedule_capacity_time_budget)
-                self.task_schedule_capacity_min_violation = float(self.root_schedule_capacity_min_violation)
-                self.task_schedule_capacity_stop_after_no_add_rounds = int(self.root_schedule_capacity_stop_after_no_add_rounds)
-            return self._separate_task_schedule_capacity_cuts(
-                node,
-                solution,
-                legacy_family="root_schedule_capacity",
-            )
-        if not self.root_schedule_capacity_cuts_enabled:
+        if not (self.task_schedule_capacity_cuts_enabled or self.root_schedule_capacity_cuts_enabled):
             return 0
-        if node.depth > self.root_schedule_capacity_max_depth:
-            return 0
-        no_add_rounds = self.root_schedule_capacity_no_add_rounds_by_node.get(node.id, 0)
-        if no_add_rounds >= self.root_schedule_capacity_stop_after_no_add_rounds:
-            return 0
-
-        min_violation = max(self.integer_tol, self.root_schedule_capacity_min_violation)
-        started = time.perf_counter()
-        candidates: dict[tuple[int, tuple[int, ...]], tuple[float, float]] = {}
-        diagnostics: dict[str, float | int] = {
-            "vehicles_checked": 0,
-            "vehicles_active": 0,
-            "candidates_generated": 0,
-            "candidates_after_precheck": 0,
-            "pair_candidates": 0,
-            "triple_candidates": 0,
-            "oracle_queries": 0,
-            "oracle_incomplete": 0,
-            "cache_hits": 0,
-            "tight_not_violated": 0,
-            "not_tight": 0,
-            "duplicate": 0,
-            "violated": 0,
-            "cuts_added": 0,
-            "oracle_time": 0.0,
-            "oracle_states_total": 0,
-            "oracle_states_max": 0,
-            "max_oracle_states": self.root_schedule_capacity_oracle_max_states,
-            "best_violation": 0.0,
-        }
-
-        def maybe_add_candidate(vehicle: int, tasks: tuple[int, ...], y_value: float, source: str) -> None:
-            tasks = tuple(sorted(int(task) for task in tasks))
-            if len(tasks) not in (2, 3):
-                return
-            diagnostics["candidates_generated"] = int(diagnostics["candidates_generated"]) + 1
-            activity = self._task_vehicle_mass(solution, tasks, vehicle)
-            score = activity - y_value
-            if score <= min_violation:
-                return
-            diagnostics["candidates_after_precheck"] = int(diagnostics["candidates_after_precheck"]) + 1
-            if source == "pair":
-                diagnostics["pair_candidates"] = int(diagnostics["pair_candidates"]) + 1
-            else:
-                diagnostics["triple_candidates"] = int(diagnostics["triple_candidates"]) + 1
-            key = (int(vehicle), tasks)
-            previous = candidates.get(key)
-            if previous is None or score > previous[0]:
-                candidates[key] = (float(score), float(activity))
-
-        for vehicle in self.data.vehicles:
-            vehicle = int(vehicle)
-            diagnostics["vehicles_checked"] = int(diagnostics["vehicles_checked"]) + 1
-            y_value = float(solution.y_values.get(vehicle, 0.0))
-            if y_value <= self.integer_tol:
-                continue
-            diagnostics["vehicles_active"] = int(diagnostics["vehicles_active"]) + 1
-            task_values = self._vehicle_task_values(solution, vehicle)
-            value_by_task = {int(task): float(value) for value, task in task_values}
-
-            pair_budget = max(0, self.root_schedule_capacity_pair_budget)
-            if pair_budget > 0:
-                pair_scan_budget = 3 * pair_budget
-                pair_top_count = min(
-                    len(task_values),
-                    max(2, int(math.ceil(math.sqrt(2.0 * pair_scan_budget))) + 2),
-                )
-                pair_tasks = [task for _value, task in task_values[:pair_top_count]]
-                pair_scores: list[tuple[float, tuple[int, ...]]] = []
-                for tasks in combinations(pair_tasks, 2):
-                    tasks = tuple(sorted(int(task) for task in tasks))
-                    activity = value_by_task.get(tasks[0], 0.0) + value_by_task.get(tasks[1], 0.0)
-                    pair_scores.append((activity - y_value, tasks))
-                pair_scores.sort(key=lambda item: (-item[0], item[1]))
-                for _score, tasks in pair_scores[:pair_budget]:
-                    maybe_add_candidate(vehicle, tasks, y_value, "pair")
-
-            triple_budget = max(0, self.root_schedule_capacity_triple_budget)
-            if triple_budget <= 0:
-                continue
-            triple_scan_budget = 3 * triple_budget
-            triple_scores_by_tasks: dict[tuple[int, ...], float] = {}
-
-            def add_triple_score(tasks: tuple[int, ...]) -> None:
-                tasks = tuple(sorted(int(task) for task in tasks))
-                if len(tasks) != 3:
-                    return
-                activity = self._task_vehicle_mass(solution, tasks, vehicle)
-                score = activity - y_value
-                triple_scores_by_tasks[tasks] = max(triple_scores_by_tasks.get(tasks, -float("inf")), score)
-
-            top_count = min(
-                len(task_values),
-                max(3, self.schedule_capacity_candidate_top_tasks),
-            )
-            top_tasks = [task for _value, task in task_values[:top_count]]
-            combo_top_count = top_count
-            if triple_scan_budget > 0:
-                combo_top_count = min(
-                    top_count,
-                    max(3, int(math.ceil((6.0 * triple_scan_budget) ** (1.0 / 3.0))) + 2),
-                )
-            for tasks in combinations(top_tasks[:combo_top_count], 3):
-                add_triple_score(tasks)
-
-            support = self._schedule_support_routes(solution, vehicle, max_routes=self.schedule_capacity_route_union_top_routes)
-            support_routes = [route for _value, route in support]
-            for route in support_routes:
-                add_triple_score(tuple(sorted(int(task) for task in route.task_set)))
-            max_route_union = min(max(2, self.schedule_capacity_route_union_max_routes), len(support_routes))
-            for size in range(2, max_route_union + 1):
-                for route_combo in combinations(support_routes[: max(0, self.schedule_capacity_route_union_top_routes)], size):
-                    tasks = tuple(sorted({int(task) for route in route_combo for task in route.task_set}))
-                    add_triple_score(tasks)
-
-            wider_top_count = min(len(task_values), max(combo_top_count, combo_top_count + 3))
-            wider_tasks = [task for _value, task in task_values[:wider_top_count]]
-            high_activity_scores: list[tuple[float, tuple[int, ...]]] = []
-            for tasks in combinations(wider_tasks, 3):
-                tasks = tuple(sorted(int(task) for task in tasks))
-                activity = sum(value_by_task.get(task, 0.0) for task in tasks)
-                high_activity_scores.append((activity - y_value, tasks))
-            high_activity_scores.sort(key=lambda item: (-item[0], item[1]))
-            for _score, tasks in high_activity_scores[:triple_scan_budget]:
-                add_triple_score(tasks)
-
-            triple_scores = [(score, tasks) for tasks, score in triple_scores_by_tasks.items()]
-            triple_scores.sort(key=lambda item: (-item[0], item[1]))
-            for _score, tasks in triple_scores[:triple_budget]:
-                maybe_add_candidate(vehicle, tasks, y_value, "triple")
-
-        self.stats.root_schedule_capacity_candidates_generated += int(diagnostics["candidates_generated"])
-        self.stats.root_schedule_capacity_candidates_after_precheck += int(diagnostics["candidates_after_precheck"])
-        if not candidates:
-            self.root_schedule_capacity_no_add_rounds_by_node[node.id] = no_add_rounds + 1
-            self.logger.log("root_schedule_capacity_diagnostics", node_id=node.id, depth=node.depth, **diagnostics)
-            return 0
-
-        ordered = sorted(candidates.items(), key=lambda item: (-item[1][0], item[0][0], len(item[0][1]), item[0][1]))
-        pair_budget = max(0, self.root_schedule_capacity_pair_budget)
-        triple_budget = max(0, self.root_schedule_capacity_triple_budget)
-        kept: list[tuple[int, tuple[int, ...], float, float]] = []
-        pair_count = 0
-        triple_count = 0
-        for (vehicle, tasks), (score, activity) in ordered:
-            if len(tasks) == 2:
-                if pair_count >= pair_budget:
-                    continue
-                pair_count += 1
-            elif len(tasks) == 3:
-                if triple_count >= triple_budget:
-                    continue
-                triple_count += 1
-            kept.append((vehicle, tasks, score, activity))
-
-        cuts_added = 0
-        added_payload = []
-        for vehicle, tasks, _score, activity in kept:
-            if self.root_schedule_capacity_time_budget > 0.0 and time.perf_counter() - started > self.root_schedule_capacity_time_budget:
-                break
-            cut_key = ("schedule_capacity", int(vehicle), tasks)
-            if cut_key in self.cut_keys:
-                diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
-                continue
-            oracle, cache_hit, oracle_time = self._root_schedule_capacity_bound(tasks)
-            diagnostics["oracle_time"] = float(diagnostics["oracle_time"]) + oracle_time
-            self.stats.root_schedule_capacity_oracle_time += oracle_time
-            if cache_hit:
-                diagnostics["cache_hits"] = int(diagnostics["cache_hits"]) + 1
-                self.stats.root_schedule_capacity_cache_hits += 1
-            else:
-                diagnostics["oracle_queries"] = int(diagnostics["oracle_queries"]) + 1
-                self.stats.root_schedule_capacity_oracle_queries += 1
-            if oracle is None:
-                diagnostics["oracle_incomplete"] = int(diagnostics["oracle_incomplete"]) + 1
-                self.stats.root_schedule_capacity_oracle_incomplete += 1
-                continue
-            diagnostics["oracle_states_total"] = int(diagnostics["oracle_states_total"]) + int(oracle.states_explored)
-            diagnostics["oracle_states_max"] = max(int(diagnostics["oracle_states_max"]), int(oracle.states_explored))
-            upper_bound = int(oracle.upper_bound)
-            if upper_bound >= len(tasks):
-                diagnostics["not_tight"] = int(diagnostics["not_tight"]) + 1
-                continue
-            y_value = float(solution.y_values.get(int(vehicle), 0.0))
-            violation = activity - float(upper_bound) * y_value
-            diagnostics["best_violation"] = max(float(diagnostics["best_violation"]), float(violation))
-            self.stats.root_schedule_capacity_best_violation = max(
-                float(self.stats.root_schedule_capacity_best_violation),
-                float(violation),
-            )
-            if violation <= min_violation:
-                diagnostics["tight_not_violated"] = int(diagnostics["tight_not_violated"]) + 1
-                continue
-            cut = ScheduleCapacityCut(
-                id=self._allocate_cut_id(),
-                vehicle=int(vehicle),
-                tasks=tasks,
-                upper_bound=upper_bound,
-                oracle_states=int(oracle.states_explored),
-                source="root_schedule_capacity",
-            )
-            if cut.key in self.cut_keys:
-                diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
-                continue
-            self.cuts.append(cut)
-            self.cut_keys.add(cut.key)
-            self.cut_inactive_age[cut.key] = 0
-            cuts_added += 1
-            diagnostics["violated"] = int(diagnostics["violated"]) + 1
-            added_payload.append(
-                {
-                    "id": cut.id,
-                    "vehicle": int(vehicle),
-                    "tasks": list(tasks),
-                    "upper_bound": upper_bound,
-                    "y": round(y_value, 9),
-                    "activity_minus_rhs": round(violation, 9),
-                    "oracle_states": int(oracle.states_explored),
-                }
-            )
-
-        diagnostics["cuts_added"] = cuts_added
-        diagnostics["oracle_time"] = round(float(diagnostics["oracle_time"]), 6)
-        if cuts_added:
-            self.root_schedule_capacity_no_add_rounds_by_node[node.id] = 0
-            self.stats.cuts_added += cuts_added
-            self.stats.schedule_capacity_cuts_added += cuts_added
-            self.stats.root_schedule_capacity_cuts_added += cuts_added
-            self.logger.log(
-                "cut_added",
-                node_id=node.id,
-                family="root_schedule_capacity",
-                added=cuts_added,
-                cuts=added_payload,
-            )
-        else:
-            self.root_schedule_capacity_no_add_rounds_by_node[node.id] = no_add_rounds + 1
-        self.logger.log("root_schedule_capacity_diagnostics", node_id=node.id, depth=node.depth, **diagnostics)
-        return cuts_added
-
-    def _root_schedule_capacity_bound(self, tasks: tuple[int, ...]) -> tuple[ScheduleCapacityResult | None, bool, float]:
-        tasks = tuple(sorted(int(task) for task in tasks))
-        cached = self.root_schedule_capacity_cache.get(tasks)
-        if cached is not None:
-            return (cached, True, 0.0)
-        if tasks in self.root_schedule_capacity_cache and cached is None:
-            return (None, True, 0.0)
-        started = time.perf_counter()
-        result = exact_schedule_task_capacity(
-            self.data,
-            tasks,
-            max_states=self.root_schedule_capacity_oracle_max_states,
+        if self.task_schedule_capacity_legacy_alias_mode:
+            self.task_schedule_capacity_cuts_enabled = bool(self.root_schedule_capacity_cuts_enabled)
+            self.task_schedule_capacity_max_depth = int(self.root_schedule_capacity_max_depth)
+            self.task_schedule_capacity_pair_budget = int(self.root_schedule_capacity_pair_budget)
+            self.task_schedule_capacity_triple_budget = int(self.root_schedule_capacity_triple_budget)
+            self.task_schedule_capacity_oracle_max_states = int(self.root_schedule_capacity_oracle_max_states)
+            self.task_schedule_capacity_node_time_budget = float(self.root_schedule_capacity_time_budget)
+            self.task_schedule_capacity_min_violation = float(self.root_schedule_capacity_min_violation)
+            self.task_schedule_capacity_stop_after_no_add_rounds = int(self.root_schedule_capacity_stop_after_no_add_rounds)
+        return self._separate_task_schedule_capacity_cuts(
+            node,
+            solution,
+            legacy_family="root_schedule_capacity",
         )
-        elapsed = time.perf_counter() - started
-        if result is None or not result.exact:
-            self.root_schedule_capacity_cache[tasks] = None
-            return (None, False, elapsed)
-        self.root_schedule_capacity_cache[tasks] = result
-        return (result, False, elapsed)
 
     def _task_schedule_capacity_bound(
         self,
@@ -5304,17 +5044,21 @@ class CleanBPCTree:
                 diagnostics["candidate_sets"] = int(diagnostics["candidate_sets"]) + 1
                 count_by("candidates_by_source", source)
                 count_by("candidates_by_alpha", alpha_pattern)
-                if not any(weight > 0.0 for weight in weights):
+                normalized_weights = self._normalized_weighted_route_weights(
+                    signatures,
+                    {signature: float(weight) for signature, weight in zip(signatures, weights)},
+                )
+                if not any(weight > 0.0 for weight in normalized_weights):
                     continue
                 activity = sum(
                     float(weight) * float(value_by_signature.get(signature, 0.0))
-                    for signature, weight in zip(signatures, weights)
+                    for signature, weight in zip(signatures, normalized_weights)
                 )
-                cheap_lower_beta = max(weights, default=0.0)
+                cheap_lower_beta = max(normalized_weights, default=0.0)
                 potential = activity - cheap_lower_beta * y_value
                 if potential <= min_violation:
                     continue
-                key = (int(vehicle), signatures, weights)
+                key = (int(vehicle), signatures, normalized_weights)
                 if key in seen_precheck:
                     diagnostics["duplicate"] = int(diagnostics["duplicate"]) + 1
                     continue
@@ -5322,7 +5066,18 @@ class CleanBPCTree:
                 diagnostics["candidates_after_precheck"] = int(diagnostics["candidates_after_precheck"]) + 1
                 score = potential + source_strength - 0.001 * float(len(signatures))
                 raw_candidates.append(
-                    (score, potential, int(vehicle), source, alpha_pattern, signatures, ordered_routes, weights, activity, y_value)
+                    (
+                        score,
+                        potential,
+                        int(vehicle),
+                        source,
+                        alpha_pattern,
+                        signatures,
+                        ordered_routes,
+                        normalized_weights,
+                        activity,
+                        y_value,
+                    )
                 )
 
         for vehicle in self.data.vehicles:

@@ -444,6 +444,41 @@ class CleanBPCTests(unittest.TestCase):
         self.assertTrue(second[2])
         self.assertAlmostEqual(first[0], second[0])
 
+    def test_weighted_route_set_schedule_packing_separator_uses_normalized_alpha_scale(self):
+        _data, routes, solution, tree = self._weighted_route_set_packing_fixture(
+            route_values=(0.6, 0.45, 0.3),
+            y_value=0.5,
+        )
+        signatures, _ordered = tree._weighted_route_signature_routes(routes)
+        normalized_weights = tree._normalized_weighted_route_weights(
+            signatures,
+            {signature: weight for signature, weight in zip(signatures, (3.0, 2.0, 1.0))},
+        )
+        expected_beta = exact_weighted_route_set_schedule_capacity(
+            _data,
+            routes,
+            normalized_weights,
+            max_states=100000,
+        ).upper_bound
+        with patch.object(tree, "_route_set_schedule_packing_candidates", return_value=[routes]):
+            with patch.object(
+                tree,
+                "_weighted_route_schedule_packing_candidate_patterns",
+                return_value=[("conflict_score_discrete", (3.0, 2.0, 1.0))],
+            ):
+                added = tree._separate_weighted_route_schedule_packing_cuts(BPCNode(0.0, 0, 0), solution)
+
+        self.assertEqual(added, 1)
+        self.assertEqual(tree.stats.weighted_route_schedule_packing_violated_candidates, 1)
+        cut = tree.cuts[0]
+        self.assertIsInstance(cut, WeightedScheduleRouteSetPackingCut)
+        self.assertEqual(cut.signatures, signatures)
+        self.assertEqual(cut.weights, normalized_weights)
+        self.assertAlmostEqual(cut.upper_bound, expected_beta)
+        lhs = sum(cut.coefficient(route, 1) * value for route, _vehicle, value in solution.route_values)
+        rhs = -cut.y_coefficient(1) * solution.y_values[1]
+        self.assertGreater(lhs, rhs + tree.weighted_route_schedule_packing_min_violation)
+
     def test_weighted_route_set_schedule_packing_does_not_emit_lp_value_by_default(self):
         _data, routes, solution, tree = self._weighted_route_set_packing_fixture()
         signatures = tuple(route.signature for route in routes)

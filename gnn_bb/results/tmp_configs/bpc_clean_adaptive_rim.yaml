@@ -4,7 +4,7 @@ python: /home/kai/miniconda3/envs/ecole/bin/python
 instances: ["very_small"]
 time_limit: 3600
 random_seed: 20260511
-instance_dir: json/instances
+instance_dir: branchpricecut/results/benchmark/20260523_bpc_clean_rim_repair_10_20_all/instances
 results_csv: results/bpc_clean.csv
 log_dir: results/logs/bpc_clean
 solution_dir: results/solutions/bpc_clean
