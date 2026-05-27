@@ -179,6 +179,8 @@ class CleanBPCTree:
         restricted_master_repair_enabled: bool = True,
         restricted_master_repair_max_attempts: int = 3,
         restricted_master_repair_max_states: int = 50000,
+        restricted_master_scan_solution_pool_enabled: bool = False,
+        restricted_master_scan_solution_pool_limit: int = 20,
         restricted_master_adaptive_enabled: bool = False,
         restricted_master_adaptive_min_depth: int = 1,
         restricted_master_adaptive_after_failures: int = 2,
@@ -347,6 +349,9 @@ class CleanBPCTree:
         route_pool_hygiene_admission_protect_incumbent_task_sets: bool = True,
         route_pool_hygiene_admission_protect_branch_task_sets: bool = True,
         route_pool_restart_enabled: bool = False,
+        route_pool_restart_node_start_enabled: bool = True,
+        route_pool_restart_min_depth: int = 0,
+        route_pool_restart_max_depth: int = -1,
         route_pool_restart_max_routes: int = 0,
         route_pool_restart_min_global_routes: int = 0,
         route_pool_restart_keep_recent_rounds: int = 2,
@@ -354,6 +359,8 @@ class CleanBPCTree:
         route_pool_restart_active_value_tol: float = 1.0e-8,
         route_pool_restart_keep_cut_signatures: bool = False,
         route_pool_restart_cleanup_enabled: bool = False,
+        route_pool_restart_branch_with_global_solution: bool = False,
+        early_bound_fathom_before_cuts_enabled: bool = False,
         three_pb_candidate_budget_enabled: bool = False,
         three_pb_root_pseudocost_candidates: int = 6,
         three_pb_root_fractional_candidates: int = 6,
@@ -413,6 +420,8 @@ class CleanBPCTree:
         self.restricted_master_repair_enabled = bool(restricted_master_repair_enabled)
         self.restricted_master_repair_max_attempts = int(restricted_master_repair_max_attempts)
         self.restricted_master_repair_max_states = int(restricted_master_repair_max_states)
+        self.restricted_master_scan_solution_pool_enabled = bool(restricted_master_scan_solution_pool_enabled)
+        self.restricted_master_scan_solution_pool_limit = int(restricted_master_scan_solution_pool_limit)
         self.restricted_master_adaptive_enabled = bool(restricted_master_adaptive_enabled)
         self.restricted_master_adaptive_min_depth = int(restricted_master_adaptive_min_depth)
         self.restricted_master_adaptive_after_failures = int(restricted_master_adaptive_after_failures)
@@ -640,6 +649,9 @@ class CleanBPCTree:
             route_pool_hygiene_admission_protect_branch_task_sets
         )
         self.route_pool_restart_enabled = bool(route_pool_restart_enabled)
+        self.route_pool_restart_node_start_enabled = bool(route_pool_restart_node_start_enabled)
+        self.route_pool_restart_min_depth = int(route_pool_restart_min_depth)
+        self.route_pool_restart_max_depth = int(route_pool_restart_max_depth)
         self.route_pool_restart_max_routes = int(route_pool_restart_max_routes)
         self.route_pool_restart_min_global_routes = int(route_pool_restart_min_global_routes)
         self.route_pool_restart_keep_recent_rounds = int(route_pool_restart_keep_recent_rounds)
@@ -647,6 +659,8 @@ class CleanBPCTree:
         self.route_pool_restart_active_value_tol = float(route_pool_restart_active_value_tol)
         self.route_pool_restart_keep_cut_signatures = bool(route_pool_restart_keep_cut_signatures)
         self.route_pool_restart_cleanup_enabled = bool(route_pool_restart_cleanup_enabled)
+        self.route_pool_restart_branch_with_global_solution = bool(route_pool_restart_branch_with_global_solution)
+        self.early_bound_fathom_before_cuts_enabled = bool(early_bound_fathom_before_cuts_enabled)
         self.three_pb_candidate_budget_enabled = bool(three_pb_candidate_budget_enabled)
         self.three_pb_root_pseudocost_candidates = int(three_pb_root_pseudocost_candidates)
         self.three_pb_root_fractional_candidates = int(three_pb_root_fractional_candidates)
@@ -1572,12 +1586,19 @@ class CleanBPCTree:
             restricted_master_adaptive_after_failures=self.restricted_master_adaptive_after_failures,
             restricted_master_adaptive_reduced_time_limit=self.restricted_master_adaptive_reduced_time_limit,
             restricted_master_adaptive_skip_after_failures=self.restricted_master_adaptive_skip_after_failures,
+            restricted_master_scan_solution_pool_enabled=self.restricted_master_scan_solution_pool_enabled,
+            restricted_master_scan_solution_pool_limit=self.restricted_master_scan_solution_pool_limit,
             route_pool_restart_enabled=self.route_pool_restart_enabled,
+            route_pool_restart_node_start_enabled=self.route_pool_restart_node_start_enabled,
+            route_pool_restart_min_depth=self.route_pool_restart_min_depth,
+            route_pool_restart_max_depth=self.route_pool_restart_max_depth,
             route_pool_restart_max_routes=self.route_pool_restart_max_routes,
             route_pool_restart_min_global_routes=self.route_pool_restart_min_global_routes,
             route_pool_restart_keep_recent_rounds=self.route_pool_restart_keep_recent_rounds,
             route_pool_restart_max_routes_per_task_set=self.route_pool_restart_max_routes_per_task_set,
             route_pool_restart_cleanup_enabled=self.route_pool_restart_cleanup_enabled,
+            route_pool_restart_branch_with_global_solution=self.route_pool_restart_branch_with_global_solution,
+            early_bound_fathom_before_cuts_enabled=self.early_bound_fathom_before_cuts_enabled,
             persistent_rmp_enabled=self.persistent_rmp_enabled,
         )
 
@@ -1904,9 +1925,13 @@ class CleanBPCTree:
             pool.add(route)
         return pool
 
-    def _route_pool_restart_active(self) -> bool:
+    def _route_pool_restart_active(self, node: BPCNode | None = None) -> bool:
+        min_depth = int(self.route_pool_restart_min_depth)
+        max_depth = int(self.route_pool_restart_max_depth)
         return (
             self.route_pool_restart_enabled
+            and (node is None or int(node.depth) >= min_depth)
+            and (node is None or max_depth < 0 or int(node.depth) <= max_depth)
             and self.route_pool_restart_max_routes > 0
             and len(self.pool.routes) > max(0, self.route_pool_restart_min_global_routes)
         )
@@ -2034,7 +2059,9 @@ class CleanBPCTree:
         return selected, reason_counts
 
     def _initial_node_route_pool(self, node: BPCNode) -> tuple[RoutePool | None, dict[tuple[int, ...], int] | None]:
-        if not self._route_pool_restart_active() or len(self.pool.routes) <= self.route_pool_restart_max_routes:
+        if not self.route_pool_restart_node_start_enabled:
+            return None, None
+        if not self._route_pool_restart_active(node) or len(self.pool.routes) <= self.route_pool_restart_max_routes:
             return None, None
         selected, reason_counts = self._select_route_pool_restart_routes(node, None, None, 0)
         local_pool = self._new_route_pool_from(selected)
@@ -2108,6 +2135,105 @@ class CleanBPCTree:
             reason_counts=reason_counts,
         )
         return True
+
+    def _create_node_route_pool_from_solution(
+        self,
+        node: BPCNode,
+        solution: RMPSolution,
+        route_birth_iter: dict[tuple[int, ...], int] | None,
+        cg_iter: int,
+    ) -> tuple[RoutePool, dict[tuple[int, ...], int]] | None:
+        """Create a local node route pool after the global pool has become large.
+
+        This is exact-safe for the same reason as node-start restart: the global
+        pool is not deleted, and exact pricing runs against the local pool so any
+        omitted route with negative reduced cost can be recovered as a column.
+        """
+
+        if not self.route_pool_restart_cleanup_enabled:
+            return None
+        if not self._route_pool_restart_active(node) or len(self.pool.routes) <= self.route_pool_restart_max_routes:
+            return None
+        birth_iter = route_birth_iter
+        if birth_iter is None:
+            birth_iter = {route.signature: 0 for route in self.pool.routes}
+        selected, reason_counts = self._select_route_pool_restart_routes(node, solution, birth_iter, cg_iter)
+        if len(selected) >= len(self.pool.routes):
+            return None
+        local_pool = self._new_route_pool_from(selected)
+        local_birth_iter = {
+            route.signature: int(birth_iter.get(route.signature, cg_iter))
+            for route in local_pool.routes
+        }
+        omitted = max(0, len(self.pool.routes) - len(local_pool.routes))
+        self.stats.route_pool_restart_nodes += 1
+        self.stats.route_pool_restart_rounds += 1
+        self.stats.route_pool_restart_routes_omitted_total += omitted
+        self.stats.route_pool_restart_routes_omitted_max = max(self.stats.route_pool_restart_routes_omitted_max, omitted)
+        self.stats.route_pool_restart_protected_routes_max = max(
+            self.stats.route_pool_restart_protected_routes_max,
+            int(reason_counts.get("protected", 0)),
+        )
+        self.logger.log(
+            "route_pool_restart",
+            node_id=node.id,
+            depth=node.depth,
+            stage="mid_node_create",
+            cg_iter=cg_iter,
+            global_routes=len(self.pool.routes),
+            local_routes=len(local_pool.routes),
+            omitted_routes=omitted,
+            max_routes=self.route_pool_restart_max_routes,
+            reason_counts=reason_counts,
+        )
+        return local_pool, local_birth_iter
+
+    def _resolve_global_solution_for_branching(
+        self,
+        node: BPCNode,
+        certified_solution: RMPSolution,
+    ) -> RMPSolution:
+        if not self.route_pool_restart_branch_with_global_solution:
+            return certified_solution
+        if certified_solution.objective is None:
+            return certified_solution
+        global_solution = solve_rmp_lp(
+            self.data,
+            self.pool.routes,
+            self.cuts,
+            node.branch_constraints,
+            phase="phase2",
+            rmp_params=self.rmp_params,
+            verbose=False,
+            task_vehicle_linking_enabled=self.task_vehicle_linking_enabled,
+        )
+        self.stats.rmp_solves += 1
+        objective_delta = None
+        if global_solution.objective is not None:
+            objective_delta = float(global_solution.objective) - float(certified_solution.objective)
+        accepted = (
+            global_solution.optimal
+            and global_solution.duals is not None
+            and global_solution.objective is not None
+            and abs(float(objective_delta or 0.0)) <= max(1.0e-6, 10.0 * self.integer_tol)
+            and global_solution.artificial_sum <= self.integer_tol
+        )
+        self.logger.log(
+            "route_pool_restart_global_branch_solution",
+            node_id=node.id,
+            depth=node.depth,
+            status=global_solution.status,
+            accepted=bool(accepted),
+            local_objective=round(float(certified_solution.objective), 6),
+            global_objective=None if global_solution.objective is None else round(float(global_solution.objective), 6),
+            objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+            global_route_count=len(self.pool.routes),
+            local_variable_count=certified_solution.variable_count,
+            global_variable_count=global_solution.variable_count,
+        )
+        if accepted:
+            return global_solution
+        return certified_solution
 
     def _route_pool_hygiene_profile(
         self,
@@ -2979,6 +3105,8 @@ class CleanBPCTree:
             repair_enabled=self.restricted_master_repair_enabled,
             repair_max_attempts=self.restricted_master_repair_max_attempts,
             repair_max_states=self.restricted_master_repair_max_states,
+            scan_solution_pool=self.restricted_master_scan_solution_pool_enabled,
+            solution_pool_scan_limit=self.restricted_master_scan_solution_pool_limit,
         )
         self.stats.restricted_master_integer_calls += 1
         self.stats.restricted_master_integer_time += result.solving_time
@@ -3040,6 +3168,8 @@ class CleanBPCTree:
             repair_time=round(result.repair_time, 6),
             repair_states=result.repair_states,
             repair_best_objective=None if result.repair_best_objective is None else round(result.repair_best_objective, 6),
+            solution_pool_scanned=result.solution_pool_scanned,
+            solution_pool_accepted_rank=result.solution_pool_accepted_rank,
             added_schedule_cuts=added_conflict_cuts,
             time=round(result.solving_time, 6),
             adaptive_enabled=adaptive_active,
@@ -3057,6 +3187,8 @@ class CleanBPCTree:
         persistent_rmp: PersistentRMP | None = None
         persistent_rmp_disabled = False
         node_route_pool, route_birth_iter = self._initial_node_route_pool(node)
+        if route_birth_iter is None and self.route_pool_restart_enabled:
+            route_birth_iter = {route.signature: 0 for route in self.pool.routes}
         self._log_route_pool_hygiene_diagnostics(node, stage="node_start")
 
         def solve_current_rmp() -> tuple[RMPSolution, str]:
@@ -3172,15 +3304,27 @@ class CleanBPCTree:
                 return []
 
             if phase == "phase2":
-                if self.route_pool_restart_cleanup_enabled and self._cleanup_node_route_pool(
-                    node,
-                    node_route_pool,
-                    solution,
-                    route_birth_iter,
-                    cg_iter,
-                ):
-                    persistent_rmp = None
-                    continue
+                if self.route_pool_restart_cleanup_enabled:
+                    if node_route_pool is None:
+                        created_pool = self._create_node_route_pool_from_solution(
+                            node,
+                            solution,
+                            route_birth_iter,
+                            cg_iter,
+                        )
+                        if created_pool is not None:
+                            node_route_pool, route_birth_iter = created_pool
+                            persistent_rmp = None
+                            continue
+                    elif self._cleanup_node_route_pool(
+                        node,
+                        node_route_pool,
+                        solution,
+                        route_birth_iter,
+                        cg_iter,
+                    ):
+                        persistent_rmp = None
+                        continue
                 purged_by_kind = self._purge_inactive_cuts(solution)
                 purged = sum(purged_by_kind.values())
                 if purged:
@@ -3270,6 +3414,15 @@ class CleanBPCTree:
                 self.stats.fathomed_infeasible += 1
                 self._log_fathom(node_id=node.id, reason="phase1_infeasible", bound=None)
                 return []
+            if (
+                self.early_bound_fathom_before_cuts_enabled
+                and solution.objective is not None
+                and self.incumbent is not None
+                and float(solution.objective) >= float(self.incumbent.objective) - self.integer_tol
+            ):
+                last_solution = solution
+                node_certified = True
+                break
             separated = self._separate_crossing_cuts(node, solution)
             if separated:
                 continue
@@ -3328,7 +3481,11 @@ class CleanBPCTree:
             self._log_fathom(node_id=node.id, reason="bound_after_schedule_pack", bound=node.lower_bound)
             return []
 
-        if self._try_restricted_master_heuristic(node, last_solution):
+        decision_solution = last_solution
+        if node_route_pool is not None:
+            decision_solution = self._resolve_global_solution_for_branching(node, last_solution)
+
+        if self._try_restricted_master_heuristic(node, decision_solution):
             return [
                 BPCNode(
                     priority=max(node.lower_bound, node.schedule_pack_relaxation_bound or node.lower_bound),
@@ -3354,9 +3511,9 @@ class CleanBPCTree:
             self._log_fathom(node_id=node.id, reason="bound", bound=node.lower_bound)
             return []
 
-        integral = self._is_integral(last_solution)
+        integral = self._is_integral(decision_solution)
         if integral:
-            cuts_added = self._validate_integral_or_cut(node, last_solution)
+            cuts_added = self._validate_integral_or_cut(node, decision_solution)
             if cuts_added:
                 return [
                     BPCNode(
@@ -3376,7 +3533,7 @@ class CleanBPCTree:
             self._log_fathom(node_id=node.id, reason="integral", bound=node.lower_bound)
             return []
 
-        branch = self._choose_branch(node, last_solution)
+        branch = self._choose_branch(node, decision_solution)
         if branch is None:
             self.abort_status = "BRANCH_FAILED"
             self._log_fathom(node_id=node.id, reason="no_branch_candidate", bound=node.lower_bound)

@@ -68,6 +68,8 @@ class RestrictedIntegerResult:
     repair_time: float = 0.0
     repair_states: int = 0
     repair_best_objective: float | None = None
+    solution_pool_scanned: int = 0
+    solution_pool_accepted_rank: int | None = None
 
     @property
     def feasible(self) -> bool:
@@ -509,6 +511,8 @@ def solve_restricted_integer_master(
     repair_enabled: bool = True,
     repair_max_attempts: int = 3,
     repair_max_states: int = 50000,
+    scan_solution_pool: bool = False,
+    solution_pool_scan_limit: int = 20,
 ) -> RestrictedIntegerResult:
     """中文注释：在当前 route pool 上解 binary RMP，并可迭代排除排程不可行的整数解。"""
 
@@ -645,6 +649,7 @@ def solve_restricted_integer_master(
     last_status = "UNKNOWN"
     no_good_limit = max(0, int(max_no_good_rounds))
     deadline = started + float(time_limit) if time_limit > 0 else None
+    solution_pool_scanned = 0
 
     def route_set_schedule_bound(conflict_routes: tuple[RouteColumn, ...]) -> tuple[int | None, int | None]:
         signatures = normalize_signatures(tuple(route.signature for route in conflict_routes))
@@ -684,10 +689,93 @@ def solve_restricted_integer_master(
         if solution is None:
             break
 
-        raw_objective = float(model.getSolObjVal(solution))
-        if raw_best_objective is None or raw_objective < raw_best_objective:
-            raw_best_objective = raw_objective
-        assigned, selected_routes = _extract_integer_assignment(data, routes, route_vars, model, solution)
+        pool_solutions = [solution]
+        if scan_solution_pool:
+            try:
+                fetched = list(model.getSols())
+            except Exception:
+                fetched = []
+            if fetched:
+                try:
+                    fetched.sort(key=lambda sol: float(model.getSolObjVal(sol)))
+                except Exception:
+                    pass
+                limit = max(1, int(solution_pool_scan_limit))
+                pool_solutions = fetched[:limit]
+
+        best_candidate: tuple[
+            float,
+            dict[int, list[RouteColumn]],
+            int,
+            tuple[int, ScheduleInfeasibilityWitness, tuple[RouteColumn, ...]] | None,
+        ] | None = None
+
+        for pool_rank, candidate_solution in enumerate(pool_solutions):
+            if scan_solution_pool:
+                solution_pool_scanned += 1
+            raw_objective = float(model.getSolObjVal(candidate_solution))
+            if raw_best_objective is None or raw_objective < raw_best_objective:
+                raw_best_objective = raw_objective
+            assigned, selected_routes = _extract_integer_assignment(data, routes, route_vars, model, candidate_solution)
+            if pool_rank == 0:
+                best_candidate = (raw_objective, assigned, selected_routes, None)
+            if not schedule_aware:
+                return RestrictedIntegerResult(
+                    status=last_status,
+                    objective=raw_objective,
+                    assigned_routes=assigned,
+                    solving_time=time.perf_counter() - started,
+                    variable_count=model.getNVars(),
+                    constraint_count=model.getNConss(),
+                    selected_routes=selected_routes,
+                    raw_objective=raw_best_objective,
+                    rejected_solutions=rejected_solutions,
+                    no_good_cuts=no_good_cuts,
+                    pair_conflict_cuts=pair_conflict_cuts,
+                    route_set_packing_cuts=route_set_packing_cuts,
+                    schedule_capacity_cuts=schedule_capacity_cuts,
+                    rejected_conflicts=tuple(rejected_conflicts),
+                    repair_attempts=repair_attempts,
+                    repair_successes=repair_successes,
+                    repair_time=repair_time,
+                    repair_states=repair_states,
+                    repair_best_objective=repair_best_objective,
+                    solution_pool_scanned=solution_pool_scanned,
+                    solution_pool_accepted_rank=pool_rank if scan_solution_pool else None,
+                )
+
+            conflict = _first_schedule_conflict(data, assigned)
+            if pool_rank == 0:
+                best_candidate = (raw_objective, assigned, selected_routes, conflict)
+            if conflict is None:
+                return RestrictedIntegerResult(
+                    status=last_status,
+                    objective=raw_objective,
+                    assigned_routes=assigned,
+                    solving_time=time.perf_counter() - started,
+                    variable_count=model.getNVars(),
+                    constraint_count=model.getNConss(),
+                    selected_routes=selected_routes,
+                    raw_objective=raw_best_objective,
+                    rejected_solutions=rejected_solutions,
+                    no_good_cuts=no_good_cuts,
+                    pair_conflict_cuts=pair_conflict_cuts,
+                    route_set_packing_cuts=route_set_packing_cuts,
+                    schedule_capacity_cuts=schedule_capacity_cuts,
+                    rejected_conflicts=tuple(rejected_conflicts),
+                    source="restricted_integer_master_solution_pool" if pool_rank > 0 else "restricted_integer_master",
+                    repair_attempts=repair_attempts,
+                    repair_successes=repair_successes,
+                    repair_time=repair_time,
+                    repair_states=repair_states,
+                    repair_best_objective=repair_best_objective,
+                    solution_pool_scanned=solution_pool_scanned,
+                    solution_pool_accepted_rank=pool_rank if scan_solution_pool else None,
+                )
+
+        if best_candidate is None:
+            break
+        raw_objective, assigned, selected_routes, conflict = best_candidate
         if not schedule_aware:
             return RestrictedIntegerResult(
                 status=last_status,
@@ -709,9 +797,9 @@ def solve_restricted_integer_master(
                 repair_time=repair_time,
                 repair_states=repair_states,
                 repair_best_objective=repair_best_objective,
+                solution_pool_scanned=solution_pool_scanned,
             )
 
-        conflict = _first_schedule_conflict(data, assigned)
         if conflict is None:
             return RestrictedIntegerResult(
                 status=last_status,
@@ -733,6 +821,7 @@ def solve_restricted_integer_master(
                 repair_time=repair_time,
                 repair_states=repair_states,
                 repair_best_objective=repair_best_objective,
+                solution_pool_scanned=solution_pool_scanned,
             )
 
         conflict_vehicle, witness, full_conflict_routes = conflict
@@ -789,6 +878,7 @@ def solve_restricted_integer_master(
                     repair_time=repair_time,
                     repair_states=repair_states,
                     repair_best_objective=repair_best_objective,
+                    solution_pool_scanned=solution_pool_scanned,
                 )
 
         rejected_solutions += 1
@@ -926,4 +1016,5 @@ def solve_restricted_integer_master(
         repair_time=repair_time,
         repair_states=repair_states,
         repair_best_objective=repair_best_objective,
+        solution_pool_scanned=solution_pool_scanned,
     )

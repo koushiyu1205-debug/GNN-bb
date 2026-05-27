@@ -127,6 +127,14 @@ def main() -> None:
             restricted_master_repair_enabled=_bool_config(config, "restricted_master_repair_enabled", True),
             restricted_master_repair_max_attempts=int(config.get("restricted_master_repair_max_attempts", 3)),
             restricted_master_repair_max_states=int(config.get("restricted_master_repair_max_states", 50000)),
+            restricted_master_scan_solution_pool_enabled=_bool_config(
+                config,
+                "restricted_master_scan_solution_pool_enabled",
+                False,
+            ),
+            restricted_master_scan_solution_pool_limit=int(
+                config.get("restricted_master_scan_solution_pool_limit", 20)
+            ),
             restricted_master_adaptive_enabled=_bool_config(config, "restricted_master_adaptive_enabled", False),
             restricted_master_adaptive_min_depth=int(config.get("restricted_master_adaptive_min_depth", 1)),
             restricted_master_adaptive_after_failures=int(config.get("restricted_master_adaptive_after_failures", 2)),
@@ -438,6 +446,9 @@ def main() -> None:
                 True,
             ),
             route_pool_restart_enabled=_bool_config(config, "route_pool_restart_enabled", False),
+            route_pool_restart_node_start_enabled=_bool_config(config, "route_pool_restart_node_start_enabled", True),
+            route_pool_restart_min_depth=int(config.get("route_pool_restart_min_depth", 0)),
+            route_pool_restart_max_depth=int(config.get("route_pool_restart_max_depth", -1)),
             route_pool_restart_max_routes=int(config.get("route_pool_restart_max_routes", 0)),
             route_pool_restart_min_global_routes=int(config.get("route_pool_restart_min_global_routes", 0)),
             route_pool_restart_keep_recent_rounds=int(config.get("route_pool_restart_keep_recent_rounds", 2)),
@@ -447,6 +458,16 @@ def main() -> None:
             route_pool_restart_active_value_tol=float(config.get("route_pool_restart_active_value_tol", 1.0e-8)),
             route_pool_restart_keep_cut_signatures=_bool_config(config, "route_pool_restart_keep_cut_signatures", False),
             route_pool_restart_cleanup_enabled=_bool_config(config, "route_pool_restart_cleanup_enabled", False),
+            route_pool_restart_branch_with_global_solution=_bool_config(
+                config,
+                "route_pool_restart_branch_with_global_solution",
+                False,
+            ),
+            early_bound_fathom_before_cuts_enabled=_bool_config(
+                config,
+                "early_bound_fathom_before_cuts_enabled",
+                False,
+            ),
             three_pb_candidate_budget_enabled=_bool_config(config, "three_pb_candidate_budget_enabled", False),
             three_pb_root_pseudocost_candidates=int(config.get("three_pb_root_pseudocost_candidates", 6)),
             three_pb_root_fractional_candidates=int(config.get("three_pb_root_fractional_candidates", 6)),

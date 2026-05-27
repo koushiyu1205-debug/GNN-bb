@@ -720,6 +720,58 @@ class CleanBPCTests(unittest.TestCase):
         self.assertIn(routes[1], filtered.routes)
         self.assertEqual(tree.stats.route_pool_hygiene_admission_protected, 2)
 
+    def test_route_pool_restart_can_create_mid_node_local_pool_from_solution(self):
+        _data, routes, tree = self._route_pool_hygiene_fixture()
+        for route in routes:
+            tree.pool.add(route)
+        tree.route_pool_restart_enabled = True
+        tree.route_pool_restart_cleanup_enabled = True
+        tree.route_pool_restart_max_routes = 2
+        tree.route_pool_restart_min_global_routes = 2
+        tree.route_pool_restart_max_routes_per_task_set = 1
+        solution = RMPSolution(
+            status="optimal",
+            objective=0.0,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[(tree.pool.by_signature[routes[0].signature], 1, 0.5)],
+            y_values={1: 1.0},
+            variable_count=0,
+            constraint_count=0,
+        )
+
+        created = tree._create_node_route_pool_from_solution(
+            BPCNode(0.0, 3, 0),
+            solution,
+            {route.signature: 0 for route in tree.pool.routes},
+            cg_iter=4,
+        )
+
+        self.assertIsNotNone(created)
+        assert created is not None
+        local_pool, local_birth_iter = created
+        self.assertEqual(len(local_pool.routes), 2)
+        self.assertIn(routes[0].signature, local_pool.by_signature)
+        same_task_set_routes = [
+            route
+            for route in local_pool.routes
+            if tuple(sorted(route.task_set)) == tuple(sorted(routes[0].task_set))
+        ]
+        self.assertEqual(len(same_task_set_routes), 1)
+        self.assertEqual(set(local_birth_iter), set(local_pool.by_signature))
+        self.assertEqual(tree.stats.route_pool_restart_nodes, 1)
+        self.assertEqual(tree.stats.route_pool_restart_rounds, 1)
+        self.assertEqual(tree.stats.route_pool_restart_routes_omitted_total, 1)
+
+        tree.route_pool_restart_max_depth = 0
+        blocked = tree._create_node_route_pool_from_solution(
+            BPCNode(0.0, 4, 1),
+            solution,
+            {route.signature: 0 for route in tree.pool.routes},
+            cg_iter=4,
+        )
+        self.assertIsNone(blocked)
+
     def test_restricted_master_adaptive_reduces_budget_and_then_skips(self):
         _data, routes, tree = self._route_pool_hygiene_fixture()
         for route in routes:

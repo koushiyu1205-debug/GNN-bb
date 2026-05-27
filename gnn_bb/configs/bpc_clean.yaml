@@ -72,6 +72,10 @@ restricted_master_route_pack_conflict_max_events: 2
 restricted_master_repair_enabled: true
 restricted_master_repair_max_attempts: 3
 restricted_master_repair_max_states: 50000
+# 默认关闭。打开后 RIM 会扫描 SCIP solution pool 中的多个整数候选，
+# 逐个做 exact schedule validation；只接受已验证可排程的解，不影响 lower bound。
+restricted_master_scan_solution_pool_enabled: false
+restricted_master_scan_solution_pool_limit: 20
 # Adaptive RIM gate:
 # 默认关闭。RIM 只提供 incumbent / valid conflict cuts，不参与 lower-bound 证明；
 # 因此连续 TIME_LIMIT 且没有 accepted incumbent 时，实验配置可以降预算或跳过深层 RIM，
@@ -350,6 +354,11 @@ route_pool_hygiene_admission_protect_branch_task_sets: true
 # 因此不能用来跳过最终 pricing certificate，也不改变 full column space。
 # 默认关闭；用于诊断列生成 tailing-off 和 route-pool 退化是否是 20 规模瓶颈。
 route_pool_restart_enabled: false
+# 若关闭 node-start，只允许节点内先求完整池 LP，再基于 LP support 建本地池。
+route_pool_restart_node_start_enabled: true
+route_pool_restart_min_depth: 0
+# -1 表示不限深度；实验时可设为 0 做 root-only 本地池压缩，避免扰动已验证的深层分支路径。
+route_pool_restart_max_depth: -1
 route_pool_restart_max_routes: 0
 route_pool_restart_min_global_routes: 0
 route_pool_restart_keep_recent_rounds: 2
@@ -357,6 +366,14 @@ route_pool_restart_max_routes_per_task_set: 6
 route_pool_restart_active_value_tol: 1.0e-8
 route_pool_restart_keep_cut_signatures: false
 route_pool_restart_cleanup_enabled: false
+# 实验项：若本地池被启用，节点完成 exact pricing 证书后可重解全局池 LP，
+# 仅用同 bound 的全局解做 RIM/integrality/branching，降低退化导致的分支路径漂移。
+route_pool_restart_branch_with_global_solution: false
+
+# Exact-safe fathom guard:
+# pricing 已经给出 phase2 证书后，若当前 LP bound 已不优于 incumbent，可直接 fathom，
+# 不必继续跑本节点 separator。默认先关闭，作为 20 规模剪枝提速实验项验证。
+early_bound_fathom_before_cuts_enabled: false
 
 # 清理 inactive crossing / schedule-capacity cut。
 cut_purge_age: 20
