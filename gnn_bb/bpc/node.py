@@ -48,6 +48,8 @@ class BPCStats:
     restricted_master_adaptive_skips: int = 0
     restricted_master_adaptive_time_limit_reductions: int = 0
     restricted_master_adaptive_failure_streak_max: int = 0
+    restricted_master_adaptive_unproductive_streak_max: int = 0
+    restricted_master_adaptive_probe_forced: int = 0
     time_to_first_incumbent: float | None = None
     time_to_best_incumbent: float | None = None
     best_incumbent_value: float | None = None
@@ -65,6 +67,20 @@ class BPCStats:
     schedule_pair_conflict_cuts_added: int = 0
     schedule_clique_conflict_cuts_added: int = 0
     schedule_route_set_packing_cuts_added: int = 0
+    schedule_variant_route_pack_cuts_added: int = 0
+    schedule_variant_route_pack_candidates: int = 0
+    schedule_variant_route_pack_expanded_candidates: int = 0
+    schedule_variant_route_pack_oracle_queries: int = 0
+    schedule_variant_route_pack_cache_hits: int = 0
+    schedule_variant_route_pack_oracle_incomplete: int = 0
+    schedule_variant_route_pack_exact_not_tight: int = 0
+    schedule_variant_route_pack_exact_not_violated: int = 0
+    schedule_variant_route_pack_violated_candidates: int = 0
+    schedule_variant_route_pack_duplicate_skips: int = 0
+    schedule_variant_route_pack_best_violation: float = 0.0
+    schedule_variant_route_pack_oracle_time: float = 0.0
+    schedule_variant_route_pack_oracle_states_total: int = 0
+    schedule_variant_route_pack_oracle_states_max: int = 0
     schedule_nogood_cuts_added: int = 0
     schedule_capacity_cuts_added: int = 0
     root_schedule_capacity_cuts_added: int = 0
@@ -106,6 +122,15 @@ class BPCStats:
     route_set_schedule_packing_oracle_time: float = 0.0
     route_set_schedule_packing_cache_hits: int = 0
     route_set_schedule_packing_added_but_no_bound_improvement: int = 0
+    witness_rank1_cuts_added: int = 0
+    witness_rank1_subset_row_cuts_added: int = 0
+    witness_rank1_lm_rank1_cuts_added: int = 0
+    witness_rank1_candidates_generated: int = 0
+    witness_rank1_candidates_after_precheck: int = 0
+    witness_rank1_violated_candidates: int = 0
+    witness_rank1_duplicate_skips: int = 0
+    witness_rank1_best_violation: float = 0.0
+    witness_rank1_candidates_by_source: dict[str, int] = field(default_factory=dict)
     weighted_route_schedule_packing_cuts_added: int = 0
     weighted_route_schedule_packing_candidates_generated: int = 0
     weighted_route_schedule_packing_candidates_after_precheck: int = 0

@@ -85,6 +85,13 @@ restricted_master_adaptive_min_depth: 1
 restricted_master_adaptive_after_failures: 2
 restricted_master_adaptive_reduced_time_limit: 5.0
 restricted_master_adaptive_skip_after_failures: 4
+# Optional productivity guard for experiments.  When enabled, RIM calls are
+# considered productive only if they accept an incumbent, add conflict cuts, or
+# improve a raw/repair incumbent candidate.  After consecutive unproductive
+# calls it skips only a bounded number of times, then forces a probe.
+restricted_master_adaptive_productivity_guard_enabled: false
+restricted_master_adaptive_productive_after_failures: 2
+restricted_master_adaptive_productive_max_consecutive_skips: 2
 
 # no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
 branching_strategy: 3pb
@@ -158,6 +165,23 @@ lm_rank1_candidate_max_sets: 700
 lm_rank1_denominators: [3, 4]
 lm_rank1_memory_size: 4
 lm_rank1_max_patterns_per_set: 12
+
+# Witness-driven pricing-aware rank-1 cuts:
+# 默认关闭。它只从 route-pack ROI / RIM rejected / schedule incompatibility witness
+# 产生任务集候选，然后复用已有 SubsetRowCut / LimitedMemoryRank1Cut；这些 cut 已经进入
+# pricing reduced-cost，因此不会出现 finite-support route-pack 的同池替代问题。
+witness_rank1_cuts_enabled: false
+witness_rank1_max_depth: 1
+witness_rank1_max_rounds_per_node: 1
+witness_rank1_max_candidates: 40
+witness_rank1_max_cuts_per_round: 8
+witness_rank1_max_subset_size: 8
+witness_rank1_min_violation: 1.0e-5
+witness_rank1_use_route_pack_roi: true
+witness_rank1_use_rim_witness: true
+witness_rank1_use_incompatibility_witness: true
+witness_rank1_use_subset_row: true
+witness_rank1_use_lm_rank1: true
 
 # Schedule subset cost lower-bound cuts:
 # 若车辆 r 完整服务任务集 S，则其真实多 sortie schedule 变量成本至少为 L(S)。
@@ -369,6 +393,25 @@ route_pool_restart_cleanup_enabled: false
 # 实验项：若本地池被启用，节点完成 exact pricing 证书后可重解全局池 LP，
 # 仅用同 bound 的全局解做 RIM/integrality/branching，降低退化导致的分支路径漂移。
 route_pool_restart_branch_with_global_solution: false
+
+# 节点局部同 task_set route 压缩：
+# 默认关闭。开启后只压缩当前节点本地 RMP 的非保护 route 变体；全局 route pool 不删除，
+# exact pricing 仍可把负 reduced-cost 的省略 route 找回。active/incumbent/recent/branch/cut
+# 相关 route 会被保护，避免破坏当前最好 baseline 和 signature cut 语义。
+route_pool_task_set_compaction_enabled: false
+route_pool_task_set_compaction_min_depth: 1
+route_pool_task_set_compaction_max_depth: -1
+route_pool_task_set_compaction_max_routes_per_task_set: 3
+route_pool_task_set_compaction_min_group_size: 4
+route_pool_task_set_compaction_keep_recent_rounds: 2
+
+# route-pack ROI 分支信号：
+# 默认只记录。若 apply 开启，会轻微提升能区分同 task_set 不同 route 顺序替换的 arc branch；
+# 不参与剪枝、不改变 bound，只影响 3PB 候选排序。
+route_pack_branch_signal_enabled: false
+route_pack_branch_signal_apply_enabled: false
+route_pack_branch_signal_apply_min_depth: 0
+route_pack_branch_signal_boost: 0.02
 
 # Exact-safe fathom guard:
 # pricing 已经给出 phase2 证书后，若当前 LP bound 已不优于 incumbent，可直接 fathom，

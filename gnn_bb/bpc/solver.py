@@ -62,6 +62,8 @@ class BPCResult:
     restricted_master_adaptive_skips: int
     restricted_master_adaptive_time_limit_reductions: int
     restricted_master_adaptive_failure_streak_max: int
+    restricted_master_adaptive_unproductive_streak_max: int
+    restricted_master_adaptive_probe_forced: int
     crossing_cuts_added: int
     crossing_cuts_upgraded: int
     subset_row_cuts_added: int
@@ -72,6 +74,20 @@ class BPCResult:
     schedule_pair_conflict_cuts_added: int
     schedule_clique_conflict_cuts_added: int
     schedule_route_set_packing_cuts_added: int
+    schedule_variant_route_pack_cuts_added: int
+    schedule_variant_route_pack_candidates: int
+    schedule_variant_route_pack_expanded_candidates: int
+    schedule_variant_route_pack_oracle_queries: int
+    schedule_variant_route_pack_cache_hits: int
+    schedule_variant_route_pack_oracle_incomplete: int
+    schedule_variant_route_pack_exact_not_tight: int
+    schedule_variant_route_pack_exact_not_violated: int
+    schedule_variant_route_pack_violated_candidates: int
+    schedule_variant_route_pack_duplicate_skips: int
+    schedule_variant_route_pack_best_violation: float
+    schedule_variant_route_pack_oracle_time: float
+    schedule_variant_route_pack_oracle_states_total: int
+    schedule_variant_route_pack_oracle_states_max: int
     schedule_nogood_cuts_added: int
     schedule_capacity_cuts_added: int
     root_schedule_capacity_cuts_added: int
@@ -112,6 +128,15 @@ class BPCResult:
     route_set_schedule_packing_oracle_time: float
     route_set_schedule_packing_cache_hits: int
     route_set_schedule_packing_added_but_no_bound_improvement: int
+    witness_rank1_cuts_added: int
+    witness_rank1_subset_row_cuts_added: int
+    witness_rank1_lm_rank1_cuts_added: int
+    witness_rank1_candidates_generated: int
+    witness_rank1_candidates_after_precheck: int
+    witness_rank1_violated_candidates: int
+    witness_rank1_duplicate_skips: int
+    witness_rank1_best_violation: float
+    witness_rank1_candidates_by_source: dict[str, int]
     weighted_route_schedule_packing_cuts_added: int
     weighted_route_schedule_packing_candidates_generated: int
     weighted_route_schedule_packing_candidates_after_precheck: int
@@ -256,6 +281,9 @@ def solve_bpc_clean(
     restricted_master_adaptive_after_failures: int = 2,
     restricted_master_adaptive_reduced_time_limit: float = 5.0,
     restricted_master_adaptive_skip_after_failures: int = 4,
+    restricted_master_adaptive_productivity_guard_enabled: bool = False,
+    restricted_master_adaptive_productive_after_failures: int = 2,
+    restricted_master_adaptive_productive_max_consecutive_skips: int = 2,
     branching_strategy: str = "3pb",
     three_pb_pseudocost_candidates: int = 6,
     three_pb_fractional_candidates: int = 6,
@@ -296,6 +324,18 @@ def solve_bpc_clean(
     lm_rank1_denominators: tuple[int, ...] | list[int] = (3, 4),
     lm_rank1_memory_size: int = 4,
     lm_rank1_max_patterns_per_set: int = 12,
+    witness_rank1_cuts_enabled: bool = False,
+    witness_rank1_max_depth: int = 1,
+    witness_rank1_max_rounds_per_node: int = 1,
+    witness_rank1_max_candidates: int = 40,
+    witness_rank1_max_cuts_per_round: int = 8,
+    witness_rank1_max_subset_size: int = 8,
+    witness_rank1_min_violation: float = 1.0e-5,
+    witness_rank1_use_route_pack_roi: bool = True,
+    witness_rank1_use_rim_witness: bool = True,
+    witness_rank1_use_incompatibility_witness: bool = True,
+    witness_rank1_use_subset_row: bool = True,
+    witness_rank1_use_lm_rank1: bool = True,
     schedule_subset_cost_cuts_enabled: bool = False,
     schedule_subset_cost_cut_max_depth: int = 0,
     schedule_subset_cost_cut_max_subset_size: int = 8,
@@ -373,6 +413,12 @@ def solve_bpc_clean(
     route_set_schedule_packing_min_objective_improvement: float = 1.0e-7,
     route_set_schedule_packing_stop_after_no_improve_rounds: int = 2,
     route_set_schedule_packing_global_time_limit_ratio: float = 0.10,
+    schedule_variant_route_pack_cuts_enabled: bool = False,
+    schedule_variant_route_pack_max_depth: int = 2,
+    schedule_variant_route_pack_max_core_routes: int = 4,
+    schedule_variant_route_pack_max_variants_per_task_set: int = 4,
+    schedule_variant_route_pack_max_routes: int = 16,
+    schedule_variant_route_pack_min_violation: float = 1.0e-5,
     weighted_route_schedule_packing_cuts_enabled: bool = False,
     weighted_route_schedule_packing_max_depth: int = 1,
     weighted_route_schedule_packing_max_rounds_per_node: int = 1,
@@ -430,6 +476,16 @@ def solve_bpc_clean(
     route_pool_restart_keep_cut_signatures: bool = False,
     route_pool_restart_cleanup_enabled: bool = False,
     route_pool_restart_branch_with_global_solution: bool = False,
+    route_pool_task_set_compaction_enabled: bool = False,
+    route_pool_task_set_compaction_min_depth: int = 1,
+    route_pool_task_set_compaction_max_depth: int = -1,
+    route_pool_task_set_compaction_max_routes_per_task_set: int = 3,
+    route_pool_task_set_compaction_min_group_size: int = 4,
+    route_pool_task_set_compaction_keep_recent_rounds: int = 2,
+    route_pack_branch_signal_enabled: bool = False,
+    route_pack_branch_signal_apply_enabled: bool = False,
+    route_pack_branch_signal_apply_min_depth: int = 0,
+    route_pack_branch_signal_boost: float = 0.02,
     early_bound_fathom_before_cuts_enabled: bool = False,
     three_pb_candidate_budget_enabled: bool = False,
     three_pb_root_pseudocost_candidates: int = 6,
@@ -502,6 +558,15 @@ def solve_bpc_clean(
             restricted_master_adaptive_after_failures=restricted_master_adaptive_after_failures,
             restricted_master_adaptive_reduced_time_limit=restricted_master_adaptive_reduced_time_limit,
             restricted_master_adaptive_skip_after_failures=restricted_master_adaptive_skip_after_failures,
+            restricted_master_adaptive_productivity_guard_enabled=(
+                restricted_master_adaptive_productivity_guard_enabled
+            ),
+            restricted_master_adaptive_productive_after_failures=(
+                restricted_master_adaptive_productive_after_failures
+            ),
+            restricted_master_adaptive_productive_max_consecutive_skips=(
+                restricted_master_adaptive_productive_max_consecutive_skips
+            ),
             branching_strategy=branching_strategy,
             three_pb_pseudocost_candidates=three_pb_pseudocost_candidates,
             three_pb_fractional_candidates=three_pb_fractional_candidates,
@@ -542,6 +607,18 @@ def solve_bpc_clean(
             lm_rank1_denominators=lm_rank1_denominators,
             lm_rank1_memory_size=lm_rank1_memory_size,
             lm_rank1_max_patterns_per_set=lm_rank1_max_patterns_per_set,
+            witness_rank1_cuts_enabled=witness_rank1_cuts_enabled,
+            witness_rank1_max_depth=witness_rank1_max_depth,
+            witness_rank1_max_rounds_per_node=witness_rank1_max_rounds_per_node,
+            witness_rank1_max_candidates=witness_rank1_max_candidates,
+            witness_rank1_max_cuts_per_round=witness_rank1_max_cuts_per_round,
+            witness_rank1_max_subset_size=witness_rank1_max_subset_size,
+            witness_rank1_min_violation=witness_rank1_min_violation,
+            witness_rank1_use_route_pack_roi=witness_rank1_use_route_pack_roi,
+            witness_rank1_use_rim_witness=witness_rank1_use_rim_witness,
+            witness_rank1_use_incompatibility_witness=witness_rank1_use_incompatibility_witness,
+            witness_rank1_use_subset_row=witness_rank1_use_subset_row,
+            witness_rank1_use_lm_rank1=witness_rank1_use_lm_rank1,
             schedule_subset_cost_cuts_enabled=schedule_subset_cost_cuts_enabled,
             schedule_subset_cost_cut_max_depth=schedule_subset_cost_cut_max_depth,
             schedule_subset_cost_cut_max_subset_size=schedule_subset_cost_cut_max_subset_size,
@@ -619,6 +696,12 @@ def solve_bpc_clean(
             route_set_schedule_packing_min_objective_improvement=route_set_schedule_packing_min_objective_improvement,
             route_set_schedule_packing_stop_after_no_improve_rounds=route_set_schedule_packing_stop_after_no_improve_rounds,
             route_set_schedule_packing_global_time_limit_ratio=route_set_schedule_packing_global_time_limit_ratio,
+            schedule_variant_route_pack_cuts_enabled=schedule_variant_route_pack_cuts_enabled,
+            schedule_variant_route_pack_max_depth=schedule_variant_route_pack_max_depth,
+            schedule_variant_route_pack_max_core_routes=schedule_variant_route_pack_max_core_routes,
+            schedule_variant_route_pack_max_variants_per_task_set=schedule_variant_route_pack_max_variants_per_task_set,
+            schedule_variant_route_pack_max_routes=schedule_variant_route_pack_max_routes,
+            schedule_variant_route_pack_min_violation=schedule_variant_route_pack_min_violation,
             weighted_route_schedule_packing_cuts_enabled=weighted_route_schedule_packing_cuts_enabled,
             weighted_route_schedule_packing_max_depth=weighted_route_schedule_packing_max_depth,
             weighted_route_schedule_packing_max_rounds_per_node=weighted_route_schedule_packing_max_rounds_per_node,
@@ -682,6 +765,16 @@ def solve_bpc_clean(
             route_pool_restart_keep_cut_signatures=route_pool_restart_keep_cut_signatures,
             route_pool_restart_cleanup_enabled=route_pool_restart_cleanup_enabled,
             route_pool_restart_branch_with_global_solution=route_pool_restart_branch_with_global_solution,
+            route_pool_task_set_compaction_enabled=route_pool_task_set_compaction_enabled,
+            route_pool_task_set_compaction_min_depth=route_pool_task_set_compaction_min_depth,
+            route_pool_task_set_compaction_max_depth=route_pool_task_set_compaction_max_depth,
+            route_pool_task_set_compaction_max_routes_per_task_set=route_pool_task_set_compaction_max_routes_per_task_set,
+            route_pool_task_set_compaction_min_group_size=route_pool_task_set_compaction_min_group_size,
+            route_pool_task_set_compaction_keep_recent_rounds=route_pool_task_set_compaction_keep_recent_rounds,
+            route_pack_branch_signal_enabled=route_pack_branch_signal_enabled,
+            route_pack_branch_signal_apply_enabled=route_pack_branch_signal_apply_enabled,
+            route_pack_branch_signal_apply_min_depth=route_pack_branch_signal_apply_min_depth,
+            route_pack_branch_signal_boost=route_pack_branch_signal_boost,
             early_bound_fathom_before_cuts_enabled=early_bound_fathom_before_cuts_enabled,
             three_pb_candidate_budget_enabled=three_pb_candidate_budget_enabled,
             three_pb_root_pseudocost_candidates=three_pb_root_pseudocost_candidates,
@@ -758,6 +851,10 @@ def solve_bpc_clean(
             tree_result.stats.restricted_master_adaptive_time_limit_reductions
         ),
         restricted_master_adaptive_failure_streak_max=tree_result.stats.restricted_master_adaptive_failure_streak_max,
+        restricted_master_adaptive_unproductive_streak_max=(
+            tree_result.stats.restricted_master_adaptive_unproductive_streak_max
+        ),
+        restricted_master_adaptive_probe_forced=tree_result.stats.restricted_master_adaptive_probe_forced,
         crossing_cuts_added=tree_result.stats.crossing_cuts_added,
         crossing_cuts_upgraded=tree_result.stats.crossing_cuts_upgraded,
         subset_row_cuts_added=tree_result.stats.subset_row_cuts_added,
@@ -768,6 +865,20 @@ def solve_bpc_clean(
         schedule_pair_conflict_cuts_added=tree_result.stats.schedule_pair_conflict_cuts_added,
         schedule_clique_conflict_cuts_added=tree_result.stats.schedule_clique_conflict_cuts_added,
         schedule_route_set_packing_cuts_added=tree_result.stats.schedule_route_set_packing_cuts_added,
+        schedule_variant_route_pack_cuts_added=tree_result.stats.schedule_variant_route_pack_cuts_added,
+        schedule_variant_route_pack_candidates=tree_result.stats.schedule_variant_route_pack_candidates,
+        schedule_variant_route_pack_expanded_candidates=tree_result.stats.schedule_variant_route_pack_expanded_candidates,
+        schedule_variant_route_pack_oracle_queries=tree_result.stats.schedule_variant_route_pack_oracle_queries,
+        schedule_variant_route_pack_cache_hits=tree_result.stats.schedule_variant_route_pack_cache_hits,
+        schedule_variant_route_pack_oracle_incomplete=tree_result.stats.schedule_variant_route_pack_oracle_incomplete,
+        schedule_variant_route_pack_exact_not_tight=tree_result.stats.schedule_variant_route_pack_exact_not_tight,
+        schedule_variant_route_pack_exact_not_violated=tree_result.stats.schedule_variant_route_pack_exact_not_violated,
+        schedule_variant_route_pack_violated_candidates=tree_result.stats.schedule_variant_route_pack_violated_candidates,
+        schedule_variant_route_pack_duplicate_skips=tree_result.stats.schedule_variant_route_pack_duplicate_skips,
+        schedule_variant_route_pack_best_violation=_round(tree_result.stats.schedule_variant_route_pack_best_violation, 9),
+        schedule_variant_route_pack_oracle_time=_round(tree_result.stats.schedule_variant_route_pack_oracle_time),
+        schedule_variant_route_pack_oracle_states_total=tree_result.stats.schedule_variant_route_pack_oracle_states_total,
+        schedule_variant_route_pack_oracle_states_max=tree_result.stats.schedule_variant_route_pack_oracle_states_max,
         schedule_nogood_cuts_added=tree_result.stats.schedule_nogood_cuts_added,
         schedule_capacity_cuts_added=tree_result.stats.schedule_capacity_cuts_added,
         root_schedule_capacity_cuts_added=tree_result.stats.root_schedule_capacity_cuts_added,
@@ -810,6 +921,15 @@ def solve_bpc_clean(
         route_set_schedule_packing_added_but_no_bound_improvement=(
             tree_result.stats.route_set_schedule_packing_added_but_no_bound_improvement
         ),
+        witness_rank1_cuts_added=tree_result.stats.witness_rank1_cuts_added,
+        witness_rank1_subset_row_cuts_added=tree_result.stats.witness_rank1_subset_row_cuts_added,
+        witness_rank1_lm_rank1_cuts_added=tree_result.stats.witness_rank1_lm_rank1_cuts_added,
+        witness_rank1_candidates_generated=tree_result.stats.witness_rank1_candidates_generated,
+        witness_rank1_candidates_after_precheck=tree_result.stats.witness_rank1_candidates_after_precheck,
+        witness_rank1_violated_candidates=tree_result.stats.witness_rank1_violated_candidates,
+        witness_rank1_duplicate_skips=tree_result.stats.witness_rank1_duplicate_skips,
+        witness_rank1_best_violation=_round(tree_result.stats.witness_rank1_best_violation, 9),
+        witness_rank1_candidates_by_source=dict(tree_result.stats.witness_rank1_candidates_by_source),
         weighted_route_schedule_packing_cuts_added=tree_result.stats.weighted_route_schedule_packing_cuts_added,
         weighted_route_schedule_packing_candidates_generated=tree_result.stats.weighted_route_schedule_packing_candidates_generated,
         weighted_route_schedule_packing_candidates_after_precheck=(

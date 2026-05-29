@@ -144,6 +144,17 @@ def main() -> None:
             restricted_master_adaptive_skip_after_failures=int(
                 config.get("restricted_master_adaptive_skip_after_failures", 4)
             ),
+            restricted_master_adaptive_productivity_guard_enabled=_bool_config(
+                config,
+                "restricted_master_adaptive_productivity_guard_enabled",
+                False,
+            ),
+            restricted_master_adaptive_productive_after_failures=int(
+                config.get("restricted_master_adaptive_productive_after_failures", 2)
+            ),
+            restricted_master_adaptive_productive_max_consecutive_skips=int(
+                config.get("restricted_master_adaptive_productive_max_consecutive_skips", 2)
+            ),
             rmp_params=dict(config.get("rmp_params", {})),
             log_path=log_path,
             solution_path=solution_path,
@@ -189,6 +200,22 @@ def main() -> None:
             lm_rank1_denominators=_int_tuple_config(config, "lm_rank1_denominators", (3, 4)),
             lm_rank1_memory_size=int(config.get("lm_rank1_memory_size", 4)),
             lm_rank1_max_patterns_per_set=int(config.get("lm_rank1_max_patterns_per_set", 12)),
+            witness_rank1_cuts_enabled=_bool_config(config, "witness_rank1_cuts_enabled", False),
+            witness_rank1_max_depth=int(config.get("witness_rank1_max_depth", 1)),
+            witness_rank1_max_rounds_per_node=int(config.get("witness_rank1_max_rounds_per_node", 1)),
+            witness_rank1_max_candidates=int(config.get("witness_rank1_max_candidates", 40)),
+            witness_rank1_max_cuts_per_round=int(config.get("witness_rank1_max_cuts_per_round", 8)),
+            witness_rank1_max_subset_size=int(config.get("witness_rank1_max_subset_size", 8)),
+            witness_rank1_min_violation=float(config.get("witness_rank1_min_violation", 1.0e-5)),
+            witness_rank1_use_route_pack_roi=_bool_config(config, "witness_rank1_use_route_pack_roi", True),
+            witness_rank1_use_rim_witness=_bool_config(config, "witness_rank1_use_rim_witness", True),
+            witness_rank1_use_incompatibility_witness=_bool_config(
+                config,
+                "witness_rank1_use_incompatibility_witness",
+                True,
+            ),
+            witness_rank1_use_subset_row=_bool_config(config, "witness_rank1_use_subset_row", True),
+            witness_rank1_use_lm_rank1=_bool_config(config, "witness_rank1_use_lm_rank1", True),
             schedule_subset_cost_cuts_enabled=_bool_config(config, "schedule_subset_cost_cuts_enabled", False),
             schedule_subset_cost_cut_max_depth=int(config.get("schedule_subset_cost_cut_max_depth", 0)),
             schedule_subset_cost_cut_max_subset_size=int(config.get("schedule_subset_cost_cut_max_subset_size", 8)),
@@ -338,6 +365,18 @@ def main() -> None:
             route_set_schedule_packing_global_time_limit_ratio=float(
                 config.get("route_set_schedule_packing_global_time_limit_ratio", 0.10)
             ),
+            schedule_variant_route_pack_cuts_enabled=_bool_config(
+                config,
+                "schedule_variant_route_pack_cuts_enabled",
+                False,
+            ),
+            schedule_variant_route_pack_max_depth=int(config.get("schedule_variant_route_pack_max_depth", 2)),
+            schedule_variant_route_pack_max_core_routes=int(config.get("schedule_variant_route_pack_max_core_routes", 4)),
+            schedule_variant_route_pack_max_variants_per_task_set=int(
+                config.get("schedule_variant_route_pack_max_variants_per_task_set", 4)
+            ),
+            schedule_variant_route_pack_max_routes=int(config.get("schedule_variant_route_pack_max_routes", 16)),
+            schedule_variant_route_pack_min_violation=float(config.get("schedule_variant_route_pack_min_violation", 1.0e-5)),
             weighted_route_schedule_packing_cuts_enabled=_bool_config(
                 config,
                 "weighted_route_schedule_packing_cuts_enabled",
@@ -463,6 +502,32 @@ def main() -> None:
                 "route_pool_restart_branch_with_global_solution",
                 False,
             ),
+            route_pool_task_set_compaction_enabled=_bool_config(
+                config,
+                "route_pool_task_set_compaction_enabled",
+                False,
+            ),
+            route_pool_task_set_compaction_min_depth=int(config.get("route_pool_task_set_compaction_min_depth", 1)),
+            route_pool_task_set_compaction_max_depth=int(config.get("route_pool_task_set_compaction_max_depth", -1)),
+            route_pool_task_set_compaction_max_routes_per_task_set=int(
+                config.get("route_pool_task_set_compaction_max_routes_per_task_set", 3)
+            ),
+            route_pool_task_set_compaction_min_group_size=int(
+                config.get("route_pool_task_set_compaction_min_group_size", 4)
+            ),
+            route_pool_task_set_compaction_keep_recent_rounds=int(
+                config.get("route_pool_task_set_compaction_keep_recent_rounds", 2)
+            ),
+            route_pack_branch_signal_enabled=_bool_config(config, "route_pack_branch_signal_enabled", False),
+            route_pack_branch_signal_apply_enabled=_bool_config(
+                config,
+                "route_pack_branch_signal_apply_enabled",
+                False,
+            ),
+            route_pack_branch_signal_apply_min_depth=int(
+                config.get("route_pack_branch_signal_apply_min_depth", 0)
+            ),
+            route_pack_branch_signal_boost=float(config.get("route_pack_branch_signal_boost", 0.02)),
             early_bound_fathom_before_cuts_enabled=_bool_config(
                 config,
                 "early_bound_fathom_before_cuts_enabled",
@@ -539,6 +604,7 @@ def main() -> None:
             f"route_pool_admission_protected={result.route_pool_hygiene_admission_protected}, "
             f"rim_adapt_skip={result.restricted_master_adaptive_skips}, "
             f"rim_adapt_reduce={result.restricted_master_adaptive_time_limit_reductions}, "
+            f"rim_adapt_probe={result.restricted_master_adaptive_probe_forced}, "
             f"cuts_purged={result.cuts_purged}, branch_test_time={result.branch_testing_time}s",
             flush=True,
         )

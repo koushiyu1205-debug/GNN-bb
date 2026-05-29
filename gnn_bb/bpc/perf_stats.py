@@ -69,6 +69,10 @@ def analyze_csv(path: str | Path) -> list[dict[str, Any]]:
             "restricted_master_adaptive_failure_streak_max": _int(
                 row.get("restricted_master_adaptive_failure_streak_max")
             ),
+            "restricted_master_adaptive_unproductive_streak_max": _int(
+                row.get("restricted_master_adaptive_unproductive_streak_max")
+            ),
+            "restricted_master_adaptive_probe_forced": _int(row.get("restricted_master_adaptive_probe_forced")),
             "task_schedule_capacity_cuts_added": _int(row.get("task_schedule_capacity_cuts_added")),
             "task_schedule_capacity_candidates_generated": _int(row.get("task_schedule_capacity_candidates_generated")),
             "task_schedule_capacity_candidates_after_precheck": _int(row.get("task_schedule_capacity_candidates_after_precheck")),
@@ -95,6 +99,15 @@ def analyze_csv(path: str | Path) -> list[dict[str, Any]]:
             "task_schedule_capacity_stopped_by_global_time_budget": _int(row.get("task_schedule_capacity_stopped_by_global_time_budget")),
             "task_schedule_capacity_branch_signal_candidates": _int(row.get("task_schedule_capacity_branch_signal_candidates")),
             "task_schedule_capacity_branch_signal_applied": _int(row.get("task_schedule_capacity_branch_signal_applied")),
+            "witness_rank1_cuts_added": _int(row.get("witness_rank1_cuts_added")),
+            "witness_rank1_subset_row_cuts_added": _int(row.get("witness_rank1_subset_row_cuts_added")),
+            "witness_rank1_lm_rank1_cuts_added": _int(row.get("witness_rank1_lm_rank1_cuts_added")),
+            "witness_rank1_candidates_generated": _int(row.get("witness_rank1_candidates_generated")),
+            "witness_rank1_candidates_after_precheck": _int(row.get("witness_rank1_candidates_after_precheck")),
+            "witness_rank1_violated_candidates": _int(row.get("witness_rank1_violated_candidates")),
+            "witness_rank1_duplicate_skips": _int(row.get("witness_rank1_duplicate_skips")),
+            "witness_rank1_best_violation": _number(row.get("witness_rank1_best_violation")) or 0.0,
+            "witness_rank1_candidates_by_source": row.get("witness_rank1_candidates_by_source"),
             "weighted_route_schedule_packing_cuts_added": _int(row.get("weighted_route_schedule_packing_cuts_added")),
             "weighted_route_schedule_packing_candidates_generated": _int(
                 row.get("weighted_route_schedule_packing_candidates_generated")
@@ -143,6 +156,38 @@ def analyze_csv(path: str | Path) -> list[dict[str, Any]]:
                 row.get("weighted_route_schedule_packing_stopped_by_budget")
             ),
             "weighted_route_schedule_packing_duplicate_skips": _int(row.get("weighted_route_schedule_packing_duplicate_skips")),
+            "schedule_variant_route_pack_cuts_added": _int(row.get("schedule_variant_route_pack_cuts_added")),
+            "schedule_variant_route_pack_candidates": _int(row.get("schedule_variant_route_pack_candidates")),
+            "schedule_variant_route_pack_expanded_candidates": _int(
+                row.get("schedule_variant_route_pack_expanded_candidates")
+            ),
+            "schedule_variant_route_pack_oracle_queries": _int(row.get("schedule_variant_route_pack_oracle_queries")),
+            "schedule_variant_route_pack_cache_hits": _int(row.get("schedule_variant_route_pack_cache_hits")),
+            "schedule_variant_route_pack_oracle_incomplete": _int(
+                row.get("schedule_variant_route_pack_oracle_incomplete")
+            ),
+            "schedule_variant_route_pack_exact_not_tight": _int(
+                row.get("schedule_variant_route_pack_exact_not_tight")
+            ),
+            "schedule_variant_route_pack_exact_not_violated": _int(
+                row.get("schedule_variant_route_pack_exact_not_violated")
+            ),
+            "schedule_variant_route_pack_violated_candidates": _int(
+                row.get("schedule_variant_route_pack_violated_candidates")
+            ),
+            "schedule_variant_route_pack_duplicate_skips": _int(row.get("schedule_variant_route_pack_duplicate_skips")),
+            "schedule_variant_route_pack_best_violation": _number(
+                row.get("schedule_variant_route_pack_best_violation")
+            )
+            or 0.0,
+            "schedule_variant_route_pack_oracle_time": _number(row.get("schedule_variant_route_pack_oracle_time"))
+            or 0.0,
+            "schedule_variant_route_pack_oracle_states_total": _int(
+                row.get("schedule_variant_route_pack_oracle_states_total")
+            ),
+            "schedule_variant_route_pack_oracle_states_max": _int(
+                row.get("schedule_variant_route_pack_oracle_states_max")
+            ),
             "route_pack_roi_classifications": row.get("route_pack_roi_classifications"),
             "route_pack_roi_same_pool_degeneracy": _int(row.get("route_pack_roi_same_pool_degeneracy")),
             "route_pack_roi_pricing_mousehole": _int(row.get("route_pack_roi_pricing_mousehole")),
@@ -217,11 +262,17 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
     task_schedcap_prechecked_by_source: Counter[str] = Counter()
     task_schedcap_time = 0.0
     task_schedcap_best_violation = 0.0
+    witness_rank1 = Counter()
+    witness_rank1_by_source: Counter[str] = Counter()
+    witness_rank1_best_violation = 0.0
     weighted_route_pack = Counter()
     weighted_route_pack_by_source: Counter[str] = Counter()
     weighted_route_pack_by_alpha: Counter[str] = Counter()
     weighted_route_pack_time = 0.0
     weighted_route_pack_best_violation = 0.0
+    schedule_variant_route_pack = Counter()
+    schedule_variant_route_pack_time = 0.0
+    schedule_variant_route_pack_best_violation = 0.0
     route_pack_roi_classifications: Counter[str] = Counter()
     route_pool_restart = Counter()
     route_pool_hygiene = Counter()
@@ -326,6 +377,41 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
                     weighted_route_pack_by_source[str(key)] += _int(value)
                 for key, value in (record.get("candidates_by_alpha") or {}).items():
                     weighted_route_pack_by_alpha[str(key)] += _int(value)
+            elif event == "schedule_variant_route_pack_diagnostics":
+                schedule_variant_route_pack["candidates"] += 1
+                schedule_variant_route_pack["expanded"] += int(_int(record.get("closure_route_count")) > 0)
+                schedule_variant_route_pack["oracle_queries"] += int("oracle_complete" in record)
+                schedule_variant_route_pack["cache_hits"] += int(bool(record.get("cache_hit", False)))
+                schedule_variant_route_pack["incomplete"] += int(record.get("oracle_complete") is False)
+                schedule_variant_route_pack["not_tight"] += int(bool(record.get("skipped_not_tight", False)))
+                schedule_variant_route_pack["not_violated"] += int(bool(record.get("exact_not_violated", False)))
+                schedule_variant_route_pack["violated"] += _int(record.get("violated_candidates"))
+                schedule_variant_route_pack["duplicate"] += _int(record.get("duplicate"))
+                schedule_variant_route_pack["added"] += _int(record.get("added"))
+                schedule_variant_route_pack["states_total"] += _int(record.get("oracle_states"))
+                schedule_variant_route_pack["states_max"] = max(
+                    int(schedule_variant_route_pack["states_max"]),
+                    _int(record.get("oracle_states")),
+                )
+                schedule_variant_route_pack_best_violation = max(
+                    schedule_variant_route_pack_best_violation,
+                    _number(record.get("best_violation")) or 0.0,
+                )
+                schedule_variant_route_pack_time += _number(record.get("oracle_time")) or 0.0
+            elif event == "witness_rank1_diagnostics":
+                witness_rank1["generated"] += _int(record.get("candidate_subsets"))
+                witness_rank1["prechecked"] += _int(record.get("violated_candidates"))
+                witness_rank1["violated"] += _int(record.get("violated_candidates"))
+                witness_rank1["duplicate"] += _int(record.get("skipped_duplicate"))
+                witness_rank1["added"] += _int(record.get("added"))
+                witness_rank1["subset_row_added"] += _int(record.get("subset_row_added"))
+                witness_rank1["lm_rank1_added"] += _int(record.get("lm_rank1_added"))
+                witness_rank1_best_violation = max(
+                    witness_rank1_best_violation,
+                    _number(record.get("max_violation")) or 0.0,
+                )
+                for key, value in (record.get("candidate_sources") or {}).items():
+                    witness_rank1_by_source[str(key)] += _int(value)
             elif event == "route_pack_roi_diagnostics":
                 route_pack_roi_classifications[str(record.get("classification") or "unknown")] += 1
         elif event == "cut_roi":
@@ -345,6 +431,11 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
                 int(rim["adaptive_failure_streak_max"]),
                 _int(record.get("adaptive_failure_streak")),
             )
+            rim["adaptive_unproductive_streak_max"] = max(
+                int(rim["adaptive_unproductive_streak_max"]),
+                _int(record.get("adaptive_unproductive_streak")),
+            )
+            rim["adaptive_probe_forced"] += int(bool(record.get("adaptive_probe_forced")))
         elif event == "restricted_integer_master_adaptive_skip":
             rim["adaptive_skips"] += 1
         elif event == "rim_conflict_diagnostics":
@@ -451,6 +542,10 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
         or _int(finish.get("restricted_master_adaptive_time_limit_reductions")),
         "restricted_master_adaptive_failure_streak_max": int(rim["adaptive_failure_streak_max"])
         or _int(finish.get("restricted_master_adaptive_failure_streak_max")),
+        "restricted_master_adaptive_unproductive_streak_max": int(rim["adaptive_unproductive_streak_max"])
+        or _int(finish.get("restricted_master_adaptive_unproductive_streak_max")),
+        "restricted_master_adaptive_probe_forced": int(rim["adaptive_probe_forced"])
+        or _int(finish.get("restricted_master_adaptive_probe_forced")),
         "rim_conflicts_checked": int(rim["conflicts_checked"]),
         "task_schedule_capacity_cuts_added": int(task_schedcap["added"]) or _int(finish.get("task_schedule_capacity_cuts_added")),
         "task_schedule_capacity_candidates_generated": int(task_schedcap["generated"])
@@ -501,6 +596,23 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
         or _int(finish.get("task_schedule_capacity_branch_signal_candidates")),
         "task_schedule_capacity_branch_signal_applied": int(task_schedcap["branch_signal_applied"])
         or _int(finish.get("task_schedule_capacity_branch_signal_applied")),
+        "witness_rank1_cuts_added": int(witness_rank1["added"]) or _int(finish.get("witness_rank1_cuts_added")),
+        "witness_rank1_subset_row_cuts_added": int(witness_rank1["subset_row_added"])
+        or _int(finish.get("witness_rank1_subset_row_cuts_added")),
+        "witness_rank1_lm_rank1_cuts_added": int(witness_rank1["lm_rank1_added"])
+        or _int(finish.get("witness_rank1_lm_rank1_cuts_added")),
+        "witness_rank1_candidates_generated": int(witness_rank1["generated"])
+        or _int(finish.get("witness_rank1_candidates_generated")),
+        "witness_rank1_candidates_after_precheck": int(witness_rank1["prechecked"])
+        or _int(finish.get("witness_rank1_candidates_after_precheck")),
+        "witness_rank1_violated_candidates": int(witness_rank1["violated"])
+        or _int(finish.get("witness_rank1_violated_candidates")),
+        "witness_rank1_duplicate_skips": int(witness_rank1["duplicate"])
+        or _int(finish.get("witness_rank1_duplicate_skips")),
+        "witness_rank1_best_violation": witness_rank1_best_violation
+        or (_number(finish.get("witness_rank1_best_violation")) or 0.0),
+        "witness_rank1_candidates_by_source": dict(witness_rank1_by_source)
+        or finish.get("witness_rank1_candidates_by_source"),
         "weighted_route_schedule_packing_cuts_added": int(weighted_route_pack["added"])
         or _int(finish.get("weighted_route_schedule_packing_cuts_added")),
         "weighted_route_schedule_packing_candidates_generated": int(weighted_route_pack["generated"])
@@ -538,6 +650,34 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
         or _int(finish.get("weighted_route_schedule_packing_stopped_by_budget")),
         "weighted_route_schedule_packing_duplicate_skips": int(weighted_route_pack["duplicate"])
         or _int(finish.get("weighted_route_schedule_packing_duplicate_skips")),
+        "schedule_variant_route_pack_cuts_added": int(schedule_variant_route_pack["added"])
+        or _int(finish.get("schedule_variant_route_pack_cuts_added")),
+        "schedule_variant_route_pack_candidates": int(schedule_variant_route_pack["candidates"])
+        or _int(finish.get("schedule_variant_route_pack_candidates")),
+        "schedule_variant_route_pack_expanded_candidates": int(schedule_variant_route_pack["expanded"])
+        or _int(finish.get("schedule_variant_route_pack_expanded_candidates")),
+        "schedule_variant_route_pack_oracle_queries": int(schedule_variant_route_pack["oracle_queries"])
+        or _int(finish.get("schedule_variant_route_pack_oracle_queries")),
+        "schedule_variant_route_pack_cache_hits": int(schedule_variant_route_pack["cache_hits"])
+        or _int(finish.get("schedule_variant_route_pack_cache_hits")),
+        "schedule_variant_route_pack_oracle_incomplete": int(schedule_variant_route_pack["incomplete"])
+        or _int(finish.get("schedule_variant_route_pack_oracle_incomplete")),
+        "schedule_variant_route_pack_exact_not_tight": int(schedule_variant_route_pack["not_tight"])
+        or _int(finish.get("schedule_variant_route_pack_exact_not_tight")),
+        "schedule_variant_route_pack_exact_not_violated": int(schedule_variant_route_pack["not_violated"])
+        or _int(finish.get("schedule_variant_route_pack_exact_not_violated")),
+        "schedule_variant_route_pack_violated_candidates": int(schedule_variant_route_pack["violated"])
+        or _int(finish.get("schedule_variant_route_pack_violated_candidates")),
+        "schedule_variant_route_pack_duplicate_skips": int(schedule_variant_route_pack["duplicate"])
+        or _int(finish.get("schedule_variant_route_pack_duplicate_skips")),
+        "schedule_variant_route_pack_best_violation": schedule_variant_route_pack_best_violation
+        or (_number(finish.get("schedule_variant_route_pack_best_violation")) or 0.0),
+        "schedule_variant_route_pack_oracle_time": schedule_variant_route_pack_time
+        or (_number(finish.get("schedule_variant_route_pack_oracle_time")) or 0.0),
+        "schedule_variant_route_pack_oracle_states_total": int(schedule_variant_route_pack["states_total"])
+        or _int(finish.get("schedule_variant_route_pack_oracle_states_total")),
+        "schedule_variant_route_pack_oracle_states_max": int(schedule_variant_route_pack["states_max"])
+        or _int(finish.get("schedule_variant_route_pack_oracle_states_max")),
         "route_pack_roi_classifications": dict(route_pack_roi_classifications),
         "route_pack_roi_same_pool_degeneracy": int(route_pack_roi_classifications["same_pool_degeneracy"]),
         "route_pack_roi_pricing_mousehole": int(route_pack_roi_classifications["pricing_mousehole"]),

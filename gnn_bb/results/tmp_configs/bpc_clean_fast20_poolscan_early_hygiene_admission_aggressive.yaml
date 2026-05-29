@@ -1,0 +1,422 @@
+# 中文摘要：clean BPC 默认配置。该主线使用根目录 bpc/，SCIP 只求解每个节点的 RMP LP。
+
+python: /home/kai/miniconda3/envs/ecole/bin/python
+instances: ["very_small"]
+time_limit: 3600
+random_seed: 20260511
+instance_dir: branchpricecut/results/benchmark/20260523_bpc_clean_rim_repair_10_20_all/instances
+results_csv: results/bpc_clean.csv
+log_dir: results/logs/bpc_clean
+solution_dir: results/solutions/bpc_clean
+log_level: progress
+
+pricing_eps: 1.0e-6
+integer_tol: 1.0e-6
+max_nodes: 100000
+max_routes_per_pricing: 500
+root_max_routes_per_pricing: 1200
+# 0 表示 exact pricing 不设 label 上限；若设为正数，中断的 pricing 不能用于证明节点 bound。
+max_labels_per_pricing: 0
+
+# 启发式 route pricing 先用 label 上限快速找负 reduced-cost 列。
+# 若 label 上限触发且找不到新列，仍会继续运行完整 exact pricing；只有完整枚举才能证明节点 bound。
+heuristic_pricing_enabled: true
+heuristic_pricing_max_labels: 120000
+heuristic_pricing_routes_per_round: 600
+heuristic_pricing_selection_mode: diverse
+exact_pricing_selection_mode: diverse
+
+# 分支节点上的增强启发式定价：普通启发式找不到列时，先用更高 label 上限再试一次。
+# 若 boost 没有触发 label 上限，它本身也能作为 certificate；否则仍回到完整 exact pricing。
+branch_node_heuristic_boost_enabled: true
+branch_node_heuristic_boost_max_labels: 900000
+branch_node_heuristic_boost_routes_per_round: 1000
+branch_node_heuristic_boost_min_depth: 1
+
+# 安全 dominance：仅在所有带非零 dual 的 cut / branching 信息都进入 label 状态时启用；
+# 顺序签名 cut 通过 active signature prefix mask 进入 dominance key，因此不再直接关闭 dominance。
+exact_pricing_dominance_enabled: true
+
+# pricing 主线回退：
+# 2026-05-21 回归显示，ng/DSSR 会减少 root route pool 多样性，使 RIM 在
+# bench_20_01 上从 root 快速找到最优解退化为多节点 timeout；completion bound /
+# exact DSSR / near-zero route enumeration 全部退出 paper-grade 默认主线。
+pricing_completion_bound_enabled: false
+ng_dssr_pricing_enabled: false
+ng_dssr_memory_size: 6
+exact_dssr_pricing_enabled: false
+exact_dssr_initial_memory_size: 6
+exact_dssr_max_iterations: 4
+exact_dssr_max_labels: 2500000
+route_enumeration_enabled: false
+route_enumeration_rc_threshold: 0.25
+route_enumeration_max_routes: 1200
+
+# PersistentRMP v1：节点内复用主 RMP-CG loop 的 SCIP LP，减少重复建模开销。
+# 默认关闭；branch testing 仍使用原 solve_rmp_lp；Phase-I/Phase-II 切换和 cut purge 会重建。
+persistent_rmp_enabled: false
+
+# route pool 受限整数主问题：只用于找 incumbent。
+# 开启 schedule-aware 后，MIP 内部按临时 pair cut、schedule-capacity cut、no-good 的顺序排除排程不可行整数候选。
+restricted_master_heuristic_enabled: true
+restricted_master_time_limit: 20.0
+restricted_master_max_routes: 4000
+restricted_master_max_calls: 20
+restricted_master_max_depth: 3
+restricted_master_schedule_aware: true
+restricted_master_max_no_good_rounds: 20
+# 356 秒主线保留小预算 RIM conflict 回流，避免在 rejected integer assignment 上空转。
+restricted_master_route_pack_conflict_max_events: 2
+# RIM repair：binary RMP 得到排程不可行但目标有希望的 route 集合时，先尝试重新分配到车辆。
+# 只更新原问题可行 incumbent，不参与 lower bound 证明。
+restricted_master_repair_enabled: true
+restricted_master_repair_max_attempts: 3
+restricted_master_repair_max_states: 50000
+# Adaptive RIM gate:
+# 默认关闭。RIM 只提供 incumbent / valid conflict cuts，不参与 lower-bound 证明；
+# 因此连续 TIME_LIMIT 且没有 accepted incumbent 时，实验配置可以降预算或跳过深层 RIM，
+# 用来诊断 20 规模中 RIM 反复超时是否是主要耗时。
+restricted_master_adaptive_enabled: false
+restricted_master_adaptive_min_depth: 1
+restricted_master_adaptive_after_failures: 2
+restricted_master_adaptive_reduced_time_limit: 5.0
+restricted_master_adaptive_skip_after_failures: 4
+
+# no-ML Three-Phase Branching。testing 只用于选择分支，不用于剪枝或证明。
+branching_strategy: 3pb
+three_pb_pseudocost_candidates: 6
+three_pb_fractional_candidates: 6
+three_pb_lp_candidates: 3
+three_pb_heuristic_cg_iterations: 3
+three_pb_heuristic_routes_per_iter: 50
+three_pb_heuristic_max_labels: 800
+# 轻量 2LBB 数据结构：root 保持 356 秒主线预算，非 root / 深层节点减少测试候选。
+# 2026-05-22 长测显示该机制可降低 branch testing time，但会改变搜索路径并损害
+# bench_20_05/08 的 incumbent；默认关闭，保留为分支排序消融实验开关。
+three_pb_candidate_budget_enabled: false
+three_pb_root_pseudocost_candidates: 6
+three_pb_root_fractional_candidates: 6
+three_pb_root_lp_candidates: 3
+three_pb_nonroot_pseudocost_candidates: 4
+three_pb_nonroot_fractional_candidates: 4
+three_pb_nonroot_lp_candidates: 2
+three_pb_deep_depth: 3
+three_pb_deep_pseudocost_candidates: 3
+three_pb_deep_fractional_candidates: 3
+three_pb_deep_lp_candidates: 1
+
+# task-vehicle linking:
+# sum_p a_ip lambda[p,r] <= y[r]。这是有限 row，用于强化车辆固定成本的 LP 松弛。
+task_vehicle_linking_enabled: true
+
+# 统一 crossing cuts:
+# x(delta(S)) >= 2 K(S), K(S)=max(Kcap(S), Kresource(S))。
+# Kcap=ceil(d(S)/Q)，Kresource 由资源不兼容图 exact coloring 证明。
+# cut manager 对同一 S 只保留 RHS 最大的一条 crossing_cut。
+robust_capacity_cuts_enabled: true
+robust_capacity_cut_max_depth: 0
+robust_capacity_cut_max_subset_size: 5
+robust_capacity_cut_max_per_round: 20
+robust_capacity_cut_min_violation: 1.0e-5
+robust_capacity_cut_max_rounds_per_node: 3
+
+resource_lower_bound_cuts_enabled: true
+resource_cut_max_depth: 0
+resource_cut_max_subset_size: 6
+resource_cut_max_per_round: 20
+resource_cut_min_violation: 1.0e-5
+resource_cut_max_rounds_per_node: 3
+
+# Subset-row cuts:
+# sum floor(|p∩S|/k) lambda[p,r] <= floor(|S|/k)。这是经典 VRP set-partitioning 强化 cut。
+subset_row_cuts_enabled: true
+subset_row_cut_max_depth: 0
+subset_row_cut_max_subset_size: 8
+subset_row_cut_max_per_round: 20
+subset_row_cut_min_violation: 1.0e-5
+subset_row_cut_max_rounds_per_node: 3
+subset_row_candidate_top_routes: 80
+subset_row_candidate_max_sets: 500
+subset_row_k_values: [2, 3]
+
+# Limited-memory rank-1 cuts:
+# 这是 subset-row 的第一版非均匀 multiplier 扩展。
+# 对小任务集 S 和分母 d，加入 sum floor(sum m_i a_ip / d) lambda <= floor(sum m_i / d)。
+# multiplier pattern 只来自有限 memory 任务，cut 有效性来自 set-partitioning CG rounding。
+lm_rank1_cuts_enabled: true
+lm_rank1_cut_max_depth: 0
+lm_rank1_cut_max_subset_size: 8
+lm_rank1_cut_max_per_round: 20
+lm_rank1_cut_min_violation: 1.0e-5
+lm_rank1_cut_max_rounds_per_node: 3
+lm_rank1_candidate_top_routes: 100
+lm_rank1_candidate_max_sets: 700
+lm_rank1_denominators: [3, 4]
+lm_rank1_memory_size: 4
+lm_rank1_max_patterns_per_set: 12
+
+# Schedule subset cost lower-bound cuts:
+# 若车辆 r 完整服务任务集 S，则其真实多 sortie schedule 变量成本至少为 L(S)。
+# L(S) 由 exact 小规模单车 DP 证明；oracle 超限或 S 单车不可行时不加 cut。
+# 2026-05-21 bench_20_02 诊断显示该候选器 1620 次 oracle 查询没有产生 violated cut，
+# 默认关闭，保留为后续重写候选逻辑时的实验开关。
+schedule_subset_cost_cuts_enabled: false
+schedule_subset_cost_cut_max_depth: 0
+schedule_subset_cost_cut_max_subset_size: 8
+schedule_subset_cost_cut_max_per_round: 10
+schedule_subset_cost_cut_min_violation: 1.0e-4
+schedule_subset_cost_cut_max_rounds_per_node: 2
+schedule_subset_cost_oracle_max_states: 200000
+schedule_subset_cost_candidate_top_tasks: 12
+schedule_subset_cost_candidate_max_combinations: 200
+schedule_subset_cost_route_union_top_routes: 10
+schedule_subset_cost_route_union_max_routes: 4
+
+# Schedule capacity upper-bound cuts:
+# sum_i z[i,r] <= U(S) y[r]，U(S) 由 exact 单车多 sortie schedule oracle 证明。
+# oracle 超过状态上限时不加 cut。
+schedule_capacity_cuts_enabled: true
+# LP 层主动分离 schedule-capacity 在 bench_20_02/03 上大量 oracle 查询但 added=0；
+# 默认关闭。RIM / integral validation 中的 schedule-capacity conflict fallback 仍由上面的
+# schedule_capacity_cuts_enabled 控制并保持可用。
+schedule_capacity_separation_enabled: false
+schedule_capacity_cut_max_depth: 0
+schedule_capacity_cut_max_subset_size: 10
+schedule_capacity_cut_max_per_round: 20
+schedule_capacity_cut_min_violation: 1.0e-5
+schedule_capacity_cut_max_rounds_per_node: 3
+schedule_capacity_oracle_max_states: 200000
+schedule_capacity_candidate_top_tasks: 12
+schedule_capacity_candidate_max_combinations: 300
+schedule_capacity_route_union_top_routes: 8
+schedule_capacity_route_union_max_routes: 4
+
+# Exact fleet lower-bound cut:
+# 若 exact 单车多 sortie schedule oracle 证明全部任务中一辆车最多只能服务 U<n 个任务，
+# 则安全加入 sum_r y_r >= ceil(n/U)。oracle 超状态上限时不加 cut。
+# 2026-05-22 长测中所有 20 规模实例均为 ORACLE_INCOMPLETE，未加入 cut，只增加初始化开销；
+# 默认关闭，直到单车证书 oracle 能稳定完成。
+fleet_lower_bound_cuts_enabled: false
+fleet_lower_bound_oracle_max_states: 500000
+
+# Schedule incompatibility cuts:
+# 对同一车辆的 LP 支撑 route，若两条 route 任意先后顺序都不可排程，则加入 pair cut；
+# 若一组 route 两两不可排程且 LP 总活动量超过 1，则加入 clique cut：sum lambda[p,r] <= 1。
+schedule_incompatibility_cuts_enabled: true
+schedule_incompatibility_cut_max_depth: 2
+schedule_incompatibility_cut_max_rounds_per_node: 2
+schedule_incompatibility_cut_max_support_routes: 80
+schedule_incompatibility_cut_max_per_round: 10
+schedule_incompatibility_cut_min_violation: 5.0e-2
+schedule_incompatibility_clique_min_size: 3
+schedule_incompatibility_clique_seed_count: 24
+
+# Route-set schedule packing cuts:
+# 对同一车辆的一组 route C，用 exact schedule DP 证明最多可排 U(C) 条；
+# 仅当当前 LP 违反 sum_{p in C} lambda[p,r] <= U(C) 时加入。
+route_set_schedule_packing_cuts_enabled: true
+route_set_schedule_packing_cut_max_depth: 2
+route_set_schedule_packing_cut_max_rounds_per_node: 2
+route_set_schedule_packing_cut_max_support_routes: 40
+route_set_schedule_packing_cut_max_routes: 16
+route_set_schedule_packing_cut_max_per_round: 5
+route_set_schedule_packing_cut_min_violation: 5.0e-2
+route_set_schedule_packing_oracle_max_states: 200000
+route_set_schedule_packing_roi_guard_enabled: true
+route_set_schedule_packing_stop_after_no_add_rounds: 1
+route_set_schedule_packing_min_objective_improvement: 1.0e-7
+route_set_schedule_packing_stop_after_no_improve_rounds: 2
+route_set_schedule_packing_global_time_limit_ratio: 0.10
+
+# Weighted route-schedule packing cuts:
+# 默认关闭。该 cut 只对当前有限 route support 中的 signature 有非零系数：
+#   sum alpha_p lambda[p,r] <= beta(C,alpha) y[r]
+# beta 必须由 exact weighted route-set schedule oracle 完整证明；incomplete 时不加 cut。
+# 因为未来新列系数为 0，启用本项不会修改 pricing reduced-cost 公式。
+# alpha 默认使用 conflict_core 与离散 conflict/incompat 权重；不再把 lp_value 作为主力权重。
+weighted_route_schedule_packing_cuts_enabled: false
+weighted_route_schedule_packing_max_depth: 1
+weighted_route_schedule_packing_max_rounds_per_node: 1
+weighted_route_schedule_packing_max_candidates: 20
+weighted_route_schedule_packing_max_cuts_per_round: 5
+weighted_route_schedule_packing_max_routes: 16
+weighted_route_schedule_packing_oracle_max_states: 200000
+weighted_route_schedule_packing_min_violation: 5.0e-2
+weighted_route_schedule_packing_node_time_budget: 5.0
+weighted_route_schedule_packing_global_time_ratio: 0.05
+
+# Root/shallow schedule-capacity cuts:
+# 默认关闭。启用时只在浅层节点生成 pair/triple 候选，并且只有 exact oracle 完整证明 U(S)
+# 且当前 LP violation 超过阈值时才加入 sum_p |p∩S| lambda[p,r] <= U(S)y[r]。
+# oracle incomplete / not-tight / duplicate 都会缓存或跳过，绝不用于剪枝。
+root_schedule_capacity_cuts_enabled: false
+root_schedule_capacity_max_depth: 0
+root_schedule_capacity_pair_budget: 100
+root_schedule_capacity_triple_budget: 50
+root_schedule_capacity_oracle_max_states: 200000
+root_schedule_capacity_time_budget: 5.0
+root_schedule_capacity_min_violation: 1.0e-5
+root_schedule_capacity_stop_after_no_add_rounds: 1
+
+# Task-level schedule-capacity separator v2:
+# z_ir=sum_p a_ip lambda_pr,  cut: sum_{i in S} z_ir <= U(S)y_r。
+# U(S) 必须由 exact single-vehicle multi-sortie oracle 完整证明；incomplete 只缓存/记录，不加 cut。
+# 当前车辆同质，oracle cache 按 task tuple S 跨车辆复用；未来异构车辆需要把 vehicle type 放进 key。
+# 候选来自 top-z、LP support route unions 和 RIM / route-pack / incompatibility witness。
+# pair/triple/small-set 都用 activity>y_r+eps 作为 cheap precheck；small-set 默认关闭且不全组合枚举。
+# 默认关闭，保留 paper-grade baseline；root_schedule_capacity_* 仍作为旧配置兼容入口。
+task_schedule_capacity_cuts_enabled: false
+task_schedule_capacity_max_depth: 0
+task_schedule_capacity_pair_budget: 100
+task_schedule_capacity_triple_budget: 50
+task_schedule_capacity_small_set_budget: 0
+task_schedule_capacity_max_subset_size: 6
+task_schedule_capacity_max_cuts_per_round: 20
+task_schedule_capacity_oracle_max_states: 200000
+task_schedule_capacity_node_time_budget: 5.0
+task_schedule_capacity_global_time_ratio: 0.05
+task_schedule_capacity_min_violation: 1.0e-5
+task_schedule_capacity_copy_to_all_vehicles: false
+task_schedule_capacity_use_rim_witness: true
+task_schedule_capacity_use_route_pack_witness: true
+task_schedule_capacity_use_incompatibility_witness: true
+task_schedule_capacity_use_top_z_mass: true
+task_schedule_capacity_use_support_route_union: true
+task_schedule_capacity_use_time_window_clusters: false
+task_schedule_capacity_stop_after_no_add_rounds: 1
+task_schedule_capacity_stop_after_no_improve_rounds: 2
+task_schedule_capacity_cache_incomplete: true
+task_schedule_capacity_cache_not_tight: true
+task_schedule_capacity_cache_exact_upper_bound: true
+task_schedule_capacity_branch_signal_enabled: true
+task_schedule_capacity_branch_signal_apply_enabled: false
+
+# Candidate-pool schedule-pack 诊断 / 浅层节点 relaxation：
+# 用当前 route pool 生成一批完整车辆 schedule columns，并解 candidate-pool schedule-pack LP。
+# 下方 relaxation 开关会在 root / 浅层节点复用同一 vehicle-indexed LP，尊重分支和已加 valid cuts。
+# 候选池收敛后，可在 root 做全 route-space exact schedule pricing。
+# 只有 exact_over_full_route_space=true 时才是完整 pricing 证书；
+# 此时 schedule-pack LP 值可作为正式节点下界参与剪枝；否则仍只作为诊断/节点排序信号。
+# 2026-05-21 的 bench_20_01/02 测试显示，当前 schedule-pack 大多只能给诊断值，
+# full route-space pricing 不能完整结束，默认不进入论文级主线；后续作为单独消融实验打开。
+schedule_pack_diagnostic_enabled: false
+schedule_pack_diagnostic_max_candidate_routes: 180
+schedule_pack_diagnostic_max_columns: 8000
+schedule_pack_diagnostic_beam_width: 800
+schedule_pack_diagnostic_max_sorties: 0
+schedule_pack_diagnostic_time_limit: 60.0
+schedule_pack_pricing_batch_size: 32
+schedule_pack_relaxation_enabled: false
+schedule_pack_relaxation_max_depth: 1
+schedule_pack_relaxation_time_limit: 30.0
+schedule_pack_relaxation_use_for_priority: true
+schedule_pack_full_pricing_enabled: false
+schedule_pack_full_pricing_max_depth: 0
+schedule_pack_full_pricing_max_states: 0
+# 自适应重判断：
+# 如果当前 incumbent 与 route-vehicle 节点下界差距已经很小，则跳过 schedule-pack
+# 和 near-zero route enumeration，避免 bench_20_01 这类简单实例付出固定重计算代价。
+# exact pricing 证书仍然照常运行，因此不影响精确性。
+schedule_pack_adaptive_enabled: false
+schedule_pack_adaptive_gap_abs: 10.0
+schedule_pack_adaptive_gap_ratio: 0.03
+schedule_pack_adaptive_skip_if_fathomable: true
+route_enumeration_adaptive_enabled: false
+route_enumeration_adaptive_gap_abs: 10.0
+route_enumeration_adaptive_gap_ratio: 0.03
+
+# Route-pool hygiene:
+# 默认关闭，保留当前 bench_20_01 最好模型行为。diagnostics 只统计同一 task_set 下
+# 近似重复 route 的规模；admission cap 只作用于 heuristic/boost pricing，并且一旦过滤
+# 负 reduced-cost route 就强制回到 exact pricing certificate，不改变 official bound。
+route_pool_hygiene_diagnostics_enabled: false
+route_pool_hygiene_diagnostics_min_routes: 0
+route_pool_hygiene_near_duplicate_abs_tol: 1.0e-6
+route_pool_hygiene_near_duplicate_rel_tol: 1.0e-4
+route_pool_hygiene_sample_groups: 5
+route_pool_hygiene_admission_enabled: false
+route_pool_hygiene_admission_max_per_task_set: 0
+# 保护感知 admission：若做消融，建议至少从 depth>=1 开始，避免改变 root route pool
+# 和 bench_20_01 当前最好搜索路径。active/cut/incumbent/branch 相关 task-set 默认保护。
+route_pool_hygiene_admission_min_depth: 1
+route_pool_hygiene_admission_protect_active_task_sets: true
+route_pool_hygiene_admission_protect_cut_task_sets: true
+route_pool_hygiene_admission_protect_incumbent_task_sets: true
+route_pool_hygiene_admission_protect_branch_task_sets: true
+
+# Exact-safe 节点局部 route-pool restart：
+# 只限制当前节点 RMP/CG 使用的本地 route 列集合；全局 route pool 不删除。
+# 被本地省略的 route 若在当前 dual 下有负 reduced cost，exact pricing 会把它重新生成回本地池，
+# 因此不能用来跳过最终 pricing certificate，也不改变 full column space。
+# 默认关闭；用于诊断列生成 tailing-off 和 route-pool 退化是否是 20 规模瓶颈。
+route_pool_restart_enabled: false
+route_pool_restart_max_routes: 0
+route_pool_restart_min_global_routes: 0
+route_pool_restart_keep_recent_rounds: 2
+route_pool_restart_max_routes_per_task_set: 6
+route_pool_restart_active_value_tol: 1.0e-8
+route_pool_restart_keep_cut_signatures: false
+route_pool_restart_cleanup_enabled: false
+
+# 清理 inactive crossing / schedule-capacity cut。
+cut_purge_age: 20
+cut_purge_slack: 1.0e-5
+cut_purge_dual: 1.0e-8
+
+# 只对弱的 schedule no-good 做额外清理；pair / clique / route-pack 结构性 cut 默认保留。
+schedule_nogood_purge_enabled: true
+schedule_nogood_purge_age: 8
+schedule_nogood_purge_slack: 1.0e-4
+schedule_nogood_purge_dual: 1.0e-8
+
+rmp_params:
+  display/verblevel: 0
+  randomization/randomseedshift: 20260511
+  randomization/permutationseed: 20260511
+  randomization/lpseed: 20260511
+  parallel/maxnthreads: 1
+  presolving/maxrounds: 0
+  separating/maxrounds: 0
+
+
+# --- adaptive RIM ablation overrides; baseline file above is copied unchanged ---
+instances: ["bench_20_01"]
+time_limit: 900
+results_csv: results/bpc_clean_adaptive_rim.csv
+log_dir: results/logs/bpc_clean_adaptive_rim
+solution_dir: results/solutions/bpc_clean_adaptive_rim
+route_pool_hygiene_diagnostics_enabled: false
+route_pool_hygiene_admission_enabled: false
+route_pool_restart_enabled: false
+weighted_route_schedule_packing_cuts_enabled: false
+task_schedule_capacity_cuts_enabled: false
+root_schedule_capacity_cuts_enabled: false
+restricted_master_adaptive_enabled: true
+restricted_master_adaptive_min_depth: 1
+restricted_master_adaptive_after_failures: 1
+restricted_master_adaptive_reduced_time_limit: 5.0
+restricted_master_adaptive_skip_after_failures: 3
+
+# Experiment: inspect multiple SCIP integer incumbents from each RIM solve and
+# accept the first one that passes exact schedule validation.
+restricted_master_scan_solution_pool_enabled: true
+restricted_master_scan_solution_pool_limit: 50
+early_bound_fathom_before_cuts_enabled: true
+
+# Temporary experiment: stronger exact-safe heuristic admission cap by task set.
+route_pool_hygiene_diagnostics_enabled: true
+route_pool_hygiene_diagnostics_min_routes: 1500
+route_pool_hygiene_admission_enabled: true
+route_pool_hygiene_admission_max_per_task_set: 1
+route_pool_hygiene_admission_min_depth: 1
+route_pool_hygiene_admission_protect_active_task_sets: false
+route_pool_hygiene_admission_protect_cut_task_sets: false
+route_pool_hygiene_admission_protect_incumbent_task_sets: true
+route_pool_hygiene_admission_protect_branch_task_sets: true
+route_pool_task_set_compaction_enabled: false
+route_pack_branch_signal_enabled: false
+route_pack_branch_signal_apply_enabled: false
+witness_rank1_cuts_enabled: false
+weighted_route_schedule_packing_cuts_enabled: false
+task_schedule_capacity_cuts_enabled: false
+root_schedule_capacity_cuts_enabled: false
