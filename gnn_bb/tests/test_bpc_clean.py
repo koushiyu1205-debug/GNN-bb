@@ -46,7 +46,7 @@ from bpc.schedule_cost import exact_schedule_subset_cost
 from bpc.schedule_pack import solve_schedule_pack_node_relaxation, solve_schedule_pack_restricted_lp
 from bpc.solver import solve_bpc_clean
 from bpc.task_schedule_capacity import generate_task_schedule_capacity_candidates, witness_from_routes
-from bpc.tree import CleanBPCTree
+from bpc.tree import CleanBPCTree, Incumbent
 from bpc.validation import diagnose_route_set_schedule, exact_route_set_schedule_capacity, exact_weighted_route_set_schedule_capacity
 
 
@@ -935,6 +935,190 @@ class CleanBPCTests(unittest.TestCase):
         self.assertEqual(tree._restricted_master_adaptive_unproductive_streak, 0)
         self.assertEqual(tree.stats.restricted_master_integer_raw_best_objective, 90.0)
         self.assertEqual(tree.stats.restricted_master_adaptive_skips, 0)
+
+    def _pricing_stabilization_fixture(self, *, true_negative: bool = False):
+        data = load_bpc_data("very_small")
+        route = evaluate_route(data, (data.tasks[0],))
+        self.assertIsNotNone(route)
+        assert route is not None
+        vehicle = data.vehicles[0]
+        cover = {int(task): 0.0 for task in data.tasks}
+        if true_negative:
+            cover[int(data.tasks[0])] = float(route.cost) + 1.0
+        duals = RMPDuals(
+            cover=cover,
+            task_vehicle={},
+            sortie_count={int(v): 0.0 for v in data.vehicles},
+            vehicle_time={int(v): 0.0 for v in data.vehicles},
+            cuts={},
+            branches={},
+        )
+        solution = RMPSolution(
+            status="optimal",
+            objective=0.0,
+            duals=duals,
+            artificial_sum=0.0,
+            route_values=[],
+            y_values={int(vehicle): 1.0},
+            variable_count=0,
+            constraint_count=0,
+        )
+        tree = CleanBPCTree(
+            data,
+            time_limit=10,
+            max_nodes=10,
+            eps=1.0e-6,
+            integer_tol=1.0e-6,
+            max_routes_per_pricing=10,
+            max_labels_per_pricing=0,
+            rmp_params={},
+            logger=BPCLogger(None, console=False),
+            pricing_dual_stabilization_enabled=True,
+            pricing_tailing_diagnostics_enabled=True,
+        )
+        return data, route, tree, solution
+
+    def test_stabilized_pricing_filters_by_true_reduced_cost_and_never_certifies(self):
+        _data, route, tree, solution = self._pricing_stabilization_fixture(true_negative=False)
+        fake = PricingResult(
+            routes=[route],
+            exhausted=True,
+            best_reduced_cost=-1.0,
+            label_pops=7,
+            generated_labels=9,
+            negative_routes=1,
+        )
+        with patch("bpc.tree.exact_pricing", return_value=fake):
+            pricing, added = tree._run_pricing(
+                BPCNode(0.0, 0, 0),
+                solution,
+                cg_iter=1,
+                phase="phase2",
+                pricing_kind="heuristic",
+                max_routes_to_return=10,
+                max_labels=100,
+                selection_mode="diverse",
+                pricing_duals=solution.duals,
+                true_duals=solution.duals,
+                dual_source="stabilized",
+            )
+
+        self.assertEqual(added, 0)
+        self.assertEqual(pricing.routes, [])
+        self.assertFalse(pricing.exhausted)
+        self.assertEqual(pricing.false_candidate_routes, 1)
+        self.assertEqual(tree.stats.pricing_stabilization_false_candidate_routes, 1)
+        self.assertEqual(len(tree.pool.routes), 0)
+
+    def test_stabilized_pricing_accepts_only_true_negative_columns(self):
+        _data, route, tree, solution = self._pricing_stabilization_fixture(true_negative=True)
+        fake = PricingResult(
+            routes=[route],
+            exhausted=True,
+            best_reduced_cost=-1.0,
+            label_pops=7,
+            generated_labels=9,
+            negative_routes=1,
+        )
+        with patch("bpc.tree.exact_pricing", return_value=fake):
+            pricing, added = tree._run_pricing(
+                BPCNode(0.0, 0, 0),
+                solution,
+                cg_iter=1,
+                phase="phase2",
+                pricing_kind="heuristic",
+                max_routes_to_return=10,
+                max_labels=100,
+                selection_mode="diverse",
+                pricing_duals=solution.duals,
+                true_duals=solution.duals,
+                dual_source="stabilized",
+            )
+
+        self.assertEqual(added, 1)
+        self.assertEqual(pricing.routes, [route])
+        self.assertFalse(pricing.exhausted)
+        self.assertEqual(pricing.false_candidate_routes, 0)
+        self.assertEqual(tree.stats.pricing_stabilization_true_negative_routes, 1)
+        self.assertEqual(len(tree.pool.routes), 1)
+
+    def test_selective_pricing_controller_requires_slow_exact_history(self):
+        _data, _route, tree, _solution = self._pricing_stabilization_fixture()
+        tree.selective_pricing_controller_enabled = True
+        tree.selective_pricing_min_depth = 1
+        tree.selective_pricing_slow_exact_streak = 1
+        self.assertFalse(tree._selective_pricing_should_try_extra(BPCNode(0.0, 0, 0)))
+        self.assertFalse(tree._selective_pricing_should_try_extra(BPCNode(0.0, 1, 1)))
+        tree._selective_pricing_slow_exact_streak = 1
+        self.assertTrue(tree._selective_pricing_should_try_extra(BPCNode(0.0, 1, 1)))
+
+    def test_branch_heuristic_boost_empty_certificate_skip_is_configured(self):
+        _data, _route, tree, _solution = self._pricing_stabilization_fixture()
+        self.assertFalse(tree._branch_heuristic_boost_should_skip(100))
+        tree.branch_node_heuristic_boost_skip_after_empty_certificates = 2
+        self.assertFalse(tree._branch_heuristic_boost_should_skip(1))
+        self.assertTrue(tree._branch_heuristic_boost_should_skip(2))
+
+    def test_pricing_tailing_classifies_slow_certificate(self):
+        _data, _route, tree, _solution = self._pricing_stabilization_fixture()
+        tree.pricing_tailing_label_threshold = 100
+        pricing = PricingResult(
+            routes=[],
+            exhausted=True,
+            best_reduced_cost=None,
+            label_pops=101,
+            generated_labels=101,
+            negative_routes=0,
+        )
+        classification = tree._record_pricing_tailing_diagnostic(
+            node=BPCNode(0.0, 0, 0),
+            cg_iter=1,
+            phase="phase2",
+            pricing_kind="exact",
+            pricing=pricing,
+            added=0,
+            duplicate_task_sets=0,
+            repeated_task_sets=0,
+            rmp_objective_delta=0.0,
+        )
+        self.assertEqual(classification, "certificate_slow")
+        self.assertEqual(tree.stats.pricing_tailing_certificate_slow, 1)
+        self.assertEqual(tree.stats.pricing_tailing_exact_label_pops, 101)
+
+    def test_restricted_master_gap_guard_skips_near_proof(self):
+        _data, routes, tree = self._route_pool_hygiene_fixture()
+        for route in routes:
+            tree.pool.add(route)
+        tree.restricted_master_heuristic_enabled = True
+        tree.restricted_master_max_depth = 10
+        tree.restricted_master_max_calls = 10
+        tree.restricted_master_adaptive_enabled = True
+        tree.restricted_master_adaptive_min_depth = 1
+        tree.restricted_master_adaptive_productivity_guard_enabled = True
+        tree.restricted_master_adaptive_productive_after_failures = 1
+        tree.restricted_master_adaptive_productive_max_consecutive_skips = 1
+        tree.restricted_master_adaptive_gap_guard_enabled = True
+        tree.restricted_master_adaptive_near_proof_gap = 0.005
+        tree._restricted_master_adaptive_unproductive_streak = 1
+        tree.incumbent = Incumbent(objective=100.0, route_values=[], y_values={}, node_id=0)
+        tree.stats.time_to_best_incumbent = 0.0
+        solution = RMPSolution(
+            status="optimal",
+            objective=99.8,
+            duals=None,
+            artificial_sum=0.0,
+            route_values=[],
+            y_values={1: 1.0},
+            variable_count=0,
+            constraint_count=0,
+        )
+
+        with patch("bpc.tree.solve_restricted_integer_master") as mocked_rim:
+            self.assertEqual(tree._try_restricted_master_heuristic(BPCNode(0.0, 1, 1), solution), 0)
+
+        mocked_rim.assert_not_called()
+        self.assertEqual(tree.stats.restricted_master_adaptive_gap_skips, 1)
+        self.assertEqual(tree.stats.restricted_master_adaptive_skips, 1)
 
     def test_weighted_route_set_schedule_packing_default_off(self):
         _data, _routes, solution, tree = self._weighted_route_set_packing_fixture()

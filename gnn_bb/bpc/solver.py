@@ -186,6 +186,26 @@ class BPCResult:
     route_enumeration_adaptive_runs: int
     route_enumeration_adaptive_skips: int
     route_enumeration_adaptive_easy_skips: int
+    pricing_tailing_events: int
+    pricing_tailing_negative_search_slow: int
+    pricing_tailing_certificate_slow: int
+    pricing_tailing_degenerate: int
+    pricing_tailing_branch_test_dominated: int
+    pricing_tailing_exact_label_pops: int
+    pricing_tailing_duplicate_task_sets: int
+    selective_pricing_heuristic_attempts: int
+    selective_pricing_true_negative_routes: int
+    selective_pricing_false_candidate_routes: int
+    selective_pricing_exact_calls_avoided: int
+    selective_pricing_exact_calls_required: int
+    pricing_stabilization_attempts: int
+    pricing_stabilization_true_negative_routes: int
+    pricing_stabilization_false_candidate_routes: int
+    pricing_stabilization_exact_calls_required: int
+    restricted_master_adaptive_gap_skips: int
+    restricted_master_adaptive_gap_forced_probes: int
+    restricted_master_adaptive_raw_stall_skips: int
+    restricted_master_adaptive_raw_stall_max: int
     route_pool_restart_nodes: int
     route_pool_restart_rounds: int
     route_pool_restart_routes_omitted_total: int
@@ -251,6 +271,7 @@ def solve_bpc_clean(
     branch_node_heuristic_boost_max_labels: int = 800000,
     branch_node_heuristic_boost_routes_per_round: int = 1000,
     branch_node_heuristic_boost_min_depth: int = 1,
+    branch_node_heuristic_boost_skip_after_empty_certificates: int = 0,
     exact_pricing_dominance_enabled: bool = False,
     pricing_completion_bound_enabled: bool = False,
     ng_dssr_pricing_enabled: bool = False,
@@ -262,6 +283,20 @@ def solve_bpc_clean(
     route_enumeration_enabled: bool = False,
     route_enumeration_rc_threshold: float = 0.0,
     route_enumeration_max_routes: int = 0,
+    pricing_tailing_diagnostics_enabled: bool = True,
+    pricing_tailing_label_threshold: int = 1_000_000,
+    pricing_tailing_min_objective_improvement: float = 1.0e-7,
+    pricing_tailing_duplicate_ratio: float = 0.50,
+    pricing_dual_stabilization_enabled: bool = False,
+    pricing_dual_stabilization_alpha: float = 0.35,
+    pricing_dual_stabilization_min_depth: int = 0,
+    pricing_dual_stabilization_max_rounds_without_improvement: int = 3,
+    selective_pricing_controller_enabled: bool = False,
+    selective_pricing_min_depth: int = 1,
+    selective_pricing_slow_label_threshold: int = 1_000_000,
+    selective_pricing_slow_exact_streak: int = 1,
+    selective_pricing_extra_max_labels: int = 900000,
+    selective_pricing_extra_routes_per_round: int = 1000,
     persistent_rmp_enabled: bool = False,
     restricted_master_heuristic_enabled: bool = False,
     restricted_master_time_limit: float = 20.0,
@@ -284,6 +319,11 @@ def solve_bpc_clean(
     restricted_master_adaptive_productivity_guard_enabled: bool = False,
     restricted_master_adaptive_productive_after_failures: int = 2,
     restricted_master_adaptive_productive_max_consecutive_skips: int = 2,
+    restricted_master_adaptive_gap_guard_enabled: bool = False,
+    restricted_master_adaptive_near_proof_gap: float = 5.0e-3,
+    restricted_master_adaptive_wide_gap: float = 3.0e-2,
+    restricted_master_adaptive_stale_incumbent_time: float = 600.0,
+    restricted_master_adaptive_raw_stall_after: int = 2,
     branching_strategy: str = "3pb",
     three_pb_pseudocost_candidates: int = 6,
     three_pb_fractional_candidates: int = 6,
@@ -528,6 +568,9 @@ def solve_bpc_clean(
             branch_node_heuristic_boost_max_labels=branch_node_heuristic_boost_max_labels,
             branch_node_heuristic_boost_routes_per_round=branch_node_heuristic_boost_routes_per_round,
             branch_node_heuristic_boost_min_depth=branch_node_heuristic_boost_min_depth,
+            branch_node_heuristic_boost_skip_after_empty_certificates=(
+                branch_node_heuristic_boost_skip_after_empty_certificates
+            ),
             exact_pricing_dominance_enabled=exact_pricing_dominance_enabled,
             pricing_completion_bound_enabled=pricing_completion_bound_enabled,
             ng_dssr_pricing_enabled=ng_dssr_pricing_enabled,
@@ -539,6 +582,22 @@ def solve_bpc_clean(
             route_enumeration_enabled=route_enumeration_enabled,
             route_enumeration_rc_threshold=route_enumeration_rc_threshold,
             route_enumeration_max_routes=route_enumeration_max_routes,
+            pricing_tailing_diagnostics_enabled=pricing_tailing_diagnostics_enabled,
+            pricing_tailing_label_threshold=pricing_tailing_label_threshold,
+            pricing_tailing_min_objective_improvement=pricing_tailing_min_objective_improvement,
+            pricing_tailing_duplicate_ratio=pricing_tailing_duplicate_ratio,
+            pricing_dual_stabilization_enabled=pricing_dual_stabilization_enabled,
+            pricing_dual_stabilization_alpha=pricing_dual_stabilization_alpha,
+            pricing_dual_stabilization_min_depth=pricing_dual_stabilization_min_depth,
+            pricing_dual_stabilization_max_rounds_without_improvement=(
+                pricing_dual_stabilization_max_rounds_without_improvement
+            ),
+            selective_pricing_controller_enabled=selective_pricing_controller_enabled,
+            selective_pricing_min_depth=selective_pricing_min_depth,
+            selective_pricing_slow_label_threshold=selective_pricing_slow_label_threshold,
+            selective_pricing_slow_exact_streak=selective_pricing_slow_exact_streak,
+            selective_pricing_extra_max_labels=selective_pricing_extra_max_labels,
+            selective_pricing_extra_routes_per_round=selective_pricing_extra_routes_per_round,
             persistent_rmp_enabled=persistent_rmp_enabled,
             restricted_master_heuristic_enabled=restricted_master_heuristic_enabled,
             restricted_master_time_limit=restricted_master_time_limit,
@@ -567,6 +626,11 @@ def solve_bpc_clean(
             restricted_master_adaptive_productive_max_consecutive_skips=(
                 restricted_master_adaptive_productive_max_consecutive_skips
             ),
+            restricted_master_adaptive_gap_guard_enabled=restricted_master_adaptive_gap_guard_enabled,
+            restricted_master_adaptive_near_proof_gap=restricted_master_adaptive_near_proof_gap,
+            restricted_master_adaptive_wide_gap=restricted_master_adaptive_wide_gap,
+            restricted_master_adaptive_stale_incumbent_time=restricted_master_adaptive_stale_incumbent_time,
+            restricted_master_adaptive_raw_stall_after=restricted_master_adaptive_raw_stall_after,
             branching_strategy=branching_strategy,
             three_pb_pseudocost_candidates=three_pb_pseudocost_candidates,
             three_pb_fractional_candidates=three_pb_fractional_candidates,
@@ -998,6 +1062,26 @@ def solve_bpc_clean(
         route_enumeration_adaptive_runs=tree_result.stats.route_enumeration_adaptive_runs,
         route_enumeration_adaptive_skips=tree_result.stats.route_enumeration_adaptive_skips,
         route_enumeration_adaptive_easy_skips=tree_result.stats.route_enumeration_adaptive_easy_skips,
+        pricing_tailing_events=tree_result.stats.pricing_tailing_events,
+        pricing_tailing_negative_search_slow=tree_result.stats.pricing_tailing_negative_search_slow,
+        pricing_tailing_certificate_slow=tree_result.stats.pricing_tailing_certificate_slow,
+        pricing_tailing_degenerate=tree_result.stats.pricing_tailing_degenerate,
+        pricing_tailing_branch_test_dominated=tree_result.stats.pricing_tailing_branch_test_dominated,
+        pricing_tailing_exact_label_pops=tree_result.stats.pricing_tailing_exact_label_pops,
+        pricing_tailing_duplicate_task_sets=tree_result.stats.pricing_tailing_duplicate_task_sets,
+        selective_pricing_heuristic_attempts=tree_result.stats.selective_pricing_heuristic_attempts,
+        selective_pricing_true_negative_routes=tree_result.stats.selective_pricing_true_negative_routes,
+        selective_pricing_false_candidate_routes=tree_result.stats.selective_pricing_false_candidate_routes,
+        selective_pricing_exact_calls_avoided=tree_result.stats.selective_pricing_exact_calls_avoided,
+        selective_pricing_exact_calls_required=tree_result.stats.selective_pricing_exact_calls_required,
+        pricing_stabilization_attempts=tree_result.stats.pricing_stabilization_attempts,
+        pricing_stabilization_true_negative_routes=tree_result.stats.pricing_stabilization_true_negative_routes,
+        pricing_stabilization_false_candidate_routes=tree_result.stats.pricing_stabilization_false_candidate_routes,
+        pricing_stabilization_exact_calls_required=tree_result.stats.pricing_stabilization_exact_calls_required,
+        restricted_master_adaptive_gap_skips=tree_result.stats.restricted_master_adaptive_gap_skips,
+        restricted_master_adaptive_gap_forced_probes=tree_result.stats.restricted_master_adaptive_gap_forced_probes,
+        restricted_master_adaptive_raw_stall_skips=tree_result.stats.restricted_master_adaptive_raw_stall_skips,
+        restricted_master_adaptive_raw_stall_max=tree_result.stats.restricted_master_adaptive_raw_stall_max,
         route_pool_restart_nodes=tree_result.stats.route_pool_restart_nodes,
         route_pool_restart_rounds=tree_result.stats.route_pool_restart_rounds,
         route_pool_restart_routes_omitted_total=tree_result.stats.route_pool_restart_routes_omitted_total,

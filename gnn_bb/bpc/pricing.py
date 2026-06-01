@@ -54,6 +54,8 @@ class PricingResult:
     dssr_iterations: int = 0
     dssr_memory_expansions: int = 0
     dssr_fallback: bool = False
+    dual_source: str = "current"
+    false_candidate_routes: int = 0
 
 
 Candidate = tuple[float, RouteColumn]

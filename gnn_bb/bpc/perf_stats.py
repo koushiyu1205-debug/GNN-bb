@@ -73,6 +73,30 @@ def analyze_csv(path: str | Path) -> list[dict[str, Any]]:
                 row.get("restricted_master_adaptive_unproductive_streak_max")
             ),
             "restricted_master_adaptive_probe_forced": _int(row.get("restricted_master_adaptive_probe_forced")),
+            "restricted_master_adaptive_gap_skips": _int(row.get("restricted_master_adaptive_gap_skips")),
+            "restricted_master_adaptive_gap_forced_probes": _int(
+                row.get("restricted_master_adaptive_gap_forced_probes")
+            ),
+            "restricted_master_adaptive_raw_stall_skips": _int(
+                row.get("restricted_master_adaptive_raw_stall_skips")
+            ),
+            "restricted_master_adaptive_raw_stall_max": _int(row.get("restricted_master_adaptive_raw_stall_max")),
+            "pricing_tailing_events": _int(row.get("pricing_tailing_events")),
+            "pricing_tailing_negative_search_slow": _int(row.get("pricing_tailing_negative_search_slow")),
+            "pricing_tailing_certificate_slow": _int(row.get("pricing_tailing_certificate_slow")),
+            "pricing_tailing_degenerate": _int(row.get("pricing_tailing_degenerate")),
+            "pricing_tailing_branch_test_dominated": _int(row.get("pricing_tailing_branch_test_dominated")),
+            "pricing_tailing_exact_label_pops": _int(row.get("pricing_tailing_exact_label_pops")),
+            "pricing_tailing_duplicate_task_sets": _int(row.get("pricing_tailing_duplicate_task_sets")),
+            "selective_pricing_heuristic_attempts": _int(row.get("selective_pricing_heuristic_attempts")),
+            "selective_pricing_true_negative_routes": _int(row.get("selective_pricing_true_negative_routes")),
+            "selective_pricing_false_candidate_routes": _int(row.get("selective_pricing_false_candidate_routes")),
+            "selective_pricing_exact_calls_avoided": _int(row.get("selective_pricing_exact_calls_avoided")),
+            "selective_pricing_exact_calls_required": _int(row.get("selective_pricing_exact_calls_required")),
+            "pricing_stabilization_attempts": _int(row.get("pricing_stabilization_attempts")),
+            "pricing_stabilization_true_negative_routes": _int(row.get("pricing_stabilization_true_negative_routes")),
+            "pricing_stabilization_false_candidate_routes": _int(row.get("pricing_stabilization_false_candidate_routes")),
+            "pricing_stabilization_exact_calls_required": _int(row.get("pricing_stabilization_exact_calls_required")),
             "task_schedule_capacity_cuts_added": _int(row.get("task_schedule_capacity_cuts_added")),
             "task_schedule_capacity_candidates_generated": _int(row.get("task_schedule_capacity_candidates_generated")),
             "task_schedule_capacity_candidates_after_precheck": _int(row.get("task_schedule_capacity_candidates_after_precheck")),
@@ -276,6 +300,7 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
     route_pack_roi_classifications: Counter[str] = Counter()
     route_pool_restart = Counter()
     route_pool_hygiene = Counter()
+    pricing_tailing = Counter()
 
     for record in records:
         event = str(record.get("event", ""))
@@ -436,8 +461,33 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
                 _int(record.get("adaptive_unproductive_streak")),
             )
             rim["adaptive_probe_forced"] += int(bool(record.get("adaptive_probe_forced")))
+            rim["adaptive_gap_forced_probes"] += int(
+                bool(record.get("adaptive_probe_forced")) and str(record.get("adaptive_gap_guard_reason")) == "wide_gap_stale_incumbent"
+            )
+            rim["adaptive_raw_stall_max"] = max(
+                int(rim["adaptive_raw_stall_max"]),
+                _int(record.get("adaptive_raw_stall_streak")),
+            )
         elif event == "restricted_integer_master_adaptive_skip":
             rim["adaptive_skips"] += 1
+            if str(record.get("gap_guard_reason")) == "near_proof":
+                rim["adaptive_gap_skips"] += 1
+            if str(record.get("gap_guard_reason")) == "raw_stall":
+                rim["adaptive_raw_stall_skips"] += 1
+        elif event == "pricing_tailing_diagnostic":
+            classification = str(record.get("classification") or "normal")
+            pricing_tailing["events"] += 1
+            pricing_tailing[classification] += 1
+            pricing_tailing["exact_label_pops"] += _int(record.get("label_pops")) if str(record.get("pricing_kind")) == "exact" else 0
+            pricing_tailing["duplicate_task_sets"] += _int(record.get("duplicate_task_set_routes"))
+            pricing_tailing["false_candidate_routes"] += _int(record.get("false_candidate_routes"))
+            if str(record.get("dual_source")) == "stabilized":
+                pricing_tailing["stabilized_attempts"] += 1
+                pricing_tailing["stabilized_false_candidate_routes"] += _int(record.get("false_candidate_routes"))
+                pricing_tailing["stabilized_true_negative_routes"] += _int(record.get("returned_routes"))
+            if str(record.get("pricing_kind")) in {"heuristic", "heuristic_boost", "selective_heuristic"}:
+                pricing_tailing["heuristic_attempts"] += 1
+                pricing_tailing["true_negative_routes"] += _int(record.get("returned_routes"))
         elif event == "rim_conflict_diagnostics":
             rim["conflicts_checked"] += _int(record.get("conflicts_checked"))
             rim["route_set_packing_events"] += _int(record.get("route_set_packing_events"))
@@ -546,6 +596,42 @@ def analyze_jsonl(path: str | Path) -> dict[str, Any]:
         or _int(finish.get("restricted_master_adaptive_unproductive_streak_max")),
         "restricted_master_adaptive_probe_forced": int(rim["adaptive_probe_forced"])
         or _int(finish.get("restricted_master_adaptive_probe_forced")),
+        "restricted_master_adaptive_gap_skips": int(rim["adaptive_gap_skips"])
+        or _int(finish.get("restricted_master_adaptive_gap_skips")),
+        "restricted_master_adaptive_gap_forced_probes": int(rim["adaptive_gap_forced_probes"])
+        or _int(finish.get("restricted_master_adaptive_gap_forced_probes")),
+        "restricted_master_adaptive_raw_stall_skips": int(rim["adaptive_raw_stall_skips"])
+        or _int(finish.get("restricted_master_adaptive_raw_stall_skips")),
+        "restricted_master_adaptive_raw_stall_max": int(rim["adaptive_raw_stall_max"])
+        or _int(finish.get("restricted_master_adaptive_raw_stall_max")),
+        "pricing_tailing_events": int(pricing_tailing["events"]) or _int(finish.get("pricing_tailing_events")),
+        "pricing_tailing_negative_search_slow": int(pricing_tailing["negative_column_search_slow"])
+        or _int(finish.get("pricing_tailing_negative_search_slow")),
+        "pricing_tailing_certificate_slow": int(pricing_tailing["certificate_slow"])
+        or _int(finish.get("pricing_tailing_certificate_slow")),
+        "pricing_tailing_degenerate": int(pricing_tailing["tailing_degenerate"])
+        or _int(finish.get("pricing_tailing_degenerate")),
+        "pricing_tailing_branch_test_dominated": int(pricing_tailing["branch_test_dominated"])
+        or _int(finish.get("pricing_tailing_branch_test_dominated")),
+        "pricing_tailing_exact_label_pops": int(pricing_tailing["exact_label_pops"])
+        or _int(finish.get("pricing_tailing_exact_label_pops")),
+        "pricing_tailing_duplicate_task_sets": int(pricing_tailing["duplicate_task_sets"])
+        or _int(finish.get("pricing_tailing_duplicate_task_sets")),
+        "selective_pricing_heuristic_attempts": int(pricing_tailing["heuristic_attempts"])
+        or _int(finish.get("selective_pricing_heuristic_attempts")),
+        "selective_pricing_true_negative_routes": int(pricing_tailing["true_negative_routes"])
+        or _int(finish.get("selective_pricing_true_negative_routes")),
+        "selective_pricing_false_candidate_routes": int(pricing_tailing["false_candidate_routes"])
+        or _int(finish.get("selective_pricing_false_candidate_routes")),
+        "selective_pricing_exact_calls_avoided": _int(finish.get("selective_pricing_exact_calls_avoided")),
+        "selective_pricing_exact_calls_required": _int(finish.get("selective_pricing_exact_calls_required")),
+        "pricing_stabilization_attempts": int(pricing_tailing["stabilized_attempts"])
+        or _int(finish.get("pricing_stabilization_attempts")),
+        "pricing_stabilization_true_negative_routes": int(pricing_tailing["stabilized_true_negative_routes"])
+        or _int(finish.get("pricing_stabilization_true_negative_routes")),
+        "pricing_stabilization_false_candidate_routes": int(pricing_tailing["stabilized_false_candidate_routes"])
+        or _int(finish.get("pricing_stabilization_false_candidate_routes")),
+        "pricing_stabilization_exact_calls_required": _int(finish.get("pricing_stabilization_exact_calls_required")),
         "rim_conflicts_checked": int(rim["conflicts_checked"]),
         "task_schedule_capacity_cuts_added": int(task_schedcap["added"]) or _int(finish.get("task_schedule_capacity_cuts_added")),
         "task_schedule_capacity_candidates_generated": int(task_schedcap["generated"])

@@ -98,6 +98,9 @@ def main() -> None:
             branch_node_heuristic_boost_max_labels=int(config.get("branch_node_heuristic_boost_max_labels", 800000)),
             branch_node_heuristic_boost_routes_per_round=int(config.get("branch_node_heuristic_boost_routes_per_round", 1000)),
             branch_node_heuristic_boost_min_depth=int(config.get("branch_node_heuristic_boost_min_depth", 1)),
+            branch_node_heuristic_boost_skip_after_empty_certificates=int(
+                config.get("branch_node_heuristic_boost_skip_after_empty_certificates", 0)
+            ),
             exact_pricing_dominance_enabled=_bool_config(
                 config,
                 "exact_pricing_dominance_enabled",
@@ -438,6 +441,38 @@ def main() -> None:
             route_enumeration_adaptive_enabled=_bool_config(config, "route_enumeration_adaptive_enabled", False),
             route_enumeration_adaptive_gap_abs=float(config.get("route_enumeration_adaptive_gap_abs", 10.0)),
             route_enumeration_adaptive_gap_ratio=float(config.get("route_enumeration_adaptive_gap_ratio", 3.0e-2)),
+            pricing_tailing_diagnostics_enabled=_bool_config(
+                config,
+                "pricing_tailing_diagnostics_enabled",
+                True,
+            ),
+            pricing_tailing_label_threshold=int(config.get("pricing_tailing_label_threshold", 1000000)),
+            pricing_tailing_min_objective_improvement=float(
+                config.get("pricing_tailing_min_objective_improvement", 1.0e-7)
+            ),
+            pricing_tailing_duplicate_ratio=float(config.get("pricing_tailing_duplicate_ratio", 0.50)),
+            pricing_dual_stabilization_enabled=_bool_config(
+                config,
+                "pricing_dual_stabilization_enabled",
+                False,
+            ),
+            pricing_dual_stabilization_alpha=float(config.get("pricing_dual_stabilization_alpha", 0.35)),
+            pricing_dual_stabilization_min_depth=int(config.get("pricing_dual_stabilization_min_depth", 0)),
+            pricing_dual_stabilization_max_rounds_without_improvement=int(
+                config.get("pricing_dual_stabilization_max_rounds_without_improvement", 3)
+            ),
+            selective_pricing_controller_enabled=_bool_config(
+                config,
+                "selective_pricing_controller_enabled",
+                False,
+            ),
+            selective_pricing_min_depth=int(config.get("selective_pricing_min_depth", 1)),
+            selective_pricing_slow_label_threshold=int(config.get("selective_pricing_slow_label_threshold", 1000000)),
+            selective_pricing_slow_exact_streak=int(config.get("selective_pricing_slow_exact_streak", 1)),
+            selective_pricing_extra_max_labels=int(config.get("selective_pricing_extra_max_labels", 900000)),
+            selective_pricing_extra_routes_per_round=int(
+                config.get("selective_pricing_extra_routes_per_round", 1000)
+            ),
             route_pool_hygiene_diagnostics_enabled=_bool_config(
                 config,
                 "route_pool_hygiene_diagnostics_enabled",
@@ -528,6 +563,23 @@ def main() -> None:
                 config.get("route_pack_branch_signal_apply_min_depth", 0)
             ),
             route_pack_branch_signal_boost=float(config.get("route_pack_branch_signal_boost", 0.02)),
+            restricted_master_adaptive_gap_guard_enabled=_bool_config(
+                config,
+                "restricted_master_adaptive_gap_guard_enabled",
+                False,
+            ),
+            restricted_master_adaptive_near_proof_gap=float(
+                config.get("restricted_master_adaptive_near_proof_gap", 5.0e-3)
+            ),
+            restricted_master_adaptive_wide_gap=float(
+                config.get("restricted_master_adaptive_wide_gap", 3.0e-2)
+            ),
+            restricted_master_adaptive_stale_incumbent_time=float(
+                config.get("restricted_master_adaptive_stale_incumbent_time", 600.0)
+            ),
+            restricted_master_adaptive_raw_stall_after=int(
+                config.get("restricted_master_adaptive_raw_stall_after", 2)
+            ),
             early_bound_fathom_before_cuts_enabled=_bool_config(
                 config,
                 "early_bound_fathom_before_cuts_enabled",
@@ -595,6 +647,12 @@ def main() -> None:
             f"sched_pack_adapt_skip={result.schedule_pack_adaptive_skips}, "
             f"route_enum_adapt={result.route_enumeration_adaptive_runs}/{result.route_enumeration_adaptive_decisions}, "
             f"route_enum_adapt_skip={result.route_enumeration_adaptive_skips}, "
+            f"pricing_tail={result.pricing_tailing_certificate_slow}/"
+            f"{result.pricing_tailing_negative_search_slow}/{result.pricing_tailing_degenerate}, "
+            f"stab={result.pricing_stabilization_true_negative_routes}/"
+            f"{result.pricing_stabilization_attempts}, "
+            f"selective={result.selective_pricing_exact_calls_avoided}/"
+            f"{result.selective_pricing_exact_calls_required}, "
             f"route_pool_restart={result.route_pool_restart_nodes}/{result.route_pool_restart_rounds}, "
             f"route_pool_omitted_max={result.route_pool_restart_routes_omitted_max}, "
             f"route_pool_recovered={result.route_pool_restart_pricing_recovered_routes}, "
@@ -605,6 +663,9 @@ def main() -> None:
             f"rim_adapt_skip={result.restricted_master_adaptive_skips}, "
             f"rim_adapt_reduce={result.restricted_master_adaptive_time_limit_reductions}, "
             f"rim_adapt_probe={result.restricted_master_adaptive_probe_forced}, "
+            f"rim_gap_skip={result.restricted_master_adaptive_gap_skips}, "
+            f"rim_gap_probe={result.restricted_master_adaptive_gap_forced_probes}, "
+            f"rim_raw_stall={result.restricted_master_adaptive_raw_stall_max}, "
             f"cuts_purged={result.cuts_purged}, branch_test_time={result.branch_testing_time}s",
             flush=True,
         )

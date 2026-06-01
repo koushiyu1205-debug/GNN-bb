@@ -39,8 +39,8 @@ from .data import BPCData
 from .logger import BPCLogger
 from .node import BPCNode, BPCStats
 from .persistent_rmp import PersistentRMP, PersistentRMPRequiresRebuild
-from .pricing import PricingResult, exact_pricing
-from .rmp import RMPSolution, RestrictedIntegerResult, solve_restricted_integer_master, solve_rmp_lp
+from .pricing import PricingResult, exact_pricing, reduced_cost
+from .rmp import RMPDuals, RMPSolution, RestrictedIntegerResult, solve_restricted_integer_master, solve_rmp_lp
 from .schedule_capacity import ScheduleCapacityResult, exact_schedule_task_capacity, find_schedule_capacity_conflict
 from .schedule_cost import ScheduleSubsetCostResult, exact_schedule_subset_cost
 from .schedule_pack import solve_schedule_pack_node_relaxation
@@ -156,6 +156,7 @@ class CleanBPCTree:
         branch_node_heuristic_boost_max_labels: int = 800000,
         branch_node_heuristic_boost_routes_per_round: int = 1000,
         branch_node_heuristic_boost_min_depth: int = 1,
+        branch_node_heuristic_boost_skip_after_empty_certificates: int = 0,
         exact_pricing_dominance_enabled: bool = False,
         pricing_completion_bound_enabled: bool = False,
         ng_dssr_pricing_enabled: bool = False,
@@ -167,6 +168,20 @@ class CleanBPCTree:
         route_enumeration_enabled: bool = False,
         route_enumeration_rc_threshold: float = 0.0,
         route_enumeration_max_routes: int = 0,
+        pricing_tailing_diagnostics_enabled: bool = True,
+        pricing_tailing_label_threshold: int = 1_000_000,
+        pricing_tailing_min_objective_improvement: float = 1.0e-7,
+        pricing_tailing_duplicate_ratio: float = 0.50,
+        pricing_dual_stabilization_enabled: bool = False,
+        pricing_dual_stabilization_alpha: float = 0.35,
+        pricing_dual_stabilization_min_depth: int = 0,
+        pricing_dual_stabilization_max_rounds_without_improvement: int = 3,
+        selective_pricing_controller_enabled: bool = False,
+        selective_pricing_min_depth: int = 1,
+        selective_pricing_slow_label_threshold: int = 1_000_000,
+        selective_pricing_slow_exact_streak: int = 1,
+        selective_pricing_extra_max_labels: int = 900000,
+        selective_pricing_extra_routes_per_round: int = 1000,
         persistent_rmp_enabled: bool = False,
         restricted_master_heuristic_enabled: bool = False,
         restricted_master_time_limit: float = 20.0,
@@ -189,6 +204,11 @@ class CleanBPCTree:
         restricted_master_adaptive_productivity_guard_enabled: bool = False,
         restricted_master_adaptive_productive_after_failures: int = 2,
         restricted_master_adaptive_productive_max_consecutive_skips: int = 2,
+        restricted_master_adaptive_gap_guard_enabled: bool = False,
+        restricted_master_adaptive_near_proof_gap: float = 5.0e-3,
+        restricted_master_adaptive_wide_gap: float = 3.0e-2,
+        restricted_master_adaptive_stale_incumbent_time: float = 600.0,
+        restricted_master_adaptive_raw_stall_after: int = 2,
         branching_strategy: str = "3pb",
         three_pb_pseudocost_candidates: int = 6,
         three_pb_fractional_candidates: int = 6,
@@ -428,6 +448,10 @@ class CleanBPCTree:
         self.branch_node_heuristic_boost_max_labels = int(branch_node_heuristic_boost_max_labels)
         self.branch_node_heuristic_boost_routes_per_round = int(branch_node_heuristic_boost_routes_per_round)
         self.branch_node_heuristic_boost_min_depth = int(branch_node_heuristic_boost_min_depth)
+        self.branch_node_heuristic_boost_skip_after_empty_certificates = max(
+            0,
+            int(branch_node_heuristic_boost_skip_after_empty_certificates),
+        )
         self.exact_pricing_dominance_enabled = bool(exact_pricing_dominance_enabled)
         self.pricing_completion_bound_enabled = bool(pricing_completion_bound_enabled)
         self.ng_dssr_pricing_enabled = bool(ng_dssr_pricing_enabled)
@@ -439,6 +463,23 @@ class CleanBPCTree:
         self.route_enumeration_enabled = bool(route_enumeration_enabled)
         self.route_enumeration_rc_threshold = float(route_enumeration_rc_threshold)
         self.route_enumeration_max_routes = int(route_enumeration_max_routes)
+        self.pricing_tailing_diagnostics_enabled = bool(pricing_tailing_diagnostics_enabled)
+        self.pricing_tailing_label_threshold = int(pricing_tailing_label_threshold)
+        self.pricing_tailing_min_objective_improvement = float(pricing_tailing_min_objective_improvement)
+        self.pricing_tailing_duplicate_ratio = float(pricing_tailing_duplicate_ratio)
+        self.pricing_dual_stabilization_enabled = bool(pricing_dual_stabilization_enabled)
+        self.pricing_dual_stabilization_alpha = float(pricing_dual_stabilization_alpha)
+        self.pricing_dual_stabilization_min_depth = int(pricing_dual_stabilization_min_depth)
+        self.pricing_dual_stabilization_max_rounds_without_improvement = int(
+            pricing_dual_stabilization_max_rounds_without_improvement
+        )
+        self.selective_pricing_controller_enabled = bool(selective_pricing_controller_enabled)
+        self.selective_pricing_min_depth = int(selective_pricing_min_depth)
+        self.selective_pricing_slow_label_threshold = int(selective_pricing_slow_label_threshold)
+        self.selective_pricing_slow_exact_streak = int(selective_pricing_slow_exact_streak)
+        self.selective_pricing_extra_max_labels = int(selective_pricing_extra_max_labels)
+        self.selective_pricing_extra_routes_per_round = int(selective_pricing_extra_routes_per_round)
+        self._selective_pricing_slow_exact_streak = 0
         self.persistent_rmp_enabled = bool(persistent_rmp_enabled)
         self.restricted_master_heuristic_enabled = bool(restricted_master_heuristic_enabled)
         self.restricted_master_time_limit = float(restricted_master_time_limit)
@@ -467,9 +508,15 @@ class CleanBPCTree:
         self.restricted_master_adaptive_productive_max_consecutive_skips = int(
             restricted_master_adaptive_productive_max_consecutive_skips
         )
+        self.restricted_master_adaptive_gap_guard_enabled = bool(restricted_master_adaptive_gap_guard_enabled)
+        self.restricted_master_adaptive_near_proof_gap = float(restricted_master_adaptive_near_proof_gap)
+        self.restricted_master_adaptive_wide_gap = float(restricted_master_adaptive_wide_gap)
+        self.restricted_master_adaptive_stale_incumbent_time = float(restricted_master_adaptive_stale_incumbent_time)
+        self.restricted_master_adaptive_raw_stall_after = int(restricted_master_adaptive_raw_stall_after)
         self._restricted_master_adaptive_failure_streak = 0
         self._restricted_master_adaptive_unproductive_streak = 0
         self._restricted_master_adaptive_productive_skip_streak = 0
+        self._restricted_master_adaptive_raw_stall_streak = 0
         self.rmp_params = dict(rmp_params or {})
         self.logger = logger
         self.branching_strategy = str(branching_strategy)
@@ -1651,6 +1698,15 @@ class CleanBPCTree:
             schedule_pack_full_pricing_enabled=self.schedule_pack_full_pricing_enabled,
             schedule_pack_adaptive_enabled=self.schedule_pack_adaptive_enabled,
             route_enumeration_adaptive_enabled=self.route_enumeration_adaptive_enabled,
+            pricing_tailing_diagnostics_enabled=self.pricing_tailing_diagnostics_enabled,
+            pricing_dual_stabilization_enabled=self.pricing_dual_stabilization_enabled,
+            pricing_dual_stabilization_alpha=self.pricing_dual_stabilization_alpha,
+            pricing_dual_stabilization_min_depth=self.pricing_dual_stabilization_min_depth,
+            pricing_dual_stabilization_max_rounds_without_improvement=(
+                self.pricing_dual_stabilization_max_rounds_without_improvement
+            ),
+            selective_pricing_controller_enabled=self.selective_pricing_controller_enabled,
+            selective_pricing_min_depth=self.selective_pricing_min_depth,
             route_pool_hygiene_diagnostics_enabled=self.route_pool_hygiene_diagnostics_enabled,
             route_pool_hygiene_diagnostics_min_routes=self.route_pool_hygiene_diagnostics_min_routes,
             route_pool_hygiene_admission_enabled=self.route_pool_hygiene_admission_enabled,
@@ -1682,6 +1738,13 @@ class CleanBPCTree:
             restricted_master_adaptive_productive_max_consecutive_skips=(
                 self.restricted_master_adaptive_productive_max_consecutive_skips
             ),
+            restricted_master_adaptive_gap_guard_enabled=self.restricted_master_adaptive_gap_guard_enabled,
+            restricted_master_adaptive_near_proof_gap=self.restricted_master_adaptive_near_proof_gap,
+            restricted_master_adaptive_wide_gap=self.restricted_master_adaptive_wide_gap,
+            restricted_master_adaptive_stale_incumbent_time=(
+                self.restricted_master_adaptive_stale_incumbent_time
+            ),
+            restricted_master_adaptive_raw_stall_after=self.restricted_master_adaptive_raw_stall_after,
             restricted_master_scan_solution_pool_enabled=self.restricted_master_scan_solution_pool_enabled,
             restricted_master_scan_solution_pool_limit=self.restricted_master_scan_solution_pool_limit,
             route_pool_restart_enabled=self.route_pool_restart_enabled,
@@ -1928,6 +1991,22 @@ class CleanBPCTree:
             route_enumeration_adaptive_runs=self.stats.route_enumeration_adaptive_runs,
             route_enumeration_adaptive_skips=self.stats.route_enumeration_adaptive_skips,
             route_enumeration_adaptive_easy_skips=self.stats.route_enumeration_adaptive_easy_skips,
+            pricing_tailing_events=self.stats.pricing_tailing_events,
+            pricing_tailing_negative_search_slow=self.stats.pricing_tailing_negative_search_slow,
+            pricing_tailing_certificate_slow=self.stats.pricing_tailing_certificate_slow,
+            pricing_tailing_degenerate=self.stats.pricing_tailing_degenerate,
+            pricing_tailing_branch_test_dominated=self.stats.pricing_tailing_branch_test_dominated,
+            pricing_tailing_exact_label_pops=self.stats.pricing_tailing_exact_label_pops,
+            pricing_tailing_duplicate_task_sets=self.stats.pricing_tailing_duplicate_task_sets,
+            selective_pricing_heuristic_attempts=self.stats.selective_pricing_heuristic_attempts,
+            selective_pricing_true_negative_routes=self.stats.selective_pricing_true_negative_routes,
+            selective_pricing_false_candidate_routes=self.stats.selective_pricing_false_candidate_routes,
+            selective_pricing_exact_calls_avoided=self.stats.selective_pricing_exact_calls_avoided,
+            selective_pricing_exact_calls_required=self.stats.selective_pricing_exact_calls_required,
+            pricing_stabilization_attempts=self.stats.pricing_stabilization_attempts,
+            pricing_stabilization_true_negative_routes=self.stats.pricing_stabilization_true_negative_routes,
+            pricing_stabilization_false_candidate_routes=self.stats.pricing_stabilization_false_candidate_routes,
+            pricing_stabilization_exact_calls_required=self.stats.pricing_stabilization_exact_calls_required,
             route_pool_restart_nodes=self.stats.route_pool_restart_nodes,
             route_pool_restart_rounds=self.stats.route_pool_restart_rounds,
             route_pool_restart_routes_omitted_total=self.stats.route_pool_restart_routes_omitted_total,
@@ -1954,6 +2033,10 @@ class CleanBPCTree:
                 self.stats.restricted_master_adaptive_unproductive_streak_max
             ),
             restricted_master_adaptive_probe_forced=self.stats.restricted_master_adaptive_probe_forced,
+            restricted_master_adaptive_gap_skips=self.stats.restricted_master_adaptive_gap_skips,
+            restricted_master_adaptive_gap_forced_probes=self.stats.restricted_master_adaptive_gap_forced_probes,
+            restricted_master_adaptive_raw_stall_skips=self.stats.restricted_master_adaptive_raw_stall_skips,
+            restricted_master_adaptive_raw_stall_max=self.stats.restricted_master_adaptive_raw_stall_max,
             rmp_solves=self.stats.rmp_solves,
             pricing_calls=self.stats.pricing_calls,
             exact_pricing_calls=self.stats.exact_pricing_calls,
@@ -3002,6 +3085,217 @@ class CleanBPCTree:
                 exact_bound=result.exact_over_full_route_space,
             )
 
+    @staticmethod
+    def _blend_dual_dict(
+        current: dict[Any, float],
+        reference: dict[Any, float],
+        alpha: float,
+    ) -> dict[Any, float]:
+        alpha = min(1.0, max(0.0, float(alpha)))
+        blended: dict[Any, float] = {}
+        for key, current_value in current.items():
+            ref_value = reference.get(key, current_value)
+            blended[key] = alpha * float(current_value) + (1.0 - alpha) * float(ref_value)
+        return blended
+
+    def _blend_duals(self, current: RMPDuals, reference: RMPDuals | None) -> RMPDuals:
+        if reference is None:
+            return current
+        alpha = float(self.pricing_dual_stabilization_alpha)
+        return RMPDuals(
+            cover=self._blend_dual_dict(current.cover, reference.cover, alpha),
+            task_vehicle=self._blend_dual_dict(current.task_vehicle, reference.task_vehicle, alpha),
+            sortie_count=self._blend_dual_dict(current.sortie_count, reference.sortie_count, alpha),
+            vehicle_time=self._blend_dual_dict(current.vehicle_time, reference.vehicle_time, alpha),
+            cuts=self._blend_dual_dict(current.cuts, reference.cuts, alpha),
+            branches=self._blend_dual_dict(current.branches, reference.branches, alpha),
+        )
+
+    def _validate_stabilized_pricing_result(
+        self,
+        pricing: PricingResult,
+        *,
+        true_duals: RMPDuals,
+        phase: str,
+        node: BPCNode,
+    ) -> PricingResult:
+        true_candidates: dict[tuple[int, ...], tuple[float, RouteColumn]] = {}
+        false_candidates = 0
+        for route in pricing.routes:
+            best_rc: float | None = None
+            for vehicle in self.data.vehicles:
+                if not route_allowed_by_branch(route, int(vehicle), node.branch_constraints):
+                    continue
+                rc = reduced_cost(
+                    self.data,
+                    route,
+                    int(vehicle),
+                    true_duals,
+                    self.cuts,
+                    node.branch_constraints,
+                    phase=phase,
+                )
+                best_rc = rc if best_rc is None else min(best_rc, rc)
+            if best_rc is not None and best_rc < -self.eps:
+                current = true_candidates.get(route.signature)
+                if current is None or best_rc < current[0]:
+                    true_candidates[route.signature] = (best_rc, route)
+            else:
+                false_candidates += 1
+        filtered = [route for _rc, route in sorted(true_candidates.values(), key=lambda item: (item[0], item[1].signature))]
+        pricing = replace(
+            pricing,
+            routes=filtered,
+            exhausted=False,
+            negative_routes=len(filtered),
+            best_reduced_cost=None if not true_candidates else min(rc for rc, _route in true_candidates.values()),
+            dual_source="stabilized",
+            false_candidate_routes=false_candidates,
+        )
+        self.stats.pricing_stabilization_true_negative_routes += len(filtered)
+        self.stats.pricing_stabilization_false_candidate_routes += false_candidates
+        self.stats.selective_pricing_true_negative_routes += len(filtered)
+        self.stats.selective_pricing_false_candidate_routes += false_candidates
+        return pricing
+
+    def _pricing_duplicate_task_sets(
+        self,
+        pricing_pool: RoutePool,
+        routes: list[RouteColumn],
+    ) -> tuple[int, int]:
+        pool_task_sets: dict[tuple[int, ...], int] = {}
+        for route in pricing_pool.routes:
+            key = tuple(sorted(int(task) for task in route.tasks))
+            pool_task_sets[key] = pool_task_sets.get(key, 0) + 1
+        duplicate_count = 0
+        repeated_count = 0
+        seen: set[tuple[int, ...]] = set()
+        for route in routes:
+            key = tuple(sorted(int(task) for task in route.tasks))
+            if pool_task_sets.get(key, 0) > 0:
+                duplicate_count += 1
+            if key in seen:
+                repeated_count += 1
+            seen.add(key)
+        return duplicate_count, repeated_count
+
+    def _classify_pricing_tailing(
+        self,
+        *,
+        node: BPCNode,
+        pricing_kind: str,
+        pricing: PricingResult,
+        added: int,
+        duplicate_task_sets: int,
+        returned_routes: int,
+        rmp_objective_delta: float | None,
+    ) -> str:
+        label_threshold = max(0, int(self.pricing_tailing_label_threshold))
+        small_improvement = (
+            rmp_objective_delta is not None
+            and abs(float(rmp_objective_delta)) <= float(self.pricing_tailing_min_objective_improvement)
+        )
+        duplicate_ratio = float(duplicate_task_sets) / max(1, int(returned_routes))
+        if (
+            str(pricing_kind) == "exact"
+            and pricing.negative_routes > 0
+            and pricing.label_pops >= label_threshold
+        ):
+            return "negative_column_search_slow"
+        if (
+            str(pricing_kind) == "exact"
+            and pricing.negative_routes <= 0
+            and pricing.exhausted
+            and pricing.label_pops >= label_threshold
+        ):
+            return "certificate_slow"
+        if (
+            small_improvement
+            and added > 0
+            and returned_routes > 0
+            and duplicate_ratio >= float(self.pricing_tailing_duplicate_ratio)
+        ):
+            return "tailing_degenerate"
+        elapsed = max(1.0e-9, self.elapsed())
+        if node.depth > 0 and self.stats.branch_testing_time / elapsed >= 0.05:
+            return "branch_test_dominated"
+        return "normal"
+
+    def _record_pricing_tailing_diagnostic(
+        self,
+        *,
+        node: BPCNode,
+        cg_iter: int,
+        phase: str,
+        pricing_kind: str,
+        pricing: PricingResult,
+        added: int,
+        duplicate_task_sets: int,
+        repeated_task_sets: int,
+        rmp_objective_delta: float | None,
+    ) -> str:
+        classification = self._classify_pricing_tailing(
+            node=node,
+            pricing_kind=pricing_kind,
+            pricing=pricing,
+            added=added,
+            duplicate_task_sets=duplicate_task_sets,
+            returned_routes=len(pricing.routes),
+            rmp_objective_delta=rmp_objective_delta,
+        )
+        self.stats.pricing_tailing_events += 1
+        if str(pricing_kind) == "exact":
+            self.stats.pricing_tailing_exact_label_pops += int(pricing.label_pops)
+        self.stats.pricing_tailing_duplicate_task_sets += int(duplicate_task_sets)
+        if classification == "negative_column_search_slow":
+            self.stats.pricing_tailing_negative_search_slow += 1
+        elif classification == "certificate_slow":
+            self.stats.pricing_tailing_certificate_slow += 1
+        elif classification == "tailing_degenerate":
+            self.stats.pricing_tailing_degenerate += 1
+        elif classification == "branch_test_dominated":
+            self.stats.pricing_tailing_branch_test_dominated += 1
+        if self.pricing_tailing_diagnostics_enabled:
+            self.logger.log(
+                "pricing_tailing_diagnostic",
+                node_id=node.id,
+                depth=node.depth,
+                cg_iter=cg_iter,
+                phase=phase,
+                pricing_kind=pricing_kind,
+                classification=classification,
+                rmp_objective_delta=None if rmp_objective_delta is None else round(rmp_objective_delta, 9),
+                label_pops=pricing.label_pops,
+                generated_labels=pricing.generated_labels,
+                best_reduced_cost=None if pricing.best_reduced_cost is None else round(pricing.best_reduced_cost, 9),
+                returned_routes=len(pricing.routes),
+                added_routes=added,
+                duplicate_task_set_routes=duplicate_task_sets,
+                repeated_returned_task_sets=repeated_task_sets,
+                dual_source=pricing.dual_source,
+                false_candidate_routes=pricing.false_candidate_routes,
+            )
+        return classification
+
+    def _selective_pricing_should_try_extra(self, node: BPCNode) -> bool:
+        if not self.selective_pricing_controller_enabled:
+            return False
+        if int(node.depth) < max(0, int(self.selective_pricing_min_depth)):
+            return False
+        return int(self._selective_pricing_slow_exact_streak) >= max(1, int(self.selective_pricing_slow_exact_streak))
+
+    def _branch_heuristic_boost_should_skip(self, empty_certificate_streak: int) -> bool:
+        threshold = int(self.branch_node_heuristic_boost_skip_after_empty_certificates)
+        return threshold > 0 and int(empty_certificate_streak) >= threshold
+
+    def _update_selective_pricing_history(self, pricing_kind: str, pricing: PricingResult, added: int) -> None:
+        if str(pricing_kind) != "exact":
+            return
+        if pricing.label_pops >= int(self.selective_pricing_slow_label_threshold):
+            self._selective_pricing_slow_exact_streak += 1
+        else:
+            self._selective_pricing_slow_exact_streak = 0
+
     def _run_pricing(
         self,
         node: BPCNode,
@@ -3015,11 +3309,20 @@ class CleanBPCTree:
         selection_mode: str,
         route_pool: RoutePool | None = None,
         route_birth_iter: dict[tuple[int, ...], int] | None = None,
+        pricing_duals: RMPDuals | None = None,
+        true_duals: RMPDuals | None = None,
+        dual_source: str = "current",
+        rmp_objective_delta: float | None = None,
     ) -> tuple[PricingResult, int]:
         pricing_pool = self.pool if route_pool is None else route_pool
+        active_duals = solution.duals if pricing_duals is None else pricing_duals
+        certificate_duals = solution.duals if true_duals is None else true_duals
+        if active_duals is None or certificate_duals is None:
+            raise RuntimeError("pricing requires RMP duals")
+        dual_source = str(dual_source or "current")
         ng_enabled = (
             bool(self.ng_dssr_pricing_enabled)
-            and pricing_kind in {"heuristic", "heuristic_boost"}
+            and pricing_kind in {"heuristic", "heuristic_boost", "selective_heuristic"}
             and int(max_labels) > 0
         )
         enumeration_threshold = None
@@ -3031,7 +3334,7 @@ class CleanBPCTree:
         pricing = exact_pricing(
             self.data,
             pricing_pool.routes,
-            solution.duals,
+            active_duals,
             self.cuts,
             node.branch_constraints,
             phase=phase,
@@ -3054,9 +3357,20 @@ class CleanBPCTree:
             route_enumeration_rc_threshold=enumeration_threshold,
             route_enumeration_max_routes=enumeration_limit,
         )
+        pricing = replace(pricing, dual_source=dual_source)
         self.stats.pricing_calls += 1
         if pricing_kind == "exact":
             self.stats.exact_pricing_calls += 1
+        if pricing_kind in {"heuristic", "heuristic_boost", "selective_heuristic"}:
+            self.stats.selective_pricing_heuristic_attempts += 1
+        if dual_source == "stabilized":
+            self.stats.pricing_stabilization_attempts += 1
+            pricing = self._validate_stabilized_pricing_result(
+                pricing,
+                true_duals=certificate_duals,
+                phase=phase,
+                node=node,
+            )
         self.stats.label_pops += pricing.label_pops
         self.stats.generated_labels += pricing.generated_labels
         pricing, admission_payload = self._apply_route_pool_hygiene_admission(
@@ -3064,6 +3378,10 @@ class CleanBPCTree:
             pricing_kind=pricing_kind,
             node=node,
             solution=solution,
+        )
+        duplicate_task_sets, repeated_task_sets = self._pricing_duplicate_task_sets(
+            pricing_pool,
+            pricing.routes,
         )
         before_signatures = set(pricing_pool.by_signature)
         added, global_added = self._add_pricing_routes(
@@ -3095,6 +3413,18 @@ class CleanBPCTree:
                 global_added_routes=global_added,
                 **admission_payload,
             )
+        tailing_classification = self._record_pricing_tailing_diagnostic(
+            node=node,
+            cg_iter=cg_iter,
+            phase=phase,
+            pricing_kind=pricing_kind,
+            pricing=pricing,
+            added=added,
+            duplicate_task_sets=duplicate_task_sets,
+            repeated_task_sets=repeated_task_sets,
+            rmp_objective_delta=rmp_objective_delta,
+        )
+        self._update_selective_pricing_history(pricing_kind, pricing, added)
         self.logger.log(
             "pricing",
             node_id=node.id,
@@ -3116,6 +3446,12 @@ class CleanBPCTree:
             exhausted=pricing.exhausted,
             route_count=len(pricing_pool.routes),
             global_route_count=len(self.pool.routes),
+            dual_source=pricing.dual_source,
+            false_candidate_routes=pricing.false_candidate_routes,
+            rmp_objective_delta=None if rmp_objective_delta is None else round(rmp_objective_delta, 9),
+            tailing_classification=tailing_classification,
+            duplicate_task_set_routes=duplicate_task_sets,
+            repeated_returned_task_sets=repeated_task_sets,
             label_pops=pricing.label_pops,
             generated_labels=pricing.generated_labels,
             dominance_enabled=pricing.dominance_enabled,
@@ -3323,38 +3659,89 @@ class CleanBPCTree:
         productivity_guard_active = (
             adaptive_active and self.restricted_master_adaptive_productivity_guard_enabled
         )
+        gap_guard_active = productivity_guard_active and bool(self.restricted_master_adaptive_gap_guard_enabled)
         failure_streak = int(self._restricted_master_adaptive_failure_streak)
         unproductive_streak = int(self._restricted_master_adaptive_unproductive_streak)
         productive_skip_streak = int(self._restricted_master_adaptive_productive_skip_streak)
         adaptive_probe_forced = False
+        gap_guard_reason: str | None = None
+        current_gap_ratio: float | None = None
+        time_since_best_incumbent: float | None = None
+        gap_guard_force_probe = False
+        if self.incumbent is not None:
+            incumbent_value = float(self.incumbent.objective)
+            current_gap_ratio = max(0.0, incumbent_value - float(solution.objective)) / max(1.0, abs(incumbent_value))
+            if self.stats.time_to_best_incumbent is not None:
+                time_since_best_incumbent = max(0.0, self.elapsed() - float(self.stats.time_to_best_incumbent))
         if productivity_guard_active:
             skip_after = int(self.restricted_master_adaptive_productive_after_failures)
             max_consecutive_skips = int(self.restricted_master_adaptive_productive_max_consecutive_skips)
+            if gap_guard_active and current_gap_ratio is not None:
+                if current_gap_ratio <= float(self.restricted_master_adaptive_near_proof_gap):
+                    skip_after = min(skip_after, 1) if skip_after > 0 else 1
+                    max_consecutive_skips = max_consecutive_skips + 2
+                    gap_guard_reason = "near_proof"
+                elif (
+                    current_gap_ratio >= float(self.restricted_master_adaptive_wide_gap)
+                    and time_since_best_incumbent is not None
+                    and time_since_best_incumbent >= float(self.restricted_master_adaptive_stale_incumbent_time)
+                ):
+                    gap_guard_force_probe = True
+                    gap_guard_reason = "wide_gap_stale_incumbent"
+            if (
+                gap_guard_active
+                and int(self._restricted_master_adaptive_raw_stall_streak)
+                >= max(1, int(self.restricted_master_adaptive_raw_stall_after))
+            ):
+                skip_after = min(skip_after, 1) if skip_after > 0 else 1
+                max_consecutive_skips = max_consecutive_skips + 1
+                if gap_guard_reason is None:
+                    gap_guard_reason = "raw_stall"
             if (
                 skip_after > 0
                 and max_consecutive_skips > 0
                 and unproductive_streak >= skip_after
                 and productive_skip_streak < max_consecutive_skips
+                and not gap_guard_force_probe
             ):
                 self._restricted_master_adaptive_productive_skip_streak += 1
                 self.stats.restricted_master_adaptive_skips += 1
+                if gap_guard_reason == "near_proof":
+                    self.stats.restricted_master_adaptive_gap_skips += 1
+                if gap_guard_reason == "raw_stall":
+                    self.stats.restricted_master_adaptive_raw_stall_skips += 1
                 self.logger.log(
                     "restricted_integer_master_adaptive_skip",
                     node_id=node.id,
                     depth=node.depth,
                     reason="productivity_guard",
+                    gap_guard_reason=gap_guard_reason,
+                    current_gap_ratio=None if current_gap_ratio is None else round(current_gap_ratio, 9),
+                    time_since_best_incumbent=(
+                        None if time_since_best_incumbent is None else round(time_since_best_incumbent, 6)
+                    ),
                     failure_streak=failure_streak,
                     unproductive_streak=unproductive_streak,
+                    raw_stall_streak=self._restricted_master_adaptive_raw_stall_streak,
                     skip_after=skip_after,
                     productive_skip_streak=self._restricted_master_adaptive_productive_skip_streak,
                     max_consecutive_skips=max_consecutive_skips,
                 )
                 return 0
             if (
+                gap_guard_force_probe
+                and skip_after > 0
+                and unproductive_streak >= skip_after
+            ):
+                adaptive_probe_forced = True
+                self.stats.restricted_master_adaptive_probe_forced += 1
+                self.stats.restricted_master_adaptive_gap_forced_probes += 1
+            if (
                 skip_after > 0
                 and max_consecutive_skips > 0
                 and unproductive_streak >= skip_after
                 and productive_skip_streak >= max_consecutive_skips
+                and not adaptive_probe_forced
             ):
                 adaptive_probe_forced = True
                 self.stats.restricted_master_adaptive_probe_forced += 1
@@ -3453,6 +3840,15 @@ class CleanBPCTree:
         if repair_improved:
             productivity_reasons.append("repair_improved")
         adaptive_productive_call = bool(productivity_reasons)
+        if gap_guard_active:
+            if accepted or raw_improved:
+                self._restricted_master_adaptive_raw_stall_streak = 0
+            else:
+                self._restricted_master_adaptive_raw_stall_streak += 1
+            self.stats.restricted_master_adaptive_raw_stall_max = max(
+                self.stats.restricted_master_adaptive_raw_stall_max,
+                int(self._restricted_master_adaptive_raw_stall_streak),
+            )
         if adaptive_active:
             status = str(result.status).upper()
             failed = (not accepted) and status == "TIME_LIMIT"
@@ -3506,10 +3902,17 @@ class CleanBPCTree:
             adaptive_reduced=adaptive_reduced,
             adaptive_failure_streak=self._restricted_master_adaptive_failure_streak,
             adaptive_productivity_guard_enabled=productivity_guard_active,
+            adaptive_gap_guard_enabled=gap_guard_active,
+            adaptive_gap_guard_reason=gap_guard_reason,
+            adaptive_gap_ratio=None if current_gap_ratio is None else round(current_gap_ratio, 9),
+            adaptive_time_since_best_incumbent=(
+                None if time_since_best_incumbent is None else round(time_since_best_incumbent, 6)
+            ),
             adaptive_productive_call=adaptive_productive_call,
             adaptive_productive_reasons=productivity_reasons,
             adaptive_unproductive_streak=self._restricted_master_adaptive_unproductive_streak,
             adaptive_productive_skip_streak=self._restricted_master_adaptive_productive_skip_streak,
+            adaptive_raw_stall_streak=self._restricted_master_adaptive_raw_stall_streak,
             adaptive_probe_forced=adaptive_probe_forced,
         )
         return added_conflict_cuts
@@ -3525,6 +3928,10 @@ class CleanBPCTree:
         if route_birth_iter is None and self.route_pool_restart_enabled:
             route_birth_iter = {route.signature: 0 for route in self.pool.routes}
         self._log_route_pool_hygiene_diagnostics(node, stage="node_start")
+        stabilized_reference_duals: RMPDuals | None = None
+        last_rmp_objective: float | None = None
+        pricing_rounds_without_improvement = 0
+        branch_boost_empty_certificate_streak = 0
 
         def solve_current_rmp() -> tuple[RMPSolution, str]:
             nonlocal persistent_rmp, persistent_rmp_disabled
@@ -3689,7 +4096,36 @@ class CleanBPCTree:
             if phase == "phase1" and solution.artificial_sum <= self.integer_tol:
                 phase = "phase2"
                 persistent_rmp = None
+                stabilized_reference_duals = None
+                last_rmp_objective = None
+                pricing_rounds_without_improvement = 0
                 continue
+
+            rmp_objective_delta: float | None = None
+            if solution.objective is not None:
+                objective_value = float(solution.objective)
+                if last_rmp_objective is not None:
+                    rmp_objective_delta = objective_value - float(last_rmp_objective)
+                    if abs(rmp_objective_delta) <= float(self.pricing_tailing_min_objective_improvement):
+                        pricing_rounds_without_improvement += 1
+                    else:
+                        pricing_rounds_without_improvement = 0
+                last_rmp_objective = objective_value
+            pricing_reference_duals = stabilized_reference_duals
+            stabilized_reference_duals = solution.duals
+
+            def stabilized_pricing_duals() -> RMPDuals | None:
+                if (
+                    self.pricing_dual_stabilization_enabled
+                    and phase == "phase2"
+                    and node.depth >= max(0, int(self.pricing_dual_stabilization_min_depth))
+                    and pricing_reference_duals is not None
+                    and solution.duals is not None
+                    and pricing_rounds_without_improvement
+                    >= max(0, int(self.pricing_dual_stabilization_max_rounds_without_improvement))
+                ):
+                    return self._blend_duals(solution.duals, pricing_reference_duals)
+                return None
 
             pricing: PricingResult | None = None
             added = 0
@@ -3705,6 +4141,7 @@ class CleanBPCTree:
                     selection_mode=self.heuristic_pricing_selection_mode,
                     route_pool=node_route_pool,
                     route_birth_iter=route_birth_iter,
+                    rmp_objective_delta=rmp_objective_delta,
                 )
                 if heuristic_added > 0:
                     continue
@@ -3713,6 +4150,28 @@ class CleanBPCTree:
                     pricing = heuristic_pricing
                     self.stats.exact_pricing_calls += 1
 
+                stabilized_duals = None if pricing is not None else stabilized_pricing_duals()
+                if stabilized_duals is not None:
+                    stabilized_pricing, stabilized_added = self._run_pricing(
+                        node,
+                        solution,
+                        cg_iter=cg_iter,
+                        phase=phase,
+                        pricing_kind="heuristic",
+                        max_routes_to_return=self.heuristic_pricing_routes_per_round,
+                        max_labels=self.heuristic_pricing_max_labels,
+                        selection_mode=self.heuristic_pricing_selection_mode,
+                        route_pool=node_route_pool,
+                        route_birth_iter=route_birth_iter,
+                        pricing_duals=stabilized_duals,
+                        true_duals=solution.duals,
+                        dual_source="stabilized",
+                        rmp_objective_delta=rmp_objective_delta,
+                    )
+                    if stabilized_added > 0:
+                        continue
+                    self.stats.pricing_stabilization_exact_calls_required += 1
+
                 if (
                     pricing is None
                     and phase == "phase2"
@@ -3720,24 +4179,62 @@ class CleanBPCTree:
                     and self.branch_node_heuristic_boost_enabled
                     and self.branch_node_heuristic_boost_max_labels > self.heuristic_pricing_max_labels
                 ):
-                    boosted_pricing, boosted_added = self._run_pricing(
-                        node,
-                        solution,
-                        cg_iter=cg_iter,
-                        phase=phase,
-                        pricing_kind="heuristic_boost",
-                        max_routes_to_return=self.branch_node_heuristic_boost_routes_per_round,
-                        max_labels=self.branch_node_heuristic_boost_max_labels,
-                        selection_mode=self.heuristic_pricing_selection_mode,
-                        route_pool=node_route_pool,
-                        route_birth_iter=route_birth_iter,
-                    )
-                    if boosted_added > 0:
-                        continue
-                    if boosted_pricing.exhausted:
-                        # 中文注释：boost 未触发 label 上限时同样给出完整枚举证明。
-                        pricing = boosted_pricing
-                        self.stats.exact_pricing_calls += 1
+                    if self._branch_heuristic_boost_should_skip(branch_boost_empty_certificate_streak):
+                        self.logger.log(
+                            "heuristic_boost_skipped",
+                            node_id=node.id,
+                            depth=node.depth,
+                            cg_iter=cg_iter,
+                            phase=phase,
+                            empty_certificate_streak=branch_boost_empty_certificate_streak,
+                            threshold=self.branch_node_heuristic_boost_skip_after_empty_certificates,
+                        )
+                    else:
+                        boosted_pricing, boosted_added = self._run_pricing(
+                            node,
+                            solution,
+                            cg_iter=cg_iter,
+                            phase=phase,
+                            pricing_kind="heuristic_boost",
+                            max_routes_to_return=self.branch_node_heuristic_boost_routes_per_round,
+                            max_labels=self.branch_node_heuristic_boost_max_labels,
+                            selection_mode=self.heuristic_pricing_selection_mode,
+                            route_pool=node_route_pool,
+                            route_birth_iter=route_birth_iter,
+                            rmp_objective_delta=rmp_objective_delta,
+                        )
+                        if boosted_added > 0:
+                            branch_boost_empty_certificate_streak = 0
+                            continue
+                        if boosted_pricing.exhausted:
+                            # 中文注释：boost 未触发 label 上限时同样给出完整枚举证明。
+                            pricing = boosted_pricing
+                            self.stats.exact_pricing_calls += 1
+                            if int(boosted_pricing.negative_routes) == 0:
+                                branch_boost_empty_certificate_streak += 1
+                            else:
+                                branch_boost_empty_certificate_streak = 0
+                        else:
+                            branch_boost_empty_certificate_streak = 0
+
+            if pricing is None and self._selective_pricing_should_try_extra(node):
+                selective_pricing, selective_added = self._run_pricing(
+                    node,
+                    solution,
+                    cg_iter=cg_iter,
+                    phase=phase,
+                    pricing_kind="selective_heuristic",
+                    max_routes_to_return=self.selective_pricing_extra_routes_per_round,
+                    max_labels=self.selective_pricing_extra_max_labels,
+                    selection_mode=self.heuristic_pricing_selection_mode,
+                    route_pool=node_route_pool,
+                    route_birth_iter=route_birth_iter,
+                    rmp_objective_delta=rmp_objective_delta,
+                )
+                if selective_added > 0:
+                    self.stats.selective_pricing_exact_calls_avoided += 1
+                    continue
+                self.stats.selective_pricing_exact_calls_required += 1
 
             if pricing is None:
                 pricing, added = self._run_pricing(
@@ -3751,6 +4248,7 @@ class CleanBPCTree:
                     selection_mode=self.exact_pricing_selection_mode,
                     route_pool=node_route_pool,
                     route_birth_iter=route_birth_iter,
+                    rmp_objective_delta=rmp_objective_delta,
                 )
             if added > 0:
                 continue
