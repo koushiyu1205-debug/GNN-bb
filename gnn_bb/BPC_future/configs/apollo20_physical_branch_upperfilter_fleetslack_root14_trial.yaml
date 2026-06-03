@@ -1,0 +1,135 @@
+# Opt-in 20-task journey Ryan-Foster branch-price trial for the DP upper-start
+# profile filter plus branch-node adaptive partial negative return.  It also
+# allows exact-safe dynamic fleet-limit tightening to incumbent vehicles + 1,
+# then delays root early branching to CG round 14 so the tightened root master
+# can absorb two more pricing rounds before branching.
+instances: ['BPC_future/data/generated/moon_trek_60/logical_graphs/apollo15_20km/tasks_20/apollo15_20km_tasks20_02_seed21018_logical_graph.json']
+instance_dir: '.'
+time_limit: 200.0
+max_nodes: 40
+journey_max_nodes: 40
+max_cg_iterations: 160
+pricing_eps: 1e-06
+integer_tol: 1e-06
+time_bucket_size: 10.0
+pricing_start_time_step: 10.0
+master_mode: 'journey'
+journey_branching_enabled: True
+journey_early_branching_enabled: True
+journey_early_branching_min_cg_iter: 14
+journey_early_branching_child_min_cg_iter: 4
+journey_early_branching_max_depth: 1
+journey_pricing_trip_cache_enabled: False
+journey_fleet_limit_slack: 1
+journey_child_priority_by_width_enabled: False
+
+fleet_bound_mode: 'computed'
+fleet_bound_slack: 1
+fleet_bound_cost_safe: True
+fleet_bound_max: None
+fleet_bound_log: True
+
+cuts_enabled: True
+fleet_lower_bound_cut_enabled: True
+incumbent_fleet_upper_cut_enabled: True
+incumbent_fleet_prefix_disable_enabled: True
+sortie_lower_bound_cut_enabled: True
+subset_row_cuts_enabled: True
+static_subset_row_cuts_enabled: True
+static_subset_row_cut_budget: 220
+static_subset_row_max_subset_size: 5
+journey_dynamic_subset_row_cuts_enabled: True
+journey_dynamic_subset_row_max_rounds: 4
+journey_dynamic_subset_row_cut_budget: 600
+journey_dynamic_subset_row_max_added: 40
+journey_dynamic_subset_row_max_subset_size: 6
+journey_dynamic_subset_row_min_violation: 1e-06
+subset_row_max_depth: 0
+subset_row_candidate_budget: 220
+subset_row_max_cuts_per_round: 35
+subset_row_max_subset_size: 6
+subset_row_min_violation: 1e-06
+
+initial_composite_seed_enabled: False
+initial_savings_seed_enabled: True
+initial_savings_seed_max_tasks: 5
+initial_savings_seed_max_evaluations: 4000
+initial_savings_seed_max_trips: 180
+initial_savings_seed_path_combinations: 24
+initial_savings_seed_path_dominance_enabled: True
+initial_single_task_starts_per_task: 3
+max_tasks_per_trip: 6
+
+pool_integer_heuristic_enabled: True
+pool_integer_heuristic_frequency: 2
+journey_pool_time_limit: 2.0
+journey_pool_integer_heuristic_enabled: True
+journey_pool_integer_frequency: 2
+journey_heuristic_pricing_enabled: False
+initial_pool_integer_heuristic_enabled: True
+initial_pool_integer_time_limit: 5.0
+column_cleanup_enabled: True
+column_cleanup_threshold: 9000
+column_cleanup_keep_per_task_set: 40
+journey_pool_restart_enabled: False
+
+journey_max_cg_iterations: 80
+journey_initial_source_trip_limit: 1800
+journey_initial_max_columns: 7000
+journey_pricing_time_limit: 60.0
+journey_pricing_max_sequences: 0
+journey_pricing_max_timed_evaluations: 0
+journey_pricing_max_candidate_trips: 0
+journey_pricing_max_dp_states: 800000
+journey_pricing_max_returned_journeys: 96
+journey_pricing_late_max_returned_journeys: 160
+journey_pricing_late_max_returned_min_cg_iter: 2
+journey_pricing_duplicate_retry_factor: 4
+journey_pricing_profile_generation_time_fraction: 0.95
+journey_pricing_profile_labeling_enabled: True
+journey_pricing_profile_labeling_best_first_enabled: True
+journey_pricing_profile_labeling_resume_enabled: True
+journey_pricing_profile_labeling_physical_catalog_resume_enabled: True
+journey_pricing_profile_labeling_task_set_superset_pruning_enabled: True
+journey_pricing_profile_cross_dominance_enabled: True
+journey_pricing_profile_online_dominance_enabled: True
+journey_pricing_task_set_bound_pruning_enabled: True
+journey_pricing_task_set_resource_pruning_enabled: True
+journey_pricing_partial_profile_bound_pruning_enabled: False
+journey_pricing_profile_catalog_max_profiles: 200000
+journey_pricing_streaming_enabled: True
+journey_pricing_streaming_profile_batch_size: 8000
+journey_pricing_streaming_min_negative_batch: 24
+journey_pricing_streaming_min_returned_journeys: 24
+journey_pricing_early_return_negative: True
+journey_pricing_early_return_negative_min_count: 24
+journey_pricing_early_return_unique_masks_enabled: True
+journey_pricing_selection_mode: 'reduced_cost'
+journey_post_pricing_time_reserve: 3.0
+journey_retry_incomplete_no_column_enabled: True
+journey_retry_incomplete_no_column_min_time: 2.0
+journey_retry_incomplete_no_column_generation_fraction: 0.95
+journey_certificate_no_reserve_enabled: True
+journey_certificate_no_reserve_min_cg_iter: 1
+journey_certificate_fast_negative_return_enabled: False
+journey_certificate_fast_negative_return_min_count: 1
+journey_certificate_full_scan_after_flat_rounds: 5
+journey_certificate_full_scan_max_sequences: 0
+journey_certificate_full_scan_max_timed_evaluations: 0
+
+journey_branch_pricing_streaming_partial_return_after_time: 15.0
+journey_branch_pricing_streaming_partial_return_min_journeys: 8
+
+journey_dual_stabilization_enabled: True
+journey_dual_stabilization_min_cg_iter: 1
+journey_dual_stabilization_tail_only_enabled: True
+journey_dual_stabilization_certificate_candidate_enabled: True
+journey_dual_stabilization_disable_on_certificate_candidate: False
+journey_dual_stabilization_mode: 'l1_reference'
+journey_dual_stabilization_time_limit: 1.0
+journey_dual_optimal_inequalities_enabled: True
+journey_deep_dual_optimal_inequalities_enabled: True
+
+results_csv: 'BPC_future/results/apollo20_physical_branch_upperfilter_fleetslack_root14_trial.csv'
+log_dir: 'BPC_future/results/logs/apollo20_physical_branch_upperfilter_fleetslack_root14_trial'
+solution_dir: 'BPC_future/results/solutions/apollo20_physical_branch_upperfilter_fleetslack_root14_trial'

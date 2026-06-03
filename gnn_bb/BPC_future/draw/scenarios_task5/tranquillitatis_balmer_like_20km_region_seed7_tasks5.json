@@ -1,0 +1,133 @@
+{
+  "connectivity": {
+    "all_tasks_in_depot_component": true,
+    "depot_component_cells": 1044365,
+    "task_candidate_cells": 820227,
+    "type": "4-connected passable grid component"
+  },
+  "depot": {
+    "col": 512,
+    "dem_m": -1010.8486938476562,
+    "id": "depot",
+    "impassable": false,
+    "requested_xy_km": [
+      10.0,
+      10.0
+    ],
+    "risk": 0.24957099556922913,
+    "roughness_m": 3.1414635181427,
+    "row": 512,
+    "slope_deg": 10.535530090332031,
+    "xy_km": [
+      10.009766,
+      9.990234
+    ]
+  },
+  "operation_region": {
+    "center_xy_km": [
+      10.0,
+      10.0
+    ],
+    "note": "The depot and operation circle center are fixed; only task points are randomized.",
+    "radius_km": 10.0
+  },
+  "sampling": {
+    "depot_xy_km": [
+      10.0,
+      10.0
+    ],
+    "max_task_risk": 0.9,
+    "min_point_spacing_km": 0.35,
+    "operation_radius_km": 10.0,
+    "seed": 7,
+    "task_count": 5,
+    "vehicle_max_roundtrip_km": 30.0
+  },
+  "seed": 7,
+  "tasks": [
+    {
+      "col": 727,
+      "dem_m": -967.7144165039062,
+      "id": "task_1",
+      "impassable": false,
+      "risk": 0.11980737745761871,
+      "roughness_m": 1.732744574546814,
+      "row": 325,
+      "slope_deg": 6.309055328369141,
+      "xy_km": [
+        14.208984,
+        13.642578
+      ]
+    },
+    {
+      "col": 668,
+      "dem_m": -992.1132202148438,
+      "id": "task_2",
+      "impassable": false,
+      "risk": 0.21085688471794128,
+      "roughness_m": 2.633040428161621,
+      "row": 363,
+      "slope_deg": 9.749144554138184,
+      "xy_km": [
+        13.056641,
+        12.900391
+      ]
+    },
+    {
+      "col": 978,
+      "dem_m": -1008.222900390625,
+      "id": "task_3",
+      "impassable": false,
+      "risk": 0.055850252509117126,
+      "roughness_m": 0.9392947554588318,
+      "row": 379,
+      "slope_deg": 3.265366554260254,
+      "xy_km": [
+        19.111328,
+        12.587891
+      ]
+    },
+    {
+      "col": 393,
+      "dem_m": -1033.8436279296875,
+      "id": "task_4",
+      "impassable": false,
+      "risk": 0.09526769816875458,
+      "roughness_m": 1.4789752960205078,
+      "row": 82,
+      "slope_deg": 5.057936668395996,
+      "xy_km": [
+        7.685547,
+        18.388672
+      ]
+    },
+    {
+      "col": 699,
+      "dem_m": -962.00732421875,
+      "id": "task_5",
+      "impassable": false,
+      "risk": 0.0730174332857132,
+      "roughness_m": 1.2907516956329346,
+      "row": 432,
+      "slope_deg": 3.189955234527588,
+      "xy_km": [
+        13.662109,
+        11.552734
+      ]
+    }
+  ],
+  "terrain": {
+    "height_km": 20.0,
+    "shape": [
+      1024,
+      1024
+    ],
+    "source_dir": "BPC_future/data/moon_trek/tranquillitatis_balmer_like_20km",
+    "width_km": 20.0
+  },
+  "vehicle": {
+    "farthest_depot_task_km": 9.465002,
+    "max_one_way_euclidean_km": 15.0,
+    "max_roundtrip_km": 30.0
+  }
+}

@@ -1,0 +1,107 @@
+# Hard 10-task Tranquillitatis trial for exact-safe streaming profile pricing.
+# Experimental only; does not change BPC_future defaults or old bpc_clean baseline.
+instances: ['BPC_future/data/generated/moon_trek_60/logical_graphs/tranquillitatis_balmer_like_20km/tasks_10/tranquillitatis_balmer_like_20km_tasks10_01_seed11000_logical_graph.json']
+instance_dir: '.'
+time_limit: 40.0
+max_nodes: 1
+max_cg_iterations: 120
+pricing_eps: 1e-06
+integer_tol: 1e-06
+time_bucket_size: 10.0
+pricing_start_time_step: 10.0
+master_mode: 'journey'
+
+fleet_bound_mode: 'computed'
+fleet_bound_slack: 1
+fleet_bound_cost_safe: True
+fleet_bound_max: None
+fleet_bound_log: True
+
+cuts_enabled: True
+fleet_lower_bound_cut_enabled: True
+incumbent_fleet_upper_cut_enabled: True
+incumbent_fleet_prefix_disable_enabled: True
+sortie_lower_bound_cut_enabled: True
+subset_row_cuts_enabled: True
+static_subset_row_cuts_enabled: True
+static_subset_row_cut_budget: 120
+static_subset_row_max_subset_size: 5
+subset_row_max_depth: 0
+subset_row_candidate_budget: 160
+subset_row_max_cuts_per_round: 25
+subset_row_max_subset_size: 6
+subset_row_min_violation: 1e-06
+
+initial_composite_seed_enabled: False
+initial_savings_seed_enabled: True
+initial_savings_seed_max_tasks: 5
+initial_savings_seed_max_evaluations: 2000
+initial_savings_seed_max_trips: 120
+initial_savings_seed_path_combinations: 24
+initial_savings_seed_path_dominance_enabled: True
+initial_single_task_starts_per_task: 3
+max_tasks_per_trip: 6
+
+pool_integer_heuristic_enabled: False
+journey_heuristic_pricing_enabled: False
+initial_pool_integer_heuristic_enabled: True
+initial_pool_integer_time_limit: 3.0
+column_cleanup_enabled: True
+column_cleanup_threshold: 6000
+column_cleanup_keep_per_task_set: 40
+journey_pool_restart_enabled: False
+
+journey_max_cg_iterations: 60
+journey_initial_source_trip_limit: 1200
+journey_initial_max_columns: 4000
+journey_pricing_time_limit: 30.0
+journey_pricing_max_sequences: 0
+journey_pricing_max_timed_evaluations: 0
+journey_pricing_max_candidate_trips: 0
+journey_pricing_max_dp_states: 500000
+journey_pricing_max_returned_journeys: 64
+journey_pricing_late_max_returned_journeys: 128
+journey_pricing_late_max_returned_min_cg_iter: 2
+journey_pricing_duplicate_retry_factor: 4
+journey_pricing_profile_generation_time_fraction: 0.95
+journey_pricing_profile_labeling_enabled: True
+journey_pricing_profile_labeling_best_first_enabled: True
+journey_pricing_profile_labeling_resume_enabled: True
+journey_pricing_profile_labeling_physical_catalog_resume_enabled: True
+journey_pricing_profile_labeling_task_set_superset_pruning_enabled: True
+journey_pricing_profile_cross_dominance_enabled: True
+journey_pricing_profile_online_dominance_enabled: True
+journey_pricing_task_set_bound_pruning_enabled: True
+journey_pricing_task_set_resource_pruning_enabled: True
+journey_pricing_partial_profile_bound_pruning_enabled: False
+journey_pricing_profile_catalog_max_profiles: 120000
+journey_pricing_streaming_enabled: True
+journey_pricing_streaming_profile_batch_size: 4000
+journey_pricing_streaming_min_negative_batch: 8
+journey_pricing_streaming_min_returned_journeys: 1
+journey_pricing_early_return_negative: True
+journey_pricing_early_return_negative_min_count: 8
+journey_pricing_selection_mode: 'reduced_cost'
+journey_post_pricing_time_reserve: 2.0
+journey_retry_incomplete_no_column_enabled: True
+journey_retry_incomplete_no_column_min_time: 1.0
+journey_retry_incomplete_no_column_generation_fraction: 0.95
+journey_certificate_no_reserve_enabled: True
+journey_certificate_no_reserve_min_cg_iter: 1
+journey_certificate_full_scan_after_flat_rounds: 5
+journey_certificate_full_scan_max_sequences: 0
+journey_certificate_full_scan_max_timed_evaluations: 0
+
+journey_dual_stabilization_enabled: True
+journey_dual_stabilization_min_cg_iter: 1
+journey_dual_stabilization_tail_only_enabled: True
+journey_dual_stabilization_certificate_candidate_enabled: True
+journey_dual_stabilization_disable_on_certificate_candidate: False
+journey_dual_stabilization_mode: 'l1_reference'
+journey_dual_stabilization_time_limit: 1.0
+journey_dual_optimal_inequalities_enabled: True
+journey_deep_dual_optimal_inequalities_enabled: True
+
+results_csv: 'BPC_future/results/tranq10_streaming_trial.csv'
+log_dir: 'BPC_future/results/logs/tranq10_streaming_trial'
+solution_dir: 'BPC_future/results/solutions/tranq10_streaming_trial'
