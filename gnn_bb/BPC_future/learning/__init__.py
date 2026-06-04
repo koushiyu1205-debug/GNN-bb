@@ -1,0 +1,12 @@
+"""Learning-side helpers for BPC_future.
+
+The package intentionally avoids importing PyTorch at package import time.
+Import concrete modules such as ``BPC_future.learning.gnn_model`` when the
+learning dependencies are installed.
+"""
+
+__all__ = [
+    "dual_stabilizer",
+    "gnn_model",
+    "graph_builder",
+]

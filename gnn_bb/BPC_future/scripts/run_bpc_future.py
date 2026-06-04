@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--results-csv")
     parser.add_argument("--log-dir")
     parser.add_argument("--solution-dir")
+    parser.add_argument("--set", dest="overrides", action="append", default=[], help="Override config as key=value.")
     parser.add_argument("--quiet", action="store_true")
     return parser.parse_args()
 
@@ -35,6 +36,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
+    for override in args.overrides:
+        if "=" not in override:
+            raise ValueError(f"--set override must be key=value, got {override!r}")
+        key, value = override.split("=", 1)
+        config[key.strip()] = parse_value(value.strip())
     if args.instances:
         config["instances"] = args.instances
     if args.time_limit is not None:

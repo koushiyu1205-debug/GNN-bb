@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import bisect
 import heapq
 import itertools
@@ -15,7 +15,7 @@ from BPC_future.core.columns import TimedTrip, evaluate_timed_trip, rounded
 from BPC_future.core.cuts import FutureCut
 from BPC_future.core.data import ArcOption, FutureData
 from BPC_future.core.journey import JourneyColumn, make_journey
-from BPC_future.master.journey_rmp import JourneyDuals
+from BPC_future.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
 from BPC_future.master.rmp import FutureDuals, manual_reduced_cost
 from BPC_future.pricing.trip_pricing import (
     _PartialNoWaitingPathProfile,
@@ -52,11 +52,33 @@ class JourneyPricingConfig:
     direct_journey_label_early_return_negative: bool = True
     direct_journey_label_next_sortie_cache_enabled: bool = True
     direct_journey_label_task_set_bound_pruning_enabled: bool = True
+    direct_journey_label_completion_bound_enabled: bool = False
+    direct_journey_label_completion_bound_time_buckets: int = 10
+    direct_journey_label_completion_bound_energy_buckets: int = 0
+    direct_journey_label_completion_bound_partial_pruning_enabled: bool = True
+    direct_journey_label_completion_bound_audit_enabled: bool = False
+    direct_journey_label_ng_dssr_enabled: bool = False
+    direct_journey_label_ng_memory_size: int = 8
+    direct_journey_label_dssr_initial_memory_size: int = 0
+    direct_journey_label_dssr_max_iterations: int = 4
+    direct_journey_label_dssr_memory_growth: int = 4
+    direct_journey_label_ng_max_labels: int = 200000
+    direct_journey_label_ng_min_negative_journeys: int = 1
+    direct_journey_label_ng_probe_time_limit: float = 0.0
+    direct_journey_label_ng_probe_min_journeys_for_early_return: int = 1
+    direct_journey_label_ng_probe_certificate_enabled: bool = False
+    direct_journey_label_ng_dominance_enabled: bool = True
+    direct_journey_label_ng_sequence_key_enabled: bool = True
+    direct_journey_label_ng_visit_mask_dominance_enabled: bool = False
+    direct_journey_label_ng_reset_memory_between_sorties_enabled: bool = False
+    direct_journey_label_ng_certificate_enabled: bool = False
+    direct_journey_label_ng_exact_probe_enabled: bool = False
     profile_generation_time_fraction: float = 0.75
     profile_labeling_enabled: bool = False
     profile_labeling_best_first_enabled: bool = True
     profile_labeling_resume_enabled: bool = False
     profile_labeling_physical_catalog_resume_enabled: bool = False
+    profile_labeling_physical_catalog_share_across_branches_enabled: bool = False
     profile_labeling_task_set_superset_pruning_enabled: bool = False
     profile_cross_dominance_enabled: bool = True
     max_returned_journeys: int = 1
@@ -70,6 +92,7 @@ class JourneyPricingConfig:
     streaming_min_returned_journeys: int = 1
     streaming_partial_return_after_time: float = 0.0
     streaming_partial_return_min_journeys: int = 0
+    streaming_final_dp_time_reserve: float = 0.0
     streaming_profile_cap_per_mask: int = 0
     min_add_reduced_cost: float = 0.0
     dp_bound_pruning_enabled: bool = True
@@ -128,6 +151,7 @@ class JourneyPricingResult:
     label_resume_profiles: int = 0
     label_resume_exhausted: bool = False
     profile_mask_cap_pruned: int = 0
+    profile_completion_time_pruned: int = 0
     branch_mask_pruned_sequences: int = 0
     dp_processed_labels: int = 0
     dp_state_count: int = 0
@@ -135,6 +159,27 @@ class JourneyPricingResult:
     dp_profile_time_filtered: int = 0
     dp_extension_attempts: int = 0
     dp_same_completion_pruned_labels: int = 0
+    completion_bound_enabled: bool = False
+    bound_build_time: float = 0.0
+    lb_state_count: int = 0
+    lb_min_value: float | None = None
+    lb_mean_value: float | None = None
+    lb_negative_state_count: int = 0
+    expanded_labels_before_bound: int = 0
+    expanded_labels_after_bound: int = 0
+    lb_pruned_labels: int = 0
+    generated_next_sorties_before_bound: int = 0
+    generated_next_sorties_after_bound: int = 0
+    ng_relaxation_enabled: bool = False
+    ng_dssr_iterations: int = 0
+    ng_memory_size: int = 0
+    ng_non_elementary_negative: int = 0
+    ng_label_pops: int = 0
+    ng_generated_labels: int = 0
+    ng_dominance_pruned_labels: int = 0
+    ng_fallback_to_elementary: bool = False
+    ng_certificate_from_relaxation: bool = False
+    ng_best_relaxed_reduced_cost: float | None = None
 
 
 @dataclass(frozen=True)
@@ -166,6 +211,7 @@ class _SortieLabelResumeState:
     labels_by_key: dict[tuple[int, int], list["_SortiePartialLabel"]]
     profiles_by_key: dict[tuple, _SortieProfile]
     heap: list[tuple[float, int, float, tuple[int, ...], int, "_SortiePartialLabel"]]
+    active_label_ids: set[int]
     profiles_by_mask: dict[int, list[_SortieProfile]] | None = None
     serial: int = 0
     generated: int = 0
@@ -200,10 +246,86 @@ class _DirectJourneyLabel:
     trips: tuple[TimedTrip, ...]
 
 
+@dataclass(frozen=True)
+class _DirectNGJourneyLabel:
+    ready_time: float
+    value: float
+    dssr_seen: frozenset[int]
+    ng_memory: frozenset[int]
+    visits: tuple[int, ...]
+    completed: tuple[TimedTrip, ...]
+    current: _SortiePartialLabel
+
+
+@dataclass
+class _DirectNGStats:
+    iterations: int = 0
+    memory_size: int = 0
+    non_elementary_negative: int = 0
+    label_pops: int = 0
+    generated_labels: int = 0
+    state_count: int = 0
+    evaluated_timed_trips: int = 0
+    dominance_pruned_labels: int = 0
+    best_relaxed_reduced_cost: float | None = None
+
+
+@dataclass
+class _DirectNGIterationResult:
+    journeys: list[JourneyColumn]
+    exhausted: bool
+    best_candidate_reduced_cost: float | None
+    best_relaxed_reduced_cost: float | None
+    stop_reason: str
+    label_pops: int
+    generated_labels: int
+    state_count: int
+    evaluated_timed_trips: int
+    dominance_pruned_labels: int
+    repeated_negative_tasks: set[int]
+
+
 class _StreamingPricingStop(Exception):
     def __init__(self, result: JourneyPricingResult) -> None:
         super().__init__(result.reason)
         self.result = result
+
+
+class _ProfileTimeFilterIndex:
+    """Range index for `upper_start >= threshold` in original profile order."""
+
+    def __init__(self, records: tuple[tuple[int, int, _SortieProfile], ...]) -> None:
+        self.records = records
+        self.count = len(records)
+        size = 1
+        while size < max(1, self.count):
+            size <<= 1
+        self.size = size
+        self.max_upper_start = [-float("inf")] * (2 * size)
+        for index, record in enumerate(records):
+            self.max_upper_start[size + index] = float(record[2].upper_start)
+        for index in range(size - 1, 0, -1):
+            self.max_upper_start[index] = max(self.max_upper_start[index << 1], self.max_upper_start[(index << 1) | 1])
+
+    def records_at_or_after(self, threshold: float) -> tuple[tuple[int, int, _SortieProfile], ...]:
+        if self.count <= 0 or self.max_upper_start[1] < float(threshold):
+            return tuple()
+        selected: list[tuple[int, int, _SortieProfile]] = []
+        stack: list[tuple[int, int, int]] = [(1, 0, self.size)]
+        while stack:
+            node, left, right = stack.pop()
+            if self.max_upper_start[node] < float(threshold):
+                continue
+            if right - left == 1:
+                if left < self.count:
+                    selected.append(self.records[left])
+                continue
+            mid = (left + right) // 2
+            # Push right first so the left child is consumed first and the
+            # returned tuple preserves the existing profile-DP scan order.
+            stack.append(((node << 1) | 1, mid, right))
+            stack.append((node << 1, left, mid))
+        return tuple(selected)
 
 
 class _CompatibleProfileCache:
@@ -226,6 +348,8 @@ class _CompatibleProfileCache:
         self.full_mask = (1 << int(task_count)) - 1 if self.enabled else 0
         self.by_profile_mask: dict[int, list[tuple[int, int, _SortieProfile]]] = {}
         self.by_used_mask: dict[int, tuple[tuple[int, int, _SortieProfile], ...]] = {}
+        self.by_used_mask_time: dict[tuple[int, float], tuple[tuple[int, int, _SortieProfile], ...]] = {}
+        self.by_used_mask_time_index: dict[int, _ProfileTimeFilterIndex] = {}
         if self.enabled:
             for record in ordered_records:
                 self.by_profile_mask.setdefault(int(record[2].mask), []).append(record)
@@ -247,7 +371,16 @@ class _CompatibleProfileCache:
         if cached is not None:
             if time_threshold is None:
                 return cached
-            return tuple(record for record in cached if float(record[2].upper_start) + 1.0e-9 >= float(min_upper_start))
+            time_key = (used_mask, float(min_upper_start))
+            timed = self.by_used_mask_time.get(time_key)
+            if timed is None:
+                index = self.by_used_mask_time_index.get(used_mask)
+                if index is None:
+                    index = _ProfileTimeFilterIndex(cached)
+                    self.by_used_mask_time_index[used_mask] = index
+                timed = index.records_at_or_after(float(time_threshold))
+                self.by_used_mask_time[time_key] = timed
+            return timed
         available = self.full_mask ^ used_mask
         records: list[tuple[int, int, _SortieProfile]] = []
         submask = available
@@ -258,7 +391,12 @@ class _CompatibleProfileCache:
         cached = tuple(records)
         self.by_used_mask[used_mask] = cached
         if time_threshold is not None:
-            return tuple(record for record in cached if float(record[2].upper_start) + 1.0e-9 >= float(min_upper_start))
+            time_key = (used_mask, float(min_upper_start))
+            index = _ProfileTimeFilterIndex(cached)
+            self.by_used_mask_time_index[used_mask] = index
+            timed = index.records_at_or_after(float(time_threshold))
+            self.by_used_mask_time[time_key] = timed
+            return timed
         return cached
 
 
@@ -726,6 +864,553 @@ class _TaskSetContinuationLowerBoundCache:
         return best
 
 
+class _DirectJourneyCompletionBound:
+    """Coarse optimistic suffix lower bound for direct journey labeling.
+
+    The table is rebuilt for the current true-dual pricing call.  It only uses
+    task-cover duals and directed physical arc options.  Time windows, energy,
+    task uniqueness, and recharge are relaxed, so every table value is
+    intentionally optimistic: if this lower bound still cannot make a partial
+    journey negative, pruning that label is exact-safe.
+    """
+
+    def __init__(
+        self,
+        data: FutureData,
+        duals: JourneyDuals,
+        *,
+        time_buckets: int,
+        max_tasks_per_sortie: int,
+        sortie_limit: int,
+    ) -> None:
+        started = time.perf_counter()
+        self.enabled = True
+        self.horizon = max(0.0, float(data.horizon))
+        self.bucket_count = max(1, int(time_buckets))
+        self.bucket_width = self.horizon / float(self.bucket_count) if self.horizon > 0.0 else 1.0
+        self.sortie_limit = max(0, int(sortie_limit))
+        self.max_tasks_per_sortie = max(1, int(max_tasks_per_sortie))
+        self.values: list[list[float]] = [[0.0] * (self.bucket_count + 1) for _ in range(self.sortie_limit + 1)]
+        self.build_time = 0.0
+        self.state_count = 0
+        self.lb_min_value: float | None = None
+        self.lb_mean_value: float | None = None
+        self.lb_negative_state_count = 0
+
+        best_arc_cost, best_arc_time = self._directed_arc_lower_bounds(data)
+        sortie_transitions = self._build_sortie_transitions(data, duals, best_arc_cost, best_arc_time)
+        self._build_journey_suffix_values(sortie_transitions)
+
+        flat_values = [float(value) for row in self.values for value in row]
+        self.lb_min_value = min(flat_values) if flat_values else None
+        self.lb_mean_value = (sum(flat_values) / float(len(flat_values))) if flat_values else None
+        self.lb_negative_state_count = sum(1 for value in flat_values if value < 0.0)
+        self.build_time = time.perf_counter() - started
+
+    def value(self, remaining_sorties: int, end_time: float) -> float:
+        remaining = max(0, min(int(remaining_sorties), self.sortie_limit))
+        bucket = self._bucket_of_time(float(end_time))
+        return float(self.values[remaining][bucket])
+
+    def _bucket_delta(self, duration: float) -> int:
+        if float(duration) <= 1.0e-12:
+            return 0
+        return max(1, int(math.ceil(float(duration) / float(self.bucket_width) - 1.0e-12)))
+
+    def _bucket_of_time(self, value: float) -> int:
+        if self.horizon <= 0.0:
+            return 0
+        bounded = max(0.0, min(float(value), self.horizon))
+        return max(0, min(self.bucket_count, int(math.floor(bounded / float(self.bucket_width)))))
+
+    def _bucket_time(self, bucket: int) -> float:
+        return max(0.0, min(float(self.horizon), float(bucket) * float(self.bucket_width)))
+
+    @staticmethod
+    def _directed_arc_lower_bounds(data: FutureData) -> tuple[dict[tuple[int, int], float], dict[tuple[int, int], float]]:
+        best_cost: dict[tuple[int, int], float] = {}
+        best_time: dict[tuple[int, int], float] = {}
+        nodes = (0, *tuple(int(task) for task in data.tasks))
+        for i in nodes:
+            for j in nodes:
+                if int(i) == int(j):
+                    continue
+                options = data.options(int(i), int(j))
+                if not options:
+                    continue
+                # cost 和 travel time 分别取定向弧上的最小值；二者可能来自不同
+                # option，这是故意的乐观松弛，只会让 LB 更低、更保守。
+                best_cost[(int(i), int(j))] = min(float(option.cost) for option in options)
+                best_time[(int(i), int(j))] = min(float(option.tau) for option in options)
+        return best_cost, best_time
+
+    def _build_sortie_transitions(
+        self,
+        data: FutureData,
+        duals: JourneyDuals,
+        best_arc_cost: dict[tuple[int, int], float],
+        best_arc_time: dict[tuple[int, int], float],
+    ) -> list[dict[int, float]]:
+        tasks = tuple(int(task) for task in data.tasks)
+        service_time = {int(task): float(data.task_value(int(task), "sigma")) for task in tasks}
+        service_cost = {int(task): float(data.task_value(int(task), "c_srv")) for task in tasks}
+        due_arrival = {
+            int(task): float(data.task_value(int(task), "D")) - float(data.task_value(int(task), "sigma"))
+            for task in tasks
+        }
+        task_reward = {int(task): float(duals.cover.get(int(task), 0.0)) for task in tasks}
+        transitions: list[dict[int, float]] = [dict() for _ in range(self.bucket_count + 1)]
+
+        for start_bucket in range(self.bucket_count + 1):
+            states: dict[tuple[int, int, int], float] = {(0, -1, start_bucket): 0.0}
+            for depth in range(0, self.max_tasks_per_sortie + 1):
+                next_states: dict[tuple[int, int, int], float] = {}
+                for (last, previous, bucket), partial_value in states.items():
+                    self.state_count += 1
+                    return_cost = 0.0 if int(last) == 0 else best_arc_cost.get((int(last), 0))
+                    return_time = 0.0 if int(last) == 0 else best_arc_time.get((int(last), 0))
+                    if return_cost is not None and return_time is not None:
+                        current_time = self._bucket_time(int(bucket))
+                        if current_time + float(return_time) > self.horizon + 1.0e-9:
+                            continue
+                        end_bucket = int(bucket) + self._bucket_delta(float(return_time))
+                        if end_bucket <= self.bucket_count:
+                            old = transitions[start_bucket].get(end_bucket)
+                            candidate = float(partial_value) + float(return_cost)
+                            if old is None or candidate < old:
+                                transitions[start_bucket][end_bucket] = candidate
+                    if int(depth) >= self.max_tasks_per_sortie:
+                        continue
+                    for task in tasks:
+                        # 2-cycle elimination: the relaxed bound has no NG memory, but
+                        # it does remember one predecessor so it cannot immediately
+                        # bounce i->j->i to repeatedly collect dual rewards.
+                        if int(task) == int(previous):
+                            continue
+                        arc_cost = best_arc_cost.get((int(last), int(task)))
+                        arc_time = best_arc_time.get((int(last), int(task)))
+                        if arc_cost is None or arc_time is None:
+                            continue
+                        current_time = self._bucket_time(int(bucket))
+                        if current_time + float(arc_time) > due_arrival[int(task)] + 1.0e-9:
+                            continue
+                        next_bucket = int(bucket) + self._bucket_delta(float(arc_time) + service_time[int(task)])
+                        if next_bucket > self.bucket_count:
+                            continue
+                        candidate = (
+                            float(partial_value)
+                            + float(arc_cost)
+                            + service_cost[int(task)]
+                            - task_reward[int(task)]
+                        )
+                        key = (int(task), int(last), int(next_bucket))
+                        old = next_states.get(key)
+                        if old is None or candidate < old:
+                            next_states[key] = candidate
+                states = next_states
+                if not states:
+                    break
+        return transitions
+
+    def _build_journey_suffix_values(self, sortie_transitions: list[dict[int, float]]) -> None:
+        for remaining in range(1, self.sortie_limit + 1):
+            previous = self.values[remaining - 1]
+            current = self.values[remaining]
+            for start_bucket in range(self.bucket_count, -1, -1):
+                best = 0.0
+                for end_bucket, sortie_value in sortie_transitions[start_bucket].items():
+                    if int(end_bucket) < int(start_bucket):
+                        continue
+                    candidate = float(sortie_value) + float(previous[int(end_bucket)])
+                    if candidate < best:
+                        best = candidate
+                current[start_bucket] = best
+
+
+class _UniqueTaskVisitLowerBound:
+    """O(N) lower bound that collects each remaining task dual at most once."""
+
+    def __init__(self, data: FutureData, duals: FutureDuals, task_to_bit: dict[int, int]) -> None:
+        self.full_mask = (1 << len(task_to_bit)) - 1
+        self.incoming_entries: tuple[tuple[int, float], ...] = tuple(
+            (1 << int(task_to_bit[int(task)]), self._task_visit_lower_bound(data, duals, int(task), direction="incoming"))
+            for task in data.tasks
+            if int(task) in task_to_bit
+        )
+        self.outgoing_entries: tuple[tuple[int, float], ...] = tuple(
+            (1 << int(task_to_bit[int(task)]), self._task_visit_lower_bound(data, duals, int(task), direction="outgoing"))
+            for task in data.tasks
+            if int(task) in task_to_bit
+        )
+
+    def value(self, available_mask: int, max_visits: int) -> float:
+        if int(max_visits) <= 0 or int(available_mask) <= 0:
+            return 0.0
+        return max(
+            self.incoming_value(int(available_mask), int(max_visits)),
+            self.outgoing_value(int(available_mask), int(max_visits)),
+        )
+
+    def incoming_value(self, available_mask: int, max_visits: int) -> float:
+        return self._value_from_entries(self.incoming_entries, int(available_mask), int(max_visits))
+
+    def outgoing_value(self, available_mask: int, max_visits: int) -> float:
+        return self._value_from_entries(self.outgoing_entries, int(available_mask), int(max_visits))
+
+    @staticmethod
+    def _value_from_entries(entries: tuple[tuple[int, float], ...], available_mask: int, max_visits: int) -> float:
+        values = [
+            float(value)
+            for bit, value in entries
+            if int(available_mask) & int(bit) and float(value) < 0.0
+        ]
+        if not values:
+            return 0.0
+        values.sort()
+        return float(sum(values[: int(max_visits)]))
+
+    @staticmethod
+    def _task_visit_lower_bound(data: FutureData, duals: FutureDuals, task: int, *, direction: str) -> float:
+        arc_costs: list[float] = []
+        other_tasks = tuple(int(item) for item in data.tasks if int(item) != int(task))
+        if direction == "incoming":
+            pairs = ((int(source), int(task)) for source in (0, *other_tasks))
+        elif direction == "outgoing":
+            pairs = ((int(task), int(target)) for target in (*other_tasks, 0))
+        else:
+            raise ValueError(f"unsupported unique task lower-bound direction {direction!r}")
+        for source, target in pairs:
+            try:
+                options = data.options(int(source), int(target))
+            except KeyError:
+                continue
+            arc_costs.extend(float(option.cost) for option in options)
+        arc_lb = min(arc_costs) if arc_costs else 0.0
+        return (
+            float(arc_lb)
+            + float(data.task_value(int(task), "c_srv"))
+            - float(duals.cover.get(int(task), 0.0))
+        )
+
+
+class _PositiveSubsetCutRewardBound:
+    """Upper bound on future positive subset-row cut reward.
+
+    For small task sets this precomputes an exact mask DP:
+    `best[slots][mask]` is the largest positive SRC reward among supersets of
+    `mask` that add at most `slots` tasks.  For larger task sets it falls back
+    to a row-wise upper bound to avoid a Python `2^N` table in 20-task runs.
+    """
+
+    EXACT_MASK_LIMIT = 16
+
+    def __init__(
+        self,
+        *,
+        task_count: int,
+        cut_duals: dict[int, float],
+        cuts: tuple[FutureCut, ...],
+        cut_masks: tuple[int, ...],
+    ) -> None:
+        self.task_count = max(0, int(task_count))
+        self.cut_duals = cut_duals
+        self.cuts = cuts
+        self.cut_masks = cut_masks
+        self.exact_enabled = bool(cut_duals) and self.task_count <= self.EXACT_MASK_LIMIT
+        self.total_reward: list[float] = []
+        self.best_by_slots: list[list[float]] = []
+        if self.exact_enabled:
+            self._build_exact_tables()
+
+    def value(self, mask: int, remaining_visit_capacity: int) -> float:
+        slots = max(0, min(int(remaining_visit_capacity), self.task_count))
+        current_mask = int(mask)
+        if slots <= 0 or not self.cut_duals or not self.cuts:
+            return 0.0
+        if self.exact_enabled and self.best_by_slots:
+            bounded_mask = current_mask & ((1 << self.task_count) - 1)
+            return max(
+                0.0,
+                float(self.best_by_slots[slots][bounded_mask]) - float(self.total_reward[bounded_mask]),
+            )
+        return _direct_completion_positive_subset_future_reward_bound_rowwise(
+            current_mask,
+            slots,
+            self.cut_duals,
+            self.cuts,
+            self.cut_masks,
+        )
+
+    def _build_exact_tables(self) -> None:
+        size = 1 << self.task_count
+        total = [0.0] * size
+        positive_cuts: list[tuple[int, int, float]] = []
+        for cut_index, cut in enumerate(self.cuts):
+            dual = float(self.cut_duals.get(int(cut_index), 0.0))
+            if dual <= 1.0e-12 or getattr(cut, "kind", "") != "subset_row" or int(cut_index) >= len(self.cut_masks):
+                continue
+            cut_mask = int(self.cut_masks[cut_index]) & (size - 1)
+            if cut_mask <= 0:
+                continue
+            positive_cuts.append((cut_mask, max(1, int(getattr(cut, "k", 2))), dual))
+        if not positive_cuts:
+            self.exact_enabled = False
+            return
+        for mask in range(size):
+            reward = 0.0
+            for cut_mask, k, dual in positive_cuts:
+                reward += float(dual) * float((int(mask) & int(cut_mask)).bit_count() // int(k))
+            total[mask] = reward
+        self.total_reward = total
+        best_by_slots: list[list[float]] = [total]
+        full_mask = size - 1
+        for slots in range(1, self.task_count + 1):
+            previous = best_by_slots[slots - 1]
+            current = previous.copy()
+            for mask in range(size - 1, -1, -1):
+                missing = full_mask ^ int(mask)
+                best = float(current[mask])
+                bitset = int(missing)
+                while bitset:
+                    bit = bitset & -bitset
+                    candidate = float(previous[int(mask) | int(bit)])
+                    if candidate > best:
+                        best = candidate
+                    bitset ^= bit
+                current[mask] = best
+            best_by_slots.append(current)
+        self.best_by_slots = best_by_slots
+
+
+class _UniqueRouteCompletionLowerBound:
+    """Task-unique route suffix bound for small direct-journey pricing calls.
+
+    This DP keeps the current node, available task mask, remaining slots in the
+    active sortie, and remaining future sorties.  It ignores time windows,
+    energy, and physical option coupling, so it remains an optimistic lower
+    bound, while being much tighter than node-independent task rewards.
+    """
+
+    EXACT_MASK_LIMIT = 16
+
+    def __init__(
+        self,
+        data: FutureData,
+        duals: FutureDuals,
+        task_to_bit: dict[int, int],
+        *,
+        max_tasks_per_sortie: int,
+        sortie_limit: int,
+        time_buckets: int,
+        energy_buckets: int,
+    ) -> None:
+        self.enabled = len(task_to_bit) <= self.EXACT_MASK_LIMIT
+        self.horizon = max(0.0, float(data.horizon))
+        self.bucket_count = max(1, int(time_buckets))
+        self.bucket_width = self.horizon / float(self.bucket_count) if self.horizon > 0.0 else 1.0
+        self.energy_limit = max(0.0, float(data.energy_limit))
+        self.energy_bucket_count = max(0, int(energy_buckets))
+        self.energy_bucket_width = (
+            self.energy_limit / float(self.energy_bucket_count)
+            if self.energy_bucket_count > 0 and self.energy_limit > 0.0
+            else 1.0
+        )
+        self.tasks = tuple(int(task) for task in data.tasks if int(task) in task_to_bit)
+        self.task_to_bit = {int(task): int(bit) for task, bit in task_to_bit.items()}
+        self.full_mask = (1 << len(task_to_bit)) - 1 if self.enabled else 0
+        self.max_tasks_per_sortie = max(1, int(max_tasks_per_sortie))
+        self.sortie_limit = max(0, int(sortie_limit))
+        self.service_cost = {int(task): float(data.task_value(int(task), "c_srv")) for task in self.tasks}
+        self.service_energy = {int(task): float(data.task_value(int(task), "g")) for task in self.tasks}
+        self.service_time = {int(task): float(data.task_value(int(task), "sigma")) for task in self.tasks}
+        self.due_arrival = {
+            int(task): float(data.task_value(int(task), "D")) - float(data.task_value(int(task), "sigma"))
+            for task in self.tasks
+        }
+        self.task_reward = {int(task): float(duals.cover.get(int(task), 0.0)) for task in self.tasks}
+        self.arc_cost: dict[tuple[int, int], float] = {}
+        self.arc_time: dict[tuple[int, int], float] = {}
+        self.arc_energy: dict[tuple[int, int], float] = {}
+        nodes = (0, *self.tasks)
+        for i in nodes:
+            for j in nodes:
+                if int(i) == int(j):
+                    continue
+                options = data.options(int(i), int(j))
+                if options:
+                    self.arc_cost[(int(i), int(j))] = min(float(option.cost) for option in options)
+                    self.arc_time[(int(i), int(j))] = min(float(option.tau) for option in options)
+                    self.arc_energy[(int(i), int(j))] = min(float(option.energy) for option in options)
+        self._future_cache: dict[tuple[int, int, int], float] = {}
+        self._partial_cache: dict[tuple[int, int, int, int, int, int], float] = {}
+
+    def future_value(self, available_mask: int, remaining_sorties: int, current_time: float = 0.0) -> float | None:
+        if not self.enabled:
+            return None
+        return self._future_value(
+            int(available_mask) & int(self.full_mask),
+            max(0, int(remaining_sorties)),
+            self._bucket_of_time(float(current_time)),
+        )
+
+    def partial_value(
+        self,
+        last: int,
+        available_mask: int,
+        remaining_slots_in_sortie: int,
+        future_sorties: int,
+        current_time: float = 0.0,
+        current_energy: float = 0.0,
+    ) -> float | None:
+        if not self.enabled:
+            return None
+        return self._partial_value(
+            int(last),
+            int(available_mask) & int(self.full_mask),
+            max(0, int(remaining_slots_in_sortie)),
+            max(0, int(future_sorties)),
+            self._bucket_of_time(float(current_time)),
+            self._bucket_of_energy(float(current_energy)),
+        )
+
+    def _bucket_of_time(self, value: float) -> int:
+        if self.horizon <= 0.0:
+            return 0
+        bounded = max(0.0, min(float(value), self.horizon))
+        return max(0, min(self.bucket_count, int(math.floor(bounded / float(self.bucket_width)))))
+
+    def _bucket_time(self, bucket: int) -> float:
+        return max(0.0, min(float(self.horizon), float(bucket) * float(self.bucket_width)))
+
+    def _bucket_of_energy(self, value: float) -> int:
+        if self.energy_bucket_count <= 0 or self.energy_limit <= 0.0:
+            return 0
+        bounded = max(0.0, min(float(value), self.energy_limit))
+        return max(0, min(self.energy_bucket_count, int(math.floor(bounded / float(self.energy_bucket_width)))))
+
+    def _bucket_energy(self, bucket: int) -> float:
+        if self.energy_bucket_count <= 0:
+            return 0.0
+        return max(0.0, min(float(self.energy_limit), float(bucket) * float(self.energy_bucket_width)))
+
+    def _future_value(self, available_mask: int, remaining_sorties: int, bucket: int) -> float:
+        key = (int(available_mask), int(remaining_sorties), int(bucket))
+        cached = self._future_cache.get(key)
+        if cached is not None:
+            return cached
+        best = 0.0
+        if int(remaining_sorties) > 0 and int(available_mask) > 0:
+            for task in self.tasks:
+                bit = 1 << self.task_to_bit[int(task)]
+                if not (int(available_mask) & int(bit)):
+                    continue
+                arc = self.arc_cost.get((0, int(task)))
+                travel = self.arc_time.get((0, int(task)))
+                energy = self.arc_energy.get((0, int(task)))
+                if arc is None or travel is None or energy is None:
+                    continue
+                depart_time = self._bucket_time(int(bucket))
+                if depart_time + float(travel) > self.due_arrival[int(task)] + 1.0e-9:
+                    continue
+                next_energy = float(energy) + self.service_energy[int(task)]
+                if self.energy_bucket_count > 0 and next_energy > self.energy_limit + 1.0e-9:
+                    continue
+                next_bucket = self._bucket_of_time(depart_time + float(travel) + self.service_time[int(task)])
+                candidate = (
+                    float(arc)
+                    + float(self.service_cost[int(task)])
+                    - float(self.task_reward[int(task)])
+                    + self._partial_value(
+                        int(task),
+                        int(available_mask) ^ int(bit),
+                        self.max_tasks_per_sortie - 1,
+                        int(remaining_sorties) - 1,
+                        int(next_bucket),
+                        self._bucket_of_energy(float(next_energy)),
+                    )
+                )
+                if candidate < best:
+                    best = candidate
+        self._future_cache[key] = float(best)
+        return float(best)
+
+    def _partial_value(
+        self,
+        last: int,
+        available_mask: int,
+        remaining_slots_in_sortie: int,
+        future_sorties: int,
+        bucket: int,
+        energy_bucket: int,
+    ) -> float:
+        key = (
+            int(last),
+            int(available_mask),
+            int(remaining_slots_in_sortie),
+            int(future_sorties),
+            int(bucket),
+            int(energy_bucket),
+        )
+        cached = self._partial_cache.get(key)
+        if cached is not None:
+            return cached
+        best = float("inf")
+        return_arc = self.arc_cost.get((int(last), 0))
+        return_time = self.arc_time.get((int(last), 0))
+        return_energy = self.arc_energy.get((int(last), 0))
+        depart_time = self._bucket_time(int(bucket))
+        energy_used = self._bucket_energy(int(energy_bucket))
+        if (
+            return_arc is not None
+            and return_time is not None
+            and return_energy is not None
+            and depart_time + float(return_time) <= self.horizon + 1.0e-9
+            and (
+                self.energy_bucket_count <= 0
+                or float(energy_used) + float(return_energy) <= self.energy_limit + 1.0e-9
+            )
+        ):
+            return_bucket = self._bucket_of_time(depart_time + float(return_time))
+            best = float(return_arc) + self._future_value(int(available_mask), int(future_sorties), int(return_bucket))
+        if int(remaining_slots_in_sortie) > 0 and int(available_mask) > 0:
+            for task in self.tasks:
+                bit = 1 << self.task_to_bit[int(task)]
+                if not (int(available_mask) & int(bit)):
+                    continue
+                arc = self.arc_cost.get((int(last), int(task)))
+                travel = self.arc_time.get((int(last), int(task)))
+                energy = self.arc_energy.get((int(last), int(task)))
+                if arc is None or travel is None or energy is None:
+                    continue
+                if depart_time + float(travel) > self.due_arrival[int(task)] + 1.0e-9:
+                    continue
+                next_energy = float(energy_used) + float(energy) + self.service_energy[int(task)]
+                if self.energy_bucket_count > 0 and next_energy > self.energy_limit + 1.0e-9:
+                    continue
+                next_bucket = self._bucket_of_time(depart_time + float(travel) + self.service_time[int(task)])
+                candidate = (
+                    float(arc)
+                    + float(self.service_cost[int(task)])
+                    - float(self.task_reward[int(task)])
+                    + self._partial_value(
+                        int(task),
+                        int(available_mask) ^ int(bit),
+                        int(remaining_slots_in_sortie) - 1,
+                        int(future_sorties),
+                        int(next_bucket),
+                        self._bucket_of_energy(float(next_energy)),
+                    )
+                )
+                if candidate < best:
+                    best = candidate
+        if math.isinf(best):
+            # No relaxed completion exists from this partial route.  The exact
+            # label cannot produce a feasible journey either.
+            best = float("inf")
+        self._partial_cache[key] = float(best)
+        return float(best)
+
+
 class _TaskSetSupersetLowerBoundCache:
     """Best optimistic sortie lower bound among supersets of a partial task set."""
 
@@ -989,6 +1674,74 @@ def price_journeys(
     )
 
 
+def _attach_ng_probe_stats(result: JourneyPricingResult, ng_probe: JourneyPricingResult) -> JourneyPricingResult:
+    return replace(
+        result,
+        ng_relaxation_enabled=bool(ng_probe.ng_relaxation_enabled),
+        ng_dssr_iterations=int(ng_probe.ng_dssr_iterations),
+        ng_memory_size=int(ng_probe.ng_memory_size),
+        ng_non_elementary_negative=int(ng_probe.ng_non_elementary_negative),
+        ng_label_pops=int(ng_probe.ng_label_pops),
+        ng_generated_labels=int(ng_probe.ng_generated_labels),
+        ng_dominance_pruned_labels=int(ng_probe.ng_dominance_pruned_labels),
+        ng_fallback_to_elementary=bool(ng_probe.ng_fallback_to_elementary),
+        ng_certificate_from_relaxation=bool(ng_probe.ng_certificate_from_relaxation),
+        ng_best_relaxed_reduced_cost=ng_probe.ng_best_relaxed_reduced_cost,
+    )
+
+
+def _merge_ng_probe_pricing_result(
+    result: JourneyPricingResult,
+    ng_probe: JourneyPricingResult,
+    *,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    max_returned: int,
+    eps: float,
+) -> JourneyPricingResult:
+    if not ng_probe.journeys:
+        return _attach_ng_probe_stats(result, ng_probe)
+
+    by_signature: dict[tuple, tuple[float, JourneyColumn]] = {}
+    for journey in [*result.journeys, *ng_probe.journeys]:
+        true_rc = float(manual_journey_reduced_cost(journey, duals, cuts))
+        if true_rc >= -float(eps):
+            continue
+        old = by_signature.get(journey.signature)
+        if old is None or true_rc < old[0] - 1.0e-9:
+            by_signature[journey.signature] = (true_rc, journey)
+
+    selected_with_rc = sorted(by_signature.values(), key=lambda item: (round(item[0], 9), item[1].signature))
+    selected = [journey for _rc, journey in selected_with_rc[: max(1, int(max_returned))]]
+    if not selected:
+        return _attach_ng_probe_stats(result, ng_probe)
+
+    best_values = [
+        value
+        for value in (
+            result.best_reduced_cost,
+            ng_probe.best_reduced_cost,
+            selected_with_rc[0][0] if selected_with_rc else None,
+        )
+        if value is not None
+    ]
+    merged = replace(
+        result,
+        journeys=selected,
+        exhausted=False,
+        best_reduced_cost=None if not best_values else min(float(value) for value in best_values),
+        candidate_trips=max(int(result.candidate_trips), int(ng_probe.candidate_trips)),
+        selected_trips=max((len(journey.trips) for journey in selected), default=0),
+        status="INCOMPLETE",
+        reason=(
+            result.reason
+            if result.journeys
+            else "ng_probe_profile_merged_negative_journey"
+        ),
+    )
+    return _attach_ng_probe_stats(merged, ng_probe)
+
+
 def _price_journeys_by_profiles(
     data: FutureData,
     duals: JourneyDuals,
@@ -1001,11 +1754,68 @@ def _price_journeys_by_profiles(
     forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
     dominant_task_set_costs: dict[frozenset[int], float] | None = None,
 ) -> JourneyPricingResult:
+    profile_call_started = time.perf_counter()
+    ng_probe_stats: JourneyPricingResult | None = None
+    if (
+        bool(config.direct_journey_label_ng_dssr_enabled)
+        and not bool(config.direct_journey_label_pricing_enabled)
+        and not bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
+        and (
+            bool(config.allow_partial_negative)
+            or bool(config.direct_journey_label_ng_exact_probe_enabled)
+            or bool(config.direct_journey_label_ng_certificate_enabled)
+        )
+        ):
+        probe_config = replace(
+            config,
+            direct_journey_label_ng_certificate_enabled=bool(
+                config.direct_journey_label_ng_probe_certificate_enabled
+                and _direct_ng_branch_certificate_safe(branch_constraints)
+            ),
+        )
+        probe_time_limit = float(config.direct_journey_label_ng_probe_time_limit)
+        if probe_time_limit > 0.0 and float(config.time_limit) > 0.0:
+            probe_config = replace(probe_config, time_limit=min(float(config.time_limit), probe_time_limit))
+        ng_probe = _price_journeys_by_direct_ng_dssr(
+            data,
+            duals,
+            config=probe_config,
+            cuts=cuts,
+            branch_constraints=branch_constraints,
+            forbidden_journey_signatures=forbidden_journey_signatures,
+            dominant_task_set_costs=dominant_task_set_costs,
+            fallback_to_elementary=False,
+        )
+        min_early_return = max(1, int(config.direct_journey_label_ng_probe_min_journeys_for_early_return))
+        if ng_probe.journeys and len(ng_probe.journeys) >= min_early_return:
+            return ng_probe
+        if (
+            bool(probe_config.direct_journey_label_ng_certificate_enabled)
+            and bool(ng_probe.exhausted)
+            and str(ng_probe.status) == "OPTIMAL"
+            and bool(ng_probe.ng_certificate_from_relaxation)
+        ):
+            return ng_probe
+        ng_probe_stats = ng_probe
+        if float(config.time_limit) > 0.0:
+            remaining = max(0.0, float(config.time_limit) - (time.perf_counter() - profile_call_started))
+            if remaining <= 0.0:
+                return ng_probe
+            config = replace(config, time_limit=remaining)
     if (
         bool(config.direct_journey_label_pricing_enabled)
         and not branch_constraints
         and not bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
     ):
+        if bool(config.direct_journey_label_ng_dssr_enabled):
+            return _price_journeys_by_direct_ng_dssr(
+                data,
+                duals,
+                config=config,
+                cuts=cuts,
+                forbidden_journey_signatures=forbidden_journey_signatures,
+                dominant_task_set_costs=dominant_task_set_costs,
+            )
         return _price_journeys_by_direct_labels(
             data,
             duals,
@@ -1015,7 +1825,7 @@ def _price_journeys_by_profiles(
             dominant_task_set_costs=dominant_task_set_costs,
         )
     if bool(config.streaming_pricing_enabled):
-        return _price_journeys_by_streaming_profiles(
+        result = _price_journeys_by_streaming_profiles(
             data,
             duals,
             branch_constraints=branch_constraints,
@@ -1026,6 +1836,16 @@ def _price_journeys_by_profiles(
             forbidden_journey_signatures=forbidden_journey_signatures,
             dominant_task_set_costs=dominant_task_set_costs,
         )
+        if ng_probe_stats is not None:
+            return _merge_ng_probe_pricing_result(
+                result,
+                ng_probe_stats,
+                duals=duals,
+                cuts=cuts,
+                max_returned=max(1, int(config.max_returned_journeys)),
+                eps=float(config.eps),
+            )
+        return result
     started = time.perf_counter()
     deadline = None if float(config.time_limit) <= 0.0 else started + float(config.time_limit)
     generation_deadline = deadline
@@ -1114,10 +1934,7 @@ def _price_journeys_by_profiles(
             )
     profile_dominance_pruned = 0
     filter_started = time.perf_counter()
-    if bool(catalog_stats.get("online_dominance_applied", 0)):
-        profile_dominance_pruned = int(catalog_stats.get("online_dominance_pruned", 0))
-    elif bool(config.profile_cross_dominance_enabled):
-        profiles, profile_dominance_pruned = _filter_dominated_sortie_profiles(profiles)
+    profiles, profile_dominance_pruned = _filter_sortie_profiles_after_generation(profiles, config, catalog_stats)
     profile_filter_time = time.perf_counter() - filter_started
     max_returned = max(1, int(config.max_returned_journeys))
     candidate_return_limit = max_returned * max(1, int(config.duplicate_retry_factor))
@@ -1329,6 +2146,680 @@ def _price_journeys_by_profiles(
         **_duplicate_stats_kwargs(dp_stats),
     )
 
+
+def _price_journeys_by_direct_ng_dssr(
+    data: FutureData,
+    duals: JourneyDuals,
+    *,
+    config: JourneyPricingConfig,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
+    forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
+    dominant_task_set_costs: dict[frozenset[int], float] | None = None,
+    fallback_to_elementary: bool = True,
+) -> JourneyPricingResult:
+    """Run ng-route/DSSR as an exact-safe direct-label front-end.
+
+    V1 uses the relaxation to find valid elementary negative journeys and to
+    identify repeated-task conflicts for DSSR memory growth.  Unless
+    ``direct_journey_label_ng_certificate_enabled`` is explicitly enabled, a
+    no-negative relaxed result falls through to the existing elementary labeler
+    so the official certificate path remains unchanged.
+    """
+
+    fallback_to_elementary = bool(fallback_to_elementary) and not branch_constraints
+    if fallback_to_elementary and not (
+        bool(config.allow_partial_negative)
+        or bool(config.direct_journey_label_ng_certificate_enabled)
+        or bool(config.direct_journey_label_ng_exact_probe_enabled)
+    ):
+        return _price_journeys_by_direct_labels(
+            data,
+            duals,
+            config=replace(config, direct_journey_label_ng_dssr_enabled=False),
+            cuts=cuts,
+            forbidden_journey_signatures=forbidden_journey_signatures,
+            dominant_task_set_costs=dominant_task_set_costs,
+        )
+
+    started = time.perf_counter()
+    deadline = None if float(config.time_limit) <= 0.0 else started + float(config.time_limit)
+    task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
+    trip_duals = FutureDuals(
+        cover={int(task): float(value) for task, value in duals.cover.items()},
+        task_vehicle={},
+        sortie_count={int(data.vehicles[0]): 0.0},
+        time_occupation={},
+        ordering={},
+        branches={},
+        cuts={},
+    )
+    task_order = _task_order(data, trip_duals, int(data.vehicles[0]), PricingConfig(heuristic=False, heuristic_top_tasks=0))
+    neighborhoods = _direct_ng_neighborhoods(data, ng_size=int(config.direct_journey_label_ng_memory_size))
+    memory = frozenset(
+        int(task) for task in data.tasks[: max(0, int(config.direct_journey_label_dssr_initial_memory_size))]
+    )
+    all_tasks = frozenset(int(task) for task in data.tasks)
+    stats = _DirectNGStats()
+    selected: list[JourneyColumn] = []
+    best_candidate_rc: float | None = None
+    stop_reason = ""
+    exhausted = True
+
+    max_iterations = max(1, int(config.direct_journey_label_dssr_max_iterations))
+    for iteration in range(1, max_iterations + 1):
+        stats.iterations = iteration
+        remaining = 0.0 if deadline is None else max(0.0, deadline - time.perf_counter())
+        if deadline is not None and remaining <= 0.0:
+            exhausted = False
+            stop_reason = "ng_dssr_time_limit"
+            break
+        iteration_result = _direct_ng_relaxed_iteration(
+            data,
+            duals,
+            task_order,
+            task_to_bit,
+            neighborhoods,
+            memory=memory,
+            config=config,
+            cuts=cuts,
+            branch_constraints=branch_constraints,
+            forbidden_journey_signatures=forbidden_journey_signatures,
+            dominant_task_set_costs=dominant_task_set_costs,
+            deadline=None if deadline is None else time.perf_counter() + remaining,
+        )
+        stats.label_pops += int(iteration_result.label_pops)
+        stats.generated_labels += int(iteration_result.generated_labels)
+        stats.state_count += int(iteration_result.state_count)
+        stats.evaluated_timed_trips += int(iteration_result.evaluated_timed_trips)
+        stats.dominance_pruned_labels += int(iteration_result.dominance_pruned_labels)
+        stats.non_elementary_negative += len(iteration_result.repeated_negative_tasks)
+        stats.memory_size = len(memory)
+        if iteration_result.best_relaxed_reduced_cost is not None:
+            stats.best_relaxed_reduced_cost = (
+                float(iteration_result.best_relaxed_reduced_cost)
+                if stats.best_relaxed_reduced_cost is None
+                else min(float(stats.best_relaxed_reduced_cost), float(iteration_result.best_relaxed_reduced_cost))
+            )
+        if iteration_result.journeys:
+            selected = iteration_result.journeys
+            best_candidate_rc = iteration_result.best_candidate_reduced_cost
+            exhausted = False
+            stop_reason = "ng_dssr_elementary_negative_journey"
+            break
+        if not iteration_result.exhausted:
+            exhausted = False
+            stop_reason = iteration_result.stop_reason or "ng_dssr_incomplete"
+            break
+        if (
+            iteration_result.best_relaxed_reduced_cost is None
+            or float(iteration_result.best_relaxed_reduced_cost) >= -float(config.eps)
+        ):
+            if bool(config.direct_journey_label_ng_certificate_enabled):
+                return JourneyPricingResult(
+                    [],
+                    True,
+                    iteration_result.best_relaxed_reduced_cost,
+                    iteration_result.generated_labels,
+                    iteration_result.evaluated_timed_trips,
+                    iteration_result.state_count,
+                    0,
+                    "OPTIMAL",
+                    "ng_dssr_relaxed_no_negative_journey",
+                    profile_generation_time=time.perf_counter() - started,
+                    **_direct_ng_stats_kwargs(stats, fallback=False, certificate=True),
+                )
+            stop_reason = "ng_dssr_relaxed_no_negative_fallback"
+            break
+
+        grow = set(int(task) for task in iteration_result.repeated_negative_tasks)
+        growth = max(1, int(config.direct_journey_label_dssr_memory_growth))
+        if len(grow) < growth:
+            scored = sorted(
+                (abs(float(duals.cover.get(int(task), 0.0))), int(task))
+                for task in data.tasks
+                if int(task) not in memory
+            )
+            for _score, task in reversed(scored):
+                grow.add(int(task))
+                if len(grow) >= growth:
+                    break
+        new_memory = frozenset(set(memory) | grow)
+        if new_memory == memory:
+            exhausted = False
+            stop_reason = "ng_dssr_negative_no_memory_growth"
+            break
+        memory = new_memory
+        stats.memory_size = len(memory)
+        if memory == all_tasks:
+            continue
+    else:
+        exhausted = False
+        stop_reason = "ng_dssr_iteration_limit"
+
+    if selected:
+        selected = selected[: max(1, int(config.max_returned_journeys))]
+        return JourneyPricingResult(
+            selected,
+            False,
+            best_candidate_rc,
+            stats.generated_labels,
+            stats.evaluated_timed_trips,
+            stats.state_count,
+            max((len(journey.trips) for journey in selected), default=0),
+            "INCOMPLETE",
+            stop_reason or "ng_dssr_elementary_negative_journey",
+            profile_generation_time=time.perf_counter() - started,
+            **_direct_ng_stats_kwargs(stats, fallback=False, certificate=False),
+        )
+
+    if not fallback_to_elementary:
+        return JourneyPricingResult(
+            [],
+            False,
+            stats.best_relaxed_reduced_cost,
+            stats.generated_labels,
+            stats.evaluated_timed_trips,
+            stats.state_count,
+            0,
+            "INCOMPLETE",
+            stop_reason or ("ng_dssr_exhausted_no_candidate" if exhausted else "ng_dssr_no_candidate"),
+            profile_generation_time=time.perf_counter() - started,
+            **_direct_ng_stats_kwargs(stats, fallback=False, certificate=False),
+        )
+
+    fallback_config = replace(config, direct_journey_label_ng_dssr_enabled=False)
+    fallback = _price_journeys_by_direct_labels(
+        data,
+        duals,
+        config=fallback_config,
+        cuts=cuts,
+        forbidden_journey_signatures=forbidden_journey_signatures,
+        dominant_task_set_costs=dominant_task_set_costs,
+    )
+    return replace(fallback, **_direct_ng_stats_kwargs(stats, fallback=True, certificate=False))
+
+
+def _direct_ng_stats_kwargs(
+    stats: _DirectNGStats,
+    *,
+    fallback: bool,
+    certificate: bool,
+) -> dict[str, Any]:
+    return {
+        "ng_relaxation_enabled": True,
+        "ng_dssr_iterations": int(stats.iterations),
+        "ng_memory_size": int(stats.memory_size),
+        "ng_non_elementary_negative": int(stats.non_elementary_negative),
+        "ng_label_pops": int(stats.label_pops),
+        "ng_generated_labels": int(stats.generated_labels),
+        "ng_dominance_pruned_labels": int(stats.dominance_pruned_labels),
+        "ng_fallback_to_elementary": bool(fallback),
+        "ng_certificate_from_relaxation": bool(certificate),
+        "ng_best_relaxed_reduced_cost": stats.best_relaxed_reduced_cost,
+    }
+
+
+def _direct_ng_neighborhoods(data: FutureData, *, ng_size: int) -> dict[int, frozenset[int]]:
+    size = max(1, int(ng_size))
+    neighborhoods: dict[int, frozenset[int]] = {}
+    for task in data.tasks:
+        task = int(task)
+        candidates: list[tuple[float, int]] = []
+        for other in data.tasks:
+            other = int(other)
+            if other == task:
+                continue
+            options = data.options(task, other)
+            best = min(options, key=lambda option: (float(option.cost), float(option.tau), float(option.energy)))
+            score = float(best.cost) + 0.01 * float(best.tau)
+            candidates.append((score, other))
+        selected = {task}
+        for _score, other in sorted(candidates)[: max(0, size - 1)]:
+            selected.add(int(other))
+        neighborhoods[task] = frozenset(selected)
+    return neighborhoods
+
+
+def _direct_ng_initial_partial(data: FutureData) -> _SortiePartialLabel:
+    return _SortiePartialLabel(
+        sequence=tuple(),
+        mask=0,
+        last=0,
+        partial=_PartialNoWaitingPathProfile(
+            arc_options=tuple(),
+            lower_start=0.0,
+            upper_start=float(data.horizon),
+            offset=0.0,
+            travel_cost=0.0,
+            travel_energy=0.0,
+            service_cost=0.0,
+            service_energy=0.0,
+        ),
+    )
+
+
+def _direct_ng_boundary_memory(label: _DirectNGJourneyLabel) -> frozenset[int]:
+    """Return NG memory after a depot/recharge boundary between sorties."""
+
+    return frozenset(int(task) for task in label.dssr_seen)
+
+
+def _direct_ng_label_key(
+    label: _DirectNGJourneyLabel,
+    *,
+    task_to_bit: dict[int, int] | None = None,
+    include_visit_mask: bool = False,
+    include_current_sequence: bool = True,
+) -> tuple[Any, ...]:
+    current_component: Any
+    if bool(include_current_sequence):
+        current_component = tuple(int(task) for task in label.current.sequence)
+    else:
+        current_component = int(label.current.mask)
+    key: tuple[Any, ...] = (
+        label.dssr_seen,
+        label.ng_memory,
+        current_component,
+        int(label.current.last),
+        len(label.completed),
+    )
+    if bool(include_visit_mask):
+        if task_to_bit is None:
+            raise ValueError("task_to_bit is required when include_visit_mask=True")
+        key = (*key, _direct_ng_unique_mask(label.visits, task_to_bit))
+    return key
+
+
+def _direct_ng_label_dominates(left: _DirectNGJourneyLabel, right: _DirectNGJourneyLabel) -> bool:
+    return bool(
+        float(left.ready_time) <= float(right.ready_time) + 1.0e-9
+        and float(left.value) <= float(right.value) + 1.0e-9
+        and float(left.current.partial.offset) <= float(right.current.partial.offset) + 1.0e-9
+        and float(left.current.partial.travel_cost) <= float(right.current.partial.travel_cost) + 1.0e-9
+        and float(left.current.partial.travel_energy) <= float(right.current.partial.travel_energy) + 1.0e-9
+        and float(left.current.partial.service_cost) <= float(right.current.partial.service_cost) + 1.0e-9
+        and float(left.current.partial.service_energy) <= float(right.current.partial.service_energy) + 1.0e-9
+    )
+
+
+def _direct_ng_repeated_tasks(visits: tuple[int, ...]) -> set[int]:
+    seen: set[int] = set()
+    repeated: set[int] = set()
+    for task in visits:
+        task = int(task)
+        if task in seen:
+            repeated.add(task)
+        seen.add(task)
+    return repeated
+
+
+def _direct_ng_visits_elementary(visits: tuple[int, ...]) -> bool:
+    return len(visits) == len(set(int(task) for task in visits))
+
+
+def _direct_ng_unique_mask(visits: tuple[int, ...], task_to_bit: dict[int, int]) -> int:
+    mask = 0
+    for task in set(int(task) for task in visits):
+        mask |= 1 << int(task_to_bit[int(task)])
+    return mask
+
+
+def _direct_ng_partial_branch_pruning_safe(constraints: tuple[BranchConstraint, ...]) -> bool:
+    """Return whether branch rows can be checked one-sided on a partial mask."""
+
+    return all(
+        constraint.kind in {"same_vehicle", "separate_vehicle"} and constraint.task_j is not None
+        for constraint in constraints
+    )
+
+
+def _direct_ng_branch_certificate_safe(constraints: tuple[BranchConstraint, ...]) -> bool:
+    """Return whether NG relaxed no-negative can certify a branch-pricing call."""
+
+    return _direct_ng_partial_branch_pruning_safe(constraints)
+
+
+def _direct_ng_label_priority(
+    base_reduced_cost: float,
+    label: _DirectNGJourneyLabel,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    cut_masks: tuple[int, ...],
+    task_to_bit: dict[int, int],
+) -> float:
+    current_dual = sum(float(duals.cover.get(int(task), 0.0)) for task in label.current.sequence)
+    optimistic = (
+        float(base_reduced_cost)
+        + float(label.value)
+        + float(label.current.partial.travel_cost)
+        + float(label.current.partial.service_cost)
+        - float(current_dual)
+    )
+    if label.visits:
+        mask = _direct_ng_unique_mask(label.visits, task_to_bit)
+        optimistic -= _journey_cut_dual_value_cached(int(mask), duals.cuts or {}, cuts, cut_masks, {})
+    return optimistic
+
+
+def _direct_ng_relaxed_iteration(
+    data: FutureData,
+    duals: JourneyDuals,
+    task_order: tuple[int, ...],
+    task_to_bit: dict[int, int],
+    neighborhoods: dict[int, frozenset[int]],
+    *,
+    memory: frozenset[int],
+    config: JourneyPricingConfig,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
+    forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
+    dominant_task_set_costs: dict[frozenset[int], float] | None = None,
+    deadline: float | None = None,
+) -> _DirectNGIterationResult:
+    base = float(data.fixed_vehicle_cost) - float(duals.fleet_limit)
+    cut_masks = _cut_masks(data, cuts)
+    cut_duals = duals.cuts or {}
+    candidates: dict[tuple, tuple[float, JourneyColumn]] = {}
+    repeated_negative: set[int] = set()
+    best_relaxed_rc: float | None = None
+    label_pops = 0
+    generated_labels = 0
+    dominance_pruned = 0
+    evaluated = 0
+    state_count = 1
+    exhausted = True
+    stop_reason = ""
+    max_labels = int(config.direct_journey_label_ng_max_labels)
+    if max_labels <= 0:
+        max_labels = int(config.max_dp_states)
+    target_negative_journeys = max(
+        1,
+        min(
+            max(1, int(config.max_returned_journeys)),
+            max(1, int(config.direct_journey_label_ng_min_negative_journeys)),
+        ),
+    )
+    max_sortie_tasks = _max_tasks_per_trip(data, int(config.max_tasks_per_trip))
+    forbidden = forbidden_journey_signatures or set()
+    start = _DirectNGJourneyLabel(
+        ready_time=0.0,
+        value=0.0,
+        dssr_seen=frozenset(),
+        ng_memory=frozenset(),
+        visits=tuple(),
+        completed=tuple(),
+        current=_direct_ng_initial_partial(data),
+    )
+    heap: list[tuple[float, int, float, int, _DirectNGJourneyLabel]] = [(0.0, 0, 0.0, 0, start)]
+    serial = 0
+    include_visit_mask_in_dominance = bool(
+        config.direct_journey_label_ng_visit_mask_dominance_enabled
+        or config.direct_journey_label_ng_certificate_enabled
+    )
+    include_current_sequence_in_dominance = bool(config.direct_journey_label_ng_sequence_key_enabled)
+    partial_branch_pruning_safe = _direct_ng_partial_branch_pruning_safe(branch_constraints)
+    dominance_buckets: dict[tuple[Any, ...], list[_DirectNGJourneyLabel]] = {
+        _direct_ng_label_key(
+            start,
+            task_to_bit=task_to_bit,
+            include_visit_mask=include_visit_mask_in_dominance,
+            include_current_sequence=include_current_sequence_in_dominance,
+        ): [start]
+    }
+
+    def active(label: _DirectNGJourneyLabel) -> bool:
+        if not bool(config.direct_journey_label_ng_dominance_enabled):
+            return True
+        return any(
+            old is label
+            for old in dominance_buckets.get(
+                _direct_ng_label_key(
+                    label,
+                    task_to_bit=task_to_bit,
+                    include_visit_mask=include_visit_mask_in_dominance,
+                    include_current_sequence=include_current_sequence_in_dominance,
+                ),
+                [],
+            )
+        )
+
+    def dominated(label: _DirectNGJourneyLabel) -> bool:
+        nonlocal dominance_pruned
+        if not bool(config.direct_journey_label_ng_dominance_enabled):
+            return False
+        key = _direct_ng_label_key(
+            label,
+            task_to_bit=task_to_bit,
+            include_visit_mask=include_visit_mask_in_dominance,
+            include_current_sequence=include_current_sequence_in_dominance,
+        )
+        bucket = dominance_buckets.setdefault(key, [])
+        if any(_direct_ng_label_dominates(old, label) for old in bucket):
+            dominance_pruned += 1
+            return True
+        survivors: list[_DirectNGJourneyLabel] = []
+        for old in bucket:
+            if _direct_ng_label_dominates(label, old):
+                dominance_pruned += 1
+                continue
+            survivors.append(old)
+        survivors.append(label)
+        dominance_buckets[key] = survivors
+        return False
+
+    def push(label: _DirectNGJourneyLabel) -> bool:
+        nonlocal generated_labels, serial, state_count, exhausted, stop_reason
+        if deadline is not None and time.perf_counter() > deadline:
+            exhausted = False
+            stop_reason = "ng_dssr_time_limit"
+            return False
+        if max_labels > 0 and generated_labels >= max_labels:
+            exhausted = False
+            stop_reason = "ng_dssr_label_limit"
+            return False
+        if dominated(label):
+            return True
+        generated_labels += 1
+        state_count += 1
+        serial += 1
+        heapq.heappush(
+            heap,
+            (
+                round(_direct_ng_label_priority(base, label, duals, cuts, cut_masks, task_to_bit), 9),
+                len(label.completed),
+                round(float(label.ready_time) + float(label.current.partial.offset), 9),
+                serial,
+                label,
+            ),
+        )
+        return True
+
+    def record_completed_sortie(label: _DirectNGJourneyLabel) -> bool:
+        nonlocal best_relaxed_rc, evaluated
+        if not label.current.sequence:
+            return True
+        options = data.options(int(label.current.last), 0)
+        if not options:
+            return True
+        dual_sum = sum(float(duals.cover.get(int(task), 0.0)) for task in label.current.sequence)
+        for option in options:
+            if deadline is not None and time.perf_counter() > deadline:
+                return False
+            completed_partial = _complete_no_waiting_partial(data, label.current.partial, option)
+            if completed_partial is None:
+                continue
+            profile = completed_partial.profile
+            start_time = max(float(label.ready_time), float(profile.lower_start))
+            if start_time > float(profile.upper_start) + 1.0e-9:
+                continue
+            trip = evaluate_timed_trip(
+                data,
+                label.current.sequence,
+                start_time,
+                time_bucket_size=float(config.time_bucket_size),
+                arc_options=completed_partial.arc_options,
+                include_physical_paths=False,
+            )
+            evaluated += 1
+            if trip is None:
+                continue
+            contribution = float(profile.cost) - float(dual_sum)
+            new_value = round(float(label.value) + float(contribution), 9)
+            new_visits = tuple(int(task) for task in label.visits)
+            new_mask = _direct_ng_unique_mask(new_visits, task_to_bit)
+            relaxed_rc = float(base) + float(new_value) - _journey_cut_dual_value_cached(
+                int(new_mask),
+                cut_duals,
+                cuts,
+                cut_masks,
+                {},
+            )
+            best_relaxed_rc = relaxed_rc if best_relaxed_rc is None else min(float(best_relaxed_rc), float(relaxed_rc))
+            new_completed = (*label.completed, trip)
+            if relaxed_rc < -float(config.eps):
+                if _direct_ng_visits_elementary(new_visits):
+                    journey = make_journey(data, new_completed)
+                    if (
+                        journey is not None
+                        and journey.signature not in forbidden
+                        and _journey_task_set_branch_allowed(journey.task_set, branch_constraints)
+                        and not _journey_task_set_cost_dominated(journey, dominant_task_set_costs)
+                    ):
+                        add_threshold = max(float(config.eps), float(config.min_add_reduced_cost))
+                        if relaxed_rc < -add_threshold:
+                            old = candidates.get(journey.signature)
+                            if old is None or relaxed_rc < old[0] - 1.0e-9:
+                                candidates[journey.signature] = (relaxed_rc, journey)
+                else:
+                    repeated_negative.update(_direct_ng_repeated_tasks(new_visits))
+            if len(new_completed) < int(data.sortie_limit):
+                next_label = _DirectNGJourneyLabel(
+                    ready_time=float(trip.end_time),
+                    value=new_value,
+                    dssr_seen=label.dssr_seen,
+                    ng_memory=(
+                        _direct_ng_boundary_memory(label)
+                        if bool(config.direct_journey_label_ng_reset_memory_between_sorties_enabled)
+                        or bool(config.direct_journey_label_ng_certificate_enabled)
+                        else label.ng_memory
+                    ),
+                    visits=new_visits,
+                    completed=new_completed,
+                    current=_direct_ng_initial_partial(data),
+                )
+                if not push(next_label):
+                    return False
+        return True
+
+    def unique_candidate_task_sets() -> int:
+        return len({frozenset(int(task) for task in journey.task_set) for _rc, journey in candidates.values()})
+
+    while heap:
+        if deadline is not None and time.perf_counter() > deadline:
+            exhausted = False
+            stop_reason = "ng_dssr_time_limit"
+            break
+        _priority, _count, _time_key, _serial, label = heapq.heappop(heap)
+        if not active(label):
+            continue
+        label_pops += 1
+        if max_labels > 0 and label_pops > max_labels:
+            exhausted = False
+            stop_reason = "ng_dssr_label_limit"
+            break
+        if not record_completed_sortie(label):
+            exhausted = False
+            stop_reason = "ng_dssr_time_limit"
+            break
+        if unique_candidate_task_sets() >= target_negative_journeys:
+            break
+        if len(label.current.sequence) >= max_sortie_tasks:
+            continue
+        for task in task_order:
+            task = int(task)
+            if task in label.current.sequence:
+                continue
+            if task in label.dssr_seen or task in label.ng_memory:
+                continue
+            sequence = (*label.current.sequence, task)
+            if not _sequence_resource_precheck(data, sequence):
+                continue
+            options = data.options(int(label.current.last), task)
+            if not options:
+                continue
+            global_bit = 1 << int(task_to_bit[task])
+            local_mask = int(label.current.mask) | int(global_bit)
+            for option in options:
+                if deadline is not None and time.perf_counter() > deadline:
+                    exhausted = False
+                    stop_reason = "ng_dssr_time_limit"
+                    break
+                extended = _extend_no_waiting_partial(
+                    data,
+                    sequence,
+                    len(label.current.sequence),
+                    label.current.partial,
+                    option,
+                )
+                if extended is None:
+                    continue
+                next_dssr_seen = label.dssr_seen | ({task} if task in memory else set())
+                next_ng_memory = frozenset((label.ng_memory & neighborhoods[task]) | {task} | next_dssr_seen)
+                next_visits = (*label.visits, task)
+                if partial_branch_pruning_safe and not _journey_mask_branch_allowed(
+                    _direct_ng_unique_mask(next_visits, task_to_bit),
+                    branch_constraints,
+                    task_to_bit,
+                    final=False,
+                ):
+                    continue
+                next_label = _DirectNGJourneyLabel(
+                    ready_time=label.ready_time,
+                    value=label.value,
+                    dssr_seen=frozenset(next_dssr_seen),
+                    ng_memory=next_ng_memory,
+                    visits=next_visits,
+                    completed=label.completed,
+                    current=_SortiePartialLabel(
+                        sequence=sequence,
+                        mask=local_mask,
+                        last=task,
+                        partial=extended,
+                    ),
+                )
+                if not push(next_label):
+                    break
+            if not exhausted:
+                break
+        if not exhausted:
+            break
+
+    selected = []
+    seen_task_sets: set[frozenset[int]] = set()
+    for item in sorted(candidates.values(), key=lambda item: (round(item[0], 9), item[1].signature)):
+        task_key = frozenset(int(task) for task in item[1].task_set)
+        if task_key in seen_task_sets:
+            continue
+        selected.append(item)
+        seen_task_sets.add(task_key)
+    if int(config.max_returned_journeys) > 0:
+        selected = selected[: max(1, int(config.max_returned_journeys))]
+    return _DirectNGIterationResult(
+        journeys=[journey for _rc, journey in selected],
+        exhausted=bool(exhausted),
+        best_candidate_reduced_cost=None if not selected else float(selected[0][0]),
+        best_relaxed_reduced_cost=best_relaxed_rc,
+        stop_reason=stop_reason,
+        label_pops=label_pops,
+        generated_labels=generated_labels,
+        state_count=state_count,
+        evaluated_timed_trips=evaluated,
+        dominance_pruned_labels=dominance_pruned,
+        repeated_negative_tasks=repeated_negative,
+    )
+
+
 def _price_journeys_by_direct_labels(
     data: FutureData,
     duals: JourneyDuals,
@@ -1378,7 +2869,16 @@ def _price_journeys_by_direct_labels(
     next_sortie_cache_misses = 0
     use_next_sortie_cache = bool(config.direct_journey_label_next_sortie_cache_enabled)
     direct_bound_pruned = 0
+    completion_lb_pruned = 0
+    expanded_before_completion_bound = 0
+    expanded_after_completion_bound = 0
+    generated_next_sorties_before_bound = 0
+    generated_next_sorties_after_bound = 0
     task_set_continuation_bound = None
+    completion_bound = None
+    unique_task_bound = None
+    positive_cut_reward_bound = None
+    unique_route_bound = None
     if (
         bool(config.direct_journey_label_task_set_bound_pruning_enabled)
         and not has_nonzero_cut_dual
@@ -1390,6 +2890,54 @@ def _price_journeys_by_direct_labels(
             max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
             enabled=True,
         )
+    completion_bound_cut_safe = _direct_completion_bound_cut_safe(cut_duals, cuts)
+    if bool(config.direct_journey_label_completion_bound_enabled) and completion_bound_cut_safe:
+        completion_bound = _DirectJourneyCompletionBound(
+            data,
+            duals,
+            time_buckets=int(config.direct_journey_label_completion_bound_time_buckets),
+            max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+            sortie_limit=int(data.sortie_limit),
+        )
+        unique_task_bound = _UniqueTaskVisitLowerBound(data, trip_duals, task_to_bit)
+        positive_cut_reward_bound = _PositiveSubsetCutRewardBound(
+            task_count=len(data.tasks),
+            cut_duals=cut_duals,
+            cuts=cuts,
+            cut_masks=cut_masks,
+        )
+        unique_route_bound = _UniqueRouteCompletionLowerBound(
+            data,
+            trip_duals,
+            task_to_bit,
+            max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+            sortie_limit=int(data.sortie_limit),
+            time_buckets=int(config.direct_journey_label_completion_bound_time_buckets),
+            energy_buckets=int(config.direct_journey_label_completion_bound_energy_buckets),
+        )
+        # Sortie-level completion pruning depends on the current journey label
+        # value, sortie count, and end time.  A profile cache keyed only by
+        # used_mask would mix bounds from different parents.  Journey-level
+        # suffix pruning is parent-specific but runs after cached profiles are
+        # instantiated, so it can still safely use the cache when partial
+        # pruning is disabled.
+        if bool(config.direct_journey_label_completion_bound_partial_pruning_enabled):
+            use_next_sortie_cache = False
+
+    def _completion_bound_kwargs() -> dict[str, Any]:
+        return {
+            "completion_bound_enabled": completion_bound is not None,
+            "bound_build_time": 0.0 if completion_bound is None else float(completion_bound.build_time),
+            "lb_state_count": 0 if completion_bound is None else int(completion_bound.state_count),
+            "lb_min_value": None if completion_bound is None else completion_bound.lb_min_value,
+            "lb_mean_value": None if completion_bound is None else completion_bound.lb_mean_value,
+            "lb_negative_state_count": 0 if completion_bound is None else int(completion_bound.lb_negative_state_count),
+            "expanded_labels_before_bound": int(expanded_before_completion_bound),
+            "expanded_labels_after_bound": int(expanded_after_completion_bound),
+            "lb_pruned_labels": int(completion_lb_pruned),
+            "generated_next_sorties_before_bound": int(generated_next_sorties_before_bound),
+            "generated_next_sorties_after_bound": int(generated_next_sorties_after_bound),
+        }
 
     while heap:
         if deadline is not None and time.perf_counter() > deadline:
@@ -1429,11 +2977,12 @@ def _price_journeys_by_direct_labels(
                                 "direct_label_partial_negative_journey",
                                 existing_journeys_filtered=duplicate_filtered,
                                 weak_negative_journeys_filtered=weak_filtered,
-                                dp_bound_pruned_labels=direct_bound_pruned,
+                                dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                                 profile_generation_time=time.perf_counter() - started,
                                 direct_next_sortie_cache_hits=next_sortie_cache_hits,
                                 direct_next_sortie_cache_misses=next_sortie_cache_misses,
                                 dominated_task_set_journeys_filtered=dominated_task_set_filtered,
+                                **_completion_bound_kwargs(),
                             )
         if int(count) >= int(data.sortie_limit):
             continue
@@ -1448,7 +2997,25 @@ def _price_journeys_by_direct_labels(
             # Journey-level cut coefficients depend on the final task mask.
             # A sortie that is not attractive by its own contribution can still
             # be part of a negative journey after cut duals are applied.
-            remaining_threshold = float("inf")
+            if completion_bound is not None and positive_cut_reward_bound is not None:
+                remaining_visit_capacity = (
+                    (int(data.sortie_limit) - int(count))
+                    * _max_tasks_per_trip(data, int(config.max_tasks_per_trip))
+                )
+                future_cut_reward = positive_cut_reward_bound.value(int(label.mask), int(remaining_visit_capacity))
+                suffix_floor = min(0.0, 0.0 if completion_bound.lb_min_value is None else float(completion_bound.lb_min_value))
+                remaining_threshold = (
+                    max(
+                        0.0,
+                        -float(base)
+                        - float(label.value)
+                        - float(suffix_floor)
+                        + float(future_cut_reward),
+                    )
+                    + float(config.eps)
+                )
+            else:
+                remaining_threshold = float("inf")
         if use_next_sortie_cache:
             cached = next_sortie_cache.get(int(label.mask))
             if cached is None:
@@ -1483,7 +3050,7 @@ def _price_journeys_by_direct_labels(
             eval_inc = int(profile_eval_inc) + int(instantiate_eval_inc)
             incomplete_reason = incomplete_reason or conversion_reason
         else:
-            next_trips, gen_inc, eval_inc, incomplete_reason = _direct_next_sortie_trips(
+            next_trips, gen_inc, eval_inc, incomplete_reason, bound_checked_inc, bound_pruned_inc = _direct_next_sortie_trips(
                 data,
                 trip_duals,
                 task_order,
@@ -1491,6 +3058,14 @@ def _price_journeys_by_direct_labels(
                 used_mask=int(label.mask),
                 earliest_start=float(label.end_time),
                 threshold=remaining_threshold,
+                base_reduced_cost=float(base),
+                journey_label_value=float(label.value),
+                journey_label_mask=int(label.mask),
+                journey_label_count=int(count),
+                completion_bound=completion_bound,
+                unique_task_bound=unique_task_bound,
+                unique_route_bound=unique_route_bound,
+                positive_cut_reward_bound=positive_cut_reward_bound,
                 cut_duals=cut_duals,
                 cuts=cuts,
                 cut_masks=cut_masks,
@@ -1498,8 +3073,13 @@ def _price_journeys_by_direct_labels(
                 config=config,
                 deadline=deadline,
             )
+            expanded_before_completion_bound += int(bound_checked_inc)
+            expanded_after_completion_bound += max(0, int(bound_checked_inc) - int(bound_pruned_inc))
+            completion_lb_pruned += int(bound_pruned_inc)
         generated += gen_inc
         evaluated += eval_inc
+        generated_next_sorties_before_bound += int(gen_inc)
+        generated_next_sorties_after_bound += max(0, int(gen_inc) - int(bound_pruned_inc if not use_next_sortie_cache else 0))
         if incomplete_reason:
             exhausted = False
             reason = incomplete_reason
@@ -1507,12 +3087,52 @@ def _price_journeys_by_direct_labels(
         for trip, contribution, trip_mask in next_trips:
             if int(label.mask) & int(trip_mask):
                 continue
+            expanded_before_completion_bound += 1
             new_label = _DirectJourneyLabel(
                 end_time=float(trip.end_time),
                 value=round(float(label.value) + float(contribution), 9),
                 mask=int(label.mask) | int(trip_mask),
                 trips=(*label.trips, trip),
             )
+            new_label_objective = _direct_journey_objective(float(base), new_label, cut_duals, cuts, cut_masks)
+            best_objective = (
+                float(new_label_objective)
+                if best_objective is None
+                else min(float(best_objective), float(new_label_objective))
+            )
+            if completion_bound is not None:
+                remaining_sorties = int(data.sortie_limit) - (int(count) + 1)
+                suffix_lb = completion_bound.value(int(remaining_sorties), float(new_label.end_time))
+                available_mask = 0
+                if unique_task_bound is not None:
+                    available_mask = int(unique_task_bound.full_mask) ^ int(new_label.mask)
+                    unique_suffix_lb = unique_task_bound.value(
+                        int(available_mask),
+                        int(remaining_sorties) * _max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                    )
+                    suffix_lb = max(float(suffix_lb), float(unique_suffix_lb))
+                if unique_route_bound is not None:
+                    route_suffix_lb = unique_route_bound.future_value(
+                        int(available_mask),
+                        int(remaining_sorties),
+                        float(new_label.end_time),
+                    )
+                    if route_suffix_lb is not None:
+                        suffix_lb = max(float(suffix_lb), float(route_suffix_lb))
+                future_cut_reward = _direct_completion_positive_subset_future_reward_bound(
+                    int(new_label.mask),
+                    int(remaining_sorties) * _max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                    cut_duals,
+                    cuts,
+                    cut_masks,
+                    positive_cut_reward_bound=positive_cut_reward_bound,
+                )
+                optimistic_objective = float(new_label_objective) + float(suffix_lb)
+                optimistic_objective -= float(future_cut_reward)
+                if optimistic_objective >= -float(config.eps):
+                    completion_lb_pruned += 1
+                    continue
+            expanded_after_completion_bound += 1
             added = _add_direct_journey_label(labels_by_count[int(count) + 1], int(new_label.mask), new_label)
             state_count += int(added)
             if not added:
@@ -1550,11 +3170,12 @@ def _price_journeys_by_direct_labels(
             "direct_label_negative_journey" if exhausted else reason or "direct_label_partial_negative_journey",
             existing_journeys_filtered=duplicate_filtered,
             weak_negative_journeys_filtered=weak_filtered,
-            dp_bound_pruned_labels=direct_bound_pruned,
+            dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
             profile_generation_time=time.perf_counter() - started,
             direct_next_sortie_cache_hits=next_sortie_cache_hits,
             direct_next_sortie_cache_misses=next_sortie_cache_misses,
             dominated_task_set_journeys_filtered=dominated_task_set_filtered,
+            **_completion_bound_kwargs(),
         )
     status = "OPTIMAL" if exhausted else "INCOMPLETE"
     final_reason = "direct_label_no_negative_journey" if exhausted else reason or "direct_label_incomplete"
@@ -1565,7 +3186,7 @@ def _price_journeys_by_direct_labels(
         final_reason = "negative_journeys_already_in_pool"
     if dominated_task_set_filtered > 0 and not exhausted:
         final_reason = "dominated_task_set_journeys_filtered"
-    return JourneyPricingResult(
+    result = JourneyPricingResult(
         [],
         bool(exhausted) and weak_filtered <= 0,
         best_objective,
@@ -1577,12 +3198,65 @@ def _price_journeys_by_direct_labels(
         final_reason,
         existing_journeys_filtered=duplicate_filtered,
         weak_negative_journeys_filtered=weak_filtered,
-        dp_bound_pruned_labels=direct_bound_pruned,
+        dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
         profile_generation_time=time.perf_counter() - started,
         direct_next_sortie_cache_hits=next_sortie_cache_hits,
         direct_next_sortie_cache_misses=next_sortie_cache_misses,
         dominated_task_set_journeys_filtered=dominated_task_set_filtered,
+        **_completion_bound_kwargs(),
     )
+    if (
+        bool(config.direct_journey_label_completion_bound_audit_enabled)
+        and bool(config.direct_journey_label_completion_bound_enabled)
+        and bool(result.exhausted)
+        and result.status == "OPTIMAL"
+        and result.reason == "direct_label_no_negative_journey"
+    ):
+        _audit_direct_completion_bound_certificate(
+            data,
+            duals,
+            config=config,
+            cuts=cuts,
+            forbidden_journey_signatures=forbidden_journey_signatures,
+            dominant_task_set_costs=dominant_task_set_costs,
+            eps=float(config.eps),
+        )
+    return result
+
+
+def _audit_direct_completion_bound_certificate(
+    data: FutureData,
+    duals: JourneyDuals,
+    *,
+    config: JourneyPricingConfig,
+    cuts: tuple[FutureCut, ...],
+    forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None,
+    dominant_task_set_costs: dict[frozenset[int], float] | None,
+    eps: float,
+) -> None:
+    audit_config = replace(
+        config,
+        direct_journey_label_completion_bound_enabled=False,
+        direct_journey_label_completion_bound_audit_enabled=False,
+    )
+    audit = _price_journeys_by_direct_labels(
+        data,
+        duals,
+        config=audit_config,
+        cuts=cuts,
+        forbidden_journey_signatures=forbidden_journey_signatures,
+        dominant_task_set_costs=dominant_task_set_costs,
+    )
+    if not bool(audit.exhausted):
+        raise RuntimeError(
+            "completion-bound audit failed: bound-off direct pricing did not exhaust "
+            f"(status={audit.status}, reason={audit.reason}, best_rc={audit.best_reduced_cost})"
+        )
+    if audit.journeys or (audit.best_reduced_cost is not None and float(audit.best_reduced_cost) < -float(eps)):
+        raise RuntimeError(
+            "completion-bound audit failed: bound-off direct pricing found a negative journey "
+            f"(status={audit.status}, reason={audit.reason}, best_rc={audit.best_reduced_cost})"
+        )
 
 def _direct_next_sortie_trips(
     data: FutureData,
@@ -1599,7 +3273,15 @@ def _direct_next_sortie_trips(
     cut_pruning_safe: bool,
     config: JourneyPricingConfig,
     deadline: float | None,
-) -> tuple[list[tuple[TimedTrip, float, int]], int, int, str]:
+    base_reduced_cost: float = 0.0,
+    journey_label_value: float = 0.0,
+    journey_label_mask: int = 0,
+    journey_label_count: int = 0,
+    completion_bound: _DirectJourneyCompletionBound | None = None,
+    unique_task_bound: _UniqueTaskVisitLowerBound | None = None,
+    unique_route_bound: "_UniqueRouteCompletionLowerBound | None" = None,
+    positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None" = None,
+) -> tuple[list[tuple[TimedTrip, float, int]], int, int, str, int, int]:
     max_tasks = _max_tasks_per_trip(data, int(config.max_tasks_per_trip))
     initial = _SortiePartialLabel(
         sequence=tuple(),
@@ -1623,6 +3305,8 @@ def _direct_next_sortie_trips(
     serial = 0
     generated = 0
     evaluated = 0
+    bound_checked = 0
+    bound_pruned = 0
     trips_by_signature: dict[tuple, tuple[TimedTrip, float, int]] = {}
     available_mask = ((1 << len(data.tasks)) - 1) ^ int(used_mask)
     superset_bound_cache = (
@@ -1637,7 +3321,7 @@ def _direct_next_sortie_trips(
     )
     while heap:
         if deadline is not None and time.perf_counter() > deadline:
-            return list(trips_by_signature.values()), generated, evaluated, "time_limit"
+            return list(trips_by_signature.values()), generated, evaluated, "time_limit", bound_checked, bound_pruned
         _priority, _depth, _offset, _seq_key, _serial, label = heapq.heappop(heap)
         if label not in labels_by_key.get((int(label.mask), int(label.last)), []):
             continue
@@ -1661,14 +3345,45 @@ def _direct_next_sortie_trips(
                 continue
             for option in options:
                 if deadline is not None and time.perf_counter() > deadline:
-                    return list(trips_by_signature.values()), generated, evaluated, "time_limit"
+                    return list(trips_by_signature.values()), generated, evaluated, "time_limit", bound_checked, bound_pruned
                 extended = _extend_no_waiting_partial(data, sequence, len(label.sequence), label.partial, option)
                 if extended is None:
                     continue
                 generated += 1
                 if int(config.max_sequences) > 0 and generated > int(config.max_sequences):
-                    return list(trips_by_signature.values()), generated, evaluated, "direct_label_sequence_budget"
+                    return (
+                        list(trips_by_signature.values()),
+                        generated,
+                        evaluated,
+                        "direct_label_sequence_budget",
+                        bound_checked,
+                        bound_pruned,
+                    )
                 new_label = _SortiePartialLabel(sequence=sequence, mask=local_mask, last=task, partial=extended)
+                if completion_bound is not None:
+                    bound_checked += 1
+                    if _direct_sortie_partial_completion_bound_prunes(
+                        data,
+                        duals,
+                        new_label,
+                        task_to_bit,
+                        base_reduced_cost=float(base_reduced_cost),
+                        journey_label_value=float(journey_label_value),
+                        journey_label_mask=int(journey_label_mask),
+                        journey_label_count=int(journey_label_count),
+                        earliest_start=float(earliest_start),
+                        completion_bound=completion_bound,
+                        unique_task_bound=unique_task_bound,
+                        unique_route_bound=unique_route_bound,
+                        positive_cut_reward_bound=positive_cut_reward_bound,
+                        max_tasks_per_sortie=max_tasks,
+                        cut_duals=cut_duals,
+                        cuts=cuts,
+                        cut_masks=cut_masks,
+                        eps=float(config.eps),
+                    ):
+                        bound_pruned += 1
+                        continue
                 if not _add_sortie_partial_label(labels_by_key.setdefault((local_mask, task), []), new_label):
                     continue
                 serial += 1
@@ -1702,8 +3417,150 @@ def _direct_next_sortie_trips(
                     if old is None or contribution < old[1] - 1.0e-9:
                         trips_by_signature[trip.signature] = (trip, contribution, trip_mask)
                 if int(config.max_timed_evaluations) > 0 and evaluated > int(config.max_timed_evaluations):
-                    return list(trips_by_signature.values()), generated, evaluated, "direct_label_profile_evaluation_budget"
-    return list(trips_by_signature.values()), generated, evaluated, ""
+                    return (
+                        list(trips_by_signature.values()),
+                        generated,
+                        evaluated,
+                        "direct_label_profile_evaluation_budget",
+                        bound_checked,
+                        bound_pruned,
+                    )
+    return list(trips_by_signature.values()), generated, evaluated, "", bound_checked, bound_pruned
+
+
+def _direct_min_outgoing_completion_arc_cost(
+    data: FutureData,
+    last: int,
+    available_mask: int,
+    task_to_bit: dict[int, int],
+) -> float | None:
+    targets = [0]
+    for task, bit_index in task_to_bit.items():
+        if int(available_mask) & (1 << int(bit_index)):
+            targets.append(int(task))
+    costs: list[float] = []
+    for target in targets:
+        try:
+            options = data.options(int(last), int(target))
+        except KeyError:
+            continue
+        costs.extend(float(option.cost) for option in options)
+    if not costs:
+        return None
+    return min(costs)
+
+
+def _direct_sortie_partial_completion_bound_prunes(
+    data: FutureData,
+    duals: FutureDuals,
+    label: _SortiePartialLabel,
+    task_to_bit: dict[int, int],
+    *,
+    base_reduced_cost: float,
+    journey_label_value: float,
+    journey_label_mask: int,
+    journey_label_count: int,
+    earliest_start: float,
+    completion_bound: _DirectJourneyCompletionBound,
+    unique_task_bound: _UniqueTaskVisitLowerBound | None,
+    unique_route_bound: "_UniqueRouteCompletionLowerBound | None",
+    positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None",
+    max_tasks_per_sortie: int,
+    cut_duals: dict[int, float],
+    cuts: tuple[FutureCut, ...],
+    cut_masks: tuple[int, ...],
+    eps: float,
+) -> bool:
+    if not label.sequence:
+        return False
+    if unique_task_bound is None:
+        return False
+    start_lb = max(float(earliest_start), float(label.partial.lower_start))
+    if start_lb > float(label.partial.upper_start) + 1.0e-9:
+        return True
+    dual_sum = sum(float(duals.cover.get(int(task), 0.0)) for task in set(label.sequence))
+    # 当前 partial 已经真实支付的前缀代价。后续完成部分用 unique-task
+    # bound 处理，不在这里强制当前节点立即返仓；否则会排除继续加任务的
+    # 可行完成方式，剪枝将不再安全。
+    sortie_prefix_contribution = (
+        float(label.partial.travel_cost)
+        + float(label.partial.service_cost)
+        - float(dual_sum)
+    )
+    remaining_sorties = int(data.sortie_limit) - int(journey_label_count) - 1
+    remaining_visit_capacity = (
+        max(0, int(max_tasks_per_sortie) - len(label.sequence))
+        + max(0, int(remaining_sorties)) * max(1, int(max_tasks_per_sortie))
+    )
+    remaining_lb = 0.0
+    available_mask = 0
+    if unique_task_bound is not None and remaining_visit_capacity > 0:
+        available_mask = int(unique_task_bound.full_mask) ^ (int(journey_label_mask) | int(label.mask))
+        remaining_lb = unique_task_bound.value(int(available_mask), int(remaining_visit_capacity))
+        outgoing_arc_lb = _direct_min_outgoing_completion_arc_cost(
+            data,
+            int(label.last),
+            int(available_mask),
+            task_to_bit,
+        )
+        if outgoing_arc_lb is None:
+            return True
+        outgoing_suffix_lb = float(outgoing_arc_lb) + unique_task_bound.outgoing_value(
+            int(available_mask),
+            int(remaining_visit_capacity),
+        )
+        remaining_lb = max(float(remaining_lb), float(outgoing_suffix_lb))
+    if unique_route_bound is not None:
+        route_lb = unique_route_bound.partial_value(
+            int(label.last),
+            int(available_mask),
+            max(0, int(max_tasks_per_sortie) - len(label.sequence)),
+            max(0, int(remaining_sorties)),
+            float(start_lb) + float(label.partial.offset),
+            float(label.partial.travel_energy) + float(label.partial.service_energy),
+        )
+        if route_lb is not None:
+            if math.isinf(float(route_lb)):
+                return True
+            remaining_lb = max(float(remaining_lb), float(route_lb))
+    if len(label.sequence) >= int(max_tasks_per_sortie):
+        try:
+            return_options = data.options(int(label.last), 0)
+        except KeyError:
+            return_options = tuple()
+        if return_options:
+            min_return_cost = min(float(option.cost) for option in return_options)
+            min_return_time = min(float(option.tau) for option in return_options)
+            route_finish_lb = (
+                float(min_return_cost)
+                + completion_bound.value(
+                    int(remaining_sorties),
+                    float(start_lb) + float(label.partial.offset) + float(min_return_time),
+                )
+            )
+            remaining_lb = max(float(remaining_lb), float(route_finish_lb))
+    optimistic_cut_value = _direct_completion_optimistic_cut_dual_value(
+        int(journey_label_mask) | int(label.mask),
+        cut_duals,
+        cuts,
+        cut_masks,
+    )
+    optimistic_cut_value += _direct_completion_positive_subset_future_reward_bound(
+        int(journey_label_mask) | int(label.mask),
+        int(remaining_visit_capacity),
+        cut_duals,
+        cuts,
+        cut_masks,
+        positive_cut_reward_bound=positive_cut_reward_bound,
+    )
+    optimistic_objective = (
+        float(base_reduced_cost)
+        + float(journey_label_value)
+        + float(sortie_prefix_contribution)
+        - float(optimistic_cut_value)
+        + float(remaining_lb)
+    )
+    return optimistic_objective >= -float(eps)
 
 
 def _direct_next_sortie_profiles(
@@ -2050,10 +3907,20 @@ def _price_journeys_by_streaming_profiles(
         best_profile_rc: float | None,
         cut_penalty_pruned: int,
     ) -> JourneyPricingResult | None:
+        callback_elapsed = time.perf_counter() - started
+        callback_dp_started = time.perf_counter()
+        adaptive_min = int(config.streaming_partial_return_min_journeys)
+        adaptive_after = float(config.streaming_partial_return_after_time)
+        early_return_min = stream_min_negative
+        if adaptive_min > 0 and adaptive_after > 0.0 and callback_elapsed >= adaptive_after:
+            early_return_min = min(stream_min_negative, max(1, adaptive_min))
         candidate_profiles = profiles
         profile_dominance_pruned = 0
-        if bool(config.profile_cross_dominance_enabled):
-            candidate_profiles, profile_dominance_pruned = _filter_dominated_sortie_profiles(candidate_profiles)
+        candidate_profiles, profile_dominance_pruned = _filter_sortie_profiles_after_generation(
+            candidate_profiles,
+            config,
+            catalog_stats,
+        )
         dp_stats: dict[str, int] = {}
         selected_candidates, objective, status = _solve_best_journey_profile_dp(
             data,
@@ -2066,7 +3933,7 @@ def _price_journeys_by_streaming_profiles(
             deadline=deadline,
             max_returned=candidate_return_limit,
             early_return_negative=bool(config.early_return_negative),
-            early_return_min_count=stream_min_negative,
+            early_return_min_count=early_return_min,
             optimistic_bound_pruning=bool(config.dp_bound_pruning_enabled),
             cross_count_dominance=bool(config.dp_cross_count_dominance_enabled),
             selection_mode=str(config.journey_selection_mode),
@@ -2078,6 +3945,7 @@ def _price_journeys_by_streaming_profiles(
             branch_constraints=branch_constraints,
             eps=float(config.eps),
         )
+        callback_dp_time = time.perf_counter() - callback_dp_started
         if not selected_candidates:
             return None
         journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
@@ -2112,18 +3980,18 @@ def _price_journeys_by_streaming_profiles(
                 duplicate_candidate_scan_count=dp_stats.get("duplicate_candidate_scan_count", 0),
                 duplicate_candidates_filtered=dp_stats.get("duplicate_candidates_filtered", 0),
                 duplicate_scan_limited=bool(dp_stats.get("duplicate_scan_limited", 0)),
+                profile_generation_time=callback_elapsed,
+                profile_dp_time=callback_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
             )
             remember_partial(result)
             if len(journeys) < min_returned:
-                adaptive_min = int(config.streaming_partial_return_min_journeys)
-                adaptive_after = float(config.streaming_partial_return_after_time)
                 if (
                     adaptive_min > 0
                     and adaptive_after > 0.0
                     and len(journeys) >= adaptive_min
-                    and time.perf_counter() - started >= adaptive_after
+                    and callback_elapsed >= adaptive_after
                 ):
                     return result
                 return None
@@ -2148,6 +4016,8 @@ def _price_journeys_by_streaming_profiles(
                 duplicate_candidate_scan_count=dp_stats.get("duplicate_candidate_scan_count", 0),
                 duplicate_candidates_filtered=dp_stats.get("duplicate_candidates_filtered", 0),
                 duplicate_scan_limited=bool(dp_stats.get("duplicate_scan_limited", 0)),
+                profile_generation_time=callback_elapsed,
+                profile_dp_time=callback_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
             )
@@ -2170,10 +4040,21 @@ def _price_journeys_by_streaming_profiles(
                 weak_filtered,
                 dp_stats.get("bound_pruned_labels", 0),
                 dp_stats.get("cross_count_pruned_labels", 0),
+                profile_generation_time=callback_elapsed,
+                profile_dp_time=callback_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
             )
         return None
+
+    generation_deadline = deadline
+    if deadline is not None:
+        fraction = min(1.0, max(0.05, float(config.profile_generation_time_fraction)))
+        generation_deadline = started + float(config.time_limit) * fraction
+    if deadline is not None and float(config.streaming_final_dp_time_reserve) > 0.0:
+        reserve = max(0.0, float(config.streaming_final_dp_time_reserve))
+        reserved_deadline = max(started, float(deadline) - reserve)
+        generation_deadline = min(float(generation_deadline), float(reserved_deadline))
 
     try:
         profiles, generated, evaluated, best_profile_rc, exhausted, reason, cut_penalty_pruned = _generate_negative_sortie_profiles(
@@ -2184,7 +4065,7 @@ def _price_journeys_by_streaming_profiles(
             trip_cache=trip_cache,
             resource_cache=resource_cache,
             started=started,
-            deadline=deadline,
+            deadline=generation_deadline,
             journey_cut_duals=duals.cuts or {},
             journey_cuts=cuts,
             stream_callback=stream_callback,
@@ -2194,6 +4075,7 @@ def _price_journeys_by_streaming_profiles(
         )
     except _StreamingPricingStop as stop:
         return stop.result
+    generation_elapsed = time.perf_counter() - started
     if best_partial_result is not None and not exhausted and deadline is not None and time.perf_counter() >= deadline:
         return best_partial_result
     if not exhausted and not profiles:
@@ -2210,6 +4092,7 @@ def _price_journeys_by_streaming_profiles(
             "INCOMPLETE",
             reason or "streaming_profile_generation_incomplete",
             profile_cut_penalty_pruned=cut_penalty_pruned,
+            profile_generation_time=generation_elapsed,
             **_resource_stats_kwargs(catalog_stats),
         )
     if not profiles:
@@ -2225,6 +4108,7 @@ def _price_journeys_by_streaming_profiles(
                 "INCOMPLETE",
                 "negative_fleet_base_requires_profiles",
                 profile_cut_penalty_pruned=cut_penalty_pruned,
+                profile_generation_time=generation_elapsed,
                 **_resource_stats_kwargs(catalog_stats),
             )
         return JourneyPricingResult(
@@ -2238,12 +4122,15 @@ def _price_journeys_by_streaming_profiles(
             "OPTIMAL" if exhausted else "INCOMPLETE",
             "no_negative_sortie_profile" if exhausted else reason,
             profile_cut_penalty_pruned=cut_penalty_pruned,
+            profile_generation_time=generation_elapsed,
             **_resource_stats_kwargs(catalog_stats),
         )
     profile_dominance_pruned = 0
-    if bool(config.profile_cross_dominance_enabled):
-        profiles, profile_dominance_pruned = _filter_dominated_sortie_profiles(profiles)
+    filter_started = time.perf_counter()
+    profiles, profile_dominance_pruned = _filter_sortie_profiles_after_generation(profiles, config, catalog_stats)
+    profile_filter_time = time.perf_counter() - filter_started
     dp_stats: dict[str, int] = {}
+    final_dp_started = time.perf_counter()
     selected_candidates, objective, status = _solve_best_journey_profile_dp(
         data,
         profiles,
@@ -2267,6 +4154,7 @@ def _price_journeys_by_streaming_profiles(
         branch_constraints=branch_constraints,
         eps=float(config.eps),
     )
+    final_dp_time = time.perf_counter() - final_dp_started
     if status != "OPTIMAL":
         journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
             data,
@@ -2299,6 +4187,9 @@ def _price_journeys_by_streaming_profiles(
                 duplicate_candidate_scan_count=dp_stats.get("duplicate_candidate_scan_count", 0),
                 duplicate_candidates_filtered=dp_stats.get("duplicate_candidates_filtered", 0),
                 duplicate_scan_limited=bool(dp_stats.get("duplicate_scan_limited", 0)),
+                profile_generation_time=generation_elapsed,
+                profile_filter_time=profile_filter_time,
+                profile_dp_time=final_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
             )
@@ -2328,6 +4219,9 @@ def _price_journeys_by_streaming_profiles(
             duplicate_candidate_scan_count=dp_stats.get("duplicate_candidate_scan_count", 0),
             duplicate_candidates_filtered=dp_stats.get("duplicate_candidates_filtered", 0),
             duplicate_scan_limited=bool(dp_stats.get("duplicate_scan_limited", 0)),
+            profile_generation_time=generation_elapsed,
+            profile_filter_time=profile_filter_time,
+            profile_dp_time=final_dp_time,
             **_dp_profile_stats_kwargs(dp_stats),
             **_resource_stats_kwargs(catalog_stats),
         )
@@ -2349,6 +4243,9 @@ def _price_journeys_by_streaming_profiles(
             duplicate_candidate_scan_count=dp_stats.get("duplicate_candidate_scan_count", 0),
             duplicate_candidates_filtered=dp_stats.get("duplicate_candidates_filtered", 0),
             duplicate_scan_limited=bool(dp_stats.get("duplicate_scan_limited", 0)),
+            profile_generation_time=generation_elapsed,
+            profile_filter_time=profile_filter_time,
+            profile_dp_time=final_dp_time,
             **_dp_profile_stats_kwargs(dp_stats),
             **_resource_stats_kwargs(catalog_stats),
         )
@@ -2390,6 +4287,9 @@ def _price_journeys_by_streaming_profiles(
             duplicate_candidate_scan_count=dp_stats.get("duplicate_candidate_scan_count", 0),
             duplicate_candidates_filtered=dp_stats.get("duplicate_candidates_filtered", 0),
             duplicate_scan_limited=bool(dp_stats.get("duplicate_scan_limited", 0)),
+            profile_generation_time=generation_elapsed,
+            profile_filter_time=profile_filter_time,
+            profile_dp_time=final_dp_time,
             **_dp_profile_stats_kwargs(dp_stats),
             **_resource_stats_kwargs(catalog_stats),
         )
@@ -2412,6 +4312,9 @@ def _price_journeys_by_streaming_profiles(
         duplicate_candidate_scan_count=dp_stats.get("duplicate_candidate_scan_count", 0),
         duplicate_candidates_filtered=dp_stats.get("duplicate_candidates_filtered", 0),
         duplicate_scan_limited=bool(dp_stats.get("duplicate_scan_limited", 0)),
+        profile_generation_time=generation_elapsed,
+        profile_filter_time=profile_filter_time,
+        profile_dp_time=final_dp_time,
         **_dp_profile_stats_kwargs(dp_stats),
         **_resource_stats_kwargs(catalog_stats),
     )
@@ -2452,6 +4355,7 @@ def _resource_stats_kwargs(catalog_stats: dict[str, int] | None) -> dict[str, An
             (catalog_stats or {}).get("partial_profile_bound_pruned_labels", 0)
         ),
         "profile_mask_cap_pruned": int((catalog_stats or {}).get("profile_mask_cap_pruned", 0)),
+        "profile_completion_time_pruned": int((catalog_stats or {}).get("profile_completion_time_pruned", 0)),
         "branch_mask_pruned_sequences": int((catalog_stats or {}).get("branch_mask_pruned_sequences", 0)),
         "label_physical_catalog": bool((catalog_stats or {}).get("label_physical_catalog", 0)),
         "label_physical_catalog_exhausted": bool(
@@ -2529,6 +4433,7 @@ def _generate_negative_sortie_profiles(
             journey_cut_duals=journey_cut_duals or {},
             journey_cuts=journey_cuts,
             task_to_bit=task_to_bit,
+            branch_constraints=branch_constraints,
         )
         if catalog_stats is not None:
             catalog_stats["hit"] = 1
@@ -2635,6 +4540,7 @@ def _generate_negative_sortie_profiles(
             journey_cut_duals=journey_cut_duals or {},
             journey_cuts=journey_cuts,
             task_to_bit=task_to_bit,
+            branch_constraints=branch_constraints,
         )
         return (
             profiles,
@@ -2668,6 +4574,7 @@ def _generate_negative_sortie_profiles(
             journey_cut_duals=journey_cut_duals or {},
             journey_cuts=journey_cuts,
             task_to_bit=task_to_bit,
+            branch_constraints=branch_constraints,
         )
         return profiles, generated, evaluated, best_profile_rc, catalog_exhausted, catalog_reason, cut_penalty_pruned
     try:
@@ -3044,6 +4951,7 @@ def _filter_sortie_profile_catalog(
     journey_cut_duals: dict[int, float],
     journey_cuts: tuple[FutureCut, ...],
     task_to_bit: dict[int, int],
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
 ) -> tuple[list[_SortieProfile], float | None, int]:
     threshold = max(0.0, -float(base_reduced_cost)) + float(config.eps)
     cut_penalty_enabled = _profile_cut_penalty_pruning_safe(journey_cut_duals or {}, journey_cuts)
@@ -3054,6 +4962,8 @@ def _filter_sortie_profile_catalog(
     best_profile_rc: float | None = None
     profiles: list[_SortieProfile] = []
     for base_profile in catalog:
+        if not _sortie_profile_mask_allowed_by_branch(int(base_profile.mask), branch_constraints, task_to_bit):
+            continue
         dual_sum = sum(float(duals.cover.get(int(task), 0.0)) for task in set(base_profile.sequence))
         contribution = float(base_profile.cost) - dual_sum
         best_profile_rc = contribution if best_profile_rc is None else min(best_profile_rc, contribution)
@@ -3101,7 +5011,9 @@ def _generate_negative_sortie_profiles_by_label_physical_catalog(
     branch_constraints: tuple[BranchConstraint, ...] = tuple(),
 ) -> tuple[list[_SortieProfile], int, int, float | None, bool, str, int]:
     max_tasks = _max_tasks_per_trip(data, int(config.max_tasks_per_trip))
-    catalog_key = _sortie_label_physical_catalog_key(data, config, task_order, max_tasks, branch_constraints)
+    shared_branchless_catalog = bool(config.profile_labeling_physical_catalog_share_across_branches_enabled)
+    catalog_branch_constraints = tuple() if shared_branchless_catalog else branch_constraints
+    catalog_key = _sortie_label_physical_catalog_key(data, config, task_order, max_tasks, catalog_branch_constraints)
     state = trip_cache.get(catalog_key)
     hit = isinstance(state, _SortieLabelResumeState)
     if not hit:
@@ -3122,8 +5034,11 @@ def _generate_negative_sortie_profiles_by_label_physical_catalog(
         catalog_stats["hit"] = int(hit)
         catalog_stats["label_physical_catalog"] = 1
         catalog_stats["label_resume_heap"] = len(state.heap)
-        catalog_stats["label_resume_profiles"] = len(_sortie_label_state_profiles(state, config))
+        catalog_stats["label_resume_profiles"] = len(state.profiles_by_key)
         catalog_stats["label_resume_exhausted"] = int(state.exhausted)
+        if bool(config.profile_online_dominance_enabled) and bool(config.profile_cross_dominance_enabled):
+            catalog_stats["online_dominance_applied"] = 1
+            catalog_stats["online_dominance_pruned"] = int(getattr(state, "online_dominance_pruned", 0))
     try:
         _advance_sortie_label_resume_state(
             data,
@@ -3139,25 +5054,30 @@ def _generate_negative_sortie_profiles_by_label_physical_catalog(
             catalog_stats=catalog_stats,
             stream_callback=stream_callback,
             stream_profile_batch_size=stream_profile_batch_size,
-            branch_constraints=branch_constraints,
+            branch_constraints=catalog_branch_constraints,
         )
     finally:
+        catalog_profiles = _sortie_label_state_profiles(state, config)
         if catalog_stats is not None:
             catalog_stats["hit"] = int(hit)
             catalog_stats["size"] = len(state.profiles_by_key)
             catalog_stats["label_physical_catalog"] = 1
             catalog_stats["label_physical_catalog_exhausted"] = int(state.exhausted)
             catalog_stats["label_resume_heap"] = len(state.heap)
-            catalog_stats["label_resume_profiles"] = len(_sortie_label_state_profiles(state, config))
+            catalog_stats["label_resume_profiles"] = len(catalog_profiles)
             catalog_stats["label_resume_exhausted"] = int(state.exhausted)
+            if bool(config.profile_online_dominance_enabled) and bool(config.profile_cross_dominance_enabled):
+                catalog_stats["online_dominance_applied"] = 1
+                catalog_stats["online_dominance_pruned"] = int(getattr(state, "online_dominance_pruned", 0))
     profiles, best_profile_rc, cut_penalty_pruned = _filter_sortie_profile_catalog(
-        list(state.profiles_by_key.values()),
+        catalog_profiles,
         duals,
         base_reduced_cost=base_reduced_cost,
         config=config,
         journey_cut_duals=journey_cut_duals,
         journey_cuts=journey_cuts,
         task_to_bit=task_to_bit,
+        branch_constraints=branch_constraints,
     )
     return (
         profiles,
@@ -3351,8 +5271,11 @@ def _generate_negative_sortie_profiles_by_labels(
                         profiles_by_key,
                         threshold,
                         task_to_bit,
+                        deadline=deadline,
                     )
                     evaluated += eval_inc
+                    if deadline is not None and time.perf_counter() > deadline:
+                        return list(profiles_by_key.values()), generated, evaluated, best_profile_rc, False, "time_limit"
                     if best_added_rc is not None:
                         best_profile_rc = best_added_rc if best_profile_rc is None else min(best_profile_rc, best_added_rc)
                     if int(config.max_candidate_trips) > 0 and len(profiles_by_key) > int(config.max_candidate_trips):
@@ -3534,6 +5457,7 @@ def _initial_sortie_label_resume_state(data: FutureData, duals: FutureDuals) -> 
         profiles_by_key=profiles_by_key,
         profiles_by_mask={},
         heap=heap,
+        active_label_ids={id(initial)},
     )
 
 
@@ -3580,7 +5504,7 @@ def _advance_sortie_label_resume_state(
             state.reason = "time_limit"
             return
         _priority, _depth_key, _offset_key, _seq_key, _serial, label = heapq.heappop(state.heap)
-        if label not in state.labels_by_key.get((int(label.mask), int(label.last)), []):
+        if id(label) not in state.active_label_ids:
             continue
         if len(label.sequence) >= max_tasks:
             continue
@@ -3643,6 +5567,7 @@ def _advance_sortie_label_resume_state(
                     state.labels_by_key.setdefault((new_mask, task), []),
                     new_label,
                     generalized=bool(config.generalized_partial_dominance_enabled),
+                    active_label_ids=state.active_label_ids,
                 ):
                     continue
                 state.serial += 1
@@ -3666,6 +5591,7 @@ def _advance_sortie_label_resume_state(
                     state.profiles_by_key,
                     threshold,
                     task_to_bit,
+                    deadline=deadline,
                     profiles_by_mask=state.profiles_by_mask if online_dominance else None,
                     catalog_stats=catalog_stats,
                     profile_cap_per_mask=(
@@ -3678,19 +5604,27 @@ def _advance_sortie_label_resume_state(
                 if cap_pruned_after > cap_pruned_before:
                     state.profile_mask_cap_pruned += cap_pruned_after - cap_pruned_before
                 state.evaluated += eval_inc
+                if deadline is not None and time.perf_counter() > deadline:
+                    _requeue_sortie_label_state(state, duals, label)
+                    state.reason = "time_limit"
+                    return
                 if best_added_rc is not None:
                     state.best_profile_rc = (
                         best_added_rc if state.best_profile_rc is None else min(state.best_profile_rc, best_added_rc)
                     )
                 current_profile_count = len(state.profiles_by_key)
                 if stream_callback is not None and current_profile_count >= next_stream_profile_count:
+                    stream_profiles = _sortie_label_state_profiles(state, config)
                     if catalog_stats is not None:
+                        if online_dominance:
+                            catalog_stats["online_dominance_applied"] = 1
+                            catalog_stats["online_dominance_pruned"] = int(getattr(state, "online_dominance_pruned", 0))
                         catalog_stats["size"] = int(current_profile_count)
                         catalog_stats["label_resume_heap"] = len(state.heap)
-                        catalog_stats["label_resume_profiles"] = len(_sortie_label_state_profiles(state, config))
+                        catalog_stats["label_resume_profiles"] = len(stream_profiles)
                         catalog_stats["label_resume_exhausted"] = int(state.exhausted)
                     result = stream_callback(
-                        _sortie_label_state_profiles(state, config),
+                        stream_profiles,
                         int(state.generated),
                         int(state.evaluated),
                         state.best_profile_rc,
@@ -3743,6 +5677,8 @@ def _reprioritize_sortie_label_state(state: _SortieLabelResumeState, duals: Futu
         return
     rebuilt: list[tuple[float, int, float, tuple[int, ...], int, _SortiePartialLabel]] = []
     for _priority, _depth, _offset, _seq_key, _serial, label in state.heap:
+        if id(label) not in state.active_label_ids:
+            continue
         state.serial += 1
         rebuilt.append(
             (
@@ -3788,6 +5724,18 @@ def _filter_dominated_sortie_profiles(profiles: list[_SortieProfile]) -> tuple[l
         kept.extend(skyline)
     kept.sort(key=_sortie_profile_sort_key)
     return kept, pruned
+
+
+def _filter_sortie_profiles_after_generation(
+    profiles: list[_SortieProfile],
+    config: JourneyPricingConfig,
+    catalog_stats: dict[str, int],
+) -> tuple[list[_SortieProfile], int]:
+    if not bool(config.profile_cross_dominance_enabled):
+        return profiles, 0
+    if bool(config.profile_online_dominance_enabled) and bool(catalog_stats.get("online_dominance_applied", 0)):
+        return profiles, int(catalog_stats.get("online_dominance_pruned", 0))
+    return _filter_dominated_sortie_profiles(profiles)
 
 
 def _add_sortie_profile_skyline(store: dict[int, list[_SortieProfile]], profile: _SortieProfile) -> tuple[bool, int]:
@@ -3864,6 +5812,7 @@ def _complete_sortie_label_profiles(
     profiles_by_key: dict[tuple, _SortieProfile],
     threshold: float,
     task_to_bit: dict[int, int],
+    deadline: float | None = None,
     profiles_by_mask: dict[int, list[_SortieProfile]] | None = None,
     catalog_stats: dict[str, int] | None = None,
     profile_cap_per_mask: int = 0,
@@ -3880,6 +5829,12 @@ def _complete_sortie_label_profiles(
     if completion_cost_lb - dual_sum >= float(threshold):
         return 0, None
     for option in options:
+        if deadline is not None and time.perf_counter() > deadline:
+            if catalog_stats is not None:
+                catalog_stats["profile_completion_time_pruned"] = int(
+                    catalog_stats.get("profile_completion_time_pruned", 0)
+                ) + 1
+            return evaluated, best_added_rc
         base = _complete_no_waiting_partial(data, label.partial, option)
         if base is None:
             continue
@@ -3986,16 +5941,22 @@ def _add_sortie_partial_label(
     candidate: _SortiePartialLabel,
     *,
     generalized: bool = False,
+    active_label_ids: set[int] | None = None,
 ) -> bool:
     for old in labels:
         if _dominates_sortie_partial_label(old, candidate, generalized=generalized):
             return False
-    labels[:] = [
-        old
-        for old in labels
-        if not _dominates_sortie_partial_label(candidate, old, generalized=generalized)
-    ]
+    survivors: list[_SortiePartialLabel] = []
+    for old in labels:
+        if _dominates_sortie_partial_label(candidate, old, generalized=generalized):
+            if active_label_ids is not None:
+                active_label_ids.discard(id(old))
+            continue
+        survivors.append(old)
+    labels[:] = survivors
     labels.append(candidate)
+    if active_label_ids is not None:
+        active_label_ids.add(id(candidate))
     return True
 
 
@@ -4092,7 +6053,22 @@ def _solve_best_journey_profile_dp(
         and bool(getattr(pricing_config, "dp_disjoint_bound_pruning_enabled", True))
         and len(data.tasks) <= int(getattr(pricing_config, "dp_disjoint_bound_max_tasks", 12)),
     )
-    bound_pruning_safe = bool(optimistic_bound_pruning) and _profile_cut_penalty_pruning_safe(cut_duals, cuts)
+    bound_pruning_safe = bool(optimistic_bound_pruning) and _profile_bound_pruning_cut_safe(cut_duals, cuts)
+    max_future_tasks_per_profile = (
+        _max_tasks_per_trip(data, int(pricing_config.max_tasks_per_trip))
+        if pricing_config is not None
+        else max(1, len(data.tasks))
+    )
+    positive_cut_reward_bound = (
+        _PositiveSubsetCutRewardBound(
+            task_count=len(data.tasks),
+            cut_duals=cut_duals,
+            cuts=cuts,
+            cut_masks=cut_masks,
+        )
+        if bound_pruning_safe and cut_duals
+        else None
+    )
     labels_by_count: list[dict[int, list[_JourneyLabel]]] = [dict() for _ in range(int(data.sortie_limit) + 1)]
     labels_by_count[0][0] = [_JourneyLabel(0.0, 0.0, tuple())]
     state_count = 1
@@ -4183,7 +6159,22 @@ def _solve_best_journey_profile_dp(
                         optimistic_extra = optimistic_cache.value(int(mask), remaining)
                     else:
                         optimistic_extra = float(disjoint_extra)
-                    lower_bound_objective = float(base_reduced_cost) + float(label.value) + float(optimistic_extra)
+                    future_cut_reward = _direct_completion_positive_subset_future_reward_bound(
+                        int(mask),
+                        int(remaining) * int(max_future_tasks_per_profile),
+                        cut_duals,
+                        cuts,
+                        cut_masks,
+                        positive_cut_reward_bound=positive_cut_reward_bound,
+                    )
+                    future_cut_reward += _profile_future_positive_fleet_cut_reward(int(mask), int(remaining), cut_duals, cuts)
+                    lower_bound_objective = (
+                        float(base_reduced_cost)
+                        + float(label.value)
+                        + float(optimistic_extra)
+                        - _journey_cut_dual_value_cached(int(mask), cut_duals, cuts, cut_masks, cut_value_cache)
+                        - float(future_cut_reward)
+                    )
                     if lower_bound_objective >= -float(eps):
                         if dp_stats is not None:
                             dp_stats["bound_pruned_labels"] = int(dp_stats.get("bound_pruned_labels", 0)) + 1
@@ -4280,6 +6271,7 @@ def _solve_best_journey_profile_dp(
                             if _early_return_candidate_count(early_candidates, pricing_config) >= max(1, int(early_return_min_count)):
                                 early_candidates.sort(key=lambda item: (round(item[0], 9), len(item[1]), item[2], item[1]))
                                 limited = _select_negative_journey_candidates(early_candidates, max_returned, selection_mode)
+                                record_dp_stats()
                                 return [(selected, objective) for objective, selected, _mask in limited], early_candidates[0][0], "INCOMPLETE"
                     if max_states > 0 and state_count > int(max_states):
                         record_dp_stats()
@@ -4803,6 +6795,156 @@ def _profile_cut_penalty_pruning_safe(cut_duals: dict[int, float], cuts: tuple[F
         if dual > 1.0e-9:
             return False
     return True
+
+
+def _profile_bound_pruning_cut_safe(cut_duals: dict[int, float], cuts: tuple[FutureCut, ...]) -> bool:
+    """Return whether profile-DP suffix pruning can account for cut duals safely.
+
+    The profile suffix bound can handle subset-row cuts by subtracting the exact
+    reward or penalty already implied by the current task mask and an upper
+    bound on future positive SRC reward.  Fleet cuts are also safe: once the
+    partial journey is non-empty their coefficient is already fully realized,
+    while the empty start label subtracts an upper bound on future positive
+    fleet reward.  Other dynamic cut families stay disabled.
+    """
+
+    if not cut_duals or not cuts:
+        return True
+    for cut_index, cut in enumerate(cuts):
+        dual = float(cut_duals.get(int(cut_index), 0.0))
+        if abs(dual) <= 1.0e-9:
+            continue
+        if getattr(cut, "kind", "") not in {"subset_row", "fleet_lower_bound", "fleet_upper_bound"}:
+            return False
+    return True
+
+
+def _profile_future_positive_fleet_cut_reward(
+    mask: int,
+    remaining_profile_capacity: int,
+    cut_duals: dict[int, float],
+    cuts: tuple[FutureCut, ...],
+) -> float:
+    if int(mask) != 0 or int(remaining_profile_capacity) <= 0 or not cut_duals or not cuts:
+        return 0.0
+    reward = 0.0
+    for cut_index, cut in enumerate(cuts):
+        if getattr(cut, "kind", "") not in {"fleet_lower_bound", "fleet_upper_bound"}:
+            continue
+        dual = float(cut_duals.get(int(cut_index), 0.0))
+        if dual > 1.0e-12:
+            reward += dual
+    return float(reward)
+
+
+def _direct_completion_bound_cut_safe(cut_duals: dict[int, float], cuts: tuple[FutureCut, ...]) -> bool:
+    """Return whether direct-label suffix bounds may ignore future cut changes.
+
+    The completion suffix table only contains task-cover duals.  Subset-row cuts
+    stay safe because pruning sites add an explicit optimistic upper bound on
+    any future positive SRC reward; negative SRC duals only create penalties, so
+    ignoring their future increase is conservative.  Fleet cuts are safe here:
+    direct-label pruning is applied only after a non-empty new label is created,
+    and the non-empty fleet-cut coefficient is already included in that label's
+    true objective; adding more sorties does not change it.
+    """
+
+    if not cut_duals or not cuts:
+        return True
+    for cut_index, cut in enumerate(cuts):
+        dual = float(cut_duals.get(int(cut_index), 0.0))
+        if abs(dual) <= 1.0e-9:
+            continue
+        kind = getattr(cut, "kind", "")
+        if kind == "subset_row":
+            continue
+        if kind in {"fleet_lower_bound", "fleet_upper_bound"}:
+            continue
+        return False
+    return True
+
+
+def _direct_completion_positive_subset_future_reward_bound(
+    mask: int,
+    remaining_visit_capacity: int,
+    cut_duals: dict[int, float],
+    cuts: tuple[FutureCut, ...],
+    cut_masks: tuple[int, ...],
+    *,
+    positive_cut_reward_bound: _PositiveSubsetCutRewardBound | None = None,
+) -> float:
+    """Upper-bound extra positive SRC reward reachable by future task visits.
+
+    Subtracting this reward from a suffix lower bound can only make the bound
+    smaller and therefore safer.  Small task sets use an exact mask DP cache;
+    larger instances fall back to a row-wise upper bound to protect memory.
+    """
+
+    if int(remaining_visit_capacity) <= 0 or not cut_duals or not cuts:
+        return 0.0
+    if positive_cut_reward_bound is not None:
+        return positive_cut_reward_bound.value(int(mask), int(remaining_visit_capacity))
+    return _direct_completion_positive_subset_future_reward_bound_rowwise(
+        int(mask),
+        int(remaining_visit_capacity),
+        cut_duals,
+        cuts,
+        cut_masks,
+    )
+
+
+def _direct_completion_positive_subset_future_reward_bound_rowwise(
+    mask: int,
+    remaining_visit_capacity: int,
+    cut_duals: dict[int, float],
+    cuts: tuple[FutureCut, ...],
+    cut_masks: tuple[int, ...],
+) -> float:
+    current_mask = int(mask)
+    capacity = max(0, int(remaining_visit_capacity))
+    reward = 0.0
+    for cut_index, cut in enumerate(cuts):
+        dual = float(cut_duals.get(int(cut_index), 0.0))
+        if dual <= 1.0e-12 or getattr(cut, "kind", "") != "subset_row" or int(cut_index) >= len(cut_masks):
+            continue
+        cut_mask = int(cut_masks[cut_index])
+        if cut_mask <= 0:
+            continue
+        k = max(1, int(getattr(cut, "k", 2)))
+        current_overlap = (current_mask & cut_mask).bit_count()
+        additional_available = (cut_mask & ~current_mask).bit_count()
+        additional_overlap = min(capacity, int(additional_available))
+        current_coeff = int(current_overlap) // int(k)
+        best_coeff = (int(current_overlap) + int(additional_overlap)) // int(k)
+        if best_coeff > current_coeff:
+            reward += float(dual) * float(best_coeff - current_coeff)
+    return float(reward)
+
+
+def _direct_completion_optimistic_cut_dual_value(
+    mask: int,
+    cut_duals: dict[int, float],
+    cuts: tuple[FutureCut, ...],
+    cut_masks: tuple[int, ...],
+) -> float:
+    if int(mask) == 0 or not cut_duals or not cuts:
+        return 0.0
+    value = 0.0
+    for cut_index, cut in enumerate(cuts):
+        dual = float(cut_duals.get(int(cut_index), 0.0))
+        if dual <= 1.0e-12:
+            continue
+        kind = getattr(cut, "kind", "")
+        if kind in {"fleet_lower_bound", "fleet_upper_bound"}:
+            value += dual
+        elif kind == "subset_row" and int(cut_index) < len(cut_masks):
+            # Realized positive SRC reward on the current mask.  Future reward
+            # is handled separately by
+            # _direct_completion_positive_subset_future_reward_bound().
+            k = int(getattr(cut, "k", 2))
+            overlap = (int(mask) & int(cut_masks[cut_index])).bit_count()
+            value += dual * float(overlap // k)
+    return value
 
 
 def _profile_cut_penalty(
