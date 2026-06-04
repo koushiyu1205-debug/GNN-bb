@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ast
 import csv
+import gc
 from pathlib import Path
 import sys
 
@@ -92,6 +93,15 @@ def main() -> None:
             f"gap={result.gap}, time={result.solving_time}s, nodes={result.node_count}, cols={result.columns}",
             flush=True,
         )
+        gc.collect()
+        torch_module = sys.modules.get("torch")
+        if torch_module is not None:
+            try:
+                cuda = getattr(torch_module, "cuda", None)
+                if cuda is not None and bool(cuda.is_available()):
+                    cuda.empty_cache()
+            except Exception:
+                pass
     with results_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()) if rows else ["instance"])
         writer.writeheader()

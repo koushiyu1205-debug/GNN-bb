@@ -121,6 +121,32 @@ journey_certificate_full_scan_max_timed_evaluations: 0
 journey_branch_pricing_streaming_partial_return_after_time: 15.0
 journey_branch_pricing_streaming_partial_return_min_journeys: 8
 
+# Level 1 learning dual anchor.  This 20-task config uses the current 5/10
+# hard-tail checkpoint as an exact-safe early column-search prior only.  It is
+# intentionally root-only and true-RC filtered because no 20-task dual-center
+# labels are available yet.  Certificate-face heuristic pricing is allowed, but
+# official certificate pricing still uses original SCIP/RMP duals.
+journey_learning_enabled: True
+journey_learning_checkpoint_path: 'BPC_future/data/learning_dual/hardtail_20260604/hierarchical_option_gat_hardtail.pt'
+journey_learning_device: 'cpu'
+journey_learning_alpha_init: 0.8
+journey_learning_alpha_min_active: 0.2
+journey_learning_alpha_decay: 0.05
+journey_learning_stagnation_patience: 3
+journey_learning_stagnation_rel_improve: 1.0e-3
+journey_learning_disable_on_certificate_candidate: False
+journey_learning_disable_on_branch_depth_gt: 0
+journey_learning_pricing_max_rounds: 1
+journey_learning_filter_true_rc: True
+journey_learning_true_rc_tol: 1.0e-5
+journey_learning_true_rc_keep_threshold: 10.0
+journey_learning_true_rc_max_kept_per_round: 8
+journey_learning_pricing_time_limit: 4.0
+journey_learning_max_returned_journeys: 48
+journey_learning_streaming_profile_batch_size: 5000
+journey_learning_streaming_min_negative_batch: 24
+journey_learning_streaming_min_returned_journeys: 8
+
 journey_dual_stabilization_enabled: True
 journey_dual_stabilization_min_cg_iter: 1
 journey_dual_stabilization_tail_only_enabled: True

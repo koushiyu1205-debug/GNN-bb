@@ -222,11 +222,10 @@ class DualStabilizer:
                 reason="smoothed_pricing_found_candidate",
             )
         if self.alpha > 0.0:
-            self.force_exact_mode()
             return PricingFallbackDecision(
                 use_true_dual_exact_pricing=True,
                 alpha=self.alpha,
-                reason="smoothed_pricing_no_negative_column",
+                reason="smoothed_pricing_no_strong_true_rc_column",
             )
         return PricingFallbackDecision(
             use_true_dual_exact_pricing=True,

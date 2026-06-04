@@ -1353,3 +1353,514 @@ Interpretation:
 - In these two smoke runs, the current grouped checkpoint did not add useful
   true-RC negative columns, so it remains a validation checkpoint rather than a
   performance default.
+
+## Mainline Level-1 Anchor Activation (2026-06-04)
+
+The Apollo20 dual diagnostics in
+`exact_pricing_completion_bounds_design.md` confirmed that column generation has
+a real dual-oscillation component:
+
+```text
+baseline 20-task representative:
+  adjacent dual hash changes = 26 / 26
+  adjacent support hash changes = 23 / 26
+  dual_l1_delta mean/median/max = 101.15 / 95.86 / 220.13
+  rounds with |objective_delta| < 1 and dual_l1_delta > 50 = 9
+```
+
+This is enough evidence to promote learning from pure smoke plumbing into the
+mainline Level-1 column-search funnel, with strict exactness guards.  The GNN
+anchor's responsibility is narrow:
+
+- predict only task-cover dual anchors `pi_i`;
+- smooth only task-cover duals for early heuristic/profile pricing;
+- keep fleet, SRC, branch, and other non-task duals at true RMP values;
+- filter every smoothed-dual candidate by true RMP reduced cost before insertion;
+- allow certificate-candidate heuristic pricing, because dual oscillation often
+  appears on the certificate face;
+- disable below branch depth `> 0` by default;
+- never certify a node and never contribute to an official bound.
+
+Mainline trial configs now enable the hard-tail checkpoint as a conservative
+root-only Level-1 prior:
+
+```text
+BPC_future/configs/moon_trek_5_journey_branch_trial.yaml
+BPC_future/configs/moon_trek_10_journey_branch_trial.yaml
+BPC_future/configs/apollo20_physical_branch_upperfilter_fleetslack_partialbound_trial.yaml
+
+journey_learning_enabled = True
+journey_learning_checkpoint_path =
+  BPC_future/data/learning_dual/hardtail_20260604/hierarchical_option_gat_hardtail.pt
+journey_learning_device = cpu
+journey_learning_disable_on_certificate_candidate = False
+journey_learning_disable_on_branch_depth_gt = 0
+journey_learning_pricing_max_rounds = 1
+journey_learning_filter_true_rc = True
+```
+
+`journey_learning_pricing_max_rounds` counts actual learning-smoothed pricing
+attempts, not raw CG iterations.  This matters because early CG iterations can
+be consumed by cut separation before any pricing call is made; 20-task root runs
+often initialize the anchor at `cg_iter = 2`.
+
+The default device is `cpu` even though the local environment has CUDA support.
+The model is small and inference is not the bottleneck; avoiding the CUDA
+context keeps memory lower for long 20-task branch-price runs.  CUDA remains an
+explicit override for training or batch inference.
+
+20-task caveat: there is still no 20-task dual-center training set.  The
+hard-tail checkpoint is trained on 5/10-task traces and is exact-safe on 20 only
+because true-RC filtering and true-dual certificate fallback are mandatory.  Do
+not interpret a 20-task smoothed-dual no-column result as evidence of
+optimality.
+
+Exactness guard: when learning is active, the exact-pricing path uses
+`scip_learning_certificate`, and the generic certificate guard also forces
+`scip_certificate` on certificate candidates and completion-bound probes.  This
+allows the GNN anchor to search for columns on a certificate face without
+polluting the official proof.
+
+Validation added:
+
+```text
+BPCFutureTests.test_mainline_learning_anchor_configs_are_exact_safe
+```
+
+This test asserts that the enabled mainline configs keep true-RC filtering on,
+allow certificate-face heuristic pricing only under true-RC filtering, keep the
+default root-only branch depth gate, and point at an existing checkpoint.
+
+Mainline smoke validation:
+
+```text
+BPC_future/results/learning_mainline_certface_tasks05_20260604.csv
+  status = OPTIMAL
+  primal/dual = 102.041475
+  time = 2.773470s
+  memory RSS ~= 849 MB
+  learning:
+    candidates = 1
+    true-negative = 1
+    kept/added = 1
+    best true RC = -53.072744
+
+BPC_future/results/learning_mainline_certface_tasks10_20260604.csv
+  status = OPTIMAL
+  primal/dual = 264.024007
+  time = 3.132734s
+  memory RSS ~= 866 MB
+  learning:
+    candidates = 16
+    true-negative = 2
+    kept/added = 2
+    best true RC = -0.406502
+```
+
+The 20-task representative was run for a 120-second component smoke after
+fixing the learning-round gate:
+
+```text
+BPC_future/results/learning_mainline_smoke_apollo20_gatefix_120s_20260604.csv
+  status = TIME_LIMIT
+  primal = 487.624693
+  nodes = 1
+  columns = 600
+  memory RSS ~= 999 MB
+  learning:
+    cg_iter = 2
+    candidates = 24
+    true-negative = 19
+    kept/added = 8
+    best true RC = -70.412440
+```
+
+Earlier in the same config, when the round gate still counted raw `cg_iter`,
+the anchor initialized on 20-task but never smoothed because `cg_iter = 1` was
+consumed by cut separation.  That run ended at 120 seconds with
+`primal = 492.883420`.  After the gate fix, the smoothed pass is active and the
+120-second incumbent improved to `487.624693`.  This is not a certificate result
+and does not prove the 20-task target, but it confirms that the GNN anchor can
+produce concentrated true-RC negative columns on the 20-task graph.
+
+Memory note: even CPU inference imports the PyTorch/PyG stack and raises process
+RSS to about 0.85-1.0 GB in these smoke runs.  Keep learning benchmarks
+single-process unless the memory profile is intentionally being tested.
+
+## Strong True-RC Learning Gate (2026-06-04)
+
+The full 10-task learning-on run exposed an important failure mode: the GNN
+anchor was active, exact-safe, and true-RC filtered, but the filter threshold was
+only the numerical tolerance `1e-5`.  That allowed weak true-negative columns to
+enter the RMP.  On several Tranquillitatis instances those columns changed the
+column-generation trajectory, bloated the tail proof, and caused regressions or
+timeouts.
+
+Diagnosis:
+
+```text
+BPC_future/results/all_tasks10_learning_mainline_120s_20260604.csv
+  20 rows
+  OPTIMAL = 18 / 20
+  TIME_LIMIT = 2 / 20
+  slow regressions concentrated on Tranquillitatis tasks10_01/04/05/06/09/10
+```
+
+The controlled probe kept learning enabled but changed only the online
+acceptance policy:
+
+```text
+journey_learning_alpha_init = 0.5
+journey_learning_true_rc_keep_threshold = 1.0
+journey_learning_true_rc_max_kept_per_round = 4
+```
+
+Probe result:
+
+```text
+BPC_future/results/probe_tasks10_learning_quality_tol1_alpha05_20260604.csv
+
+tranq10_04:
+  previous learning mainline = OPTIMAL, 104.682362s, 509 columns
+  stricter learning gate     = OPTIMAL,  73.658087s, 448 columns
+
+tranq10_05:
+  previous learning mainline = TIME_LIMIT, 120.207442s, 302 columns
+  stricter learning gate     = OPTIMAL,    19.595720s, 304 columns
+
+tranq10_06:
+  previous learning mainline = TIME_LIMIT, 120.919857s, 412 columns
+  stricter learning gate     = OPTIMAL,    47.549628s, 407 columns
+```
+
+After exact-safe cache isolation, the `1.0` threshold still allowed
+medium-strength learning columns on `tranq10_04` and the full 10-task run hit
+the 120-second limit on that instance.  A second probe raised only the learning
+candidate quality gate:
+
+```text
+journey_learning_true_rc_keep_threshold = 10.0
+
+BPC_future/results/probe_tasks10_learning_threshold10_isolated_20260604.csv
+
+tranq10_04:
+  threshold 1 isolated = TIME_LIMIT, 120.620316s, 416 columns
+  threshold 10         = OPTIMAL,     70.941678s, 441 columns
+
+tranq10_05:
+  threshold 10         = OPTIMAL,     24.121163s, 309 columns
+
+tranq10_06:
+  threshold 10         = OPTIMAL,     53.314876s, 350 columns
+```
+
+The mainline configs therefore use `journey_learning_true_rc_keep_threshold =
+10.0`.  This keeps learning active but restricts online column insertion to
+very strong true-RC negatives.  We should revisit this threshold only after
+training a better terrain-balanced checkpoint and measuring candidate quality
+by instance family.
+
+Interpretation: this does not prove the checkpoint is high quality across the
+whole distribution, but it does argue against the simpler hypothesis that "the
+GAT is useless."  The model can produce strong true-RC negative journeys; the
+mainline problem was that weak true-negative journeys were allowed to perturb
+the RMP.  The online role of the GNN is therefore narrowed to a high-confidence
+candidate injector.
+
+Mainline contract after this probe:
+
+- `journey_learning_enabled` stays `True`; do not disable learning to fix a
+  regression.
+- `journey_learning_true_rc_tol` remains the numerical tolerance.
+- `journey_learning_true_rc_keep_threshold` is the heuristic quality gate for
+  learning-smoothed candidates.
+- Learning candidates must satisfy
+  `true_rc < -max(true_rc_tol, true_rc_keep_threshold)` before insertion.
+- Exact certificate pricing remains true-dual only and is not affected by this
+  stronger heuristic gate.
+- If a smoothed pass produces no strong true-RC column, the current round still
+  falls back to true-dual exact pricing, but alpha is not permanently forced to
+  zero.  A later RMP dual can still use the GNN anchor while the configured
+  learning round budget remains.
+- Learning-smoothed pricing must use isolated one-shot pricing caches.  It must
+  not write label-resume or physical-catalog state into the cache later reused
+  by true-dual exact pricing, because those states are reduced-cost-vector
+  dependent.
+- Learning logs record `kept_best_true_reduced_cost`,
+  `kept_worst_true_reduced_cost`, and `kept_mean_true_reduced_cost` so future
+  failures can distinguish anchor quality from candidate-selection quality.
+
+Regression note: before cache isolation, `tranq10_03` could finish with
+`201.321909` when learning was enabled, while the same current config with
+`journey_learning_enabled=False` finished at `197.875013`.  That is an exactness
+violation and must be treated as integration-cache contamination, not as a GAT
+training-quality issue.
+
+Final 5/10 validation after strong gate and cache isolation:
+
+```text
+BPC_future/results/all_tasks05_learning_threshold10_isolated_120s_20260604.csv
+  OPTIMAL = 20 / 20
+  TIME_LIMIT = 0 / 20
+  max time = 2.337395s
+  mean time = 0.406981s
+  objective mismatches vs resource-bound baseline = 0
+  target status: all 5-task instances are below 5s
+
+BPC_future/results/all_tasks10_learning_threshold10_isolated_120s_20260604.csv
+  OPTIMAL = 20 / 20
+  TIME_LIMIT = 0 / 20
+  max time = 75.512124s
+  mean time = 28.721814s
+  objective mismatches vs resource-bound baseline = 0
+  learning true-RC filter events = 20
+  total GNN columns kept = 40
+  target status: 17 / 20 10-task instances are below 60s
+```
+
+Remaining 10-task slow instances:
+
+```text
+apollo15_20km_tasks10_04_seed11055:
+  learning threshold10 isolated = 75.512124s
+  resource-bound baseline       = 66.758771s
+
+tranquillitatis_tasks10_01_seed11000:
+  learning threshold10 isolated = 67.842055s
+  resource-bound baseline       = 55.865s
+
+tranquillitatis_tasks10_04_seed11054:
+  learning threshold10 isolated = 70.088245s
+  resource-bound baseline       = 60.255424s
+```
+
+These remaining misses are not learning exactness failures.  They are tail
+certificate/runtime problems and should be attacked through exact-pricing and
+completion-bound improvements.  Keep learning enabled while doing that work.
+
+## Anchor Diagnostics and MLP Ablation (2026-06-04)
+
+The hypothesis "maybe the GAT is trained badly" was split into measurable
+checks instead of judging only by wall-clock time.
+
+Zero-dual/dead-task check:
+
+```text
+script:
+  BPC_future/scripts/diagnose_learning_dual_anchor.py
+
+hardtail dataset:
+  sample_count = 39
+  task_count = 290
+  checkpoint label mean/std = 34.693942 / 23.024107
+  label min/q05/q50/q95/max = 2.766059 / 5.203244 / 30.932669 / 76.059602 / 129.058990
+  zero_dual_count(|pi| <= 1e-8) = 0
+  near_zero_count(|pi| <= 1.0) = 0 across all existing learning datasets
+```
+
+Interpretation: the current dual-center datasets do not contain true zero-dual
+task labels.  The observed online failures are therefore not simply "the model
+predicts 5 or 10 for many exact zero labels."  The stronger issue is a label
+coverage gap: if future RMP variants or instances have dead task-cover rows, the
+current checkpoints have not been trained to represent that regime.  Adding a
+zero-label penalty will not help until the data builder can produce such labels.
+
+Scaler/outlier check:
+
+```text
+hardtail checkpoint on hardtail dataset:
+  MAE = 9.596469
+  MAE without top 5% |label| = 9.431465
+  MAE without top 1% |label| = 9.532514
+
+v1_trace_5_10_optimal_all checkpoint on hardtail dataset:
+  MAE = 6.972546
+  MAE without top 5% |label| = 7.074173
+  MAE without top 1% |label| = 6.997609
+```
+
+Interpretation: a few huge outliers are not the main source of MAE.  The
+standard-scaler variance is not hiding a "nearly perfect on normal nodes, bad on
+one pi=2000 outlier" pattern; the largest label in these datasets is only about
+129.
+
+Node-only MLP ablation:
+
+```text
+script:
+  BPC_future/scripts/train_learning_dual_mlp_baseline.py
+
+dataset:
+  BPC_future/data/learning_dual/hardtail_20260604
+  split = instance split, seed 7
+  validation instances = 8
+  validation task_count = 65
+
+node-only MLP validation:
+  MAE = 15.078762
+  RMSE = 20.235743
+  Pearson = 0.487973
+  Spearman = 0.334135
+
+GAT hardtail on the same validation split:
+  MAE = 10.302677
+  RMSE = 14.713701
+  Pearson = 0.755550
+  Spearman = 0.673951
+
+GAT v1_trace_5_10_optimal_all on the same validation split:
+  MAE = 7.107132
+  RMSE = 9.653681
+  Pearson = 0.923364
+  Spearman = 0.911014
+```
+
+Interpretation: the graph/option model is doing real work.  A node-only MLP can
+fit some scale information, but it is much worse at ranking task duals.  This is
+a useful ablation result for the learning component: path-option topology and
+message passing materially improve dual-anchor ranking.  However, the better
+offline v1 checkpoint did not uniformly improve online wall-clock time, so
+future checkpoint selection must use both offline ranking metrics and online
+true-RC column-quality metrics.
+
+## Learning Funnel Refinement (2026-06-04)
+
+The 10-task slow-instance probes showed that weak true-negative columns can hurt
+the column-generation trajectory even when they are exact-safe.
+
+Bad probe:
+
+```text
+fallback rule:
+  if strong true-RC columns == 0, keep one best weak true-negative with true_rc < -1
+
+Tranq10_04:
+  before fallback = 71.120770s, columns = 440, exact pricing calls = 14
+  with fallback  = 82.495508s, columns = 478, exact pricing calls = 15
+```
+
+This fallback is not a mainline setting.  It is kept as an off-by-default
+diagnostic hook only.
+
+Accepted rule:
+
+```text
+journey_learning_pricing_max_rounds = 2
+journey_learning_min_kept_to_continue = 2
+journey_learning_stop_after_no_strong_round = True
+```
+
+The GNN remains enabled, but a later smoothed pass is suppressed when the
+previous learning pass kept too few strong true-RC columns.  This avoids wasting
+pricing time or perturbing the RMP with weak learning guidance.
+
+Validation:
+
+```text
+BPC_future/results/all_tasks10_learning_min2_120s_full_20260604.csv
+  OPTIMAL = 20 / 20
+  max time = 76.377088s
+  mean time = 29.037943s
+  median time = 19.690474s
+  over 60s = 3 / 20
+  max RSS ~= 1.0 GB
+
+notable effects:
+  Tranq10_09 returns to 58.965776s after suppressing the second learning round
+  Tranq10_04 remains around 69s in full-run context
+  Apollo10_04 remains the dominant 10-task branch/tree bottleneck at ~76s
+```
+
+Current learning conclusion: the GAT anchor is useful but should act as a
+high-confidence Level-1 injector.  Online success is better predicted by strong
+true-RC kept columns than by offline MAE alone.
+
+## Rank/Zero Loss Probe (2026-06-04)
+
+The training and evaluation scripts now support the first version of a
+column-quality-oriented objective without changing the solver exactness
+contract.
+
+Added training knobs:
+
+```text
+--ranking-loss-weight
+--ranking-temperature
+--ranking-min-gap
+--zero-label-weight
+--zero-label-threshold
+--zero-anchor-regularization-weight
+```
+
+The regression loss is still Huber on standardized task-cover duals.  The
+optional ranking term is graph-local pairwise logistic ranking: task pairs with
+a larger true dual are penalized if the model ranks them lower.  This pushes the
+anchor toward better pricing priorities even when absolute dual MAE is not the
+most important signal.
+
+The data builder now treats missing `cover` entries in a dual trace as zero.
+This is important because logs may omit zero-valued task-cover duals, and
+omitting them would silently remove dead-task labels from the dataset.  The
+builder also records zero/near-zero label counts in the manifest and supports
+an off-by-default low-weight synthetic zero-anchor clone:
+
+```text
+--synthetic-zero-sample-fraction
+--synthetic-zero-sample-weight
+```
+
+This synthetic option is experimental.  It must not be used as proof of
+generalization; it is only a regularizer to expose the model to dead-task dual
+patterns when collected traces contain no zero labels.
+
+Train/test leakage rule:
+
+- `train_learning_dual_model.py` defaults to `--split-by-instance=True`, so
+  training and validation do not mix solve samples from the same instance.
+- Full-dataset `diagnose_learning_dual_anchor.py` runs are replay diagnostics,
+  not held-out tests, unless the caller explicitly points it at a held-out
+  dataset.
+- The held-out slow-instance probe with
+  `hierarchical_option_gat_rankzero_probe2.pt` checked that `Apollo10_04`,
+  `Tranq10_04`, and `Tranq10_01` had zero hits in
+  `v1_trace_5_10_optimal_all/manifest.json`.
+
+Probe result on three held-out 10-task slow instances:
+
+```text
+Baseline current min2 run:
+  Apollo10_04: 76.377s, 17 nodes, 242 cols
+  Tranq10_04: 69.364s, 1 node, 443 cols
+  Tranq10_01: 62.646s, 1 node, 427 cols
+
+Rank/zero probe2:
+  Apollo10_04: 63.591s, 13 nodes, 247 cols
+  Tranq10_04: 88.749s, 1 node, 480 cols
+  Tranq10_01: 58.385s, 1 node, 430 cols
+```
+
+The online true-RC funnel for the same three held-out runs:
+
+```text
+candidate_journeys = 54
+true_negative_journeys = 23
+kept_journeys = 20
+kept_rate = 0.370
+true_negative_rate = 0.426
+```
+
+Compared with the current min2 all-10 run, the rank/zero objective produced a
+more concentrated true-RC funnel on these three cases and improved two of the
+three wall-clock times.  It also made `Tranq10_04` worse by generating a deeper
+best true-RC column but more columns/pricing work.  Therefore this checkpoint is
+not a mainline replacement yet.
+
+Current conclusion:
+
+- The method is worth keeping and optimizing.
+- Offline MAE/top-k is insufficient; model selection must include online
+  `true_negative_rate`, `kept_rate`, `kept_best_true_reduced_cost`, pricing
+  calls, columns, and wall-clock.
+- The next iteration should tune ranking weight and true-RC filter interaction
+  together, because stronger columns can still slow the branch-price path if
+  they increase RMP column volume or alter branching unfavorably.

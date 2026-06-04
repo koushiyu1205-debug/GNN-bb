@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import random
@@ -15,9 +16,23 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import torch
+import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 
-from BPC_future.learning.gnn_model import HierarchicalOptionGAT, dual_prediction_loss
+from BPC_future.learning.gnn_model import HierarchicalOptionGAT
+
+
+@dataclass(frozen=True)
+class _LossConfig:
+    huber_delta: float
+    ranking_loss_weight: float
+    ranking_temperature: float
+    ranking_min_gap: float
+    zero_label_weight: float
+    zero_label_threshold: float
+    zero_anchor_regularization_weight: float
+    label_mean: torch.Tensor
+    label_std: torch.Tensor
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,6 +51,42 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--heads", type=int, default=4)
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--huber-delta", type=float, default=0.5)
+    parser.add_argument(
+        "--ranking-loss-weight",
+        type=float,
+        default=0.0,
+        help="Weight for graph-local pairwise dual-ranking loss. Default keeps pure regression training.",
+    )
+    parser.add_argument(
+        "--ranking-temperature",
+        type=float,
+        default=1.0,
+        help="Softplus temperature for pairwise ranking loss in normalized dual units.",
+    )
+    parser.add_argument(
+        "--ranking-min-gap",
+        type=float,
+        default=0.0,
+        help="Ignore task pairs whose normalized label gap is at most this value.",
+    )
+    parser.add_argument(
+        "--zero-label-weight",
+        type=float,
+        default=1.0,
+        help="Extra regression weight for |true dual| <= zero-label-threshold tasks.",
+    )
+    parser.add_argument(
+        "--zero-label-threshold",
+        type=float,
+        default=1.0e-8,
+        help="Original-scale tolerance used to identify zero/near-zero task dual labels.",
+    )
+    parser.add_argument(
+        "--zero-anchor-regularization-weight",
+        type=float,
+        default=0.0,
+        help="Optional low-weight penalty toward a zero-dual anchor on all tasks. Default disabled.",
+    )
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument(
         "--split-by-instance",
@@ -83,12 +134,23 @@ def main() -> None:
     device = torch.device(str(args.device))
     model = HierarchicalOptionGAT(**model_config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(args.lr), weight_decay=float(args.weight_decay))
+    loss_config = _LossConfig(
+        huber_delta=float(args.huber_delta),
+        ranking_loss_weight=max(0.0, float(args.ranking_loss_weight)),
+        ranking_temperature=max(1.0e-6, float(args.ranking_temperature)),
+        ranking_min_gap=max(0.0, float(args.ranking_min_gap)),
+        zero_label_weight=max(0.0, float(args.zero_label_weight)),
+        zero_label_threshold=abs(float(args.zero_label_threshold)),
+        zero_anchor_regularization_weight=max(0.0, float(args.zero_anchor_regularization_weight)),
+        label_mean=normalizer["label_mean"].to(device),
+        label_std=normalizer["label_std"].to(device),
+    )
 
     best_val = float("inf")
     best_state: dict[str, Any] | None = None
     for epoch in range(1, int(args.epochs) + 1):
-        train_loss = _run_epoch(model, train_loader, optimizer, device, huber_delta=float(args.huber_delta))
-        val_loss = _evaluate(model, val_loader, device, huber_delta=float(args.huber_delta)) if val_loader else train_loss
+        train_loss = _run_epoch(model, train_loader, optimizer, device, loss_config=loss_config)
+        val_loss = _evaluate(model, val_loader, device, loss_config=loss_config) if val_loader else train_loss
         if val_loss <= best_val:
             best_val = float(val_loss)
             best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
@@ -120,6 +182,12 @@ def main() -> None:
             "lr": float(args.lr),
             "weight_decay": float(args.weight_decay),
             "huber_delta": float(args.huber_delta),
+            "ranking_loss_weight": float(loss_config.ranking_loss_weight),
+            "ranking_temperature": float(loss_config.ranking_temperature),
+            "ranking_min_gap": float(loss_config.ranking_min_gap),
+            "zero_label_weight": float(loss_config.zero_label_weight),
+            "zero_label_threshold": float(loss_config.zero_label_threshold),
+            "zero_anchor_regularization_weight": float(loss_config.zero_anchor_regularization_weight),
             "split": split_info,
             "sample_count": len(samples),
             "train_count": len(train_samples),
@@ -169,6 +237,8 @@ def _normalize_sample(sample: Any, normalizer: dict[str, torch.Tensor]) -> Any:
     graph.x = (graph.x - normalizer["node_mean"]) / normalizer["node_std"]
     graph.option_feat = (graph.option_feat - normalizer["option_mean"]) / normalizer["option_std"]
     graph.y_task = (graph.y_task - normalizer["label_mean"]) / normalizer["label_std"]
+    if hasattr(graph, "y_task_weight"):
+        graph.y_task_weight = graph.y_task_weight.to(dtype=torch.float32)
     graph.learning_features_normalized = True
     return graph
 
@@ -230,7 +300,7 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     *,
-    huber_delta: float,
+    loss_config: _LossConfig,
 ) -> float:
     model.train()
     total_loss = 0.0
@@ -239,7 +309,7 @@ def _run_epoch(
         batch = batch.to(device)
         optimizer.zero_grad(set_to_none=True)
         output = model(batch)
-        loss = dual_prediction_loss(output["pred_task"], batch.y_task, huber_delta=huber_delta)
+        loss = _training_loss(output["pred_task"], batch, loss_config)
         loss.backward()
         optimizer.step()
         task_count = int(batch.y_task.numel())
@@ -253,7 +323,7 @@ def _evaluate(
     loader: DataLoader | None,
     device: torch.device,
     *,
-    huber_delta: float,
+    loss_config: _LossConfig,
 ) -> float:
     if loader is None:
         return float("inf")
@@ -264,11 +334,95 @@ def _evaluate(
         for batch in loader:
             batch = batch.to(device)
             output = model(batch)
-            loss = dual_prediction_loss(output["pred_task"], batch.y_task, huber_delta=huber_delta)
+            loss = _training_loss(output["pred_task"], batch, loss_config)
             task_count = int(batch.y_task.numel())
             total_loss += float(loss.detach().cpu()) * task_count
             total_tasks += task_count
     return total_loss / max(1, total_tasks)
+
+
+def _training_loss(pred_task: torch.Tensor, batch: Any, config: _LossConfig) -> torch.Tensor:
+    regression = _weighted_dual_regression_loss(pred_task, batch, config)
+    zero_anchor_weight = max(0.0, float(config.zero_anchor_regularization_weight))
+    if zero_anchor_weight > 0.0:
+        zero_norm = (pred_task.new_tensor(0.0) - config.label_mean.to(device=pred_task.device)) / config.label_std.to(
+            device=pred_task.device
+        )
+        zero_target = torch.full_like(pred_task, float(zero_norm.item()))
+        # 低权重 zero-anchor 正则用来给“死节点 dual 应接近 0”提供覆盖；
+        # 它不是主标签，权重必须保持很小，避免把真实紧缺任务整体压低。
+        regression = regression + zero_anchor_weight * F.huber_loss(
+            pred_task,
+            zero_target,
+            delta=float(config.huber_delta),
+        )
+    ranking_weight = max(0.0, float(config.ranking_loss_weight))
+    if ranking_weight <= 0.0:
+        return regression
+    ranking = _pairwise_ranking_loss(
+        pred_task,
+        batch.y_task,
+        _task_graph_ids(batch),
+        temperature=float(config.ranking_temperature),
+        min_gap=float(config.ranking_min_gap),
+    )
+    return regression + ranking_weight * ranking
+
+
+def _weighted_dual_regression_loss(pred_task: torch.Tensor, batch: Any, config: _LossConfig) -> torch.Tensor:
+    y_task = batch.y_task
+    if pred_task.shape != y_task.shape:
+        raise ValueError(f"pred_task shape {tuple(pred_task.shape)} != y_task shape {tuple(y_task.shape)}")
+    if float(config.huber_delta) <= 0.0:
+        raise ValueError("huber_delta must be positive")
+    per_task = F.huber_loss(pred_task, y_task, delta=float(config.huber_delta), reduction="none")
+    weights = torch.ones_like(per_task)
+    if hasattr(batch, "y_task_weight"):
+        weights = weights * batch.y_task_weight.to(device=per_task.device, dtype=per_task.dtype).view_as(per_task)
+    if float(config.zero_label_weight) != 1.0:
+        # zero 判定必须在原始 dual 尺度上做，不能在标准化标签上做；
+        # 否则 label_mean/std 改变会导致同一物理 dual 被误判。
+        y_original = y_task * config.label_std.to(device=y_task.device) + config.label_mean.to(device=y_task.device)
+        zero_mask = torch.abs(y_original) <= float(config.zero_label_threshold)
+        weights = torch.where(zero_mask, weights * float(config.zero_label_weight), weights)
+    denominator = torch.clamp(torch.sum(weights), min=1.0e-12)
+    return torch.sum(per_task * weights) / denominator
+
+
+def _pairwise_ranking_loss(
+    pred_task: torch.Tensor,
+    y_task: torch.Tensor,
+    task_graph_ids: torch.Tensor,
+    *,
+    temperature: float,
+    min_gap: float,
+) -> torch.Tensor:
+    losses: list[torch.Tensor] = []
+    for graph_id in torch.unique(task_graph_ids):
+        mask = task_graph_ids == graph_id
+        pred = pred_task[mask]
+        truth = y_task[mask]
+        if pred.numel() <= 1:
+            continue
+        pred_diff = pred.view(-1, 1) - pred.view(1, -1)
+        truth_diff = truth.view(-1, 1) - truth.view(1, -1)
+        upper = torch.triu(torch.ones_like(truth_diff, dtype=torch.bool), diagonal=1)
+        usable = upper & (torch.abs(truth_diff) > float(min_gap))
+        if not bool(torch.any(usable)):
+            continue
+        sign = torch.sign(truth_diff[usable])
+        # 这个项直接惩罚“真实 dual 更高的任务在预测里排得更低”。
+        # 它不要求绝对 dual 数值完全准，而是把训练目标推向 pricing 更需要的 task ranking。
+        losses.append(F.softplus(-sign * pred_diff[usable] / max(1.0e-6, float(temperature))).mean())
+    if not losses:
+        return pred_task.new_tensor(0.0)
+    return torch.stack(losses).mean()
+
+
+def _task_graph_ids(batch: Any) -> torch.Tensor:
+    if not hasattr(batch, "batch"):
+        return torch.zeros_like(batch.y_task, dtype=torch.long)
+    return batch.batch[batch.task_mask].to(dtype=torch.long)
 
 
 def _prediction_metrics(
@@ -282,6 +436,7 @@ def _prediction_metrics(
     model.eval()
     pred_values: list[torch.Tensor] = []
     true_values: list[torch.Tensor] = []
+    top3_overlaps: list[float] = []
     label_mean = normalizer["label_mean"].to(device)
     label_std = normalizer["label_std"].to(device)
     with torch.no_grad():
@@ -290,6 +445,7 @@ def _prediction_metrics(
             output = model(batch)
             pred = output["pred_task"] * label_std + label_mean
             truth = batch.y_task * label_std + label_mean
+            top3_overlaps.extend(_batch_top_k_overlaps(pred, truth, _task_graph_ids(batch), top_k=3))
             pred_values.append(pred.detach().cpu())
             true_values.append(truth.detach().cpu())
     if not pred_values:
@@ -308,7 +464,55 @@ def _prediction_metrics(
         "label_std": float(torch.std(true_all, unbiased=False).item()) if true_all.numel() > 1 else 0.0,
         "baseline_mean_mae": float(torch.mean(torch.abs(baseline_error)).item()),
         "baseline_mean_rmse": float(torch.sqrt(torch.mean(baseline_error * baseline_error)).item()),
+        "pearson": _corr(pred_all, true_all),
+        "spearman": _corr(_rank(pred_all), _rank(true_all)),
+        "top3_overlap_mean": float(sum(top3_overlaps) / len(top3_overlaps)) if top3_overlaps else 0.0,
     }
+
+
+def _batch_top_k_overlaps(
+    pred: torch.Tensor,
+    truth: torch.Tensor,
+    graph_ids: torch.Tensor,
+    *,
+    top_k: int,
+) -> list[float]:
+    result: list[float] = []
+    pred_cpu = pred.detach().cpu().to(dtype=torch.float64)
+    truth_cpu = truth.detach().cpu().to(dtype=torch.float64)
+    graph_cpu = graph_ids.detach().cpu()
+    for graph_id in torch.unique(graph_cpu):
+        mask = graph_cpu == graph_id
+        if int(torch.sum(mask).item()) <= 0:
+            continue
+        local_pred = pred_cpu[mask]
+        local_truth = truth_cpu[mask]
+        k = min(max(1, int(top_k)), int(local_truth.numel()))
+        pred_top = set(int(index) for index in torch.topk(local_pred, k=k).indices.tolist())
+        true_top = set(int(index) for index in torch.topk(local_truth, k=k).indices.tolist())
+        result.append(len(pred_top & true_top) / float(k))
+    return result
+
+
+def _rank(values: torch.Tensor) -> torch.Tensor:
+    values = values.detach().cpu().to(dtype=torch.float64).view(-1)
+    order = torch.argsort(values)
+    ranks = torch.empty_like(values)
+    ranks[order] = torch.arange(values.numel(), dtype=torch.float64)
+    return ranks
+
+
+def _corr(left: torch.Tensor, right: torch.Tensor) -> float:
+    left = left.detach().cpu().to(dtype=torch.float64).view(-1)
+    right = right.detach().cpu().to(dtype=torch.float64).view(-1)
+    if left.numel() != right.numel() or left.numel() < 2:
+        return 0.0
+    left_centered = left - torch.mean(left)
+    right_centered = right - torch.mean(right)
+    denom = torch.sqrt(torch.sum(left_centered * left_centered) * torch.sum(right_centered * right_centered))
+    if float(denom.item()) <= 0.0:
+        return 0.0
+    return float((torch.sum(left_centered * right_centered) / denom).item())
 
 
 if __name__ == "__main__":

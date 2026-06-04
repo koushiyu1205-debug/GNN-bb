@@ -7,6 +7,7 @@ import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import random
 import sys
 from typing import Any
 
@@ -46,11 +47,40 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Maximum branch depth to include in labels. Default 0 keeps root-node dual centers only; use -1 to include all depths.",
     )
+    parser.add_argument(
+        "--zero-label-tol",
+        type=float,
+        default=1.0e-8,
+        help="Manifest diagnostic tolerance for exact-zero task-cover dual labels.",
+    )
+    parser.add_argument(
+        "--near-zero-label-tol",
+        type=float,
+        default=1.0,
+        help="Manifest diagnostic tolerance for near-zero task-cover dual labels.",
+    )
+    parser.add_argument(
+        "--synthetic-zero-sample-fraction",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional experimental zero-anchor coverage. For this fraction of real graphs, "
+            "write a low-weight clone whose task labels are all zero. Defaults to disabled."
+        ),
+    )
+    parser.add_argument(
+        "--synthetic-zero-sample-weight",
+        type=float,
+        default=0.05,
+        help="Per-task loss weight stored on synthetic zero-anchor clones.",
+    )
+    parser.add_argument("--seed", type=int, default=7)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    rng = random.Random(int(args.seed))
     output_dir = Path(args.output_dir)
     sample_dir = output_dir / "samples"
     sample_dir.mkdir(parents=True, exist_ok=True)
@@ -68,18 +98,24 @@ def main() -> None:
     label_stats = _RunningStats(1)
     samples: list[dict[str, Any]] = []
     total_bytes = 0
+    next_sample_index = 0
+    real_sample_count = 0
+    synthetic_zero_sample_count = 0
+    zero_label_count = 0
+    near_zero_label_count = 0
+    total_label_count = 0
 
-    for sample_index, group in enumerate(
-        sorted(traces, key=lambda item: (str(item.instance_path), str(item.log_path)))
-    ):
+    for group in sorted(traces, key=lambda item: (str(item.instance_path), str(item.log_path))):
         if len(group.records) < int(args.min_traces):
             continue
         selected = group.records[-max(1, int(args.tail_window)) :]
-        label_by_task = _average_cover_duals(selected)
         data = load_future_data(str(group.instance_path), instance_dir=args.instance_dir)
         graph = builder.build_from_future_data(data)
+        task_ids = [int(task) for task in graph.task_ids.tolist()]
+        label_by_task = _average_cover_duals(selected, task_ids)
         y_task = torch.tensor([float(label_by_task[int(task)]) for task in graph.task_ids.tolist()], dtype=torch.float32)
         graph.y_task = y_task
+        graph.y_task_weight = torch.ones_like(y_task)
         graph.learning_instance_name = str(data.name)
         graph.learning_instance_path = str(data.instance_path)
         graph.learning_log_path = str(group.log_path)
@@ -89,30 +125,47 @@ def main() -> None:
         node_stats.update(graph.x)
         option_stats.update(graph.option_feat)
         label_stats.update(y_task.view(-1, 1))
+        real_sample_count += 1
+        zero_label_count += int(torch.sum(torch.abs(y_task) <= abs(float(args.zero_label_tol))).item())
+        near_zero_label_count += int(torch.sum(torch.abs(y_task) <= abs(float(args.near_zero_label_tol))).item())
+        total_label_count += int(y_task.numel())
 
-        sample_path = sample_dir / f"sample_{sample_index:05d}.pt"
-        torch.save(graph, sample_path)
-        size = sample_path.stat().st_size
-        total_bytes += int(size)
-        if total_bytes > int(args.max_bytes):
-            raise SystemExit(
-                f"dataset size limit exceeded: {total_bytes} bytes > {int(args.max_bytes)} bytes"
-            )
-        samples.append(
-            {
-                "path": str(sample_path.relative_to(output_dir)),
-                "instance_path": str(data.instance_path),
-                "log_path": str(group.log_path),
-                "instance_name": str(data.name),
-                "task_count": int(graph.task_ids.numel()),
-                "node_count": int(graph.x.size(0)),
-                "pair_count": int(graph.pair_edge_index.size(1)),
-                "option_count": int(graph.option_feat.size(0)),
-                "trace_count": int(len(group.records)),
-                "tail_window": int(len(selected)),
-                "bytes": int(size),
-            }
+        total_bytes, next_sample_index = _write_sample(
+            graph,
+            samples,
+            sample_dir=sample_dir,
+            output_dir=output_dir,
+            sample_index=next_sample_index,
+            total_bytes=total_bytes,
+            max_bytes=int(args.max_bytes),
+            instance_path=str(data.instance_path),
+            log_path=str(group.log_path),
+            instance_name=str(data.name),
+            trace_count=int(len(group.records)),
+            tail_window=int(len(selected)),
+            is_synthetic=False,
         )
+        if _include_synthetic_zero_sample(float(args.synthetic_zero_sample_fraction), rng):
+            synthetic = graph.clone()
+            synthetic.y_task = torch.zeros_like(y_task)
+            synthetic.y_task_weight = torch.full_like(y_task, max(0.0, float(args.synthetic_zero_sample_weight)))
+            synthetic.learning_label_source = "synthetic_zero_dual_regularizer"
+            total_bytes, next_sample_index = _write_sample(
+                synthetic,
+                samples,
+                sample_dir=sample_dir,
+                output_dir=output_dir,
+                sample_index=next_sample_index,
+                total_bytes=total_bytes,
+                max_bytes=int(args.max_bytes),
+                instance_path=str(data.instance_path),
+                log_path=str(group.log_path),
+                instance_name=str(data.name),
+                trace_count=int(len(group.records)),
+                tail_window=int(len(selected)),
+                is_synthetic=True,
+            )
+            synthetic_zero_sample_count += 1
 
     if not samples:
         raise SystemExit("no samples written; check min-traces and log inputs")
@@ -120,6 +173,8 @@ def main() -> None:
     manifest = {
         "version": "v1",
         "sample_count": len(samples),
+        "real_sample_count": int(real_sample_count),
+        "synthetic_zero_sample_count": int(synthetic_zero_sample_count),
         "total_bytes": int(total_bytes),
         "node_feature_schema": list(DEFAULT_NODE_FEATURE_SCHEMA),
         "option_feature_schema": list(DEFAULT_OPTION_FEATURE_SCHEMA),
@@ -129,6 +184,15 @@ def main() -> None:
         "option_feature_std": option_stats.std(),
         "label_mean": label_stats.mean()[0],
         "label_std": label_stats.std()[0],
+        "label_zero_tol": abs(float(args.zero_label_tol)),
+        "label_near_zero_tol": abs(float(args.near_zero_label_tol)),
+        "label_count": int(total_label_count),
+        "zero_label_count": int(zero_label_count),
+        "near_zero_label_count": int(near_zero_label_count),
+        "zero_label_fraction": float(zero_label_count) / float(max(1, total_label_count)),
+        "near_zero_label_fraction": float(near_zero_label_count) / float(max(1, total_label_count)),
+        "synthetic_zero_sample_fraction": max(0.0, min(1.0, float(args.synthetic_zero_sample_fraction))),
+        "synthetic_zero_sample_weight": max(0.0, float(args.synthetic_zero_sample_weight)),
         "samples": samples,
     }
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
@@ -177,18 +241,69 @@ def _collect_traces(
     return result
 
 
-def _average_cover_duals(records: list[dict[str, Any]]) -> dict[int, float]:
+def _average_cover_duals(records: list[dict[str, Any]], task_ids: list[int]) -> dict[int, float]:
     sums: dict[int, float] = {}
     counts: dict[int, int] = {}
+    for task in task_ids:
+        sums[int(task)] = 0.0
+        counts[int(task)] = 0
     for record in records:
         cover = record.get("cover", {})
         if not isinstance(cover, dict):
             raise ValueError("dual trace cover field must be a dict")
-        for raw_task, raw_value in cover.items():
-            task = int(raw_task)
-            sums[task] = sums.get(task, 0.0) + float(raw_value)
-            counts[task] = counts.get(task, 0) + 1
+        for task in task_ids:
+            # 有些日志格式会省略值为 0 的 cover dual。这里按“缺失即 0”
+            # 处理，避免把死节点标签从训练集里系统性删掉。
+            sums[int(task)] = sums.get(int(task), 0.0) + float(cover.get(str(int(task)), cover.get(int(task), 0.0)))
+            counts[int(task)] = counts.get(int(task), 0) + 1
     return {task: sums[task] / float(counts[task]) for task in sums}
+
+
+def _include_synthetic_zero_sample(fraction: float, rng: random.Random) -> bool:
+    clipped = max(0.0, min(1.0, float(fraction)))
+    return clipped > 0.0 and rng.random() < clipped
+
+
+def _write_sample(
+    graph: Any,
+    samples: list[dict[str, Any]],
+    *,
+    sample_dir: Path,
+    output_dir: Path,
+    sample_index: int,
+    total_bytes: int,
+    max_bytes: int,
+    instance_path: str,
+    log_path: str,
+    instance_name: str,
+    trace_count: int,
+    tail_window: int,
+    is_synthetic: bool,
+) -> tuple[int, int]:
+    sample_path = sample_dir / f"sample_{sample_index:05d}.pt"
+    torch.save(graph, sample_path)
+    size = sample_path.stat().st_size
+    updated_bytes = int(total_bytes) + int(size)
+    if updated_bytes > int(max_bytes):
+        raise SystemExit(f"dataset size limit exceeded: {updated_bytes} bytes > {int(max_bytes)} bytes")
+    samples.append(
+        {
+            "path": str(sample_path.relative_to(output_dir)),
+            "instance_path": instance_path,
+            "log_path": log_path,
+            "instance_name": instance_name,
+            "task_count": int(graph.task_ids.numel()),
+            "node_count": int(graph.x.size(0)),
+            "pair_count": int(graph.pair_edge_index.size(1)),
+            "option_count": int(graph.option_feat.size(0)),
+            "trace_count": int(trace_count),
+            "tail_window": int(tail_window),
+            "label_source": str(getattr(graph, "learning_label_source", "")),
+            "synthetic": bool(is_synthetic),
+            "bytes": int(size),
+        }
+    )
+    return updated_bytes, int(sample_index) + 1
 
 
 class _RunningStats:

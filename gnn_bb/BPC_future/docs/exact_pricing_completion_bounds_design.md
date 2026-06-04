@@ -65,6 +65,43 @@ Do not enable this heavy bound in early or middle CG rounds.  In those rounds,
 GNN-smoothed pricing and lightweight heuristics are expected to find negative
 columns cheaply.
 
+Role definition:
+
+```text
+Completion Bound is a final optimality-certificate generator, not a negative-column worker.
+```
+
+If ordinary heuristic/profile pricing can still cheaply produce even one true-RC
+negative column, the completion-bound direct-label oracle should stay off.  A
+standard exact pricing call that exhausts and returns no negative column is
+already a valid certificate; it must not be followed by a redundant bound retry.
+Completion Bound is reserved for a final probe after an ordinary exact attempt
+is incomplete, for example because of a soft time limit or label budget.
+Budget pre-reservation for that final probe must also be conservative: it should
+not shorten ordinary Level 2/3 pricing by default.  The current mainline keeps
+`journey_certificate_completion_bound_pre_retry_reserve_remaining_threshold =
+0.0`, so `journey_certificate_completion_bound_pre_retry_reserve_time` is ignored
+unless a future experiment explicitly sets a positive low-remaining-time
+threshold.
+
+The `certificate_candidate` gate remains the default activation trigger.  Branch
+nodes that need a true-dual exact-pricing proof but are not incumbent candidates
+can opt in separately with:
+
+```text
+journey_certificate_completion_bound_exact_proof_enabled
+journey_certificate_completion_bound_exact_proof_min_depth
+journey_certificate_completion_bound_exact_proof_min_incomplete_rounds
+```
+
+This opt-in only affects exact-pricing proof calls.  Candidate-only controls such
+as fast negative return and full-scan cadence remain gated by
+`certificate_candidate`.  The default minimum depth is `1`, so non-candidate
+root pricing is not rewritten into direct-label bound pricing.  The default
+minimum incomplete count is `1`, so a non-candidate branch node first tries the
+existing profile/streaming exact pricing path; the completion-bound direct-label
+path is used only after an incomplete proof attempt.
+
 ## Bound Rebuild Policy
 
 The lower bound must be rebuilt for each true-dual pricing call.  The reduced
@@ -79,15 +116,17 @@ precomputation, while exact pricing expansion is exponential in the hard tail.
 
 ## Bound State
 
-First-version state:
+Current V1 state:
 
 ```text
-LB(last_node, remaining_slots, time_bucket)
+LB(node_id, time_bucket, energy_bucket)
 ```
 
-Do not include full NG memory in the reverse-bound state.  The reverse bound is
-intentionally memoryless and relaxed; that is safe as long as it remains
-optimistic.  Full NG memory would destroy the speed advantage.
+Do not include NG memory, predecessor memory, remaining task slots, bitmasks, or
+future-sortie counters in the main reverse-bound state.  The reverse bound is
+intentionally memoryless and allows repeated node visits; this is safe as long
+as the value stays optimistic.  Future sorties are represented only by a scalar
+global optimistic sortie floor.
 
 Configuration knobs:
 
@@ -96,9 +135,46 @@ completion_bound_time_buckets: configurable, suggested 5-15
 completion_bound_energy_buckets: configurable, suggested 5-15
 ```
 
-The first implementation can start with time buckets only.  If energy buckets
-are added, path-option handling must preserve a safe resource envelope; see the
-path-option rule below.
+The implemented direct journey-label bound uses a coarse time+energy resource
+envelope for the main suffix table.  The state count is:
+
+```text
+(number_of_tasks + 1 depot) * (time_buckets + 1) * (energy_buckets + 1)
+```
+
+Energy buckets remain configurable; setting them to `0` falls back to the
+time-only relaxation.  Small-instance unique-task and unique-route helpers are
+explicit opt-ins and are disabled in the mainline configuration.
+
+The root certificate activation remains opt-in:
+
+```text
+journey_certificate_completion_bound_enabled: true in the 10-task journey trial
+journey_certificate_completion_bound_final_probe_only: true
+journey_certificate_completion_bound_root_only: true
+journey_certificate_completion_bound_exact_proof_enabled: false by default
+journey_certificate_completion_bound_exact_proof_min_depth: 1
+journey_certificate_completion_bound_exact_proof_min_incomplete_rounds: 1
+journey_certificate_completion_bound_min_flat_rounds: 0
+journey_certificate_completion_bound_time_buckets: suggested 5-15
+journey_certificate_completion_bound_energy_buckets: suggested 5-15
+journey_certificate_completion_bound_audit_enabled: false by default
+journey_certificate_completion_bound_unique_task_helper_enabled: false
+journey_certificate_completion_bound_unique_route_helper_enabled: false
+```
+
+The 10-task branch trial may set `journey_certificate_completion_bound_root_only:
+false` and `journey_certificate_completion_bound_exact_proof_enabled: true`
+with `journey_certificate_completion_bound_exact_proof_min_depth: 1` and
+`journey_certificate_completion_bound_exact_proof_min_incomplete_rounds: 1` to
+cover late branch-node final proof probes such as Apollo 10-04 while leaving
+non-candidate root exact pricing, first branch exact pricing attempts, and
+ordinary negative-column retries on the existing path.  This is still an
+exact-pricing certificate feature, not an early CG heuristic.
+
+Audit mode runs a bound-off direct pricing check after a bound-on no-negative
+certificate.  It is intended for 5-task full validation and sampled 10-task
+diagnostics, not for default benchmark timing.
 
 ## Reduced-Cost Components
 
@@ -123,12 +199,13 @@ negative cycles by repeatedly collecting task dual rewards.  First-version cycle
 control:
 
 ```text
-2-cycle elimination: remember predecessor node and forbid immediate return
 coarse time/energy buckets: consume resource to truncate longer cycles
 ```
 
-The bound must remain optimistic.  It is better to be too small and prune less
-than to be too large and prune a valid negative column.
+The main V1 table does not store predecessor or NG memory; it relies on coarse
+time/energy consumption to truncate repeated visits.  The bound must remain
+optimistic.  It is better to be too small and prune less than to be too large
+and prune a valid negative column.
 
 ## NG-Route And DSSR
 
@@ -1282,6 +1359,8 @@ Completion-bound activation probes (2026-06-04):
       The first 4-second profile call at cg2 returned no column, so the retry
       immediately switched to direct-label completion-bound proof and skipped
       the streaming retry that normally finds another 64 negative journeys.
+      This is now classified as the wrong role for Completion Bound: it was used
+      as a worker before ordinary retry pricing was exhausted.
 
     cache-preserving completion bound:
       BPC_future/results/probe_tranq10_04_completion_cache_20260604.csv
@@ -2117,3 +2196,199 @@ BPC_future/results/probe_apollo10_04_no_physical_catalog_resume_20260604.csv
 
 Disabling physical-catalog resume changes the tree but still does not produce a
 60-second certificate.  Do not use this as a default either.
+
+## Apollo20 Final-Probe Funnel Diagnostics (2026-06-04)
+
+The current Resource-Aware Completion Bound funnel was tested on the historical
+20-task hard representative:
+
+```text
+BPC_future/data/generated/moon_trek_60/logical_graphs/apollo15_20km/tasks_20/
+  apollo15_20km_tasks20_02_seed21018_logical_graph.json
+```
+
+The baseline final-probe configuration used the 20-task partial-bound trial
+settings plus:
+
+```text
+journey_certificate_completion_bound_enabled = True
+journey_certificate_completion_bound_final_probe_only = True
+journey_certificate_completion_bound_root_only = False
+journey_certificate_completion_bound_time_buckets = 6
+journey_certificate_completion_bound_energy_buckets = 6
+```
+
+Result:
+
+```text
+BPC_future/results/probe_apollo20_02_cb_finalprobe_600s_20260604.csv
+  TIME_LIMIT, time = 600.337800s
+  primal = 486.360054
+  nodes = 5, columns = 757
+  completion-bound pricing calls = 0
+```
+
+Interpretation: this instance did not reach the Level-4 final-probe phase.
+Ordinary Level 2/3 profile pricing kept finding true negative journeys for most
+of the run.  The bottleneck is therefore not yet the final certificate cliff; it
+is expensive profile generation while negative columns are still available.
+
+Two Level 2/3 scheduling probes were tested and rejected as defaults:
+
+```text
+BPC_future/results/probe_apollo20_02_batch4000_partial8_600s_20260604.csv
+  TIME_LIMIT, time = 600.025451s
+  primal = 486.568881
+  nodes = 5, columns = 745
+```
+
+Reducing the streaming batch to 4000 and returning 8 columns earlier lowers the
+per-call latency, but it increases CG rounds and produces a worse incumbent.
+
+```text
+BPC_future/results/probe_apollo20_02_densecols_600s_20260604.csv
+  TIME_LIMIT, time = 600.340165s
+  primal = 486.533368
+  nodes = 4, columns = 853
+```
+
+Returning denser 48/24-column batches strengthens the root LP faster, but delays
+root exit and still misses the 200-second target.  Do not adopt either probe as
+the mainline 20-task setting.
+
+Current next target: reduce physical/profile generation cost before the final
+certificate phase, or add a separate true-RC heuristic level that supplies
+high-quality columns earlier.  Completion Bound should remain the Level-4 judge
+and should not be promoted back into a negative-column worker.
+
+## Apollo20 Dual-Oscillation Diagnostic (2026-06-04)
+
+The same 20-task representative above was inspected for column-generation dual
+oscillation.  The baseline log shows a real degeneracy/dual-jump component:
+
+```text
+baseline: probe_apollo20_02_cb_finalprobe_600s_20260604
+  adjacent dual hash changes = 26 / 26
+  adjacent support hash changes = 23 / 26
+  dual_l1_delta mean/median/max = 101.15 / 95.86 / 220.13
+  dual_linf_delta mean/median/max = 13.53 / 12.18 / 30.11
+  rounds with |objective_delta| < 1 and dual_l1_delta > 50 = 9
+  traditional dual stabilization accepted = 2 / 31
+  main skip reason = not_tail_degenerate
+```
+
+Interpretation: this is not only a raw-label-pricing bottleneck.  The RMP is
+highly degenerate and the active dual extreme point moves substantially between
+column-generation rounds.  This supports the learning-dual-stabilization
+direction, but it does not justify using smoothed/stabilized duals for official
+proof.
+
+A controlled diagnostic moved the existing traditional stabilized-dual selector
+earlier in the funnel while forcing certificate exact pricing back to SCIP
+original duals:
+
+```text
+BPC_future/results/probe_apollo20_02_stab_nontail_truecert_600s_20260604.csv
+  TIME_LIMIT, time = 600.353307s
+  primal = 485.864724
+  nodes = 5, columns = 767
+  rmp_solves = 32, pricing_calls = 31
+  generated_sequences = 3,197,639
+  evaluated_timed_trips = 4,310,611
+  completion-bound pricing calls = 0
+
+dual/pricing diagnostics:
+  stabilized pricing calls = 7
+  scip_certificate pricing calls = 3
+  stabilization accepted = 8
+  stabilization infeasible = 18
+  adjacent dual hash changes = 26 / 26
+  adjacent support hash changes = 20 / 26
+  dual_l1_delta mean/median/max = 104.74 / 107.32 / 238.90
+```
+
+This slightly improved the incumbent (`486.360054 -> 485.864724`) and reduced
+generated/evaluated profile work, but it did not reduce RMP or pricing rounds
+and still timed out at the same tree size.  Do not promote non-tail traditional
+dual stabilization as the 20-task mainline.  It is diagnostically useful, but
+the stabilized-dual LP is too brittle (`INFEASIBLE` in 18 rounds) and does not
+solve the proof bottleneck.
+
+Exactness guard added after this diagnostic:
+
+- exact pricing uses stabilized pricing duals only in non-certificate column
+  search;
+- if `certificate_candidate` is true, exact pricing uses SCIP/RMP original
+  duals and logs `pricing_dual_source = scip_certificate`;
+- if completion-bound direct-label pricing is enabled, exact pricing also uses
+  SCIP/RMP original duals;
+- learning-smoothed duals remain heuristic-only and certificate pricing uses
+  `scip_learning_certificate`.
+
+Current conclusion: dual oscillation is real, so GNN/Wentges-style task-cover
+anchors remain a valid direction for Level 1/early column search.  However, the
+20-task target still requires a stronger Level 2/3 true-RC column generator or a
+tighter Level-4 resource-aware completion bound that is reached only after the
+ordinary funnel stops adding columns.
+
+## Standard-Phase Completion Bound Probe (2026-06-04)
+
+The current `Resource-Aware Completion Bound` was tested as a non-final exact
+pricing worker on the slow 10-task Tranquillitatis instance.  This is
+intentionally outside the preferred "judge only" role, but it checks whether the
+bound is tight enough to safely move earlier in the funnel.
+
+Probe:
+
+```text
+instance:
+  tranquilllitatis_balmer_like_20km_tasks10_04_seed11054
+
+config overrides:
+  journey_certificate_completion_bound_final_probe_only = False
+  journey_certificate_completion_bound_after_retry_enabled = False
+
+result:
+  TIME_LIMIT at 120.298714s
+  primal = 207.893439
+  dual = None
+  columns = 233
+  exact pricing calls = 4
+  max RSS ~= 4.6 GB
+```
+
+Detailed pricing evidence:
+
+```text
+cg=1 exact:
+  completion_bound_enabled = True
+  bound_build_time ~= 0.0025s
+  lb_state_count = 539
+  lb_pruned_labels = 98
+  expanded before/after = 37,821 / 37,723
+  status = INCOMPLETE, reason = time_limit
+
+cg=1 exact_retry:
+  completion_bound_enabled = True
+  lb_pruned_labels = 39,528
+  expanded before/after = 1,196,456 / 1,156,928
+  status = INCOMPLETE, reason = direct_label_partial_negative_journey
+
+cg=2 exact_retry:
+  completion_bound_enabled = True
+  lb_pruned_labels = 25,585
+  expanded before/after = 294,011 / 268,426
+  status = INCOMPLETE, reason = time_limit
+```
+
+Interpretation:
+
+- Bound construction itself is cheap.
+- The bound is still too loose to justify switching ordinary exact/profile
+  pricing into direct-label completion-bound mode.
+- Earlier activation caused label expansion and memory blow-up instead of a
+  certificate speedup.
+
+Mainline rule: keep Completion Bound as a Level-4 final-probe judge.  Do not
+promote it into Level 2/3 negative-column work until its pruning ratio is strong
+enough under an on/off audit.
