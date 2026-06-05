@@ -43,8 +43,10 @@ not support the old trip-time master time-occupation rows.
 - Smoothed duals are used only to search for candidate journey columns.
 - Smoothed duals must not affect official RMP bounds, node completion,
   branching decisions, or optimality certificates.
-- If smoothed-dual pricing finds no negative reduced-cost column, the solver
-  must set `alpha = 0` and rerun exact pricing with the original SCIP/RMP duals.
+- If smoothed-dual pricing finds no true-RC useful column, the solver must
+  continue through true-dual pricing with the original SCIP/RMP duals.  Current
+  mainline learning is not shut off; stagnation lowers `alpha` to the cruise
+  floor while the proof path remains true-dual only.
 - A node LP is certified only when true-dual exact pricing exhausts and proves
   that no negative reduced-cost journey remains.
 - GNN output never contributes to an official lower bound or optimality
@@ -523,8 +525,10 @@ Alpha policy:
 - early decay subtracts `0.05` per iteration;
 - cruise lower bound is `0.2`;
 - if no stagnation is detected, keep `alpha >= 0.2`;
-- if three consecutive RMP relative improvements are below `1e-3`, set
-  `alpha = 0.0` immediately.
+- if three consecutive RMP relative improvements are below `1e-3`, legacy
+  experiments may force exact mode, but required mainline configs set
+  `journey_learning_stagnation_forces_exact = False`, so `alpha` is reduced to
+  the cruise floor instead of zero.
 
 Relative improvement:
 
@@ -532,7 +536,10 @@ Relative improvement:
 (last_obj - current_obj) / max(abs(last_obj), eps)
 ```
 
-Once alpha is forced to zero, the solver has entered the proof tail and should
+When the solver enters the proof tail, certificate pricing uses true SCIP/RMP
+duals regardless of the current learning alpha.  The learning alpha may remain
+at the cruise floor for later non-certificate candidate search, but it is never
+used as a proof dual.
 use only true RMP duals.
 
 ## Dual Stabilizer
@@ -650,7 +657,6 @@ while not done:
     )
 
     if not filtered_journeys:
-        stabilizer.force_exact_mode()
         true_pricing_result = price_journeys(
             ...,
             task_duals=pi_rmp,
@@ -1864,3 +1870,299 @@ Current conclusion:
 - The next iteration should tune ranking weight and true-RC filter interaction
   together, because stronger columns can still slow the branch-price path if
   they increase RMP column volume or alter branching unfavorably.
+
+## Full 10-task Rank/Zero Probe and Joint Tuning (2026-06-04)
+
+Full 20-instance 10-task test with `hierarchical_option_gat_rankzero_probe2.pt`
+and the current mainline true-RC filter (`threshold=10`, `max_kept=4`,
+`learning rounds=2`):
+
+```text
+baseline:
+  csv = BPC_future/results/all_tasks10_learning_min2_120s_full_20260604.csv
+  OPTIMAL = 20 / 20
+  mean time = 29.038s
+  total columns = 5352
+  >60s = 3
+
+rankzero_probe2:
+  csv = BPC_future/results/all_tasks10_rankzero_probe2_120s_full_20260604.csv
+  OPTIMAL = 19 / 20
+  improved = 7 / 20
+  worse or non-optimal = 13 / 20
+  mean time = 36.387s
+  total columns = 5333
+  >60s or TIME_LIMIT = 5
+```
+
+Learning column-quality funnel:
+
+```text
+baseline min2:
+  candidate_journeys = 337
+  true_negative_journeys = 87
+  kept_journeys = 61
+  true_negative_rate = 0.258
+  kept_rate = 0.181
+
+rankzero_probe2:
+  candidate_journeys = 290
+  true_negative_journeys = 94
+  kept_journeys = 72
+  true_negative_rate = 0.324
+  kept_rate = 0.248
+```
+
+Conclusion: `rankzero_probe2` improves the online true-RC funnel, but it is not
+safe to promote to the mainline checkpoint because it worsens wall-clock on most
+10-task instances and causes `Tranq10_10` to hit the 120s time limit.
+
+Representative joint tuning probes:
+
+```text
+rankzero_probe2 + threshold=20 + max_kept=2:
+  Apollo10_04: 76.377s -> 75.871s, columns 242 -> 238
+  Tranq10_02: 15.491s -> 11.014s, columns 266 -> 247
+  Tranq10_04: 69.364s -> 88.143s, columns 443 -> 527
+  Tranq10_09: 58.966s -> 67.688s, columns 473 -> 440
+  Tranq10_10: 27.395s -> 29.512s, columns 350 -> 354
+
+rankzero_probe2 + learning rounds=1:
+  Apollo10_04: 76.377s -> 80.028s, columns 242 -> 242
+  Tranq10_02: 15.491s -> 11.326s, columns 266 -> 267
+  Tranq10_04: 69.364s -> 82.415s, columns 443 -> 522
+  Tranq10_09: 58.966s -> 59.142s, columns 473 -> 474
+  Tranq10_10: 27.395s -> TIME_LIMIT, columns 350 -> 320
+
+rankzero_probe2 + threshold=10 + max_kept=2:
+  Apollo10_04: 76.377s -> 73.601s, columns 242 -> 233
+  Tranq10_02: 15.491s -> 13.017s, columns 266 -> 264
+  Tranq10_04: 69.364s -> 88.985s, columns 443 -> 527
+  Tranq10_09: 58.966s -> 61.111s, columns 473 -> 474
+  Tranq10_10: 27.395s -> 32.424s, columns 350 -> 293
+
+rank005_zero2 checkpoint, default filter:
+  Apollo10_04: 76.377s -> 74.620s, columns 242 -> 239
+  Tranq10_04: 69.364s -> 90.318s, columns 443 -> 507
+```
+
+The static filter knobs did not produce a robust improvement.  Raising the
+true-RC threshold or lowering `max_kept` can fix `Tranq10_02`, but it either
+loses the `Apollo10_04` benefit or still leaves `Tranq10_04` much worse.  A
+lower ranking-loss checkpoint also fails the two-instance online probe.
+
+Observed failure mode:
+
+```text
+Tranq10_04 baseline hardtail checkpoint:
+  first learning pass produces candidates but keeps 0 true-RC columns
+  solver quickly returns to true-dual exact pricing
+  final = 69.364s, 443 columns
+
+Tranq10_04 rankzero_probe2:
+  first learning pass keeps 3 deep true-RC columns, best true RC = -46.178
+  second learning pass keeps 3 more
+  final = 96.554s, 494 columns
+```
+
+This shows that "deeper true-RC columns" can still be harmful when they move the
+CG trajectory into a heavier RMP/proof path.  The next useful optimization is
+not another static threshold grid.  It should be an online confidence gate, for
+example: reject or downweight a smoothed pricing pass when the candidate set is
+too diffuse, when the smoothed reduced-cost signal is weak relative to true-RC
+filtering, or when the previous accepted learning pass increased pricing/RMP
+work without reducing exact-pricing effort.
+
+Code review update on metric semantics:
+
+- New logs split `all_true_negative_journeys` and
+  `strong_true_negative_journeys`.
+- `true_negative_journeys` is kept as a backward-compatible alias for all
+  true-RC negative candidates, while `strong_true_negative_journeys` counts
+  candidates that pass the active keep threshold.
+- Historical funnel numbers above were produced before this split, so they
+  should be treated as threshold-dependent diagnostics, not as the new all/strong
+  separated metrics.
+
+## Mainline Enforcement Update (2026-06-04)
+
+The official 5/10/20 journey configs now treat learning as a required Level-1
+component rather than an optional experiment:
+
+- `journey_learning_required = True` and `journey_learning_fail_hard = True`.
+- `journey_learning_enabled = False`, missing checkpoints, or initialization
+  failures now raise immediately for required configs.
+- `journey_learning_disable_on_certificate_candidate = False`; the learning
+  anchor stays available for non-certificate smoothed pricing and is still
+  excluded from certificate proof duals by the true-dual pricing path.
+- `journey_learning_disable_on_branch_depth_gt = 999` in official configs, so
+  the mainline does not silently disable learning below the root.  Exactness is
+  protected by true-RC filtering and true-dual certificate pricing, not by
+  hiding the learning component.
+- `journey_learning_pricing_max_rounds = 0` means no fixed iteration cap.  The
+  current guardrail is online true-RC filtering plus `alpha` decay/stagnation,
+  not shutting the component off.
+- Follow-up code review tightened this rule: required learning configs must set
+  `journey_learning_stagnation_forces_exact = False`.  Objective stagnation now
+  reduces `alpha` to the cruise floor (`alpha_min_active`, currently `0.2`)
+  instead of forcing `alpha = 0`.  This keeps Level-1 learning alive while the
+  official exact/certificate path still uses true SCIP/RMP duals.
+- Checkpoint paths are resolved relative to the current working directory first
+  and then the repository root, so required learning does not fail spuriously
+  when scripts are launched outside the repo root.
+
+Run limits are operational budgets, not proof shortcuts: 5/10-scale official
+runs use 120 seconds, and the 20-task smoke/proof config uses 600 seconds.  The
+performance target remains stricter than these limits.
+
+## Mainline Benchmark Update (2026-06-04)
+
+Learning cold-start handling:
+
+- Required learning is now prewarmed before the solver's algorithm timer starts.
+- A cold single-instance Apollo5 run previously reported `21.467765s` because
+  PyTorch/checkpoint initialization happened inside the timed solve.
+- After prewarm, the same instance reports `1.498736s` solver time; process
+  wall-clock remains about `3.38s`, so dependency loading is still visible at
+  script level but no longer pollutes algorithm timing.
+
+Full 5-task mainline result:
+
+```text
+csv = BPC_future/results/mainline_required_tasks05_all_prewarm_20260604.csv
+instances = 20
+OPTIMAL = 20 / 20
+mean solver time = 0.474341s
+median solver time = 0.334697s
+max solver time = 1.506685s
+>10s = 0
+batch wall-clock = 13.24s
+max RSS ~= 875 MB
+```
+
+Full 10-task mainline result:
+
+```text
+csv = BPC_future/results/mainline_required_tasks10_all_prewarm_20260604.csv
+instances = 20
+OPTIMAL = 20 / 20
+mean solver time = 29.388941s
+median solver time = 19.783510s
+max solver time = 74.085263s
+>60s = 3
+>120s = 0
+batch wall-clock = 10:48.31
+max RSS ~= 1.9 GB
+```
+
+10-task slow cases:
+
+```text
+Tranq10_04: 74.085s, nodes=1, columns=440, pricing=21, exact=15
+Apollo10_04: 71.279s, nodes=17, columns=269, pricing=59, exact=29
+Tranq10_09: 64.349s, nodes=1, columns=449, pricing=20, exact=16
+Tranq10_01: 55.625s, nodes=1, columns=409, pricing=19, exact=16
+```
+
+Interpretation:
+
+- 5-task target is currently satisfied by a wide margin.
+- 10-task exactness is stable under the 120s operational limit, but the 60s
+  target is not yet satisfied for three instances.
+- The slow root instances are not failing because of GNN initialization or
+  completion-bound proof.  They spend most work in Level 2/3 true-dual profile
+  pricing while valid negative columns still exist.
+- `journey_pricing_streaming_min_negative_batch=32` was probed on the slow
+  set.  Apollo10_04 worsened from `71.279s` to `79.188s`, so coarse "return
+  more columns per round" is not a robust fix.
+- Next optimization should target true-dual profile generation/reuse or
+  confidence-aware learning column acceptance, not earlier Completion Bound
+  activation and not static batch-size inflation.
+
+## 20-Task Review Update (2026-06-04)
+
+A 20-task Tranquillitatis root run with the required-learning mainline reached
+the 600s operational limit:
+
+```text
+csv = BPC_future/results/mainline_required_tranq20_01_prewarm_20260604.csv
+status = TIME_LIMIT
+primal = 391.818439
+nodes = 1
+columns = 816
+rmp_solves = 55
+pricing_calls = 62
+exact_pricing_calls = 32
+max RSS ~= 2.05 GB
+```
+
+Diagnostic interpretation:
+
+- This was not an out-of-memory failure.
+- Dual oscillation is visible in the tail: the final 10 RMP dual L1 changes
+  remained nonzero while objective improvement flattened.
+- The old stagnation behavior drove `alpha` to zero by the late tail.  The
+  updated mainline prevents that learning shutdown by holding the cruise floor.
+- Completion Bound was only reached after ordinary true-dual retry became
+  incomplete, which is correct.  However, the final probe only received about
+  `3.9s`, far too little to act as a certificate judge on 20-task instances.
+
+Action taken:
+
+- `moon_trek_20_smoke.yaml` now reserves `120s` for the after-retry
+  completion-bound final probe.
+- The 20-task result remains a bottleneck datapoint, not a solved target.  The
+  next optimization should measure whether the larger final-probe reserve turns
+  the last incomplete `profile_dp_incomplete` round into either a true
+  no-negative certificate or a faster failure with useful pruning metrics.
+
+## Learning/Certificate Mainline Follow-Up (2026-06-04)
+
+Required learning remains on in the current mainline.  It is not allowed to
+silently disappear because of certificate-candidate gates, branch depth, fixed
+learning-round caps, or objective-stagnation alpha zeroing:
+
+```text
+journey_learning_required = True
+journey_learning_fail_hard = True
+journey_learning_stagnation_forces_exact = False
+journey_learning_disable_on_certificate_candidate = False
+journey_learning_disable_on_branch_depth_gt = 999
+journey_learning_pricing_max_rounds = 0
+```
+
+The exactness boundary is still unchanged:
+
+- Level-1 learning predicts only task-cover anchor duals and proposes columns.
+- Candidate journeys from learning pass through true-RC filtering before they
+  enter the RMP.
+- Certificate pricing uses true SCIP/RMP duals, never smoothed learning duals.
+- If learning finds no useful true-RC column, the solver continues through the
+  true-dual profile/direct-label proof funnel instead of using the anchor as a
+  proof object.
+
+The 20-task run with the larger completion-bound reserve showed that learning
+is not the only tail issue.  Late in the run, `alpha` stays at the cruise floor
+instead of being forced to zero, but Level-1 candidates no longer provide
+true-RC negative columns.  The remaining failure is a proof/certificate
+bottleneck, not a reason to disable learning.
+
+Current engineering status:
+
+```text
+20-task reserve-only run:
+  final-probe reserve reached, but uncapped direct-label memory rose to ~= 9.2 GB
+  run was manually killed
+
+20-task capguard run:
+  csv = BPC_future/results/mainline_required_tranq20_01_capguard_20260604.csv
+  status = TIME_LIMIT
+  primal = 389.873056
+  max RSS ~= 2.40 GB
+  final-probe reason = direct_label_partial_state_budget
+```
+
+Conclusion: learning must stay as the Level-1 guide, but 20-task certification
+requires a tighter exact-safe final probe.  The next mainline tightening enables
+the Completion Bound unique-task helper while preserving the true-dual
+certificate contract.

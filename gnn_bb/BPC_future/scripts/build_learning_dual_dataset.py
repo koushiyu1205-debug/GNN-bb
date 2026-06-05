@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import heapq
 import json
 from pathlib import Path
 import random
 import sys
-from typing import Any
+from typing import Any, Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -30,6 +31,7 @@ class _TraceGroup:
     instance_path: Path
     log_path: Path
     records: list[dict[str, Any]]
+    trace_count: int
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,6 +90,7 @@ def main() -> None:
         [Path(item) for item in args.logs],
         require_finish_status=str(args.require_finish_status or ""),
         max_depth=int(args.max_depth),
+        tail_window=max(1, int(args.tail_window)),
     )
     if not traces:
         raise SystemExit("no journey_learning_dual_trace events found")
@@ -106,7 +109,7 @@ def main() -> None:
     total_label_count = 0
 
     for group in sorted(traces, key=lambda item: (str(item.instance_path), str(item.log_path))):
-        if len(group.records) < int(args.min_traces):
+        if group.trace_count < int(args.min_traces):
             continue
         selected = group.records[-max(1, int(args.tail_window)) :]
         data = load_future_data(str(group.instance_path), instance_dir=args.instance_dir)
@@ -141,7 +144,7 @@ def main() -> None:
             instance_path=str(data.instance_path),
             log_path=str(group.log_path),
             instance_name=str(data.name),
-            trace_count=int(len(group.records)),
+            trace_count=int(group.trace_count),
             tail_window=int(len(selected)),
             is_synthetic=False,
         )
@@ -161,7 +164,7 @@ def main() -> None:
                 instance_path=str(data.instance_path),
                 log_path=str(group.log_path),
                 instance_name=str(data.name),
-                trace_count=int(len(group.records)),
+                trace_count=int(group.trace_count),
                 tail_window=int(len(selected)),
                 is_synthetic=True,
             )
@@ -204,46 +207,88 @@ def _collect_traces(
     *,
     require_finish_status: str = "",
     max_depth: int | None = 0,
+    tail_window: int | None = None,
 ) -> list[_TraceGroup]:
     result: list[_TraceGroup] = []
+    max_records = None if tail_window is None else max(1, int(tail_window))
     for path in paths:
         files = sorted(path.rglob("*.jsonl")) if path.is_dir() else [path]
         for file_path in files:
-            records = [json.loads(raw) for raw in file_path.read_text(encoding="utf-8").splitlines() if raw.strip()]
-            if require_finish_status:
-                finish = next((record for record in reversed(records) if record.get("event") == "finish"), None)
-                if finish is None or str(finish.get("status", "")) != str(require_finish_status):
+            records_by_instance: dict[Path, list[Any]] = {}
+            trace_counts: dict[Path, int] = {}
+            finish: dict[str, Any] | None = None
+            sequence = 0
+            for record in _iter_jsonl_records(file_path):
+                event = record.get("event")
+                if event == "finish":
+                    finish = record
                     continue
-            records_by_instance: dict[Path, list[dict[str, Any]]] = {}
-            for record in records:
-                if record.get("event") != "journey_learning_dual_trace":
+                if event != "journey_learning_dual_trace":
                     continue
                 if max_depth is not None and int(max_depth) >= 0:
                     if int(record.get("depth", 0)) > int(max_depth):
                         continue
                 instance_path = Path(str(record["instance_path"]))
-                records_by_instance.setdefault(instance_path, []).append(record)
-            for instance_path, trace_records in records_by_instance.items():
+                trace_counts[instance_path] = trace_counts.get(instance_path, 0) + 1
+                if max_records is None:
+                    records_by_instance.setdefault(instance_path, []).append(record)
+                else:
+                    heap = records_by_instance.setdefault(instance_path, [])
+                    # 只保留排序意义上的最后 tail_window 条 trace，避免大日志把内存吃满。
+                    entry = (_trace_sort_key(record), sequence, record)
+                    if len(heap) < max_records:
+                        heapq.heappush(heap, entry)
+                    elif entry[:2] > heap[0][:2]:
+                        heapq.heapreplace(heap, entry)
+                sequence += 1
+            if require_finish_status:
+                if finish is None or str(finish.get("status", "")) != str(require_finish_status):
+                    continue
+            for instance_path, stored_records in records_by_instance.items():
+                if max_records is None:
+                    trace_records = list(stored_records)
+                else:
+                    trace_records = [entry[2] for entry in stored_records]
                 trace_records.sort(
-                    key=lambda item: (
-                        int(item.get("node_id", 0)),
-                        int(item.get("cg_iter", 0)),
-                        float(item.get("time", 0.0)),
-                    )
+                    key=_trace_sort_key
                 )
                 result.append(
                     _TraceGroup(
                         instance_path=instance_path,
                         log_path=file_path,
                         records=trace_records,
+                        trace_count=int(trace_counts.get(instance_path, len(trace_records))),
                     )
                 )
     return result
 
 
-def _average_cover_duals(records: list[dict[str, Any]], task_ids: list[int]) -> dict[int, float]:
+def _trace_sort_key(record: dict[str, Any]) -> tuple[int, int, float]:
+    return (
+        int(record.get("node_id", 0)),
+        int(record.get("cg_iter", 0)),
+        float(record.get("time", 0.0)),
+    )
+
+
+def _iter_jsonl_records(file_path: Path) -> Iterator[dict[str, Any]]:
+    with file_path.open("r", encoding="utf-8") as handle:
+        for raw in handle:
+            if raw.strip():
+                yield json.loads(raw)
+
+
+def _average_cover_duals(records: list[dict[str, Any]], task_ids: list[int] | None = None) -> dict[int, float]:
     sums: dict[int, float] = {}
     counts: dict[int, int] = {}
+    if task_ids is None:
+        inferred: set[int] = set()
+        for record in records:
+            cover = record.get("cover", {})
+            if not isinstance(cover, dict):
+                raise ValueError("dual trace cover field must be a dict")
+            inferred.update(int(raw_task) for raw_task in cover)
+        task_ids = sorted(inferred)
     for task in task_ids:
         sums[int(task)] = 0.0
         counts[int(task)] = 0
@@ -256,7 +301,7 @@ def _average_cover_duals(records: list[dict[str, Any]], task_ids: list[int]) -> 
             # 处理，避免把死节点标签从训练集里系统性删掉。
             sums[int(task)] = sums.get(int(task), 0.0) + float(cover.get(str(int(task)), cover.get(int(task), 0.0)))
             counts[int(task)] = counts.get(int(task), 0) + 1
-    return {task: sums[task] / float(counts[task]) for task in sums}
+    return {task: sums[task] / float(counts[task]) for task in sums if counts[task] > 0}
 
 
 def _include_synthetic_zero_sample(fraction: float, rng: random.Random) -> bool:

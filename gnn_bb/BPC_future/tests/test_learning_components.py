@@ -17,6 +17,7 @@ try:
         FutureGraphBuilder,
     )
     from BPC_future.scripts.build_learning_dual_dataset import _average_cover_duals, _collect_traces
+    from BPC_future.scripts.summarize_learning_pricing_quality import _summarize_log
     from BPC_future.scripts.train_learning_dual_model import _split_samples
 
     HAS_LEARNING_STACK = True
@@ -249,34 +250,32 @@ class DualStabilizerTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp:
             checkpoint_path = Path(tmp) / "fake_checkpoint.pt"
-            torch.save(
-                {
-                    "model_state_dict": model.state_dict(),
-                    "model_config": {
-                        "node_dim": data.x.size(1),
-                        "option_dim": data.option_feat.size(1),
-                        "hidden_dim": 16,
-                        "option_hidden_dim": 16,
-                        "pair_edge_dim": 16,
-                        "num_gnn_layers": 1,
-                        "heads": 4,
-                        "dropout": 0.0,
-                        "use_layer_norm": True,
-                    },
-                    "node_feature_mean": [0.0] * data.x.size(1),
-                    "node_feature_std": [1.0] * data.x.size(1),
-                    "option_feature_mean": [0.0] * data.option_feat.size(1),
-                    "option_feature_std": [1.0] * data.option_feat.size(1),
-                    "label_mean": 0.0,
-                    "label_std": 1.0,
-                    "feature_schema": {
-                        "node": list(DEFAULT_NODE_FEATURE_SCHEMA),
-                        "option": list(DEFAULT_OPTION_FEATURE_SCHEMA),
-                    },
-                    "version": "v1",
+            checkpoint = {
+                "model_state_dict": model.state_dict(),
+                "model_config": {
+                    "node_dim": data.x.size(1),
+                    "option_dim": data.option_feat.size(1),
+                    "hidden_dim": 16,
+                    "option_hidden_dim": 16,
+                    "pair_edge_dim": 16,
+                    "num_gnn_layers": 1,
+                    "heads": 4,
+                    "dropout": 0.0,
+                    "use_layer_norm": True,
                 },
-                checkpoint_path,
-            )
+                "node_feature_mean": [0.0] * data.x.size(1),
+                "node_feature_std": [1.0] * data.x.size(1),
+                "option_feature_mean": [0.0] * data.option_feat.size(1),
+                "option_feature_std": [1.0] * data.option_feat.size(1),
+                "label_mean": 0.0,
+                "label_std": 1.0,
+                "feature_schema": {
+                    "node": list(DEFAULT_NODE_FEATURE_SCHEMA),
+                    "option": list(DEFAULT_OPTION_FEATURE_SCHEMA),
+                },
+                "version": "v1",
+            }
+            torch.save(checkpoint, checkpoint_path)
             stabilizer = DualStabilizer(
                 DualStabilizerConfig(checkpoint_path=str(checkpoint_path), alpha_init=0.8, alpha_decay=0.05)
             )
@@ -304,10 +303,37 @@ class DualStabilizerTests(unittest.TestCase):
             alpha = stabilizer.update_alpha([100.0, 99.99], branch_depth=1)
             self.assertEqual(alpha, 0.0)
 
+            cruise_stabilizer = DualStabilizer(
+                DualStabilizerConfig(
+                    checkpoint_path=str(checkpoint_path),
+                    alpha_init=0.8,
+                    alpha_min_active=0.2,
+                    alpha_decay=0.05,
+                    stagnation_forces_exact=False,
+                )
+            )
+            alpha = cruise_stabilizer.update_alpha([100.0, 99.99, 99.98, 99.97], branch_depth=0)
+            self.assertAlmostEqual(alpha, 0.2)
+            self.assertFalse(cruise_stabilizer.handle_smoothed_pricing_result(found_negative_column=True).use_true_dual_exact_pricing)
+
             stabilizer.reset_runtime_state()
             self.assertAlmostEqual(stabilizer.alpha, 0.8)
             self.assertIsNone(stabilizer.last_anchor)
             self.assertFalse(stabilizer.handle_smoothed_pricing_result(found_negative_column=True).use_true_dual_exact_pricing)
+
+            missing_label_checkpoint = dict(checkpoint)
+            missing_label_checkpoint.pop("label_std")
+            missing_checkpoint_path = Path(tmp) / "missing_label_checkpoint.pt"
+            torch.save(missing_label_checkpoint, missing_checkpoint_path)
+            with self.assertRaisesRegex(ValueError, "label_std"):
+                DualStabilizer(DualStabilizerConfig(checkpoint_path=str(missing_checkpoint_path)))
+
+            nan_label_checkpoint = dict(checkpoint)
+            nan_label_checkpoint["label_std"] = float("nan")
+            nan_checkpoint_path = Path(tmp) / "nan_label_checkpoint.pt"
+            torch.save(nan_label_checkpoint, nan_checkpoint_path)
+            with self.assertRaisesRegex(ValueError, "label_std.*finite"):
+                DualStabilizer(DualStabilizerConfig(checkpoint_path=str(nan_checkpoint_path)))
 
 
 @unittest.skipUnless(HAS_LEARNING_STACK, "learning stack is not installed")
@@ -381,6 +407,83 @@ class LearningDatasetBuilderTests(unittest.TestCase):
         self.assertEqual(len(root_only), 1)
         self.assertEqual(_average_cover_duals(root_only[0].records)[1], 10.0)
         self.assertEqual(len(all_depths[0].records), 2)
+
+    def test_average_cover_duals_fills_missing_explicit_tasks_with_zero(self):
+        records = [
+            {"cover": {"1": 10.0}},
+            {"cover": {"2": 20.0}},
+        ]
+
+        explicit = _average_cover_duals(records, task_ids=[1, 2])
+        inferred = _average_cover_duals(records)
+
+        self.assertEqual(explicit, {1: 5.0, 2: 10.0})
+        self.assertEqual(inferred, {1: 5.0, 2: 10.0})
+
+    def test_collect_traces_tail_window_is_bounded_by_sort_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            instance = root / "same_instance_logical_graph.json"
+            log_path = root / "run.jsonl"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        _trace_line(instance, cg_iter=10, value=100.0),
+                        _trace_line(instance, cg_iter=1, value=10.0),
+                        _trace_line(instance, cg_iter=9, value=90.0),
+                        '{"event": "finish", "status": "OPTIMAL"}',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            groups = _collect_traces([log_path], require_finish_status="OPTIMAL", tail_window=2)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].trace_count, 3)
+        self.assertEqual([int(record["cg_iter"]) for record in groups[0].records], [9, 10])
+
+    def test_summarize_learning_quality_splits_all_and_strong_negatives(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "run.jsonl"
+            records = [
+                {
+                    "event": "journey_learning_true_rc_filter",
+                    "candidate_journeys": 5,
+                    "true_negative_journeys": 2,
+                    "kept_journeys": 1,
+                    "fallback_used": False,
+                    "best_true_reduced_cost": -3.0,
+                    "kept_best_true_reduced_cost": -2.0,
+                },
+                {
+                    "event": "journey_learning_true_rc_filter",
+                    "candidate_journeys": 5,
+                    "all_true_negative_journeys": 4,
+                    "strong_true_negative_journeys": 1,
+                    "kept_journeys": 1,
+                    "fallback_used": True,
+                    "best_true_reduced_cost": -5.0,
+                    "kept_best_true_reduced_cost": -4.0,
+                },
+                {"event": "finish", "status": "OPTIMAL", "instance": "toy"},
+            ]
+            log_path.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
+
+            summary = _summarize_log(log_path)
+
+        self.assertEqual(summary["learning_filter_events"], 2)
+        self.assertEqual(summary["candidate_journeys"], 10)
+        self.assertEqual(summary["all_true_negative_journeys"], 6)
+        self.assertEqual(summary["strong_true_negative_journeys"], 3)
+        self.assertEqual(summary["kept_journeys"], 2)
+        self.assertAlmostEqual(summary["all_true_negative_rate"], 0.6)
+        self.assertAlmostEqual(summary["strong_true_negative_rate"], 0.3)
+        self.assertEqual(summary["fallback_used_events"], 1)
+        self.assertEqual(summary["best_true_reduced_cost"], -5.0)
+        self.assertEqual(summary["kept_best_true_reduced_cost"], -4.0)
 
     def test_training_split_keeps_same_instance_samples_together(self):
         import random

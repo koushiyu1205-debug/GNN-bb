@@ -28,20 +28,24 @@ def main() -> None:
     paths = [Path(item) for item in args.logs]
     rows = [_summarize_log(path) for path in _iter_jsonl_files(paths)]
     rows = [row for row in rows if row["learning_filter_events"] > 0 or row["status"]]
+    candidate_total = sum(int(row["candidate_journeys"]) for row in rows)
+    all_true_negative_total = sum(int(row["all_true_negative_journeys"]) for row in rows)
+    strong_true_negative_total = sum(int(row["strong_true_negative_journeys"]) for row in rows)
+    kept_total = sum(int(row["kept_journeys"]) for row in rows)
     summary = {
         "log_count": len(rows),
         "learning_filter_events": sum(int(row["learning_filter_events"]) for row in rows),
-        "candidate_journeys": sum(int(row["candidate_journeys"]) for row in rows),
-        "true_negative_journeys": sum(int(row["true_negative_journeys"]) for row in rows),
-        "kept_journeys": sum(int(row["kept_journeys"]) for row in rows),
-        "kept_rate": _safe_ratio(
-            sum(int(row["kept_journeys"]) for row in rows),
-            sum(int(row["candidate_journeys"]) for row in rows),
-        ),
-        "true_negative_rate": _safe_ratio(
-            sum(int(row["true_negative_journeys"]) for row in rows),
-            sum(int(row["candidate_journeys"]) for row in rows),
-        ),
+        "candidate_journeys": int(candidate_total),
+        "true_negative_journeys": int(all_true_negative_total),
+        "all_true_negative_journeys": int(all_true_negative_total),
+        "strong_true_negative_journeys": int(strong_true_negative_total),
+        "kept_journeys": int(kept_total),
+        "kept_rate": _safe_ratio(kept_total, candidate_total),
+        "true_negative_rate": _safe_ratio(all_true_negative_total, candidate_total),
+        "all_true_negative_rate": _safe_ratio(all_true_negative_total, candidate_total),
+        "strong_true_negative_rate": _safe_ratio(strong_true_negative_total, candidate_total),
+        "kept_per_true_negative": _safe_ratio(kept_total, all_true_negative_total),
+        "kept_per_strong_true_negative": _safe_ratio(kept_total, strong_true_negative_total),
         "rows": rows,
     }
     if args.output_csv:
@@ -64,31 +68,43 @@ def _iter_jsonl_files(paths: list[Path]) -> list[Path]:
 
 
 def _summarize_log(path: Path) -> dict[str, Any]:
-    events = []
     finish: dict[str, Any] = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        if not raw.strip():
-            continue
-        record = json.loads(raw)
-        event = str(record.get("event", ""))
-        if event == "journey_learning_true_rc_filter":
-            events.append(record)
-        elif event == "finish":
-            finish = record
-    candidate = sum(int(record.get("candidate_journeys", 0)) for record in events)
-    true_negative = sum(int(record.get("true_negative_journeys", 0)) for record in events)
-    kept = sum(int(record.get("kept_journeys", 0)) for record in events)
-    fallback_used = sum(1 for record in events if bool(record.get("fallback_used", False)))
-    best_values = [
-        float(record["best_true_reduced_cost"])
-        for record in events
-        if record.get("best_true_reduced_cost") is not None
-    ]
-    kept_best_values = [
-        float(record["kept_best_true_reduced_cost"])
-        for record in events
-        if record.get("kept_best_true_reduced_cost") is not None
-    ]
+    learning_filter_events = 0
+    candidate = 0
+    all_true_negative = 0
+    strong_true_negative = 0
+    kept = 0
+    fallback_used = 0
+    best_true_reduced_cost: float | None = None
+    kept_best_true_reduced_cost: float | None = None
+    with path.open("r", encoding="utf-8") as handle:
+        for raw in handle:
+            if not raw.strip():
+                continue
+            record = json.loads(raw)
+            event = str(record.get("event", ""))
+            if event == "journey_learning_true_rc_filter":
+                learning_filter_events += 1
+                candidate += int(record.get("candidate_journeys", 0))
+                all_true_negative += int(
+                    record.get("all_true_negative_journeys", record.get("true_negative_journeys", 0))
+                )
+                strong_true_negative += int(
+                    record.get("strong_true_negative_journeys", record.get("true_negative_journeys", 0))
+                )
+                kept += int(record.get("kept_journeys", 0))
+                if bool(record.get("fallback_used", False)):
+                    fallback_used += 1
+                best_true_reduced_cost = _min_optional_float(
+                    best_true_reduced_cost,
+                    record.get("best_true_reduced_cost"),
+                )
+                kept_best_true_reduced_cost = _min_optional_float(
+                    kept_best_true_reduced_cost,
+                    record.get("kept_best_true_reduced_cost"),
+                )
+            elif event == "finish":
+                finish = record
     return {
         "log_path": str(path),
         "instance": str(finish.get("instance", "") or _instance_from_log_path(path)),
@@ -96,16 +112,21 @@ def _summarize_log(path: Path) -> dict[str, Any]:
         "time": _none_or_float(finish.get("time")),
         "nodes": int(finish.get("nodes", 0) or 0),
         "pricing_calls": int(finish.get("pricing_calls", 0) or 0),
-        "learning_filter_events": len(events),
+        "learning_filter_events": int(learning_filter_events),
         "candidate_journeys": int(candidate),
-        "true_negative_journeys": int(true_negative),
+        "true_negative_journeys": int(all_true_negative),
+        "all_true_negative_journeys": int(all_true_negative),
+        "strong_true_negative_journeys": int(strong_true_negative),
         "kept_journeys": int(kept),
         "kept_rate": _safe_ratio(kept, candidate),
-        "true_negative_rate": _safe_ratio(true_negative, candidate),
-        "kept_per_true_negative": _safe_ratio(kept, true_negative),
+        "true_negative_rate": _safe_ratio(all_true_negative, candidate),
+        "all_true_negative_rate": _safe_ratio(all_true_negative, candidate),
+        "strong_true_negative_rate": _safe_ratio(strong_true_negative, candidate),
+        "kept_per_true_negative": _safe_ratio(kept, all_true_negative),
+        "kept_per_strong_true_negative": _safe_ratio(kept, strong_true_negative),
         "fallback_used_events": int(fallback_used),
-        "best_true_reduced_cost": None if not best_values else min(best_values),
-        "kept_best_true_reduced_cost": None if not kept_best_values else min(kept_best_values),
+        "best_true_reduced_cost": best_true_reduced_cost,
+        "kept_best_true_reduced_cost": kept_best_true_reduced_cost,
     }
 
 
@@ -130,6 +151,13 @@ def _none_or_float(value: Any) -> float | None:
     return float(value)
 
 
+def _min_optional_float(current: float | None, value: Any) -> float | None:
+    if value is None:
+        return current
+    parsed = float(value)
+    return parsed if current is None else min(float(current), parsed)
+
+
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
@@ -142,10 +170,15 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "learning_filter_events",
         "candidate_journeys",
         "true_negative_journeys",
+        "all_true_negative_journeys",
+        "strong_true_negative_journeys",
         "kept_journeys",
         "kept_rate",
         "true_negative_rate",
+        "all_true_negative_rate",
+        "strong_true_negative_rate",
         "kept_per_true_negative",
+        "kept_per_strong_true_negative",
         "fallback_used_events",
         "best_true_reduced_cost",
         "kept_best_true_reduced_cost",

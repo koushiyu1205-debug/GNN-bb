@@ -134,6 +134,9 @@ journey_certificate_completion_bound_unique_route_helper_enabled: False
 # by true reduced cost before insertion, and certificate pricing remains
 # true-dual only.
 journey_learning_enabled: True
+journey_learning_required: True
+journey_learning_fail_hard: True
+journey_learning_prewarm_enabled: True
 journey_learning_checkpoint_path: 'BPC_future/data/learning_dual/hardtail_20260604/hierarchical_option_gat_hardtail.pt'
 journey_learning_device: 'cpu'
 journey_learning_alpha_init: 0.5
@@ -141,10 +144,13 @@ journey_learning_alpha_min_active: 0.2
 journey_learning_alpha_decay: 0.05
 journey_learning_stagnation_patience: 3
 journey_learning_stagnation_rel_improve: 1.0e-3
+journey_learning_stagnation_forces_exact: False
 journey_learning_disable_on_certificate_candidate: False
-journey_learning_disable_on_branch_depth_gt: 0
-journey_learning_pricing_max_rounds: 2
-journey_learning_min_kept_to_continue: 2
+journey_learning_disable_on_branch_depth_gt: 999
+journey_learning_pricing_enabled: True
+journey_learning_pricing_max_rounds: 0
+journey_learning_stop_after_no_strong_round: False
+journey_learning_min_kept_to_continue: 1
 journey_learning_filter_true_rc: True
 journey_learning_true_rc_tol: 1.0e-5
 journey_learning_true_rc_keep_threshold: 10.0

@@ -30,7 +30,9 @@ proof tail.
 - If a pricing run hits any limit, the result remains incomplete.
 - Official lower bounds and optimality certificates still require true-dual
   exact pricing exhaustion.
-- Keep the feature opt-in and easy to disable while benchmarking.
+- Historical probes kept the feature opt-in while benchmarking.  The current
+  5/10/20 mainline configs require it as a Level-4 final-probe judge, with
+  fail-closed validation and positive runtime/state budgets.
 
 ## Primary Target
 
@@ -143,23 +145,24 @@ envelope for the main suffix table.  The state count is:
 ```
 
 Energy buckets remain configurable; setting them to `0` falls back to the
-time-only relaxation.  Small-instance unique-task and unique-route helpers are
-explicit opt-ins and are disabled in the mainline configuration.
+time-only relaxation.  The unique-task helper is now enabled in the 5/10/20
+mainline configs as an exact-safe tightening attempt.  The unique-route helper
+remains off by default because it is heavier and still experimental.
 
-The root certificate activation remains opt-in:
+Current mainline certificate activation:
 
 ```text
-journey_certificate_completion_bound_enabled: true in the 10-task journey trial
+journey_certificate_completion_bound_enabled: true
 journey_certificate_completion_bound_final_probe_only: true
-journey_certificate_completion_bound_root_only: true
-journey_certificate_completion_bound_exact_proof_enabled: false by default
+journey_certificate_completion_bound_root_only: false
+journey_certificate_completion_bound_exact_proof_enabled: true in mainline 5/10/20 configs
 journey_certificate_completion_bound_exact_proof_min_depth: 1
 journey_certificate_completion_bound_exact_proof_min_incomplete_rounds: 1
 journey_certificate_completion_bound_min_flat_rounds: 0
 journey_certificate_completion_bound_time_buckets: suggested 5-15
 journey_certificate_completion_bound_energy_buckets: suggested 5-15
 journey_certificate_completion_bound_audit_enabled: false by default
-journey_certificate_completion_bound_unique_task_helper_enabled: false
+journey_certificate_completion_bound_unique_task_helper_enabled: true in mainline 5/10/20 configs
 journey_certificate_completion_bound_unique_route_helper_enabled: false
 ```
 
@@ -2392,3 +2395,521 @@ Interpretation:
 Mainline rule: keep Completion Bound as a Level-4 final-probe judge.  Do not
 promote it into Level 2/3 negative-column work until its pruning ratio is strong
 enough under an on/off audit.
+
+## Mainline Enforcement Update (2026-06-04)
+
+The official journey configs now encode Completion Bound as a required judge,
+not as an ordinary worker:
+
+- `journey_completion_bound_required = True` for the 5/10/20 mainline configs.
+- `journey_certificate_completion_bound_enabled = True` and
+  `journey_certificate_completion_bound_after_retry_enabled = True`.
+- `journey_certificate_completion_bound_final_probe_only = True`; the bound is
+  reached only after ordinary true-dual pricing is incomplete and adds no column.
+- If ordinary exact pricing exhausts the state space and returns no column, that
+  is already the certificate; the final-probe bound is not retried.
+- The official bucket settings are coarse resource-aware bounds:
+  `time_buckets = 6`, `energy_buckets = 6`.  Required configs reject values
+  outside `[5, 10]` to avoid both raw-node bounds and memory-heavy fine grids.
+- Required configs also reject non-positive
+  `journey_certificate_completion_bound_after_retry_reserve_time`, because a
+  final-probe judge with no reserved time is only nominally enabled.
+- Completion-bound certificate pricing uses true SCIP/RMP duals.  Smoothed
+  learning duals remain heuristic-only and are never used for the proof.
+
+Operational run limits are 120 seconds for 5/10-scale runs and 600 seconds for
+the 20-task smoke/proof config.  These limits are benchmark budgets; they do not
+relax the exact certificate rule.
+
+## Benchmark Update (2026-06-04)
+
+Full 5-task and 10-task mainline runs were executed after learning prewarm:
+
+```text
+5-task:
+  csv = BPC_future/results/mainline_required_tasks05_all_prewarm_20260604.csv
+  OPTIMAL = 20 / 20
+  max solver time = 1.506685s
+
+10-task:
+  csv = BPC_future/results/mainline_required_tasks10_all_prewarm_20260604.csv
+  OPTIMAL = 20 / 20
+  max solver time = 74.085263s
+  >60s = 3 / 20
+```
+
+Completion Bound did not trigger in the 10-task slow cases, and that is the
+correct behavior under the current funnel.  The ordinary true-dual profile
+pricing was still finding valid negative columns in Level 2/3, and the final
+rounds that returned `exhausted=True, no_negative_journey` already provided the
+certificate.  Therefore, activating Completion Bound earlier would violate its
+"judge only" role and repeat the previously observed memory-heavy failure mode.
+
+Current bottleneck classification:
+
+- `Tranq10_04` and `Tranq10_09`: root-node true-dual profile pricing tail.
+- `Apollo10_04`: branch-tree proof cost, with 17 processed nodes.
+- Completion-bound construction/pruning is not the active bottleneck on these
+  10-task runs because the Level 4 gate is not reached.
+
+Rejected probe:
+
+- Raising `journey_pricing_streaming_min_negative_batch` and
+  `journey_pricing_early_return_negative_min_count` from `16` to `32` worsened
+  Apollo10_04 from `71.279s` to `79.188s`, so the next step should not be a
+  global batch-size increase.
+
+## 20-Task Final-Probe Budget Update (2026-06-04)
+
+The first required-learning 20-task Tranquillitatis run did not hit memory
+limits but failed to certify within the 600s budget:
+
+```text
+csv = BPC_future/results/mainline_required_tranq20_01_prewarm_20260604.csv
+status = TIME_LIMIT
+primal = 391.818439
+nodes = 1
+columns = 816
+pricing_incomplete_nodes = 1
+max RSS ~= 2.05 GB
+```
+
+Tail evidence:
+
+```text
+cg=55 exact:
+  no negative journey found, but profile DP incomplete
+
+cg=55 exact_retry:
+  time ~= 188.7s
+  no negative journey found, but profile DP incomplete
+
+cg=55 exact_completion_bound_retry:
+  reserve time ~= 3.9s
+  completion_bound_enabled = True
+  lb_state_count = 1029
+  lb_pruned_labels = 1354
+  expanded before/after = 9167 / 7813
+  status = INCOMPLETE, reason = time_limit
+```
+
+Interpretation:
+
+- The final-probe trigger is correct: it only fired after ordinary true-dual
+  pricing and retry were incomplete, not after an exhausted no-column proof.
+- The budget allocation was wrong for 20-task proof.  The ordinary retry spent
+  nearly all remaining time and left the completion-bound judge only a few
+  seconds.
+- `moon_trek_20_smoke.yaml` now reserves `120s` for the after-retry
+  completion-bound final probe.
+- The next 20-task run should compare `lb_pruned_labels`,
+  `expanded_labels_before_bound`, and final certificate status under this larger
+  reserve.  If it still times out, the bound itself is too loose and must be
+  tightened rather than activated earlier.
+
+## 20-Task Capguard Update (2026-06-04)
+
+The 120-second final-probe reserve was validated on the same 20-task
+Tranquillitatis root instance.  The first uncapped reserve run confirmed the
+role of the reserve but exposed an inner direct-label memory risk:
+
+```text
+result = manually killed during final-probe direct-label pricing
+RSS before final probe ~= 2.1 GB
+RSS after entering uncapped final probe ~= 4.5 GB -> 9.2 GB
+```
+
+Action taken:
+
+- `JourneyPricingConfig.direct_journey_label_partial_max_states` was added as
+  an inner partial-label budget for direct journey-label pricing.
+- Required completion-bound configs now fail closed unless this budget is
+  positive.
+- The budgeted final probe returns `INCOMPLETE` with reason
+  `direct_label_partial_state_budget` when the guard is hit.  This is exact-safe:
+  it prevents a false certificate and reports the node as incomplete instead of
+  exhausting memory.
+- The final-probe override now maps three independent budgets:
+  `max_sequences`, `max_dp_states`, and
+  `direct_journey_label_partial_max_states`.
+
+Budgeted rerun:
+
+```text
+csv = BPC_future/results/mainline_required_tranq20_01_capguard_20260604.csv
+status = TIME_LIMIT
+primal = 389.873056
+nodes = 1
+columns = 824
+solver time = 492.750414s
+max RSS ~= 2.40 GB
+```
+
+Final-probe evidence:
+
+```text
+remaining at final probe ~= 119.9s
+completion_bound_enabled = True
+lb_state_count = 1029
+bound_build_time ~= 0.009s
+lb_pruned_labels = 9,598
+expanded_labels_before_bound = 87,170
+expanded_labels_after_bound = 77,572
+status = INCOMPLETE
+reason = direct_label_partial_state_budget
+```
+
+Interpretation:
+
+- The larger reserve now reaches the judge phase with meaningful time.
+- The capguard fixes the immediate memory cliff.
+- The current bound is still too loose for a 20-task certificate: the pruning
+  ratio is useful but not decisive, and the partial-state budget is reached
+  before proof exhaustion.
+- The mainline now enables the exact-safe unique-task helper for the 5/10/20
+  configs as the next tightening attempt.  This helper must be validated under
+  the same on/off certificate semantics; it is not a license to move Completion
+  Bound earlier in the funnel.
+
+## Two-Cycle Top-2 Bound Contract (2026-06-04)
+
+The next Completion Bound tightening target is 2-cycle elimination inside the
+reverse bound DP.  This is motivated by the 20-task root final-probe failure:
+the current resource-aware bound is safe but too loose, partly because a
+memoryless reverse relaxation can create artificial local cycles such as
+`A -> B -> A` and repeatedly collect task-cover dual reward.  The goal is to
+tighten the final-probe judge without adding full NG memory or changing the
+forward exact DP.
+
+Scope:
+
+- Apply 2-cycle elimination only to the Completion Bound reverse DP.
+- Do not change ordinary forward exact pricing.  The forward exact oracle keeps
+  its own exact/NG/DSSR state management and remains responsible for the final
+  certificate.
+- Activate V1 only for root final-probe experiments, initially through a feature
+  flag such as `journey_certificate_completion_bound_two_cycle_enabled`.
+- Keep it off by default until bound-on/off audits pass.
+
+Reverse label memory:
+
+```text
+BackwardLabel:
+  node
+  time_bucket
+  energy_bucket
+  remaining_sorties
+  slots
+  cost
+  prev_in_dp
+```
+
+`prev_in_dp` is the parent in the reverse DP search tree, i.e. the physical
+successor node in the real path.  For a physical suffix `A -> B -> C -> Depot`,
+when reverse DP expands from `C` to `B`, the label at `B` has
+`prev_in_dp = C`.
+
+Depot rule:
+
+- Depot and virtual depot nodes are immune to 2-cycle checks.
+- Only real task nodes participate in `prev_in_dp` collision tests.
+- This is mandatory for exactness: `Depot -> A -> Depot` is a legal one-task
+  sortie and must never be pruned as a 2-cycle.
+
+State bucket:
+
+```text
+(node, time_bucket, energy_bucket, remaining_sorties, slots)
+```
+
+`slots` means the number of additional task visits available in the current
+sortie.  `remaining_sorties` handles the macro sortie count separately.  Top-2
+labels compete only inside this full bucket key.  Labels with different
+remaining sorties or slots are not equivalent and must not evict each other.
+
+Reverse extension rule:
+
+```text
+# Physical arc u -> v, reverse DP extends from v to u.
+if u != depot and v != depot and u == label_at_v.prev_in_dp:
+    block extension
+else:
+    create label_at_u with prev_in_dp = v
+```
+
+The initial depot label uses a dummy predecessor such as `-1`, which must not
+collide with any real task id.
+
+Top-2 storage rule:
+
+- Do not include `prev_in_dp` in the state key.
+- For each full bucket key, keep at most two labels with different
+  `prev_in_dp`.
+- If a new label has the same `prev_in_dp` as an existing label, keep only the
+  lower-cost label.
+- If the bucket already has two labels with different predecessors, replace the
+  current higher-cost label only when the new label has a lower cost.
+- Inside a bucket, compare only cost.  Do not preserve continuous time or energy
+  residuals.  The bucket is the state-space relaxation; keeping residual
+  sub-states would reintroduce memory growth.
+
+Forward stitching rule:
+
+When the forward final-probe label is at task `u`, use the physical predecessor
+within the current sortie as `p`.  For the first task of a sortie, `p` is depot
+and therefore immune to the 2-cycle collision rule.
+
+```text
+best_lb = inf
+for reverse_label in top2_bucket(u, time_bucket, energy_bucket, remaining_sorties, slots):
+    if p == depot or reverse_label.prev_in_dp != p:
+        best_lb = min(best_lb, reverse_label.cost)
+```
+
+If the completed two-cycle table has no compatible label, return `inf`.  This
+is safe only when the table was fully built; it means even the relaxed suffix
+cannot complete without a forbidden immediate backtrack.
+
+Budget and fallback rule:
+
+- If two-cycle table construction hits any build budget, discard the entire
+  two-cycle table.
+- Fall back to the older memoryless resource-aware bound table.
+- Never use a partially built two-cycle table for pruning.  Missing states in a
+  partial table could create false `inf` values and invalid pruning.
+
+Combination with set-based bounds:
+
+```text
+if two_cycle_table_complete:
+    route_lb = LB_two_cycle(node, prev, time, energy, remaining_sorties, slots)
+else:
+    route_lb = LB_memoryless(node, time, energy, remaining_sorties, slots)
+
+set_lb = LB_unique_task(available_tasks, remaining_visit_capacity)
+final_lb = max(route_lb, set_lb)
+```
+
+The two-cycle bound is a resource/path lower bound; the unique-task helper is a
+set/elementarity lower bound.  Taking the maximum of valid optimistic lower
+bounds is exact-safe and should tighten pruning.
+
+Required diagnostics:
+
+```text
+two_cycle_blocked_extensions
+two_cycle_second_best_queries
+two_cycle_incompatible_queries
+two_cycle_top2_replacements
+two_cycle_table_complete
+two_cycle_fallback_to_memoryless
+```
+
+Validation:
+
+- 5-task debug audit: strict equality of best true reduced cost with bound on
+  and bound off.
+- 10/20-task diagnostic audit: at minimum,
+  `bound_on declares no negative => bound_off also declares no negative`.
+- A budget-hit two-cycle table must not be used for audit certificates; it must
+  report fallback to memoryless mode.
+
+Implementation priority:
+
+1. Add the feature flag and data structures.
+2. Implement Top-2 reverse bucket maintenance and Depot immunity.
+3. Add diagnostics and table-completeness fallback.
+4. Run 5-task strict audit before any 20-task benchmark.
+5. Probe the 20-task root final-probe with the flag enabled only at depth `0`.
+
+Implementation status:
+
+- `JourneyPricingConfig` now exposes
+  `direct_journey_label_completion_bound_two_cycle_enabled` and
+  `direct_journey_label_completion_bound_two_cycle_max_states`.
+- Certificate configs map these through
+  `journey_certificate_completion_bound_two_cycle_enabled` and
+  `journey_certificate_completion_bound_two_cycle_max_states`.
+- Two-cycle is forcibly disabled when `depth > 0`, even if branch-node
+  Completion Bound itself is enabled.
+- `moon_trek_5_journey.yaml`, `moon_trek_10_journey.yaml`, and
+  `moon_trek_20_smoke.yaml` all enable the two-cycle probe at the root final
+  probe.  The feature is still forcibly disabled at branch depth `> 0`.
+- If the Top-2 table exceeds its build-state budget, the implementation clears
+  the table and falls back to the older memoryless bound.
+- Runtime logs include the required two-cycle diagnostic counters.
+
+## Two-Cycle Probe Result (2026-06-04)
+
+### 5/10-Task Mainline Probe
+
+The 5/10 configs were also tested with two-cycle enabled through CLI overrides
+before making the flag explicit in the YAML configs:
+
+```text
+5-task two-cycle override:
+  csv = BPC_future/results/mainline_required_tasks05_all_twocycle_override_20260604.csv
+  status = 20 OPTIMAL / 20
+  solver-time sum = 9.460941s
+  mean = 0.473047s
+  max = 1.516591s
+  completion-bound events = 0
+  two-cycle events = 0
+
+10-task two-cycle override:
+  csv = BPC_future/results/mainline_required_tasks10_all_twocycle_override_20260604.csv
+  status = 19 OPTIMAL / 20, 1 TIME_LIMIT
+  solver-time sum = 572.349007s
+  mean = 28.617450s
+  max = 75.283105s
+  completion-bound events = 1
+  two-cycle events = 1
+  two_cycle_table_complete = 1
+  two_cycle_fallback_to_memoryless = 0
+  two_cycle_blocked_extensions = 15,390
+  two_cycle_second_best_queries = 10,935
+  two_cycle_incompatible_queries = 10,935
+  two_cycle_top2_replacements = 33,728
+  two_cycle_build_time ~= 0.30s
+```
+
+A same-code-version 10-task run with two-cycle disabled was then executed for a
+clean A/B comparison:
+
+```text
+csv = BPC_future/results/mainline_required_tasks10_all_current_twocycle_off_20260604.csv
+status = 19 OPTIMAL / 20, 1 TIME_LIMIT
+solver-time sum = 569.640s
+mean = 28.482s
+max = 75.192s
+```
+
+Interpretation:
+
+- Enabling two-cycle on 5-task has no runtime effect because the final
+  Completion Bound probe is never reached.
+- On 10-task, the only two-cycle activation completed its table and did not
+  fall back.  It added about 0.30s of reverse-DP build time and did not change
+  the proof outcome.
+- The `tranquillitatis_balmer_like_20km_tasks10_03_seed11036` TIME_LIMIT occurs
+  with two-cycle both enabled and disabled.  Its direct reason is
+  `direct_label_partial_state_budget`, so it is a current final-probe budget
+  issue rather than a two-cycle correctness regression.
+
+Follow-up probes on the same 10-task instance showed that the certificate probe
+was being cut off by generic proof budgets, not by wall-clock time:
+
+```text
+failed current config:
+  reason = direct_label_partial_state_budget
+  partial_max_states = 40,000
+  expanded_labels_before_bound = 60,674
+  status = TIME_LIMIT
+  solver time ~= 22.5s
+
+partial_max_states = 200,000:
+  reason = direct_label_sequence_budget
+  max_sequences = 100,000
+  status = TIME_LIMIT
+  solver time ~= 26.6s
+
+certificate budgets = 1,500,000 sequences / 1,500,000 partial states:
+  csv = BPC_future/results/probe_tasks10_03_cert1500k_20260604.csv
+  status = OPTIMAL
+  primal = dual = 197.875013
+  solver time = 48.311273s
+  max RSS ~= 1.85 GB
+  generated_sequences = 978,460
+  expanded_labels_before_bound = 1,211,881
+  expanded_labels_after_bound = 403,371
+  lb_pruned_labels = 808,510
+  two_cycle_table_complete = True
+```
+
+The first attempt to make these large budgets the default for every 10-task
+final probe was rejected: it made
+`tranquillitatis_balmer_like_20km_tasks10_01_seed11000` spend the remaining
+time in an unnecessarily heavy certificate probe and return TIME_LIMIT.  The
+accepted design is therefore a proper multi-level certificate funnel:
+
+1. Keep the normal lightweight final-probe budgets.
+2. If, and only if, the lightweight final probe reports a proof-budget reason
+   such as `direct_label_partial_state_budget` or `direct_label_sequence_budget`,
+   and enough wall-clock time remains, run one escalated true-dual
+   Completion-Bound probe.
+3. The escalated probe keeps Resource-Aware Completion Bound and two-cycle
+   bounding enabled; it only raises the generic proof budgets.
+
+`moon_trek_10_journey.yaml` enables this escalation path with:
+
+```text
+base final probe:
+  max_sequences = 100,000
+  max_dp_states = 150,000
+  partial_max_states = 40,000
+
+escalated final probe:
+  min_remaining_time = 90s
+  max_sequences = 1,500,000
+  max_dp_states = 500,000
+  partial_max_states = 1,500,000
+```
+
+### 20-Task Root Probe
+
+The two-cycle Top-2 implementation was tested on the same 20-task
+Tranquillitatis root instance used for the capguard baseline:
+
+```text
+csv = BPC_future/results/mainline_required_tranq20_01_twocycle_20260604.csv
+status = TIME_LIMIT
+primal = 389.873056
+nodes = 1
+columns = 824
+solver time = 494.826498s
+max RSS ~= 2.42 GB
+```
+
+Final-probe comparison against the previous capguard run:
+
+```text
+capguard final probe:
+  lb_pruned_labels = 9,598
+  expanded_labels_before_bound = 87,170
+  expanded_labels_after_bound = 77,572
+  reason = direct_label_partial_state_budget
+
+two-cycle final probe:
+  two_cycle_table_complete = True
+  two_cycle_fallback_to_memoryless = False
+  two_cycle_state_count = 64,827
+  two_cycle_blocked_extensions = 42,354
+  two_cycle_second_best_queries = 2,407
+  two_cycle_incompatible_queries = 2,407
+  two_cycle_top2_replacements = 129,244
+  two_cycle_build_time ~= 1.17s
+  lb_pruned_labels = 9,598
+  expanded_labels_before_bound = 87,170
+  expanded_labels_after_bound = 77,572
+  reason = direct_label_partial_state_budget
+```
+
+Interpretation:
+
+- The two-cycle table built completely and did not fall back to memoryless mode.
+- The reverse DP did eliminate many artificial two-cycle extensions, so the
+  mechanism is active.
+- It did not increase forward pruning on this hard 20-task root certificate:
+  `lb_pruned_labels` and expanded-label counts are identical to the capguard
+  baseline.
+- Therefore the current root proof bottleneck is not primarily caused by
+  immediate 2-cycles in the reverse bound.  The direct-label final probe still
+  exhausts the inner partial-label budget before proving no negative journey.
+
+Next implication:
+
+- Keep the two-cycle implementation and diagnostics because they are exact-safe
+  and useful for future instances.
+- Do not expect two-cycle alone to close the 20-task certificate gap.
+- The next tightening should target the forward partial-label explosion directly
+  or add a stronger suffix lower bound than immediate 2-cycle elimination.

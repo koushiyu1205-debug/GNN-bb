@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from copy import copy
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
@@ -32,6 +33,8 @@ REQUIRED_CHECKPOINT_FIELDS: tuple[str, ...] = (
     "node_feature_std",
     "option_feature_mean",
     "option_feature_std",
+    "label_mean",
+    "label_std",
     "feature_schema",
     "version",
 )
@@ -46,6 +49,7 @@ class DualStabilizerConfig:
     alpha_decay: float = 0.05
     stagnation_patience: int = 3
     stagnation_rel_improve: float = 1.0e-3
+    stagnation_forces_exact: bool = True
     disable_on_branch_depth_gt: int = 0
     filter_true_rc: bool = False
     rc_filter_tol: float = 1.0e-8
@@ -75,10 +79,10 @@ class DualStabilizer:
         self.node_std = self._normalizer_tensor("node_feature_std", expected_dim=self._node_dim)
         self.option_mean = self._normalizer_tensor("option_feature_mean", expected_dim=self._option_dim)
         self.option_std = self._normalizer_tensor("option_feature_std", expected_dim=self._option_dim)
-        self.label_mean = _optional_scalar(self.checkpoint.get("label_mean"), default=0.0)
-        self.label_std = _optional_scalar(self.checkpoint.get("label_std"), default=1.0)
+        self.label_mean = _checkpoint_scalar(self.checkpoint["label_mean"], "label_mean")
+        self.label_std = _checkpoint_scalar(self.checkpoint["label_std"], "label_std")
         if self.label_std <= 0:
-            raise ValueError("checkpoint label_std must be positive when present")
+            raise ValueError("checkpoint label_std must be positive")
 
         self.model = self._build_model(self.checkpoint["model_config"])
         self.model.load_state_dict(self.checkpoint["model_state_dict"])
@@ -178,7 +182,13 @@ class DualStabilizer:
             return self.alpha
 
         if self._is_stagnating(rmp_obj_history):
-            self.force_exact_mode()
+            if bool(self.config.stagnation_forces_exact):
+                self.force_exact_mode()
+            else:
+                # 主线 learning 不能因为 RMP 停滞被整体关闭。停滞只说明
+                # anchor 权重应降到巡航下限；最终证书仍由 true-dual exact
+                # pricing 负责，因此这里保留 Level 1 的轻量引导作用。
+                self.alpha = max(0.0, min(float(self.alpha), float(self.config.alpha_min_active)))
             return self.alpha
 
         if len(rmp_obj_history) < 2:
@@ -331,14 +341,15 @@ def _schema_list(value: Any, field_name: str) -> list[str]:
     return [str(item) for item in value]
 
 
-def _optional_scalar(value: Any, *, default: float) -> float:
-    if value is None:
-        return float(default)
+def _checkpoint_scalar(value: Any, field_name: str) -> float:
     if isinstance(value, Tensor):
         if value.numel() != 1:
-            raise ValueError("scalar checkpoint field contains more than one value")
+            raise ValueError(f"checkpoint {field_name} contains more than one value")
         value = value.detach().cpu().item()
-    return float(value)
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"checkpoint {field_name} must be finite")
+    return parsed
 
 
 def _tensor_to_int_list(value: Any) -> list[int]:
