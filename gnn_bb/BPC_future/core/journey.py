@@ -55,12 +55,11 @@ class JourneyPool:
             return stored
         if incumbent is not None:
             if float(incumbent.cost) <= float(journey.cost) + 1.0e-9:
-                self.by_signature[journey.signature] = incumbent
                 return incumbent
             stored = replace(journey, id=int(incumbent.id), task_set=task_key)
             self.journeys[int(incumbent.id)] = stored
             self.by_task_set[task_key] = stored
-            self.by_signature[incumbent.signature] = stored
+            self.by_signature.pop(incumbent.signature, None)
             self.by_signature[stored.signature] = stored
             return stored
         stored = replace(journey, id=len(self.journeys))

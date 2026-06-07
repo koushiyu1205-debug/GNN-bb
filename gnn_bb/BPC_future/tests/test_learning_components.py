@@ -316,6 +316,86 @@ class DualStabilizerTests(unittest.TestCase):
             self.assertAlmostEqual(alpha, 0.2)
             self.assertFalse(cruise_stabilizer.handle_smoothed_pricing_result(found_negative_column=True).use_true_dual_exact_pricing)
 
+            adaptive_stabilizer = DualStabilizer(
+                DualStabilizerConfig(
+                    checkpoint_path=str(checkpoint_path),
+                    alpha_init=0.8,
+                    alpha_min_active=0.2,
+                    true_rc_filter_fail_patience=2,
+                    true_rc_filter_fail_alpha_decay=0.1,
+                )
+            )
+            feedback = adaptive_stabilizer.record_true_rc_filter_feedback(
+                candidate_journeys=3,
+                kept_journeys=0,
+                added_journeys=0,
+            )
+            self.assertFalse(feedback["alpha_adjusted_by_true_rc_filter"])
+            self.assertAlmostEqual(adaptive_stabilizer.alpha, 0.8)
+            feedback = adaptive_stabilizer.record_true_rc_filter_feedback(
+                candidate_journeys=4,
+                kept_journeys=0,
+                added_journeys=0,
+            )
+            self.assertTrue(feedback["alpha_adjusted_by_true_rc_filter"])
+            self.assertAlmostEqual(adaptive_stabilizer.alpha, 0.7)
+            feedback = adaptive_stabilizer.record_true_rc_filter_feedback(
+                candidate_journeys=1,
+                kept_journeys=1,
+                added_journeys=1,
+            )
+            self.assertEqual(feedback["true_rc_filter_failures"], 0)
+
+            adaptive_floor_stabilizer = DualStabilizer(
+                DualStabilizerConfig(
+                    checkpoint_path=str(checkpoint_path),
+                    alpha_init=0.25,
+                    alpha_min_active=0.2,
+                    true_rc_filter_fail_patience=1,
+                    true_rc_filter_fail_alpha_decay=0.1,
+                    true_rc_filter_fail_alpha_floor=0.05,
+                )
+            )
+            feedback = adaptive_floor_stabilizer.record_true_rc_filter_feedback(
+                candidate_journeys=2,
+                kept_journeys=0,
+                added_journeys=0,
+            )
+            self.assertTrue(feedback["alpha_adjusted_by_true_rc_filter"])
+            self.assertAlmostEqual(adaptive_floor_stabilizer.alpha, 0.15)
+            feedback = adaptive_floor_stabilizer.record_true_rc_filter_feedback(
+                candidate_journeys=2,
+                kept_journeys=0,
+                added_journeys=0,
+            )
+            self.assertTrue(feedback["alpha_adjusted_by_true_rc_filter"])
+            self.assertAlmostEqual(adaptive_floor_stabilizer.alpha, 0.05)
+
+            empty_round_stabilizer = DualStabilizer(
+                DualStabilizerConfig(
+                    checkpoint_path=str(checkpoint_path),
+                    alpha_init=0.25,
+                    alpha_min_active=0.2,
+                    true_rc_filter_fail_patience=2,
+                    true_rc_filter_fail_alpha_decay=0.1,
+                    true_rc_filter_fail_alpha_floor=0.05,
+                )
+            )
+            feedback = empty_round_stabilizer.record_true_rc_filter_feedback(
+                candidate_journeys=0,
+                kept_journeys=0,
+                added_journeys=0,
+            )
+            self.assertFalse(feedback["alpha_adjusted_by_true_rc_filter"])
+            self.assertEqual(feedback["true_rc_filter_failures"], 1)
+            feedback = empty_round_stabilizer.record_true_rc_filter_feedback(
+                candidate_journeys=0,
+                kept_journeys=0,
+                added_journeys=0,
+            )
+            self.assertTrue(feedback["alpha_adjusted_by_true_rc_filter"])
+            self.assertAlmostEqual(empty_round_stabilizer.alpha, 0.15)
+
             stabilizer.reset_runtime_state()
             self.assertAlmostEqual(stabilizer.alpha, 0.8)
             self.assertIsNone(stabilizer.last_anchor)

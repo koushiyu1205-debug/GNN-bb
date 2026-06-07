@@ -53,6 +53,9 @@ class DualStabilizerConfig:
     disable_on_branch_depth_gt: int = 0
     filter_true_rc: bool = False
     rc_filter_tol: float = 1.0e-8
+    true_rc_filter_fail_patience: int = 3
+    true_rc_filter_fail_alpha_decay: float = 0.1
+    true_rc_filter_fail_alpha_floor: Optional[float] = None
     debug_checks: bool = False
 
 
@@ -73,6 +76,7 @@ class DualStabilizer:
         self.device = torch.device(config.device)
         self.alpha = float(config.alpha_init)
         self._forced_exact = False
+        self._consecutive_true_rc_filter_failures = 0
         self.checkpoint = self._load_checkpoint(Path(config.checkpoint_path))
         self.feature_schema = self._validate_feature_schema(self.checkpoint["feature_schema"])
         self.node_mean = self._normalizer_tensor("node_feature_mean", expected_dim=self._node_dim)
@@ -101,6 +105,7 @@ class DualStabilizer:
 
         self.alpha = float(self.config.alpha_init)
         self._forced_exact = False
+        self._consecutive_true_rc_filter_failures = 0
         self.last_anchor = None
 
     @property
@@ -242,6 +247,55 @@ class DualStabilizer:
             alpha=self.alpha,
             reason="already_in_true_dual_mode",
         )
+
+    def record_true_rc_filter_feedback(
+        self,
+        *,
+        candidate_journeys: int,
+        kept_journeys: int,
+        added_journeys: int,
+    ) -> Dict[str, Any]:
+        """Reduce anchor weight when smoothed pricing repeatedly produces waste.
+
+        In this codebase ``alpha`` is the anchor weight in
+        ``alpha * pi_anchor + (1 - alpha) * pi_true``.  Therefore increasing the
+        true-dual share means decreasing ``alpha``.  The normal cruise floor is
+        ``alpha_min_active``; repeated true-RC filter failures or empty
+        smoothed-pricing rounds may use a lower explicit floor so the worker
+        stays learning-guided without ignoring the current RMP dual face.  This
+        is a learning-quality correction only; it never sets alpha to zero or
+        changes the true-dual certificate path.
+        """
+
+        candidate_count = max(0, int(candidate_journeys))
+        kept_count = max(0, int(kept_journeys))
+        added_count = max(0, int(added_journeys))
+        old_alpha = float(self.alpha)
+        adjusted = False
+        if kept_count <= 0 and added_count <= 0:
+            self._consecutive_true_rc_filter_failures += 1
+            patience = max(1, int(self.config.true_rc_filter_fail_patience))
+            if self._consecutive_true_rc_filter_failures >= patience:
+                failure_floor = (
+                    float(self.config.alpha_min_active)
+                    if self.config.true_rc_filter_fail_alpha_floor is None
+                    else float(self.config.true_rc_filter_fail_alpha_floor)
+                )
+                failure_floor = max(0.0, min(float(self.config.alpha_min_active), failure_floor))
+                self.alpha = max(
+                    failure_floor,
+                    float(self.alpha) - max(0.0, float(self.config.true_rc_filter_fail_alpha_decay)),
+                )
+                adjusted = self.alpha < old_alpha - 1.0e-12
+                self._consecutive_true_rc_filter_failures = 0
+        elif kept_count > 0 or added_count > 0:
+            self._consecutive_true_rc_filter_failures = 0
+        return {
+            "true_rc_filter_failures": int(self._consecutive_true_rc_filter_failures),
+            "alpha_adjusted_by_true_rc_filter": bool(adjusted),
+            "alpha_before_true_rc_filter": float(old_alpha),
+            "alpha_after_true_rc_filter": float(self.alpha),
+        }
 
     def _load_checkpoint(self, path: Path) -> Mapping[str, Any]:
         if not path.exists():

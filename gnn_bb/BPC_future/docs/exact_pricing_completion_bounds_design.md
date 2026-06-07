@@ -34,6 +34,539 @@ proof tail.
   5/10/20 mainline configs require it as a Level-4 final-probe judge, with
   fail-closed validation and positive runtime/state budgets.
 
+## Current Optimization Priorities (2026-06-06)
+
+The current implementation and tuning work must follow this priority order.
+The purpose is to keep the proof chain exact while turning the expensive final
+judge back into a certificate oracle rather than a repeated negative-column
+worker.
+
+2026-06-06 reminder: this section records the active six-priority engineering
+roadmap and is the authoritative order for the next code changes.  Before
+making any pricing or learning change, identify which priority below the change
+serves.  Do not jump straight to parameter tuning when the pricing status
+semantics or hidden-negative audit evidence is still ambiguous.  If a pricing
+result cannot be proven to come from the true-dual direct-label judge, treat it
+as worker evidence only.  The default fallback for ambiguous no-column outcomes
+is `LOCAL_NO_COLUMN_UNCERTIFIED`, never `CERTIFIED_NO_NEGATIVE`.
+
+Operational rule: read this section before touching pricing dispatch,
+direct-label pricing, completion bounds, profile/streaming workers, or learning
+dual stabilization.  Changes should proceed in priority order unless there is a
+fresh log proving that an earlier priority is already satisfied for the current
+failure mode.  In particular, do not let a performance patch bypass the status
+semantics, and do not let a worker-local no-column result become an official
+certificate.
+
+Self-reminder for future implementation sessions: the next optimization should
+not be chosen by whichever knob looks convenient in the config.  The queue is:
+status semantics, hidden-negative audit, final-judge harvesting, CB trigger
+control, worker batching semantics, then tail dual center.  A patch that cannot
+be mapped to one of these six priorities should be deferred or documented as a
+diagnostic only.
+
+### 中文执行清单：当前六个优先级
+
+这一节是给后续实现和调参时反复回看的短清单。代码修改和优化必须按照下面六个优先级推进。不要跳过前面的语义修复去直接调性能参数，否则日志会继续混淆 worker 与 judge，难以判断到底是谁漏列、谁在证明。
+后续每次改 pricing 或 learning 相关代码前，先标明该改动服务于哪一个优先级；
+如果说不清，就先回到优先级 1 和 2 做语义与 hidden-negative 审计。
+
+1. **优先级 1：修正 pricing 状态语义。**
+   先把状态拆清楚：
+   `FOUND_NEGATIVE`、`LOCAL_NO_COLUMN_UNCERTIFIED`、
+   `CERTIFIED_NO_NEGATIVE`、`INCOMPLETE_LIMIT`、`DUPLICATE_ONLY`。
+   只有 `CERTIFIED_NO_NEGATIVE` 可以产生官方 lower bound 或节点 LP
+   certificate。`profile exhausted` 只能表示 profile universe 内没列，
+   不能污染全局收敛语义。否则无法分清哪个 oracle 是 worker，哪个 oracle
+   是 judge。这一步仍然是第一优先级，未确认前不要继续调 worker 或 CB
+   参数。
+
+2. **优先级 2：hidden-negative audit 定位漏列原因。**
+   继续记录：
+   `ordinary/profile local no-column -> direct-label / completion-bound found hidden negative`。
+   每个 hidden negative 都要定位它为什么漏：没生成、被 task-set bound 剪、
+   被 resource pruning 剪、被 profile dominance 剪、被 catalog/resume 漏、
+   被 duplicate/signature filter 误过滤，还是 reduced cost 口径不一致。
+   这一步的目标是修 worker，不是直接提速。若 direct-label / CB 已经构造出
+   true-dual negative journey，可以把其中的 feasible timed sorties 作为
+   fixed-start physical profiles 种回 profile worker 的 physical catalog，
+   让后续 worker 不再重复漏同一类 sortie mask；但这种 seed 只修候选宇宙，
+   不能改变 profile no-column 的 `LOCAL_NO_COLUMN_UNCERTIFIED` 语义。
+
+3. **优先级 3：在 Final Judge 中加入 Pareto-Harvesting / Orthogonal Harvesting。**
+   这是当前最值得立刻做的性能改动。completion-bound / direct-label judge
+   找到负列后，不应立即返回少量列，而要收割一批 true-RC 负列，按 reduced
+   cost 与 task-set diversity 批量返回给 RMP。优先记录：
+   `harvest_candidate_negative_count`、`harvest_selected_count`、
+   `harvest_rejected_overlap_count`、`harvest_fallback_fill_count`、
+   `harvest_best_true_rc`、`harvest_worst_selected_true_rc`、
+   `harvest_avg_pairwise_jaccard`。同时必须区分
+   `harvest_selected_new_task_set_count` 与
+   `harvest_selected_replacement_task_set_count`：replacement-only batch 只是在
+   改善已有 task-set 的物理代表，不等价于扩张 RMP 方向。目标是让 Final
+   Judge 盖证书或一次性收割一批正交负列，而不是每轮只交回 1-2 条列后继续
+   充当昂贵 worker。
+
+4. **优先级 4：控制 CB / Final Judge 的触发时机。**
+   CB 是法官，不是早期工人，不能太早、太频繁变成 worker。建议触发条件：
+   root node、`certificate_candidate=True` 或 objective flat、ordinary/profile
+   返回 `LOCAL_NO_COLUMN_UNCERTIFIED`、remaining time 足够。不要在 early
+   discovery 阶段频繁打开重型 CB。
+
+5. **优先级 5：profile/streaming worker 改成批量找列，不承担证书。**
+   profile/streaming 的职责是尽快批量发现有用负列，不是证明没有负列。
+   它找不到列时必须返回 `LOCAL_NO_COLUMN_UNCERTIFIED`，而不是
+   `CERTIFIED_NO_NEGATIVE`。如果 worker 找列成功，可以引入轻量版
+   harvesting，按 true RC 与 task-mask diversity 返回列，但 Final Judge
+   的 harvesting 优先做。
+
+6. **优先级 6：tail dual center / stabilization 加强。**
+   对偶震荡仍然是根本原因之一。进入 tail 后要维护更稳定的 dual center，
+   减少 objective flat、`dual_l1_delta` 很大、hidden negative 一轮轮冒出的
+   现象。GNN 暂时不要作为 tail breaker，只作为 early/mid worker 辅助或
+   hidden-negative task-set 排序器。若学习 worker 连续产出被 true-RC
+   过滤掉的列，可以把 anchor 权重降到专门的失败地板（10/20 主线为
+   `0.05`），但不能让它参与 official certificate。tail dual center 的
+   目标是减少乒乓式 hidden negative，而不是替代最终 true-dual judge。
+
+Global constraints:
+
+- Avoid per-instance special configs whenever possible.
+- GNN anchors, resource-aware completion bounds, and 2-cycle bounding may be
+  optimized and tightened, but must not be silently disabled.
+- Pricing dispatch should remain a healthy multi-level funnel: cheap workers
+  first, true-dual judge last.
+- Exactness is non-negotiable; only a certified true-dual no-negative result may
+  close a node or contribute an official lower bound.
+- Pricing time budgets should leave a small deadline safety margin before the
+  outer solver limit.  Internal pricing loops check deadlines at coarse
+  granularity, so passing the full remaining wall-clock budget can overrun the
+  engineering limit without improving proof validity.
+- Benchmark limits for engineering runs: 5/10-task runs may use `120s`; 20-task
+  runs may use `600s`.  Final performance targets remain 5-task under `10s`,
+  10-task under `60s`, and 20-task under `200s`, all with exact solutions.
+- Do not simply disable static SRC as a pricing shortcut.  A 10-task hard-case
+  probe showed that this can certify the root faster but weakens the bound
+  enough to force branching and still timeout.  If revisited, use delayed,
+  budgeted, or ranked SRC activation.
+- An opt-in compact-ranked SRC selector exists for experiments, but a budget-60
+  hard-case probe still timed out at the root.  Do not enable it by default
+  unless paired with stronger delayed activation or harvesting evidence.
+- Keep hidden-negative audit bounded.  It is a diagnostic tool for worker
+  repair, not part of the proof.  Use
+  `journey_hidden_negative_audit_max_logged_journeys` to cap detailed journey
+  payloads, especially before running 20-task probes.  In benchmark/mainline
+  runs the current default is `0`, which disables the audit completely; turn it
+  back on only for targeted leak hunts.
+- Keep profile mask diagnostics disabled in benchmark/mainline runs unless a
+  hidden-negative audit specifically needs the mask evidence.  The profile
+  worker can still return columns and the final judge can still certify without
+  constructing these diagnostic sets.
+- Before re-enabling a previously rejected default, check
+  `optimization_failure_notes.md`.
+
+### Priority 1: Fix Pricing Status Semantics
+
+Pricing status must be explicit.  Do not let a worker oracle's local
+`no-column` result look like a global proof.
+
+Implementation update, 2026-06-06:
+
+- `JourneyPricingConfig` now carries an explicit
+  `direct_journey_label_global_certificate_enabled` switch.
+- `JourneyPricingResult` now carries `global_certificate_capable`.
+- `completion_bound_enabled=True` is no longer sufficient to create an
+  official certificate.  A no-negative result can become
+  `CERTIFIED_NO_NEGATIVE` only when the direct-label result is also explicitly
+  marked `global_certificate_capable=True`.
+- Hidden-negative patrol, learning pricing, profile repair, replacement repair,
+  and completion-bound audit fallback clear this flag.  They are workers even
+  if they internally use direct-label or completion-bound machinery.
+- `_journey_completion_bound_final_probe_needed()` now trusts only
+  `CERTIFIED_NO_NEGATIVE`; it no longer skips the final judge merely because a
+  previous worker had `completion_bound_enabled=True` and `exhausted=True`.
+- A smoke run on
+  `apollo15_20km_tasks05_01_seed6000_logical_graph.json` closed exactly in
+  `2.295682s`; the log shows ordinary profile no-column as
+  `LOCAL_NO_COLUMN_UNCERTIFIED`, hidden-negative patrol as non-certificate, and
+  the completion-bound retry as `CERTIFIED_NO_NEGATIVE/global_certificate=true`.
+- A hard-tail probe on
+  `tranquillitatis_balmer_like_20km_tasks10_09_seed11144_logical_graph.json`
+  still timed out at the root in `118.848344s`.  The semantic fix did not solve
+  the performance bottleneck: ordinary exact/profile spent about `63.94s` in
+  profile generation and `18.73s` in profile DP; completion-bound retries spent
+  about `26.20s` and selected mostly replacement columns (`15` replacement vs
+  `1` new task-set direction).  This confirms the next optimization must still
+  target worker strength/new task-set directions or stronger proof bounds, not
+  certificate semantics alone.
+
+Priority-2 audit update, 2026-06-06:
+
+- Hidden-negative audit now emits a compact
+  `journey_hidden_negative_audit_reason_summary` event when a hidden-pricing
+  call returns multiple true-dual negative journeys.  The summary aggregates
+  primary and candidate miss reasons over the whole hidden-negative batch,
+  instead of relying only on the first few detailed journey payloads capped by
+  `journey_hidden_negative_audit_max_logged_journeys`.
+- The audit primary-reason rule now prefers per-hidden-journey mask evidence
+  over global worker counters.  For example, a global
+  `weak_negative_journeys_filtered` counter is recorded as supporting evidence,
+  but it should not hide the more actionable fact that the hidden task set was
+  reached by profile DP and still failed to become a negative candidate.
+- A 120s hard 10-task probe
+  `probe_hna_reason_summary_tranq10_09_20260606.csv` still timed out at the
+  root (`status=TIME_LIMIT`, `columns=496`).  The compact audit showed that all
+  summarized hidden negatives had their final task masks and sortie masks
+  present in the ordinary worker universe (`profile_mask_hit=20/20`,
+  `reachable_mask_hit=20/20`, `all_trip_masks_hit=20/20`), but none appeared as
+  ordinary negative or selected masks (`negative_mask_hit=0`,
+  `selected_mask_hit=0`).  This narrows the current worker gap: the hard case is
+  not primarily missing physical sortie profiles; the profile/journey DP
+  objective and materialization layer are failing to turn already-reached
+  hidden task sets into true-RC negative worker columns.
+
+Required state vocabulary:
+
+```text
+FOUND_NEGATIVE
+LOCAL_NO_COLUMN_UNCERTIFIED
+CERTIFIED_NO_NEGATIVE
+INCOMPLETE_LIMIT
+DUPLICATE_ONLY
+```
+
+Only this state may produce an official lower bound or node LP certificate:
+
+```text
+CERTIFIED_NO_NEGATIVE
+```
+
+This remains the first priority.  Without this separation, logs and control flow
+cannot reliably tell which oracle is a worker and which oracle is the judge.
+
+### Priority 2: Hidden-Negative Audit For Worker Repair
+
+Continue recording this transition:
+
+```text
+ordinary/profile local no-column
+  -> direct-label / completion-bound found hidden negative
+```
+
+For each hidden negative, identify why the worker missed it:
+
+- the journey was never generated;
+- task-set bound pruning removed it;
+- resource pruning removed it;
+- profile dominance removed it;
+- catalog/resume logic skipped it;
+- duplicate or forbidden-signature filtering removed it incorrectly;
+- reduced-cost components were inconsistent between worker and judge.
+
+Minimum audit payload:
+
+```text
+instance
+cg_iter
+node_id
+dual_hash
+cut_hash
+ordinary_status
+ordinary_reason
+ordinary_exhausted
+CB_found_journey_signature
+CB_journey_task_set
+CB_journey_cost
+CB_true_reduced_cost
+CB_reduced_cost_components:
+  journey_cost
+  cover_dual_sum
+  fleet_dual
+  cut_dual_sum
+forbidden_signature_hit?
+duplicate_filtered?
+```
+
+For the same RMP state, the audit should be able to answer three questions:
+
+1. Recompute the CB journey with `manual_journey_reduced_cost`, including
+   cover dual, fleet dual, and cut dual, and verify that the true RC matches.
+2. Re-run ordinary exact/profile with streaming early return disabled, caps
+   disabled, and enough time, then check whether it finds the same journey or
+   an equivalent negative journey.
+3. If ordinary exact/profile still misses the negative journey, trace the miss
+   through:
+   `task_set_bound_pruning`, `task_set_resource_pruning`,
+   `profile_cross_dominance`, `profile_online_dominance`,
+   `physical_catalog_resume`, `forbidden_journey_signatures`,
+   `dominant_task_set_costs`, and duplicate filtering.
+
+This audit is for repairing worker pricing.  It must not be treated as a speed
+optimization by itself.  Its immediate purpose is to confirm whether ordinary
+exact/profile `exhausted` is really a complete certificate, or only a local
+no-column result inside a restricted worker universe.
+
+### Priority 3: Pareto-Harvesting / Orthogonal Harvesting In Final Judge
+
+This is the highest-value immediate performance change.  When the
+completion-bound or direct-label judge finds negative columns, it should not
+return only one or two columns after paying the full exact-search cost.  It
+should harvest a batch of true-RC negative journeys and select them by reduced
+cost plus task-set diversity before returning them to the RMP.
+
+Required logs:
+
+```text
+harvest_candidate_negative_count
+harvest_selected_count
+harvest_rejected_overlap_count
+harvest_fallback_fill_count
+harvest_best_true_rc
+harvest_worst_selected_true_rc
+harvest_avg_pairwise_jaccard
+```
+
+Implementation reminder: use the current orthogonal-harvest proposal below as
+the default implementation sketch.  The fallback fill phase is allowed to fill
+the batch with the remaining strongest true-RC negative columns after signature
+filtering, even when task sets overlap, because the immediate goal is to stop
+the final judge from returning only one or two columns after an expensive full
+search.  This must be logged carefully with `harvest_rejected_overlap_count`,
+`harvest_fallback_fill_count`, and duplicate-task-set/new-task-set counts so we
+can verify whether fallback fill is widening RMP directions or merely inflating
+the matrix with physical replacements.
+
+Implementation invariant: the `top_k_strongest` phase must always be evaluated
+on global true reduced cost before any new-task-set preference is applied.  The
+new-task-set preference is useful for widening RMP directions, but it must not
+displace the globally strongest negative column when the harvest budget is
+small.
+
+Reference pseudocode:
+
+```python
+def harvest_orthogonal_negative_journeys(
+    candidate_journeys,
+    *,
+    true_duals,
+    cuts,
+    forbidden_signatures,
+    eps=1e-6,
+    max_columns=64,
+    top_k_strongest=5,
+    min_fill=20,
+    max_jaccard=0.5,
+    max_containment=0.8,
+):
+    scored = []
+    for journey in candidate_journeys:
+        if journey.signature in forbidden_signatures:
+            continue
+        true_rc = manual_journey_reduced_cost(journey, true_duals, cuts)
+        if true_rc >= -eps:
+            continue
+        mask = int(journey.task_mask) if hasattr(journey, "task_mask") else _task_mask(journey.task_set)
+        size = mask.bit_count()
+        if size <= 0:
+            continue
+        scored.append((true_rc, mask, size, journey))
+
+    scored.sort(key=lambda item: item[0])  # 越负越好
+
+    selected = []
+    selected_masks = []
+
+    # 1. 强制保留最强负列。
+    for true_rc, mask, size, journey in scored[:top_k_strongest]:
+        selected.append((true_rc, journey))
+        selected_masks.append(mask)
+
+    # 2. 再做正交收割。
+    for true_rc, mask, size, journey in scored[top_k_strongest:]:
+        if len(selected) >= max_columns:
+            break
+        diverse = True
+        for selected_mask in selected_masks:
+            overlap = (mask & selected_mask).bit_count()
+            selected_size = selected_mask.bit_count()
+            union = size + selected_size - overlap
+            jaccard = overlap / max(1, union)
+            containment = overlap / max(1, min(size, selected_size))
+            if jaccard > max_jaccard or containment > max_containment:
+                diverse = False
+                break
+        if diverse:
+            selected.append((true_rc, journey))
+            selected_masks.append(mask)
+
+    # 3. fallback：若太少，用剩余最负列补齐到 min_fill。
+    if len(selected) < min_fill:
+        selected_signatures = {journey.signature for _, journey in selected}
+        for true_rc, mask, size, journey in scored:
+            if len(selected) >= min(max_columns, min_fill):
+                break
+            if journey.signature in selected_signatures:
+                continue
+            selected.append((true_rc, journey))
+            selected_signatures.add(journey.signature)
+
+    selected.sort(key=lambda item: item[0])
+    return [journey for _, journey in selected[:max_columns]]
+```
+
+### Probe Notes: 10-task hard tail batching (2026-06-05)
+
+Instance:
+`tranquillitatis_balmer_like_20km_tasks10_09_seed11144`.
+
+Observed baseline after status-semantics and hidden-negative audit fixes:
+
+- The hard tail is not mainly caused by repeated final-judge calls anymore.
+- Ordinary true-dual exact/profile generation dominates wall-clock: about
+  `1.45M` generated sequences and `64-69s` profile generation on this single
+  instance.
+- Early exact/profile returned exactly `16` negative journeys per call although
+  many more true-dual negative candidates existed.
+
+Batching decision:
+
+- Raising late worker thresholds to
+  `journey_pricing_late_early_return_negative_min_count = 48` and
+  `journey_pricing_late_streaming_min_negative_batch = 48` is directionally
+  useful.
+- It moved the root LP objective to `203.102839` by CG iteration 9 instead of
+  about iteration 19, reduced exact pricing calls from `34` to `29`, and
+  increased useful true-dual exact columns from `235` to `290`.
+- It still does not solve the hard instance within `120s`, because profile
+  universe construction remains expensive.
+
+Final-judge harvesting decision:
+
+- Increasing the diverse-harvest soft return from `5@10s` to `15@15s` made the
+  first completion-bound retry return 15 columns instead of 7.
+- This reduced pricing calls slightly but did not solve the instance within
+  `120s`; keep it as a modest improvement, not as the main breakthrough.
+
+Negative result:
+
+- Moving hidden-negative patrol before ordinary exact/profile was tested with a
+  certificate-candidate guard.
+- It can still trigger around a suboptimal incumbent plateau and cause the run
+  to stall at `203.263873`, worse than the normal late-batch path.
+- Therefore `journey_hidden_negative_patrol_before_exact_flat_enabled` must stay
+  disabled by default.  It remains a diagnostic switch only.
+
+Additional diagnostics added:
+
+- Hidden-negative audit now flattens the true reduced-cost components:
+  `CB_reduced_cost_journey_cost`, `CB_reduced_cost_cover_dual_sum`,
+  `CB_reduced_cost_fleet_dual`, `CB_reduced_cost_cut_dual_sum`, and
+  decomposition error.
+- Profile DP now records a bounded `best objective by task mask` diagnostic so
+  audits can report `ordinary_hidden_task_mask_best_profile_objective`.
+
+Follow-up findings:
+
+- For several hidden negatives, ordinary profile DP did reach the same task
+  mask, but its best profile objective was exactly `0.0` while direct-label
+  true RC was around `-0.9` to `-1.3`.  This means the profile worker's local
+  route universe is missing a cheaper physical realization; it is not merely
+  duplicate filtering.
+- The diagnostic was refined to compare hidden direct-label trip
+  contributions with the best profile contribution for the same sortie
+  task-mask.  On the hard `tranq10_09` probe, comparable single-sortie hidden
+  negatives showed profile contribution gaps of roughly `0.49` to `2.08`
+  reduced-cost units, with mean about `1.17`.  This confirms the worker had
+  the same sortie task-mask but a weaker physical representative.
+- A late `orthogonal` worker selection mode was added and enabled in the
+  5/10/20 mainline configs.  It is exact-safe because it only changes which
+  already true-RC negative worker candidates are batched into the RMP.  On the
+  hard `tranq10_09` case it had near-identical aggregate behavior to the
+  previous reduced-cost late selection because most failing rounds had
+  `profile_negative_candidate_count = 0`; therefore candidate selection is not
+  the current primary bottleneck.
+- A diagnostic override disabling physical-catalog resume showed the opposite
+  tradeoff: dual-specific profile generation found more worker columns and
+  avoided hidden-negative audits in the sampled run, but spent much more time
+  in profile generation and still timed out.  The right direction is a hybrid
+  repair worker after `LOCAL_NO_COLUMN_UNCERTIFIED`, not globally dropping the
+  physical catalog.
+- Disabling profile cross-count dominance was tested and rejected.  It increased
+  DP states substantially without eliminating hidden negatives.
+- Increasing hidden-negative patrol from `0.5s` to `1-2s` found more direct
+  negative columns and reduced one CB call, but it also increased ordinary
+  exact/profile work and did not improve wall-clock.
+- Increasing completion-bound time/energy buckets from `10/10` to `15/15` was
+  rejected.  Bound construction and two-cycle table size roughly doubled, while
+  label pruning did not improve enough.
+- Raising late batch all the way to `96` reduced exact calls but inflated the
+  RMP column pool and shifted cost into CB; keep `48` as the current practical
+  late-worker batch size.
+- Later compact-SRC probes showed a different final-judge pathology:
+  completion-bound direct-label pricing can accumulate hundreds of true-RC
+  negative physical candidates but only a few unique task-set directions
+  (`362` candidates, `358` duplicate-task-set rejections, `4` selected
+  journeys).  This is not an overlap-threshold problem.  It is duplicate
+  task-set saturation: the judge is rediscovering physical variants of the
+  same few RMP directions.  The soft-return rule should therefore allow an
+  early return when completion-bound harvesting is duplicate-saturated and the
+  elapsed/remaining-time condition is met, instead of burning the rest of the
+  pricing budget chasing an unreachable diversity target.
+
+### Priority 4: Control CB / Final-Judge Trigger Timing
+
+Completion Bound must not become an early discovery worker.  It should be
+expensive, true-dual, and late.
+
+Preferred trigger conditions:
+
+- root node first;
+- `certificate_candidate=True` or objective-flat tail behavior;
+- ordinary/profile pricing returns `LOCAL_NO_COLUMN_UNCERTIFIED`;
+- enough remaining time is available for the judge to finish or fail cleanly.
+
+Do not frequently open heavy completion-bound pricing during early discovery
+rounds.
+
+### Priority 5: Profile/Streaming Worker Finds Columns In Batches
+
+Profile/streaming pricing is a worker, not a proof oracle.  Its job is to find
+useful negative columns quickly and in batches.  If it cannot find a column, it
+should return:
+
+```text
+LOCAL_NO_COLUMN_UNCERTIFIED
+```
+
+It must not return:
+
+```text
+CERTIFIED_NO_NEGATIVE
+```
+
+When worker pricing does find columns, it may use a lightweight harvesting pass
+based on true reduced cost and task-mask diversity.  Final-judge harvesting has
+priority and should be implemented first.
+
+If hidden-negative patrol or the completion-bound judge returns feasible
+true-dual journeys, their timed sorties may seed the profile physical catalog as
+fixed-start profiles.  This is worker repair only: the profiles are still
+re-filtered under the current duals, and profile exhaustion still cannot certify
+global no-negative-column status.
+
+### Priority 6: Tail Dual Center / Stabilization
+
+Dual oscillation remains one root cause of the tail.  In the tail, maintain a
+more stable dual center to reduce:
+
+- flat objective rounds;
+- large `dual_l1_delta`;
+- repeated hidden negatives appearing one round at a time.
+
+The GNN anchor should not be used as a tail breaker or certificate object.  It
+remains an early/mid worker guide, and may later help rank hidden-negative task
+sets, while true-dual pricing remains responsible for proof.
+
 ## Primary Target
 
 First implementation target:
@@ -79,12 +612,18 @@ standard exact pricing call that exhausts and returns no negative column is
 already a valid certificate; it must not be followed by a redundant bound retry.
 Completion Bound is reserved for a final probe after an ordinary exact attempt
 is incomplete, for example because of a soft time limit or label budget.
-Budget pre-reservation for that final probe must also be conservative: it should
-not shorten ordinary Level 2/3 pricing by default.  The current mainline keeps
-`journey_certificate_completion_bound_pre_retry_reserve_remaining_threshold =
-0.0`, so `journey_certificate_completion_bound_pre_retry_reserve_time` is ignored
-unless a future experiment explicitly sets a positive low-remaining-time
-threshold.
+Budget pre-reservation for that final probe must also be conservative: it must
+not shorten ordinary Level 2/3 pricing during early discovery.  The current
+mainline therefore gates pre-retry reserve on `certificate_candidate=True`, on
+the final completion-bound probe being eligible, and on a low remaining-time
+threshold.  The 5-task configuration keeps this reserve disabled.  The 10-task
+configuration reserves up to `8s` only when remaining wall time is at most
+`35s`; the 20-task smoke configuration reserves up to `15s` only when remaining
+wall time is at most `180s`.  This protects the true-dual final judge from
+being starved without letting Completion Bound become an early worker.  The
+reserve must also leave at least the ordinary retry minimum time for the first
+worker attempt; it must not create sub-second profile/direct-label calls that
+cannot meaningfully search.
 
 The `certificate_candidate` gate remains the default activation trigger.  Branch
 nodes that need a true-dual exact-pricing proof but are not incumbent candidates

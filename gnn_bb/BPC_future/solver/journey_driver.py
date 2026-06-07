@@ -15,15 +15,27 @@ from BPC_future.core.branching import BranchConstraint
 from BPC_future.core.cuts import FutureCut, FleetLowerBoundCut, SubsetRowCut, fleet_lower_bound
 from BPC_future.core.data import FutureData
 from BPC_future.core.fleet_bound import unavoidable_nonvehicle_cost_lb
+from BPC_future.core.columns import candidate_start_times_for_trip, evaluate_timed_trip
 from BPC_future.core.journey import JourneyPool, build_journey_pool, make_journey
 from BPC_future.master.journey_rmp import (
     JourneyDuals,
+    _journey_cut_coefficient,
     manual_journey_reduced_cost,
     solve_journey_pool_master,
     solve_journey_rmp,
     solve_journey_stabilized_dual,
 )
-from BPC_future.pricing.journey_pricing import JourneyPricingConfig, price_journeys
+from BPC_future.pricing.journey_pricing import (
+    PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+    PRICING_STATE_DUPLICATE_ONLY,
+    PRICING_STATE_FOUND_NEGATIVE,
+    PRICING_STATE_INCOMPLETE_LIMIT,
+    PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED,
+    JourneyPricingConfig,
+    JourneyPricingResult,
+    price_journeys,
+    seed_sortie_profile_catalog_from_journeys,
+)
 from BPC_future.solver.driver import (
     FutureResult,
     _journey_source_trips,
@@ -65,6 +77,17 @@ class JourneyBranchStats:
 
 
 @dataclass
+class _JourneySameDualSupplementResult:
+    added: int = 0
+    pricing_calls: int = 0
+    exact_pricing_calls: int = 0
+    generated_sequences: int = 0
+    evaluated_timed_trips: int = 0
+    priced_journeys: list[Any] = field(default_factory=list)
+    changed_task_sets: list[frozenset[int]] = field(default_factory=list)
+
+
+@dataclass
 class _JourneyLearningRuntime:
     stabilizer: Any
     anchor: dict[int, float]
@@ -77,8 +100,22 @@ class _JourneyLearningRuntime:
     true_rc_max_kept_per_round: int
     stop_after_no_strong_round: bool
     min_kept_to_continue: int
+    dual_center_enabled: bool = False
+    dual_center_weight: float = 0.0
+    dual_center_momentum: float = 0.25
+    dual_center_min_rounds: int = 3
+    dual_center: dict[int, float] | None = None
+    dual_center_updates: int = 0
     pricing_rounds_used: int = 0
     suppress_after_no_strong_round: bool = False
+
+
+@dataclass
+class _JourneyDualAveragingRuntime:
+    history: list[JourneyDuals] = field(default_factory=list)
+    flat_rounds: int = 0
+    true_rc_filter_failures: int = 0
+    cooldown_until_iter: int = -1
 
 
 _JOURNEY_LEARNING_STABILIZER_CACHE: dict[tuple[Any, ...], Any] = {}
@@ -182,13 +219,16 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
     heuristic_round_limit = int(config.get("journey_heuristic_max_rounds", config.get("heuristic_pricing_max_rounds", 0)))
     previous_dual_vector: tuple[float, ...] | None = None
     previous_pricing_duals: JourneyDuals | None = None
+    dual_averaging_runtime = _JourneyDualAveragingRuntime()
     previous_rmp_objective: float | None = None
     previous_support_hash: str | None = None
     certificate_flat_rounds = 0
     certificate_no_column_rounds = 0
+    certificate_flat_weak_column_rounds = 0
     restart_degenerate_rounds = 0
     restart_count = 0
     recent_priced_journeys: list[Any] = []
+    recent_changed_task_sets: list[frozenset[int]] = []
     dynamic_cuts_total = 0
     dynamic_subset_row_cuts_total = 0
     learning_runtime: _JourneyLearningRuntime | None = prewarmed_learning_runtime
@@ -237,6 +277,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
         )
         scip_dual_vector = _journey_dual_vector(data, solution.duals, len(cuts))
         support_hash = _journey_support_hash(solution.journey_values)
+        active_task_sets = _journey_active_task_sets(solution.journey_values)
         objective_delta = None if previous_rmp_objective is None else float(solution.objective) - float(previous_rmp_objective)
         scip_dual_l1_delta = None if previous_dual_vector is None else sum(abs(a - b) for a, b in zip(scip_dual_vector, previous_dual_vector))
         certificate_candidate = bool(
@@ -262,23 +303,38 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             restart_degenerate_rounds += 1
         else:
             restart_degenerate_rounds = 0
-        pricing_duals, pricing_dual_source = _select_journey_pricing_duals(
+        averaged_duals, averaged_dual_source = _journey_dual_averaging_pricing_duals(
             data,
             config,
-            journey_pool,
-            tuple(cuts),
-            active_fleet_limit,
-            float(solution.objective),
+            dual_averaging_runtime,
             solution.duals,
-            previous_pricing_duals,
-            logger,
-            cg_iter,
+            objective_delta=objective_delta,
             progress_classification=progress_classification,
-            incumbent=incumbent,
-            integer_tol=integer_tol,
-            remaining_time=max(0.0, time_limit - (time.perf_counter() - started)),
-            certificate_flat_rounds=certificate_flat_rounds,
+            logger=logger,
+            cg_iter=cg_iter,
+            node_id=0,
+            depth=0,
         )
+        if averaged_duals is not None and averaged_dual_source is not None:
+            pricing_duals, pricing_dual_source = averaged_duals, averaged_dual_source
+        else:
+            pricing_duals, pricing_dual_source = _select_journey_pricing_duals(
+                data,
+                config,
+                journey_pool,
+                tuple(cuts),
+                active_fleet_limit,
+                float(solution.objective),
+                solution.duals,
+                previous_pricing_duals,
+                logger,
+                cg_iter,
+                progress_classification=progress_classification,
+                incumbent=incumbent,
+                integer_tol=integer_tol,
+                remaining_time=max(0.0, time_limit - (time.perf_counter() - started)),
+                certificate_flat_rounds=certificate_flat_rounds,
+            )
         dual_vector = _journey_dual_vector(data, pricing_duals, len(cuts))
         dual_hash = _journey_dual_hash(dual_vector)
         dual_l1_delta = None if previous_dual_vector is None else sum(abs(a - b) for a, b in zip(dual_vector, previous_dual_vector))
@@ -309,6 +365,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             active_support_hash=support_hash,
             certificate_candidate=certificate_candidate,
             certificate_flat_rounds=certificate_flat_rounds,
+            certificate_flat_weak_column_rounds=certificate_flat_weak_column_rounds,
             restart_degenerate_rounds=restart_degenerate_rounds,
         )
         previous_dual_vector = dual_vector
@@ -438,33 +495,82 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 )
                 priced_journeys = pricing.journeys
                 if learning_smoothed and learning_runtime is not None and learning_runtime.filter_true_rc:
+                    (
+                        learning_keep_threshold,
+                        learning_max_kept,
+                        learning_fallback_keep_threshold,
+                        learning_fallback_max_kept,
+                        learning_filter_context,
+                    ) = _journey_learning_true_rc_filter_parameters(
+                        config,
+                        learning_runtime,
+                        certificate_candidate=certificate_candidate,
+                    )
                     priced_journeys = _journey_learning_true_rc_filter(
                         logger,
                         pricing.journeys,
                         true_duals=solution.duals,
                         cuts=tuple(cuts),
                         tol=learning_runtime.true_rc_tol if learning_runtime is not None else 1.0e-5,
-                        keep_threshold=learning_runtime.true_rc_keep_threshold
-                        if learning_runtime is not None
-                        else 0.0,
-                        max_kept=learning_runtime.true_rc_max_kept_per_round
-                        if learning_runtime is not None
-                        else 0,
-                        fallback_keep_threshold=learning_runtime.true_rc_fallback_keep_threshold
-                        if learning_runtime is not None
-                        else 0.0,
-                        fallback_max_kept=learning_runtime.true_rc_fallback_max_kept_per_round
-                        if learning_runtime is not None
-                        else 0,
+                        keep_threshold=learning_keep_threshold,
+                        max_kept=learning_max_kept,
+                        fallback_keep_threshold=learning_fallback_keep_threshold,
+                        fallback_max_kept=learning_fallback_max_kept,
                         cg_iter=cg_iter,
                         node_id=0,
                         depth=0,
                         pricing_kind="heuristic",
+                        filter_context=learning_filter_context,
                     )
                 if priced_journeys:
                     pricing_for_add = replace(pricing, journeys=list(priced_journeys))
+                    if learning_smoothed and learning_runtime is not None and learning_runtime.filter_true_rc:
+                        seed_config = _journey_pricing_config(
+                            data,
+                            config,
+                            bucket,
+                            start_step,
+                            eps,
+                            remaining,
+                            heuristic=False,
+                            cg_iter=cg_iter,
+                        )
+                        _seed_hidden_negative_profile_catalog(
+                            logger,
+                            data,
+                            config,
+                            pricing_for_add,
+                            solution.duals,
+                            seed_config,
+                            trip_cache,
+                            tuple(),
+                            cg_iter,
+                            pricing_kind="heuristic_learning_true_rc",
+                            node_id=0,
+                            depth=0,
+                        )
                     added = _add_priced_journeys(journey_pool, list(priced_journeys))
-                    _log_journey_addition(logger, pricing_for_add, added, cg_iter, pricing_kind="heuristic")
+                    flat_weak_addition = _journey_flat_weak_column_pressure_addition(
+                        config,
+                        added,
+                        certificate_candidate=certificate_candidate,
+                        certificate_flat_rounds=certificate_flat_rounds,
+                        objective_delta=objective_delta,
+                        eps=eps,
+                        active_task_sets=active_task_sets,
+                    )
+                    if flat_weak_addition:
+                        certificate_flat_weak_column_rounds += 1
+                    else:
+                        certificate_flat_weak_column_rounds = 0
+                    _log_journey_addition(
+                        logger,
+                        pricing_for_add,
+                        added,
+                        cg_iter,
+                        pricing_kind="heuristic",
+                        active_task_sets=active_task_sets,
+                    )
                     if learning_smoothed and learning_runtime is not None:
                         _journey_learning_handle_smoothed_pricing_result(
                             logger,
@@ -500,8 +606,35 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                         slack=_journey_fleet_limit_slack(config),
                     )
                     if added > 0:
-                        certificate_no_column_rounds = 0
-                        continue
+                        logger.log(
+                            "journey_flat_weak_column_pressure",
+                            node_id=0,
+                            depth=0,
+                            cg_iter=cg_iter,
+                            pricing_kind="heuristic",
+                            weak=bool(flat_weak_addition),
+                            flat_weak_column_rounds=int(certificate_flat_weak_column_rounds),
+                            certificate_flat_rounds=int(certificate_flat_rounds),
+                            objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+                            added_journeys=int(added),
+                            new_journeys=int(getattr(added, "new_journeys", int(added))),
+                            replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+                            continue_exact=bool(
+                                flat_weak_addition
+                                and _journey_continue_exact_after_flat_weak_heuristic(
+                                    config,
+                                    flat_weak_column_rounds=certificate_flat_weak_column_rounds,
+                                )
+                            ),
+                        )
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
+                            continue
+                        if not _journey_continue_exact_after_flat_weak_heuristic(
+                            config,
+                            flat_weak_column_rounds=certificate_flat_weak_column_rounds,
+                        ):
+                            continue
                 elif learning_smoothed and learning_runtime is not None:
                     _journey_learning_handle_smoothed_pricing_result(
                         logger,
@@ -528,6 +661,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             cg_iter=cg_iter,
             certificate_no_reserve_enabled=bool(config.get("journey_certificate_no_reserve_enabled", True)),
             certificate_no_reserve_min_cg_iter=int(config.get("journey_certificate_no_reserve_min_cg_iter", 3)),
+            deadline_safety_margin=float(config.get("journey_pricing_deadline_safety_margin", 1.0)),
         )
         logger.log(
             "journey_exact_pricing_budget",
@@ -606,6 +740,27 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             certificate_candidate=certificate_candidate,
             completion_bound_enabled=exact_pricing_config.direct_journey_label_completion_bound_enabled,
         )
+        exact_pricing_kind = "exact"
+        if exact_dual_source == "dual_average":
+            average_direct_config, average_direct_mode = _journey_dual_average_direct_patrol_config(
+                config,
+                exact_pricing_config,
+                remaining=remaining,
+                min_pricing_time=min_pricing_time,
+            )
+            if average_direct_mode:
+                logger.log(
+                    "journey_dual_averaging_direct_patrol",
+                    node_id=0,
+                    depth=0,
+                    cg_iter=cg_iter,
+                    remaining=round(float(remaining), 6),
+                    patrol_mode=average_direct_mode,
+                    pricing_dual_source=exact_dual_source,
+                    certificate_capable=False,
+                )
+                exact_pricing_config = average_direct_config
+                exact_pricing_kind = "exact_dual_average_direct_patrol"
         pricing = price_journeys(
             data,
             exact_duals,
@@ -616,7 +771,21 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             resource_cache=resource_cache,
             forbidden_journey_signatures=_journey_forbidden_signatures_for_node(journey_pool, tuple()),
             dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(journey_pool, cuts, tuple()),
+            priority_task_sets=active_task_sets,
         )
+        if exact_dual_source == "dual_average":
+            pricing = _journey_dual_average_true_rc_filtered_pricing(
+                logger,
+                pricing,
+                runtime=dual_averaging_runtime,
+                true_duals=solution.duals,
+                cuts=tuple(cuts),
+                config=config,
+                cg_iter=cg_iter,
+                node_id=0,
+                depth=0,
+                pricing_kind=exact_pricing_kind,
+            )
         pricing_calls += 1
         exact_pricing_calls += 1
         generated_sequences += pricing.generated_sequences
@@ -625,15 +794,60 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             logger,
             pricing,
             cg_iter,
-            pricing_kind="exact",
+            pricing_kind=exact_pricing_kind,
             config=exact_pricing_config,
             pricing_dual_source=exact_dual_source,
         )
         if pricing.journeys:
             added = _add_priced_journeys(journey_pool, pricing.journeys)
-            _log_journey_addition(logger, pricing, added, cg_iter, pricing_kind="exact")
+            _log_journey_addition(
+                logger,
+                pricing,
+                added,
+                cg_iter,
+                pricing_kind=exact_pricing_kind,
+                active_task_sets=active_task_sets,
+            )
             if added > 0:
                 recent_priced_journeys = list(pricing.journeys)
+                recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                if _journey_same_dual_supplement_needed(
+                    config,
+                    added_columns=int(added),
+                    certificate_candidate=certificate_candidate,
+                    certificate_flat_rounds=certificate_flat_rounds,
+                    depth=0,
+                    pricing_dual_source=exact_dual_source,
+                ):
+                    supplement = _run_journey_same_dual_supplement(
+                        data,
+                        config,
+                        journey_pool,
+                        exact_pricing_config,
+                        exact_duals,
+                        tuple(cuts),
+                        tuple(),
+                        logger,
+                        cg_iter,
+                        node_id=0,
+                        depth=0,
+                        deadline=started + time_limit,
+                        min_pricing_time=min_pricing_time,
+                        trip_cache=trip_cache,
+                        resource_cache=resource_cache,
+                        active_task_sets=active_task_sets,
+                        previous_pricing_kind=exact_pricing_kind,
+                        previous_added=int(added),
+                        pricing_dual_source=exact_dual_source,
+                    )
+                    pricing_calls += int(supplement.pricing_calls)
+                    exact_pricing_calls += int(supplement.exact_pricing_calls)
+                    generated_sequences += int(supplement.generated_sequences)
+                    evaluated_timed_trips += int(supplement.evaluated_timed_trips)
+                    if int(supplement.added) > 0:
+                        added += int(supplement.added)
+                        recent_priced_journeys.extend(supplement.priced_journeys)
+                        recent_changed_task_sets.extend(supplement.changed_task_sets)
             if added > 0 and _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
                 incumbent, final_solution = _run_journey_pool_incumbent_probe(
                     data,
@@ -693,8 +907,53 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
         if not pricing.exhausted:
             certificate_no_column_rounds += 1
             retry_enabled = bool(config.get("journey_retry_incomplete_no_column_enabled", True))
+            skip_ordinary_retry_for_final_probe = _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                config,
+                pricing,
+            )
+            skip_reason = (
+                "profile_materialization_failure_goes_to_final_probe"
+                if bool(skip_ordinary_retry_for_final_probe)
+                else ""
+            )
             retry_min_time = float(config.get("journey_retry_incomplete_no_column_min_time", 1.0))
             retry_remaining = max(0.0, time_limit - (time.perf_counter() - started))
+            if not bool(skip_ordinary_retry_for_final_probe) and _journey_skip_ordinary_retry_after_weak_negative_filtered(
+                config,
+                pricing,
+            ):
+                final_probe_config, _final_probe_mode = _journey_certificate_pricing_config(
+                    config,
+                    exact_pricing_config,
+                    certificate_candidate=certificate_candidate,
+                    certificate_flat_rounds=certificate_flat_rounds,
+                    certificate_no_column_rounds=certificate_no_column_rounds,
+                    depth=0,
+                    completion_bound_phase="after_retry",
+                )
+                final_completion_bound_eligible = bool(
+                    config.get("journey_certificate_completion_bound_after_retry_enabled", False)
+                ) and bool(final_probe_config.direct_journey_label_completion_bound_enabled)
+                final_probe_viable, _final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                    config,
+                    remaining=retry_remaining,
+                    min_pricing_time=min_pricing_time,
+                )
+                if bool(final_completion_bound_eligible) and bool(final_probe_viable):
+                    skip_ordinary_retry_for_final_probe = True
+                    skip_reason = "weak_negative_filtered_goes_to_final_probe"
+            if bool(skip_ordinary_retry_for_final_probe):
+                retry_enabled = False
+                logger.log(
+                    "journey_exact_pricing_retry_skipped",
+                    node_id=0,
+                    depth=0,
+                    cg_iter=cg_iter,
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    reason=skip_reason or "ordinary_retry_skipped_for_final_probe",
+                    certificate_no_column_rounds=certificate_no_column_rounds,
+                )
             if retry_enabled and retry_remaining > max(min_pricing_time, retry_min_time):
                 final_probe_config, _final_probe_mode = _journey_certificate_pricing_config(
                     config,
@@ -744,15 +1003,23 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     retry_force_ng=bool(retry_force_ng),
                     completion_bound_final_reserve=round(float(completion_bound_final_reserve), 6),
                 )
-                retry_pricing_kind = "exact_retry"
-                retry_duals, retry_dual_source = _journey_exact_pricing_duals(
+                retry_pricing_duals, retry_pricing_dual_source = _journey_retry_duals_after_average_filter(
+                    pricing,
                     solution.duals,
                     pricing_duals,
                     pricing_dual_source,
+                )
+                retry_pricing_kind = "exact_retry"
+                retry_duals, retry_dual_source = _journey_exact_pricing_duals(
+                    solution.duals,
+                    retry_pricing_duals,
+                    retry_pricing_dual_source,
                     learning_runtime=learning_runtime,
                     certificate_candidate=certificate_candidate,
                     completion_bound_enabled=retry_config.direct_journey_label_completion_bound_enabled,
                 )
+                retry_active_duals = retry_duals
+                retry_active_dual_source = retry_dual_source
                 pricing = price_journeys(
                     data,
                     retry_duals,
@@ -763,7 +1030,21 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     resource_cache=resource_cache,
                     forbidden_journey_signatures=_journey_forbidden_signatures_for_node(journey_pool, tuple()),
                     dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(journey_pool, cuts, tuple()),
+                    priority_task_sets=active_task_sets,
                 )
+                if retry_dual_source == "dual_average":
+                    pricing = _journey_dual_average_true_rc_filtered_pricing(
+                        logger,
+                        pricing,
+                        runtime=dual_averaging_runtime,
+                        true_duals=solution.duals,
+                        cuts=tuple(cuts),
+                        config=config,
+                        cg_iter=cg_iter,
+                        node_id=0,
+                        depth=0,
+                        pricing_kind="exact_retry",
+                    )
                 pricing_calls += 1
                 exact_pricing_calls += 1
                 generated_sequences += pricing.generated_sequences
@@ -781,7 +1062,425 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     final_min_time = float(
                         config.get("journey_certificate_completion_bound_after_retry_min_time", retry_min_time)
                     )
-                    if final_remaining > max(min_pricing_time, final_min_time):
+                    final_probe_viable, final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                        config,
+                        remaining=final_remaining,
+                        min_pricing_time=min_pricing_time,
+                    )
+                    if final_probe_viable:
+                        dominant_task_set_costs = _journey_pricing_dominant_task_set_costs(
+                            journey_pool,
+                            cuts,
+                            tuple(),
+                        )
+                        patrol_config, patrol_mode = _journey_hidden_negative_patrol_config(
+                            config,
+                            retry_config,
+                            remaining=final_remaining,
+                            min_pricing_time=min_pricing_time,
+                        )
+                        if patrol_mode:
+                            logger.log(
+                                "journey_hidden_negative_patrol_after_retry",
+                                node_id=0,
+                                depth=0,
+                                cg_iter=cg_iter,
+                                remaining=round(float(final_remaining), 6),
+                                previous_status=pricing.status,
+                                previous_reason=pricing.reason,
+                                patrol_mode=patrol_mode,
+                                direct_journey_label_pricing_enabled=True,
+                                completion_bound_enabled=False,
+                                certificate_capable=False,
+                            )
+                            patrol_duals = solution.duals
+                            patrol_dual_source = "scip_hidden_negative_patrol_after_retry"
+                            patrol_pricing = price_journeys(
+                                data,
+                                patrol_duals,
+                                tuple(),
+                                config=patrol_config,
+                                cuts=tuple(cuts),
+                                trip_cache=trip_cache,
+                                resource_cache=resource_cache,
+                                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                    journey_pool, tuple()
+                                ),
+                                dominant_task_set_costs=dominant_task_set_costs,
+                            )
+                            pricing_calls += 1
+                            exact_pricing_calls += 1
+                            generated_sequences += patrol_pricing.generated_sequences
+                            evaluated_timed_trips += patrol_pricing.evaluated_timed_trips
+                            _log_journey_pricing(
+                                logger,
+                                patrol_pricing,
+                                cg_iter,
+                                pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                config=patrol_config,
+                                pricing_dual_source=patrol_dual_source,
+                            )
+                            _log_hidden_negative_audit(
+                                logger,
+                                data,
+                                journey_pool,
+                                pricing,
+                                patrol_pricing,
+                                patrol_duals,
+                                tuple(cuts),
+                                tuple(),
+                                cg_iter,
+                                hidden_pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                hidden_dual_source=patrol_dual_source,
+                                max_logged_journeys=int(
+                                    config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                ),
+                                trigger="hidden_negative_patrol_after_retry",
+                            )
+                            pricing = patrol_pricing
+                            retry_active_duals = patrol_duals
+                            retry_active_dual_source = patrol_dual_source
+                            if patrol_pricing.journeys:
+                                patrol_new_task_sets = int(
+                                    getattr(
+                                        patrol_pricing,
+                                        "direct_label_harvest_selected_new_task_set_count",
+                                        getattr(patrol_pricing, "harvest_selected_new_task_set_count", 0),
+                                    )
+                                )
+                                replacement_only_escalates = bool(
+                                    config.get("journey_hidden_negative_patrol_replacement_only_escalates_to_cb", False)
+                                )
+                                if (
+                                    replacement_only_escalates
+                                    and bool(certificate_candidate)
+                                    and patrol_new_task_sets <= 0
+                                ):
+                                    logger.log(
+                                        "journey_hidden_negative_patrol_replacement_only_escalation",
+                                        node_id=0,
+                                        depth=0,
+                                        cg_iter=cg_iter,
+                                        negative_journeys=len(patrol_pricing.journeys),
+                                        selected_new_task_sets=patrol_new_task_sets,
+                                        selected_replacement_task_sets=int(
+                                            getattr(
+                                                patrol_pricing,
+                                                "direct_label_harvest_selected_replacement_task_set_count",
+                                                getattr(
+                                                    patrol_pricing,
+                                                    "harvest_selected_replacement_task_set_count",
+                                                    0,
+                                                ),
+                                            )
+                                        ),
+                                        next_oracle="exact_completion_bound_retry",
+                                        exact_safe=True,
+                                        certificate_capable=False,
+                                    )
+                                else:
+                                    _seed_hidden_negative_profile_catalog(
+                                        logger,
+                                        data,
+                                        config,
+                                        patrol_pricing,
+                                        patrol_duals,
+                                        retry_config,
+                                        trip_cache,
+                                        tuple(),
+                                        cg_iter,
+                                        pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                        node_id=0,
+                                        depth=0,
+                                    )
+                                    added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
+                                    _log_journey_addition(
+                                        logger,
+                                        patrol_pricing,
+                                        added,
+                                        cg_iter,
+                                        pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                        active_task_sets=active_task_sets,
+                                    )
+                                    if added > 0:
+                                        certificate_no_column_rounds = 0
+                                        recent_priced_journeys = list(patrol_pricing.journeys)
+                                        recent_changed_task_sets = list(
+                                            getattr(added, "changed_task_sets", tuple())
+                                        )
+                                        continue
+                        sweep_enabled, sweep_mode = _journey_new_task_set_sweep_enabled(
+                            config,
+                            remaining=final_remaining,
+                            min_pricing_time=min_pricing_time,
+                            depth=0,
+                        )
+                        if sweep_enabled:
+                            logger.log(
+                                "journey_new_task_set_sweep",
+                                node_id=0,
+                                depth=0,
+                                cg_iter=cg_iter,
+                                remaining=round(float(final_remaining), 6),
+                                previous_status=pricing.status,
+                                previous_reason=pricing.reason,
+                                sweep_mode=sweep_mode,
+                                known_task_sets=len(dominant_task_set_costs),
+                                certificate_capable=False,
+                            )
+                            sweep_duals = solution.duals
+                            sweep_dual_source = "scip_new_task_set_sweep"
+                            sweep_pricing = _price_new_task_set_sweep(
+                                data,
+                                sweep_duals,
+                                tuple(cuts),
+                                journey_pool,
+                                config,
+                                time_limit=float(sweep_mode.get("time_limit", 0.0)),
+                                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                    journey_pool, tuple()
+                                ),
+                            )
+                            pricing_calls += 1
+                            exact_pricing_calls += 1
+                            generated_sequences += sweep_pricing.generated_sequences
+                            evaluated_timed_trips += sweep_pricing.evaluated_timed_trips
+                            _log_journey_pricing(
+                                logger,
+                                sweep_pricing,
+                                cg_iter,
+                                pricing_kind="exact_new_task_set_sweep",
+                                config=retry_config,
+                                pricing_dual_source=sweep_dual_source,
+                            )
+                            if sweep_pricing.journeys:
+                                _log_hidden_negative_audit(
+                                    logger,
+                                    data,
+                                    journey_pool,
+                                    pricing,
+                                    sweep_pricing,
+                                    sweep_duals,
+                                    tuple(cuts),
+                                    tuple(),
+                                    cg_iter,
+                                    hidden_pricing_kind="exact_new_task_set_sweep",
+                                    hidden_dual_source=sweep_dual_source,
+                                    max_logged_journeys=int(
+                                        config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                    ),
+                                    trigger="new_task_set_sweep_after_retry",
+                                )
+                                added = _add_priced_journeys(journey_pool, sweep_pricing.journeys)
+                                _log_journey_addition(
+                                    logger,
+                                    sweep_pricing,
+                                    added,
+                                    cg_iter,
+                                    pricing_kind="exact_new_task_set_sweep",
+                                    active_task_sets=active_task_sets,
+                                )
+                                if added > 0:
+                                    certificate_no_column_rounds = 0
+                                    recent_priced_journeys = list(sweep_pricing.journeys)
+                                    recent_changed_task_sets = list(
+                                        getattr(added, "changed_task_sets", tuple())
+                                    )
+                                    continue
+                        fixed_targets = _journey_fixed_task_set_repair_target_task_sets(
+                            config,
+                            recent_changed_task_sets=recent_changed_task_sets,
+                            active_task_sets=active_task_sets,
+                        )
+                        if not fixed_targets:
+                            fixed_targets = _journey_fixed_task_set_repair_pool_targets(
+                                config,
+                                journey_pool,
+                                solution.duals,
+                                tuple(cuts),
+                            )
+                        fixed_enabled, fixed_mode = _journey_fixed_task_set_repair_enabled(
+                            config,
+                            remaining=final_remaining,
+                            min_pricing_time=min_pricing_time,
+                            depth=0,
+                            target_task_sets=fixed_targets,
+                        )
+                        if fixed_enabled and dominant_task_set_costs:
+                            logger.log(
+                                "journey_fixed_task_set_repair",
+                                node_id=0,
+                                depth=0,
+                                cg_iter=cg_iter,
+                                remaining=round(float(final_remaining), 6),
+                                previous_status=pricing.status,
+                                previous_reason=pricing.reason,
+                                repair_mode=fixed_mode,
+                                known_task_sets=len(dominant_task_set_costs),
+                                certificate_capable=False,
+                            )
+                            fixed_duals = solution.duals
+                            fixed_dual_source = "scip_fixed_task_set_repair"
+                            fixed_pricing = _price_fixed_task_set_representatives(
+                                data,
+                                fixed_duals,
+                                tuple(cuts),
+                                journey_pool,
+                                fixed_targets,
+                                config,
+                                time_limit=float(fixed_mode.get("time_limit", 0.0)),
+                                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                    journey_pool, tuple()
+                                ),
+                            )
+                            pricing_calls += 1
+                            exact_pricing_calls += 1
+                            generated_sequences += fixed_pricing.generated_sequences
+                            evaluated_timed_trips += fixed_pricing.evaluated_timed_trips
+                            _log_journey_pricing(
+                                logger,
+                                fixed_pricing,
+                                cg_iter,
+                                pricing_kind="exact_fixed_task_set_repair",
+                                config=retry_config,
+                                pricing_dual_source=fixed_dual_source,
+                            )
+                            if fixed_pricing.journeys:
+                                _log_hidden_negative_audit(
+                                    logger,
+                                    data,
+                                    journey_pool,
+                                    pricing,
+                                    fixed_pricing,
+                                    fixed_duals,
+                                    tuple(cuts),
+                                    tuple(),
+                                    cg_iter,
+                                    hidden_pricing_kind="exact_fixed_task_set_repair",
+                                    hidden_dual_source=fixed_dual_source,
+                                    max_logged_journeys=int(
+                                        config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                    ),
+                                    trigger="fixed_task_set_repair_after_retry",
+                                )
+                                added = _add_priced_journeys(journey_pool, fixed_pricing.journeys)
+                                _log_journey_addition(
+                                    logger,
+                                    fixed_pricing,
+                                    added,
+                                    cg_iter,
+                                    pricing_kind="exact_fixed_task_set_repair",
+                                    active_task_sets=active_task_sets,
+                                )
+                                if added > 0:
+                                    certificate_no_column_rounds = 0
+                                    recent_priced_journeys = list(fixed_pricing.journeys)
+                                    recent_changed_task_sets = list(
+                                        getattr(added, "changed_task_sets", tuple())
+                                    )
+                                    continue
+                        replacement_config, replacement_mode = _journey_replacement_repair_config(
+                            config,
+                            retry_config,
+                            remaining=final_remaining,
+                            min_pricing_time=min_pricing_time,
+                            depth=0,
+                            target_task_sets=_journey_replacement_repair_target_task_sets(
+                                config,
+                                recent_changed_task_sets=recent_changed_task_sets,
+                                active_task_sets=active_task_sets,
+                            ),
+                        )
+                        if replacement_mode and dominant_task_set_costs:
+                            logger.log(
+                                "journey_replacement_repair",
+                                node_id=0,
+                                depth=0,
+                                cg_iter=cg_iter,
+                                remaining=round(float(final_remaining), 6),
+                                previous_status=pricing.status,
+                                previous_reason=pricing.reason,
+                                replacement_mode=replacement_mode,
+                                known_task_sets=len(dominant_task_set_costs),
+                                direct_journey_label_pricing_enabled=True,
+                                existing_task_set_repair_only=True,
+                                certificate_capable=False,
+                            )
+                            replacement_duals = solution.duals
+                            replacement_dual_source = "scip_replacement_repair"
+                            replacement_pricing = price_journeys(
+                                data,
+                                replacement_duals,
+                                tuple(),
+                                config=replacement_config,
+                                cuts=tuple(cuts),
+                                trip_cache=trip_cache,
+                                resource_cache=resource_cache,
+                                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                    journey_pool, tuple()
+                                ),
+                                dominant_task_set_costs=dominant_task_set_costs,
+                            )
+                            pricing_calls += 1
+                            exact_pricing_calls += 1
+                            generated_sequences += replacement_pricing.generated_sequences
+                            evaluated_timed_trips += replacement_pricing.evaluated_timed_trips
+                            _log_journey_pricing(
+                                logger,
+                                replacement_pricing,
+                                cg_iter,
+                                pricing_kind="exact_replacement_repair",
+                                config=replacement_config,
+                                pricing_dual_source=replacement_dual_source,
+                            )
+                            if replacement_pricing.journeys:
+                                _log_hidden_negative_audit(
+                                    logger,
+                                    data,
+                                    journey_pool,
+                                    pricing,
+                                    replacement_pricing,
+                                    replacement_duals,
+                                    tuple(cuts),
+                                    tuple(),
+                                    cg_iter,
+                                    hidden_pricing_kind="exact_replacement_repair",
+                                    hidden_dual_source=replacement_dual_source,
+                                    max_logged_journeys=int(
+                                        config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                    ),
+                                    trigger="replacement_repair_after_retry",
+                                )
+                                _seed_hidden_negative_profile_catalog(
+                                    logger,
+                                    data,
+                                    config,
+                                    replacement_pricing,
+                                    replacement_duals,
+                                    retry_config,
+                                    trip_cache,
+                                    tuple(),
+                                    cg_iter,
+                                    pricing_kind="exact_replacement_repair",
+                                    node_id=0,
+                                    depth=0,
+                                )
+                                added = _add_priced_journeys(journey_pool, replacement_pricing.journeys)
+                                _log_journey_addition(
+                                    logger,
+                                    replacement_pricing,
+                                    added,
+                                    cg_iter,
+                                    pricing_kind="exact_replacement_repair",
+                                    active_task_sets=active_task_sets,
+                                )
+                                if added > 0:
+                                    certificate_no_column_rounds = 0
+                                    recent_priced_journeys = list(replacement_pricing.journeys)
+                                    recent_changed_task_sets = list(
+                                        getattr(added, "changed_task_sets", tuple())
+                                    )
+                                    continue
                         final_config, final_mode = _journey_certificate_pricing_config(
                             config,
                             retry_config,
@@ -793,7 +1492,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                         )
                         final_config = replace(
                             final_config,
-                            time_limit=_journey_completion_bound_probe_budget(config, final_remaining),
+                            time_limit=final_probe_budget,
                             profile_generation_time_fraction=float(
                                 config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
                             ),
@@ -825,6 +1524,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 certificate_candidate=certificate_candidate,
                                 completion_bound_enabled=final_config.direct_journey_label_completion_bound_enabled,
                             )
+                            ordinary_pricing_for_hidden_audit = pricing
                             pricing = price_journeys(
                                 data,
                                 final_duals,
@@ -839,6 +1539,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                     journey_pool, cuts, tuple()
                                 ),
+                                priority_task_sets=active_task_sets,
                             )
                             pricing_calls += 1
                             exact_pricing_calls += 1
@@ -846,6 +1547,8 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                             evaluated_timed_trips += pricing.evaluated_timed_trips
                             retry_config = final_config
                             retry_pricing_kind = "exact_completion_bound_retry"
+                            retry_active_duals = final_duals
+                            retry_active_dual_source = final_dual_source
                             _log_journey_pricing(
                                 logger,
                                 pricing,
@@ -853,6 +1556,23 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 pricing_kind=retry_pricing_kind,
                                 config=retry_config,
                                 pricing_dual_source=final_dual_source,
+                            )
+                            _log_hidden_negative_audit(
+                                logger,
+                                data,
+                                journey_pool,
+                                ordinary_pricing_for_hidden_audit,
+                                pricing,
+                                final_duals,
+                                tuple(cuts),
+                                tuple(),
+                                cg_iter,
+                                hidden_pricing_kind=retry_pricing_kind,
+                                hidden_dual_source=final_dual_source,
+                                max_logged_journeys=int(
+                                    config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                ),
+                                trigger="after_retry",
                             )
                             if _journey_completion_bound_escalation_needed(
                                 config,
@@ -900,6 +1620,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                         journey_pool, cuts, tuple()
                                     ),
+                                    priority_task_sets=active_task_sets,
                                 )
                                 pricing_calls += 1
                                 exact_pricing_calls += 1
@@ -907,6 +1628,8 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 evaluated_timed_trips += pricing.evaluated_timed_trips
                                 retry_config = escalation_config
                                 retry_pricing_kind = "exact_completion_bound_escalation_retry"
+                                retry_active_duals = final_duals
+                                retry_active_dual_source = final_dual_source
                                 _log_journey_pricing(
                                     logger,
                                     pricing,
@@ -915,11 +1638,161 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     config=retry_config,
                                     pricing_dual_source=final_dual_source,
                                 )
+                                _log_hidden_negative_audit(
+                                    logger,
+                                    data,
+                                    journey_pool,
+                                    ordinary_pricing_for_hidden_audit,
+                                    pricing,
+                                    final_duals,
+                                    tuple(cuts),
+                                    tuple(),
+                                    cg_iter,
+                                    hidden_pricing_kind=retry_pricing_kind,
+                                    hidden_dual_source=final_dual_source,
+                                    max_logged_journeys=int(
+                                        config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                    ),
+                                    trigger="after_retry_escalation",
+                                )
                 if pricing.journeys:
+                    _seed_hidden_negative_profile_catalog(
+                        logger,
+                        data,
+                        config,
+                        pricing,
+                        retry_active_duals,
+                        exact_pricing_config,
+                        trip_cache,
+                        tuple(),
+                        cg_iter,
+                        pricing_kind=retry_pricing_kind,
+                        node_id=0,
+                        depth=0,
+                    )
                     added = _add_priced_journeys(journey_pool, pricing.journeys)
-                    _log_journey_addition(logger, pricing, added, cg_iter, pricing_kind=retry_pricing_kind)
+                    _log_journey_addition(
+                        logger,
+                        pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind=retry_pricing_kind,
+                        active_task_sets=active_task_sets,
+                    )
                     if added > 0:
+                        reharvest_remaining = max(0.0, time_limit - (time.perf_counter() - started))
+                        reharvest_config, reharvest_mode = _journey_post_seed_profile_reharvest_config(
+                            config,
+                            exact_pricing_config,
+                            added,
+                            remaining=reharvest_remaining,
+                            min_pricing_time=min_pricing_time,
+                            depth=0,
+                        )
+                        reharvest_added = 0
+                        reharvest_priced_journeys: list[Any] = []
+                        reharvest_changed_task_sets: list[frozenset[int]] = []
+                        if reharvest_mode:
+                            logger.log(
+                                "journey_post_seed_profile_reharvest",
+                                node_id=0,
+                                depth=0,
+                                cg_iter=cg_iter,
+                                previous_pricing_kind=retry_pricing_kind,
+                                previous_added_journeys=int(added),
+                                previous_new_journeys=int(getattr(added, "new_journeys", int(added))),
+                                previous_replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+                                remaining=round(float(reharvest_remaining), 6),
+                                reharvest_mode=reharvest_mode,
+                                certificate_capable=False,
+                            )
+                            reharvest_pricing = price_journeys(
+                                data,
+                                retry_active_duals,
+                                tuple(),
+                                config=reharvest_config,
+                                cuts=tuple(cuts),
+                                trip_cache=trip_cache,
+                                resource_cache=resource_cache,
+                                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                    journey_pool, tuple()
+                                ),
+                                dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                                    journey_pool, cuts, tuple()
+                                ),
+                            )
+                            pricing_calls += 1
+                            exact_pricing_calls += 1
+                            generated_sequences += reharvest_pricing.generated_sequences
+                            evaluated_timed_trips += reharvest_pricing.evaluated_timed_trips
+                            _log_journey_pricing(
+                                logger,
+                                reharvest_pricing,
+                                cg_iter,
+                                pricing_kind="exact_post_seed_profile_reharvest",
+                                config=reharvest_config,
+                                pricing_dual_source="scip_post_seed_profile_reharvest",
+                            )
+                            if reharvest_pricing.journeys:
+                                reharvest_added_count = _add_priced_journeys(
+                                    journey_pool,
+                                    reharvest_pricing.journeys,
+                                )
+                                _log_journey_addition(
+                                    logger,
+                                    reharvest_pricing,
+                                    reharvest_added_count,
+                                    cg_iter,
+                                    pricing_kind="exact_post_seed_profile_reharvest",
+                                    active_task_sets=active_task_sets,
+                                )
+                                reharvest_added = int(reharvest_added_count)
+                                if reharvest_added > 0:
+                                    reharvest_priced_journeys = list(reharvest_pricing.journeys)
+                                    reharvest_changed_task_sets = list(
+                                        getattr(reharvest_added_count, "changed_task_sets", tuple())
+                                    )
+                        if _journey_same_dual_supplement_needed(
+                            config,
+                            added_columns=int(added),
+                            certificate_candidate=certificate_candidate,
+                            certificate_flat_rounds=certificate_flat_rounds,
+                            depth=0,
+                            pricing_dual_source=retry_active_dual_source,
+                        ):
+                            supplement = _run_journey_same_dual_supplement(
+                                data,
+                                config,
+                                journey_pool,
+                                exact_pricing_config,
+                                retry_active_duals,
+                                tuple(cuts),
+                                tuple(),
+                                logger,
+                                cg_iter,
+                                node_id=0,
+                                depth=0,
+                                deadline=started + time_limit,
+                                min_pricing_time=min_pricing_time,
+                                trip_cache=trip_cache,
+                                resource_cache=resource_cache,
+                                active_task_sets=active_task_sets,
+                                previous_pricing_kind=retry_pricing_kind,
+                                previous_added=int(added),
+                                pricing_dual_source=retry_active_dual_source,
+                            )
+                            pricing_calls += int(supplement.pricing_calls)
+                            exact_pricing_calls += int(supplement.exact_pricing_calls)
+                            generated_sequences += int(supplement.generated_sequences)
+                            evaluated_timed_trips += int(supplement.evaluated_timed_trips)
+                            if int(supplement.added) > 0:
+                                added += int(supplement.added)
+                                reharvest_priced_journeys.extend(supplement.priced_journeys)
+                                reharvest_changed_task_sets.extend(supplement.changed_task_sets)
                         recent_priced_journeys = list(pricing.journeys)
+                        recent_priced_journeys.extend(reharvest_priced_journeys)
+                        recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                        recent_changed_task_sets.extend(reharvest_changed_task_sets)
                     if added > 0 and _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
                         incumbent, final_solution = _run_journey_pool_incumbent_probe(
                             data,
@@ -959,7 +1832,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                         )
                         restart_count += int(restarted)
                         continue
-                if pricing.exhausted:
+                if pricing.exhausted or bool(skip_ordinary_retry_for_final_probe):
                     if _journey_completion_bound_final_probe_needed(config, pricing):
                         final_remaining = max(0.0, time_limit - (time.perf_counter() - started))
                         final_min_time = float(
@@ -968,7 +1841,12 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 float(config.get("journey_retry_incomplete_no_column_min_time", 1.0)),
                             )
                         )
-                        if final_remaining > max(min_pricing_time, final_min_time):
+                        final_probe_viable, final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                            config,
+                            remaining=final_remaining,
+                            min_pricing_time=min_pricing_time,
+                        )
+                        if final_probe_viable:
                             final_config, final_mode = _journey_certificate_pricing_config(
                                 config,
                                 exact_pricing_config,
@@ -980,7 +1858,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                             )
                             final_config = replace(
                                 final_config,
-                                time_limit=_journey_completion_bound_probe_budget(config, final_remaining),
+                                time_limit=final_probe_budget,
                                 profile_generation_time_fraction=float(
                                     config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
                                 ),
@@ -1010,6 +1888,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     certificate_candidate=certificate_candidate,
                                     completion_bound_enabled=final_config.direct_journey_label_completion_bound_enabled,
                                 )
+                                ordinary_pricing_for_hidden_audit = pricing
                                 pricing = price_journeys(
                                     data,
                                     final_duals,
@@ -1024,6 +1903,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                         journey_pool, cuts, tuple()
                                     ),
+                                    priority_task_sets=active_task_sets,
                                 )
                                 pricing_calls += 1
                                 exact_pricing_calls += 1
@@ -1037,6 +1917,23 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     pricing_kind=retry_pricing_kind,
                                     config=final_config,
                                     pricing_dual_source=final_dual_source,
+                                )
+                                _log_hidden_negative_audit(
+                                    logger,
+                                    data,
+                                    journey_pool,
+                                    ordinary_pricing_for_hidden_audit,
+                                    pricing,
+                                    final_duals,
+                                    tuple(cuts),
+                                    tuple(),
+                                    cg_iter,
+                                    hidden_pricing_kind=retry_pricing_kind,
+                                    hidden_dual_source=final_dual_source,
+                                    max_logged_journeys=int(
+                                        config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                    ),
+                                    trigger="profile_exhausted_no_column",
                                 )
                                 if _journey_completion_bound_escalation_needed(
                                     config,
@@ -1084,6 +1981,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                             journey_pool, cuts, tuple()
                                         ),
+                                        priority_task_sets=active_task_sets,
                                     )
                                     pricing_calls += 1
                                     exact_pricing_calls += 1
@@ -1099,7 +1997,38 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         config=final_config,
                                         pricing_dual_source=final_dual_source,
                                     )
+                                    _log_hidden_negative_audit(
+                                        logger,
+                                        data,
+                                        journey_pool,
+                                        ordinary_pricing_for_hidden_audit,
+                                        pricing,
+                                        final_duals,
+                                        tuple(cuts),
+                                        tuple(),
+                                        cg_iter,
+                                        hidden_pricing_kind=retry_pricing_kind,
+                                        hidden_dual_source=final_dual_source,
+                                        max_logged_journeys=int(
+                                            config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                        ),
+                                        trigger="profile_exhausted_no_column_escalation",
+                                    )
                                 if pricing.journeys:
+                                    _seed_hidden_negative_profile_catalog(
+                                        logger,
+                                        data,
+                                        config,
+                                        pricing,
+                                        final_duals,
+                                        exact_pricing_config,
+                                        trip_cache,
+                                        tuple(),
+                                        cg_iter,
+                                        pricing_kind=retry_pricing_kind,
+                                        node_id=0,
+                                        depth=0,
+                                    )
                                     added = _add_priced_journeys(journey_pool, pricing.journeys)
                                     _log_journey_addition(
                                         logger,
@@ -1107,13 +2036,144 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         added,
                                         cg_iter,
                                         pricing_kind=retry_pricing_kind,
+                                        active_task_sets=active_task_sets,
                                     )
                                     if added > 0:
+                                        reharvest_remaining = max(0.0, time_limit - (time.perf_counter() - started))
+                                        reharvest_config, reharvest_mode = _journey_post_seed_profile_reharvest_config(
+                                            config,
+                                            exact_pricing_config,
+                                            added,
+                                            remaining=reharvest_remaining,
+                                            min_pricing_time=min_pricing_time,
+                                            depth=0,
+                                        )
+                                        reharvest_priced_journeys: list[Any] = []
+                                        reharvest_changed_task_sets: list[frozenset[int]] = []
+                                        if reharvest_mode:
+                                            logger.log(
+                                                "journey_post_seed_profile_reharvest",
+                                                node_id=0,
+                                                depth=0,
+                                                cg_iter=cg_iter,
+                                                previous_pricing_kind=retry_pricing_kind,
+                                                previous_added_journeys=int(added),
+                                                previous_new_journeys=int(
+                                                    getattr(added, "new_journeys", int(added))
+                                                ),
+                                                previous_replacement_journeys=int(
+                                                    getattr(added, "replacement_journeys", 0)
+                                                ),
+                                                remaining=round(float(reharvest_remaining), 6),
+                                                reharvest_mode=reharvest_mode,
+                                                certificate_capable=False,
+                                            )
+                                            reharvest_pricing = price_journeys(
+                                                data,
+                                                final_duals,
+                                                tuple(),
+                                                config=reharvest_config,
+                                                cuts=tuple(cuts),
+                                                trip_cache=trip_cache,
+                                                resource_cache=resource_cache,
+                                                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                                    journey_pool, tuple()
+                                                ),
+                                                dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                                                    journey_pool, cuts, tuple()
+                                                ),
+                                            )
+                                            pricing_calls += 1
+                                            exact_pricing_calls += 1
+                                            generated_sequences += reharvest_pricing.generated_sequences
+                                            evaluated_timed_trips += reharvest_pricing.evaluated_timed_trips
+                                            _log_journey_pricing(
+                                                logger,
+                                                reharvest_pricing,
+                                                cg_iter,
+                                                pricing_kind="exact_post_seed_profile_reharvest",
+                                                config=reharvest_config,
+                                                pricing_dual_source="scip_post_seed_profile_reharvest",
+                                            )
+                                            if reharvest_pricing.journeys:
+                                                reharvest_added_count = _add_priced_journeys(
+                                                    journey_pool,
+                                                    reharvest_pricing.journeys,
+                                                )
+                                                _log_journey_addition(
+                                                    logger,
+                                                    reharvest_pricing,
+                                                    reharvest_added_count,
+                                                    cg_iter,
+                                                    pricing_kind="exact_post_seed_profile_reharvest",
+                                                    active_task_sets=active_task_sets,
+                                                )
+                                                if int(reharvest_added_count) > 0:
+                                                    reharvest_priced_journeys = list(reharvest_pricing.journeys)
+                                                    reharvest_changed_task_sets = list(
+                                                        getattr(reharvest_added_count, "changed_task_sets", tuple())
+                                                    )
+                                        if _journey_same_dual_supplement_needed(
+                                            config,
+                                            added_columns=int(added),
+                                            certificate_candidate=certificate_candidate,
+                                            certificate_flat_rounds=certificate_flat_rounds,
+                                            depth=0,
+                                            pricing_dual_source=final_dual_source,
+                                        ):
+                                            supplement = _run_journey_same_dual_supplement(
+                                                data,
+                                                config,
+                                                journey_pool,
+                                                exact_pricing_config,
+                                                final_duals,
+                                                tuple(cuts),
+                                                tuple(),
+                                                logger,
+                                                cg_iter,
+                                                node_id=0,
+                                                depth=0,
+                                                deadline=started + time_limit,
+                                                min_pricing_time=min_pricing_time,
+                                                trip_cache=trip_cache,
+                                                resource_cache=resource_cache,
+                                                active_task_sets=active_task_sets,
+                                                previous_pricing_kind=retry_pricing_kind,
+                                                previous_added=int(added),
+                                                pricing_dual_source=final_dual_source,
+                                            )
+                                            pricing_calls += int(supplement.pricing_calls)
+                                            exact_pricing_calls += int(supplement.exact_pricing_calls)
+                                            generated_sequences += int(supplement.generated_sequences)
+                                            evaluated_timed_trips += int(supplement.evaluated_timed_trips)
+                                            if int(supplement.added) > 0:
+                                                added += int(supplement.added)
+                                                reharvest_priced_journeys.extend(supplement.priced_journeys)
+                                                reharvest_changed_task_sets.extend(supplement.changed_task_sets)
                                         certificate_no_column_rounds = 0
                                         recent_priced_journeys = list(pricing.journeys)
+                                        recent_priced_journeys.extend(reharvest_priced_journeys)
+                                        recent_changed_task_sets = list(
+                                            getattr(added, "changed_task_sets", tuple())
+                                        )
+                                        recent_changed_task_sets.extend(reharvest_changed_task_sets)
                                         continue
                                 if not pricing.exhausted:
                                     break
+                                pricing = _journey_promote_duplicate_only_final_judge_certificate(
+                                    data,
+                                    config,
+                                    journey_pool,
+                                    tuple(),
+                                    tuple(cuts),
+                                    active_fleet_limit,
+                                    pricing,
+                                    logger,
+                                    cg_iter,
+                                    node_id=0,
+                                    depth=0,
+                                )
+                                break
                             else:
                                 pricing = replace(
                                     pricing,
@@ -1134,7 +2194,30 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     break
             else:
                 break
-        if not pricing.exhausted:
+        pricing = _journey_promote_duplicate_only_final_judge_certificate(
+            data,
+            config,
+            journey_pool,
+            tuple(),
+            tuple(cuts),
+            active_fleet_limit,
+            pricing,
+            logger,
+            cg_iter,
+            node_id=0,
+            depth=0,
+        )
+        if not _journey_pricing_is_global_certificate(pricing):
+            _log_journey_certificate_rejection(
+                logger,
+                pricing,
+                cg_iter,
+                node_id=0,
+                depth=0,
+                pricing_kind="exact_completion_bound_retry"
+                if bool(getattr(pricing, "completion_bound_enabled", False))
+                else "exact",
+            )
             break
         dual_bound = float(solution.objective)
         pool_mip = solve_journey_pool_master(
@@ -1190,9 +2273,14 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
         primal_bound=result.primal_bound,
         dual_bound=result.dual_bound,
         gap=result.gap,
+        solving_time=result.solving_time,
         nodes=result.node_count,
         columns=result.columns,
+        rmp_solves=result.rmp_solves,
         pricing_calls=result.pricing_calls,
+        exact_pricing_calls=result.exact_pricing_calls,
+        generated_sequences=result.generated_sequences,
+        evaluated_timed_trips=result.evaluated_timed_trips,
         cuts_added=result.cuts_added,
     )
     return result
@@ -1617,11 +2705,15 @@ def _solve_bpc_future_journey_branch_price(
         primal_bound=result.primal_bound,
         dual_bound=result.dual_bound,
         gap=result.gap,
+        solving_time=result.solving_time,
         nodes=result.node_count,
         open_nodes=len(open_nodes),
         columns=result.columns,
+        rmp_solves=result.rmp_solves,
         pricing_calls=result.pricing_calls,
         exact_pricing_calls=result.exact_pricing_calls,
+        generated_sequences=result.generated_sequences,
+        evaluated_timed_trips=result.evaluated_timed_trips,
         cuts_added=result.cuts_added,
         branch_nodes=stats.branch_nodes,
         pricing_incomplete_nodes=stats.pricing_incomplete_nodes,
@@ -1660,12 +2752,14 @@ def _process_journey_branch_node(
     heuristic_round_limit = int(config.get("journey_heuristic_max_rounds", config.get("heuristic_pricing_max_rounds", 0)))
     previous_dual_vector: tuple[float, ...] | None = None
     previous_pricing_duals: JourneyDuals | None = None
+    dual_averaging_runtime = _JourneyDualAveragingRuntime()
     previous_rmp_objective: float | None = None
     previous_support_hash: str | None = None
     certificate_flat_rounds = 0
     restart_degenerate_rounds = 0
     restart_count = 0
     recent_priced_journeys: list[Any] = []
+    recent_changed_task_sets: list[frozenset[int]] = []
     cache_enabled = bool(config.get("journey_pricing_trip_cache_enabled", True))
     if int(node.depth) > 0 and "journey_branch_pricing_trip_cache_enabled" in config:
         cache_enabled = bool(config.get("journey_branch_pricing_trip_cache_enabled", cache_enabled))
@@ -1690,6 +2784,7 @@ def _process_journey_branch_node(
     learning_certificate_gate_logged = False
     certificate_no_column_rounds = 0
     retry_negative_after_no_column_rounds = 0
+    certificate_flat_weak_column_rounds = 0
 
     def payload(status: str, **extra: Any) -> dict[str, Any]:
         extra["status"] = status
@@ -1698,6 +2793,38 @@ def _process_journey_branch_node(
             extra["incumbent_objective"] = local_incumbent
             extra["incumbent_solution"] = local_solution
         return extra
+
+    def note_flat_weak_addition(added: int, pricing_kind: str) -> bool:
+        nonlocal certificate_flat_weak_column_rounds
+        weak = _journey_flat_weak_column_pressure_addition(
+            config,
+            added,
+            certificate_candidate=certificate_candidate,
+            certificate_flat_rounds=certificate_flat_rounds,
+            objective_delta=objective_delta,
+            eps=eps,
+            active_task_sets=active_task_sets,
+        )
+        if weak:
+            certificate_flat_weak_column_rounds += 1
+        else:
+            certificate_flat_weak_column_rounds = 0
+        if int(added) > 0:
+            logger.log(
+                "journey_flat_weak_column_pressure",
+                node_id=node.id,
+                depth=node.depth,
+                cg_iter=cg_iter,
+                pricing_kind=pricing_kind,
+                weak=bool(weak),
+                flat_weak_column_rounds=int(certificate_flat_weak_column_rounds),
+                certificate_flat_rounds=int(certificate_flat_rounds),
+                objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+                added_journeys=int(added),
+                new_journeys=int(getattr(added, "new_journeys", int(added))),
+                replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+            )
+        return weak
 
     for cg_iter in range(1, max_cg + 1):
         if time.perf_counter() >= deadline:
@@ -1761,6 +2888,7 @@ def _process_journey_branch_node(
 
         scip_dual_vector = _journey_dual_vector(data, solution.duals, len(cuts))
         support_hash = _journey_support_hash(solution.journey_values)
+        active_task_sets = _journey_active_task_sets(solution.journey_values)
         objective_delta = None if previous_rmp_objective is None else float(solution.objective) - float(previous_rmp_objective)
         scip_dual_l1_delta = None if previous_dual_vector is None else sum(abs(a - b) for a, b in zip(scip_dual_vector, previous_dual_vector))
         certificate_candidate = bool(
@@ -1786,23 +2914,38 @@ def _process_journey_branch_node(
             restart_degenerate_rounds += 1
         else:
             restart_degenerate_rounds = 0
-        pricing_duals, pricing_dual_source = _select_journey_pricing_duals(
+        averaged_duals, averaged_dual_source = _journey_dual_averaging_pricing_duals(
             data,
             config,
-            journey_pool,
-            tuple(cuts),
-            active_fleet_limit,
-            float(solution.objective),
+            dual_averaging_runtime,
             solution.duals,
-            previous_pricing_duals,
-            logger,
-            cg_iter,
+            objective_delta=objective_delta,
             progress_classification=progress_classification,
-            incumbent=local_incumbent,
-            integer_tol=integer_tol,
-            remaining_time=max(0.0, deadline - time.perf_counter()),
-            certificate_flat_rounds=certificate_flat_rounds,
+            logger=logger,
+            cg_iter=cg_iter,
+            node_id=node.id,
+            depth=node.depth,
         )
+        if averaged_duals is not None and averaged_dual_source is not None:
+            pricing_duals, pricing_dual_source = averaged_duals, averaged_dual_source
+        else:
+            pricing_duals, pricing_dual_source = _select_journey_pricing_duals(
+                data,
+                config,
+                journey_pool,
+                tuple(cuts),
+                active_fleet_limit,
+                float(solution.objective),
+                solution.duals,
+                previous_pricing_duals,
+                logger,
+                cg_iter,
+                progress_classification=progress_classification,
+                incumbent=local_incumbent,
+                integer_tol=integer_tol,
+                remaining_time=max(0.0, deadline - time.perf_counter()),
+                certificate_flat_rounds=certificate_flat_rounds,
+            )
         dual_vector = _journey_dual_vector(data, pricing_duals, len(cuts))
         dual_hash = _journey_dual_hash(dual_vector)
         dual_l1_delta = None if previous_dual_vector is None else sum(abs(a - b) for a, b in zip(dual_vector, previous_dual_vector))
@@ -1835,6 +2978,7 @@ def _process_journey_branch_node(
             active_support_hash=support_hash,
             certificate_candidate=certificate_candidate,
             certificate_flat_rounds=certificate_flat_rounds,
+            certificate_flat_weak_column_rounds=certificate_flat_weak_column_rounds,
             restart_degenerate_rounds=restart_degenerate_rounds,
         )
         previous_dual_vector = dual_vector
@@ -1974,32 +3118,75 @@ def _process_journey_branch_node(
                 )
                 priced_journeys = pricing.journeys
                 if learning_smoothed and learning_runtime is not None and learning_runtime.filter_true_rc:
+                    (
+                        learning_keep_threshold,
+                        learning_max_kept,
+                        learning_fallback_keep_threshold,
+                        learning_fallback_max_kept,
+                        learning_filter_context,
+                    ) = _journey_learning_true_rc_filter_parameters(
+                        config,
+                        learning_runtime,
+                        certificate_candidate=certificate_candidate,
+                    )
                     priced_journeys = _journey_learning_true_rc_filter(
                         logger,
                         pricing.journeys,
                         true_duals=solution.duals,
                         cuts=tuple(cuts),
                         tol=learning_runtime.true_rc_tol if learning_runtime is not None else 1.0e-5,
-                        keep_threshold=learning_runtime.true_rc_keep_threshold
-                        if learning_runtime is not None
-                        else 0.0,
-                        max_kept=learning_runtime.true_rc_max_kept_per_round
-                        if learning_runtime is not None
-                        else 0,
-                        fallback_keep_threshold=learning_runtime.true_rc_fallback_keep_threshold
-                        if learning_runtime is not None
-                        else 0.0,
-                        fallback_max_kept=learning_runtime.true_rc_fallback_max_kept_per_round
-                        if learning_runtime is not None
-                        else 0,
+                        keep_threshold=learning_keep_threshold,
+                        max_kept=learning_max_kept,
+                        fallback_keep_threshold=learning_fallback_keep_threshold,
+                        fallback_max_kept=learning_fallback_max_kept,
                         cg_iter=cg_iter,
                         node_id=node.id,
                         depth=node.depth,
                         pricing_kind="heuristic",
-                    )
+                        filter_context=learning_filter_context,
+                )
                 if priced_journeys:
                     pricing_for_add = replace(pricing, journeys=list(priced_journeys))
+                    if learning_smoothed and learning_runtime is not None and learning_runtime.filter_true_rc:
+                        seed_config = _journey_pricing_config(
+                            data,
+                            config,
+                            bucket,
+                            start_step,
+                            eps,
+                            remaining,
+                            heuristic=False,
+                            cg_iter=cg_iter,
+                        )
+                        seed_config = _journey_node_depth_pricing_config(config, seed_config, node.depth)
+                        _seed_hidden_negative_profile_catalog(
+                            logger,
+                            data,
+                            config,
+                            pricing_for_add,
+                            solution.duals,
+                            seed_config,
+                            pricing_trip_cache if pricing_trip_cache is not None else {},
+                            node.branch_constraints,
+                            cg_iter,
+                            pricing_kind="heuristic_learning_true_rc",
+                            node_id=node.id,
+                            depth=node.depth,
+                        )
                     added = _add_priced_journeys(journey_pool, list(priced_journeys))
+                    flat_weak_addition = _journey_flat_weak_column_pressure_addition(
+                        config,
+                        added,
+                        certificate_candidate=certificate_candidate,
+                        certificate_flat_rounds=certificate_flat_rounds,
+                        objective_delta=objective_delta,
+                        eps=eps,
+                        active_task_sets=active_task_sets,
+                    )
+                    if flat_weak_addition:
+                        certificate_flat_weak_column_rounds += 1
+                    else:
+                        certificate_flat_weak_column_rounds = 0
                     _log_journey_addition(
                         logger,
                         pricing_for_add,
@@ -2008,6 +3195,7 @@ def _process_journey_branch_node(
                         pricing_kind="heuristic",
                         node_id=node.id,
                         depth=node.depth,
+                        active_task_sets=active_task_sets,
                     )
                     if learning_smoothed and learning_runtime is not None:
                         _journey_learning_handle_smoothed_pricing_result(
@@ -2037,9 +3225,36 @@ def _process_journey_branch_node(
                             depth=node.depth,
                         )
                     if added > 0:
-                        certificate_no_column_rounds = 0
-                        retry_negative_after_no_column_rounds = 0
-                        continue
+                        logger.log(
+                            "journey_flat_weak_column_pressure",
+                            node_id=node.id,
+                            depth=node.depth,
+                            cg_iter=cg_iter,
+                            pricing_kind="heuristic",
+                            weak=bool(flat_weak_addition),
+                            flat_weak_column_rounds=int(certificate_flat_weak_column_rounds),
+                            certificate_flat_rounds=int(certificate_flat_rounds),
+                            objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+                            added_journeys=int(added),
+                            new_journeys=int(getattr(added, "new_journeys", int(added))),
+                            replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+                            continue_exact=bool(
+                                flat_weak_addition
+                                and _journey_continue_exact_after_flat_weak_heuristic(
+                                    config,
+                                    flat_weak_column_rounds=certificate_flat_weak_column_rounds,
+                                )
+                            ),
+                        )
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
+                            retry_negative_after_no_column_rounds = 0
+                            continue
+                        if not _journey_continue_exact_after_flat_weak_heuristic(
+                            config,
+                            flat_weak_column_rounds=certificate_flat_weak_column_rounds,
+                        ):
+                            continue
                 elif learning_smoothed and learning_runtime is not None:
                     _journey_learning_handle_smoothed_pricing_result(
                         logger,
@@ -2067,6 +3282,7 @@ def _process_journey_branch_node(
             cg_iter=cg_iter,
             certificate_no_reserve_enabled=bool(config.get("journey_certificate_no_reserve_enabled", True)),
             certificate_no_reserve_min_cg_iter=int(config.get("journey_certificate_no_reserve_min_cg_iter", 3)),
+            deadline_safety_margin=float(config.get("journey_pricing_deadline_safety_margin", 1.0)),
         )
         logger.log(
             "journey_exact_pricing_budget",
@@ -2161,6 +3377,7 @@ def _process_journey_branch_node(
             remaining=remaining,
             exact_time_limit=float(exact_config.time_limit),
             min_pricing_time=min_pricing_time,
+            certificate_candidate=certificate_candidate,
             final_completion_bound_eligible=bool(final_probe_preview.direct_journey_label_completion_bound_enabled),
             exact_completion_bound_enabled=bool(exact_config.direct_journey_label_completion_bound_enabled),
         )
@@ -2181,6 +3398,50 @@ def _process_journey_branch_node(
                     6,
                 ),
             )
+        exact_pricing_kind = "exact"
+        if _journey_pre_exact_completion_bound_handoff_needed(
+            config,
+            remaining=max(0.0, deadline - time.perf_counter()),
+            final_min_time=float(config.get("journey_certificate_completion_bound_after_retry_min_time", min_pricing_time)),
+            min_pricing_time=min_pricing_time,
+            certificate_candidate=certificate_candidate,
+            certificate_flat_rounds=certificate_flat_rounds,
+            depth=node.depth,
+            final_completion_bound_eligible=bool(final_probe_preview.direct_journey_label_completion_bound_enabled),
+            exact_completion_bound_enabled=bool(exact_config.direct_journey_label_completion_bound_enabled),
+        ):
+            handoff_remaining = max(0.0, deadline - time.perf_counter())
+            handoff_config, handoff_mode = _journey_certificate_pricing_config(
+                config,
+                exact_config,
+                certificate_candidate=certificate_candidate,
+                certificate_flat_rounds=certificate_flat_rounds,
+                certificate_no_column_rounds=max(1, certificate_no_column_rounds + 1),
+                depth=node.depth,
+                completion_bound_phase="after_retry",
+            )
+            handoff_config = replace(
+                handoff_config,
+                time_limit=_journey_completion_bound_probe_budget(config, handoff_remaining),
+                profile_generation_time_fraction=float(
+                    config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
+                ),
+            )
+            if bool(handoff_config.direct_journey_label_completion_bound_enabled):
+                logger.log(
+                    "journey_exact_pricing_completion_bound_pre_exact_handoff",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(handoff_remaining), 6),
+                    old_time_limit=round(float(exact_config.time_limit), 6),
+                    new_time_limit=round(float(handoff_config.time_limit), 6),
+                    certificate_flat_rounds=int(certificate_flat_rounds),
+                    certificate_no_column_rounds=int(certificate_no_column_rounds),
+                    retry_mode=handoff_mode,
+                )
+                exact_config = handoff_config
+                exact_pricing_kind = "exact_completion_bound_pre_exact_handoff"
         exact_duals, exact_dual_source = _journey_exact_pricing_duals(
             solution.duals,
             pricing_duals,
@@ -2189,6 +3450,191 @@ def _process_journey_branch_node(
             certificate_candidate=certificate_candidate,
             completion_bound_enabled=exact_config.direct_journey_label_completion_bound_enabled,
         )
+        pre_exact_patrol_enabled = bool(config.get("journey_hidden_negative_patrol_before_exact_flat_enabled", False))
+        pre_exact_patrol_depth_limit = int(
+            config.get("journey_hidden_negative_patrol_before_exact_disable_on_branch_depth_gt", 0)
+        )
+        pre_exact_patrol_min_flat = max(
+            1,
+            int(config.get("journey_hidden_negative_patrol_before_exact_min_flat_rounds", 1)),
+        )
+        pre_exact_patrol_min_retry_negative = max(
+            0,
+            int(config.get("journey_hidden_negative_patrol_before_exact_min_retry_negative_rounds", 1)),
+        )
+        pre_exact_patrol_remaining = max(0.0, deadline - time.perf_counter())
+        if (
+            pre_exact_patrol_enabled
+            and int(node.depth) <= pre_exact_patrol_depth_limit
+            and bool(certificate_candidate)
+            and int(certificate_flat_rounds) >= pre_exact_patrol_min_flat
+            and int(retry_negative_after_no_column_rounds) >= pre_exact_patrol_min_retry_negative
+            and not bool(exact_config.direct_journey_label_completion_bound_enabled)
+            and pre_exact_patrol_remaining > min_pricing_time
+        ):
+            patrol_config, patrol_mode = _journey_hidden_negative_patrol_config(
+                config,
+                exact_config,
+                remaining=pre_exact_patrol_remaining,
+                min_pricing_time=min_pricing_time,
+            )
+            if patrol_mode:
+                logger.log(
+                    "journey_hidden_negative_patrol_before_exact",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(pre_exact_patrol_remaining), 6),
+                    certificate_flat_rounds=int(certificate_flat_rounds),
+                    retry_negative_after_no_column_rounds=int(retry_negative_after_no_column_rounds),
+                    patrol_mode=patrol_mode,
+                    direct_journey_label_pricing_enabled=True,
+                    completion_bound_enabled=False,
+                    certificate_capable=False,
+                )
+                patrol_duals = solution.duals
+                patrol_dual_source = "scip_hidden_negative_patrol_pre"
+                patrol_pricing = price_journeys(
+                    data,
+                    patrol_duals,
+                    node.branch_constraints,
+                    config=patrol_config,
+                    cuts=tuple(cuts),
+                    trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                    resource_cache=pricing_resource_cache,
+                    forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                        journey_pool, node.branch_constraints
+                    ),
+                    dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                        journey_pool, cuts, node.branch_constraints
+                    ),
+                )
+                stats.pricing_calls += 1
+                stats.exact_pricing_calls += 1
+                stats.generated_sequences += patrol_pricing.generated_sequences
+                stats.evaluated_timed_trips += patrol_pricing.evaluated_timed_trips
+                _log_journey_pricing(
+                    logger,
+                    patrol_pricing,
+                    cg_iter,
+                    pricing_kind="exact_hidden_negative_patrol_pre",
+                    config=patrol_config,
+                    pricing_dual_source=patrol_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                if patrol_pricing.journeys:
+                    added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
+                    flat_weak_addition = _journey_flat_weak_column_pressure_addition(
+                        config,
+                        added,
+                        certificate_candidate=certificate_candidate,
+                        certificate_flat_rounds=certificate_flat_rounds,
+                        objective_delta=objective_delta,
+                        eps=eps,
+                        active_task_sets=active_task_sets,
+                    )
+                    if flat_weak_addition:
+                        certificate_flat_weak_column_rounds += 1
+                    else:
+                        certificate_flat_weak_column_rounds = 0
+                    _log_journey_addition(
+                        logger,
+                        patrol_pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind="exact_hidden_negative_patrol_pre",
+                        node_id=node.id,
+                        depth=node.depth,
+                        active_task_sets=active_task_sets,
+                    )
+                    if added > 0:
+                        logger.log(
+                            "journey_flat_weak_column_pressure",
+                            node_id=node.id,
+                            depth=node.depth,
+                            cg_iter=cg_iter,
+                            pricing_kind="exact_hidden_negative_patrol_pre",
+                            weak=bool(flat_weak_addition),
+                            flat_weak_column_rounds=int(certificate_flat_weak_column_rounds),
+                            certificate_flat_rounds=int(certificate_flat_rounds),
+                            objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+                            added_journeys=int(added),
+                            new_journeys=int(getattr(added, "new_journeys", int(added))),
+                            replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+                        )
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
+                        recent_priced_journeys = list(patrol_pricing.journeys)
+                        recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                        if _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
+                            local_incumbent, local_solution = _run_journey_pool_incumbent_probe(
+                                data,
+                                config,
+                                journey_pool,
+                                logger,
+                                cg_iter,
+                                local_incumbent,
+                                local_solution,
+                                fleet_limit=active_fleet_limit,
+                                remaining=max(0.0, deadline - time.perf_counter()),
+                                node_id=node.id,
+                                depth=node.depth,
+                            )
+                            active_fleet_limit = _update_journey_fleet_limit(
+                                data,
+                                logger,
+                                active_fleet_limit,
+                                local_incumbent,
+                                local_solution,
+                                cg_iter,
+                                slack=_journey_fleet_limit_slack(config),
+                                node_id=node.id,
+                                depth=node.depth,
+                            )
+                        continue
+        deadline_safety_margin = max(0.0, float(config.get("journey_pricing_deadline_safety_margin", 1.0)))
+        remaining_after_pre_exact_worker = max(0.0, deadline - time.perf_counter() - deadline_safety_margin)
+        if remaining_after_pre_exact_worker <= float(min_pricing_time):
+            logger.log(
+                "journey_exact_pricing_budget",
+                node_id=node.id,
+                depth=node.depth,
+                cg_iter=cg_iter,
+                reason="time_limit_before_exact_after_pre_worker",
+                remaining=round(float(remaining_after_pre_exact_worker), 6),
+                min_pricing_time=round(float(min_pricing_time), 6),
+                deadline_safety_margin=round(float(deadline_safety_margin), 6),
+            )
+            return payload("PRICING_INCOMPLETE", reason="time_limit")
+        exact_time_limit = float(exact_config.time_limit)
+        capped_exact_time_limit = (
+            remaining_after_pre_exact_worker
+            if exact_time_limit <= 0.0
+            else min(exact_time_limit, remaining_after_pre_exact_worker)
+        )
+        if capped_exact_time_limit < exact_time_limit - 1.0e-9 or exact_time_limit <= 0.0:
+            exact_config = replace(exact_config, time_limit=float(capped_exact_time_limit))
+        if exact_dual_source == "dual_average":
+            average_direct_config, average_direct_mode = _journey_dual_average_direct_patrol_config(
+                config,
+                exact_config,
+                remaining=remaining_after_pre_exact_worker,
+                min_pricing_time=min_pricing_time,
+            )
+            if average_direct_mode:
+                logger.log(
+                    "journey_dual_averaging_direct_patrol",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(remaining_after_pre_exact_worker), 6),
+                    patrol_mode=average_direct_mode,
+                    pricing_dual_source=exact_dual_source,
+                    certificate_capable=False,
+                )
+                exact_config = average_direct_config
+                exact_pricing_kind = "exact_dual_average_direct_patrol"
         pricing = price_journeys(
             data,
             exact_duals,
@@ -2203,7 +3649,21 @@ def _process_journey_branch_node(
             dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                 journey_pool, cuts, node.branch_constraints
             ),
+            priority_task_sets=active_task_sets,
         )
+        if exact_dual_source == "dual_average":
+            pricing = _journey_dual_average_true_rc_filtered_pricing(
+                logger,
+                pricing,
+                runtime=dual_averaging_runtime,
+                true_duals=solution.duals,
+                cuts=tuple(cuts),
+                config=config,
+                cg_iter=cg_iter,
+                node_id=node.id,
+                depth=node.depth,
+                pricing_kind=exact_pricing_kind,
+            )
         stats.pricing_calls += 1
         stats.exact_pricing_calls += 1
         stats.generated_sequences += pricing.generated_sequences
@@ -2212,7 +3672,7 @@ def _process_journey_branch_node(
             logger,
             pricing,
             cg_iter,
-            pricing_kind="exact",
+            pricing_kind=exact_pricing_kind,
             config=exact_config,
             pricing_dual_source=exact_dual_source,
             node_id=node.id,
@@ -2220,17 +3680,168 @@ def _process_journey_branch_node(
         )
         if pricing.journeys:
             added = _add_priced_journeys(journey_pool, pricing.journeys)
+            flat_weak_addition = _journey_flat_weak_column_pressure_addition(
+                config,
+                added,
+                certificate_candidate=certificate_candidate,
+                certificate_flat_rounds=certificate_flat_rounds,
+                objective_delta=objective_delta,
+                eps=eps,
+                active_task_sets=active_task_sets,
+            )
+            if flat_weak_addition:
+                certificate_flat_weak_column_rounds += 1
+            else:
+                certificate_flat_weak_column_rounds = 0
             _log_journey_addition(
                 logger,
                 pricing,
                 added,
                 cg_iter,
-                pricing_kind="exact",
+                pricing_kind=exact_pricing_kind,
                 node_id=node.id,
                 depth=node.depth,
-            )
+                active_task_sets=active_task_sets,
+                )
             if added > 0:
+                logger.log(
+                    "journey_flat_weak_column_pressure",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    pricing_kind=exact_pricing_kind,
+                    weak=bool(flat_weak_addition),
+                    flat_weak_column_rounds=int(certificate_flat_weak_column_rounds),
+                    certificate_flat_rounds=int(certificate_flat_rounds),
+                    objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+                    added_journeys=int(added),
+                    new_journeys=int(getattr(added, "new_journeys", int(added))),
+                    replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+                )
                 recent_priced_journeys = list(pricing.journeys)
+                recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                if _journey_hidden_negative_patrol_after_small_batch_needed(
+                    config,
+                    pricing,
+                    added_columns=added,
+                    certificate_candidate=certificate_candidate,
+                    certificate_flat_rounds=certificate_flat_rounds,
+                    depth=node.depth,
+                ):
+                    supplement_remaining = max(0.0, deadline - time.perf_counter())
+                    supplement_config, supplement_mode = _journey_hidden_negative_patrol_config(
+                        config,
+                        exact_config,
+                        remaining=supplement_remaining,
+                        min_pricing_time=min_pricing_time,
+                    )
+                    if supplement_mode:
+                        logger.log(
+                            "journey_hidden_negative_patrol_after_small_batch",
+                            node_id=node.id,
+                            depth=node.depth,
+                            cg_iter=cg_iter,
+                            remaining=round(float(supplement_remaining), 6),
+                            exact_added_journeys=int(added),
+                            patrol_mode=supplement_mode,
+                            direct_journey_label_pricing_enabled=True,
+                            completion_bound_enabled=False,
+                            certificate_capable=False,
+                        )
+                        supplement_duals = solution.duals
+                        supplement_dual_source = "scip_hidden_negative_patrol_after_small_batch"
+                        supplement_pricing = price_journeys(
+                            data,
+                            supplement_duals,
+                            node.branch_constraints,
+                            config=supplement_config,
+                            cuts=tuple(cuts),
+                            trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                            resource_cache=pricing_resource_cache,
+                            forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                journey_pool, node.branch_constraints
+                            ),
+                            dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                                journey_pool, cuts, node.branch_constraints
+                            ),
+                            priority_task_sets=active_task_sets,
+                        )
+                        stats.pricing_calls += 1
+                        stats.exact_pricing_calls += 1
+                        stats.generated_sequences += supplement_pricing.generated_sequences
+                        stats.evaluated_timed_trips += supplement_pricing.evaluated_timed_trips
+                        _log_journey_pricing(
+                            logger,
+                            supplement_pricing,
+                            cg_iter,
+                            pricing_kind="exact_hidden_negative_patrol_after_small_batch",
+                            config=supplement_config,
+                            pricing_dual_source=supplement_dual_source,
+                            node_id=node.id,
+                            depth=node.depth,
+                        )
+                        if supplement_pricing.journeys:
+                            supplement_added = _add_priced_journeys(journey_pool, supplement_pricing.journeys)
+                            _log_journey_addition(
+                                logger,
+                                supplement_pricing,
+                                supplement_added,
+                                cg_iter,
+                                pricing_kind="exact_hidden_negative_patrol_after_small_batch",
+                                node_id=node.id,
+                                depth=node.depth,
+                                active_task_sets=active_task_sets,
+                            )
+                            if supplement_added > 0:
+                                added += int(supplement_added)
+                                recent_priced_journeys.extend(supplement_pricing.journeys)
+                                recent_changed_task_sets = list(
+                                    dict.fromkeys(
+                                        (
+                                            *recent_changed_task_sets,
+                                            *getattr(supplement_added, "changed_task_sets", tuple()),
+                                        )
+                                    )
+                                )
+                if _journey_same_dual_supplement_needed(
+                    config,
+                    added_columns=int(added),
+                    certificate_candidate=certificate_candidate,
+                    certificate_flat_rounds=certificate_flat_rounds,
+                    depth=node.depth,
+                    pricing_dual_source=exact_dual_source,
+                ):
+                    supplement = _run_journey_same_dual_supplement(
+                        data,
+                        config,
+                        journey_pool,
+                        exact_config,
+                        exact_duals,
+                        tuple(cuts),
+                        node.branch_constraints,
+                        logger,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                        deadline=deadline,
+                        min_pricing_time=min_pricing_time,
+                        trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                        resource_cache=pricing_resource_cache,
+                        active_task_sets=active_task_sets,
+                        previous_pricing_kind=exact_pricing_kind,
+                        previous_added=int(added),
+                        pricing_dual_source=exact_dual_source,
+                    )
+                    stats.pricing_calls += int(supplement.pricing_calls)
+                    stats.exact_pricing_calls += int(supplement.exact_pricing_calls)
+                    stats.generated_sequences += int(supplement.generated_sequences)
+                    stats.evaluated_timed_trips += int(supplement.evaluated_timed_trips)
+                    if int(supplement.added) > 0:
+                        added += int(supplement.added)
+                        recent_priced_journeys.extend(supplement.priced_journeys)
+                        recent_changed_task_sets = list(
+                            dict.fromkeys((*recent_changed_task_sets, *supplement.changed_task_sets))
+                        )
             if added > 0 and _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
                 local_incumbent, local_solution = _run_journey_pool_incumbent_probe(
                     data,
@@ -2244,11 +3855,12 @@ def _process_journey_branch_node(
                     remaining=max(0.0, deadline - time.perf_counter()),
                     node_id=node.id,
                     depth=node.depth,
-                )
+                    )
             if added > 0:
-                certificate_no_column_rounds = 0
-                if not bool(skip_short_exact):
-                    retry_negative_after_no_column_rounds = 0
+                if not bool(flat_weak_addition):
+                    certificate_no_column_rounds = 0
+                    if not bool(skip_short_exact):
+                        retry_negative_after_no_column_rounds = 0
                 if _journey_should_early_branch(config, node, cg_iter, solution, integer_tol):
                     logger.log(
                         "journey_early_branch_trigger",
@@ -2287,7 +3899,7 @@ def _process_journey_branch_node(
             duplicate_resolved_by_final_probe = False
             duplicate_pricing = pricing
             duplicate_duals = exact_duals
-            duplicate_pricing_kind = "exact"
+            duplicate_pricing_kind = exact_pricing_kind
             if _journey_completion_bound_final_probe_needed(config, pricing, added_columns=added):
                 final_remaining = max(0.0, deadline - time.perf_counter())
                 final_min_time = float(
@@ -2296,7 +3908,12 @@ def _process_journey_branch_node(
                         float(config.get("journey_retry_incomplete_no_column_min_time", 1.0)),
                     )
                 )
-                if final_remaining > max(min_pricing_time, final_min_time):
+                final_probe_viable, final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                    config,
+                    remaining=final_remaining,
+                    min_pricing_time=min_pricing_time,
+                )
+                if final_probe_viable:
                     final_config, final_mode = _journey_certificate_pricing_config(
                         config,
                         exact_config,
@@ -2308,7 +3925,7 @@ def _process_journey_branch_node(
                     )
                     final_config = replace(
                         final_config,
-                        time_limit=_journey_completion_bound_probe_budget(config, final_remaining),
+                        time_limit=final_probe_budget,
                         profile_generation_time_fraction=float(
                             config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
                         ),
@@ -2341,6 +3958,7 @@ def _process_journey_branch_node(
                             certificate_candidate=certificate_candidate,
                             completion_bound_enabled=final_config.direct_journey_label_completion_bound_enabled,
                         )
+                        ordinary_pricing_for_hidden_audit = pricing
                         pricing = price_journeys(
                             data,
                             final_duals,
@@ -2355,6 +3973,7 @@ def _process_journey_branch_node(
                             dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                 journey_pool, cuts, node.branch_constraints
                             ),
+                            priority_task_sets=active_task_sets,
                         )
                         stats.pricing_calls += 1
                         stats.exact_pricing_calls += 1
@@ -2373,6 +3992,25 @@ def _process_journey_branch_node(
                             node_id=node.id,
                             depth=node.depth,
                         )
+                        _log_hidden_negative_audit(
+                            logger,
+                            data,
+                            journey_pool,
+                            ordinary_pricing_for_hidden_audit,
+                            pricing,
+                            final_duals,
+                            tuple(cuts),
+                            node.branch_constraints,
+                            cg_iter,
+                            node_id=node.id,
+                            depth=node.depth,
+                            hidden_pricing_kind=duplicate_pricing_kind,
+                            hidden_dual_source=final_dual_source,
+                            max_logged_journeys=int(
+                                config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                            ),
+                            trigger="initial_duplicate_no_new_columns",
+                        )
                         if pricing.journeys:
                             added = _add_priced_journeys(journey_pool, pricing.journeys)
                             _log_journey_addition(
@@ -2383,12 +4021,29 @@ def _process_journey_branch_node(
                                 pricing_kind=duplicate_pricing_kind,
                                 node_id=node.id,
                                 depth=node.depth,
+                                active_task_sets=active_task_sets,
                             )
                             if added > 0:
-                                certificate_no_column_rounds = 0
+                                flat_weak_addition = note_flat_weak_addition(added, duplicate_pricing_kind)
+                                if not bool(flat_weak_addition):
+                                    certificate_no_column_rounds = 0
                                 retry_negative_after_no_column_rounds += 1
                                 continue
-                        if pricing.exhausted:
+                        pricing = _journey_promote_duplicate_only_final_judge_certificate(
+                            data,
+                            config,
+                            journey_pool,
+                            node.branch_constraints,
+                            tuple(cuts),
+                            active_fleet_limit,
+                            pricing,
+                            logger,
+                            cg_iter,
+                            node_id=node.id,
+                            depth=node.depth,
+                        )
+                        duplicate_pricing = pricing
+                        if _journey_pricing_is_global_certificate(pricing):
                             duplicate_resolved_by_final_probe = True
             if duplicate_resolved_by_final_probe:
                 pass
@@ -2419,8 +4074,64 @@ def _process_journey_branch_node(
             retry_enabled = bool(config.get("journey_retry_incomplete_no_column_enabled", True)) and not bool(
                 skip_short_exact
             )
+            skip_ordinary_retry_for_final_probe = _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                config,
+                pricing,
+            )
+            skip_reason = (
+                "profile_materialization_failure_goes_to_final_probe"
+                if bool(skip_ordinary_retry_for_final_probe)
+                else ""
+            )
             retry_min_time = float(config.get("journey_retry_incomplete_no_column_min_time", 1.0))
             retry_remaining = max(0.0, deadline - time.perf_counter())
+            if not bool(skip_ordinary_retry_for_final_probe) and _journey_skip_ordinary_retry_after_weak_negative_filtered(
+                config,
+                pricing,
+            ):
+                final_probe_config, _final_probe_mode = _journey_certificate_pricing_config(
+                    config,
+                    exact_config,
+                    certificate_candidate=certificate_candidate,
+                    certificate_flat_rounds=certificate_flat_rounds,
+                    certificate_no_column_rounds=certificate_no_column_rounds,
+                    depth=node.depth,
+                    completion_bound_phase="after_retry",
+                )
+                final_completion_bound_eligible = bool(
+                    config.get("journey_certificate_completion_bound_after_retry_enabled", False)
+                ) and bool(final_probe_config.direct_journey_label_completion_bound_enabled)
+                final_probe_viable, _final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                    config,
+                    remaining=retry_remaining,
+                    min_pricing_time=min_pricing_time,
+                )
+                if bool(final_completion_bound_eligible) and bool(final_probe_viable):
+                    skip_ordinary_retry_for_final_probe = True
+                    skip_reason = "weak_negative_filtered_goes_to_final_probe"
+            if (
+                not bool(skip_ordinary_retry_for_final_probe)
+                and bool(config.get("journey_certificate_completion_bound_skip_retry_after_pre_reserve_enabled", True))
+                and float(pre_retry_reserve) > 0.0
+                and bool(certificate_candidate)
+                and bool(final_probe_preview.direct_journey_label_completion_bound_enabled)
+                and _journey_completion_bound_final_probe_needed(config, pricing)
+            ):
+                skip_ordinary_retry_for_final_probe = True
+                skip_reason = "pre_reserved_completion_bound_goes_to_final_probe"
+            if bool(skip_ordinary_retry_for_final_probe):
+                retry_enabled = False
+                logger.log(
+                    "journey_exact_pricing_retry_skipped",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    reason=skip_reason or "ordinary_retry_skipped_for_final_probe",
+                    certificate_no_column_rounds=certificate_no_column_rounds,
+                    pre_retry_reserve=round(float(pre_retry_reserve), 6),
+                )
             if retry_enabled and retry_remaining > max(min_pricing_time, retry_min_time):
                 retry_config, retry_mode = _journey_certificate_pricing_config(
                     config,
@@ -2480,11 +4191,17 @@ def _process_journey_branch_node(
                     completion_bound_final_reserve=round(float(completion_bound_final_reserve), 6),
                     retry_mode=retry_mode,
                 )
-                retry_pricing_kind = "exact_retry"
-                retry_duals, retry_dual_source = _journey_exact_pricing_duals(
+                retry_pricing_duals, retry_pricing_dual_source = _journey_retry_duals_after_average_filter(
+                    pricing,
                     solution.duals,
                     pricing_duals,
                     pricing_dual_source,
+                )
+                retry_pricing_kind = "exact_retry"
+                retry_duals, retry_dual_source = _journey_exact_pricing_duals(
+                    solution.duals,
+                    retry_pricing_duals,
+                    retry_pricing_dual_source,
                     learning_runtime=learning_runtime,
                     certificate_candidate=certificate_candidate,
                     completion_bound_enabled=retry_config.direct_journey_label_completion_bound_enabled,
@@ -2503,7 +4220,21 @@ def _process_journey_branch_node(
                     dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                         journey_pool, cuts, node.branch_constraints
                     ),
+                    priority_task_sets=active_task_sets,
                 )
+                if retry_dual_source == "dual_average":
+                    pricing = _journey_dual_average_true_rc_filtered_pricing(
+                        logger,
+                        pricing,
+                        runtime=dual_averaging_runtime,
+                        true_duals=solution.duals,
+                        cuts=tuple(cuts),
+                        config=config,
+                        cg_iter=cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                        pricing_kind="exact_retry",
+                    )
                 stats.pricing_calls += 1
                 stats.exact_pricing_calls += 1
                 stats.generated_sequences += pricing.generated_sequences
@@ -2523,7 +4254,165 @@ def _process_journey_branch_node(
                     final_min_time = float(
                         config.get("journey_certificate_completion_bound_after_retry_min_time", retry_min_time)
                     )
-                    if final_remaining > max(min_pricing_time, final_min_time):
+                    final_probe_viable, final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                        config,
+                        remaining=final_remaining,
+                        min_pricing_time=min_pricing_time,
+                    )
+                    if final_probe_viable:
+                        dominant_task_set_costs = _journey_pricing_dominant_task_set_costs(
+                            journey_pool,
+                            cuts,
+                            node.branch_constraints,
+                        )
+                        patrol_config, patrol_mode = _journey_hidden_negative_patrol_config(
+                            config,
+                            retry_config,
+                            remaining=final_remaining,
+                            min_pricing_time=min_pricing_time,
+                        )
+                        if patrol_mode:
+                            logger.log(
+                                "journey_hidden_negative_patrol_after_retry",
+                                node_id=node.id,
+                                depth=node.depth,
+                                cg_iter=cg_iter,
+                                remaining=round(float(final_remaining), 6),
+                                previous_status=pricing.status,
+                                previous_reason=pricing.reason,
+                                patrol_mode=patrol_mode,
+                                direct_journey_label_pricing_enabled=True,
+                                completion_bound_enabled=False,
+                                certificate_capable=False,
+                            )
+                            patrol_duals = solution.duals
+                            patrol_dual_source = "scip_hidden_negative_patrol_after_retry"
+                            ordinary_pricing_for_hidden_audit = pricing
+                            patrol_pricing = price_journeys(
+                                data,
+                                patrol_duals,
+                                node.branch_constraints,
+                                config=patrol_config,
+                                cuts=tuple(cuts),
+                                trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                                resource_cache=pricing_resource_cache,
+                                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                    journey_pool,
+                                    node.branch_constraints,
+                                ),
+                                dominant_task_set_costs=dominant_task_set_costs,
+                            )
+                            stats.pricing_calls += 1
+                            stats.exact_pricing_calls += 1
+                            stats.generated_sequences += patrol_pricing.generated_sequences
+                            stats.evaluated_timed_trips += patrol_pricing.evaluated_timed_trips
+                            _log_journey_pricing(
+                                logger,
+                                patrol_pricing,
+                                cg_iter,
+                                pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                config=patrol_config,
+                                pricing_dual_source=patrol_dual_source,
+                                node_id=node.id,
+                                depth=node.depth,
+                            )
+                            _log_hidden_negative_audit(
+                                logger,
+                                data,
+                                journey_pool,
+                                ordinary_pricing_for_hidden_audit,
+                                patrol_pricing,
+                                patrol_duals,
+                                tuple(cuts),
+                                node.branch_constraints,
+                                cg_iter,
+                                node_id=node.id,
+                                depth=node.depth,
+                                hidden_pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                hidden_dual_source=patrol_dual_source,
+                                max_logged_journeys=int(
+                                    config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                ),
+                                trigger="hidden_negative_patrol_after_retry",
+                            )
+                            pricing = patrol_pricing
+                            if patrol_pricing.journeys:
+                                patrol_new_task_sets = int(
+                                    getattr(
+                                        patrol_pricing,
+                                        "direct_label_harvest_selected_new_task_set_count",
+                                        getattr(patrol_pricing, "harvest_selected_new_task_set_count", 0),
+                                    )
+                                )
+                                replacement_only_escalates = bool(
+                                    config.get("journey_hidden_negative_patrol_replacement_only_escalates_to_cb", False)
+                                )
+                                if (
+                                    replacement_only_escalates
+                                    and bool(certificate_candidate)
+                                    and patrol_new_task_sets <= 0
+                                ):
+                                    logger.log(
+                                        "journey_hidden_negative_patrol_replacement_only_escalation",
+                                        node_id=node.id,
+                                        depth=node.depth,
+                                        cg_iter=cg_iter,
+                                        negative_journeys=len(patrol_pricing.journeys),
+                                        selected_new_task_sets=patrol_new_task_sets,
+                                        selected_replacement_task_sets=int(
+                                            getattr(
+                                                patrol_pricing,
+                                                "direct_label_harvest_selected_replacement_task_set_count",
+                                                getattr(
+                                                    patrol_pricing,
+                                                    "harvest_selected_replacement_task_set_count",
+                                                    0,
+                                                ),
+                                            )
+                                        ),
+                                        next_oracle="exact_completion_bound_retry",
+                                        exact_safe=True,
+                                        certificate_capable=False,
+                                    )
+                                else:
+                                    _seed_hidden_negative_profile_catalog(
+                                        logger,
+                                        data,
+                                        config,
+                                        patrol_pricing,
+                                        patrol_duals,
+                                        retry_config,
+                                        pricing_trip_cache if pricing_trip_cache is not None else {},
+                                        node.branch_constraints,
+                                        cg_iter,
+                                        pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                        node_id=node.id,
+                                        depth=node.depth,
+                                    )
+                                    added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
+                                    _log_journey_addition(
+                                        logger,
+                                        patrol_pricing,
+                                        added,
+                                        cg_iter,
+                                        pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                        node_id=node.id,
+                                        depth=node.depth,
+                                        active_task_sets=active_task_sets,
+                                    )
+                                    if added > 0:
+                                        flat_weak_addition = note_flat_weak_addition(
+                                            added,
+                                            "exact_hidden_negative_patrol_after_retry",
+                                        )
+                                        if not bool(flat_weak_addition):
+                                            certificate_no_column_rounds = 0
+                                        retry_negative_after_no_column_rounds += 1
+                                        recent_priced_journeys = list(patrol_pricing.journeys)
+                                        recent_changed_task_sets = list(
+                                            getattr(added, "changed_task_sets", tuple())
+                                        )
+                                        continue
                         final_config, final_mode = _journey_certificate_pricing_config(
                             config,
                             retry_config,
@@ -2535,7 +4424,7 @@ def _process_journey_branch_node(
                         )
                         final_config = replace(
                             final_config,
-                            time_limit=_journey_completion_bound_probe_budget(config, final_remaining),
+                            time_limit=final_probe_budget,
                             profile_generation_time_fraction=float(
                                 config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
                             ),
@@ -2568,6 +4457,7 @@ def _process_journey_branch_node(
                                 certificate_candidate=certificate_candidate,
                                 completion_bound_enabled=final_config.direct_journey_label_completion_bound_enabled,
                             )
+                            ordinary_pricing_for_hidden_audit = pricing
                             pricing = price_journeys(
                                 data,
                                 final_duals,
@@ -2582,6 +4472,7 @@ def _process_journey_branch_node(
                                 dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                     journey_pool, cuts, node.branch_constraints
                                 ),
+                                priority_task_sets=active_task_sets,
                             )
                             stats.pricing_calls += 1
                             stats.exact_pricing_calls += 1
@@ -2598,6 +4489,25 @@ def _process_journey_branch_node(
                                 pricing_dual_source=final_dual_source,
                                 node_id=node.id,
                                 depth=node.depth,
+                            )
+                            _log_hidden_negative_audit(
+                                logger,
+                                data,
+                                journey_pool,
+                                ordinary_pricing_for_hidden_audit,
+                                pricing,
+                                final_duals,
+                                tuple(cuts),
+                                node.branch_constraints,
+                                cg_iter,
+                                node_id=node.id,
+                                depth=node.depth,
+                                hidden_pricing_kind=retry_pricing_kind,
+                                hidden_dual_source=final_dual_source,
+                                max_logged_journeys=int(
+                                    config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                ),
+                                trigger="after_retry",
                             )
                             if _journey_completion_bound_escalation_needed(
                                 config,
@@ -2646,6 +4556,7 @@ def _process_journey_branch_node(
                                     dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                         journey_pool, cuts, node.branch_constraints
                                     ),
+                                    priority_task_sets=active_task_sets,
                                 )
                                 stats.pricing_calls += 1
                                 stats.exact_pricing_calls += 1
@@ -2663,6 +4574,25 @@ def _process_journey_branch_node(
                                     node_id=node.id,
                                     depth=node.depth,
                                 )
+                                _log_hidden_negative_audit(
+                                    logger,
+                                    data,
+                                    journey_pool,
+                                    ordinary_pricing_for_hidden_audit,
+                                    pricing,
+                                    final_duals,
+                                    tuple(cuts),
+                                    node.branch_constraints,
+                                    cg_iter,
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                    hidden_pricing_kind=retry_pricing_kind,
+                                    hidden_dual_source=final_dual_source,
+                                    max_logged_journeys=int(
+                                        config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                    ),
+                                    trigger="after_retry_escalation",
+                                )
                 if pricing.journeys:
                     added = _add_priced_journeys(journey_pool, pricing.journeys)
                     _log_journey_addition(
@@ -2673,9 +4603,12 @@ def _process_journey_branch_node(
                         pricing_kind=retry_pricing_kind,
                         node_id=node.id,
                         depth=node.depth,
+                        active_task_sets=active_task_sets,
                     )
                     if added > 0:
-                        certificate_no_column_rounds = 0
+                        flat_weak_addition = note_flat_weak_addition(added, retry_pricing_kind)
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
                         retry_negative_after_no_column_rounds += 1
                         continue
                     duplicate_resolved_by_final_probe = False
@@ -2687,7 +4620,12 @@ def _process_journey_branch_node(
                         final_min_time = float(
                             config.get("journey_certificate_completion_bound_after_retry_min_time", retry_min_time)
                         )
-                        if final_remaining > max(min_pricing_time, final_min_time):
+                        final_probe_viable, final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                            config,
+                            remaining=final_remaining,
+                            min_pricing_time=min_pricing_time,
+                        )
+                        if final_probe_viable:
                             final_config, final_mode = _journey_certificate_pricing_config(
                                 config,
                                 retry_config,
@@ -2699,7 +4637,7 @@ def _process_journey_branch_node(
                             )
                             final_config = replace(
                                 final_config,
-                                time_limit=_journey_completion_bound_probe_budget(config, final_remaining),
+                                time_limit=final_probe_budget,
                                 profile_generation_time_fraction=float(
                                     config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
                                 ),
@@ -2732,6 +4670,7 @@ def _process_journey_branch_node(
                                     certificate_candidate=certificate_candidate,
                                     completion_bound_enabled=final_config.direct_journey_label_completion_bound_enabled,
                                 )
+                                ordinary_pricing_for_hidden_audit = pricing
                                 pricing = price_journeys(
                                     data,
                                     final_duals,
@@ -2746,6 +4685,7 @@ def _process_journey_branch_node(
                                     dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                         journey_pool, cuts, node.branch_constraints
                                     ),
+                                    priority_task_sets=active_task_sets,
                                 )
                                 stats.pricing_calls += 1
                                 stats.exact_pricing_calls += 1
@@ -2763,6 +4703,25 @@ def _process_journey_branch_node(
                                     node_id=node.id,
                                     depth=node.depth,
                                 )
+                                _log_hidden_negative_audit(
+                                    logger,
+                                    data,
+                                    journey_pool,
+                                    ordinary_pricing_for_hidden_audit,
+                                    pricing,
+                                    final_duals,
+                                    tuple(cuts),
+                                    node.branch_constraints,
+                                    cg_iter,
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                    hidden_pricing_kind=retry_pricing_kind,
+                                    hidden_dual_source=final_dual_source,
+                                    max_logged_journeys=int(
+                                        config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                    ),
+                                    trigger="duplicate_no_new_columns",
+                                )
                                 if pricing.journeys:
                                     added = _add_priced_journeys(journey_pool, pricing.journeys)
                                     _log_journey_addition(
@@ -2773,12 +4732,28 @@ def _process_journey_branch_node(
                                         pricing_kind=retry_pricing_kind,
                                         node_id=node.id,
                                         depth=node.depth,
+                                        active_task_sets=active_task_sets,
                                     )
                                     if added > 0:
-                                        certificate_no_column_rounds = 0
+                                        flat_weak_addition = note_flat_weak_addition(added, retry_pricing_kind)
+                                        if not bool(flat_weak_addition):
+                                            certificate_no_column_rounds = 0
                                         retry_negative_after_no_column_rounds += 1
                                         continue
-                                if pricing.exhausted:
+                                pricing = _journey_promote_duplicate_only_final_judge_certificate(
+                                    data,
+                                    config,
+                                    journey_pool,
+                                    node.branch_constraints,
+                                    tuple(cuts),
+                                    active_fleet_limit,
+                                    pricing,
+                                    logger,
+                                    cg_iter,
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                )
+                                if _journey_pricing_is_global_certificate(pricing):
                                     duplicate_resolved_by_final_probe = True
                     if duplicate_resolved_by_final_probe:
                         pass
@@ -2802,7 +4777,19 @@ def _process_journey_branch_node(
                         )
                         return payload("PRICING_INCOMPLETE", reason="duplicate_negative_journey")
                 if pricing.exhausted:
-                    pass
+                    pricing = _journey_promote_duplicate_only_final_judge_certificate(
+                        data,
+                        config,
+                        journey_pool,
+                        node.branch_constraints,
+                        tuple(cuts),
+                        active_fleet_limit,
+                        pricing,
+                        logger,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                    )
                 else:
                     return payload("PRICING_INCOMPLETE", reason=str(pricing.reason or "pricing_incomplete"))
             else:
@@ -2811,7 +4798,12 @@ def _process_journey_branch_node(
                     final_min_time = float(
                         config.get("journey_certificate_completion_bound_after_retry_min_time", retry_min_time)
                     )
-                    if final_remaining > max(min_pricing_time, final_min_time):
+                    final_probe_viable, final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                        config,
+                        remaining=final_remaining,
+                        min_pricing_time=min_pricing_time,
+                    )
+                    if final_probe_viable:
                         final_config, final_mode = _journey_certificate_pricing_config(
                             config,
                             exact_config,
@@ -2823,7 +4815,7 @@ def _process_journey_branch_node(
                         )
                         final_config = replace(
                             final_config,
-                            time_limit=_journey_completion_bound_probe_budget(config, final_remaining),
+                            time_limit=final_probe_budget,
                             profile_generation_time_fraction=float(
                                 config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
                             ),
@@ -2854,6 +4846,7 @@ def _process_journey_branch_node(
                                 certificate_candidate=certificate_candidate,
                                 completion_bound_enabled=final_config.direct_journey_label_completion_bound_enabled,
                             )
+                            ordinary_pricing_for_hidden_audit = pricing
                             pricing = price_journeys(
                                 data,
                                 final_duals,
@@ -2868,6 +4861,7 @@ def _process_journey_branch_node(
                                 dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                     journey_pool, cuts, node.branch_constraints
                                 ),
+                                priority_task_sets=active_task_sets,
                             )
                             stats.pricing_calls += 1
                             stats.exact_pricing_calls += 1
@@ -2883,6 +4877,25 @@ def _process_journey_branch_node(
                                 node_id=node.id,
                                 depth=node.depth,
                             )
+                            _log_hidden_negative_audit(
+                                logger,
+                                data,
+                                journey_pool,
+                                ordinary_pricing_for_hidden_audit,
+                                pricing,
+                                final_duals,
+                                tuple(cuts),
+                                node.branch_constraints,
+                                cg_iter,
+                                node_id=node.id,
+                                depth=node.depth,
+                                hidden_pricing_kind="exact_completion_bound_retry",
+                                hidden_dual_source=final_dual_source,
+                                max_logged_journeys=int(
+                                    config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                                ),
+                                trigger="no_retry_budget",
+                            )
                             if pricing.journeys:
                                 added = _add_priced_journeys(journey_pool, pricing.journeys)
                                 _log_journey_addition(
@@ -2893,15 +4906,45 @@ def _process_journey_branch_node(
                                     pricing_kind="exact_completion_bound_retry",
                                     node_id=node.id,
                                     depth=node.depth,
+                                    active_task_sets=active_task_sets,
                                 )
                                 if added > 0:
-                                    certificate_no_column_rounds = 0
+                                    flat_weak_addition = note_flat_weak_addition(
+                                        added,
+                                        "exact_completion_bound_retry",
+                                    )
+                                    if not bool(flat_weak_addition):
+                                        certificate_no_column_rounds = 0
                                     retry_negative_after_no_column_rounds += 1
                                     continue
-                            if pricing.exhausted:
+                            pricing = _journey_promote_duplicate_only_final_judge_certificate(
+                                data,
+                                config,
+                                journey_pool,
+                                node.branch_constraints,
+                                tuple(cuts),
+                                active_fleet_limit,
+                                pricing,
+                                logger,
+                                cg_iter,
+                                node_id=node.id,
+                                depth=node.depth,
+                            )
+                            if _journey_pricing_is_global_certificate(pricing):
                                 pass
                             else:
-                                return payload("PRICING_INCOMPLETE", reason=str(pricing.reason or "pricing_incomplete"))
+                                _log_journey_certificate_rejection(
+                                    logger,
+                                    pricing,
+                                    cg_iter,
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                    pricing_kind="exact_completion_bound_retry",
+                                )
+                                return payload(
+                                    "PRICING_INCOMPLETE",
+                                    reason=_journey_pricing_certificate_rejection_reason(pricing),
+                                )
                         else:
                             return payload("PRICING_INCOMPLETE", reason=str(pricing.reason or "pricing_incomplete"))
                     else:
@@ -2909,6 +4952,100 @@ def _process_journey_branch_node(
                 else:
                     return payload("PRICING_INCOMPLETE", reason=str(pricing.reason or "pricing_incomplete"))
         if bool(pricing.exhausted) and _journey_completion_bound_final_probe_needed(config, pricing):
+            repair_remaining = max(0.0, deadline - time.perf_counter())
+            repair_config, repair_mode = _journey_profile_repair_config(
+                config,
+                exact_config,
+                remaining=repair_remaining,
+                min_pricing_time=min_pricing_time,
+                depth=node.depth,
+            )
+            if repair_mode:
+                logger.log(
+                    "journey_profile_repair",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(repair_remaining), 6),
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    repair_mode=repair_mode,
+                    profile_labeling_enabled=True,
+                    physical_catalog_resume_enabled=False,
+                    certificate_capable=False,
+                )
+                repair_duals = solution.duals
+                repair_dual_source = "scip_profile_repair"
+                ordinary_pricing_for_hidden_audit = pricing
+                repair_pricing = price_journeys(
+                    data,
+                    repair_duals,
+                    node.branch_constraints,
+                    config=repair_config,
+                    cuts=tuple(cuts),
+                    # Use a local profile cache so dual-specific repair states do
+                    # not accumulate in the long-lived branch pricing cache.
+                    trip_cache={},
+                    resource_cache=pricing_resource_cache,
+                    forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                        journey_pool, node.branch_constraints
+                    ),
+                                dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                                    journey_pool, cuts, node.branch_constraints
+                                ),
+                                priority_task_sets=active_task_sets,
+                            )
+                stats.pricing_calls += 1
+                stats.exact_pricing_calls += 1
+                stats.generated_sequences += repair_pricing.generated_sequences
+                stats.evaluated_timed_trips += repair_pricing.evaluated_timed_trips
+                _log_journey_pricing(
+                    logger,
+                    repair_pricing,
+                    cg_iter,
+                    pricing_kind="exact_profile_repair",
+                    config=repair_config,
+                    pricing_dual_source=repair_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                if repair_pricing.journeys:
+                    _log_hidden_negative_audit(
+                        logger,
+                        data,
+                        journey_pool,
+                        ordinary_pricing_for_hidden_audit,
+                        repair_pricing,
+                        repair_duals,
+                        tuple(cuts),
+                        node.branch_constraints,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                        hidden_pricing_kind="exact_profile_repair",
+                        hidden_dual_source=repair_dual_source,
+                        max_logged_journeys=int(
+                            config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                        ),
+                        trigger="profile_repair",
+                    )
+                    added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
+                    _log_journey_addition(
+                        logger,
+                        repair_pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind="exact_profile_repair",
+                        node_id=node.id,
+                        depth=node.depth,
+                        active_task_sets=active_task_sets,
+                    )
+                    if added > 0:
+                        flat_weak_addition = note_flat_weak_addition(added, "exact_profile_repair")
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
+                        retry_negative_after_no_column_rounds += 1
+                        continue
             patrol_remaining = max(0.0, deadline - time.perf_counter())
             patrol_config, patrol_mode = _journey_hidden_negative_patrol_config(
                 config,
@@ -2932,6 +5069,7 @@ def _process_journey_branch_node(
                 )
                 patrol_duals = solution.duals
                 patrol_dual_source = "scip_hidden_negative_patrol"
+                ordinary_pricing_for_hidden_audit = pricing
                 patrol_pricing = price_journeys(
                     data,
                     patrol_duals,
@@ -2961,20 +5099,461 @@ def _process_journey_branch_node(
                     node_id=node.id,
                     depth=node.depth,
                 )
+                _log_hidden_negative_audit(
+                    logger,
+                    data,
+                    journey_pool,
+                    ordinary_pricing_for_hidden_audit,
+                    patrol_pricing,
+                    patrol_duals,
+                    tuple(cuts),
+                    node.branch_constraints,
+                    cg_iter,
+                    node_id=node.id,
+                    depth=node.depth,
+                    hidden_pricing_kind="exact_hidden_negative_patrol",
+                    hidden_dual_source=patrol_dual_source,
+                    max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
+                    trigger="hidden_negative_patrol",
+                )
                 pricing = patrol_pricing
                 if patrol_pricing.journeys:
-                    added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
-                    _log_journey_addition(
+                    patrol_new_task_sets = int(
+                        getattr(
+                            patrol_pricing,
+                            "direct_label_harvest_selected_new_task_set_count",
+                            getattr(patrol_pricing, "harvest_selected_new_task_set_count", 0),
+                        )
+                    )
+                    replacement_only_escalates = bool(
+                        config.get("journey_hidden_negative_patrol_replacement_only_escalates_to_cb", False)
+                    )
+                    if (
+                        replacement_only_escalates
+                        and bool(certificate_candidate)
+                        and patrol_new_task_sets <= 0
+                    ):
+                        logger.log(
+                            "journey_hidden_negative_patrol_replacement_only_escalation",
+                            node_id=node.id,
+                            depth=node.depth,
+                            cg_iter=cg_iter,
+                            negative_journeys=len(patrol_pricing.journeys),
+                            selected_new_task_sets=patrol_new_task_sets,
+                            selected_replacement_task_sets=int(
+                                getattr(
+                                    patrol_pricing,
+                                    "direct_label_harvest_selected_replacement_task_set_count",
+                                    getattr(patrol_pricing, "harvest_selected_replacement_task_set_count", 0),
+                                )
+                            ),
+                            next_oracle="exact_completion_bound_retry",
+                            exact_safe=True,
+                            certificate_capable=False,
+                        )
+                    else:
+                        _seed_hidden_negative_profile_catalog(
+                            logger,
+                            data,
+                            config,
+                            patrol_pricing,
+                            patrol_duals,
+                            exact_config,
+                            pricing_trip_cache if pricing_trip_cache is not None else {},
+                            node.branch_constraints,
+                            cg_iter,
+                            pricing_kind="exact_hidden_negative_patrol",
+                            node_id=node.id,
+                            depth=node.depth,
+                        )
+                        added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
+                        _log_journey_addition(
+                            logger,
+                            patrol_pricing,
+                            added,
+                            cg_iter,
+                            pricing_kind="exact_hidden_negative_patrol",
+                            node_id=node.id,
+                            depth=node.depth,
+                            active_task_sets=active_task_sets,
+                        )
+                        if added > 0:
+                            flat_weak_addition = note_flat_weak_addition(added, "exact_hidden_negative_patrol")
+                            if not bool(flat_weak_addition):
+                                certificate_no_column_rounds = 0
+                            retry_negative_after_no_column_rounds += 1
+                            continue
+            dominant_task_set_costs = _journey_pricing_dominant_task_set_costs(
+                journey_pool, cuts, node.branch_constraints
+            )
+            sweep_remaining = max(0.0, deadline - time.perf_counter())
+            sweep_enabled, sweep_mode = _journey_new_task_set_sweep_enabled(
+                config,
+                remaining=sweep_remaining,
+                min_pricing_time=min_pricing_time,
+                depth=node.depth,
+            )
+            if sweep_enabled:
+                logger.log(
+                    "journey_new_task_set_sweep",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(sweep_remaining), 6),
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    sweep_mode=sweep_mode,
+                    known_task_sets=len(dominant_task_set_costs),
+                    certificate_capable=False,
+                )
+                sweep_duals = solution.duals
+                sweep_dual_source = "scip_new_task_set_sweep"
+                ordinary_pricing_for_hidden_audit = pricing
+                sweep_pricing = _price_new_task_set_sweep(
+                    data,
+                    sweep_duals,
+                    tuple(cuts),
+                    journey_pool,
+                    config,
+                    time_limit=float(sweep_mode.get("time_limit", 0.0)),
+                    forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                        journey_pool, node.branch_constraints
+                    ),
+                )
+                stats.pricing_calls += 1
+                stats.exact_pricing_calls += 1
+                stats.generated_sequences += sweep_pricing.generated_sequences
+                stats.evaluated_timed_trips += sweep_pricing.evaluated_timed_trips
+                _log_journey_pricing(
+                    logger,
+                    sweep_pricing,
+                    cg_iter,
+                    pricing_kind="exact_new_task_set_sweep",
+                    config=exact_config,
+                    pricing_dual_source=sweep_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                if sweep_pricing.journeys:
+                    _log_hidden_negative_audit(
                         logger,
-                        patrol_pricing,
-                        added,
+                        data,
+                        journey_pool,
+                        ordinary_pricing_for_hidden_audit,
+                        sweep_pricing,
+                        sweep_duals,
+                        tuple(cuts),
+                        node.branch_constraints,
                         cg_iter,
-                        pricing_kind="exact_hidden_negative_patrol",
                         node_id=node.id,
                         depth=node.depth,
+                        hidden_pricing_kind="exact_new_task_set_sweep",
+                        hidden_dual_source=sweep_dual_source,
+                        max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
+                        trigger="new_task_set_sweep",
+                    )
+                    added = _add_priced_journeys(journey_pool, sweep_pricing.journeys)
+                    _log_journey_addition(
+                        logger,
+                        sweep_pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind="exact_new_task_set_sweep",
+                        node_id=node.id,
+                        depth=node.depth,
+                        active_task_sets=active_task_sets,
                     )
                     if added > 0:
-                        certificate_no_column_rounds = 0
+                        flat_weak_addition = note_flat_weak_addition(added, "exact_new_task_set_sweep")
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
+                        retry_negative_after_no_column_rounds += 1
+                        recent_priced_journeys = list(sweep_pricing.journeys)
+                        recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                        continue
+            fixed_remaining = max(0.0, deadline - time.perf_counter())
+            fixed_targets = _journey_fixed_task_set_repair_target_task_sets(
+                config,
+                recent_changed_task_sets=recent_changed_task_sets,
+                active_task_sets=active_task_sets,
+            )
+            if not fixed_targets:
+                fixed_targets = _journey_fixed_task_set_repair_pool_targets(
+                    config,
+                    journey_pool,
+                    solution.duals,
+                    tuple(cuts),
+                )
+            fixed_enabled, fixed_mode = _journey_fixed_task_set_repair_enabled(
+                config,
+                remaining=fixed_remaining,
+                min_pricing_time=min_pricing_time,
+                depth=node.depth,
+                target_task_sets=fixed_targets,
+            )
+            if fixed_enabled and dominant_task_set_costs:
+                logger.log(
+                    "journey_fixed_task_set_repair",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(fixed_remaining), 6),
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    repair_mode=fixed_mode,
+                    known_task_sets=len(dominant_task_set_costs),
+                    certificate_capable=False,
+                )
+                fixed_duals = solution.duals
+                fixed_dual_source = "scip_fixed_task_set_repair"
+                ordinary_pricing_for_hidden_audit = pricing
+                fixed_pricing = _price_fixed_task_set_representatives(
+                    data,
+                    fixed_duals,
+                    tuple(cuts),
+                    journey_pool,
+                    fixed_targets,
+                    config,
+                    time_limit=float(fixed_mode.get("time_limit", 0.0)),
+                    forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                        journey_pool, node.branch_constraints
+                    ),
+                )
+                stats.pricing_calls += 1
+                stats.exact_pricing_calls += 1
+                stats.generated_sequences += fixed_pricing.generated_sequences
+                stats.evaluated_timed_trips += fixed_pricing.evaluated_timed_trips
+                _log_journey_pricing(
+                    logger,
+                    fixed_pricing,
+                    cg_iter,
+                    pricing_kind="exact_fixed_task_set_repair",
+                    config=exact_config,
+                    pricing_dual_source=fixed_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                if fixed_pricing.journeys:
+                    _log_hidden_negative_audit(
+                        logger,
+                        data,
+                        journey_pool,
+                        ordinary_pricing_for_hidden_audit,
+                        fixed_pricing,
+                        fixed_duals,
+                        tuple(cuts),
+                        node.branch_constraints,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                        hidden_pricing_kind="exact_fixed_task_set_repair",
+                        hidden_dual_source=fixed_dual_source,
+                        max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
+                        trigger="fixed_task_set_repair",
+                    )
+                    added = _add_priced_journeys(journey_pool, fixed_pricing.journeys)
+                    _log_journey_addition(
+                        logger,
+                        fixed_pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind="exact_fixed_task_set_repair",
+                        node_id=node.id,
+                        depth=node.depth,
+                        active_task_sets=active_task_sets,
+                    )
+                    if added > 0:
+                        flat_weak_addition = note_flat_weak_addition(added, "exact_fixed_task_set_repair")
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
+                        retry_negative_after_no_column_rounds += 1
+                        recent_priced_journeys = list(fixed_pricing.journeys)
+                        recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                        continue
+            replacement_remaining = max(0.0, deadline - time.perf_counter())
+            replacement_config, replacement_mode = _journey_replacement_repair_config(
+                config,
+                exact_config,
+                remaining=replacement_remaining,
+                min_pricing_time=min_pricing_time,
+                depth=node.depth,
+                target_task_sets=_journey_replacement_repair_target_task_sets(
+                    config,
+                    recent_changed_task_sets=recent_changed_task_sets,
+                    active_task_sets=active_task_sets,
+                ),
+            )
+            if replacement_mode and dominant_task_set_costs:
+                logger.log(
+                    "journey_replacement_repair",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(replacement_remaining), 6),
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    replacement_mode=replacement_mode,
+                    known_task_sets=len(dominant_task_set_costs),
+                    direct_journey_label_pricing_enabled=True,
+                    existing_task_set_repair_only=True,
+                    certificate_capable=False,
+                )
+                replacement_duals = solution.duals
+                replacement_dual_source = "scip_replacement_repair"
+                ordinary_pricing_for_hidden_audit = pricing
+                replacement_pricing = price_journeys(
+                    data,
+                    replacement_duals,
+                    node.branch_constraints,
+                    config=replacement_config,
+                    cuts=tuple(cuts),
+                    trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                    resource_cache=pricing_resource_cache,
+                    forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                        journey_pool, node.branch_constraints
+                    ),
+                    dominant_task_set_costs=dominant_task_set_costs,
+                )
+                stats.pricing_calls += 1
+                stats.exact_pricing_calls += 1
+                stats.generated_sequences += replacement_pricing.generated_sequences
+                stats.evaluated_timed_trips += replacement_pricing.evaluated_timed_trips
+                _log_journey_pricing(
+                    logger,
+                    replacement_pricing,
+                    cg_iter,
+                    pricing_kind="exact_replacement_repair",
+                    config=replacement_config,
+                    pricing_dual_source=replacement_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                _log_hidden_negative_audit(
+                    logger,
+                    data,
+                    journey_pool,
+                    ordinary_pricing_for_hidden_audit,
+                    replacement_pricing,
+                    replacement_duals,
+                    tuple(cuts),
+                    node.branch_constraints,
+                    cg_iter,
+                    node_id=node.id,
+                    depth=node.depth,
+                    hidden_pricing_kind="exact_replacement_repair",
+                    hidden_dual_source=replacement_dual_source,
+                    max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
+                    trigger="replacement_repair",
+                )
+                pricing = replacement_pricing
+                if replacement_pricing.journeys:
+                    added = _add_priced_journeys(journey_pool, replacement_pricing.journeys)
+                    _log_journey_addition(
+                        logger,
+                        replacement_pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind="exact_replacement_repair",
+                        node_id=node.id,
+                        depth=node.depth,
+                        active_task_sets=active_task_sets,
+                    )
+                    if added > 0:
+                        flat_weak_addition = note_flat_weak_addition(added, "exact_replacement_repair")
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
+                        retry_negative_after_no_column_rounds += 1
+                        continue
+            repair_remaining = max(0.0, deadline - time.perf_counter())
+            repair_config, repair_mode = _journey_profile_repair_config(
+                config,
+                exact_config,
+                remaining=repair_remaining,
+                min_pricing_time=min_pricing_time,
+                depth=node.depth,
+                after_patrol=True,
+            )
+            if repair_mode:
+                logger.log(
+                    "journey_profile_repair",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    remaining=round(float(repair_remaining), 6),
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    repair_mode=repair_mode,
+                    profile_labeling_enabled=True,
+                    physical_catalog_resume_enabled=False,
+                    certificate_capable=False,
+                )
+                repair_duals = solution.duals
+                repair_dual_source = "scip_profile_repair"
+                ordinary_pricing_for_hidden_audit = pricing
+                repair_pricing = price_journeys(
+                    data,
+                    repair_duals,
+                    node.branch_constraints,
+                    config=repair_config,
+                    cuts=tuple(cuts),
+                    trip_cache={},
+                    resource_cache=pricing_resource_cache,
+                    forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                        journey_pool, node.branch_constraints
+                    ),
+                    dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                        journey_pool, cuts, node.branch_constraints
+                    ),
+                )
+                stats.pricing_calls += 1
+                stats.exact_pricing_calls += 1
+                stats.generated_sequences += repair_pricing.generated_sequences
+                stats.evaluated_timed_trips += repair_pricing.evaluated_timed_trips
+                _log_journey_pricing(
+                    logger,
+                    repair_pricing,
+                    cg_iter,
+                    pricing_kind="exact_profile_repair",
+                    config=repair_config,
+                    pricing_dual_source=repair_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                if repair_pricing.journeys:
+                    _log_hidden_negative_audit(
+                        logger,
+                        data,
+                        journey_pool,
+                        ordinary_pricing_for_hidden_audit,
+                        repair_pricing,
+                        repair_duals,
+                        tuple(cuts),
+                        node.branch_constraints,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                        hidden_pricing_kind="exact_profile_repair",
+                        hidden_dual_source=repair_dual_source,
+                        max_logged_journeys=int(
+                            config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                        ),
+                        trigger="profile_repair_after_patrol",
+                    )
+                    added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
+                    _log_journey_addition(
+                        logger,
+                        repair_pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind="exact_profile_repair",
+                        node_id=node.id,
+                        depth=node.depth,
+                        active_task_sets=active_task_sets,
+                    )
+                    if added > 0:
+                        flat_weak_addition = note_flat_weak_addition(added, "exact_profile_repair")
+                        if not bool(flat_weak_addition):
+                            certificate_no_column_rounds = 0
                         retry_negative_after_no_column_rounds += 1
                         continue
             final_remaining = max(0.0, deadline - time.perf_counter())
@@ -2984,7 +5563,12 @@ def _process_journey_branch_node(
                     float(config.get("journey_retry_incomplete_no_column_min_time", 1.0)),
                 )
             )
-            if final_remaining > max(min_pricing_time, final_min_time):
+            final_probe_viable, final_probe_budget = _journey_completion_bound_probe_budget_is_viable(
+                config,
+                remaining=final_remaining,
+                min_pricing_time=min_pricing_time,
+            )
+            if final_probe_viable:
                 final_config, final_mode = _journey_certificate_pricing_config(
                     config,
                     exact_config,
@@ -2996,7 +5580,7 @@ def _process_journey_branch_node(
                 )
                 final_config = replace(
                     final_config,
-                    time_limit=_journey_completion_bound_probe_budget(config, final_remaining),
+                    time_limit=final_probe_budget,
                     profile_generation_time_fraction=float(
                         config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
                     ),
@@ -3027,6 +5611,7 @@ def _process_journey_branch_node(
                         certificate_candidate=certificate_candidate,
                         completion_bound_enabled=final_config.direct_journey_label_completion_bound_enabled,
                     )
+                    ordinary_pricing_for_hidden_audit = pricing
                     pricing = price_journeys(
                         data,
                         final_duals,
@@ -3041,6 +5626,7 @@ def _process_journey_branch_node(
                         dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                             journey_pool, cuts, node.branch_constraints
                         ),
+                        priority_task_sets=active_task_sets,
                     )
                     stats.pricing_calls += 1
                     stats.exact_pricing_calls += 1
@@ -3056,6 +5642,23 @@ def _process_journey_branch_node(
                         pricing_dual_source=final_dual_source,
                         node_id=node.id,
                         depth=node.depth,
+                    )
+                    _log_hidden_negative_audit(
+                        logger,
+                        data,
+                        journey_pool,
+                        ordinary_pricing_for_hidden_audit,
+                        pricing,
+                        final_duals,
+                        tuple(cuts),
+                        node.branch_constraints,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                        hidden_pricing_kind=final_pricing_kind,
+                        hidden_dual_source=final_dual_source,
+                        max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
+                        trigger="profile_exhausted_no_column",
                     )
                     if _journey_completion_bound_escalation_needed(
                         config,
@@ -3104,6 +5707,7 @@ def _process_journey_branch_node(
                             dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                                 journey_pool, cuts, node.branch_constraints
                             ),
+                            priority_task_sets=active_task_sets,
                         )
                         stats.pricing_calls += 1
                         stats.exact_pricing_calls += 1
@@ -3121,7 +5725,40 @@ def _process_journey_branch_node(
                             node_id=node.id,
                             depth=node.depth,
                         )
+                        _log_hidden_negative_audit(
+                            logger,
+                            data,
+                            journey_pool,
+                            ordinary_pricing_for_hidden_audit,
+                            pricing,
+                            final_duals,
+                            tuple(cuts),
+                            node.branch_constraints,
+                            cg_iter,
+                            node_id=node.id,
+                            depth=node.depth,
+                            hidden_pricing_kind=final_pricing_kind,
+                            hidden_dual_source=final_dual_source,
+                            max_logged_journeys=int(
+                                config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
+                            ),
+                            trigger="profile_exhausted_no_column_escalation",
+                        )
                     if pricing.journeys:
+                        _seed_hidden_negative_profile_catalog(
+                            logger,
+                            data,
+                            config,
+                            pricing,
+                            final_duals,
+                            exact_config,
+                            pricing_trip_cache if pricing_trip_cache is not None else {},
+                            node.branch_constraints,
+                            cg_iter,
+                            pricing_kind=final_pricing_kind,
+                            node_id=node.id,
+                            depth=node.depth,
+                        )
                         added = _add_priced_journeys(journey_pool, pricing.journeys)
                         _log_journey_addition(
                             logger,
@@ -3131,20 +5768,190 @@ def _process_journey_branch_node(
                             pricing_kind=final_pricing_kind,
                             node_id=node.id,
                             depth=node.depth,
+                            active_task_sets=active_task_sets,
                         )
                         if added > 0:
-                            certificate_no_column_rounds = 0
+                            reharvest_remaining = max(0.0, deadline - time.perf_counter())
+                            reharvest_config, reharvest_mode = _journey_post_seed_profile_reharvest_config(
+                                config,
+                                exact_config,
+                                added,
+                                remaining=reharvest_remaining,
+                                min_pricing_time=min_pricing_time,
+                                depth=node.depth,
+                            )
+                            reharvest_priced_journeys: list[Any] = []
+                            reharvest_changed_task_sets: list[frozenset[int]] = []
+                            if reharvest_mode:
+                                logger.log(
+                                    "journey_post_seed_profile_reharvest",
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                    cg_iter=cg_iter,
+                                    previous_pricing_kind=final_pricing_kind,
+                                    previous_added_journeys=int(added),
+                                    previous_new_journeys=int(getattr(added, "new_journeys", int(added))),
+                                    previous_replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+                                    remaining=round(float(reharvest_remaining), 6),
+                                    reharvest_mode=reharvest_mode,
+                                    certificate_capable=False,
+                                )
+                                reharvest_pricing = price_journeys(
+                                    data,
+                                    final_duals,
+                                    node.branch_constraints,
+                                    config=reharvest_config,
+                                    cuts=tuple(cuts),
+                                    trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                                    resource_cache=pricing_resource_cache,
+                                    forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                        journey_pool, node.branch_constraints
+                                    ),
+                            dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                                journey_pool, cuts, node.branch_constraints
+                            ),
+                            priority_task_sets=active_task_sets,
+                        )
+                                stats.pricing_calls += 1
+                                stats.exact_pricing_calls += 1
+                                stats.generated_sequences += reharvest_pricing.generated_sequences
+                                stats.evaluated_timed_trips += reharvest_pricing.evaluated_timed_trips
+                                _log_journey_pricing(
+                                    logger,
+                                    reharvest_pricing,
+                                    cg_iter,
+                                    pricing_kind="exact_post_seed_profile_reharvest",
+                                    config=reharvest_config,
+                                    pricing_dual_source=final_dual_source,
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                )
+                                if reharvest_pricing.journeys:
+                                    reharvest_added = _add_priced_journeys(
+                                        journey_pool,
+                                        reharvest_pricing.journeys,
+                                    )
+                                    _log_journey_addition(
+                                        logger,
+                                        reharvest_pricing,
+                                        reharvest_added,
+                                        cg_iter,
+                                        pricing_kind="exact_post_seed_profile_reharvest",
+                                        node_id=node.id,
+                                        depth=node.depth,
+                                        active_task_sets=active_task_sets,
+                                    )
+                                    if reharvest_added > 0:
+                                        reharvest_priced_journeys = list(reharvest_pricing.journeys)
+                                        reharvest_changed_task_sets = list(
+                                            getattr(reharvest_added, "changed_task_sets", tuple())
+                                        )
+                            if _journey_same_dual_supplement_needed(
+                                config,
+                                added_columns=int(added),
+                                certificate_candidate=certificate_candidate,
+                                certificate_flat_rounds=certificate_flat_rounds,
+                                depth=node.depth,
+                                pricing_dual_source=final_dual_source,
+                            ):
+                                supplement = _run_journey_same_dual_supplement(
+                                    data,
+                                    config,
+                                    journey_pool,
+                                    exact_config,
+                                    final_duals,
+                                    tuple(cuts),
+                                    node.branch_constraints,
+                                    logger,
+                                    cg_iter,
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                    deadline=deadline,
+                                    min_pricing_time=min_pricing_time,
+                                    trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                                    resource_cache=pricing_resource_cache,
+                                    active_task_sets=active_task_sets,
+                                    previous_pricing_kind=final_pricing_kind,
+                                    previous_added=int(added),
+                                    pricing_dual_source=final_dual_source,
+                                )
+                                stats.pricing_calls += int(supplement.pricing_calls)
+                                stats.exact_pricing_calls += int(supplement.exact_pricing_calls)
+                                stats.generated_sequences += int(supplement.generated_sequences)
+                                stats.evaluated_timed_trips += int(supplement.evaluated_timed_trips)
+                                if int(supplement.added) > 0:
+                                    added += int(supplement.added)
+                                    reharvest_priced_journeys.extend(supplement.priced_journeys)
+                                    reharvest_changed_task_sets.extend(supplement.changed_task_sets)
+                            flat_weak_addition = note_flat_weak_addition(added, final_pricing_kind)
+                            if not bool(flat_weak_addition):
+                                certificate_no_column_rounds = 0
+                            if reharvest_priced_journeys:
+                                recent_priced_journeys = list(pricing.journeys)
+                                recent_priced_journeys.extend(reharvest_priced_journeys)
+                                recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                                recent_changed_task_sets.extend(reharvest_changed_task_sets)
+                            else:
+                                recent_priced_journeys = list(pricing.journeys)
+                                recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
                             retry_negative_after_no_column_rounds += 1
                             continue
-                    if not pricing.exhausted:
-                        return payload("PRICING_INCOMPLETE", reason=str(pricing.reason or "pricing_incomplete"))
+                    pricing = _journey_promote_duplicate_only_final_judge_certificate(
+                        data,
+                        config,
+                        journey_pool,
+                        node.branch_constraints,
+                        tuple(cuts),
+                        active_fleet_limit,
+                        pricing,
+                        logger,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                    )
+                    if not _journey_pricing_is_global_certificate(pricing):
+                        _log_journey_certificate_rejection(
+                            logger,
+                            pricing,
+                            cg_iter,
+                            node_id=node.id,
+                            depth=node.depth,
+                            pricing_kind=final_pricing_kind,
+                        )
+                        return payload(
+                            "PRICING_INCOMPLETE",
+                            reason=_journey_pricing_certificate_rejection_reason(pricing),
+                        )
                 else:
                     return payload("PRICING_INCOMPLETE", reason="completion_bound_final_probe_disabled")
             else:
                 return payload("PRICING_INCOMPLETE", reason="completion_bound_final_probe_time_limit")
 
-        if not pricing.exhausted:
-            return payload("PRICING_INCOMPLETE", reason=str(pricing.reason or "pricing_incomplete"))
+        pricing = _journey_promote_duplicate_only_final_judge_certificate(
+            data,
+            config,
+            journey_pool,
+            node.branch_constraints,
+            tuple(cuts),
+            active_fleet_limit,
+            pricing,
+            logger,
+            cg_iter,
+            node_id=node.id,
+            depth=node.depth,
+        )
+        if not _journey_pricing_is_global_certificate(pricing):
+            _log_journey_certificate_rejection(
+                logger,
+                pricing,
+                cg_iter,
+                node_id=node.id,
+                depth=node.depth,
+                pricing_kind="exact_completion_bound_retry"
+                if bool(getattr(pricing, "completion_bound_enabled", False))
+                else "exact",
+            )
+            return payload("PRICING_INCOMPLETE", reason=_journey_pricing_certificate_rejection_reason(pricing))
 
         if (
             bool(config.get("journey_skip_pool_integer_when_bound_fathoms_enabled", True))
@@ -3670,8 +6477,11 @@ def _journey_exact_pricing_budget(
     cg_iter: int = 1,
     certificate_no_reserve_enabled: bool = True,
     certificate_no_reserve_min_cg_iter: int = 3,
+    deadline_safety_margin: float = 0.0,
 ) -> tuple[float, float, str]:
-    remaining = max(0.0, float(remaining))
+    raw_remaining = max(0.0, float(remaining))
+    safety_margin = max(0.0, float(deadline_safety_margin))
+    remaining = max(0.0, raw_remaining - safety_margin)
     reserve = max(0.0, float(post_pricing_reserve))
     min_time = max(0.0, float(min_pricing_time))
     if remaining <= min_time:
@@ -3812,6 +6622,241 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 raise ValueError(
                     "journey_certificate_completion_bound_hidden_negative_grace_time must be nonnegative"
                 )
+        if bool(config.get("journey_certificate_completion_bound_diverse_harvest_enabled", False)):
+            harvest_min_count = int(
+                config.get("journey_certificate_completion_bound_diverse_harvest_min_journeys", 1)
+            )
+            harvest_max_returned = int(
+                config.get("journey_certificate_completion_bound_diverse_harvest_max_returned_journeys", 30)
+            )
+            if harvest_min_count <= 0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_min_journeys must be positive"
+                )
+            if harvest_max_returned < harvest_min_count:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_max_returned_journeys "
+                    "must be at least diverse_harvest_min_journeys"
+                )
+            harvest_overlap = float(
+                config.get("journey_certificate_completion_bound_diverse_harvest_overlap_threshold", 0.4)
+            )
+            if harvest_overlap < 0.0 or harvest_overlap > 1.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_overlap_threshold must be in [0, 1]"
+                )
+            harvest_grace_time = float(
+                config.get("journey_certificate_completion_bound_diverse_harvest_grace_time", 0.0)
+            )
+            if harvest_grace_time < 0.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_grace_time must be nonnegative"
+                )
+            harvest_soft_min = int(
+                config.get("journey_certificate_completion_bound_diverse_harvest_soft_return_min_journeys", 0)
+            )
+            if harvest_soft_min < 0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_soft_return_min_journeys "
+                    "must be nonnegative"
+                )
+            harvest_min_new_task_sets = int(
+                config.get("journey_certificate_completion_bound_diverse_harvest_min_new_task_sets", 0)
+            )
+            if harvest_min_new_task_sets < 0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_min_new_task_sets must be nonnegative"
+                )
+            harvest_min_priority_task_sets = int(
+                config.get("journey_certificate_completion_bound_diverse_harvest_min_priority_task_sets", 0)
+            )
+            if harvest_min_priority_task_sets < 0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_min_priority_task_sets "
+                    "must be nonnegative"
+                )
+            harvest_priority_overlap = float(
+                config.get("journey_certificate_completion_bound_diverse_harvest_priority_overlap_threshold", 1.0)
+            )
+            if harvest_priority_overlap < 0.0 or harvest_priority_overlap > 1.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_priority_overlap_threshold "
+                    "must be in [0, 1]"
+                )
+            harvest_soft_min_new_task_sets = int(
+                config.get(
+                    "journey_certificate_completion_bound_diverse_harvest_soft_return_min_new_task_sets",
+                    0,
+                )
+            )
+            if harvest_soft_min_new_task_sets < 0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_soft_return_min_new_task_sets "
+                    "must be nonnegative"
+                )
+            harvest_soft_after = float(
+                config.get("journey_certificate_completion_bound_diverse_harvest_soft_return_after_time", 0.0)
+            )
+            if harvest_soft_after < 0.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_soft_return_after_time "
+                    "must be nonnegative"
+                )
+            harvest_soft_remaining = float(
+                config.get("journey_certificate_completion_bound_diverse_harvest_soft_return_remaining_time", 0.0)
+            )
+            if harvest_soft_remaining < 0.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_soft_return_remaining_time "
+                    "must be nonnegative"
+                )
+            harvest_duplicate_saturation_after = float(
+                config.get(
+                    "journey_certificate_completion_bound_diverse_harvest_duplicate_saturation_after_time",
+                    0.0,
+                )
+            )
+            if harvest_duplicate_saturation_after < 0.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_duplicate_saturation_after_time "
+                    "must be nonnegative"
+                )
+        if bool(config.get("journey_certificate_completion_bound_pre_exact_handoff_enabled", False)):
+            if int(config.get("journey_certificate_completion_bound_pre_exact_handoff_min_flat_rounds", 3)) < 0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_pre_exact_handoff_min_flat_rounds must be nonnegative"
+                )
+            if (
+                int(config.get("journey_certificate_completion_bound_pre_exact_handoff_disable_on_branch_depth_gt", 0))
+                < 0
+            ):
+                raise ValueError(
+                    "journey_certificate_completion_bound_pre_exact_handoff_disable_on_branch_depth_gt "
+                    "must be nonnegative"
+                )
+            if float(config.get("journey_certificate_completion_bound_pre_exact_handoff_max_remaining", 0.0)) < 0.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_pre_exact_handoff_max_remaining must be nonnegative"
+                )
+            if float(config.get("journey_certificate_completion_bound_pre_exact_handoff_slack_time", 2.0)) < 0.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_pre_exact_handoff_slack_time must be nonnegative"
+                )
+        if float(config.get("journey_pricing_deadline_safety_margin", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_deadline_safety_margin must be nonnegative")
+        if float(config.get("journey_pricing_profile_labeling_priority_future_dual_weight", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_profile_labeling_priority_future_dual_weight must be nonnegative")
+        if float(config.get("journey_pricing_profile_labeling_priority_cut_dual_weight", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_profile_labeling_priority_cut_dual_weight must be nonnegative")
+        if int(config.get("journey_pricing_profile_dp_max_labels_per_mask", 0)) < 0:
+            raise ValueError("journey_pricing_profile_dp_max_labels_per_mask must be nonnegative")
+        if float(config.get("journey_pricing_profile_true_rc_materialization_slack", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_profile_true_rc_materialization_slack must be nonnegative")
+        if float(config.get("journey_pricing_late_profile_true_rc_materialization_slack", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_late_profile_true_rc_materialization_slack must be nonnegative")
+        if float(config.get("journey_pricing_profile_no_negative_true_rc_materialization_slack", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_profile_no_negative_true_rc_materialization_slack must be nonnegative")
+        if (
+            float(config.get("journey_pricing_late_profile_no_negative_true_rc_materialization_slack", 0.0))
+            < 0.0
+        ):
+            raise ValueError("journey_pricing_late_profile_no_negative_true_rc_materialization_slack must be nonnegative")
+        if int(config.get("journey_pricing_profile_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError("journey_pricing_profile_true_rc_materialization_max_candidates must be nonnegative")
+        if int(config.get("journey_pricing_late_profile_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError("journey_pricing_late_profile_true_rc_materialization_max_candidates must be nonnegative")
+        if int(config.get("journey_pricing_profile_no_negative_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError("journey_pricing_profile_no_negative_true_rc_materialization_max_candidates must be nonnegative")
+        if int(config.get("journey_pricing_late_profile_no_negative_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError(
+                "journey_pricing_late_profile_no_negative_true_rc_materialization_max_candidates must be nonnegative"
+            )
+        if float(config.get("journey_pricing_profile_replacement_true_rc_materialization_slack", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_profile_replacement_true_rc_materialization_slack must be nonnegative")
+        if float(config.get("journey_pricing_late_profile_replacement_true_rc_materialization_slack", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_late_profile_replacement_true_rc_materialization_slack must be nonnegative")
+        if int(config.get("journey_pricing_profile_replacement_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError("journey_pricing_profile_replacement_true_rc_materialization_max_candidates must be nonnegative")
+        if int(config.get("journey_pricing_late_profile_replacement_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError(
+                "journey_pricing_late_profile_replacement_true_rc_materialization_max_candidates must be nonnegative"
+            )
+        if float(config.get("journey_pricing_profile_cross_count_true_rc_materialization_slack", 0.0)) < 0.0:
+            raise ValueError("journey_pricing_profile_cross_count_true_rc_materialization_slack must be nonnegative")
+        if float(config.get("journey_pricing_late_profile_cross_count_true_rc_materialization_slack", 0.0)) < 0.0:
+            raise ValueError(
+                "journey_pricing_late_profile_cross_count_true_rc_materialization_slack must be nonnegative"
+            )
+        if int(config.get("journey_pricing_profile_cross_count_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError(
+                "journey_pricing_profile_cross_count_true_rc_materialization_max_candidates must be nonnegative"
+            )
+        if int(config.get("journey_pricing_late_profile_cross_count_true_rc_materialization_max_candidates", 0)) < 0:
+            raise ValueError(
+                "journey_pricing_late_profile_cross_count_true_rc_materialization_max_candidates must be nonnegative"
+            )
+        if int(config.get("journey_pricing_profile_true_rc_candidate_scan_factor", 1)) <= 0:
+            raise ValueError("journey_pricing_profile_true_rc_candidate_scan_factor must be positive")
+        if int(config.get("journey_pricing_late_profile_true_rc_candidate_scan_factor", 1)) <= 0:
+            raise ValueError("journey_pricing_late_profile_true_rc_candidate_scan_factor must be positive")
+        if int(config.get("journey_pricing_profile_true_rc_candidate_scan_max_candidates", 0)) < 0:
+            raise ValueError("journey_pricing_profile_true_rc_candidate_scan_max_candidates must be nonnegative")
+        if int(config.get("journey_pricing_late_profile_true_rc_candidate_scan_max_candidates", 0)) < 0:
+            raise ValueError("journey_pricing_late_profile_true_rc_candidate_scan_max_candidates must be nonnegative")
+        if int(config.get("journey_pricing_streaming_min_returned_journeys", 1)) <= 0:
+            raise ValueError("journey_pricing_streaming_min_returned_journeys must be positive")
+        if int(config.get("journey_pricing_late_streaming_min_returned_journeys", 0)) < 0:
+            raise ValueError("journey_pricing_late_streaming_min_returned_journeys must be nonnegative")
+        if bool(config.get("journey_pricing_streaming_callback_backoff_enabled", False)):
+            if int(config.get("journey_pricing_streaming_callback_backoff_max_batches", 4)) <= 0:
+                raise ValueError("journey_pricing_streaming_callback_backoff_max_batches must be positive")
+        if int(config.get("journey_pricing_streaming_callback_exhaust_after_profile_count", 0)) < 0:
+            raise ValueError("journey_pricing_streaming_callback_exhaust_after_profile_count must be nonnegative")
+        static_src_selection = str(config.get("static_subset_row_selection", "lexicographic")).strip().lower()
+        if static_src_selection not in {"lexicographic", "compact", "ranked_compact"}:
+            raise ValueError("static_subset_row_selection must be lexicographic or compact")
+        if int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)) < 0:
+            raise ValueError("journey_hidden_negative_audit_max_logged_journeys must be nonnegative")
+        if bool(config.get("journey_hidden_negative_profile_catalog_seed_enabled", False)) and not bool(
+            config.get("journey_pricing_profile_labeling_physical_catalog_resume_enabled", False)
+        ):
+            raise ValueError(
+                "journey_hidden_negative_profile_catalog_seed_enabled=True requires "
+                "journey_pricing_profile_labeling_physical_catalog_resume_enabled=True"
+            )
+        if bool(config.get("journey_post_seed_profile_reharvest_enabled", False)):
+            if float(config.get("journey_post_seed_profile_reharvest_time_limit", 0.0)) <= 0.0:
+                raise ValueError(
+                    "journey_post_seed_profile_reharvest_enabled=True requires "
+                    "journey_post_seed_profile_reharvest_time_limit > 0"
+                )
+            if float(config.get("journey_post_seed_profile_reharvest_final_reserve_time", 0.0)) < 0.0:
+                raise ValueError("journey_post_seed_profile_reharvest_final_reserve_time must be nonnegative")
+            reharvest_min_journeys = int(config.get("journey_post_seed_profile_reharvest_min_journeys", 1))
+            reharvest_max_returned = int(config.get("journey_post_seed_profile_reharvest_max_returned_journeys", 1))
+            if reharvest_min_journeys <= 0:
+                raise ValueError("journey_post_seed_profile_reharvest_min_journeys must be positive")
+            if reharvest_max_returned < reharvest_min_journeys:
+                raise ValueError(
+                    "journey_post_seed_profile_reharvest_max_returned_journeys must be at least "
+                    "journey_post_seed_profile_reharvest_min_journeys"
+                )
+            if int(config.get("journey_post_seed_profile_reharvest_streaming_min_negative_batch", reharvest_min_journeys)) <= 0:
+                raise ValueError("journey_post_seed_profile_reharvest_streaming_min_negative_batch must be positive")
+            if int(config.get("journey_post_seed_profile_reharvest_streaming_profile_batch_size", 1)) <= 0:
+                raise ValueError("journey_post_seed_profile_reharvest_streaming_profile_batch_size must be positive")
+            if int(config.get("journey_post_seed_profile_reharvest_streaming_min_returned_journeys", 1)) <= 0:
+                raise ValueError("journey_post_seed_profile_reharvest_streaming_min_returned_journeys must be positive")
+            for key in (
+                "journey_post_seed_profile_reharvest_streaming_partial_return_after_time",
+                "journey_post_seed_profile_reharvest_streaming_partial_return_min_journeys",
+                "journey_post_seed_profile_reharvest_max_sequences",
+                "journey_post_seed_profile_reharvest_max_timed_evaluations",
+                "journey_post_seed_profile_reharvest_max_candidate_trips",
+                "journey_post_seed_profile_reharvest_max_dp_states",
+            ):
+                if float(config.get(key, 0.0)) < 0.0:
+                    raise ValueError(f"{key} must be nonnegative")
         if bool(config.get("journey_hidden_negative_patrol_enabled", False)):
             patrol_max_labels = int(config.get("journey_hidden_negative_patrol_max_labels_per_node", 0))
             patrol_completion_bound_enabled = bool(
@@ -3820,12 +6865,28 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                     config.get("journey_certificate_completion_bound_enabled", False),
                 )
             )
-            if patrol_max_labels <= 0 and not patrol_completion_bound_enabled:
+            patrol_resource_coarsening_enabled = bool(
+                config.get("journey_hidden_negative_patrol_resource_coarsening_enabled", False)
+            )
+            if patrol_max_labels <= 0 and not patrol_completion_bound_enabled and not patrol_resource_coarsening_enabled:
                 raise ValueError(
                     "journey_hidden_negative_patrol_enabled=True requires "
                     "journey_hidden_negative_patrol_max_labels_per_node > 0 "
-                    "unless journey_hidden_negative_patrol_completion_bound_enabled=True"
+                    "unless journey_hidden_negative_patrol_completion_bound_enabled=True "
+                    "or journey_hidden_negative_patrol_resource_coarsening_enabled=True"
                 )
+            if patrol_resource_coarsening_enabled:
+                patrol_time_bucket = float(
+                    config.get("journey_hidden_negative_patrol_resource_coarsening_time_bucket_size", 0.0)
+                )
+                patrol_energy_bucket = float(
+                    config.get("journey_hidden_negative_patrol_resource_coarsening_energy_bucket_size", 0.0)
+                )
+                if patrol_time_bucket <= 0.0 and patrol_energy_bucket <= 0.0:
+                    raise ValueError(
+                        "journey_hidden_negative_patrol_resource_coarsening_enabled=True requires "
+                        "a positive time or energy bucket size"
+                    )
             patrol_time_limit = float(config.get("journey_hidden_negative_patrol_time_limit", 0.0))
             if patrol_time_limit <= 0.0:
                 raise ValueError(
@@ -3843,6 +6904,186 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 )
             if float(config.get("journey_hidden_negative_patrol_grace_time", 0.0)) < 0.0:
                 raise ValueError("journey_hidden_negative_patrol_grace_time must be nonnegative")
+            if bool(config.get("journey_hidden_negative_patrol_before_exact_flat_enabled", False)):
+                if int(config.get("journey_hidden_negative_patrol_before_exact_min_retry_negative_rounds", 1)) < 0:
+                    raise ValueError(
+                        "journey_hidden_negative_patrol_before_exact_min_retry_negative_rounds must be nonnegative"
+                    )
+        if bool(config.get("journey_hidden_negative_patrol_after_small_batch_enabled", False)):
+            if int(config.get("journey_hidden_negative_patrol_after_small_batch_max_added_journeys", 3)) <= 0:
+                raise ValueError(
+                    "journey_hidden_negative_patrol_after_small_batch_max_added_journeys must be positive"
+                )
+            if int(config.get("journey_hidden_negative_patrol_after_small_batch_min_flat_rounds", 1)) < 0:
+                raise ValueError(
+                    "journey_hidden_negative_patrol_after_small_batch_min_flat_rounds must be nonnegative"
+                )
+        if bool(config.get("journey_same_dual_supplement_enabled", False)):
+            if int(config.get("journey_same_dual_supplement_max_rounds", 1)) <= 0:
+                raise ValueError("journey_same_dual_supplement_max_rounds must be positive")
+            if float(config.get("journey_same_dual_supplement_time_limit", 0.0)) <= 0.0:
+                raise ValueError(
+                    "journey_same_dual_supplement_enabled=True requires "
+                    "journey_same_dual_supplement_time_limit > 0"
+                )
+            if int(config.get("journey_same_dual_supplement_max_initial_added_journeys", 4)) <= 0:
+                raise ValueError("journey_same_dual_supplement_max_initial_added_journeys must be positive")
+            if int(config.get("journey_same_dual_supplement_min_flat_rounds", 1)) < 0:
+                raise ValueError("journey_same_dual_supplement_min_flat_rounds must be nonnegative")
+            if int(config.get("journey_same_dual_supplement_min_journeys", 1)) <= 0:
+                raise ValueError("journey_same_dual_supplement_min_journeys must be positive")
+            if int(config.get("journey_same_dual_supplement_max_returned_journeys", 1)) < int(
+                config.get("journey_same_dual_supplement_min_journeys", 1)
+            ):
+                raise ValueError(
+                    "journey_same_dual_supplement_max_returned_journeys must be at least "
+                    "journey_same_dual_supplement_min_journeys"
+                )
+            if bool(config.get("journey_same_dual_supplement_resource_coarsening_enabled", True)):
+                time_bucket = float(config.get("journey_same_dual_supplement_resource_coarsening_time_bucket_size", 0.0))
+                energy_bucket = float(
+                    config.get("journey_same_dual_supplement_resource_coarsening_energy_bucket_size", 0.0)
+                )
+                if time_bucket <= 0.0 and energy_bucket <= 0.0:
+                    raise ValueError(
+                        "journey_same_dual_supplement_resource_coarsening_enabled=True requires "
+                        "a positive time or energy bucket size"
+                    )
+            for key in (
+                "journey_same_dual_supplement_final_reserve_time",
+                "journey_same_dual_supplement_grace_time",
+            ):
+                if float(config.get(key, 0.0)) < 0.0:
+                    raise ValueError(f"{key} must be nonnegative")
+        if bool(config.get("journey_new_task_set_sweep_enabled", False)):
+            if float(config.get("journey_new_task_set_sweep_time_limit", 0.0)) <= 0.0:
+                raise ValueError(
+                    "journey_new_task_set_sweep_enabled=True requires "
+                    "journey_new_task_set_sweep_time_limit > 0"
+                )
+            if float(config.get("journey_new_task_set_sweep_final_reserve_time", 0.0)) < 0.0:
+                raise ValueError("journey_new_task_set_sweep_final_reserve_time must be nonnegative")
+            min_count = int(config.get("journey_new_task_set_sweep_min_task_count", 2))
+            max_count = int(config.get("journey_new_task_set_sweep_max_task_count", 6))
+            if min_count <= 0:
+                raise ValueError("journey_new_task_set_sweep_min_task_count must be positive")
+            if max_count < min_count:
+                raise ValueError(
+                    "journey_new_task_set_sweep_max_task_count must be at least "
+                    "journey_new_task_set_sweep_min_task_count"
+                )
+            if int(config.get("journey_new_task_set_sweep_top_tasks", max_count)) < max_count:
+                raise ValueError(
+                    "journey_new_task_set_sweep_top_tasks must be at least "
+                    "journey_new_task_set_sweep_max_task_count"
+                )
+            for key in (
+                "journey_new_task_set_sweep_max_combinations",
+                "journey_new_task_set_sweep_max_sequences_per_task_set",
+                "journey_new_task_set_sweep_arc_options_per_leg",
+                "journey_new_task_set_sweep_max_option_combinations_per_sequence",
+                "journey_new_task_set_sweep_max_start_times_per_sequence",
+                "journey_new_task_set_sweep_max_returned_journeys",
+            ):
+                if int(config.get(key, 1)) <= 0:
+                    raise ValueError(f"{key} must be positive")
+        if bool(config.get("journey_profile_repair_enabled", False)):
+            repair_time_limit = float(config.get("journey_profile_repair_time_limit", 0.0))
+            if repair_time_limit <= 0.0:
+                raise ValueError("journey_profile_repair_enabled=True requires journey_profile_repair_time_limit > 0")
+            if float(config.get("journey_profile_repair_final_reserve_time", 0.0)) < 0.0:
+                raise ValueError("journey_profile_repair_final_reserve_time must be nonnegative")
+            repair_min_journeys = int(config.get("journey_profile_repair_min_journeys", 1))
+            repair_max_returned = int(config.get("journey_profile_repair_max_returned_journeys", 1))
+            if repair_min_journeys <= 0:
+                raise ValueError("journey_profile_repair_min_journeys must be positive")
+            if repair_max_returned < repair_min_journeys:
+                raise ValueError(
+                    "journey_profile_repair_max_returned_journeys must be at least "
+                    "journey_profile_repair_min_journeys"
+                )
+            repair_streaming_batch = int(
+                config.get("journey_profile_repair_streaming_profile_batch_size", 1)
+            )
+            if repair_streaming_batch <= 0:
+                raise ValueError("journey_profile_repair_streaming_profile_batch_size must be positive")
+            if int(config.get("journey_profile_repair_streaming_min_negative_batch", repair_min_journeys)) <= 0:
+                raise ValueError("journey_profile_repair_streaming_min_negative_batch must be positive")
+            if int(config.get("journey_profile_repair_streaming_min_returned_journeys", 1)) <= 0:
+                raise ValueError("journey_profile_repair_streaming_min_returned_journeys must be positive")
+            for key in (
+                "journey_profile_repair_streaming_partial_return_after_time",
+                "journey_profile_repair_streaming_partial_return_min_journeys",
+                "journey_profile_repair_max_sequences",
+                "journey_profile_repair_max_timed_evaluations",
+                "journey_profile_repair_max_candidate_trips",
+                "journey_profile_repair_max_dp_states",
+            ):
+                if float(config.get(key, 0.0)) < 0.0:
+                    raise ValueError(f"{key} must be nonnegative")
+        if bool(config.get("journey_replacement_repair_enabled", False)):
+            replacement_time_limit = float(config.get("journey_replacement_repair_time_limit", 0.0))
+            if replacement_time_limit <= 0.0:
+                raise ValueError(
+                    "journey_replacement_repair_enabled=True requires "
+                    "journey_replacement_repair_time_limit > 0"
+                )
+            if float(config.get("journey_replacement_repair_final_reserve_time", 0.0)) < 0.0:
+                raise ValueError("journey_replacement_repair_final_reserve_time must be nonnegative")
+            replacement_min = int(config.get("journey_replacement_repair_min_journeys", 1))
+            replacement_max = int(config.get("journey_replacement_repair_max_returned_journeys", 1))
+            if replacement_min <= 0:
+                raise ValueError("journey_replacement_repair_min_journeys must be positive")
+            if replacement_max < replacement_min:
+                raise ValueError(
+                    "journey_replacement_repair_max_returned_journeys must be at least "
+                    "journey_replacement_repair_min_journeys"
+                )
+            if bool(config.get("journey_replacement_repair_resource_coarsening_enabled", True)):
+                replacement_time_bucket = float(
+                    config.get("journey_replacement_repair_resource_coarsening_time_bucket_size", 0.0)
+                )
+                replacement_energy_bucket = float(
+                    config.get("journey_replacement_repair_resource_coarsening_energy_bucket_size", 0.0)
+                )
+                if replacement_time_bucket <= 0.0 and replacement_energy_bucket <= 0.0:
+                    raise ValueError(
+                        "journey_replacement_repair_resource_coarsening_enabled=True requires "
+                        "a positive time or energy bucket size"
+                    )
+            for key in (
+                "journey_replacement_repair_grace_time",
+                "journey_replacement_repair_max_sequences",
+                "journey_replacement_repair_max_timed_evaluations",
+                "journey_replacement_repair_max_candidate_trips",
+                "journey_replacement_repair_max_dp_states",
+                "journey_replacement_repair_partial_max_states",
+                "journey_replacement_repair_harvest_overlap_threshold",
+                "journey_replacement_repair_harvest_max_containment",
+            ):
+                if float(config.get(key, 0.0)) < 0.0:
+                    raise ValueError(f"{key} must be nonnegative")
+            if bool(config.get("journey_replacement_repair_completion_bound_enabled", False)):
+                replacement_time_buckets = int(
+                    config.get(
+                        "journey_replacement_repair_completion_bound_time_buckets",
+                        config.get("journey_certificate_completion_bound_time_buckets", 0),
+                    )
+                )
+                replacement_energy_buckets = int(
+                    config.get(
+                        "journey_replacement_repair_completion_bound_energy_buckets",
+                        config.get("journey_certificate_completion_bound_energy_buckets", 0),
+                    )
+                )
+                if not 5 <= replacement_time_buckets <= 15:
+                    raise ValueError("journey_replacement_repair_completion_bound_time_buckets must be in [5, 15]")
+                if not 5 <= replacement_energy_buckets <= 15:
+                    raise ValueError("journey_replacement_repair_completion_bound_energy_buckets must be in [5, 15]")
+                if int(config.get("journey_replacement_repair_completion_bound_two_cycle_max_states", 0)) < 0:
+                    raise ValueError(
+                        "journey_replacement_repair_completion_bound_two_cycle_max_states must be nonnegative"
+                    )
         if bool(config.get("journey_certificate_completion_bound_escalation_enabled", False)):
             escalation_min_remaining = float(
                 config.get("journey_certificate_completion_bound_escalation_min_remaining_time", 0.0)
@@ -3927,16 +7168,42 @@ def _journey_learning_true_rc_max_kept_per_round(config: dict[str, Any]) -> int:
     )
 
 
+def _journey_learning_certificate_true_rc_max_kept_per_round(config: dict[str, Any]) -> int:
+    if "journey_learning_certificate_true_rc_max_kept_per_round" not in config:
+        return _journey_learning_true_rc_max_kept_per_round(config)
+    return max(0, int(config.get("journey_learning_certificate_true_rc_max_kept_per_round", 0)))
+
+
 def _journey_learning_true_rc_keep_threshold(config: dict[str, Any]) -> float:
     return max(0.0, float(config.get("journey_learning_true_rc_keep_threshold", 0.0)))
+
+
+def _journey_learning_certificate_true_rc_keep_threshold(config: dict[str, Any]) -> float:
+    base = _journey_learning_true_rc_keep_threshold(config)
+    if "journey_learning_certificate_true_rc_keep_threshold" not in config:
+        return base
+    return max(base, max(0.0, float(config.get("journey_learning_certificate_true_rc_keep_threshold", base))))
 
 
 def _journey_learning_true_rc_fallback_keep_threshold(config: dict[str, Any]) -> float:
     return max(0.0, float(config.get("journey_learning_true_rc_fallback_keep_threshold", 0.0)))
 
 
+def _journey_learning_certificate_true_rc_fallback_keep_threshold(config: dict[str, Any]) -> float:
+    base = _journey_learning_true_rc_fallback_keep_threshold(config)
+    if "journey_learning_certificate_true_rc_fallback_keep_threshold" not in config:
+        return base
+    return max(base, max(0.0, float(config.get("journey_learning_certificate_true_rc_fallback_keep_threshold", base))))
+
+
 def _journey_learning_true_rc_fallback_max_kept_per_round(config: dict[str, Any]) -> int:
     return max(0, int(config.get("journey_learning_true_rc_fallback_max_kept_per_round", 0)))
+
+
+def _journey_learning_certificate_true_rc_fallback_max_kept_per_round(config: dict[str, Any]) -> int:
+    if "journey_learning_certificate_true_rc_fallback_max_kept_per_round" not in config:
+        return _journey_learning_true_rc_fallback_max_kept_per_round(config)
+    return max(0, int(config.get("journey_learning_certificate_true_rc_fallback_max_kept_per_round", 0)))
 
 
 def _journey_learning_filter_true_rc_enabled(config: dict[str, Any]) -> bool:
@@ -3968,6 +7235,8 @@ def _journey_learning_pricing_config(
             heavy_updates["direct_journey_label_pricing_enabled"] = False
         if bool(updated.direct_journey_label_completion_bound_enabled):
             heavy_updates["direct_journey_label_completion_bound_enabled"] = False
+        if bool(updated.direct_journey_label_global_certificate_enabled):
+            heavy_updates["direct_journey_label_global_certificate_enabled"] = False
         if bool(updated.direct_journey_label_ng_dssr_enabled):
             heavy_updates["direct_journey_label_ng_dssr_enabled"] = False
         if bool(updated.direct_journey_label_ng_exact_probe_enabled):
@@ -4113,6 +7382,13 @@ def _maybe_create_journey_learning_runtime(
             disable_on_branch_depth_gt=int(config.get("journey_learning_disable_on_branch_depth_gt", 0)),
             filter_true_rc=_journey_learning_filter_true_rc_enabled(config),
             rc_filter_tol=float(config.get("journey_learning_true_rc_tol", 1.0e-5)),
+            true_rc_filter_fail_patience=int(config.get("journey_learning_true_rc_filter_fail_patience", 3)),
+            true_rc_filter_fail_alpha_decay=float(
+                config.get("journey_learning_true_rc_filter_fail_alpha_decay", 0.1)
+            ),
+            true_rc_filter_fail_alpha_floor=float(config["journey_learning_true_rc_filter_fail_alpha_floor"])
+            if "journey_learning_true_rc_filter_fail_alpha_floor" in config
+            else None,
             debug_checks=bool(config.get("journey_learning_debug_checks", False)),
         )
         cache_key = _journey_learning_cache_key(stabilizer_config)
@@ -4178,6 +7454,30 @@ def _maybe_create_journey_learning_runtime(
         true_rc_keep_threshold=round(float(_journey_learning_true_rc_keep_threshold(config)), 9),
         true_rc_fallback_keep_threshold=round(float(_journey_learning_true_rc_fallback_keep_threshold(config)), 9),
         true_rc_fallback_max_kept_per_round=_journey_learning_true_rc_fallback_max_kept_per_round(config),
+        certificate_true_rc_keep_threshold=round(
+            float(_journey_learning_certificate_true_rc_keep_threshold(config)),
+            9,
+        ),
+        certificate_true_rc_max_kept_per_round=_journey_learning_certificate_true_rc_max_kept_per_round(config),
+        certificate_true_rc_fallback_keep_threshold=round(
+            float(_journey_learning_certificate_true_rc_fallback_keep_threshold(config)),
+            9,
+        ),
+        certificate_true_rc_fallback_max_kept_per_round=(
+            _journey_learning_certificate_true_rc_fallback_max_kept_per_round(config)
+        ),
+        true_rc_filter_fail_patience=int(config.get("journey_learning_true_rc_filter_fail_patience", 3)),
+        true_rc_filter_fail_alpha_decay=round(
+            float(config.get("journey_learning_true_rc_filter_fail_alpha_decay", 0.1)),
+            9,
+        ),
+        true_rc_filter_fail_alpha_floor=None
+        if "journey_learning_true_rc_filter_fail_alpha_floor" not in config
+        else round(float(config.get("journey_learning_true_rc_filter_fail_alpha_floor", 0.0)), 9),
+        dual_center_enabled=bool(config.get("journey_learning_dual_center_enabled", False)),
+        dual_center_weight=round(float(config.get("journey_learning_dual_center_weight", 0.0)), 9),
+        dual_center_momentum=round(float(config.get("journey_learning_dual_center_momentum", 0.25)), 9),
+        dual_center_min_rounds=int(config.get("journey_learning_dual_center_min_rounds", 3)),
         stop_after_no_strong_round=bool(config.get("journey_learning_stop_after_no_strong_round", True)),
         min_kept_to_continue=max(1, int(config.get("journey_learning_min_kept_to_continue", 1))),
     )
@@ -4193,6 +7493,10 @@ def _maybe_create_journey_learning_runtime(
         true_rc_max_kept_per_round=_journey_learning_true_rc_max_kept_per_round(config),
         stop_after_no_strong_round=bool(config.get("journey_learning_stop_after_no_strong_round", True)),
         min_kept_to_continue=max(1, int(config.get("journey_learning_min_kept_to_continue", 1))),
+        dual_center_enabled=bool(config.get("journey_learning_dual_center_enabled", False)),
+        dual_center_weight=max(0.0, min(1.0, float(config.get("journey_learning_dual_center_weight", 0.0)))),
+        dual_center_momentum=max(0.0, min(1.0, float(config.get("journey_learning_dual_center_momentum", 0.25)))),
+        dual_center_min_rounds=max(1, int(config.get("journey_learning_dual_center_min_rounds", 3))),
     )
 
 
@@ -4214,6 +7518,11 @@ def _journey_learning_cache_key(config: Any) -> tuple[Any, ...]:
         int(config.disable_on_branch_depth_gt),
         bool(config.filter_true_rc),
         round(float(config.rc_filter_tol), 12),
+        int(config.true_rc_filter_fail_patience),
+        round(float(config.true_rc_filter_fail_alpha_decay), 12),
+        None
+        if config.true_rc_filter_fail_alpha_floor is None
+        else round(float(config.true_rc_filter_fail_alpha_floor), 12),
         bool(config.debug_checks),
     )
 
@@ -4245,6 +7554,105 @@ def _log_journey_learning_dual_trace(
         fleet_limit=round(float(duals.fleet_limit), 12),
         cut_count=len(duals.cuts or {}),
     )
+
+
+def _journey_learning_effective_anchor(
+    runtime: _JourneyLearningRuntime,
+    true_task_duals: dict[int, float],
+) -> tuple[dict[int, float], str, dict[str, float | int | bool]]:
+    """Return the anchor used by Level-1 learning pricing.
+
+    The optional dual center is an exponential moving average of official RMP
+    task-cover duals.  It is blended with the GNN anchor only for smoothed
+    pricing; exact pricing and all certificates still use the original SCIP
+    duals.
+    """
+
+    if not bool(runtime.dual_center_enabled):
+        return runtime.anchor, "gnn_anchor", {
+            "dual_center_enabled": False,
+            "dual_center_updates": int(runtime.dual_center_updates),
+            "dual_center_weight": 0.0,
+            "dual_center_active": False,
+        }
+
+    true_cover = {int(task): float(value) for task, value in true_task_duals.items()}
+    momentum = max(0.0, min(1.0, float(runtime.dual_center_momentum)))
+    if runtime.dual_center is None:
+        runtime.dual_center = dict(true_cover)
+    else:
+        updated_center: dict[int, float] = {}
+        for task, value in true_cover.items():
+            old = float(runtime.dual_center.get(int(task), value))
+            updated_center[int(task)] = (1.0 - momentum) * old + momentum * float(value)
+        runtime.dual_center = updated_center
+    runtime.dual_center_updates += 1
+
+    center = runtime.dual_center
+    center_weight = max(0.0, min(1.0, float(runtime.dual_center_weight)))
+    active = bool(center_weight > 0.0 and int(runtime.dual_center_updates) >= int(runtime.dual_center_min_rounds))
+    if not active:
+        return runtime.anchor, "gnn_anchor_warming", {
+            "dual_center_enabled": True,
+            "dual_center_updates": int(runtime.dual_center_updates),
+            "dual_center_weight": center_weight,
+            "dual_center_active": False,
+            "dual_center_anchor_l1_delta": _cover_l1_delta(runtime.anchor, center),
+            "dual_center_anchor_linf_delta": _cover_linf_delta(runtime.anchor, center),
+        }
+
+    effective_anchor: dict[int, float] = {}
+    for task, anchor_value in runtime.anchor.items():
+        task_id = int(task)
+        center_value = float(center.get(task_id, anchor_value))
+        effective_anchor[task_id] = (1.0 - center_weight) * float(anchor_value) + center_weight * center_value
+    return effective_anchor, "gnn_dual_center_anchor", {
+        "dual_center_enabled": True,
+        "dual_center_updates": int(runtime.dual_center_updates),
+        "dual_center_weight": center_weight,
+        "dual_center_active": True,
+        "dual_center_anchor_l1_delta": _cover_l1_delta(runtime.anchor, center),
+        "dual_center_anchor_linf_delta": _cover_linf_delta(runtime.anchor, center),
+    }
+
+
+def _cover_l1_delta(left: dict[int, float], right: dict[int, float]) -> float:
+    return sum(abs(float(left[int(task)]) - float(right.get(int(task), 0.0))) for task in left)
+
+
+def _cover_linf_delta(left: dict[int, float], right: dict[int, float]) -> float:
+    return max((abs(float(left[int(task)]) - float(right.get(int(task), 0.0))) for task in left), default=0.0)
+
+
+def _journey_learning_true_rc_filter_parameters(
+    config: dict[str, Any],
+    runtime: _JourneyLearningRuntime,
+    *,
+    certificate_candidate: bool,
+) -> tuple[float, int, float, int, str]:
+    """Return the true-RC filter policy for the current learning worker round.
+
+    In certificate-candidate tail rounds, learning remains enabled but becomes a
+    stricter worker: it may contribute only genuinely strong true-dual columns,
+    leaving weak tail exploration and all proof obligations to the true-dual
+    direct-label / completion-bound judge.
+    """
+
+    keep_threshold = float(runtime.true_rc_keep_threshold)
+    max_kept = int(runtime.true_rc_max_kept_per_round)
+    fallback_keep_threshold = float(runtime.true_rc_fallback_keep_threshold)
+    fallback_max_kept = int(runtime.true_rc_fallback_max_kept_per_round)
+    filter_context = "regular"
+    if bool(certificate_candidate):
+        filter_context = "certificate_candidate"
+        keep_threshold = max(keep_threshold, _journey_learning_certificate_true_rc_keep_threshold(config))
+        max_kept = _journey_learning_certificate_true_rc_max_kept_per_round(config)
+        fallback_keep_threshold = max(
+            fallback_keep_threshold,
+            _journey_learning_certificate_true_rc_fallback_keep_threshold(config),
+        )
+        fallback_max_kept = _journey_learning_certificate_true_rc_fallback_max_kept_per_round(config)
+    return keep_threshold, max_kept, fallback_keep_threshold, fallback_max_kept, filter_context
 
 
 def _journey_learning_pricing_duals(
@@ -4280,9 +7688,11 @@ def _journey_learning_pricing_duals(
         )
         return true_duals, "scip", False
     runtime.pricing_rounds_used += 1
+    true_task_duals = {int(task): float(value) for task, value in true_duals.cover.items()}
+    effective_anchor, anchor_source, anchor_stats = _journey_learning_effective_anchor(runtime, true_task_duals)
     smoothed_cover = runtime.stabilizer.smooth_task_duals(
-        true_task_duals={int(task): float(value) for task, value in true_duals.cover.items()},
-        predicted_anchor=runtime.anchor,
+        true_task_duals=true_task_duals,
+        predicted_anchor=effective_anchor,
         alpha=alpha,
     )
     l1_delta = sum(
@@ -4303,10 +7713,15 @@ def _journey_learning_pricing_duals(
         cg_iter=cg_iter,
         status="ENABLED",
         alpha=round(alpha, 9),
+        anchor_source=anchor_source,
         learning_pricing_round=int(runtime.pricing_rounds_used),
         task_count=len(smoothed_cover),
         smoothed_true_l1_delta=round(float(l1_delta), 9),
         smoothed_true_linf_delta=round(float(linf_delta), 9),
+        **{
+            key: (round(float(value), 9) if isinstance(value, float) else value)
+            for key, value in anchor_stats.items()
+        },
     )
     return (
         JourneyDuals(
@@ -4334,6 +7749,7 @@ def _journey_learning_true_rc_filter(
     node_id: int,
     depth: int,
     pricing_kind: str,
+    filter_context: str = "regular",
 ) -> list[Any]:
     kept_with_rc: list[tuple[float, Any]] = []
     fallback_with_rc: list[tuple[float, Any]] = []
@@ -4355,14 +7771,50 @@ def _journey_learning_true_rc_filter(
     max_kept_int = max(0, int(max_kept))
     fallback_max_kept_int = max(0, int(fallback_max_kept))
     fallback_used = False
+    fallback_fill_count = 0
+    selected_signatures: set[tuple] = set()
+    selected_task_sets: set[frozenset[int]] = set()
+
+    def remember_selected(items: list[tuple[float, Any]]) -> None:
+        selected_signatures.clear()
+        selected_task_sets.clear()
+        for _rc, journey in items:
+            selected_signatures.add(tuple(getattr(journey, "signature", tuple())))
+            selected_task_sets.add(frozenset(int(task) for task in getattr(journey, "task_set", ())))
+
     if kept_with_rc:
         kept_with_rc.sort(key=lambda item: float(item[0]))
         if max_kept_int > 0 and len(kept_with_rc) > max_kept_int:
             kept_with_rc = kept_with_rc[:max_kept_int]
+        remember_selected(kept_with_rc)
+        if max_kept_int > 0 and len(kept_with_rc) < max_kept_int and fallback_with_rc:
+            for true_rc, journey in sorted(fallback_with_rc, key=lambda item: float(item[0])):
+                signature = tuple(getattr(journey, "signature", tuple()))
+                task_set = frozenset(int(task) for task in getattr(journey, "task_set", ()))
+                if signature in selected_signatures or task_set in selected_task_sets:
+                    continue
+                kept_with_rc.append((true_rc, journey))
+                selected_signatures.add(signature)
+                selected_task_sets.add(task_set)
+                fallback_fill_count += 1
+                fallback_used = True
+                if len(kept_with_rc) >= max_kept_int:
+                    break
     elif fallback_max_kept_int > 0 and fallback_with_rc:
         fallback_with_rc.sort(key=lambda item: float(item[0]))
-        kept_with_rc = fallback_with_rc[:fallback_max_kept_int]
+        kept_with_rc = []
+        for true_rc, journey in fallback_with_rc:
+            signature = tuple(getattr(journey, "signature", tuple()))
+            task_set = frozenset(int(task) for task in getattr(journey, "task_set", ()))
+            if signature in selected_signatures or task_set in selected_task_sets:
+                continue
+            kept_with_rc.append((true_rc, journey))
+            selected_signatures.add(signature)
+            selected_task_sets.add(task_set)
+            if len(kept_with_rc) >= fallback_max_kept_int:
+                break
         fallback_used = True
+        fallback_fill_count = len(kept_with_rc)
     kept = [journey for _rc, journey in kept_with_rc]
     kept_rcs = [float(rc) for rc, _journey in kept_with_rc]
     eligible_before_cap = fallback_before_cap if fallback_used else strong_before_cap
@@ -4372,12 +7824,14 @@ def _journey_learning_true_rc_filter(
         depth=depth,
         cg_iter=cg_iter,
         pricing_kind=pricing_kind,
+        filter_context=str(filter_context),
         candidate_journeys=len(journeys),
         true_negative_journeys=all_true_negative_count,
         all_true_negative_journeys=all_true_negative_count,
         strong_true_negative_journeys=strong_before_cap,
         fallback_true_negative_journeys=fallback_before_cap,
         fallback_used=bool(fallback_used),
+        fallback_fill_journeys=int(fallback_fill_count),
         kept_journeys=len(kept),
         cap_dropped_journeys=max(0, eligible_before_cap - len(kept)),
         true_rc_max_kept_per_round=max_kept_int,
@@ -4409,6 +7863,11 @@ def _journey_learning_handle_smoothed_pricing_result(
     depth: int,
     pricing_kind: str,
 ) -> None:
+    feedback = runtime.stabilizer.record_true_rc_filter_feedback(
+        candidate_journeys=int(candidate_journeys),
+        kept_journeys=int(kept_journeys),
+        added_journeys=int(added_journeys),
+    )
     decision = runtime.stabilizer.handle_smoothed_pricing_result(
         found_negative_column=bool(found_negative_column),
         certificate_mode=False,
@@ -4436,6 +7895,10 @@ def _journey_learning_handle_smoothed_pricing_result(
         use_true_dual_exact_pricing=bool(decision.use_true_dual_exact_pricing),
         suppress_future_learning=bool(suppress_future_learning),
         alpha=round(float(decision.alpha), 9),
+        true_rc_filter_failures=int(feedback.get("true_rc_filter_failures", 0)),
+        alpha_adjusted_by_true_rc_filter=bool(feedback.get("alpha_adjusted_by_true_rc_filter", False)),
+        alpha_before_true_rc_filter=round(float(feedback.get("alpha_before_true_rc_filter", decision.alpha)), 9),
+        alpha_after_true_rc_filter=round(float(feedback.get("alpha_after_true_rc_filter", decision.alpha)), 9),
         reason=str(decision.reason),
     )
 
@@ -4450,10 +7913,240 @@ def _journey_exact_pricing_duals(
     completion_bound_enabled: bool,
 ) -> tuple[JourneyDuals, str]:
     """Choose the dual vector for exact pricing without weakening certificates."""
+    source = str(pricing_dual_source)
+    if source == "stabilized":
+        certificate_source = bool(certificate_candidate) or bool(completion_bound_enabled)
+        return pricing_duals, "stabilized_certificate" if certificate_source else "stabilized"
+    if bool(completion_bound_enabled):
+        return scip_duals, "scip_certificate"
+    if source == "dual_average":
+        return pricing_duals, "dual_average"
     if learning_runtime is not None:
         return scip_duals, "scip_learning_certificate"
-    if bool(certificate_candidate) or bool(completion_bound_enabled):
+    if bool(certificate_candidate):
         return scip_duals, "scip_certificate"
+    return pricing_duals, pricing_dual_source
+
+
+def _journey_dual_averaging_pricing_duals(
+    data: FutureData,
+    config: dict[str, Any],
+    runtime: _JourneyDualAveragingRuntime,
+    scip_duals: JourneyDuals,
+    *,
+    objective_delta: float | None,
+    progress_classification: str,
+    logger: FutureLogger,
+    cg_iter: int,
+    node_id: int,
+    depth: int,
+) -> tuple[JourneyDuals | None, str | None]:
+    if not bool(config.get("journey_dual_averaging_enabled", False)):
+        return None, None
+    if bool(config.get("journey_dual_averaging_root_only", True)) and int(depth) > 0:
+        return None, None
+    if int(cg_iter) <= int(runtime.cooldown_until_iter):
+        logger.log(
+            "journey_dual_averaging",
+            node_id=node_id,
+            depth=depth,
+            cg_iter=cg_iter,
+            status="SKIPPED",
+            active=False,
+            reason="true_rc_filter_cooldown",
+            cooldown_until_iter=int(runtime.cooldown_until_iter),
+            true_rc_filter_failures=int(runtime.true_rc_filter_failures),
+            progress_classification=str(progress_classification),
+        )
+        return None, None
+    tol = max(0.0, float(config.get("journey_dual_averaging_objective_tol", 1.0e-4)))
+    flat = objective_delta is not None and abs(float(objective_delta)) <= tol
+    if not flat:
+        runtime.history.clear()
+        runtime.flat_rounds = 0
+        logger.log(
+            "journey_dual_averaging",
+            node_id=node_id,
+            depth=depth,
+            cg_iter=cg_iter,
+            status="SKIPPED",
+            active=False,
+            reason="objective_not_flat",
+            objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+            objective_tol=round(float(tol), 9),
+            progress_classification=str(progress_classification),
+        )
+        return None, None
+
+    runtime.flat_rounds += 1
+    runtime.history.append(scip_duals)
+    window = max(1, int(config.get("journey_dual_averaging_window", 5)))
+    if len(runtime.history) > window:
+        runtime.history = runtime.history[-window:]
+    patience = max(1, int(config.get("journey_dual_averaging_patience", 3)))
+    if int(runtime.flat_rounds) < patience or len(runtime.history) < min(window, patience):
+        logger.log(
+            "journey_dual_averaging",
+            node_id=node_id,
+            depth=depth,
+            cg_iter=cg_iter,
+            status="WARMING",
+            active=False,
+            reason="insufficient_flat_history",
+            flat_rounds=int(runtime.flat_rounds),
+            history_size=len(runtime.history),
+            window=window,
+            patience=patience,
+            objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+            progress_classification=str(progress_classification),
+        )
+        return None, None
+
+    averaged_cover: dict[int, float] = {}
+    for task in data.tasks:
+        task_id = int(task)
+        averaged_cover[task_id] = sum(float(duals.cover.get(task_id, 0.0)) for duals in runtime.history) / float(
+            len(runtime.history)
+        )
+    averaged_duals = JourneyDuals(
+        cover=averaged_cover,
+        fleet_limit=float(scip_duals.fleet_limit),
+        cuts=None if scip_duals.cuts is None else dict(scip_duals.cuts),
+    )
+    logger.log(
+        "journey_dual_averaging",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        status="ACTIVE",
+        active=True,
+        reason="flat_dual_average",
+        flat_rounds=int(runtime.flat_rounds),
+        history_size=len(runtime.history),
+        window=window,
+        patience=patience,
+        objective_delta=None if objective_delta is None else round(float(objective_delta), 9),
+        cover_l1_delta=round(_cover_l1_delta(scip_duals.cover, averaged_cover), 9),
+        cover_linf_delta=round(_cover_linf_delta(scip_duals.cover, averaged_cover), 9),
+        progress_classification=str(progress_classification),
+    )
+    return averaged_duals, "dual_average"
+
+
+def _journey_dual_average_true_rc_filtered_pricing(
+    logger: FutureLogger,
+    pricing: Any,
+    *,
+    runtime: _JourneyDualAveragingRuntime,
+    true_duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    config: dict[str, Any],
+    cg_iter: int,
+    node_id: int,
+    depth: int,
+    pricing_kind: str,
+) -> Any:
+    tol = max(0.0, float(config.get("journey_dual_averaging_true_rc_tol", 1.0e-5)))
+    max_kept = max(0, int(config.get("journey_dual_averaging_true_rc_max_kept_per_round", 0)))
+    scored: list[tuple[float, Any]] = []
+    best_true_rc: float | None = None
+    for journey in getattr(pricing, "journeys", []) or []:
+        true_rc = manual_journey_reduced_cost(journey, true_duals, cuts)
+        best_true_rc = float(true_rc) if best_true_rc is None else min(float(best_true_rc), float(true_rc))
+        if float(true_rc) < -tol:
+            scored.append((float(true_rc), journey))
+    scored.sort(key=lambda item: (round(item[0], 9), getattr(item[1], "signature", tuple())))
+    kept = [journey for _true_rc, journey in scored[:max_kept if max_kept > 0 else None]]
+    logger.log(
+        "journey_dual_averaging_true_rc_filter",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        pricing_kind=pricing_kind,
+        candidate_journeys=len(getattr(pricing, "journeys", []) or []),
+        true_negative_journeys=len(scored),
+        kept_journeys=len(kept),
+        true_rc_tol=round(float(tol), 9),
+        true_rc_max_kept_per_round=max_kept,
+        best_average_reduced_cost=None
+        if getattr(pricing, "best_reduced_cost", None) is None
+        else round(float(pricing.best_reduced_cost), 9),
+        best_true_reduced_cost=None if best_true_rc is None else round(float(best_true_rc), 9),
+        true_rc_filter_failures=int(runtime.true_rc_filter_failures),
+        cooldown_until_iter=int(runtime.cooldown_until_iter),
+    )
+    if kept:
+        runtime.true_rc_filter_failures = 0
+        runtime.cooldown_until_iter = -1
+        return replace(pricing, journeys=kept)
+    runtime.true_rc_filter_failures += 1
+    patience = max(1, int(config.get("journey_dual_averaging_true_rc_filter_fail_patience", 2)))
+    cooldown_rounds = max(0, int(config.get("journey_dual_averaging_true_rc_filter_fail_cooldown_rounds", 6)))
+    if int(runtime.true_rc_filter_failures) >= patience and cooldown_rounds > 0:
+        runtime.cooldown_until_iter = max(int(runtime.cooldown_until_iter), int(cg_iter) + cooldown_rounds)
+        logger.log(
+            "journey_dual_averaging_cooldown",
+            node_id=node_id,
+            depth=depth,
+            cg_iter=cg_iter,
+            true_rc_filter_failures=int(runtime.true_rc_filter_failures),
+            patience=int(patience),
+            cooldown_rounds=int(cooldown_rounds),
+            cooldown_until_iter=int(runtime.cooldown_until_iter),
+            pricing_kind=pricing_kind,
+        )
+    reason = (
+        "dual_average_filtered_no_true_negative_journey"
+        if getattr(pricing, "journeys", None)
+        else "dual_average_no_column_requires_true_dual"
+    )
+    return replace(pricing, journeys=[], exhausted=False, status="INCOMPLETE", reason=reason)
+
+
+def _journey_dual_average_direct_patrol_config(
+    config: dict[str, Any],
+    pricing_config: JourneyPricingConfig,
+    *,
+    remaining: float,
+    min_pricing_time: float,
+) -> tuple[JourneyPricingConfig, dict[str, Any]]:
+    """Build a worker-only direct-label patrol for averaged-dual pricing.
+
+    Historical probes showed that passing a tail dual center through the normal
+    profile worker mostly produced duplicate/dominated materializations.  This
+    opt-in path reuses the bounded hidden-negative patrol machinery but drives
+    it with averaged task-cover duals.  Returned journeys are still filtered by
+    the latest true duals, and misses remain uncertified.
+    """
+
+    if not bool(config.get("journey_dual_averaging_direct_patrol_enabled", False)):
+        return pricing_config, {}
+    if bool(pricing_config.direct_journey_label_completion_bound_enabled):
+        return pricing_config, {}
+    patrol_config, patrol_mode = _journey_hidden_negative_patrol_config(
+        config,
+        pricing_config,
+        remaining=remaining,
+        min_pricing_time=min_pricing_time,
+    )
+    if not patrol_mode:
+        return pricing_config, {}
+    patrol_mode = dict(patrol_mode)
+    patrol_mode["dual_average_direct_patrol"] = True
+    patrol_mode["certificate_capable"] = False
+    return patrol_config, patrol_mode
+
+
+def _journey_retry_duals_after_average_filter(
+    pricing: Any,
+    scip_duals: JourneyDuals,
+    pricing_duals: JourneyDuals,
+    pricing_dual_source: str,
+) -> tuple[JourneyDuals, str]:
+    if str(pricing_dual_source) == "dual_average" and str(getattr(pricing, "reason", "")).startswith(
+        "dual_average_"
+    ):
+        return scip_duals, "scip_after_dual_average_filter"
     return pricing_duals, pricing_dual_source
 
 
@@ -4847,13 +8540,68 @@ def _journey_retry_budget_with_completion_reserve(
     return capped_retry_budget, max(0.0, retry_budget - capped_retry_budget)
 
 
+def _journey_skip_ordinary_retry_after_profile_materialization_failure(config: dict[str, Any], pricing: Any) -> bool:
+    """Return whether a profile worker failure should go straight to the judge.
+
+    `selected_profiles_not_a_valid_journey` means the profile worker already
+    found a negative profile combination but could not materialize it into a
+    valid journey.  Re-running the same ordinary profile retry usually repeats
+    the same invalid selection and does not certify anything.
+
+    `negative_journeys_already_in_pool` is a second, opt-in case: the worker did
+    find negative-looking candidates, but every materialized candidate was
+    already present, forbidden, or dominated by an existing task-set column.
+    A normal retry often repeats the same local-universe result.  Bypassing only
+    that retry is exact-safe: the result remains uncertified unless the later
+    true-dual completion-bound judge proves no negative column.
+    """
+
+    reason = str(getattr(pricing, "reason", "") or "")
+    if (
+        bool(config.get("journey_skip_ordinary_retry_after_profile_materialization_failure", False))
+        and reason == "selected_profiles_not_a_valid_journey"
+    ):
+        return True
+    if not bool(config.get("journey_skip_ordinary_retry_after_duplicate_only", False)):
+        return False
+    if reason != "negative_journeys_already_in_pool":
+        return False
+    if bool(getattr(pricing, "duplicate_scan_limited", False)):
+        return False
+    duplicate_like_count = (
+        int(getattr(pricing, "existing_journeys_filtered", 0))
+        + int(getattr(pricing, "duplicate_candidates_filtered", 0))
+        + int(getattr(pricing, "dominated_task_set_journeys_filtered", 0))
+    )
+    return duplicate_like_count > 0
+
+
+def _journey_skip_ordinary_retry_after_weak_negative_filtered(config: dict[str, Any], pricing: Any) -> bool:
+    """Return whether weak filtered negatives should hand off to the judge.
+
+    A weak-negative filtered pricing result has already found only columns whose
+    true reduced cost is too close to zero to add safely.  Re-running the same
+    ordinary profile/direct worker often consumes the final certificate window.
+    Skipping it is exact-safe because the following completion-bound probe must
+    still either add a true negative column or leave the node incomplete.
+    """
+
+    if not bool(config.get("journey_skip_ordinary_retry_after_weak_negative_filtered", False)):
+        return False
+    if getattr(pricing, "journeys", None):
+        return False
+    return int(getattr(pricing, "weak_negative_journeys_filtered", 0)) > 0
+
+
 def _journey_completion_bound_probe_budget(config: dict[str, Any], remaining: float) -> float:
     """Leave a small outer-loop reserve after a final completion-bound probe.
 
     Direct-label pricing checks its own deadline, but returning the result,
     logging, and node bookkeeping still need a little wall-clock slack.  Cutting
     the probe budget is exact-safe: a timed-out final probe cannot certify the
-    node, it only reports incomplete earlier.
+    node, it only reports incomplete earlier.  After the reserve is deducted,
+    do not hand the final judge a sub-minimum budget such as a few tenths of a
+    second; that can start an expensive oracle that cannot materially search.
     """
 
     budget = max(0.0, float(remaining))
@@ -4863,7 +8611,91 @@ def _journey_completion_bound_probe_budget(config: dict[str, Any], remaining: fl
     )
     if reserve <= 0.0 or budget <= reserve:
         return budget
-    return max(0.0, budget - reserve)
+    probe_budget = max(0.0, budget - reserve)
+    return probe_budget
+
+
+def _journey_completion_bound_probe_budget_is_viable(
+    config: dict[str, Any],
+    *,
+    remaining: float,
+    min_pricing_time: float,
+) -> tuple[bool, float]:
+    """Return whether a final completion-bound probe has a usable budget.
+
+    The viability check is based on the post-reserve budget, not the raw
+    remaining wall-clock time.  Starting a final judge with less than the
+    configured minimum cannot certify the node reliably and can overrun the
+    outer solver limit; skipping it is exact-safe because the node remains
+    incomplete.
+    """
+
+    probe_budget = _journey_completion_bound_probe_budget(config, float(remaining))
+    min_probe_budget = max(
+        float(min_pricing_time),
+        float(config.get("journey_certificate_completion_bound_after_retry_min_time", 0.0)),
+    )
+    return bool(float(probe_budget) >= float(min_probe_budget) - 1.0e-9), float(probe_budget)
+
+
+def _journey_pre_exact_completion_bound_handoff_needed(
+    config: dict[str, Any],
+    *,
+    remaining: float,
+    final_min_time: float,
+    min_pricing_time: float,
+    certificate_candidate: bool,
+    certificate_flat_rounds: int,
+    depth: int,
+    final_completion_bound_eligible: bool,
+    exact_completion_bound_enabled: bool,
+) -> bool:
+    """Return whether the tail should hand the next oracle slot to the judge.
+
+    This is a scheduling guard, not a new proof shortcut.  It only fires when
+    the node is already in a flat certificate candidate and the remaining time
+    is too small to safely run ordinary exact pricing and still leave a viable
+    completion-bound final probe afterwards.
+    """
+
+    if not bool(config.get("journey_certificate_completion_bound_pre_exact_handoff_enabled", False)):
+        return False
+    if bool(exact_completion_bound_enabled):
+        return False
+    if not bool(final_completion_bound_eligible):
+        return False
+    if not bool(certificate_candidate):
+        return False
+    depth_limit = int(config.get("journey_certificate_completion_bound_pre_exact_handoff_disable_on_branch_depth_gt", 0))
+    if int(depth) > int(depth_limit):
+        return False
+    min_flat_rounds = max(
+        0,
+        int(config.get("journey_certificate_completion_bound_pre_exact_handoff_min_flat_rounds", 3)),
+    )
+    if int(certificate_flat_rounds) < int(min_flat_rounds):
+        return False
+    remaining_value = max(0.0, float(remaining))
+    required = max(float(min_pricing_time), float(final_min_time))
+    if remaining_value <= required:
+        return False
+    max_remaining = float(config.get("journey_certificate_completion_bound_pre_exact_handoff_max_remaining", 0.0))
+    if max_remaining <= 0.0:
+        max_remaining = max(
+            0.0,
+            float(config.get("journey_certificate_completion_bound_pre_retry_reserve_remaining_threshold", 0.0)),
+        )
+        if max_remaining <= 0.0:
+            reserve = max(
+                0.0,
+                float(config.get("journey_certificate_completion_bound_after_retry_reserve_time", 0.0)),
+            )
+            slack = max(
+                0.0,
+                float(config.get("journey_certificate_completion_bound_pre_exact_handoff_slack_time", 2.0)),
+            )
+            max_remaining = float(final_min_time) + reserve + slack
+    return remaining_value <= max(required, float(max_remaining))
 
 
 _COMPLETION_BOUND_ESCALATION_REASONS = frozenset(
@@ -4953,6 +8785,7 @@ def _journey_pre_retry_completion_reserve_time(
     remaining: float,
     exact_time_limit: float,
     min_pricing_time: float,
+    certificate_candidate: bool = True,
     final_completion_bound_eligible: bool,
     exact_completion_bound_enabled: bool,
 ) -> float:
@@ -4964,7 +8797,11 @@ def _journey_pre_retry_completion_reserve_time(
     experiment explicitly sets a low remaining-time threshold.
     """
 
-    if not bool(final_completion_bound_eligible) or bool(exact_completion_bound_enabled):
+    if (
+        not bool(certificate_candidate)
+        or not bool(final_completion_bound_eligible)
+        or bool(exact_completion_bound_enabled)
+    ):
         return 0.0
     requested_reserve = max(
         0.0,
@@ -4978,9 +8815,21 @@ def _journey_pre_retry_completion_reserve_time(
         return 0.0
     if float(remaining) > float(remaining_threshold):
         return 0.0
-    if float(exact_time_limit) <= float(requested_reserve) + float(min_pricing_time):
+    min_ordinary_time = max(
+        float(min_pricing_time),
+        max(
+            0.0,
+            float(
+                config.get(
+                    "journey_certificate_completion_bound_pre_retry_min_ordinary_time",
+                    config.get("journey_retry_incomplete_no_column_min_time", min_pricing_time),
+                )
+            ),
+        ),
+    )
+    if float(exact_time_limit) <= float(requested_reserve) + float(min_ordinary_time):
         return 0.0
-    return min(float(requested_reserve), max(0.0, float(exact_time_limit) - float(min_pricing_time)))
+    return min(float(requested_reserve), max(0.0, float(exact_time_limit) - float(min_ordinary_time)))
 
 
 def _journey_completion_bound_final_probe_needed(
@@ -5000,11 +8849,183 @@ def _journey_completion_bound_final_probe_needed(
 
     if not bool(config.get("journey_certificate_completion_bound_after_retry_enabled", False)):
         return False
-    if bool(getattr(pricing, "completion_bound_enabled", False)) and bool(getattr(pricing, "exhausted", False)):
+    state = _journey_pricing_state(pricing)
+    if state == PRICING_STATE_CERTIFIED_NO_NEGATIVE:
         return False
     if added_columns is not None:
-        return int(added_columns) <= 0
-    return not bool(getattr(pricing, "journeys", None))
+        return int(added_columns) <= 0 and state in {
+            PRICING_STATE_FOUND_NEGATIVE,
+            PRICING_STATE_DUPLICATE_ONLY,
+            PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED,
+            PRICING_STATE_INCOMPLETE_LIMIT,
+        }
+    return state in {
+        PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED,
+        PRICING_STATE_INCOMPLETE_LIMIT,
+        PRICING_STATE_DUPLICATE_ONLY,
+    }
+
+
+def _journey_hidden_negative_patrol_after_small_batch_needed(
+    config: dict[str, Any],
+    pricing: Any,
+    *,
+    added_columns: int,
+    certificate_candidate: bool,
+    certificate_flat_rounds: int,
+    depth: int,
+) -> bool:
+    """Return whether a tail small-batch exact result should get a cheap patrol.
+
+    This is a worker-only supplement.  It is intended for degenerate tail rounds
+    where ordinary true-dual exact/profile pricing finds only one or two columns
+    and the RMP objective keeps staying flat.  It must never replace the final
+    true-dual certificate.
+    """
+
+    if not bool(config.get("journey_hidden_negative_patrol_after_small_batch_enabled", False)):
+        return False
+    if not bool(config.get("journey_hidden_negative_patrol_enabled", False)):
+        return False
+    if int(depth) > int(config.get("journey_hidden_negative_patrol_after_small_batch_disable_on_branch_depth_gt", 0)):
+        return False
+    if not bool(certificate_candidate):
+        return False
+    min_flat = max(0, int(config.get("journey_hidden_negative_patrol_after_small_batch_min_flat_rounds", 1)))
+    if int(certificate_flat_rounds) < min_flat:
+        return False
+    max_added = max(0, int(config.get("journey_hidden_negative_patrol_after_small_batch_max_added_journeys", 3)))
+    if max_added <= 0 or int(added_columns) <= 0 or int(added_columns) > max_added:
+        return False
+    return _journey_pricing_state(pricing) == PRICING_STATE_FOUND_NEGATIVE
+
+
+def _journey_same_dual_supplement_needed(
+    config: dict[str, Any],
+    *,
+    added_columns: int,
+    certificate_candidate: bool,
+    certificate_flat_rounds: int,
+    depth: int,
+    pricing_dual_source: str,
+) -> bool:
+    """Return whether to run bounded same-dual worker rounds after adding columns.
+
+    This worker targets degenerate tails where an exact true-dual call finds a
+    small batch, the RMP is immediately re-solved, and simplex jumps to another
+    dual extreme.  It only harvests more legal columns under the same dual
+    vector.  Its no-column result is ignored and never becomes a certificate.
+    """
+
+    if not bool(config.get("journey_same_dual_supplement_enabled", False)):
+        return False
+    if int(depth) > int(config.get("journey_same_dual_supplement_disable_on_branch_depth_gt", 0)):
+        return False
+    if not bool(certificate_candidate):
+        return False
+    min_flat = max(0, int(config.get("journey_same_dual_supplement_min_flat_rounds", 1)))
+    if int(certificate_flat_rounds) < min_flat:
+        return False
+    max_initial_added = max(0, int(config.get("journey_same_dual_supplement_max_initial_added_journeys", 4)))
+    if max_initial_added <= 0 or int(added_columns) <= 0 or int(added_columns) > max_initial_added:
+        return False
+    if bool(config.get("journey_same_dual_supplement_require_scip_dual", True)) and not str(
+        pricing_dual_source
+    ).startswith("scip"):
+        return False
+    return True
+
+
+def _journey_same_dual_supplement_config(
+    config: dict[str, Any],
+    pricing_config: JourneyPricingConfig,
+    *,
+    remaining: float,
+    min_pricing_time: float,
+) -> tuple[JourneyPricingConfig, dict[str, Any]]:
+    requested = max(0.0, float(config.get("journey_same_dual_supplement_time_limit", 0.5)))
+    reserve = max(float(min_pricing_time), float(config.get("journey_same_dual_supplement_final_reserve_time", 2.0)))
+    time_limit = min(requested, max(0.0, float(remaining) - reserve))
+    if time_limit <= 0.0:
+        return pricing_config, {}
+
+    min_journeys = max(1, int(config.get("journey_same_dual_supplement_min_journeys", 4)))
+    max_returned = max(
+        min_journeys,
+        int(config.get("journey_same_dual_supplement_max_returned_journeys", pricing_config.max_returned_journeys)),
+    )
+    resource_coarsening_enabled = bool(config.get("journey_same_dual_supplement_resource_coarsening_enabled", True))
+    time_bucket = (
+        max(0.0, float(config.get("journey_same_dual_supplement_resource_coarsening_time_bucket_size", 50.0)))
+        if resource_coarsening_enabled
+        else 0.0
+    )
+    energy_bucket = (
+        max(0.0, float(config.get("journey_same_dual_supplement_resource_coarsening_energy_bucket_size", 50.0)))
+        if resource_coarsening_enabled
+        else 0.0
+    )
+    max_labels_per_node = max(0, int(config.get("journey_same_dual_supplement_max_labels_per_node", 0)))
+    updated = replace(
+        pricing_config,
+        profile_pricing_enabled=False,
+        streaming_pricing_enabled=False,
+        direct_journey_label_pricing_enabled=True,
+        direct_journey_label_global_certificate_enabled=False,
+        direct_journey_label_completion_bound_enabled=False,
+        direct_journey_label_completion_bound_audit_enabled=False,
+        direct_journey_label_completion_bound_unique_task_helper_enabled=False,
+        direct_journey_label_completion_bound_unique_route_helper_enabled=False,
+        direct_journey_label_completion_bound_two_cycle_enabled=False,
+        direct_journey_label_next_sortie_cache_enabled=bool(
+            config.get("journey_same_dual_supplement_next_sortie_cache_enabled", False)
+        ),
+        direct_journey_label_max_labels_per_node=max_labels_per_node,
+        direct_journey_label_resource_coarsening_time_bucket_size=time_bucket,
+        direct_journey_label_resource_coarsening_energy_bucket_size=energy_bucket,
+        direct_journey_label_existing_task_set_repair_only=False,
+        direct_journey_label_new_task_set_only=bool(
+            config.get("journey_same_dual_supplement_new_task_set_only", False)
+        ),
+        direct_journey_label_early_return_negative=True,
+        direct_journey_label_early_return_negative_min_count=min_journeys,
+        direct_journey_label_early_return_negative_grace_time=max(
+            0.0,
+            float(config.get("journey_same_dual_supplement_grace_time", 0.0)),
+        ),
+        max_returned_journeys=max_returned,
+        time_limit=float(time_limit),
+    )
+    max_sequences = int(config.get("journey_same_dual_supplement_max_sequences", 0))
+    max_dp_states = int(config.get("journey_same_dual_supplement_max_dp_states", 0))
+    partial_max_states = int(config.get("journey_same_dual_supplement_partial_max_states", 0))
+    next_sortie_trip_return_limit = int(config.get("journey_same_dual_supplement_next_sortie_trip_return_limit", 0))
+    if max_sequences > 0:
+        updated = replace(updated, max_sequences=max_sequences)
+    if max_dp_states > 0:
+        updated = replace(updated, max_dp_states=max_dp_states)
+    if partial_max_states > 0:
+        updated = replace(updated, direct_journey_label_partial_max_states=partial_max_states)
+    if next_sortie_trip_return_limit > 0:
+        updated = replace(
+            updated,
+            direct_journey_label_next_sortie_trip_return_limit=next_sortie_trip_return_limit,
+        )
+    mode = {
+        "same_dual_supplement": True,
+        "time_limit": round(float(time_limit), 6),
+        "min_journeys": int(min_journeys),
+        "max_returned_journeys": int(max_returned),
+        "max_labels_per_node": int(max_labels_per_node),
+        "resource_coarsening": bool(resource_coarsening_enabled),
+        "resource_coarsening_time_bucket_size": round(float(time_bucket), 6),
+        "resource_coarsening_energy_bucket_size": round(float(energy_bucket), 6),
+        "max_sequences": int(updated.max_sequences),
+        "max_dp_states": int(updated.max_dp_states),
+        "partial_max_states": int(updated.direct_journey_label_partial_max_states),
+        "next_sortie_cache": bool(updated.direct_journey_label_next_sortie_cache_enabled),
+    }
+    return updated, mode
 
 
 def _journey_hidden_negative_patrol_config(
@@ -5016,11 +9037,10 @@ def _journey_hidden_negative_patrol_config(
 ) -> tuple[JourneyPricingConfig, dict[str, Any]]:
     """Build the Level 2.5 true-dual patrol used before final proof.
 
-    The patrol is a negative-column finder only.  When ``max_labels_per_node``
-    is positive it runs a beam-truncated direct labeler.  When completion bound
-    is enabled, ``max_labels_per_node=0`` is also allowed as a full direct-label
-    hidden-column probe.  In both modes, no-column is never treated as a
-    certificate; the caller must still run the final judge before fathoming.
+    The patrol is a negative-column finder only.  It can run as a beam-truncated
+    direct labeler, a completion-bound direct probe, or a resource-coarsened
+    direct probe.  In every mode, no-column is never treated as a certificate;
+    the caller must still run the final judge before fathoming.
     """
 
     if not bool(config.get("journey_hidden_negative_patrol_enabled", False)):
@@ -5032,8 +9052,20 @@ def _journey_hidden_negative_patrol_config(
             config.get("journey_certificate_completion_bound_enabled", False),
         )
     )
-    if max_labels_per_node <= 0 and not patrol_completion_bound_enabled:
+    resource_coarsening_enabled = bool(config.get("journey_hidden_negative_patrol_resource_coarsening_enabled", False))
+    if max_labels_per_node <= 0 and not patrol_completion_bound_enabled and not resource_coarsening_enabled:
         return pricing_config, {}
+    new_task_set_only = bool(config.get("journey_hidden_negative_patrol_new_task_set_only", False))
+    coarsening_time_bucket_size = (
+        float(config.get("journey_hidden_negative_patrol_resource_coarsening_time_bucket_size", 0.0))
+        if resource_coarsening_enabled
+        else 0.0
+    )
+    coarsening_energy_bucket_size = (
+        float(config.get("journey_hidden_negative_patrol_resource_coarsening_energy_bucket_size", 0.0))
+        if resource_coarsening_enabled
+        else 0.0
+    )
     requested_time = float(config.get("journey_hidden_negative_patrol_time_limit", 0.1))
     reserve = max(float(min_pricing_time), float(config.get("journey_hidden_negative_patrol_final_reserve_time", 0.0)))
     time_limit = min(max(0.0, requested_time), max(0.0, float(remaining) - reserve))
@@ -5047,6 +9079,7 @@ def _journey_hidden_negative_patrol_config(
     updated = replace(
         pricing_config,
         direct_journey_label_pricing_enabled=True,
+        direct_journey_label_global_certificate_enabled=False,
         direct_journey_label_completion_bound_enabled=patrol_completion_bound_enabled,
         direct_journey_label_completion_bound_audit_enabled=False,
         direct_journey_label_completion_bound_unique_task_helper_enabled=bool(
@@ -5070,6 +9103,10 @@ def _journey_hidden_negative_patrol_config(
             config.get("journey_hidden_negative_patrol_next_sortie_cache_enabled", False)
         ),
         direct_journey_label_max_labels_per_node=max_labels_per_node,
+        direct_journey_label_resource_coarsening_time_bucket_size=max(0.0, float(coarsening_time_bucket_size)),
+        direct_journey_label_resource_coarsening_energy_bucket_size=max(0.0, float(coarsening_energy_bucket_size)),
+        direct_journey_label_new_task_set_only=bool(new_task_set_only),
+        direct_journey_label_existing_task_set_repair_only=False,
         direct_journey_label_early_return_negative=True,
         direct_journey_label_early_return_negative_min_count=min_journeys,
         direct_journey_label_early_return_negative_grace_time=max(
@@ -5142,10 +9179,1032 @@ def _journey_hidden_negative_patrol_config(
         "max_dp_states": int(updated.max_dp_states),
         "partial_max_states": int(updated.direct_journey_label_partial_max_states),
         "next_sortie_cache": bool(updated.direct_journey_label_next_sortie_cache_enabled),
+        "resource_coarsening": bool(resource_coarsening_enabled),
+        "new_task_set_only": bool(updated.direct_journey_label_new_task_set_only),
+        "resource_coarsening_time_bucket_size": round(
+            float(updated.direct_journey_label_resource_coarsening_time_bucket_size),
+            6,
+        ),
+        "resource_coarsening_energy_bucket_size": round(
+            float(updated.direct_journey_label_resource_coarsening_energy_bucket_size),
+            6,
+        ),
         "completion_bound": bool(updated.direct_journey_label_completion_bound_enabled),
         "completion_bound_two_cycle": bool(updated.direct_journey_label_completion_bound_two_cycle_enabled),
     }
     return updated, mode
+
+
+def _journey_profile_repair_config(
+    config: dict[str, Any],
+    pricing_config: JourneyPricingConfig,
+    *,
+    remaining: float,
+    min_pricing_time: float,
+    depth: int,
+    after_patrol: bool = False,
+) -> tuple[JourneyPricingConfig, dict[str, Any]]:
+    """Build the Level 2.7 dual-specific profile repair worker.
+
+    The normal profile worker uses the fast physical catalog as its first
+    representative universe.  Hard-tail diagnostics showed that this universe
+    can contain the right sortie task-mask but a weaker physical realization.
+    This repair worker runs briefly under true duals with the physical catalog
+    disabled, so it can generate dual-specific profile representatives before
+    the final completion-bound judge is asked to prove the node.
+
+    It is a worker only: no-column from this call is always uncertified.
+    """
+
+    if not bool(config.get("journey_profile_repair_enabled", False)):
+        return pricing_config, {}
+    if bool(config.get("journey_profile_repair_after_patrol_only", True)) and not bool(after_patrol):
+        return pricing_config, {}
+    if bool(config.get("journey_profile_repair_root_only", True)) and int(depth) > 0:
+        return pricing_config, {}
+    reserve = max(float(min_pricing_time), float(config.get("journey_profile_repair_final_reserve_time", 0.0)))
+    requested = float(config.get("journey_profile_repair_time_limit", 0.0))
+    available = max(0.0, float(remaining) - reserve)
+    if not bool(config.get("journey_profile_repair_allow_partial_time", False)) and available < max(0.0, requested):
+        return pricing_config, {}
+    time_limit = min(max(0.0, requested), available)
+    if time_limit <= 0.0:
+        return pricing_config, {}
+    min_journeys = max(1, int(config.get("journey_profile_repair_min_journeys", 1)))
+    max_returned = max(
+        min_journeys,
+        int(config.get("journey_profile_repair_max_returned_journeys", pricing_config.max_returned_journeys)),
+    )
+    streaming_min = max(
+        min_journeys,
+        int(config.get("journey_profile_repair_streaming_min_negative_batch", min_journeys)),
+    )
+    updated = replace(
+        pricing_config,
+        profile_pricing_enabled=True,
+        direct_journey_label_pricing_enabled=False,
+        direct_journey_label_global_certificate_enabled=False,
+        direct_journey_label_completion_bound_enabled=False,
+        direct_journey_label_ng_dssr_enabled=False,
+        profile_labeling_enabled=True,
+        profile_labeling_best_first_enabled=True,
+        profile_labeling_resume_enabled=True,
+        profile_labeling_physical_catalog_resume_enabled=False,
+        profile_labeling_physical_catalog_share_across_branches_enabled=False,
+        streaming_pricing_enabled=True,
+        streaming_profile_batch_size=max(
+            1,
+            int(config.get("journey_profile_repair_streaming_profile_batch_size", pricing_config.streaming_profile_batch_size)),
+        ),
+        streaming_min_negative_batch=int(streaming_min),
+        streaming_min_returned_journeys=max(
+            1,
+            int(config.get("journey_profile_repair_streaming_min_returned_journeys", 1)),
+        ),
+        streaming_partial_return_after_time=max(
+            0.0,
+            float(config.get("journey_profile_repair_streaming_partial_return_after_time", 0.0)),
+        ),
+        streaming_partial_return_min_journeys=max(
+            0,
+            int(config.get("journey_profile_repair_streaming_partial_return_min_journeys", 0)),
+        ),
+        early_return_negative=True,
+        early_return_negative_min_count=int(streaming_min),
+        early_return_unique_masks_enabled=True,
+        max_returned_journeys=int(max_returned),
+        duplicate_retry_factor=max(1, int(config.get("journey_profile_repair_duplicate_retry_factor", 4))),
+        journey_selection_mode=str(config.get("journey_profile_repair_selection_mode", "orthogonal")),
+        time_limit=float(time_limit),
+        max_sequences=int(config.get("journey_profile_repair_max_sequences", pricing_config.max_sequences)),
+        max_timed_evaluations=int(
+            config.get("journey_profile_repair_max_timed_evaluations", pricing_config.max_timed_evaluations)
+        ),
+        max_candidate_trips=int(
+            config.get("journey_profile_repair_max_candidate_trips", pricing_config.max_candidate_trips)
+        ),
+        max_dp_states=int(config.get("journey_profile_repair_max_dp_states", pricing_config.max_dp_states)),
+        dp_cross_count_dominance_enabled=bool(
+            config.get(
+                "journey_profile_repair_dp_cross_count_dominance_enabled",
+                pricing_config.dp_cross_count_dominance_enabled,
+            )
+        ),
+        profile_generation_time_fraction=1.0,
+        profile_best_contribution_diagnostics_enabled=False,
+        min_add_reduced_cost=0.0,
+    )
+    mode = {
+        "profile_repair": True,
+        "after_patrol": bool(after_patrol),
+        "time_limit": round(float(time_limit), 6),
+        "min_journeys": int(min_journeys),
+        "max_returned_journeys": int(max_returned),
+        "streaming_min_negative_batch": int(streaming_min),
+        "streaming_profile_batch_size": int(updated.streaming_profile_batch_size),
+        "physical_catalog_resume": bool(updated.profile_labeling_physical_catalog_resume_enabled),
+        "profile_labeling_resume": bool(updated.profile_labeling_resume_enabled),
+        "selection_mode": str(updated.journey_selection_mode),
+        "max_sequences": int(updated.max_sequences),
+        "max_timed_evaluations": int(updated.max_timed_evaluations),
+        "max_candidate_trips": int(updated.max_candidate_trips),
+        "max_dp_states": int(updated.max_dp_states),
+        "dp_cross_count_dominance": bool(updated.dp_cross_count_dominance_enabled),
+        "certificate_capable": False,
+    }
+    return updated, mode
+
+
+def _journey_post_seed_profile_reharvest_config(
+    config: dict[str, Any],
+    pricing_config: JourneyPricingConfig,
+    added: int,
+    *,
+    remaining: float,
+    min_pricing_time: float,
+    depth: int,
+) -> tuple[JourneyPricingConfig, dict[str, Any]]:
+    """Build a short true-dual profile worker after hidden-negative seeding.
+
+    Unlike ``_journey_profile_repair_config``, this worker deliberately keeps
+    physical-catalog resume enabled.  Its job is to consume profiles that were
+    just seeded from direct-label/CB hidden negatives and harvest any new
+    profile-combinable task sets before the next RMP solve.  It is never a
+    certificate oracle.
+    """
+
+    if not bool(config.get("journey_post_seed_profile_reharvest_enabled", False)):
+        return pricing_config, {}
+    if bool(config.get("journey_post_seed_profile_reharvest_root_only", True)) and int(depth) > 0:
+        return pricing_config, {}
+    if int(added) <= 0:
+        return pricing_config, {}
+    if bool(config.get("journey_post_seed_profile_reharvest_after_replacement_only", True)):
+        new_journeys = int(getattr(added, "new_journeys", int(added)))
+        new_task_sets = len(getattr(added, "new_task_sets", tuple()))
+        if new_journeys > 0 or new_task_sets > 0:
+            return pricing_config, {}
+    reserve = max(float(min_pricing_time), float(config.get("journey_post_seed_profile_reharvest_final_reserve_time", 0.0)))
+    requested = max(0.0, float(config.get("journey_post_seed_profile_reharvest_time_limit", 0.0)))
+    available = max(0.0, float(remaining) - float(reserve))
+    if not bool(config.get("journey_post_seed_profile_reharvest_allow_partial_time", False)) and available < requested:
+        return pricing_config, {}
+    time_limit = min(requested, available)
+    if time_limit <= 0.0:
+        return pricing_config, {}
+    min_journeys = max(1, int(config.get("journey_post_seed_profile_reharvest_min_journeys", 1)))
+    max_returned = max(
+        min_journeys,
+        int(config.get("journey_post_seed_profile_reharvest_max_returned_journeys", pricing_config.max_returned_journeys)),
+    )
+    streaming_min = max(
+        min_journeys,
+        int(config.get("journey_post_seed_profile_reharvest_streaming_min_negative_batch", min_journeys)),
+    )
+    updated = replace(
+        pricing_config,
+        profile_pricing_enabled=True,
+        direct_journey_label_pricing_enabled=False,
+        direct_journey_label_global_certificate_enabled=False,
+        direct_journey_label_completion_bound_enabled=False,
+        direct_journey_label_ng_dssr_enabled=False,
+        profile_labeling_enabled=True,
+        profile_labeling_best_first_enabled=True,
+        profile_labeling_resume_enabled=True,
+        profile_labeling_physical_catalog_resume_enabled=True,
+        profile_labeling_physical_catalog_share_across_branches_enabled=False,
+        streaming_pricing_enabled=True,
+        streaming_profile_batch_size=max(
+            1,
+            int(
+                config.get(
+                    "journey_post_seed_profile_reharvest_streaming_profile_batch_size",
+                    pricing_config.streaming_profile_batch_size,
+                )
+            ),
+        ),
+        streaming_min_negative_batch=int(streaming_min),
+        streaming_min_returned_journeys=max(
+            1,
+            int(config.get("journey_post_seed_profile_reharvest_streaming_min_returned_journeys", 1)),
+        ),
+        streaming_partial_return_after_time=max(
+            0.0,
+            float(config.get("journey_post_seed_profile_reharvest_streaming_partial_return_after_time", 0.0)),
+        ),
+        streaming_partial_return_min_journeys=max(
+            0,
+            int(config.get("journey_post_seed_profile_reharvest_streaming_partial_return_min_journeys", 0)),
+        ),
+        early_return_negative=True,
+        early_return_negative_min_count=int(streaming_min),
+        early_return_unique_masks_enabled=True,
+        max_returned_journeys=int(max_returned),
+        duplicate_retry_factor=max(
+            1,
+            int(config.get("journey_post_seed_profile_reharvest_duplicate_retry_factor", 4)),
+        ),
+        journey_selection_mode=str(config.get("journey_post_seed_profile_reharvest_selection_mode", "orthogonal")),
+        time_limit=float(time_limit),
+        max_sequences=int(config.get("journey_post_seed_profile_reharvest_max_sequences", pricing_config.max_sequences)),
+        max_timed_evaluations=int(
+            config.get("journey_post_seed_profile_reharvest_max_timed_evaluations", pricing_config.max_timed_evaluations)
+        ),
+        max_candidate_trips=int(
+            config.get("journey_post_seed_profile_reharvest_max_candidate_trips", pricing_config.max_candidate_trips)
+        ),
+        max_dp_states=int(config.get("journey_post_seed_profile_reharvest_max_dp_states", pricing_config.max_dp_states)),
+        profile_generation_time_fraction=1.0,
+        profile_best_contribution_diagnostics_enabled=False,
+        min_add_reduced_cost=0.0,
+    )
+    mode = {
+        "post_seed_profile_reharvest": True,
+        "time_limit": round(float(time_limit), 6),
+        "after_replacement_only": bool(
+            config.get("journey_post_seed_profile_reharvest_after_replacement_only", True)
+        ),
+        "min_journeys": int(min_journeys),
+        "max_returned_journeys": int(max_returned),
+        "streaming_min_negative_batch": int(streaming_min),
+        "streaming_profile_batch_size": int(updated.streaming_profile_batch_size),
+        "physical_catalog_resume": bool(updated.profile_labeling_physical_catalog_resume_enabled),
+        "profile_labeling_resume": bool(updated.profile_labeling_resume_enabled),
+        "selection_mode": str(updated.journey_selection_mode),
+        "certificate_capable": False,
+    }
+    return updated, mode
+
+
+def _journey_replacement_repair_config(
+    config: dict[str, Any],
+    pricing_config: JourneyPricingConfig,
+    *,
+    remaining: float,
+    min_pricing_time: float,
+    depth: int,
+    target_task_sets: tuple[frozenset[int], ...] = tuple(),
+) -> tuple[JourneyPricingConfig, dict[str, Any]]:
+    """Build a worker that repairs physical representatives of known task sets.
+
+    This Level-2.8 worker exists for the hard-tail case where profile pricing
+    finds no new direction, while the final direct-label judge later discovers
+    many true-RC negative replacements for task sets already present in the RMP.
+    The worker is deliberately restricted to those existing task sets and is
+    never certificate-capable.
+    """
+
+    if not bool(config.get("journey_replacement_repair_enabled", False)):
+        return pricing_config, {}
+    if bool(config.get("journey_replacement_repair_root_only", True)) and int(depth) > 0:
+        return pricing_config, {}
+    normalized_target_task_sets = tuple(
+        dict.fromkeys(
+            frozenset(int(task) for task in task_set)
+            for task_set in (target_task_sets or tuple())
+            if task_set
+        )
+    )
+    if bool(config.get("journey_replacement_repair_target_recent_changed_task_sets_only", True)) and not normalized_target_task_sets:
+        return pricing_config, {}
+    reserve = max(float(min_pricing_time), float(config.get("journey_replacement_repair_final_reserve_time", 0.0)))
+    requested = float(config.get("journey_replacement_repair_time_limit", 0.0))
+    available = max(0.0, float(remaining) - reserve)
+    if not bool(config.get("journey_replacement_repair_allow_partial_time", False)) and available < max(0.0, requested):
+        return pricing_config, {}
+    time_limit = min(max(0.0, requested), available)
+    if time_limit <= 0.0:
+        return pricing_config, {}
+    min_journeys = max(1, int(config.get("journey_replacement_repair_min_journeys", 1)))
+    max_returned = max(
+        min_journeys,
+        int(config.get("journey_replacement_repair_max_returned_journeys", pricing_config.max_returned_journeys)),
+    )
+    resource_coarsening_enabled = bool(config.get("journey_replacement_repair_resource_coarsening_enabled", True))
+    time_bucket = (
+        float(config.get("journey_replacement_repair_resource_coarsening_time_bucket_size", 0.0))
+        if resource_coarsening_enabled
+        else 0.0
+    )
+    energy_bucket = (
+        float(config.get("journey_replacement_repair_resource_coarsening_energy_bucket_size", 0.0))
+        if resource_coarsening_enabled
+        else 0.0
+    )
+    completion_bound_enabled = bool(config.get("journey_replacement_repair_completion_bound_enabled", False))
+    updated = replace(
+        pricing_config,
+        profile_pricing_enabled=False,
+        streaming_pricing_enabled=False,
+        direct_journey_label_pricing_enabled=True,
+        direct_journey_label_global_certificate_enabled=False,
+        direct_journey_label_completion_bound_enabled=bool(completion_bound_enabled),
+        direct_journey_label_completion_bound_audit_enabled=False,
+        direct_journey_label_completion_bound_time_buckets=int(
+            config.get(
+                "journey_replacement_repair_completion_bound_time_buckets",
+                config.get(
+                    "journey_certificate_completion_bound_time_buckets",
+                    pricing_config.direct_journey_label_completion_bound_time_buckets,
+                ),
+            )
+        ),
+        direct_journey_label_completion_bound_energy_buckets=int(
+            config.get(
+                "journey_replacement_repair_completion_bound_energy_buckets",
+                config.get(
+                    "journey_certificate_completion_bound_energy_buckets",
+                    pricing_config.direct_journey_label_completion_bound_energy_buckets,
+                ),
+            )
+        ),
+        direct_journey_label_completion_bound_partial_pruning_enabled=bool(
+            config.get(
+                "journey_replacement_repair_completion_bound_partial_pruning_enabled",
+                pricing_config.direct_journey_label_completion_bound_partial_pruning_enabled,
+            )
+        ),
+        direct_journey_label_completion_bound_unique_task_helper_enabled=bool(
+            config.get(
+                "journey_replacement_repair_completion_bound_unique_task_helper_enabled",
+                config.get(
+                    "journey_certificate_completion_bound_unique_task_helper_enabled",
+                    pricing_config.direct_journey_label_completion_bound_unique_task_helper_enabled,
+                ),
+            )
+        ),
+        direct_journey_label_completion_bound_unique_route_helper_enabled=bool(
+            config.get(
+                "journey_replacement_repair_completion_bound_unique_route_helper_enabled",
+                config.get(
+                    "journey_certificate_completion_bound_unique_route_helper_enabled",
+                    pricing_config.direct_journey_label_completion_bound_unique_route_helper_enabled,
+                ),
+            )
+        ),
+        direct_journey_label_completion_bound_two_cycle_enabled=bool(
+            completion_bound_enabled
+            and config.get(
+                "journey_replacement_repair_completion_bound_two_cycle_enabled",
+                config.get(
+                    "journey_certificate_completion_bound_two_cycle_enabled",
+                    pricing_config.direct_journey_label_completion_bound_two_cycle_enabled,
+                ),
+            )
+        ),
+        direct_journey_label_completion_bound_two_cycle_max_states=int(
+            config.get(
+                "journey_replacement_repair_completion_bound_two_cycle_max_states",
+                config.get(
+                    "journey_certificate_completion_bound_two_cycle_max_states",
+                    pricing_config.direct_journey_label_completion_bound_two_cycle_max_states,
+                ),
+            )
+        ),
+        direct_journey_label_completion_bound_elapsed_soft_return_enabled=False,
+        direct_journey_label_ng_dssr_enabled=False,
+        direct_journey_label_existing_task_set_repair_only=True,
+        direct_journey_label_repair_task_sets=normalized_target_task_sets,
+        direct_journey_label_next_sortie_cache_enabled=bool(
+            config.get("journey_replacement_repair_next_sortie_cache_enabled", False)
+        ),
+        direct_journey_label_max_labels_per_node=max(
+            0,
+            int(config.get("journey_replacement_repair_max_labels_per_node", pricing_config.direct_journey_label_max_labels_per_node)),
+        ),
+        direct_journey_label_resource_coarsening_time_bucket_size=max(0.0, float(time_bucket)),
+        direct_journey_label_resource_coarsening_energy_bucket_size=max(0.0, float(energy_bucket)),
+        direct_journey_label_early_return_negative=True,
+        direct_journey_label_early_return_negative_min_count=int(min_journeys),
+        direct_journey_label_early_return_negative_grace_time=max(
+            0.0,
+            float(config.get("journey_replacement_repair_grace_time", 0.0)),
+        ),
+        direct_journey_label_diverse_harvest_enabled=True,
+        direct_journey_label_diverse_harvest_top_k_strongest=max(
+            1,
+            int(config.get("journey_replacement_repair_harvest_top_k_strongest", min(5, min_journeys))),
+        ),
+        direct_journey_label_diverse_harvest_min_fill=max(
+            min_journeys,
+            int(config.get("journey_replacement_repair_harvest_min_fill", min_journeys)),
+        ),
+        direct_journey_label_diverse_harvest_overlap_threshold=float(
+            config.get("journey_replacement_repair_harvest_overlap_threshold", 0.5)
+        ),
+        direct_journey_label_diverse_harvest_max_containment=float(
+            config.get("journey_replacement_repair_harvest_max_containment", 0.8)
+        ),
+        direct_journey_label_diverse_harvest_allow_duplicate_task_sets=bool(
+            config.get("journey_replacement_repair_harvest_allow_duplicate_task_sets", False)
+        ),
+        max_returned_journeys=int(max_returned),
+        time_limit=float(time_limit),
+        max_sequences=int(config.get("journey_replacement_repair_max_sequences", pricing_config.max_sequences)),
+        max_timed_evaluations=int(
+            config.get("journey_replacement_repair_max_timed_evaluations", pricing_config.max_timed_evaluations)
+        ),
+        max_candidate_trips=int(
+            config.get("journey_replacement_repair_max_candidate_trips", pricing_config.max_candidate_trips)
+        ),
+        max_dp_states=int(config.get("journey_replacement_repair_max_dp_states", pricing_config.max_dp_states)),
+        direct_journey_label_partial_max_states=int(
+            config.get(
+                "journey_replacement_repair_partial_max_states",
+                pricing_config.direct_journey_label_partial_max_states,
+            )
+        ),
+        min_add_reduced_cost=0.0,
+    )
+    mode = {
+        "replacement_repair": True,
+        "time_limit": round(float(time_limit), 6),
+        "min_journeys": int(min_journeys),
+        "max_returned_journeys": int(max_returned),
+        "resource_coarsening": bool(resource_coarsening_enabled),
+        "resource_coarsening_time_bucket_size": round(
+            float(updated.direct_journey_label_resource_coarsening_time_bucket_size),
+            6,
+        ),
+        "resource_coarsening_energy_bucket_size": round(
+            float(updated.direct_journey_label_resource_coarsening_energy_bucket_size),
+            6,
+        ),
+        "next_sortie_cache": bool(updated.direct_journey_label_next_sortie_cache_enabled),
+        "completion_bound": bool(updated.direct_journey_label_completion_bound_enabled),
+        "completion_bound_two_cycle": bool(updated.direct_journey_label_completion_bound_two_cycle_enabled),
+        "completion_bound_two_cycle_max_states": int(
+            updated.direct_journey_label_completion_bound_two_cycle_max_states
+        ),
+        "max_sequences": int(updated.max_sequences),
+        "max_dp_states": int(updated.max_dp_states),
+        "partial_max_states": int(updated.direct_journey_label_partial_max_states),
+        "target_task_sets": int(len(normalized_target_task_sets)),
+        "certificate_capable": False,
+    }
+    return updated, mode
+
+
+def _journey_replacement_repair_target_task_sets(
+    config: dict[str, Any],
+    *,
+    recent_changed_task_sets: tuple[frozenset[int], ...] | list[frozenset[int]] = tuple(),
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+) -> tuple[frozenset[int], ...]:
+    """Choose known task sets for the true-dual replacement repair worker.
+
+    The original worker followed only task sets that had just changed.  That is
+    useful when a final judge finds a few replacement columns, but it misses the
+    hard-tail case where those replacements are inactive and the current LP
+    support remains untouched.  The active-support option is still worker-only:
+    it can search for better physical representatives of current active task
+    sets, but it never certifies no-negative-column.
+    """
+
+    targets: list[frozenset[int]] = []
+    if bool(config.get("journey_replacement_repair_target_recent_changed_task_sets_enabled", True)):
+        targets.extend(
+            frozenset(int(task) for task in task_set)
+            for task_set in (recent_changed_task_sets or tuple())
+            if task_set
+        )
+    if bool(config.get("journey_replacement_repair_target_active_task_sets_enabled", False)):
+        targets.extend(
+            frozenset(int(task) for task in task_set)
+            for task_set in (active_task_sets or set())
+            if task_set
+        )
+    return tuple(dict.fromkeys(targets))
+
+
+def _journey_fixed_task_set_repair_enabled(
+    config: dict[str, Any],
+    *,
+    remaining: float,
+    min_pricing_time: float,
+    depth: int,
+    target_task_sets: tuple[frozenset[int], ...] = tuple(),
+) -> tuple[bool, dict[str, Any]]:
+    """Return whether to run the small fixed-task-set representative worker.
+
+    This worker is deliberately not a pricing certificate.  It only attempts to
+    find cheaper physical representatives for known task sets and all returned
+    columns are checked under the current true duals before insertion.
+    """
+
+    if not bool(config.get("journey_fixed_task_set_repair_enabled", False)):
+        return False, {}
+    if bool(config.get("journey_fixed_task_set_repair_root_only", True)) and int(depth) > 0:
+        return False, {}
+    if not target_task_sets:
+        return False, {}
+    requested = max(0.0, float(config.get("journey_fixed_task_set_repair_time_limit", 0.0)))
+    if requested <= 0.0:
+        return False, {}
+    reserve = max(float(min_pricing_time), float(config.get("journey_fixed_task_set_repair_final_reserve_time", 0.0)))
+    available = max(0.0, float(remaining) - reserve)
+    if not bool(config.get("journey_fixed_task_set_repair_allow_partial_time", False)) and available < requested:
+        return False, {}
+    budget = min(requested, available)
+    if budget <= 0.0:
+        return False, {}
+    mode = {
+        "fixed_task_set_repair": True,
+        "certificate_capable": False,
+        "time_limit": round(float(budget), 6),
+        "target_task_sets": int(len(target_task_sets)),
+        "max_task_set_size": int(config.get("journey_fixed_task_set_repair_max_task_set_size", 6)),
+        "max_target_task_sets": int(config.get("journey_fixed_task_set_repair_max_target_task_sets", 16)),
+        "arc_options_per_leg": int(config.get("journey_fixed_task_set_repair_arc_options_per_leg", 1)),
+        "max_sequences_per_task_set": int(config.get("journey_fixed_task_set_repair_max_sequences_per_task_set", 720)),
+        "max_option_combinations_per_sequence": int(
+            config.get("journey_fixed_task_set_repair_max_option_combinations_per_sequence", 1)
+        ),
+    }
+    return True, mode
+
+
+def _journey_fixed_task_set_repair_target_task_sets(
+    config: dict[str, Any],
+    *,
+    recent_changed_task_sets: tuple[frozenset[int], ...] | list[frozenset[int]] = tuple(),
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+) -> tuple[frozenset[int], ...]:
+    targets: list[frozenset[int]] = []
+    if bool(config.get("journey_fixed_task_set_repair_target_recent_changed_task_sets_enabled", True)):
+        targets.extend(
+            frozenset(int(task) for task in task_set)
+            for task_set in (recent_changed_task_sets or tuple())
+            if task_set
+        )
+    if bool(config.get("journey_fixed_task_set_repair_target_active_task_sets_enabled", True)):
+        targets.extend(
+            frozenset(int(task) for task in task_set)
+            for task_set in (active_task_sets or set())
+            if task_set
+        )
+    return tuple(dict.fromkeys(targets))
+
+
+def _journey_fixed_task_set_repair_pool_targets(
+    config: dict[str, Any],
+    journey_pool: JourneyPool,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+) -> tuple[frozenset[int], ...]:
+    if not bool(config.get("journey_fixed_task_set_repair_target_pool_best_enabled", True)):
+        return tuple()
+    max_targets = max(1, int(config.get("journey_fixed_task_set_repair_max_target_task_sets", 16)))
+    max_size = max(1, int(config.get("journey_fixed_task_set_repair_max_task_set_size", 6)))
+    scored: list[tuple[float, int, float, frozenset[int]]] = []
+    for task_set, journey in journey_pool.by_task_set.items():
+        key = frozenset(int(task) for task in task_set)
+        if not key or len(key) > max_size:
+            continue
+        rc = float(manual_journey_reduced_cost(journey, duals, cuts))
+        scored.append((round(rc, 9), len(key), round(float(journey.cost), 9), key))
+    scored.sort(key=lambda item: (item[0], item[1], item[2], tuple(sorted(item[3]))))
+    return tuple(dict.fromkeys(item[3] for item in scored[:max_targets]))
+
+
+def _journey_new_task_set_sweep_enabled(
+    config: dict[str, Any],
+    *,
+    remaining: float,
+    min_pricing_time: float,
+    depth: int,
+) -> tuple[bool, dict[str, Any]]:
+    """Return whether to run the bounded true-dual new-task-set sweep.
+
+    This is a worker oracle only.  It enumerates a small ranked universe of
+    single-sortie task sets that are not already represented in the RMP pool,
+    then true-RC filters any found journeys.  A no-column result is local to
+    that configured universe and must never certify the node.
+    """
+
+    if not bool(config.get("journey_new_task_set_sweep_enabled", False)):
+        return False, {}
+    if bool(config.get("journey_new_task_set_sweep_root_only", True)) and int(depth) > 0:
+        return False, {}
+    requested = max(0.0, float(config.get("journey_new_task_set_sweep_time_limit", 0.0)))
+    if requested <= 0.0:
+        return False, {}
+    reserve = max(float(min_pricing_time), float(config.get("journey_new_task_set_sweep_final_reserve_time", 0.0)))
+    available = max(0.0, float(remaining) - reserve)
+    if not bool(config.get("journey_new_task_set_sweep_allow_partial_time", False)) and available < requested:
+        return False, {}
+    budget = min(requested, available)
+    if budget <= 0.0:
+        return False, {}
+    mode = {
+        "new_task_set_sweep": True,
+        "certificate_capable": False,
+        "time_limit": round(float(budget), 6),
+        "top_tasks": int(config.get("journey_new_task_set_sweep_top_tasks", 10)),
+        "min_task_count": int(config.get("journey_new_task_set_sweep_min_task_count", 2)),
+        "max_task_count": int(config.get("journey_new_task_set_sweep_max_task_count", 6)),
+        "max_combinations": int(config.get("journey_new_task_set_sweep_max_combinations", 512)),
+        "max_sequences_per_task_set": int(config.get("journey_new_task_set_sweep_max_sequences_per_task_set", 720)),
+        "arc_options_per_leg": int(config.get("journey_new_task_set_sweep_arc_options_per_leg", 1)),
+        "max_option_combinations_per_sequence": int(
+            config.get("journey_new_task_set_sweep_max_option_combinations_per_sequence", 1)
+        ),
+    }
+    return True, mode
+
+
+def _journey_new_task_set_sweep_candidate_task_sets(
+    data: FutureData,
+    duals: JourneyDuals,
+    journey_pool: JourneyPool,
+    config: dict[str, Any],
+) -> tuple[frozenset[int], ...]:
+    min_count = max(1, int(config.get("journey_new_task_set_sweep_min_task_count", 2)))
+    max_count = max(min_count, int(config.get("journey_new_task_set_sweep_max_task_count", 6)))
+    max_count = min(max_count, max(1, int(config.get("max_tasks_per_trip", max_count))))
+    top_tasks = max(max_count, int(config.get("journey_new_task_set_sweep_top_tasks", len(data.tasks))))
+    max_combinations = max(1, int(config.get("journey_new_task_set_sweep_max_combinations", 512)))
+    existing = {frozenset(int(task) for task in task_set) for task_set in journey_pool.by_task_set}
+    ranked_tasks = sorted(
+        (int(task) for task in data.tasks),
+        key=lambda task: (-float(duals.cover.get(int(task), 0.0)), int(task)),
+    )[:top_tasks]
+    scored: list[tuple[float, int, tuple[int, ...], frozenset[int]]] = []
+    for size in range(min_count, max_count + 1):
+        if size > len(ranked_tasks):
+            break
+        for combo in itertools.combinations(ranked_tasks, size):
+            task_set = frozenset(int(task) for task in combo)
+            if task_set in existing:
+                continue
+            cover_sum = sum(float(duals.cover.get(int(task), 0.0)) for task in task_set)
+            scored.append((-cover_sum, -len(task_set), tuple(sorted(task_set)), task_set))
+    scored.sort(key=lambda item: (round(float(item[0]), 9), item[1], item[2]))
+    return tuple(dict.fromkeys(item[3] for item in scored[:max_combinations]))
+
+
+def _price_new_task_set_sweep(
+    data: FutureData,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    journey_pool: JourneyPool,
+    config: dict[str, Any],
+    *,
+    time_limit: float,
+    forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
+) -> JourneyPricingResult:
+    """Enumerate a bounded set of true-dual single-sortie new task sets.
+
+    The worker targets the failure mode observed in hard 10-task logs: final
+    completion-bound probes occasionally find single-sortie negative journeys
+    with task sets that ordinary profile workers did not materialize.  We keep
+    this search deliberately local, time-limited, and non-certificate.
+    """
+
+    started = time.perf_counter()
+    deadline = started + max(0.0, float(time_limit))
+    eps = float(config.get("eps", 1.0e-6))
+    true_rc_tol = max(eps, float(config.get("journey_new_task_set_sweep_true_rc_tol", eps)))
+    max_returned = max(1, int(config.get("journey_new_task_set_sweep_max_returned_journeys", 24)))
+    max_task_count = max(1, int(config.get("journey_new_task_set_sweep_max_task_count", 6)))
+    max_sequences_per_set = max(1, int(config.get("journey_new_task_set_sweep_max_sequences_per_task_set", 720)))
+    option_limit = max(1, int(config.get("journey_new_task_set_sweep_arc_options_per_leg", 1)))
+    max_option_combos = max(1, int(config.get("journey_new_task_set_sweep_max_option_combinations_per_sequence", 1)))
+    max_start_times = max(1, int(config.get("journey_new_task_set_sweep_max_start_times_per_sequence", 1)))
+    time_bucket = max(1.0e-9, float(config.get("time_bucket_size", 10.0)))
+    max_tasks_per_trip = max(1, int(config.get("max_tasks_per_trip", max_task_count)))
+    forbidden = set(forbidden_journey_signatures or set())
+    existing_task_sets = {frozenset(int(task) for task in task_set) for task_set in journey_pool.by_task_set}
+
+    best_by_task_set: dict[frozenset[int], tuple[float, Any]] = {}
+    best_rc: float | None = None
+    generated_sequences = 0
+    evaluated_trips = 0
+    candidate_journeys = 0
+    skipped_existing = 0
+    skipped_large = 0
+    skipped_weak = 0
+    timeout = False
+
+    target_task_sets = _journey_new_task_set_sweep_candidate_task_sets(data, duals, journey_pool, config)
+    for task_set in target_task_sets:
+        if time.perf_counter() > deadline:
+            timeout = True
+            break
+        task_set = frozenset(int(task) for task in task_set)
+        if task_set in existing_task_sets:
+            skipped_existing += 1
+            continue
+        tasks = tuple(sorted(int(task) for task in task_set))
+        if len(tasks) > max_task_count or len(tasks) > max_tasks_per_trip:
+            skipped_large += 1
+            continue
+        sequence_count = 0
+        for sequence in itertools.permutations(tasks):
+            if time.perf_counter() > deadline:
+                timeout = True
+                break
+            if sequence_count >= max_sequences_per_set:
+                break
+            sequence_count += 1
+            generated_sequences += 1
+            option_lists: list[tuple[Any, ...]] = []
+            current = 0
+            feasible_options = True
+            for task in sequence:
+                options = tuple(data.options(int(current), int(task))[:option_limit])
+                if not options:
+                    feasible_options = False
+                    break
+                option_lists.append(options)
+                current = int(task)
+            if feasible_options:
+                back_options = tuple(data.options(int(current), 0)[:option_limit])
+                if not back_options:
+                    feasible_options = False
+                else:
+                    option_lists.append(back_options)
+            if not feasible_options:
+                continue
+            combo_count = 0
+            for arc_options in itertools.product(*option_lists):
+                if time.perf_counter() > deadline:
+                    timeout = True
+                    break
+                if combo_count >= max_option_combos:
+                    break
+                combo_count += 1
+                starts = candidate_start_times_for_trip(
+                    data,
+                    sequence,
+                    tuple(arc_options),
+                    start_step=float(time_bucket),
+                )
+                for start in starts[:max_start_times]:
+                    if time.perf_counter() > deadline:
+                        timeout = True
+                        break
+                    trip = evaluate_timed_trip(
+                        data,
+                        sequence,
+                        float(start),
+                        time_bucket_size=float(time_bucket),
+                        arc_options=tuple(arc_options),
+                        include_physical_paths=False,
+                    )
+                    evaluated_trips += 1
+                    if trip is None:
+                        continue
+                    journey = make_journey(data, (trip,))
+                    if journey is None:
+                        continue
+                    if journey.task_set in existing_task_sets:
+                        skipped_existing += 1
+                        continue
+                    if tuple(getattr(journey, "signature", tuple())) in forbidden:
+                        continue
+                    candidate_journeys += 1
+                    true_rc = float(manual_journey_reduced_cost(journey, duals, cuts))
+                    best_rc = true_rc if best_rc is None else min(float(best_rc), true_rc)
+                    if true_rc >= -true_rc_tol:
+                        skipped_weak += 1
+                        continue
+                    key = frozenset(int(task) for task in journey.task_set)
+                    old = best_by_task_set.get(key)
+                    if old is None or true_rc < float(old[0]) - 1.0e-9:
+                        best_by_task_set[key] = (true_rc, journey)
+                if timeout:
+                    break
+            if timeout:
+                break
+
+    selected_pairs = sorted(
+        best_by_task_set.values(),
+        key=lambda item: (round(float(item[0]), 9), tuple(getattr(item[1], "signature", tuple()))),
+    )[:max_returned]
+    selected = [journey for _rc, journey in selected_pairs]
+    reason = (
+        "new_task_set_sweep_negative_journey"
+        if selected
+        else ("new_task_set_sweep_time_limit" if timeout else "new_task_set_sweep_no_negative_journey")
+    )
+    return JourneyPricingResult(
+        selected,
+        False,
+        best_rc,
+        generated_sequences,
+        evaluated_trips,
+        candidate_journeys,
+        max((len(journey.trips) for journey in selected), default=0),
+        "INCOMPLETE",
+        reason,
+        profile_generation_time=time.perf_counter() - started,
+        existing_journeys_filtered=skipped_existing,
+        weak_negative_journeys_filtered=skipped_weak,
+        dominated_task_set_journeys_filtered=skipped_large,
+        direct_label_new_task_set_only=True,
+        direct_label_harvest_candidate_count=len(best_by_task_set),
+        direct_label_harvest_selected_count=len(selected),
+        direct_label_harvest_candidate_new_task_set_count=len(best_by_task_set),
+        direct_label_harvest_selected_new_task_set_count=len(selected),
+        harvest_candidate_negative_count=len(best_by_task_set),
+        harvest_candidate_new_task_set_count=len(best_by_task_set),
+        harvest_selected_count=len(selected),
+        harvest_selected_new_task_set_count=len(selected),
+        harvest_best_true_rc=None if not selected_pairs else round(float(selected_pairs[0][0]), 9),
+        harvest_worst_selected_true_rc=None if not selected_pairs else round(float(selected_pairs[-1][0]), 9),
+        global_certificate_capable=False,
+        pricing_state=PRICING_STATE_FOUND_NEGATIVE if selected else PRICING_STATE_INCOMPLETE_LIMIT,
+    )
+
+
+def _price_fixed_task_set_representatives(
+    data: FutureData,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    journey_pool: JourneyPool,
+    target_task_sets: tuple[frozenset[int], ...],
+    config: dict[str, Any],
+    *,
+    time_limit: float,
+    forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
+) -> JourneyPricingResult:
+    """Repair known task-set representatives by direct physical enumeration.
+
+    The first version handles only small single-sortie task sets.  That narrow
+    scope is intentional: current hard-root evidence shows replacement-only CB
+    columns with `selected_trips=1`, and this keeps the worker bounded enough
+    for 20-task runs.  Exhaustion here is still local to the configured target
+    universe, so it never certifies no negative journey globally.
+    """
+
+    started = time.perf_counter()
+    deadline = started + max(0.0, float(time_limit))
+    eps = float(config.get("eps", 1.0e-6))
+    true_rc_tol = max(eps, float(config.get("journey_fixed_task_set_repair_true_rc_tol", eps)))
+    improve_tol = max(eps, float(config.get("journey_fixed_task_set_repair_min_cost_improvement", eps)))
+    max_returned = max(1, int(config.get("journey_fixed_task_set_repair_max_returned_journeys", 12)))
+    max_task_set_size = max(1, int(config.get("journey_fixed_task_set_repair_max_task_set_size", 6)))
+    max_target_task_sets = max(1, int(config.get("journey_fixed_task_set_repair_max_target_task_sets", 16)))
+    max_sequences_per_set = max(1, int(config.get("journey_fixed_task_set_repair_max_sequences_per_task_set", 720)))
+    option_limit = max(1, int(config.get("journey_fixed_task_set_repair_arc_options_per_leg", 1)))
+    max_option_combos = max(1, int(config.get("journey_fixed_task_set_repair_max_option_combinations_per_sequence", 1)))
+    max_start_times = max(1, int(config.get("journey_fixed_task_set_repair_max_start_times_per_sequence", 1)))
+    time_bucket = max(1.0e-9, float(config.get("time_bucket_size", 10.0)))
+    max_tasks_per_trip = max(1, int(config.get("max_tasks_per_trip", max_task_set_size)))
+    forbidden = set(forbidden_journey_signatures or set())
+    best_by_task_set: dict[frozenset[int], tuple[float, Any]] = {}
+    best_rc: float | None = None
+    generated_sequences = 0
+    evaluated_trips = 0
+    candidate_journeys = 0
+    skipped_large = 0
+    skipped_missing = 0
+    skipped_not_improving = 0
+    skipped_weak = 0
+    timeout = False
+
+    ordered_targets = sorted(
+        (
+            frozenset(int(task) for task in task_set)
+            for task_set in target_task_sets
+            if task_set
+        ),
+        key=lambda task_set: (
+            len(task_set),
+            round(float(journey_pool.by_task_set.get(task_set).cost), 9)
+            if journey_pool.by_task_set.get(task_set) is not None
+            else math.inf,
+            tuple(sorted(task_set)),
+        ),
+    )[:max_target_task_sets]
+
+    for task_set in ordered_targets:
+        if time.perf_counter() > deadline:
+            timeout = True
+            break
+        incumbent = journey_pool.by_task_set.get(task_set)
+        if incumbent is None:
+            skipped_missing += 1
+            continue
+        tasks = tuple(sorted(int(task) for task in task_set))
+        if len(tasks) > max_task_set_size or len(tasks) > max_tasks_per_trip:
+            skipped_large += 1
+            continue
+        sequence_count = 0
+        for sequence in itertools.permutations(tasks):
+            if time.perf_counter() > deadline:
+                timeout = True
+                break
+            if sequence_count >= max_sequences_per_set:
+                break
+            sequence_count += 1
+            generated_sequences += 1
+            option_lists: list[tuple[Any, ...]] = []
+            current = 0
+            feasible_options = True
+            for task in sequence:
+                options = tuple(data.options(int(current), int(task))[:option_limit])
+                if not options:
+                    feasible_options = False
+                    break
+                option_lists.append(options)
+                current = int(task)
+            if feasible_options:
+                back_options = tuple(data.options(int(current), 0)[:option_limit])
+                if not back_options:
+                    feasible_options = False
+                else:
+                    option_lists.append(back_options)
+            if not feasible_options:
+                continue
+            combo_count = 0
+            for arc_options in itertools.product(*option_lists):
+                if time.perf_counter() > deadline:
+                    timeout = True
+                    break
+                if combo_count >= max_option_combos:
+                    break
+                combo_count += 1
+                starts = candidate_start_times_for_trip(
+                    data,
+                    sequence,
+                    tuple(arc_options),
+                    start_step=float(time_bucket),
+                )
+                for start in starts[:max_start_times]:
+                    if time.perf_counter() > deadline:
+                        timeout = True
+                        break
+                    trip = evaluate_timed_trip(
+                        data,
+                        sequence,
+                        float(start),
+                        time_bucket_size=float(time_bucket),
+                        arc_options=tuple(arc_options),
+                        include_physical_paths=False,
+                    )
+                    evaluated_trips += 1
+                    if trip is None:
+                        continue
+                    journey = make_journey(data, (trip,))
+                    if journey is None:
+                        continue
+                    if tuple(getattr(journey, "signature", tuple())) in forbidden:
+                        continue
+                    candidate_journeys += 1
+                    if float(journey.cost) >= float(incumbent.cost) - improve_tol:
+                        skipped_not_improving += 1
+                        continue
+                    true_rc = float(manual_journey_reduced_cost(journey, duals, cuts))
+                    best_rc = true_rc if best_rc is None else min(float(best_rc), true_rc)
+                    if true_rc >= -true_rc_tol:
+                        skipped_weak += 1
+                        continue
+                    old = best_by_task_set.get(task_set)
+                    if old is None or true_rc < float(old[0]) - 1.0e-9:
+                        best_by_task_set[task_set] = (true_rc, journey)
+                if timeout:
+                    break
+            if timeout:
+                break
+
+    selected_pairs = sorted(
+        best_by_task_set.values(),
+        key=lambda item: (round(float(item[0]), 9), tuple(getattr(item[1], "signature", tuple()))),
+    )[:max_returned]
+    selected = [journey for _rc, journey in selected_pairs]
+    reason = (
+        "fixed_task_set_repair_negative_journey"
+        if selected
+        else ("fixed_task_set_repair_time_limit" if timeout else "fixed_task_set_repair_no_negative_journey")
+    )
+    return JourneyPricingResult(
+        selected,
+        False,
+        best_rc,
+        generated_sequences,
+        evaluated_trips,
+        candidate_journeys,
+        max((len(journey.trips) for journey in selected), default=0),
+        "INCOMPLETE",
+        reason,
+        profile_generation_time=time.perf_counter() - started,
+        existing_journeys_filtered=skipped_not_improving,
+        weak_negative_journeys_filtered=skipped_weak,
+        dominated_task_set_journeys_filtered=skipped_large + skipped_missing,
+        direct_label_existing_task_set_repair_only=True,
+        direct_label_harvest_candidate_count=len(best_by_task_set),
+        direct_label_harvest_selected_count=len(selected),
+        direct_label_harvest_selected_replacement_task_set_count=len(selected),
+        harvest_candidate_negative_count=len(best_by_task_set),
+        harvest_selected_count=len(selected),
+        harvest_selected_replacement_task_set_count=len(selected),
+        harvest_best_true_rc=None if not selected_pairs else round(float(selected_pairs[0][0]), 9),
+        harvest_worst_selected_true_rc=None if not selected_pairs else round(float(selected_pairs[-1][0]), 9),
+        global_certificate_capable=False,
+        pricing_state=PRICING_STATE_FOUND_NEGATIVE if selected else PRICING_STATE_INCOMPLETE_LIMIT,
+    )
 
 
 def _journey_retry_force_ng_config(
@@ -5303,6 +10362,7 @@ def _journey_certificate_pricing_config(
         updated = replace(
             updated,
             direct_journey_label_pricing_enabled=True,
+            direct_journey_label_global_certificate_enabled=True,
             direct_journey_label_completion_bound_enabled=True,
             direct_journey_label_completion_bound_time_buckets=int(
                 config.get(
@@ -5352,6 +10412,15 @@ def _journey_certificate_pricing_config(
                     config.get(
                         "journey_pricing_direct_journey_label_completion_bound_unique_route_helper_enabled",
                         updated.direct_journey_label_completion_bound_unique_route_helper_enabled,
+                    ),
+                )
+            ),
+            direct_journey_label_completion_bound_unique_route_exact_first_step_enabled=bool(
+                config.get(
+                    "journey_certificate_completion_bound_unique_route_exact_first_step_enabled",
+                    config.get(
+                        "journey_pricing_direct_journey_label_completion_bound_unique_route_exact_first_step_enabled",
+                        updated.direct_journey_label_completion_bound_unique_route_exact_first_step_enabled,
                     ),
                 )
             ),
@@ -5424,6 +10493,135 @@ def _journey_certificate_pricing_config(
                 ),
                 max_returned_journeys=hidden_max_returned,
             )
+        if bool(config.get("journey_certificate_completion_bound_diverse_harvest_enabled", False)):
+            harvest_max_returned = max(
+                1,
+                int(config.get("journey_certificate_completion_bound_diverse_harvest_max_returned_journeys", 30)),
+            )
+            harvest_min_count = max(
+                1,
+                min(
+                    harvest_max_returned,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_min_journeys",
+                            harvest_max_returned,
+                        )
+                    ),
+                ),
+            )
+            harvest_grace_time = max(
+                float(updated.direct_journey_label_early_return_negative_grace_time),
+                max(
+                    0.0,
+                    float(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_grace_time",
+                            config.get("journey_certificate_completion_bound_hidden_negative_grace_time", 0.0),
+                        )
+                    ),
+                ),
+            )
+            updated = replace(
+                updated,
+                direct_journey_label_early_return_negative=True,
+                direct_journey_label_early_return_negative_min_count=harvest_min_count,
+                direct_journey_label_early_return_negative_grace_time=harvest_grace_time,
+                direct_journey_label_diverse_harvest_enabled=True,
+                direct_journey_label_diverse_harvest_overlap_threshold=float(
+                    config.get("journey_certificate_completion_bound_diverse_harvest_overlap_threshold", 0.4)
+                ),
+                direct_journey_label_diverse_harvest_top_k_strongest=max(
+                    0,
+                    int(config.get("journey_certificate_completion_bound_diverse_harvest_top_k_strongest", 5)),
+                ),
+                direct_journey_label_diverse_harvest_min_fill=max(
+                    0,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_min_fill",
+                            harvest_min_count,
+                        )
+                    ),
+                ),
+                direct_journey_label_diverse_harvest_min_new_task_sets=max(
+                    0,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_min_new_task_sets",
+                            0,
+                        )
+                    ),
+                ),
+                direct_journey_label_diverse_harvest_min_priority_task_sets=max(
+                    0,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_min_priority_task_sets",
+                            0,
+                        )
+                    ),
+                ),
+                direct_journey_label_diverse_harvest_priority_overlap_threshold=float(
+                    config.get(
+                        "journey_certificate_completion_bound_diverse_harvest_priority_overlap_threshold",
+                        updated.direct_journey_label_diverse_harvest_priority_overlap_threshold,
+                    )
+                ),
+                direct_journey_label_diverse_harvest_max_containment=float(
+                    config.get("journey_certificate_completion_bound_diverse_harvest_max_containment", 0.8)
+                ),
+                direct_journey_label_diverse_harvest_allow_duplicate_task_sets=bool(
+                    config.get(
+                        "journey_certificate_completion_bound_diverse_harvest_allow_duplicate_task_sets",
+                        False,
+                    )
+                ),
+                direct_journey_label_diverse_harvest_soft_return_min_count=max(
+                    0,
+                    int(config.get("journey_certificate_completion_bound_diverse_harvest_soft_return_min_journeys", 0)),
+                ),
+                direct_journey_label_diverse_harvest_soft_return_min_new_task_sets=max(
+                    0,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_soft_return_min_new_task_sets",
+                            0,
+                        )
+                    ),
+                ),
+                direct_journey_label_diverse_harvest_soft_return_after_time=max(
+                    0.0,
+                    float(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_soft_return_after_time",
+                            0.0,
+                        )
+                    ),
+                ),
+                direct_journey_label_diverse_harvest_soft_return_remaining_time=max(
+                    0.0,
+                    float(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_soft_return_remaining_time",
+                            0.0,
+                        )
+                    ),
+                ),
+                direct_journey_label_diverse_harvest_duplicate_saturation_after_time=max(
+                    0.0,
+                    float(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_duplicate_saturation_after_time",
+                            0.0,
+                        )
+                    ),
+                ),
+                direct_journey_label_completion_bound_elapsed_soft_return_enabled=bool(
+                    config.get("journey_certificate_completion_bound_elapsed_soft_return_enabled", True)
+                ),
+                max_returned_journeys=max(int(updated.max_returned_journeys), harvest_max_returned),
+            )
         mode["completion_bound"] = True
         mode["completion_bound_final_probe_only"] = bool(completion_bound_final_probe_only)
         mode["completion_bound_hidden_negative"] = bool(
@@ -5437,6 +10635,66 @@ def _journey_certificate_pricing_config(
             mode["completion_bound_hidden_negative_grace_time"] = round(
                 float(updated.direct_journey_label_early_return_negative_grace_time),
                 6,
+            )
+        mode["completion_bound_diverse_harvest"] = bool(
+            updated.direct_journey_label_diverse_harvest_enabled
+        )
+        if mode["completion_bound_diverse_harvest"]:
+            mode["completion_bound_diverse_harvest_min_journeys"] = int(
+                updated.direct_journey_label_early_return_negative_min_count
+            )
+            mode["completion_bound_diverse_harvest_max_returned_journeys"] = int(updated.max_returned_journeys)
+            mode["completion_bound_diverse_harvest_overlap_threshold"] = round(
+                float(updated.direct_journey_label_diverse_harvest_overlap_threshold),
+                6,
+            )
+            mode["completion_bound_diverse_harvest_top_k_strongest"] = int(
+                updated.direct_journey_label_diverse_harvest_top_k_strongest
+            )
+            mode["completion_bound_diverse_harvest_min_fill"] = int(
+                updated.direct_journey_label_diverse_harvest_min_fill
+            )
+            mode["completion_bound_diverse_harvest_min_new_task_sets"] = int(
+                updated.direct_journey_label_diverse_harvest_min_new_task_sets
+            )
+            mode["completion_bound_diverse_harvest_min_priority_task_sets"] = int(
+                updated.direct_journey_label_diverse_harvest_min_priority_task_sets
+            )
+            mode["completion_bound_diverse_harvest_priority_overlap_threshold"] = round(
+                float(updated.direct_journey_label_diverse_harvest_priority_overlap_threshold),
+                6,
+            )
+            mode["completion_bound_diverse_harvest_max_containment"] = round(
+                float(updated.direct_journey_label_diverse_harvest_max_containment),
+                6,
+            )
+            mode["completion_bound_diverse_harvest_allow_duplicate_task_sets"] = bool(
+                updated.direct_journey_label_diverse_harvest_allow_duplicate_task_sets
+            )
+            mode["completion_bound_diverse_harvest_grace_time"] = round(
+                float(updated.direct_journey_label_early_return_negative_grace_time),
+                6,
+            )
+            mode["completion_bound_diverse_harvest_soft_return_min_journeys"] = int(
+                updated.direct_journey_label_diverse_harvest_soft_return_min_count
+            )
+            mode["completion_bound_diverse_harvest_soft_return_min_new_task_sets"] = int(
+                updated.direct_journey_label_diverse_harvest_soft_return_min_new_task_sets
+            )
+            mode["completion_bound_diverse_harvest_soft_return_after_time"] = round(
+                float(updated.direct_journey_label_diverse_harvest_soft_return_after_time),
+                6,
+            )
+            mode["completion_bound_diverse_harvest_soft_return_remaining_time"] = round(
+                float(updated.direct_journey_label_diverse_harvest_soft_return_remaining_time),
+                6,
+            )
+            mode["completion_bound_diverse_harvest_duplicate_saturation_after_time"] = round(
+                float(updated.direct_journey_label_diverse_harvest_duplicate_saturation_after_time),
+                6,
+            )
+            mode["completion_bound_elapsed_soft_return_enabled"] = bool(
+                updated.direct_journey_label_completion_bound_elapsed_soft_return_enabled
             )
         if int(updated.direct_journey_label_next_sortie_trip_return_limit) > 0:
             mode["completion_bound_next_sortie_trip_return_limit"] = int(
@@ -5461,6 +10719,9 @@ def _journey_certificate_pricing_config(
         mode["completion_bound_unique_route_helper"] = bool(
             updated.direct_journey_label_completion_bound_unique_route_helper_enabled
         )
+        mode["completion_bound_unique_route_exact_first_step"] = bool(
+            updated.direct_journey_label_completion_bound_unique_route_exact_first_step_enabled
+        )
         mode["completion_bound_two_cycle"] = bool(
             updated.direct_journey_label_completion_bound_two_cycle_enabled
         )
@@ -5481,7 +10742,11 @@ def _journey_node_depth_pricing_config(
     if bool(updated.direct_journey_label_completion_bound_enabled) and bool(
         config.get("journey_certificate_completion_bound_root_only", True)
     ):
-        updated = replace(updated, direct_journey_label_completion_bound_enabled=False)
+        updated = replace(
+            updated,
+            direct_journey_label_completion_bound_enabled=False,
+            direct_journey_label_global_certificate_enabled=False,
+        )
     if bool(updated.direct_journey_label_completion_bound_two_cycle_enabled) and not bool(
         config.get("journey_certificate_completion_bound_two_cycle_branch_enabled", False)
     ):
@@ -5649,6 +10914,29 @@ def _journey_static_cuts(data: FutureData, config: dict[str, Any]) -> list[Futur
     if budget <= 0:
         return cuts
     max_subset = int(config.get("static_subset_row_max_subset_size", 5))
+    selection = str(config.get("static_subset_row_selection", "lexicographic")).strip().lower()
+    if selection in {"compact", "ranked_compact"}:
+        candidates: list[tuple[float, int, int, tuple[int, ...], SubsetRowCut]] = []
+        for k, sizes in ((2, (3, 4, 5)), (3, (4, 5, 6))):
+            for size in sizes:
+                if size > max_subset or size > len(data.tasks):
+                    continue
+                for tasks in itertools.combinations(data.tasks, size):
+                    task_tuple = tuple(int(task) for task in tasks)
+                    cut = SubsetRowCut(task_tuple, k)
+                    candidates.append(
+                        (
+                            _journey_static_subset_row_compactness_score(data, task_tuple),
+                            int(k),
+                            int(size),
+                            task_tuple,
+                            cut,
+                        )
+                    )
+        candidates.sort(key=lambda item: (item[1], item[0], item[2], item[3]))
+        for _, _, _, _, cut in candidates[:budget]:
+            cuts.append(cut)
+        return cuts
     for k, sizes in ((2, (3, 4, 5)), (3, (4, 5, 6))):
         for size in sizes:
             if size > max_subset or size > len(data.tasks):
@@ -5658,6 +10946,51 @@ def _journey_static_cuts(data: FutureData, config: dict[str, Any]) -> list[Futur
                 if _journey_cut_count(cuts, "subset_row") >= budget:
                     return cuts
     return cuts
+
+
+def _journey_static_subset_row_compactness_score(data: FutureData, tasks: tuple[int, ...]) -> float:
+    """Rank static SRC candidates by cheap physical relevance, without affecting validity."""
+
+    task_tuple = tuple(int(task) for task in tasks)
+    if len(task_tuple) <= 1:
+        return 0.0
+    pair_costs: list[float] = []
+    for left, right in itertools.combinations(task_tuple, 2):
+        forward = data.closure.get((int(left), int(right)))
+        backward = data.closure.get((int(right), int(left)))
+        values = [
+            float(arc.cost)
+            for arc in (forward, backward)
+            if arc is not None and math.isfinite(float(arc.cost))
+        ]
+        if values:
+            pair_costs.append(sum(values) / float(len(values)))
+    if pair_costs:
+        pair_compactness = sum(pair_costs) / float(len(pair_costs))
+    else:
+        pair_compactness = 0.0
+
+    depot_costs: list[float] = []
+    for task in task_tuple:
+        outbound = data.closure.get((0, int(task)))
+        inbound = data.closure.get((int(task), 0))
+        values = [
+            float(arc.cost)
+            for arc in (outbound, inbound)
+            if arc is not None and math.isfinite(float(arc.cost))
+        ]
+        if values:
+            depot_costs.append(sum(values) / float(len(values)))
+    depot_compactness = sum(depot_costs) / float(len(depot_costs)) if depot_costs else 0.0
+
+    ready_times = [data.task_value(task, "r") for task in task_tuple]
+    due_times = [data.task_value(task, "D") for task in task_tuple]
+    overlap = max(0.0, min(due_times) - max(ready_times))
+    span = max(due_times) - min(ready_times)
+    horizon = max(1.0, float(data.horizon))
+    time_penalty = max(0.0, span - overlap) / horizon
+
+    return float(pair_compactness) + 0.25 * float(depot_compactness) + 10.0 * float(time_penalty)
 
 
 def _log_journey_static_cut_diagnostics(
@@ -5790,7 +11123,8 @@ def _journey_pricing_config(
             config.get("journey_pricing_late_max_returned_min_cg_iter", 3),
         )
     )
-    if late_max_returned > 0 and int(cg_iter) >= max(1, late_min_cg):
+    late_pricing_active = bool(late_max_returned > 0 and int(cg_iter) >= max(1, late_min_cg))
+    if late_pricing_active:
         max_returned = max(max_returned, late_max_returned)
     streaming_enabled = bool(
         config.get(
@@ -5806,6 +11140,308 @@ def _journey_pricing_config(
     )
     if int(cg_iter) < max(1, int(streaming_min_cg)):
         streaming_enabled = False
+    early_return_negative_min_count = int(
+        config.get(
+            f"{prefix}_early_return_negative_min_count",
+            config.get("journey_pricing_early_return_negative_min_count", 1),
+        )
+    )
+    early_return_new_task_set_min_count = int(
+        config.get(
+            f"{prefix}_early_return_new_task_set_min_count",
+            config.get("journey_pricing_early_return_new_task_set_min_count", 0),
+        )
+    )
+    streaming_min_negative_batch = int(
+        config.get(
+            f"{prefix}_streaming_min_negative_batch",
+            config.get("journey_pricing_streaming_min_negative_batch", 1),
+        )
+    )
+    streaming_min_returned_journeys = int(
+        config.get(
+            f"{prefix}_streaming_min_returned_journeys",
+            config.get("journey_pricing_streaming_min_returned_journeys", 1),
+        )
+    )
+    journey_selection_mode = str(
+        config.get(
+            f"{prefix}_selection_mode",
+            config.get("journey_pricing_selection_mode", "reduced_cost"),
+        )
+    )
+    if late_pricing_active:
+        late_early_return_min = int(
+            config.get(
+                f"{prefix}_late_early_return_negative_min_count",
+                config.get("journey_pricing_late_early_return_negative_min_count", 0),
+            )
+        )
+        if late_early_return_min > 0:
+            early_return_negative_min_count = max(early_return_negative_min_count, late_early_return_min)
+        late_new_task_set_min = int(
+            config.get(
+                f"{prefix}_late_early_return_new_task_set_min_count",
+                config.get("journey_pricing_late_early_return_new_task_set_min_count", 0),
+            )
+        )
+        if late_new_task_set_min > 0:
+            early_return_new_task_set_min_count = max(early_return_new_task_set_min_count, late_new_task_set_min)
+        late_streaming_min_negative = int(
+            config.get(
+                f"{prefix}_late_streaming_min_negative_batch",
+                config.get("journey_pricing_late_streaming_min_negative_batch", 0),
+            )
+        )
+        if late_streaming_min_negative > 0:
+            streaming_min_negative_batch = max(streaming_min_negative_batch, late_streaming_min_negative)
+        late_streaming_min_returned = int(
+            config.get(
+                f"{prefix}_late_streaming_min_returned_journeys",
+                config.get("journey_pricing_late_streaming_min_returned_journeys", 0),
+            )
+        )
+        if late_streaming_min_returned > 0:
+            streaming_min_returned_journeys = max(streaming_min_returned_journeys, late_streaming_min_returned)
+        late_selection_mode = str(
+            config.get(
+                f"{prefix}_late_selection_mode",
+                config.get("journey_pricing_late_selection_mode", ""),
+            )
+        ).strip()
+        if late_selection_mode:
+            journey_selection_mode = late_selection_mode
+    profile_true_rc_materialization_slack = max(
+        0.0,
+        float(
+            config.get(
+                f"{prefix}_profile_true_rc_materialization_slack",
+                config.get("journey_pricing_profile_true_rc_materialization_slack", 0.0),
+            )
+        ),
+    )
+    profile_true_rc_materialization_max_candidates = max(
+        0,
+        int(
+            config.get(
+                f"{prefix}_profile_true_rc_materialization_max_candidates",
+                config.get("journey_pricing_profile_true_rc_materialization_max_candidates", 0),
+            )
+        ),
+    )
+    profile_no_negative_true_rc_materialization_slack = max(
+        0.0,
+        float(
+            config.get(
+                f"{prefix}_profile_no_negative_true_rc_materialization_slack",
+                config.get("journey_pricing_profile_no_negative_true_rc_materialization_slack", 0.0),
+            )
+        ),
+    )
+    profile_no_negative_true_rc_materialization_max_candidates = max(
+        0,
+        int(
+            config.get(
+                f"{prefix}_profile_no_negative_true_rc_materialization_max_candidates",
+                config.get("journey_pricing_profile_no_negative_true_rc_materialization_max_candidates", 0),
+            )
+        ),
+    )
+    profile_replacement_true_rc_materialization_slack = max(
+        0.0,
+        float(
+            config.get(
+                f"{prefix}_profile_replacement_true_rc_materialization_slack",
+                config.get("journey_pricing_profile_replacement_true_rc_materialization_slack", 0.0),
+            )
+        ),
+    )
+    profile_replacement_true_rc_materialization_max_candidates = max(
+        0,
+        int(
+            config.get(
+                f"{prefix}_profile_replacement_true_rc_materialization_max_candidates",
+                config.get("journey_pricing_profile_replacement_true_rc_materialization_max_candidates", 0),
+            )
+        ),
+    )
+    profile_cross_count_true_rc_materialization_slack = max(
+        0.0,
+        float(
+            config.get(
+                f"{prefix}_profile_cross_count_true_rc_materialization_slack",
+                config.get("journey_pricing_profile_cross_count_true_rc_materialization_slack", 0.0),
+            )
+        ),
+    )
+    profile_cross_count_true_rc_materialization_max_candidates = max(
+        0,
+        int(
+            config.get(
+                f"{prefix}_profile_cross_count_true_rc_materialization_max_candidates",
+                config.get("journey_pricing_profile_cross_count_true_rc_materialization_max_candidates", 0),
+            )
+        ),
+    )
+    profile_true_rc_candidate_scan_factor = max(
+        1,
+        int(
+            config.get(
+                f"{prefix}_profile_true_rc_candidate_scan_factor",
+                config.get("journey_pricing_profile_true_rc_candidate_scan_factor", 1),
+            )
+        ),
+    )
+    profile_true_rc_candidate_scan_max_candidates = max(
+        0,
+        int(
+            config.get(
+                f"{prefix}_profile_true_rc_candidate_scan_max_candidates",
+                config.get("journey_pricing_profile_true_rc_candidate_scan_max_candidates", 0),
+            )
+        ),
+    )
+    if late_pricing_active:
+        late_materialization_slack = max(
+            0.0,
+            float(
+                config.get(
+                    f"{prefix}_late_profile_true_rc_materialization_slack",
+                    config.get("journey_pricing_late_profile_true_rc_materialization_slack", 0.0),
+                )
+            ),
+        )
+        if late_materialization_slack > 0.0:
+            profile_true_rc_materialization_slack = max(
+                profile_true_rc_materialization_slack,
+                late_materialization_slack,
+            )
+        late_materialization_cap = max(
+            0,
+            int(
+                config.get(
+                    f"{prefix}_late_profile_true_rc_materialization_max_candidates",
+                    config.get("journey_pricing_late_profile_true_rc_materialization_max_candidates", 0),
+                )
+            ),
+        )
+        if late_materialization_cap > 0:
+            profile_true_rc_materialization_max_candidates = late_materialization_cap
+        late_no_negative_materialization_slack = max(
+            0.0,
+            float(
+                config.get(
+                    f"{prefix}_late_profile_no_negative_true_rc_materialization_slack",
+                    config.get("journey_pricing_late_profile_no_negative_true_rc_materialization_slack", 0.0),
+                )
+            ),
+        )
+        if late_no_negative_materialization_slack > 0.0:
+            profile_no_negative_true_rc_materialization_slack = max(
+                profile_no_negative_true_rc_materialization_slack,
+                late_no_negative_materialization_slack,
+            )
+        late_no_negative_materialization_cap = max(
+            0,
+            int(
+                config.get(
+                    f"{prefix}_late_profile_no_negative_true_rc_materialization_max_candidates",
+                    config.get("journey_pricing_late_profile_no_negative_true_rc_materialization_max_candidates", 0),
+                )
+            ),
+        )
+        if late_no_negative_materialization_cap > 0:
+            profile_no_negative_true_rc_materialization_max_candidates = late_no_negative_materialization_cap
+        late_replacement_materialization_slack = max(
+            0.0,
+            float(
+                config.get(
+                    f"{prefix}_late_profile_replacement_true_rc_materialization_slack",
+                    config.get("journey_pricing_late_profile_replacement_true_rc_materialization_slack", 0.0),
+                )
+            ),
+        )
+        if late_replacement_materialization_slack > 0.0:
+            profile_replacement_true_rc_materialization_slack = max(
+                profile_replacement_true_rc_materialization_slack,
+                late_replacement_materialization_slack,
+            )
+        late_replacement_materialization_cap = max(
+            0,
+            int(
+                config.get(
+                    f"{prefix}_late_profile_replacement_true_rc_materialization_max_candidates",
+                    config.get("journey_pricing_late_profile_replacement_true_rc_materialization_max_candidates", 0),
+                )
+            ),
+        )
+        if late_replacement_materialization_cap > 0:
+            profile_replacement_true_rc_materialization_max_candidates = late_replacement_materialization_cap
+        late_cross_count_materialization_slack = max(
+            0.0,
+            float(
+                config.get(
+                    f"{prefix}_late_profile_cross_count_true_rc_materialization_slack",
+                    config.get("journey_pricing_late_profile_cross_count_true_rc_materialization_slack", 0.0),
+                )
+            ),
+        )
+        if late_cross_count_materialization_slack > 0.0:
+            profile_cross_count_true_rc_materialization_slack = max(
+                profile_cross_count_true_rc_materialization_slack,
+                late_cross_count_materialization_slack,
+            )
+        late_cross_count_materialization_cap = max(
+            0,
+            int(
+                config.get(
+                    f"{prefix}_late_profile_cross_count_true_rc_materialization_max_candidates",
+                    config.get(
+                        "journey_pricing_late_profile_cross_count_true_rc_materialization_max_candidates",
+                        0,
+                    ),
+                )
+            ),
+        )
+        if late_cross_count_materialization_cap > 0:
+            profile_cross_count_true_rc_materialization_max_candidates = late_cross_count_materialization_cap
+        late_true_rc_scan_factor = max(
+            1,
+            int(
+                config.get(
+                    f"{prefix}_late_profile_true_rc_candidate_scan_factor",
+                    config.get("journey_pricing_late_profile_true_rc_candidate_scan_factor", 1),
+                )
+            ),
+        )
+        profile_true_rc_candidate_scan_factor = max(
+            profile_true_rc_candidate_scan_factor,
+            late_true_rc_scan_factor,
+        )
+        late_true_rc_scan_cap = max(
+            0,
+            int(
+                config.get(
+                    f"{prefix}_late_profile_true_rc_candidate_scan_max_candidates",
+                    config.get("journey_pricing_late_profile_true_rc_candidate_scan_max_candidates", 0),
+                )
+            ),
+        )
+        if late_true_rc_scan_cap > 0:
+            profile_true_rc_candidate_scan_max_candidates = late_true_rc_scan_cap
+    dp_cross_count_dominance_enabled = bool(
+        config.get(
+            f"{prefix}_dp_cross_count_dominance_enabled",
+            config.get("journey_pricing_dp_cross_count_dominance_enabled", True),
+        )
+    )
+    if late_pricing_active:
+        late_dp_cross_value = config.get(
+            f"{prefix}_late_dp_cross_count_dominance_enabled",
+            config.get("journey_pricing_late_dp_cross_count_dominance_enabled", None),
+        )
+        if late_dp_cross_value is not None:
+            dp_cross_count_dominance_enabled = bool(late_dp_cross_value)
     return JourneyPricingConfig(
         time_bucket_size=bucket,
         max_tasks_per_trip=int(config.get("max_tasks_per_trip", 6)),
@@ -5820,6 +11456,12 @@ def _journey_pricing_config(
         max_dp_states=int(config.get(f"{prefix}_max_dp_states", config.get("journey_pricing_max_dp_states", 200000))),
         allow_partial_negative=bool(heuristic),
         direct_journey_label_pricing_enabled=direct_enabled,
+        direct_journey_label_global_certificate_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_global_certificate_enabled",
+                config.get("journey_pricing_direct_journey_label_global_certificate_enabled", False),
+            )
+        ),
         direct_journey_label_early_return_negative=bool(
             config.get(
                 f"{prefix}_direct_journey_label_early_return_negative",
@@ -5827,9 +11469,89 @@ def _journey_pricing_config(
             )
         ),
         direct_journey_label_early_return_negative_min_count=int(
+            max(
+                early_return_negative_min_count,
+                int(
+                    config.get(
+                        f"{prefix}_direct_journey_label_early_return_negative_min_count",
+                        config.get("journey_pricing_direct_journey_label_early_return_negative_min_count", 0),
+                    )
+                ),
+            )
+        ),
+        direct_journey_label_diverse_harvest_enabled=bool(
             config.get(
-                f"{prefix}_direct_journey_label_early_return_negative_min_count",
-                config.get("journey_pricing_direct_journey_label_early_return_negative_min_count", 0),
+                f"{prefix}_direct_journey_label_diverse_harvest_enabled",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_enabled", False),
+            )
+        ),
+        direct_journey_label_diverse_harvest_overlap_threshold=float(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_overlap_threshold",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_overlap_threshold", 0.4),
+            )
+        ),
+        direct_journey_label_diverse_harvest_top_k_strongest=int(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_top_k_strongest",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_top_k_strongest", 5),
+            )
+        ),
+        direct_journey_label_diverse_harvest_min_fill=int(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_min_fill",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_min_fill", 20),
+            )
+        ),
+        direct_journey_label_diverse_harvest_min_new_task_sets=int(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_min_new_task_sets",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_min_new_task_sets", 0),
+            )
+        ),
+        direct_journey_label_diverse_harvest_min_priority_task_sets=int(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_min_priority_task_sets",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_min_priority_task_sets", 0),
+            )
+        ),
+        direct_journey_label_diverse_harvest_priority_overlap_threshold=float(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_priority_overlap_threshold",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_priority_overlap_threshold", 1.0),
+            )
+        ),
+        direct_journey_label_diverse_harvest_max_containment=float(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_max_containment",
+                config.get("journey_pricing_direct_journey_label_diverse_harvest_max_containment", 0.8),
+            )
+        ),
+        direct_journey_label_diverse_harvest_allow_duplicate_task_sets=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_allow_duplicate_task_sets",
+                config.get(
+                    "journey_pricing_direct_journey_label_diverse_harvest_allow_duplicate_task_sets",
+                    False,
+                ),
+            )
+        ),
+        direct_journey_label_diverse_harvest_soft_return_min_new_task_sets=int(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_soft_return_min_new_task_sets",
+                config.get(
+                    "journey_pricing_direct_journey_label_diverse_harvest_soft_return_min_new_task_sets",
+                    0,
+                ),
+            )
+        ),
+        direct_journey_label_diverse_harvest_duplicate_saturation_after_time=float(
+            config.get(
+                f"{prefix}_direct_journey_label_diverse_harvest_duplicate_saturation_after_time",
+                config.get(
+                    "journey_pricing_direct_journey_label_diverse_harvest_duplicate_saturation_after_time",
+                    0.0,
+                ),
             )
         ),
         direct_journey_label_next_sortie_cache_enabled=bool(
@@ -5848,6 +11570,12 @@ def _journey_pricing_config(
             config.get(
                 f"{prefix}_direct_journey_label_max_labels_per_node",
                 config.get("journey_pricing_direct_journey_label_max_labels_per_node", 0),
+            )
+        ),
+        direct_journey_label_cross_count_dominance_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_cross_count_dominance_enabled",
+                config.get("journey_pricing_direct_journey_label_cross_count_dominance_enabled", False),
             )
         ),
         direct_journey_label_task_set_bound_pruning_enabled=bool(
@@ -5898,6 +11626,15 @@ def _journey_pricing_config(
                 config.get("journey_pricing_direct_journey_label_completion_bound_unique_route_helper_enabled", False),
             )
         ),
+        direct_journey_label_completion_bound_unique_route_exact_first_step_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_completion_bound_unique_route_exact_first_step_enabled",
+                config.get(
+                    "journey_pricing_direct_journey_label_completion_bound_unique_route_exact_first_step_enabled",
+                    False,
+                ),
+            )
+        ),
         direct_journey_label_completion_bound_two_cycle_enabled=bool(
             config.get(
                 f"{prefix}_direct_journey_label_completion_bound_two_cycle_enabled",
@@ -5908,6 +11645,12 @@ def _journey_pricing_config(
             config.get(
                 f"{prefix}_direct_journey_label_completion_bound_two_cycle_max_states",
                 config.get("journey_pricing_direct_journey_label_completion_bound_two_cycle_max_states", 0),
+            )
+        ),
+        direct_journey_label_completion_bound_elapsed_soft_return_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_completion_bound_elapsed_soft_return_enabled",
+                config.get("journey_pricing_direct_journey_label_completion_bound_elapsed_soft_return_enabled", True),
             )
         ),
         direct_journey_label_partial_max_states=int(
@@ -6032,6 +11775,12 @@ def _journey_pricing_config(
                 config.get("journey_pricing_profile_labeling_physical_catalog_resume_enabled", False),
             )
         ),
+        profile_labeling_existing_catalog_pre_scan_enabled=bool(
+            config.get(
+                f"{prefix}_profile_labeling_existing_catalog_pre_scan_enabled",
+                config.get("journey_pricing_profile_labeling_existing_catalog_pre_scan_enabled", False),
+            )
+        ),
         profile_labeling_physical_catalog_share_across_branches_enabled=bool(
             config.get(
                 f"{prefix}_profile_labeling_physical_catalog_share_across_branches_enabled",
@@ -6047,6 +11796,24 @@ def _journey_pricing_config(
                 config.get("journey_pricing_profile_labeling_task_set_superset_pruning_enabled", False),
             )
         ),
+        profile_labeling_priority_future_dual_weight=max(
+            0.0,
+            float(
+                config.get(
+                    f"{prefix}_profile_labeling_priority_future_dual_weight",
+                    config.get("journey_pricing_profile_labeling_priority_future_dual_weight", 0.0),
+                )
+            ),
+        ),
+        profile_labeling_priority_cut_dual_weight=max(
+            0.0,
+            float(
+                config.get(
+                    f"{prefix}_profile_labeling_priority_cut_dual_weight",
+                    config.get("journey_pricing_profile_labeling_priority_cut_dual_weight", 0.0),
+                )
+            ),
+        ),
         profile_cross_dominance_enabled=bool(
             config.get(
                 f"{prefix}_profile_cross_dominance_enabled",
@@ -6060,6 +11827,8 @@ def _journey_pricing_config(
                 config.get("journey_pricing_duplicate_retry_factor", 4),
             )
         ),
+        profile_true_rc_candidate_scan_factor=int(profile_true_rc_candidate_scan_factor),
+        profile_true_rc_candidate_scan_max_candidates=int(profile_true_rc_candidate_scan_max_candidates),
         early_return_negative=bool(
             config.get(
                 f"{prefix}_early_return_negative",
@@ -6067,11 +11836,9 @@ def _journey_pricing_config(
             )
         ),
         early_return_negative_min_count=int(
-            config.get(
-                f"{prefix}_early_return_negative_min_count",
-                config.get("journey_pricing_early_return_negative_min_count", 1),
-            )
+            early_return_negative_min_count
         ),
+        early_return_new_task_set_min_count=max(0, int(early_return_new_task_set_min_count)),
         early_return_unique_masks_enabled=bool(
             config.get(
                 f"{prefix}_early_return_unique_masks_enabled",
@@ -6086,16 +11853,10 @@ def _journey_pricing_config(
             )
         ),
         streaming_min_negative_batch=int(
-            config.get(
-                f"{prefix}_streaming_min_negative_batch",
-                config.get("journey_pricing_streaming_min_negative_batch", 1),
-            )
+            streaming_min_negative_batch
         ),
         streaming_min_returned_journeys=int(
-            config.get(
-                f"{prefix}_streaming_min_returned_journeys",
-                config.get("journey_pricing_streaming_min_returned_journeys", 1),
-            )
+            streaming_min_returned_journeys
         ),
         streaming_partial_return_after_time=float(
             config.get(
@@ -6119,6 +11880,24 @@ def _journey_pricing_config(
             config.get(
                 f"{prefix}_streaming_profile_cap_per_mask",
                 config.get("journey_pricing_streaming_profile_cap_per_mask", 0),
+            )
+        ),
+        streaming_callback_backoff_enabled=bool(
+            config.get(
+                f"{prefix}_streaming_callback_backoff_enabled",
+                config.get("journey_pricing_streaming_callback_backoff_enabled", False),
+            )
+        ),
+        streaming_callback_backoff_max_batches=int(
+            config.get(
+                f"{prefix}_streaming_callback_backoff_max_batches",
+                config.get("journey_pricing_streaming_callback_backoff_max_batches", 4),
+            )
+        ),
+        streaming_callback_exhaust_after_profile_count=int(
+            config.get(
+                f"{prefix}_streaming_callback_exhaust_after_profile_count",
+                config.get("journey_pricing_streaming_callback_exhaust_after_profile_count", 0),
             )
         ),
         min_add_reduced_cost=float(
@@ -6146,9 +11925,39 @@ def _journey_pricing_config(
             )
         ),
         dp_cross_count_dominance_enabled=bool(
+            dp_cross_count_dominance_enabled
+        ),
+        profile_dp_max_labels_per_mask=max(
+            0,
+            int(
+                config.get(
+                    f"{prefix}_profile_dp_max_labels_per_mask",
+                    config.get("journey_pricing_profile_dp_max_labels_per_mask", 0),
+                )
+            ),
+        ),
+        profile_true_rc_materialization_slack=float(profile_true_rc_materialization_slack),
+        profile_true_rc_materialization_max_candidates=int(profile_true_rc_materialization_max_candidates),
+        profile_no_negative_true_rc_materialization_slack=float(
+            profile_no_negative_true_rc_materialization_slack
+        ),
+        profile_no_negative_true_rc_materialization_max_candidates=int(
+            profile_no_negative_true_rc_materialization_max_candidates
+        ),
+        profile_replacement_true_rc_materialization_slack=float(profile_replacement_true_rc_materialization_slack),
+        profile_replacement_true_rc_materialization_max_candidates=int(
+            profile_replacement_true_rc_materialization_max_candidates
+        ),
+        profile_cross_count_true_rc_materialization_slack=float(
+            profile_cross_count_true_rc_materialization_slack
+        ),
+        profile_cross_count_true_rc_materialization_max_candidates=int(
+            profile_cross_count_true_rc_materialization_max_candidates
+        ),
+        profile_materialization_feasibility_filter_enabled=bool(
             config.get(
-                f"{prefix}_dp_cross_count_dominance_enabled",
-                config.get("journey_pricing_dp_cross_count_dominance_enabled", True),
+                f"{prefix}_profile_materialization_feasibility_filter_enabled",
+                config.get("journey_pricing_profile_materialization_feasibility_filter_enabled", False),
             )
         ),
         dp_same_completion_pruning_enabled=bool(
@@ -6211,11 +12020,26 @@ def _journey_pricing_config(
                 config.get("journey_pricing_profile_online_dominance_enabled", False),
             )
         ),
-        journey_selection_mode=str(
+        profile_mask_diagnostics_enabled=bool(
             config.get(
-                f"{prefix}_selection_mode",
-                config.get("journey_pricing_selection_mode", "reduced_cost"),
+                f"{prefix}_profile_mask_diagnostics_enabled",
+                config.get("journey_pricing_profile_mask_diagnostics_enabled", False),
             )
+        ),
+        profile_best_contribution_diagnostics_enabled=bool(
+            config.get(
+                f"{prefix}_profile_best_contribution_diagnostics_enabled",
+                config.get("journey_pricing_profile_best_contribution_diagnostics_enabled", False),
+            )
+        ),
+        profile_best_contribution_diagnostics_max_masks=int(
+            config.get(
+                f"{prefix}_profile_best_contribution_diagnostics_max_masks",
+                config.get("journey_pricing_profile_best_contribution_diagnostics_max_masks", 256),
+            )
+        ),
+        journey_selection_mode=str(
+            journey_selection_mode
         ),
         duplicate_scan_limit=int(
             config.get(
@@ -6267,6 +12091,95 @@ def _log_journey_pricing(
         label_resume_profiles=getattr(pricing, "label_resume_profiles", 0),
         label_resume_exhausted=getattr(pricing, "label_resume_exhausted", False),
         direct_label_max_labels_per_node=getattr(pricing, "direct_label_max_labels_per_node", 0),
+        direct_label_cross_count_pruned_labels=int(
+            getattr(pricing, "direct_label_cross_count_pruned_labels", 0)
+        ),
+        direct_label_existing_task_set_repair_only=bool(
+            getattr(pricing, "direct_label_existing_task_set_repair_only", False)
+        ),
+        direct_label_new_task_set_only=bool(getattr(pricing, "direct_label_new_task_set_only", False)),
+        direct_label_diverse_harvest_enabled=getattr(pricing, "direct_label_diverse_harvest_enabled", False),
+        direct_label_diverse_harvest_allow_duplicate_task_sets=bool(
+            getattr(pricing, "direct_label_diverse_harvest_allow_duplicate_task_sets", False)
+        ),
+        direct_label_diverse_harvest_priority_overlap_threshold=None
+        if config is None
+        else round(float(getattr(config, "direct_journey_label_diverse_harvest_priority_overlap_threshold", 1.0)), 6),
+        direct_label_harvest_candidate_count=getattr(pricing, "direct_label_harvest_candidate_count", 0),
+        direct_label_harvest_selected_count=getattr(pricing, "direct_label_harvest_selected_count", 0),
+        direct_label_harvest_overlap_deferred=getattr(
+            pricing,
+            "direct_label_harvest_overlap_deferred",
+            0,
+        ),
+        direct_label_harvest_duplicate_task_set_rejected_count=getattr(
+            pricing,
+            "direct_label_harvest_duplicate_task_set_rejected_count",
+            0,
+        ),
+        direct_label_harvest_fallback_fill_count=getattr(pricing, "direct_label_harvest_fallback_fill_count", 0),
+        direct_label_harvest_candidate_new_task_set_count=int(
+            getattr(pricing, "direct_label_harvest_candidate_new_task_set_count", 0)
+        ),
+        direct_label_harvest_selected_new_task_set_count=int(
+            getattr(pricing, "direct_label_harvest_selected_new_task_set_count", 0)
+        ),
+        direct_label_harvest_selected_replacement_task_set_count=int(
+            getattr(pricing, "direct_label_harvest_selected_replacement_task_set_count", 0)
+        ),
+        direct_label_harvest_candidate_priority_task_set_count=int(
+            getattr(pricing, "direct_label_harvest_candidate_priority_task_set_count", 0)
+        ),
+        direct_label_harvest_selected_priority_task_set_count=int(
+            getattr(pricing, "direct_label_harvest_selected_priority_task_set_count", 0)
+        ),
+        direct_label_harvest_best_true_rc=None
+        if getattr(pricing, "direct_label_harvest_best_true_rc", None) is None
+        else round(float(getattr(pricing, "direct_label_harvest_best_true_rc")), 9),
+        direct_label_harvest_worst_selected_true_rc=None
+        if getattr(pricing, "direct_label_harvest_worst_selected_true_rc", None) is None
+        else round(float(getattr(pricing, "direct_label_harvest_worst_selected_true_rc")), 9),
+        direct_label_harvest_avg_pairwise_jaccard=None
+        if getattr(pricing, "direct_label_harvest_avg_pairwise_jaccard", None) is None
+        else round(float(getattr(pricing, "direct_label_harvest_avg_pairwise_jaccard")), 9),
+        direct_label_harvest_soft_return_triggered=bool(
+            getattr(pricing, "direct_label_harvest_soft_return_triggered", False)
+        ),
+        harvest_candidate_negative_count=int(getattr(pricing, "harvest_candidate_negative_count", 0)),
+        harvest_selected_count=int(getattr(pricing, "harvest_selected_count", 0)),
+        harvest_rejected_overlap_count=int(getattr(pricing, "harvest_rejected_overlap_count", 0)),
+        harvest_rejected_duplicate_task_set_count=int(
+            getattr(pricing, "harvest_rejected_duplicate_task_set_count", 0)
+        ),
+        harvest_fallback_fill_count=int(getattr(pricing, "harvest_fallback_fill_count", 0)),
+        harvest_candidate_new_task_set_count=int(getattr(pricing, "harvest_candidate_new_task_set_count", 0)),
+        harvest_selected_new_task_set_count=int(getattr(pricing, "harvest_selected_new_task_set_count", 0)),
+        harvest_selected_replacement_task_set_count=int(
+            getattr(pricing, "harvest_selected_replacement_task_set_count", 0)
+        ),
+        harvest_candidate_priority_task_set_count=int(
+            getattr(pricing, "harvest_candidate_priority_task_set_count", 0)
+        ),
+        harvest_selected_priority_task_set_count=int(
+            getattr(pricing, "harvest_selected_priority_task_set_count", 0)
+        ),
+        harvest_best_true_rc=None
+        if getattr(pricing, "harvest_best_true_rc", None) is None
+        else round(float(getattr(pricing, "harvest_best_true_rc")), 9),
+        harvest_worst_selected_true_rc=None
+        if getattr(pricing, "harvest_worst_selected_true_rc", None) is None
+        else round(float(getattr(pricing, "harvest_worst_selected_true_rc")), 9),
+        harvest_avg_pairwise_jaccard=None
+        if getattr(pricing, "harvest_avg_pairwise_jaccard", None) is None
+        else round(float(getattr(pricing, "harvest_avg_pairwise_jaccard")), 9),
+        direct_label_resource_coarsening_time_bucket_size=round(
+            float(getattr(pricing, "direct_label_resource_coarsening_time_bucket_size", 0.0)),
+            6,
+        ),
+        direct_label_resource_coarsening_energy_bucket_size=round(
+            float(getattr(pricing, "direct_label_resource_coarsening_energy_bucket_size", 0.0)),
+            6,
+        ),
         dp_bound_pruned_labels=getattr(pricing, "dp_bound_pruned_labels", 0),
         dp_disjoint_bound_pruned_labels=getattr(pricing, "dp_disjoint_bound_pruned_labels", 0),
         dp_cross_count_pruned_labels=getattr(pricing, "dp_cross_count_pruned_labels", 0),
@@ -6275,6 +12188,7 @@ def _log_journey_pricing(
         dp_profile_record_scans=getattr(pricing, "dp_profile_record_scans", 0),
         dp_profile_time_filtered=getattr(pricing, "dp_profile_time_filtered", 0),
         dp_extension_attempts=getattr(pricing, "dp_extension_attempts", 0),
+        dp_label_cap_pruned=getattr(pricing, "dp_label_cap_pruned", 0),
         dp_same_completion_pruned_labels=getattr(pricing, "dp_same_completion_pruned_labels", 0),
         completion_bound_enabled=getattr(pricing, "completion_bound_enabled", False),
         completion_bound_cache_hit=getattr(pricing, "completion_bound_cache_hit", False),
@@ -6329,6 +12243,97 @@ def _log_journey_pricing(
         profile_generation_time=round(float(getattr(pricing, "profile_generation_time", 0.0)), 6),
         profile_filter_time=round(float(getattr(pricing, "profile_filter_time", 0.0)), 6),
         profile_dp_time=round(float(getattr(pricing, "profile_dp_time", 0.0)), 6),
+        profile_negative_candidate_count=getattr(pricing, "profile_negative_candidate_count", 0),
+        profile_negative_unique_mask_count=getattr(pricing, "profile_negative_unique_mask_count", 0),
+        profile_negative_new_mask_count=getattr(pricing, "profile_negative_new_mask_count", 0),
+        profile_negative_selected_candidate_count=getattr(pricing, "profile_negative_selected_candidate_count", 0),
+        profile_negative_selected_new_mask_count=getattr(pricing, "profile_negative_selected_new_mask_count", 0),
+        profile_negative_selected_replacement_mask_count=getattr(
+            pricing,
+            "profile_negative_selected_replacement_mask_count",
+            0,
+        ),
+        profile_materialization_candidate_count=getattr(pricing, "profile_materialization_candidate_count", 0),
+        profile_materialization_candidate_selected_for_scan_count=getattr(
+            pricing,
+            "profile_materialization_candidate_selected_for_scan_count",
+            0,
+        ),
+        profile_materialization_candidate_cap_filtered=getattr(
+            pricing,
+            "profile_materialization_candidate_cap_filtered",
+            0,
+        ),
+        profile_materialization_selected_candidate_count=getattr(
+            pricing,
+            "profile_materialization_selected_candidate_count",
+            0,
+        ),
+        profile_no_negative_materialization_candidate_count=getattr(
+            pricing,
+            "profile_no_negative_materialization_candidate_count",
+            0,
+        ),
+        profile_no_negative_materialization_selected_for_scan_count=getattr(
+            pricing,
+            "profile_no_negative_materialization_selected_for_scan_count",
+            0,
+        ),
+        profile_no_negative_materialization_candidate_cap_filtered=getattr(
+            pricing,
+            "profile_no_negative_materialization_candidate_cap_filtered",
+            0,
+        ),
+        profile_no_negative_materialization_selected_candidate_count=getattr(
+            pricing,
+            "profile_no_negative_materialization_selected_candidate_count",
+            0,
+        ),
+        profile_replacement_materialization_candidate_count=getattr(
+            pricing,
+            "profile_replacement_materialization_candidate_count",
+            0,
+        ),
+        profile_replacement_materialization_selected_for_scan_count=getattr(
+            pricing,
+            "profile_replacement_materialization_selected_for_scan_count",
+            0,
+        ),
+        profile_replacement_materialization_candidate_cap_filtered=getattr(
+            pricing,
+            "profile_replacement_materialization_candidate_cap_filtered",
+            0,
+        ),
+        profile_replacement_materialization_selected_candidate_count=getattr(
+            pricing,
+            "profile_replacement_materialization_selected_candidate_count",
+            0,
+        ),
+        profile_cross_count_materialization_candidate_count=getattr(
+            pricing,
+            "profile_cross_count_materialization_candidate_count",
+            0,
+        ),
+        profile_cross_count_materialization_selected_for_scan_count=getattr(
+            pricing,
+            "profile_cross_count_materialization_selected_for_scan_count",
+            0,
+        ),
+        profile_cross_count_materialization_candidate_cap_filtered=getattr(
+            pricing,
+            "profile_cross_count_materialization_candidate_cap_filtered",
+            0,
+        ),
+        profile_cross_count_materialization_selected_candidate_count=getattr(
+            pricing,
+            "profile_cross_count_materialization_selected_candidate_count",
+            0,
+        ),
+        profile_materialization_infeasible_candidates_filtered=getattr(
+            pricing,
+            "profile_materialization_infeasible_candidates_filtered",
+            0,
+        ),
         duplicate_candidate_scan_count=getattr(pricing, "duplicate_candidate_scan_count", 0),
         duplicate_candidates_filtered=getattr(pricing, "duplicate_candidates_filtered", 0),
         duplicate_scan_limited=getattr(pricing, "duplicate_scan_limited", False),
@@ -6336,6 +12341,9 @@ def _log_journey_pricing(
         early_return_unique_masks_enabled=None
         if config is None
         else bool(getattr(config, "early_return_unique_masks_enabled", False)),
+        early_return_new_task_set_min_count=None
+        if config is None
+        else int(getattr(config, "early_return_new_task_set_min_count", 0)),
         streaming_min_returned_journeys=None
         if config is None
         else int(getattr(config, "streaming_min_returned_journeys", 1)),
@@ -6351,7 +12359,46 @@ def _log_journey_pricing(
         streaming_profile_cap_per_mask=None
         if config is None
         else int(getattr(config, "streaming_profile_cap_per_mask", 0)),
+        streaming_callback_exhaust_after_profile_count=None
+        if config is None
+        else int(getattr(config, "streaming_callback_exhaust_after_profile_count", 0)),
+        streaming_callback_exhaust_triggered=bool(
+            getattr(pricing, "streaming_callback_exhaust_triggered", False)
+        ),
+        streaming_callback_exhaust_threshold=int(
+            getattr(pricing, "streaming_callback_exhaust_threshold", 0)
+        ),
         min_add_reduced_cost=None if config is None else round(float(getattr(config, "min_add_reduced_cost", 0.0)), 9),
+        profile_true_rc_materialization_slack=None
+        if config is None
+        else round(float(getattr(config, "profile_true_rc_materialization_slack", 0.0)), 9),
+        profile_true_rc_materialization_max_candidates=None
+        if config is None
+        else int(getattr(config, "profile_true_rc_materialization_max_candidates", 0)),
+        profile_no_negative_true_rc_materialization_slack=None
+        if config is None
+        else round(float(getattr(config, "profile_no_negative_true_rc_materialization_slack", 0.0)), 9),
+        profile_no_negative_true_rc_materialization_max_candidates=None
+        if config is None
+        else int(getattr(config, "profile_no_negative_true_rc_materialization_max_candidates", 0)),
+        profile_replacement_true_rc_materialization_slack=None
+        if config is None
+        else round(float(getattr(config, "profile_replacement_true_rc_materialization_slack", 0.0)), 9),
+        profile_replacement_true_rc_materialization_max_candidates=None
+        if config is None
+        else int(getattr(config, "profile_replacement_true_rc_materialization_max_candidates", 0)),
+        profile_cross_count_true_rc_materialization_slack=None
+        if config is None
+        else round(float(getattr(config, "profile_cross_count_true_rc_materialization_slack", 0.0)), 9),
+        profile_cross_count_true_rc_materialization_max_candidates=None
+        if config is None
+        else int(getattr(config, "profile_cross_count_true_rc_materialization_max_candidates", 0)),
+        profile_true_rc_candidate_scan_factor=None
+        if config is None
+        else int(getattr(config, "profile_true_rc_candidate_scan_factor", 1)),
+        profile_true_rc_candidate_scan_max_candidates=None
+        if config is None
+        else int(getattr(config, "profile_true_rc_candidate_scan_max_candidates", 0)),
         duplicate_scan_limit=None if config is None else int(getattr(config, "duplicate_scan_limit", 0)),
         dp_bound_pruning_enabled=None if config is None else bool(getattr(config, "dp_bound_pruning_enabled", False)),
         dp_disjoint_bound_pruning_enabled=None if config is None else bool(getattr(config, "dp_disjoint_bound_pruning_enabled", False)),
@@ -6379,6 +12426,9 @@ def _log_journey_pricing(
         direct_journey_label_next_sortie_trip_return_limit=None
         if config is None
         else int(getattr(config, "direct_journey_label_next_sortie_trip_return_limit", 0)),
+        direct_journey_label_existing_task_set_repair_only=None
+        if config is None
+        else bool(getattr(config, "direct_journey_label_existing_task_set_repair_only", False)),
         direct_journey_label_task_set_bound_pruning_enabled=None
         if config is None
         else bool(getattr(config, "direct_journey_label_task_set_bound_pruning_enabled", False)),
@@ -6403,6 +12453,15 @@ def _log_journey_pricing(
         direct_journey_label_completion_bound_unique_route_helper_enabled=None
         if config is None
         else bool(getattr(config, "direct_journey_label_completion_bound_unique_route_helper_enabled", False)),
+        direct_journey_label_completion_bound_unique_route_exact_first_step_enabled=None
+        if config is None
+        else bool(
+            getattr(
+                config,
+                "direct_journey_label_completion_bound_unique_route_exact_first_step_enabled",
+                False,
+            )
+        ),
         direct_journey_label_completion_bound_two_cycle_enabled=None
         if config is None
         else bool(getattr(config, "direct_journey_label_completion_bound_two_cycle_enabled", False)),
@@ -6486,8 +12545,14 @@ def _log_journey_pricing(
         profile_online_dominance_enabled=None
         if config is None
         else bool(getattr(config, "profile_online_dominance_enabled", False)),
+        profile_mask_diagnostics_enabled=None
+        if config is None
+        else bool(getattr(config, "profile_mask_diagnostics_enabled", False)),
         journey_selection_mode=None if config is None else str(getattr(config, "journey_selection_mode", "reduced_cost")),
         exhausted=pricing.exhausted,
+        pricing_state=_journey_pricing_state(pricing),
+        global_certificate=_journey_pricing_is_global_certificate(pricing),
+        global_certificate_capable=bool(getattr(pricing, "global_certificate_capable", False)),
         oracle_classification=_journey_pricing_oracle_classification(pricing),
         status=pricing.status,
         reason=pricing.reason,
@@ -6497,20 +12562,340 @@ def _log_journey_pricing(
 
 
 def _journey_pricing_oracle_classification(pricing: Any) -> str:
-    if getattr(pricing, "journeys", None):
+    state = _journey_pricing_state(pricing)
+    if state == PRICING_STATE_FOUND_NEGATIVE:
         return "negative_column_found"
     reason = str(getattr(pricing, "reason", ""))
+    if state == PRICING_STATE_CERTIFIED_NO_NEGATIVE:
+        return "global_certificate"
+    if state == PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED:
+        return "oracle_exhausted_local_universe"
+    if state == PRICING_STATE_DUPLICATE_ONLY:
+        return "duplicate_tail"
     if bool(getattr(pricing, "duplicate_scan_limited", False)):
         return "duplicate_scan_limited"
-    if int(getattr(pricing, "duplicate_candidates_filtered", 0)) > 0 or reason == "negative_journeys_already_in_pool":
-        return "duplicate_tail"
     if int(getattr(pricing, "weak_negative_journeys_filtered", 0)) > 0:
         return "weak_negative_filtered_incomplete"
-    if bool(getattr(pricing, "exhausted", False)) and str(getattr(pricing, "status", "")) == "OPTIMAL":
-        return "exact_certificate"
     if "time" in reason:
         return "pricing_time_incomplete"
     return "pricing_incomplete"
+
+
+def _journey_pricing_state(pricing: Any) -> str:
+    state = str(getattr(pricing, "pricing_state", "") or "")
+    if state in {
+        PRICING_STATE_FOUND_NEGATIVE,
+        PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED,
+        PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+        PRICING_STATE_INCOMPLETE_LIMIT,
+        PRICING_STATE_DUPLICATE_ONLY,
+    }:
+        if state == PRICING_STATE_CERTIFIED_NO_NEGATIVE and not bool(
+            getattr(pricing, "global_certificate_capable", False)
+        ):
+            if (
+                bool(getattr(pricing, "exhausted", False))
+                and str(getattr(pricing, "status", "")) == "OPTIMAL"
+            ):
+                return PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED
+            return PRICING_STATE_INCOMPLETE_LIMIT
+        return state
+    if getattr(pricing, "journeys", None):
+        return PRICING_STATE_FOUND_NEGATIVE
+    reason = str(getattr(pricing, "reason", ""))
+    if (
+        bool(getattr(pricing, "exhausted", False))
+        and not bool(getattr(pricing, "journeys", None))
+        and bool(getattr(pricing, "global_certificate_capable", False))
+        and bool(getattr(pricing, "completion_bound_enabled", False))
+        and str(getattr(pricing, "status", "")) == "OPTIMAL"
+        and reason == "direct_label_no_negative_journey"
+    ):
+        return PRICING_STATE_CERTIFIED_NO_NEGATIVE
+    if (not bool(getattr(pricing, "exhausted", False))) or str(getattr(pricing, "status", "")) != "OPTIMAL":
+        return PRICING_STATE_INCOMPLETE_LIMIT
+    if (
+        bool(getattr(pricing, "duplicate_scan_limited", False))
+        or int(getattr(pricing, "duplicate_candidates_filtered", 0)) > 0
+        or int(getattr(pricing, "existing_journeys_filtered", 0)) > 0
+        or int(getattr(pricing, "dominated_task_set_journeys_filtered", 0)) > 0
+        or reason == "negative_journeys_already_in_pool"
+    ):
+        return PRICING_STATE_DUPLICATE_ONLY
+    if bool(getattr(pricing, "exhausted", False)) and str(getattr(pricing, "status", "")) == "OPTIMAL":
+        return PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED
+    return PRICING_STATE_INCOMPLETE_LIMIT
+
+
+def _journey_pricing_is_global_certificate(pricing: Any) -> bool:
+    """Return whether a pricing result proves no journey column exists.
+
+    ``exhausted=True`` is oracle-local.  Profile/streaming or NG workers may
+    exhaust their own relaxed/generated universe, but that is not a journey
+    master certificate.  In the current exact-safe chain, the global certificate
+    is only a true-dual direct-label final judge that exhausts with no negative
+    journey under completion-bound mode.
+    """
+
+    return _journey_pricing_state(pricing) == PRICING_STATE_CERTIFIED_NO_NEGATIVE
+
+
+def _journey_pricing_certificate_rejection_reason(pricing: Any) -> str:
+    if not bool(getattr(pricing, "exhausted", False)):
+        return str(getattr(pricing, "reason", "") or "pricing_incomplete")
+    if getattr(pricing, "journeys", None):
+        return "negative_journey_requires_column_addition"
+    if not bool(getattr(pricing, "completion_bound_enabled", False)):
+        return "profile_exhausted_requires_direct_label_final_judge"
+    if not bool(getattr(pricing, "global_certificate_capable", False)):
+        return "completion_bound_worker_requires_direct_label_final_judge"
+    if str(getattr(pricing, "reason", "")) != "direct_label_no_negative_journey":
+        return "direct_label_final_judge_not_no_column_certificate"
+    return "pricing_certificate_rejected"
+
+
+def _journey_duplicate_only_final_judge_can_certify(
+    data: FutureData,
+    config: dict[str, Any],
+    journey_pool: JourneyPool,
+    branch_constraints: tuple[BranchConstraint, ...],
+    cuts: tuple[FutureCut, ...],
+    fleet_limit: int | None,
+    pricing: Any,
+    logger: FutureLogger,
+    cg_iter: int,
+    *,
+    node_id: int = 0,
+    depth: int = 0,
+) -> bool:
+    """Audit whether an exhausted duplicate-only final judge can close the node.
+
+    Journey variables have an upper bound ``x_j <= 1``.  Therefore an existing
+    RMP column may legally have negative reduced cost when it is already at its
+    upper bound.  A true-dual final judge that exhausts the search and finds
+    only such existing columns has not found an addable negative column.
+
+    This helper is deliberately narrow: it never upgrades profile workers, scan
+    limited results, weak-negative filters, or non-final incomplete results.
+    Before accepting, it re-solves the current branch-node RMP with variable
+    reduced costs captured and verifies that every negative reduced-cost RMP
+    variable is fixed at its upper bound.  If any negative reduced-cost column
+    is not at the upper bound, the duplicate-only result remains uncertified.
+    """
+
+    if not bool(config.get("journey_duplicate_only_final_judge_audit_enabled", True)):
+        return False
+    if _journey_pricing_state(pricing) != PRICING_STATE_DUPLICATE_ONLY:
+        return False
+    if not bool(getattr(pricing, "exhausted", False)):
+        return False
+    if str(getattr(pricing, "status", "")) != "OPTIMAL":
+        return False
+    if getattr(pricing, "journeys", None):
+        return False
+    if not bool(getattr(pricing, "completion_bound_enabled", False)):
+        return False
+    if not bool(getattr(pricing, "global_certificate_capable", False)):
+        return False
+    if bool(getattr(pricing, "duplicate_scan_limited", False)):
+        return False
+    if int(getattr(pricing, "weak_negative_journeys_filtered", 0)) > 0:
+        return False
+    if str(getattr(pricing, "reason", "")) != "negative_journeys_already_in_pool":
+        return False
+
+    node_journeys = _filter_journeys_by_branch(journey_pool.journeys, branch_constraints)
+    if not node_journeys:
+        logger.log(
+            "journey_duplicate_only_certificate_audit",
+            node_id=int(node_id),
+            depth=int(depth),
+            cg_iter=int(cg_iter),
+            accepted=False,
+            reason="empty_branch_filtered_pool",
+            exact_safe=True,
+        )
+        return False
+
+    audit_solution = solve_journey_rmp(
+        data,
+        node_journeys,
+        cuts=tuple(cuts),
+        fleet_limit=fleet_limit,
+        capture_reduced_costs=True,
+    )
+    rc_tol = max(
+        0.0,
+        float(config.get("journey_duplicate_only_final_judge_audit_rc_tolerance", config.get("eps", 1.0e-6))),
+    )
+    upper_tol = max(
+        0.0,
+        float(config.get("journey_duplicate_only_final_judge_audit_upper_tolerance", 1.0e-6)),
+    )
+    if not audit_solution.optimal:
+        logger.log(
+            "journey_duplicate_only_certificate_audit",
+            node_id=int(node_id),
+            depth=int(depth),
+            cg_iter=int(cg_iter),
+            accepted=False,
+            reason="rmp_not_optimal",
+            rmp_status=str(audit_solution.status),
+            node_journeys=len(node_journeys),
+            exact_safe=True,
+        )
+        return False
+
+    reduced_costs = dict(getattr(audit_solution, "reduced_costs", {}) or {})
+    variable_values = dict(getattr(audit_solution, "variable_values", {}) or {})
+    if not reduced_costs:
+        logger.log(
+            "journey_duplicate_only_certificate_audit",
+            node_id=int(node_id),
+            depth=int(depth),
+            cg_iter=int(cg_iter),
+            accepted=False,
+            reason="missing_reduced_costs",
+            rmp_status=str(audit_solution.status),
+            node_journeys=len(node_journeys),
+            exact_safe=True,
+        )
+        return False
+
+    negative_count = 0
+    negative_at_upper_count = 0
+    negative_below_upper_count = 0
+    min_reduced_cost: float | None = None
+    min_below_upper_reduced_cost: float | None = None
+    max_negative_below_upper_value: float | None = None
+    for index, rc_value in reduced_costs.items():
+        rc = float(rc_value)
+        value = float(variable_values.get(int(index), 0.0))
+        min_reduced_cost = rc if min_reduced_cost is None else min(float(min_reduced_cost), rc)
+        if rc >= -float(rc_tol):
+            continue
+        negative_count += 1
+        if value >= 1.0 - float(upper_tol):
+            negative_at_upper_count += 1
+            continue
+        negative_below_upper_count += 1
+        min_below_upper_reduced_cost = (
+            rc
+            if min_below_upper_reduced_cost is None
+            else min(float(min_below_upper_reduced_cost), rc)
+        )
+        max_negative_below_upper_value = (
+            value
+            if max_negative_below_upper_value is None
+            else max(float(max_negative_below_upper_value), value)
+        )
+
+    accepted = negative_below_upper_count == 0
+    accepted_reason = (
+        "no_negative_rmp_reduced_costs"
+        if negative_count == 0
+        else "all_negative_rmp_columns_at_upper_bound"
+    )
+    logger.log(
+        "journey_duplicate_only_certificate_audit",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        accepted=bool(accepted),
+        reason=accepted_reason if accepted else "negative_rmp_column_below_upper_bound",
+        pricing_reason=str(getattr(pricing, "reason", "")),
+        rmp_status=str(audit_solution.status),
+        rmp_objective=None
+        if audit_solution.objective is None
+        else round(float(audit_solution.objective), 9),
+        node_journeys=len(node_journeys),
+        reduced_cost_count=len(reduced_costs),
+        negative_reduced_cost_count=int(negative_count),
+        negative_at_upper_count=int(negative_at_upper_count),
+        negative_below_upper_count=int(negative_below_upper_count),
+        min_reduced_cost=None if min_reduced_cost is None else round(float(min_reduced_cost), 9),
+        min_below_upper_reduced_cost=None
+        if min_below_upper_reduced_cost is None
+        else round(float(min_below_upper_reduced_cost), 9),
+        max_negative_below_upper_value=None
+        if max_negative_below_upper_value is None
+        else round(float(max_negative_below_upper_value), 9),
+        rc_tolerance=round(float(rc_tol), 9),
+        upper_tolerance=round(float(upper_tol), 9),
+        existing_journeys_filtered=int(getattr(pricing, "existing_journeys_filtered", 0)),
+        duplicate_candidates_filtered=int(getattr(pricing, "duplicate_candidates_filtered", 0)),
+        dominated_task_set_journeys_filtered=int(getattr(pricing, "dominated_task_set_journeys_filtered", 0)),
+        exact_safe=True,
+    )
+    return bool(accepted)
+
+
+def _journey_promote_duplicate_only_final_judge_certificate(
+    data: FutureData,
+    config: dict[str, Any],
+    journey_pool: JourneyPool,
+    branch_constraints: tuple[BranchConstraint, ...],
+    cuts: tuple[FutureCut, ...],
+    fleet_limit: int | None,
+    pricing: Any,
+    logger: FutureLogger,
+    cg_iter: int,
+    *,
+    node_id: int = 0,
+    depth: int = 0,
+) -> Any:
+    if not _journey_duplicate_only_final_judge_can_certify(
+        data,
+        config,
+        journey_pool,
+        branch_constraints,
+        cuts,
+        fleet_limit,
+        pricing,
+        logger,
+        cg_iter,
+        node_id=node_id,
+        depth=depth,
+    ):
+        return pricing
+    try:
+        return replace(
+            pricing,
+            pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+            reason="direct_label_duplicate_only_no_new_column_certificate",
+            best_reduced_cost=0.0,
+        )
+    except TypeError:
+        setattr(pricing, "pricing_state", PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        setattr(pricing, "reason", "direct_label_duplicate_only_no_new_column_certificate")
+        setattr(pricing, "best_reduced_cost", 0.0)
+        return pricing
+
+
+def _log_journey_certificate_rejection(
+    logger: FutureLogger,
+    pricing: Any,
+    cg_iter: int,
+    *,
+    node_id: int = 0,
+    depth: int = 0,
+    pricing_kind: str = "",
+) -> None:
+    logger.log(
+        "journey_pricing_certificate_rejected",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        pricing_kind=str(pricing_kind),
+        exhausted=bool(getattr(pricing, "exhausted", False)),
+        status=str(getattr(pricing, "status", "")),
+        reason=str(getattr(pricing, "reason", "")),
+        completion_bound_enabled=bool(getattr(pricing, "completion_bound_enabled", False)),
+        negative_journeys=len(getattr(pricing, "journeys", []) or []),
+        pricing_state=_journey_pricing_state(pricing),
+        oracle_classification=_journey_pricing_oracle_classification(pricing),
+        rejection_reason=_journey_pricing_certificate_rejection_reason(pricing),
+    )
 
 
 def _log_journey_addition(
@@ -6522,9 +12907,34 @@ def _log_journey_addition(
     pricing_kind: str,
     node_id: int = 0,
     depth: int = 0,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
 ) -> None:
     requested = len(getattr(pricing, "journeys", []) or [])
     signatures = [str(getattr(journey, "signature", "")) for journey in getattr(pricing, "journeys", []) or []]
+    new_journeys = int(getattr(added, "new_journeys", int(added)))
+    replacement_journeys = int(getattr(added, "replacement_journeys", 0))
+    unchanged_journeys = int(getattr(added, "unchanged_journeys", max(0, requested - int(added))))
+    support_payload: dict[str, int | None] = {
+        "active_changed_task_set_count": None,
+        "active_new_task_set_count": None,
+        "active_replacement_task_set_count": None,
+        "inactive_changed_task_set_count": None,
+    }
+    if active_task_sets is not None:
+        active = {frozenset(int(task) for task in task_set) for task_set in active_task_sets}
+        changed = {frozenset(int(task) for task in task_set) for task_set in getattr(added, "changed_task_sets", tuple())}
+        new_sets = {frozenset(int(task) for task in task_set) for task_set in getattr(added, "new_task_sets", tuple())}
+        replacement_sets = {
+            frozenset(int(task) for task in task_set)
+            for task_set in getattr(added, "replacement_task_sets", tuple())
+        }
+        active_changed = changed.intersection(active)
+        support_payload = {
+            "active_changed_task_set_count": len(active_changed),
+            "active_new_task_set_count": len(new_sets.intersection(active)),
+            "active_replacement_task_set_count": len(replacement_sets.intersection(active)),
+            "inactive_changed_task_set_count": max(0, len(changed) - len(active_changed)),
+        }
     logger.log(
         "journey_column_addition",
         node_id=node_id,
@@ -6533,18 +12943,172 @@ def _log_journey_addition(
         pricing_kind=pricing_kind,
         requested_journeys=requested,
         added_journeys=int(added),
+        new_journeys=new_journeys,
+        replacement_journeys=replacement_journeys,
+        unchanged_journeys=unchanged_journeys,
         duplicate_journeys=max(0, requested - int(added)),
         candidate_signature_hash=_hash_strings(signatures),
+        **support_payload,
     )
 
 
+def _seed_hidden_negative_profile_catalog(
+    logger: FutureLogger,
+    data: FutureData,
+    config: dict[str, Any],
+    pricing: Any,
+    duals: Any,
+    profile_config: JourneyPricingConfig,
+    trip_cache: dict[tuple, Any] | None,
+    branch_constraints: tuple[BranchConstraint, ...],
+    cg_iter: int,
+    *,
+    pricing_kind: str,
+    node_id: int = 0,
+    depth: int = 0,
+) -> None:
+    if not bool(config.get("journey_hidden_negative_profile_catalog_seed_enabled", False)):
+        return
+    journeys = list(getattr(pricing, "journeys", []) or [])
+    if not journeys:
+        return
+    stats = seed_sortie_profile_catalog_from_journeys(
+        data,
+        duals,
+        journeys,
+        config=profile_config,
+        trip_cache=trip_cache,
+        branch_constraints=branch_constraints,
+    )
+    logger.log(
+        "journey_hidden_negative_profile_catalog_seed",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        pricing_kind=pricing_kind,
+        enabled=bool(stats.enabled),
+        skipped_no_cache=bool(stats.skipped_no_cache),
+        catalog_hit=bool(stats.catalog_hit),
+        journeys_seen=int(stats.journeys_seen),
+        trips_seen=int(stats.trips_seen),
+        seeded_profiles=int(stats.seeded_profiles),
+        forced_seed_profiles=int(stats.forced_seed_profiles),
+        duplicate_or_dominated_profiles=int(stats.duplicate_or_dominated_profiles),
+        skipped_missing_arc_option=int(stats.skipped_missing_arc_option),
+        skipped_invalid_trip=int(stats.skipped_invalid_trip),
+        catalog_size_before=int(stats.catalog_size_before),
+        catalog_size_after=int(stats.catalog_size_after),
+        exact_safe=True,
+        certificate_capable=False,
+    )
+
+
+class _JourneyAdditionCount(int):
+    def __new__(
+        cls,
+        total_changed: int,
+        *,
+        new_journeys: int,
+        replacement_journeys: int,
+        unchanged_journeys: int,
+        new_task_sets: tuple[frozenset[int], ...] = tuple(),
+        replacement_task_sets: tuple[frozenset[int], ...] = tuple(),
+        changed_task_sets: tuple[frozenset[int], ...] = tuple(),
+    ) -> "_JourneyAdditionCount":
+        obj = int.__new__(cls, int(total_changed))
+        obj.new_journeys = int(new_journeys)
+        obj.replacement_journeys = int(replacement_journeys)
+        obj.unchanged_journeys = int(unchanged_journeys)
+        obj.new_task_sets = tuple(new_task_sets)
+        obj.replacement_task_sets = tuple(replacement_task_sets)
+        obj.changed_task_sets = tuple(changed_task_sets)
+        return obj
+
+
+def _journey_flat_weak_column_pressure_addition(
+    config: dict[str, Any],
+    added: int,
+    *,
+    certificate_candidate: bool,
+    certificate_flat_rounds: int,
+    objective_delta: float | None,
+    eps: float,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+) -> bool:
+    """Return whether a priced batch is weak tail progress, not proof progress.
+
+    In a degenerate certificate tail, adding a few true-RC negative journeys can
+    leave the RMP objective unchanged.  Such columns are valid and should be
+    kept, but they should not completely erase the pressure to reach the
+    true-dual final judge.  This helper is deliberately conservative: it only
+    fires in an incumbent-backed certificate candidate, after at least one flat
+    RMP round, and for small changed-column batches.
+    """
+
+    if not bool(config.get("journey_certificate_flat_weak_column_pressure_enabled", False)):
+        return False
+    if not bool(certificate_candidate):
+        return False
+    min_flat_rounds = max(
+        1,
+        int(config.get("journey_certificate_flat_weak_column_min_flat_rounds", 1)),
+    )
+    if int(certificate_flat_rounds) < min_flat_rounds:
+        return False
+    if objective_delta is None:
+        return False
+    tol = max(
+        float(eps),
+        float(config.get("journey_certificate_flat_weak_column_objective_tol", eps)),
+    )
+    if abs(float(objective_delta)) > tol:
+        return False
+    added_count = int(added)
+    if added_count <= 0:
+        return False
+    active_support_miss = False
+    if (
+        active_task_sets is not None
+        and bool(config.get("journey_certificate_flat_weak_column_active_support_miss_enabled", True))
+    ):
+        active = {frozenset(int(task) for task in task_set) for task_set in active_task_sets}
+        changed = {frozenset(int(task) for task in task_set) for task_set in getattr(added, "changed_task_sets", tuple())}
+        active_support_miss = bool(changed) and not bool(changed.intersection(active))
+    max_added = int(config.get("journey_certificate_flat_weak_column_max_added_journeys", 4))
+    if max_added > 0 and added_count > max_added and not active_support_miss:
+        return False
+    max_new = int(config.get("journey_certificate_flat_weak_column_max_new_journeys", -1))
+    if max_new >= 0 and int(getattr(added, "new_journeys", added_count)) > max_new and not active_support_miss:
+        return False
+    return True
+
+
+def _journey_continue_exact_after_flat_weak_heuristic(
+    config: dict[str, Any],
+    *,
+    flat_weak_column_rounds: int,
+) -> bool:
+    if not bool(config.get("journey_certificate_flat_weak_column_continue_exact_after_heuristic", False)):
+        return False
+    min_rounds = max(
+        1,
+        int(config.get("journey_certificate_flat_weak_column_continue_exact_after_heuristic_rounds", 1)),
+    )
+    return int(flat_weak_column_rounds) >= min_rounds
+
+
 def _add_priced_journeys(journey_pool: JourneyPool, journeys: list[Any]) -> int:
-    added = 0
+    new_journeys = 0
+    replacement_journeys = 0
+    unchanged_journeys = 0
+    new_task_sets: list[frozenset[int]] = []
+    replacement_task_sets: list[frozenset[int]] = []
     for journey in journeys:
         before = len(journey_pool.journeys)
         task_key = frozenset(int(task) for task in getattr(journey, "task_set", frozenset()))
         previous = journey_pool.by_task_set.get(task_key)
         stored = journey_pool.add(journey)
+        is_new = len(journey_pool.journeys) > before
         replaced = bool(
             previous is not None
             and int(stored.id) == int(previous.id)
@@ -6553,8 +13117,150 @@ def _add_priced_journeys(journey_pool: JourneyPool, journeys: list[Any]) -> int:
                 or float(getattr(stored, "cost", 0.0)) < float(getattr(previous, "cost", 0.0)) - 1.0e-9
             )
         )
-        added += int(len(journey_pool.journeys) > before or replaced)
-    return added
+        new_journeys += int(is_new)
+        replacement_journeys += int((not is_new) and replaced)
+        unchanged_journeys += int((not is_new) and (not replaced))
+        if is_new:
+            new_task_sets.append(task_key)
+        elif replaced:
+            replacement_task_sets.append(task_key)
+    changed_task_sets = tuple(dict.fromkeys((*new_task_sets, *replacement_task_sets)))
+    return _JourneyAdditionCount(
+        new_journeys + replacement_journeys,
+        new_journeys=new_journeys,
+        replacement_journeys=replacement_journeys,
+        unchanged_journeys=unchanged_journeys,
+        new_task_sets=tuple(dict.fromkeys(new_task_sets)),
+        replacement_task_sets=tuple(dict.fromkeys(replacement_task_sets)),
+        changed_task_sets=changed_task_sets,
+    )
+
+
+def _run_journey_same_dual_supplement(
+    data: FutureData,
+    config: dict[str, Any],
+    journey_pool: JourneyPool,
+    base_pricing_config: JourneyPricingConfig,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...],
+    logger: FutureLogger,
+    cg_iter: int,
+    *,
+    node_id: int,
+    depth: int,
+    deadline: float,
+    min_pricing_time: float,
+    trip_cache: dict[tuple, Any] | None,
+    resource_cache: dict[tuple, Any] | None,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None,
+    previous_pricing_kind: str,
+    previous_added: int,
+    pricing_dual_source: str,
+) -> _JourneySameDualSupplementResult:
+    """Run bounded true-dual worker rounds before re-solving the RMP.
+
+    The same-dual supplement is exact-safe because it only adds feasible journey
+    columns discovered under the current dual vector.  A no-column or timeout
+    result from this helper is ignored; it never closes a node and never
+    contributes an official lower bound.
+    """
+
+    max_rounds = max(0, int(config.get("journey_same_dual_supplement_max_rounds", 1)))
+    result = _JourneySameDualSupplementResult()
+    if max_rounds <= 0:
+        return result
+    for round_index in range(max_rounds):
+        remaining = max(0.0, float(deadline) - time.perf_counter())
+        supplement_config, supplement_mode = _journey_same_dual_supplement_config(
+            config,
+            base_pricing_config,
+            remaining=remaining,
+            min_pricing_time=min_pricing_time,
+        )
+        if not supplement_mode:
+            break
+        logger.log(
+            "journey_same_dual_supplement",
+            node_id=node_id,
+            depth=depth,
+            cg_iter=cg_iter,
+            round_index=round_index,
+            previous_pricing_kind=previous_pricing_kind,
+            previous_added_journeys=int(previous_added),
+            remaining=round(float(remaining), 6),
+            supplement_mode=supplement_mode,
+            pricing_dual_source=pricing_dual_source,
+            certificate_capable=False,
+            exact_safe=True,
+        )
+        supplement_pricing = price_journeys(
+            data,
+            duals,
+            branch_constraints,
+            config=supplement_config,
+            cuts=tuple(cuts),
+            trip_cache=trip_cache if trip_cache is not None else {},
+            resource_cache=resource_cache,
+            forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                journey_pool,
+                branch_constraints,
+            ),
+            dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                journey_pool,
+                cuts,
+                branch_constraints,
+            ),
+            priority_task_sets=active_task_sets,
+        )
+        result.pricing_calls += 1
+        result.exact_pricing_calls += 1
+        result.generated_sequences += int(supplement_pricing.generated_sequences)
+        result.evaluated_timed_trips += int(supplement_pricing.evaluated_timed_trips)
+        _log_journey_pricing(
+            logger,
+            supplement_pricing,
+            cg_iter,
+            pricing_kind="exact_same_dual_supplement",
+            config=supplement_config,
+            pricing_dual_source=pricing_dual_source,
+            node_id=node_id,
+            depth=depth,
+        )
+        if not supplement_pricing.journeys:
+            break
+        _seed_hidden_negative_profile_catalog(
+            logger,
+            data,
+            config,
+            supplement_pricing,
+            duals,
+            supplement_config,
+            trip_cache,
+            branch_constraints,
+            cg_iter,
+            pricing_kind="exact_same_dual_supplement",
+            node_id=node_id,
+            depth=depth,
+        )
+        added = _add_priced_journeys(journey_pool, supplement_pricing.journeys)
+        _log_journey_addition(
+            logger,
+            supplement_pricing,
+            added,
+            cg_iter,
+            pricing_kind="exact_same_dual_supplement",
+            node_id=node_id,
+            depth=depth,
+            active_task_sets=active_task_sets,
+        )
+        if int(added) <= 0:
+            break
+        result.added += int(added)
+        result.priced_journeys.extend(supplement_pricing.journeys)
+        result.changed_task_sets.extend(getattr(added, "changed_task_sets", tuple()))
+        previous_added = int(added)
+    return result
 
 
 def _journey_forbidden_signatures_for_node(
@@ -6832,6 +13538,626 @@ def _journey_duplicate_diagnostics(
     }
 
 
+def _journey_cut_hash(cuts: tuple[FutureCut, ...]) -> str:
+    parts = []
+    for index, cut in enumerate(cuts):
+        payload = getattr(cut, "payload", lambda: {})()
+        parts.append(
+            repr(
+                (
+                    int(index),
+                    str(getattr(cut, "kind", "")),
+                    tuple(getattr(cut, "key", tuple())),
+                    str(getattr(cut, "sense", "")),
+                    round(float(getattr(cut, "rhs", 0.0)), 9),
+                    payload,
+                )
+            )
+        )
+    return _hash_strings(parts)
+
+
+def _journey_reduced_cost_components(
+    journey: Any,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+) -> dict[str, float]:
+    """Return the same reduced-cost decomposition used by the official RMP.
+
+    这里必须和 ``manual_journey_reduced_cost`` 保持同一符号约定：
+    RC = journey_cost - fleet_dual - cover_dual_sum - cut_dual_sum。
+    hidden-negative audit 会用这个分解定位是路径成本、cover dual、
+    fleet dual，还是 cut dual 把列推成了真负列。
+    """
+
+    journey_cost = float(getattr(journey, "cost", 0.0))
+    cover_dual_sum = sum(float(duals.cover.get(int(task), 0.0)) for task in getattr(journey, "task_set", ()))
+    fleet_dual = float(duals.fleet_limit)
+    cut_dual_sum = 0.0
+    for cut_index, cut in enumerate(cuts):
+        cut_dual = float((duals.cuts or {}).get(int(cut_index), 0.0))
+        if abs(cut_dual) <= 0.0:
+            continue
+        cut_dual_sum += cut_dual * float(_journey_cut_coefficient(cut, journey))
+    manual_rc = float(manual_journey_reduced_cost(journey, duals, cuts))
+    decomposed_rc = journey_cost - fleet_dual - cover_dual_sum - cut_dual_sum
+    return {
+        "journey_cost": round(journey_cost, 9),
+        "cover_dual_sum": round(cover_dual_sum, 9),
+        "fleet_dual": round(fleet_dual, 9),
+        "cut_dual_sum": round(cut_dual_sum, 9),
+        "manual_true_reduced_cost": round(manual_rc, 9),
+        "decomposed_true_reduced_cost": round(decomposed_rc, 9),
+        "decomposition_abs_error": round(abs(manual_rc - decomposed_rc), 9),
+    }
+
+
+def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]:
+    fields = (
+        "status",
+        "reason",
+        "exhausted",
+        "best_reduced_cost",
+        "generated_sequences",
+        "evaluated_timed_trips",
+        "candidate_trips",
+        "selected_trips",
+        "profile_dominance_pruned",
+        "profile_catalog_hit",
+        "profile_catalog_size",
+        "profile_completion_time_pruned",
+        "profile_mask_cap_pruned",
+        "profile_negative_candidate_count",
+        "profile_negative_selected_candidate_count",
+        "profile_negative_new_mask_count",
+        "profile_negative_selected_new_mask_count",
+        "profile_negative_selected_replacement_mask_count",
+        "profile_materialization_candidate_count",
+        "profile_materialization_candidate_selected_for_scan_count",
+        "profile_materialization_candidate_cap_filtered",
+        "profile_materialization_selected_candidate_count",
+        "profile_no_negative_materialization_candidate_count",
+        "profile_no_negative_materialization_selected_for_scan_count",
+        "profile_no_negative_materialization_candidate_cap_filtered",
+        "profile_no_negative_materialization_selected_candidate_count",
+        "profile_replacement_materialization_candidate_count",
+        "profile_replacement_materialization_selected_for_scan_count",
+        "profile_replacement_materialization_candidate_cap_filtered",
+        "profile_replacement_materialization_selected_candidate_count",
+        "profile_cross_count_materialization_candidate_count",
+        "profile_cross_count_materialization_selected_for_scan_count",
+        "profile_cross_count_materialization_candidate_cap_filtered",
+        "profile_cross_count_materialization_selected_candidate_count",
+        "profile_materialization_infeasible_candidates_filtered",
+        "task_set_resource_pruned_sequences",
+        "partial_profile_bound_pruned_labels",
+        "dp_bound_pruned_labels",
+        "dp_disjoint_bound_pruned_labels",
+        "dp_cross_count_pruned_labels",
+        "dp_processed_labels",
+        "dp_state_count",
+        "dp_profile_record_scans",
+        "dp_profile_time_filtered",
+        "dp_extension_attempts",
+        "dp_label_cap_pruned",
+        "dp_same_completion_pruned_labels",
+        "direct_label_cross_count_pruned_labels",
+        "harvest_candidate_negative_count",
+        "harvest_selected_count",
+        "harvest_rejected_overlap_count",
+        "harvest_rejected_duplicate_task_set_count",
+        "harvest_fallback_fill_count",
+        "harvest_candidate_new_task_set_count",
+        "harvest_selected_new_task_set_count",
+        "harvest_selected_replacement_task_set_count",
+        "harvest_best_true_rc",
+        "harvest_worst_selected_true_rc",
+        "harvest_avg_pairwise_jaccard",
+        "existing_journeys_filtered",
+        "duplicate_candidate_scan_count",
+        "duplicate_candidates_filtered",
+        "duplicate_scan_limited",
+        "dominated_task_set_journeys_filtered",
+        "label_physical_catalog",
+        "label_physical_catalog_exhausted",
+        "label_resume_heap",
+        "label_resume_profiles",
+        "label_resume_exhausted",
+        "completion_bound_enabled",
+        "two_cycle_enabled",
+        "two_cycle_table_complete",
+        "ng_relaxation_enabled",
+        "ng_label_pops",
+        "ng_generated_labels",
+        "ng_dominance_pruned_labels",
+        "ng_fallback_to_elementary",
+    )
+    stats: dict[str, Any] = {}
+    for field_name in fields:
+        value = getattr(pricing, field_name, None)
+        if isinstance(value, float):
+            value = round(float(value), 9)
+        stats[f"{prefix}_{field_name}"] = value
+    stats[f"{prefix}_oracle_classification"] = _journey_pricing_oracle_classification(pricing)
+    stats[f"{prefix}_pricing_state"] = _journey_pricing_state(pricing)
+    stats[f"{prefix}_negative_journeys"] = len(getattr(pricing, "journeys", []) or [])
+    mask_fields = (
+        "diagnostic_profile_task_masks",
+        "diagnostic_profile_trip_masks",
+        "diagnostic_reachable_task_masks",
+        "diagnostic_negative_task_masks",
+        "diagnostic_selected_task_masks",
+    )
+    for field_name in mask_fields:
+        masks = frozenset(int(mask) for mask in (getattr(pricing, field_name, frozenset()) or frozenset()))
+        short_name = field_name.removeprefix("diagnostic_")
+        stats[f"{prefix}_{short_name}_count"] = int(len(masks))
+        stats[f"{prefix}_{short_name}_hash"] = _hash_strings([str(mask) for mask in sorted(masks)]) if masks else ""
+    return stats
+
+
+def _journey_task_set_mask(data: FutureData, tasks: Any) -> int:
+    task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
+    mask = 0
+    for task in tasks or ():
+        bit = task_to_bit.get(int(task))
+        if bit is None:
+            continue
+        mask |= 1 << int(bit)
+    return int(mask)
+
+
+def _journey_trip_task_masks(data: FutureData, journey: Any) -> tuple[int, ...]:
+    masks: list[int] = []
+    for trip in getattr(journey, "trips", ()) or ():
+        mask = _journey_task_set_mask(data, getattr(trip, "task_set", ()))
+        if int(mask) > 0:
+            masks.append(int(mask))
+    return tuple(masks)
+
+
+def _hidden_negative_miss_diagnostics(
+    ordinary_pricing: Any,
+    *,
+    signature_duplicate: bool,
+    forbidden_signature_hit: bool,
+    task_set_dominated: bool,
+    reduced_cost_components: dict[str, float],
+    hidden_task_mask: int | None = None,
+    hidden_trip_masks: tuple[int, ...] = tuple(),
+) -> dict[str, Any]:
+    """Summarize likely reasons a worker missed a true-dual negative journey.
+
+    This is diagnostic only.  It deliberately reports candidate causes rather
+    than making an exact proof claim, because ordinary/profile pricing often
+    lacks enough retained state to prove the exact pruning point after the fact.
+    """
+
+    candidates: list[str] = []
+    if forbidden_signature_hit:
+        candidates.append("forbidden_signature_filter")
+    if signature_duplicate:
+        candidates.append("duplicate_signature_filter")
+    if task_set_dominated:
+        candidates.append("dominant_task_set_filter")
+    if int(getattr(ordinary_pricing, "existing_journeys_filtered", 0)) > 0:
+        candidates.append("worker_existing_journey_filter")
+    if int(getattr(ordinary_pricing, "duplicate_candidates_filtered", 0)) > 0:
+        candidates.append("worker_duplicate_candidate_filter")
+    if int(getattr(ordinary_pricing, "dominated_task_set_journeys_filtered", 0)) > 0:
+        candidates.append("worker_dominated_task_set_filter")
+    if int(getattr(ordinary_pricing, "weak_negative_journeys_filtered", 0)) > 0:
+        candidates.append("worker_true_rc_threshold_filter")
+    ordinary_state = _journey_pricing_state(ordinary_pricing)
+    ordinary_reason = str(getattr(ordinary_pricing, "reason", "") or "")
+    if ordinary_state == PRICING_STATE_INCOMPLETE_LIMIT:
+        if "time_limit" in ordinary_reason:
+            candidates.append("worker_incomplete_time_limit")
+        elif "budget" in ordinary_reason or "max" in ordinary_reason:
+            candidates.append("worker_incomplete_budget_limit")
+        else:
+            candidates.append("worker_incomplete_limit")
+    if int(getattr(ordinary_pricing, "task_set_resource_pruned_sequences", 0)) > 0:
+        candidates.append("task_set_resource_pruning")
+    if int(getattr(ordinary_pricing, "profile_mask_cap_pruned", 0)) > 0:
+        candidates.append("profile_mask_cap_pruning")
+    if int(getattr(ordinary_pricing, "profile_completion_time_pruned", 0)) > 0:
+        candidates.append("profile_completion_time_pruning")
+    if int(getattr(ordinary_pricing, "partial_profile_bound_pruned_labels", 0)) > 0:
+        candidates.append("partial_profile_bound_pruning")
+    if int(getattr(ordinary_pricing, "dp_bound_pruned_labels", 0)) > 0:
+        candidates.append("dp_bound_pruning")
+    if int(getattr(ordinary_pricing, "dp_disjoint_bound_pruned_labels", 0)) > 0:
+        candidates.append("dp_disjoint_bound_pruning")
+    if int(getattr(ordinary_pricing, "profile_dominance_pruned", 0)) > 0:
+        candidates.append("profile_dominance_pruning")
+    if int(getattr(ordinary_pricing, "dp_cross_count_pruned_labels", 0)) > 0:
+        candidates.append("profile_cross_count_dominance")
+    if int(getattr(ordinary_pricing, "dp_same_completion_pruned_labels", 0)) > 0:
+        candidates.append("same_completion_dominance")
+    if bool(getattr(ordinary_pricing, "profile_catalog_hit", False)):
+        candidates.append("profile_catalog_reuse")
+    if bool(getattr(ordinary_pricing, "label_physical_catalog", False)):
+        candidates.append("physical_catalog_search")
+    if bool(getattr(ordinary_pricing, "label_physical_catalog", False)) and not bool(
+        getattr(ordinary_pricing, "label_physical_catalog_exhausted", False)
+    ):
+        candidates.append("physical_catalog_resume_incomplete")
+    if int(getattr(ordinary_pricing, "label_resume_heap", 0)) > 0 or int(
+        getattr(ordinary_pricing, "label_resume_profiles", 0)
+    ) > 0:
+        candidates.append("profile_label_resume")
+    generated_sequences = int(getattr(ordinary_pricing, "generated_sequences", 0))
+    candidate_trips = int(getattr(ordinary_pricing, "candidate_trips", 0))
+    negative_candidate_count = int(getattr(ordinary_pricing, "profile_negative_candidate_count", 0))
+    negative_selected_count = int(getattr(ordinary_pricing, "profile_negative_selected_candidate_count", 0))
+    if negative_candidate_count > 0 or negative_selected_count > 0:
+        candidates.append("generated_negative_candidate_but_not_returned")
+    elif generated_sequences > 0 and candidate_trips > 0:
+        candidates.append("worker_universe_no_true_rc_negative_candidate")
+    elif generated_sequences > 0:
+        candidates.append("worker_universe_generated_no_candidates")
+    if generated_sequences <= 0 and candidate_trips <= 0 and negative_candidate_count <= 0:
+        candidates.append("not_generated")
+    if hidden_task_mask is not None and int(hidden_task_mask) > 0:
+        hidden_mask = int(hidden_task_mask)
+        profile_masks = frozenset(
+            int(mask) for mask in (getattr(ordinary_pricing, "diagnostic_profile_task_masks", frozenset()) or frozenset())
+        )
+        reachable_masks = frozenset(
+            int(mask) for mask in (getattr(ordinary_pricing, "diagnostic_reachable_task_masks", frozenset()) or frozenset())
+        )
+        negative_masks = frozenset(
+            int(mask) for mask in (getattr(ordinary_pricing, "diagnostic_negative_task_masks", frozenset()) or frozenset())
+        )
+        selected_masks = frozenset(
+            int(mask) for mask in (getattr(ordinary_pricing, "diagnostic_selected_task_masks", frozenset()) or frozenset())
+        )
+        if hidden_mask in selected_masks:
+            candidates.append("worker_selected_hidden_task_set_but_not_returned")
+        elif hidden_mask in negative_masks:
+            candidates.append("worker_generated_hidden_task_set_negative_but_filtered")
+        elif hidden_mask in reachable_masks:
+            candidates.append("worker_reached_hidden_task_set_without_negative_candidate")
+        else:
+            profile_subset_hits = sum(1 for mask in profile_masks if int(mask) > 0 and (int(mask) & hidden_mask) == int(mask))
+            if profile_subset_hits > 0:
+                candidates.append("worker_profile_universe_has_hidden_subset_but_dp_did_not_reach_set")
+            else:
+                candidates.append("worker_profile_universe_missing_hidden_task_set")
+    if hidden_trip_masks:
+        profile_trip_masks = frozenset(
+            int(mask)
+            for mask in (
+                getattr(
+                    ordinary_pricing,
+                    "diagnostic_profile_trip_masks",
+                    getattr(ordinary_pricing, "diagnostic_profile_task_masks", frozenset()),
+                )
+                or frozenset()
+            )
+        )
+        hidden_trip_mask_set = frozenset(int(mask) for mask in hidden_trip_masks if int(mask) > 0)
+        if hidden_trip_mask_set:
+            hit_count = sum(1 for mask in hidden_trip_mask_set if int(mask) in profile_trip_masks)
+            if hit_count == len(hidden_trip_mask_set):
+                candidates.append("worker_profile_universe_has_hidden_sortie_masks")
+            elif hit_count > 0:
+                candidates.append("worker_profile_universe_has_partial_hidden_sortie_masks")
+            else:
+                candidates.append("worker_profile_universe_missing_hidden_sortie_masks")
+    if float(reduced_cost_components.get("decomposition_abs_error", 0.0)) > 1.0e-6:
+        candidates.append("reduced_cost_decomposition_mismatch")
+    if (
+        ordinary_state == PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED
+        or (
+            bool(getattr(ordinary_pricing, "exhausted", False))
+            and not bool(getattr(ordinary_pricing, "journeys", None))
+            and str(getattr(ordinary_pricing, "status", "")) == "OPTIMAL"
+        )
+    ):
+        candidates.append("worker_local_no_column_universe_gap")
+    if not candidates:
+        candidates.append("unknown_worker_gap")
+
+    primary_reason = candidates[0]
+    hard_filter_reasons = {
+        "forbidden_signature_filter",
+        "duplicate_signature_filter",
+        "dominant_task_set_filter",
+        "reduced_cost_decomposition_mismatch",
+    }
+    if not any(reason in candidates for reason in hard_filter_reasons) and generated_sequences > 0:
+        # Global worker counters such as weak-RC filtering or cross-count
+        # dominance are useful supporting evidence, but they can hide the more
+        # actionable per-hidden-journey fact: whether the exact task set was
+        # reached, generated as negative, selected, or absent from the profile
+        # universe.  Prefer that specific diagnosis as the primary reason.
+        hidden_specific_priority = (
+            "worker_selected_hidden_task_set_but_not_returned",
+            "worker_generated_hidden_task_set_negative_but_filtered",
+            "worker_reached_hidden_task_set_without_negative_candidate",
+            "worker_profile_universe_has_hidden_subset_but_dp_did_not_reach_set",
+            "worker_profile_universe_missing_hidden_task_set",
+            "worker_profile_universe_missing_hidden_sortie_masks",
+            "worker_profile_universe_has_partial_hidden_sortie_masks",
+            "worker_profile_universe_has_hidden_sortie_masks",
+        )
+        for reason in hidden_specific_priority:
+            if reason in candidates:
+                primary_reason = reason
+                break
+
+    return {
+        "hidden_negative_miss_reason_primary": primary_reason,
+        "hidden_negative_miss_reason_candidates": candidates,
+        "hidden_negative_miss_reason_count": len(candidates),
+    }
+
+
+def _log_hidden_negative_audit(
+    logger: FutureLogger,
+    data: FutureData,
+    journey_pool: JourneyPool,
+    ordinary_pricing: Any,
+    hidden_pricing: Any,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...],
+    cg_iter: int,
+    *,
+    node_id: int = 0,
+    depth: int = 0,
+    hidden_pricing_kind: str,
+    hidden_dual_source: str,
+    trigger: str = "",
+    max_logged_journeys: int = 8,
+) -> None:
+    # Hidden-negative audit is diagnostic-only and can be expensive in long
+    # certificate tails because it builds per-journey RC/mask snapshots.  A
+    # nonpositive limit disables the audit completely for benchmark runs.
+    if int(max_logged_journeys) <= 0:
+        return
+    hidden_journeys = list(getattr(hidden_pricing, "journeys", []) or [])
+    if not hidden_journeys:
+        return
+    max_logged = max(0, int(max_logged_journeys))
+    logged_journeys = hidden_journeys[:max_logged]
+    forbidden_signatures = _journey_forbidden_signatures_for_node(journey_pool, branch_constraints)
+    dominant_task_set_costs = _journey_pricing_dominant_task_set_costs(journey_pool, cuts, branch_constraints)
+    dual_hash = _journey_dual_hash(_journey_dual_vector(data, duals, len(cuts)))
+    cut_hash = _journey_cut_hash(cuts)
+
+    def journey_snapshot(journey: Any) -> dict[str, Any]:
+        signature = tuple(getattr(journey, "signature", tuple()))
+        task_set = sorted(int(task) for task in getattr(journey, "task_set", ()))
+        task_mask = _journey_task_set_mask(data, task_set)
+        trip_masks = _journey_trip_task_masks(data, journey)
+        task_key = frozenset(task_set)
+        dominant_cost = dominant_task_set_costs.get(task_key)
+        signature_duplicate = signature in journey_pool.by_signature
+        task_set_dominated = (
+            dominant_cost is not None and float(dominant_cost) <= float(getattr(journey, "cost", math.inf)) + 1.0e-9
+        )
+        components = _journey_reduced_cost_components(journey, duals, cuts)
+        miss_diagnostics = _hidden_negative_miss_diagnostics(
+            ordinary_pricing,
+            signature_duplicate=signature_duplicate,
+            forbidden_signature_hit=signature in forbidden_signatures,
+            task_set_dominated=task_set_dominated,
+            reduced_cost_components=components,
+            hidden_task_mask=task_mask,
+            hidden_trip_masks=trip_masks,
+        )
+        return {
+            "journey": journey,
+            "signature": signature,
+            "task_set": task_set,
+            "task_mask": int(task_mask),
+            "trip_masks": tuple(int(mask) for mask in trip_masks),
+            "dominant_cost": dominant_cost,
+            "signature_duplicate": bool(signature_duplicate),
+            "task_set_dominated": bool(task_set_dominated),
+            "components": components,
+            "miss_diagnostics": miss_diagnostics,
+        }
+
+    snapshots = [journey_snapshot(journey) for journey in hidden_journeys]
+
+    def count_values(values: Any) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for value in values:
+            key = str(value)
+            counts[key] = int(counts.get(key, 0)) + 1
+        return dict(sorted(counts.items(), key=lambda item: (-int(item[1]), item[0])))
+
+    base_payload = {
+        "instance": str(getattr(data, "name", "")),
+        "node_id": int(node_id),
+        "depth": int(depth),
+        "cg_iter": int(cg_iter),
+        "dual_hash": dual_hash,
+        "cut_hash": cut_hash,
+        "cut_count": int(len(cuts)),
+        "hidden_pricing_kind": hidden_pricing_kind,
+        "hidden_dual_source": hidden_dual_source,
+        "trigger": str(trigger),
+        **_journey_pricing_audit_stats(ordinary_pricing, prefix="ordinary"),
+        **_journey_pricing_audit_stats(hidden_pricing, prefix="CB"),
+    }
+
+    ordinary_profile_masks = frozenset(
+        int(mask)
+        for mask in (getattr(ordinary_pricing, "diagnostic_profile_task_masks", frozenset()) or frozenset())
+    )
+    ordinary_profile_trip_masks = frozenset(
+        int(mask)
+        for mask in (
+            getattr(
+                ordinary_pricing,
+                "diagnostic_profile_trip_masks",
+                getattr(ordinary_pricing, "diagnostic_profile_task_masks", frozenset()),
+            )
+            or frozenset()
+        )
+    )
+    ordinary_reachable_masks = frozenset(
+        int(mask)
+        for mask in (getattr(ordinary_pricing, "diagnostic_reachable_task_masks", frozenset()) or frozenset())
+    )
+    ordinary_negative_masks = frozenset(
+        int(mask)
+        for mask in (getattr(ordinary_pricing, "diagnostic_negative_task_masks", frozenset()) or frozenset())
+    )
+    ordinary_selected_masks = frozenset(
+        int(mask)
+        for mask in (getattr(ordinary_pricing, "diagnostic_selected_task_masks", frozenset()) or frozenset())
+    )
+    if len(hidden_journeys) > 1:
+        primary_reasons = [
+            snapshot["miss_diagnostics"]["hidden_negative_miss_reason_primary"]
+            for snapshot in snapshots
+        ]
+        candidate_reasons = [
+            reason
+            for snapshot in snapshots
+            for reason in snapshot["miss_diagnostics"]["hidden_negative_miss_reason_candidates"]
+        ]
+        logger.log(
+            "journey_hidden_negative_audit_reason_summary",
+            **base_payload,
+            hidden_negative_audit_candidate_count=len(hidden_journeys),
+            hidden_negative_audit_logged_count=len(logged_journeys),
+            hidden_negative_audit_skipped_count=len(hidden_journeys) - len(logged_journeys),
+            hidden_negative_primary_reason_counts=count_values(primary_reasons),
+            hidden_negative_candidate_reason_counts=count_values(candidate_reasons),
+            hidden_negative_profile_mask_hit_count=sum(
+                1 for snapshot in snapshots if int(snapshot["task_mask"]) in ordinary_profile_masks
+            ),
+            hidden_negative_reachable_mask_hit_count=sum(
+                1 for snapshot in snapshots if int(snapshot["task_mask"]) in ordinary_reachable_masks
+            ),
+            hidden_negative_negative_mask_hit_count=sum(
+                1 for snapshot in snapshots if int(snapshot["task_mask"]) in ordinary_negative_masks
+            ),
+            hidden_negative_selected_mask_hit_count=sum(
+                1 for snapshot in snapshots if int(snapshot["task_mask"]) in ordinary_selected_masks
+            ),
+            hidden_negative_all_trip_masks_profile_hit_count=sum(
+                1
+                for snapshot in snapshots
+                if snapshot["trip_masks"]
+                and all(int(mask) in ordinary_profile_trip_masks for mask in frozenset(snapshot["trip_masks"]))
+            ),
+            hidden_negative_duplicate_signature_count=sum(
+                1 for snapshot in snapshots if bool(snapshot["signature_duplicate"])
+            ),
+            hidden_negative_dominant_task_set_count=sum(
+                1 for snapshot in snapshots if bool(snapshot["task_set_dominated"])
+            ),
+            hidden_negative_max_decomposition_abs_error=max(
+                (float(snapshot["components"].get("decomposition_abs_error", 0.0)) for snapshot in snapshots),
+                default=0.0,
+            ),
+        )
+    if len(hidden_journeys) > len(logged_journeys):
+        logger.log(
+            "journey_hidden_negative_audit_summary",
+            **base_payload,
+            hidden_negative_audit_candidate_count=len(hidden_journeys),
+            hidden_negative_audit_logged_count=len(logged_journeys),
+            hidden_negative_audit_skipped_count=len(hidden_journeys) - len(logged_journeys),
+            hidden_negative_audit_max_logged_journeys=max_logged,
+        )
+    for rank, snapshot in enumerate(snapshots[:max_logged]):
+        journey = snapshot["journey"]
+        signature = snapshot["signature"]
+        task_set = snapshot["task_set"]
+        task_mask = int(snapshot["task_mask"])
+        trip_masks = tuple(int(mask) for mask in snapshot["trip_masks"])
+        dominant_cost = snapshot["dominant_cost"]
+        signature_duplicate = bool(snapshot["signature_duplicate"])
+        task_set_dominated = bool(snapshot["task_set_dominated"])
+        components = snapshot["components"]
+        miss_diagnostics = snapshot["miss_diagnostics"]
+        ordinary_best_by_mask = getattr(ordinary_pricing, "diagnostic_best_objective_by_mask", {}) or {}
+        ordinary_best_profile_by_mask = (
+            getattr(ordinary_pricing, "diagnostic_best_profile_contribution_by_mask", {}) or {}
+        )
+        ordinary_hidden_mask_best_objective = None
+        if isinstance(ordinary_best_by_mask, dict) and int(task_mask) in ordinary_best_by_mask:
+            ordinary_hidden_mask_best_objective = float(ordinary_best_by_mask[int(task_mask)])
+        ordinary_hidden_trip_profile_contributions: list[float | None] = []
+        if isinstance(ordinary_best_profile_by_mask, dict):
+            for mask in trip_masks:
+                value = ordinary_best_profile_by_mask.get(int(mask))
+                ordinary_hidden_trip_profile_contributions.append(
+                    None if value is None else round(float(value), 9)
+                )
+        cb_trip_contributions: list[float] = []
+        for trip in getattr(journey, "trips", ()) or ():
+            trip_cover_dual_sum = sum(
+                float(duals.cover.get(int(task), 0.0))
+                for task in getattr(trip, "task_set", ())
+            )
+            cb_trip_contributions.append(round(float(getattr(trip, "cost", 0.0)) - trip_cover_dual_sum, 9))
+        logger.log(
+            "journey_hidden_negative_audit",
+            **base_payload,
+            CB_journey_rank=int(rank),
+            CB_found_journey_signature=str(signature),
+            CB_journey_signature_hash=_hash_strings([str(signature)]),
+            CB_journey_task_set=task_set,
+            CB_journey_task_mask=int(task_mask),
+            CB_journey_task_count=len(task_set),
+            CB_journey_trip_masks=[int(mask) for mask in trip_masks],
+            CB_journey_trip_mask_count=len(trip_masks),
+            CB_journey_trip_contributions=cb_trip_contributions,
+            ordinary_hidden_task_mask_profile_hit=bool(task_mask in ordinary_profile_masks),
+            ordinary_hidden_trip_masks_profile_hit_count=sum(
+                1 for mask in frozenset(int(item) for item in trip_masks) if int(mask) in ordinary_profile_trip_masks
+            ),
+            ordinary_hidden_trip_masks_profile_all_hit=bool(
+                trip_masks
+                and all(int(mask) in ordinary_profile_trip_masks for mask in frozenset(int(item) for item in trip_masks))
+            ),
+            ordinary_hidden_trip_masks_profile_missing_count=max(
+                0,
+                len(frozenset(int(item) for item in trip_masks))
+                - sum(1 for mask in frozenset(int(item) for item in trip_masks) if int(mask) in ordinary_profile_trip_masks),
+            ),
+            ordinary_hidden_task_mask_reachable_hit=bool(task_mask in ordinary_reachable_masks),
+            ordinary_hidden_task_mask_negative_hit=bool(task_mask in ordinary_negative_masks),
+            ordinary_hidden_task_mask_selected_hit=bool(task_mask in ordinary_selected_masks),
+            ordinary_hidden_task_mask_best_profile_objective=None
+            if ordinary_hidden_mask_best_objective is None
+            else round(float(ordinary_hidden_mask_best_objective), 9),
+            ordinary_hidden_trip_mask_best_profile_contributions=ordinary_hidden_trip_profile_contributions,
+            ordinary_hidden_task_mask_profile_objective_gap=None
+            if ordinary_hidden_mask_best_objective is None
+            else round(float(ordinary_hidden_mask_best_objective) - float(components["manual_true_reduced_cost"]), 9),
+            CB_journey_cost=round(float(getattr(journey, "cost", 0.0)), 9),
+            CB_true_reduced_cost=components["manual_true_reduced_cost"],
+            CB_reduced_cost_components=components,
+            CB_reduced_cost_journey_cost=components["journey_cost"],
+            CB_reduced_cost_cover_dual_sum=components["cover_dual_sum"],
+            CB_reduced_cost_fleet_dual=components["fleet_dual"],
+            CB_reduced_cost_cut_dual_sum=components["cut_dual_sum"],
+            CB_reduced_cost_decomposed_true_reduced_cost=components["decomposed_true_reduced_cost"],
+            CB_reduced_cost_decomposition_abs_error=components["decomposition_abs_error"],
+            **miss_diagnostics,
+            ordinary_miss_reasons=miss_diagnostics["hidden_negative_miss_reason_candidates"],
+            forbidden_signature_hit=signature in forbidden_signatures,
+            duplicate_signature_hit=signature_duplicate,
+            duplicate_filtered=signature_duplicate or task_set_dominated,
+            dominant_task_set_hit=task_set_dominated,
+            dominant_task_set_cost=None if dominant_cost is None else round(float(dominant_cost), 9),
+            dominant_task_set_cost_delta=None
+            if dominant_cost is None
+            else round(float(getattr(journey, "cost", 0.0)) - float(dominant_cost), 9),
+        )
+
+
 def _journey_support_hash(values: list[tuple[Any, float]]) -> str:
     parts = [
         f"{getattr(journey, 'signature', '')}:{round(float(value), 9)}"
@@ -6841,6 +14167,18 @@ def _journey_support_hash(values: list[tuple[Any, float]]) -> str:
         )
     ]
     return _hash_strings(parts)
+
+
+def _journey_active_task_sets(
+    values: list[tuple[Any, float]],
+    *,
+    tol: float = 1.0e-9,
+) -> set[frozenset[int]]:
+    return {
+        frozenset(int(task) for task in getattr(journey, "task_set", frozenset()))
+        for journey, value in values
+        if float(value) > float(tol)
+    }
 
 
 def _hash_strings(values: list[str]) -> str:

@@ -2007,6 +2007,13 @@ component rather than an optional experiment:
   reduces `alpha` to the cruise floor (`alpha_min_active`, currently `0.2`)
   instead of forcing `alpha = 0`.  This keeps Level-1 learning alive while the
   official exact/certificate path still uses true SCIP/RMP duals.
+- The cruise floor is not a hard floor for repeated true-RC filter failures.
+  When smoothed pricing repeatedly proposes columns that true-RC filtering
+  rejects, or repeatedly produces no candidate at all,
+  `journey_learning_true_rc_filter_fail_alpha_floor` may let the anchor weight
+  fall below `alpha_min_active` while staying positive.  The 10/20-task
+  mainline uses a `0.05` failure floor; this keeps learning present but makes
+  the worker much closer to the current true dual face in the tail.
 - Checkpoint paths are resolved relative to the current working directory first
   and then the repository root, so required learning does not fail spuriously
   when scripts are launched outside the repo root.
@@ -2166,3 +2173,52 @@ Conclusion: learning must stay as the Level-1 guide, but 20-task certification
 requires a tighter exact-safe final probe.  The next mainline tightening enables
 the Completion Bound unique-task helper while preserving the true-dual
 certificate contract.
+
+## Tail Dual Averaging Probe (2026-06-05)
+
+Historical true-dual averaging was tested as a tail-center worker on the hard
+10-task instance `tranquillitatis_balmer_like_20km_tasks10_09_seed11144`.
+The implementation is exact-safe because average-dual columns are filtered by
+manual true reduced cost, and any no-column outcome falls back to the latest
+SCIP/RMP true dual before certificate pricing.
+
+Observed behavior:
+
+- Without feedback cooldown, dual averaging activated 13 times, produced 189
+  average-dual candidates, but only 5 survived true-RC filtering.  The run still
+  hit the 120s limit.
+- With strict feedback cooldown, activation fell to 3 average-dual filter
+  events and only 1 true-RC column survived.  The run still hit the 120s limit.
+- The dominant hard-case cost remained ordinary exact/profile generation:
+  roughly 1.45M generated sequences and about 64-68s of profile generation on
+  this single instance.
+
+Decision:
+
+- Keep the code-level feedback cooldown as a safety valve for future
+  experiments.
+- Do not enable `journey_dual_averaging_enabled` by default in the main
+  5/10/20 configs yet.
+- Do not treat this as a reason to disable GNN learning.  The current bottleneck
+  is repeated ordinary exact/profile worker scanning; the next optimization
+  should target worker batching/cache semantics and final-judge harvesting, not
+  more aggressive tail averaging.
+
+## Cross-Reminder: Exact Pricing Priority Queue (2026-06-06)
+
+Learning changes must follow the active six-priority queue in
+`exact_pricing_completion_bounds_design.md`:
+
+1. Fix pricing status semantics.
+2. Use hidden-negative audit to locate why workers miss columns.
+3. Add Pareto/Orthogonal Harvesting in the true-dual Final Judge.
+4. Control when CB / Final Judge is allowed to run.
+5. Make profile/streaming workers batch column discovery without claiming
+   certificates.
+6. Strengthen tail dual center / stabilization.
+
+GNN anchors and dual averaging are priority-6 tools.  They can guide early and
+mid-stage workers or rank hidden-negative task sets, but they must not bypass
+the status semantics, hidden-negative audit, or true-dual Final Judge contract.
+If a learning patch cannot explain which one of the six priorities it serves,
+defer it or record it as a diagnostic experiment only.

@@ -8,6 +8,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 import numpy as np
@@ -42,15 +43,19 @@ from BPC_future.pricing.journey_pricing import (
     JourneyPricingConfig,
     _CompatibleProfileCache,
     _DirectJourneyCompletionBound,
+    _DirectJourneyLabel,
     _DirectNGJourneyLabel,
     _SortiePartialLabel,
     _SortieProfile,
     _SortieProfileCatalogState,
     _StreamingPricingStop,
+    _JourneyLabel,
     _TaskSetReducedCostLowerBoundCache,
     _TaskSetResourceLowerBoundCache,
     _UniqueRouteCompletionLowerBound,
     _branch_constraints_cache_key,
+    _add_direct_journey_label,
+    _add_direct_journey_label_with_cross_count_dominance,
     _add_sortie_profile_skyline,
     _add_sortie_profile_online_skyline,
     _advance_sortie_label_resume_state,
@@ -66,6 +71,9 @@ from BPC_future.pricing.journey_pricing import (
     _direct_ng_label_key,
     _direct_ng_partial_branch_pruning_safe,
     _direct_ng_neighborhoods,
+    _direct_label_diverse_harvest_soft_return_ready,
+    _direct_completion_bound_cache_key,
+    _direct_repair_target_masks,
     _direct_ng_relaxed_iteration,
     _direct_sortie_profiles_to_trips,
     _generate_negative_sortie_profiles,
@@ -74,23 +82,38 @@ from BPC_future.pricing.journey_pricing import (
     _initial_sortie_label_resume_state,
     _instantiate_profile_journey_candidates,
     _cut_masks,
+    _add_profile_label,
     _add_sortie_partial_label,
     _dominates_sortie_partial_label,
     _early_return_candidate_count,
+    _early_return_negative_candidates_ready,
     _profile_cut_penalty,
     _profile_cut_penalty_pruning_safe,
+    _profile_mask_diagnostic_kwargs,
     _journey_task_set_branch_allowed,
+    _profile_candidate_return_limit,
     _journey_same_completion_possible,
     _price_journeys_by_profiles,
     _price_journeys_by_streaming_profiles,
     _resume_sortie_profile_catalog,
     _select_negative_journey_candidates,
+    _select_nonduplicate_negative_journey_candidates,
+    _select_diverse_journey_candidates,
     _solve_best_journey_profile_dp,
     _sortie_label_physical_catalog_key,
+    _sortie_partial_label_priority,
     _sortie_profile_mask_allowed_by_branch,
     price_journeys,
+    seed_sortie_profile_catalog_from_journeys,
 )
-from BPC_future.pricing.journey_pricing import JourneyPricingResult
+from BPC_future.pricing.journey_pricing import (
+    PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+    PRICING_STATE_DUPLICATE_ONLY,
+    PRICING_STATE_FOUND_NEGATIVE,
+    PRICING_STATE_INCOMPLETE_LIMIT,
+    PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED,
+    JourneyPricingResult,
+)
 from BPC_future.draw.moon_trek_viz import ScenarioConfig, TerrainGrid, sample_operational_scenario
 from BPC_future.preprocess.risk_model import RiskModelConfig, build_risk_layer, derive_slope_from_dem
 from BPC_future.preprocess.scheduling_augmentation import (
@@ -123,11 +146,28 @@ from BPC_future.solver.journey_driver import (
     _journey_completion_bound_escalation_needed,
     _journey_completion_bound_final_probe_needed,
     _journey_completion_bound_probe_budget,
+    _journey_fixed_task_set_repair_enabled,
+    _journey_fixed_task_set_repair_pool_targets,
+    _journey_fixed_task_set_repair_target_task_sets,
+    _journey_new_task_set_sweep_candidate_task_sets,
+    _journey_new_task_set_sweep_enabled,
     _journey_hidden_negative_patrol_config,
+    _journey_hidden_negative_patrol_after_small_batch_needed,
+    _journey_same_dual_supplement_config,
+    _journey_same_dual_supplement_needed,
+    _journey_pre_exact_completion_bound_handoff_needed,
+    _journey_post_seed_profile_reharvest_config,
+    _journey_profile_repair_config,
+    _journey_replacement_repair_config,
+    _JourneyAdditionCount,
+    _journey_active_task_sets,
     _journey_allowed_by_branch,
     _journey_branch_same_mass,
     _journey_child_constraint_order,
+    _journey_cut_hash,
     _journey_exact_pricing_budget,
+    _journey_flat_weak_column_pressure_addition,
+    _journey_continue_exact_after_flat_weak_heuristic,
     _journey_dual_current_pool_validation,
     _journey_dual_optimal_inequality_bounds,
     _journey_dual_hash,
@@ -136,18 +176,44 @@ from BPC_future.solver.journey_driver import (
     _journey_pre_retry_completion_reserve_time,
     _journey_retry_budget_with_completion_reserve,
     _journey_retry_force_ng_config,
+    _journey_replacement_repair_target_task_sets,
+    _price_fixed_task_set_representatives,
+    _price_new_task_set_sweep,
     _journey_static_cuts,
+    _journey_static_subset_row_compactness_score,
+    _journey_skip_ordinary_retry_after_profile_materialization_failure,
+    _journey_skip_ordinary_retry_after_weak_negative_filtered,
     _journey_learning_certificate_gate_disabled,
     _journey_learning_filter_true_rc_enabled,
     _journey_learning_pricing_max_rounds,
     _journey_learning_pricing_config,
+    _journey_learning_pricing_duals,
     _journey_learning_runtime_for_pricing,
+    _journey_learning_true_rc_filter,
+    _journey_learning_certificate_true_rc_fallback_keep_threshold,
+    _journey_learning_certificate_true_rc_fallback_max_kept_per_round,
+    _journey_learning_certificate_true_rc_keep_threshold,
+    _journey_learning_certificate_true_rc_max_kept_per_round,
     _journey_learning_true_rc_keep_threshold,
     _journey_learning_true_rc_max_kept_per_round,
+    _journey_learning_true_rc_filter_parameters,
+    _JourneyLearningRuntime,
+    _JourneyDualAveragingRuntime,
+    _journey_dual_average_direct_patrol_config,
+    _journey_dual_averaging_pricing_duals,
     _journey_pricing_caches_for_learning_pass,
     _journey_exact_pricing_duals,
+    _journey_pricing_certificate_rejection_reason,
+    _journey_pricing_is_global_certificate,
+    _journey_pricing_state,
+    _journey_promote_duplicate_only_final_judge_certificate,
+    _journey_reduced_cost_components,
+    _hidden_negative_miss_diagnostics,
+    _log_hidden_negative_audit,
+    _log_journey_addition,
     _journey_task_set_dominance_safe,
     _journey_forbidden_signatures_for_node,
+    _add_priced_journeys,
     _maybe_restart_journey_pool,
     _journey_pool_restart_triggered,
     _journey_progress_classification,
@@ -423,6 +489,63 @@ class BPCFutureTests(unittest.TestCase):
             )
 
         self.assertEqual(sorted(key(profile) for profile in online_profiles), sorted(key(profile) for profile in batch_filtered))
+
+    def test_seed_sortie_profile_catalog_from_hidden_journey_is_bounded(self):
+        data = load_future_data("very_small")
+        vehicle = data.vehicles[0]
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=10.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, [trip])
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        duals = JourneyDuals(
+            cover={int(item): 10.0 for item in data.tasks},
+            fleet_limit=0.0,
+            cuts={},
+        )
+        config = JourneyPricingConfig(
+            time_bucket_size=10.0,
+            max_tasks_per_trip=2,
+            profile_labeling_physical_catalog_resume_enabled=True,
+            profile_cross_dominance_enabled=True,
+            profile_online_dominance_enabled=True,
+        )
+        trip_cache: dict[tuple, object] = {}
+        stats = seed_sortie_profile_catalog_from_journeys(
+            data,
+            duals,
+            [journey],
+            config=config,
+            trip_cache=trip_cache,
+        )
+        self.assertTrue(stats.enabled)
+        self.assertFalse(stats.catalog_hit)
+        self.assertEqual(stats.seeded_profiles, 1)
+        self.assertEqual(stats.forced_seed_profiles, 0)
+        self.assertEqual(stats.catalog_size_before, 0)
+        self.assertEqual(stats.catalog_size_after, 1)
+        state = next(iter(trip_cache.values()))
+        profiles = list(getattr(state, "profiles_by_key").values())
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0].sequence, (task,))
+        self.assertAlmostEqual(profiles[0].lower_start, trip.start_time, places=6)
+        self.assertAlmostEqual(profiles[0].upper_start, trip.start_time, places=6)
+        self.assertAlmostEqual(profiles[0].end_offset, trip.end_time - trip.start_time, places=6)
+
+        repeat = seed_sortie_profile_catalog_from_journeys(
+            data,
+            duals,
+            [journey],
+            config=config,
+            trip_cache=trip_cache,
+        )
+        self.assertTrue(repeat.catalog_hit)
+        self.assertEqual(repeat.seeded_profiles, 0)
+        self.assertEqual(repeat.forced_seed_profiles, 0)
+        self.assertEqual(repeat.duplicate_or_dominated_profiles, 1)
+        self.assertEqual(repeat.catalog_size_after, 1)
 
     def test_incomplete_pricing_does_not_certificate(self):
         data = load_future_data("very_small")
@@ -803,7 +926,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(len(pool.journeys), 1)
         self.assertEqual(stored.signature, expensive.signature)
         self.assertEqual(pool.by_task_set[frozenset({1, 2})].cost, 150.0)
-        self.assertIs(pool.by_signature[dominated.signature], pool.journeys[0])
+        self.assertIs(pool.by_signature[expensive.signature], pool.journeys[0])
+        self.assertNotIn(dominated.signature, pool.by_signature)
 
     def test_journey_pool_replaces_same_task_set_with_cheaper_column(self):
         pool = JourneyPool()
@@ -835,7 +959,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(stored.id, 0)
         self.assertEqual(stored.signature, cheaper.signature)
         self.assertEqual(pool.journeys[0].cost, 140.0)
-        self.assertIs(pool.by_signature[expensive.signature], pool.journeys[0])
+        self.assertNotIn(expensive.signature, pool.by_signature)
+        self.assertIs(pool.by_signature[cheaper.signature], pool.journeys[0])
 
     def test_journey_pool_can_disable_task_set_dominance(self):
         pool = JourneyPool(task_set_dominance_enabled=False)
@@ -867,6 +992,204 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(pool.by_task_set[frozenset({1, 2})].signature, second.signature)
         self.assertIs(pool.by_signature[first.signature], pool.journeys[0])
         self.assertIs(pool.by_signature[second.signature], pool.journeys[1])
+
+    def test_add_priced_journeys_reports_changed_task_sets(self):
+        pool = JourneyPool()
+        first = JourneyColumn(
+            id=-1,
+            trips=tuple(),
+            task_set=frozenset({1, 2}),
+            start_time=0.0,
+            end_time=10.0,
+            travel_cost=100.0,
+            fixed_vehicle_cost=50.0,
+            cost=150.0,
+            signature=(((1, 2), ("first",), 0.0),),
+        )
+        replacement = JourneyColumn(
+            id=-1,
+            trips=tuple(),
+            task_set=frozenset({1, 2}),
+            start_time=0.0,
+            end_time=9.0,
+            travel_cost=90.0,
+            fixed_vehicle_cost=50.0,
+            cost=140.0,
+            signature=(((1, 2), ("replacement",), 0.0),),
+        )
+        dominated = JourneyColumn(
+            id=-1,
+            trips=tuple(),
+            task_set=frozenset({1, 2}),
+            start_time=0.0,
+            end_time=11.0,
+            travel_cost=110.0,
+            fixed_vehicle_cost=50.0,
+            cost=160.0,
+            signature=(((1, 2), ("dominated",), 0.0),),
+        )
+        other = JourneyColumn(
+            id=-1,
+            trips=tuple(),
+            task_set=frozenset({3}),
+            start_time=0.0,
+            end_time=5.0,
+            travel_cost=40.0,
+            fixed_vehicle_cost=50.0,
+            cost=90.0,
+            signature=(((3,), ("other",), 0.0),),
+        )
+
+        added = _add_priced_journeys(pool, [first, replacement, dominated, other])
+
+        self.assertEqual(int(added), 3)
+        self.assertEqual(added.new_journeys, 2)
+        self.assertEqual(added.replacement_journeys, 1)
+        self.assertEqual(added.unchanged_journeys, 1)
+        self.assertEqual(added.new_task_sets, (frozenset({1, 2}), frozenset({3})))
+        self.assertEqual(added.replacement_task_sets, (frozenset({1, 2}),))
+        self.assertEqual(added.changed_task_sets, (frozenset({1, 2}), frozenset({3})))
+
+    def test_journey_addition_log_reports_active_support_overlap(self):
+        active_values = [
+            (SimpleNamespace(task_set=frozenset({1, 2}), signature="active"), 0.75),
+            (SimpleNamespace(task_set=frozenset({4}), signature="inactive_zero"), 0.0),
+        ]
+        active_task_sets = _journey_active_task_sets(active_values)
+        added = _JourneyAdditionCount(
+            2,
+            new_journeys=1,
+            replacement_journeys=1,
+            unchanged_journeys=0,
+            new_task_sets=(frozenset({3}),),
+            replacement_task_sets=(frozenset({1, 2}),),
+            changed_task_sets=(frozenset({1, 2}), frozenset({3})),
+        )
+        pricing = SimpleNamespace(
+            journeys=(
+                SimpleNamespace(signature="replacement"),
+                SimpleNamespace(signature="new"),
+            )
+        )
+        events: list[tuple[str, dict[str, Any]]] = []
+        logger = SimpleNamespace(log=lambda name, **payload: events.append((name, payload)))
+
+        _log_journey_addition(
+            logger,
+            pricing,
+            added,
+            7,
+            pricing_kind="exact",
+            active_task_sets=active_task_sets,
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0][0], "journey_column_addition")
+        payload = events[0][1]
+        self.assertEqual(payload["active_changed_task_set_count"], 1)
+        self.assertEqual(payload["active_new_task_set_count"], 0)
+        self.assertEqual(payload["active_replacement_task_set_count"], 1)
+        self.assertEqual(payload["inactive_changed_task_set_count"], 1)
+
+    def test_pre_exact_completion_bound_handoff_is_tail_only(self):
+        config = {
+            "journey_certificate_completion_bound_pre_exact_handoff_enabled": True,
+            "journey_certificate_completion_bound_pre_exact_handoff_min_flat_rounds": 3,
+            "journey_certificate_completion_bound_pre_exact_handoff_disable_on_branch_depth_gt": 0,
+            "journey_certificate_completion_bound_pre_exact_handoff_slack_time": 2.0,
+            "journey_certificate_completion_bound_after_retry_reserve_time": 2.0,
+        }
+
+        self.assertTrue(
+            _journey_pre_exact_completion_bound_handoff_needed(
+                config,
+                remaining=7.5,
+                final_min_time=6.0,
+                min_pricing_time=1.0,
+                certificate_candidate=True,
+                certificate_flat_rounds=4,
+                depth=0,
+                final_completion_bound_eligible=True,
+                exact_completion_bound_enabled=False,
+            )
+        )
+        self.assertFalse(
+            _journey_pre_exact_completion_bound_handoff_needed(
+                config,
+                remaining=30.0,
+                final_min_time=6.0,
+                min_pricing_time=1.0,
+                certificate_candidate=True,
+                certificate_flat_rounds=4,
+                depth=0,
+                final_completion_bound_eligible=True,
+                exact_completion_bound_enabled=False,
+            )
+        )
+        self.assertFalse(
+            _journey_pre_exact_completion_bound_handoff_needed(
+                config,
+                remaining=7.5,
+                final_min_time=6.0,
+                min_pricing_time=1.0,
+                certificate_candidate=False,
+                certificate_flat_rounds=4,
+                depth=0,
+                final_completion_bound_eligible=True,
+                exact_completion_bound_enabled=False,
+            )
+        )
+        self.assertFalse(
+            _journey_pre_exact_completion_bound_handoff_needed(
+                config,
+                remaining=7.5,
+                final_min_time=6.0,
+                min_pricing_time=1.0,
+                certificate_candidate=True,
+                certificate_flat_rounds=4,
+                depth=1,
+                final_completion_bound_eligible=True,
+                exact_completion_bound_enabled=False,
+            )
+        )
+
+    def test_flat_weak_column_pressure_treats_inactive_support_batch_as_weak(self):
+        config = {
+            "journey_certificate_flat_weak_column_pressure_enabled": True,
+            "journey_certificate_flat_weak_column_min_flat_rounds": 1,
+            "journey_certificate_flat_weak_column_max_added_journeys": 2,
+            "journey_certificate_flat_weak_column_active_support_miss_enabled": True,
+        }
+        added = _JourneyAdditionCount(
+            8,
+            new_journeys=8,
+            replacement_journeys=0,
+            unchanged_journeys=0,
+            changed_task_sets=(frozenset({3}), frozenset({4}), frozenset({5})),
+        )
+
+        self.assertTrue(
+            _journey_flat_weak_column_pressure_addition(
+                config,
+                added,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                objective_delta=0.0,
+                eps=1.0e-6,
+                active_task_sets={frozenset({1, 2})},
+            )
+        )
+        self.assertFalse(
+            _journey_flat_weak_column_pressure_addition(
+                config,
+                added,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                objective_delta=0.0,
+                eps=1.0e-6,
+                active_task_sets={frozenset({3})},
+            )
+        )
 
     def test_pricing_uses_path_options_without_one_minute_full_grid(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1356,8 +1679,8 @@ class BPCFutureTests(unittest.TestCase):
             certificate_candidate=True,
             completion_bound_enabled=False,
         )
-        self.assertIs(selected, scip)
-        self.assertEqual(source, "scip_certificate")
+        self.assertIs(selected, stabilized)
+        self.assertEqual(source, "stabilized_certificate")
 
         selected, source = _journey_exact_pricing_duals(
             scip,
@@ -1367,8 +1690,19 @@ class BPCFutureTests(unittest.TestCase):
             certificate_candidate=False,
             completion_bound_enabled=True,
         )
-        self.assertIs(selected, scip)
-        self.assertEqual(source, "scip_certificate")
+        self.assertIs(selected, stabilized)
+        self.assertEqual(source, "stabilized_certificate")
+
+        selected, source = _journey_exact_pricing_duals(
+            scip,
+            stabilized,
+            "stabilized",
+            learning_runtime=object(),
+            certificate_candidate=True,
+            completion_bound_enabled=True,
+        )
+        self.assertIs(selected, stabilized)
+        self.assertEqual(source, "stabilized_certificate")
 
         selected, source = _journey_exact_pricing_duals(
             scip,
@@ -1380,6 +1714,286 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertIs(selected, scip)
         self.assertEqual(source, "scip_learning_certificate")
+
+        averaged = JourneyDuals(cover={1: 1.5}, fleet_limit=0.0)
+        selected, source = _journey_exact_pricing_duals(
+            scip,
+            averaged,
+            "dual_average",
+            learning_runtime=None,
+            certificate_candidate=True,
+            completion_bound_enabled=False,
+        )
+        self.assertIs(selected, averaged)
+        self.assertEqual(source, "dual_average")
+
+        selected, source = _journey_exact_pricing_duals(
+            scip,
+            averaged,
+            "dual_average",
+            learning_runtime=None,
+            certificate_candidate=True,
+            completion_bound_enabled=True,
+        )
+        self.assertIs(selected, scip)
+        self.assertEqual(source, "scip_certificate")
+
+    def test_journey_dual_averaging_activates_after_flat_history(self):
+        runtime = _JourneyDualAveragingRuntime()
+        data = SimpleNamespace(tasks=(1, 2))
+        config = {
+            "journey_dual_averaging_enabled": True,
+            "journey_dual_averaging_window": 3,
+            "journey_dual_averaging_patience": 3,
+            "journey_dual_averaging_objective_tol": 1.0e-4,
+        }
+        logger = FutureLogger(None, console=False)
+        duals = [
+            JourneyDuals(cover={1: 1.0, 2: 10.0}, fleet_limit=-1.0, cuts={0: 2.0}),
+            JourneyDuals(cover={1: 3.0, 2: 12.0}, fleet_limit=-2.0, cuts={0: 4.0}),
+            JourneyDuals(cover={1: 5.0, 2: 14.0}, fleet_limit=-3.0, cuts={0: 6.0}),
+        ]
+        for index, dual in enumerate(duals[:2], start=1):
+            averaged, source = _journey_dual_averaging_pricing_duals(
+                data,
+                config,
+                runtime,
+                dual,
+                objective_delta=0.0,
+                progress_classification="dual_changed_degenerate",
+                logger=logger,
+                cg_iter=index,
+                node_id=0,
+                depth=0,
+            )
+            self.assertIsNone(averaged)
+            self.assertIsNone(source)
+
+        averaged, source = _journey_dual_averaging_pricing_duals(
+            data,
+            config,
+            runtime,
+            duals[2],
+            objective_delta=0.0,
+            progress_classification="dual_changed_degenerate",
+            logger=logger,
+            cg_iter=3,
+            node_id=0,
+            depth=0,
+        )
+        self.assertEqual(source, "dual_average")
+        assert averaged is not None
+        self.assertAlmostEqual(averaged.cover[1], 3.0)
+        self.assertAlmostEqual(averaged.cover[2], 12.0)
+        self.assertAlmostEqual(averaged.fleet_limit, -3.0)
+        self.assertEqual(averaged.cuts, {0: 6.0})
+
+    def test_dual_average_direct_patrol_is_worker_only(self):
+        base = JourneyPricingConfig(
+            time_limit=20.0,
+            direct_journey_label_pricing_enabled=False,
+            direct_journey_label_global_certificate_enabled=True,
+            direct_journey_label_completion_bound_enabled=False,
+        )
+        updated, mode = _journey_dual_average_direct_patrol_config(
+            {
+                "journey_dual_averaging_direct_patrol_enabled": True,
+                "journey_hidden_negative_patrol_enabled": True,
+                "journey_hidden_negative_patrol_time_limit": 0.5,
+                "journey_hidden_negative_patrol_final_reserve_time": 1.0,
+                "journey_hidden_negative_patrol_min_journeys": 4,
+                "journey_hidden_negative_patrol_max_returned_journeys": 8,
+                "journey_hidden_negative_patrol_resource_coarsening_enabled": True,
+                "journey_hidden_negative_patrol_resource_coarsening_time_bucket_size": 50.0,
+                "journey_hidden_negative_patrol_resource_coarsening_energy_bucket_size": 50.0,
+            },
+            base,
+            remaining=5.0,
+            min_pricing_time=0.1,
+        )
+        self.assertTrue(mode["dual_average_direct_patrol"])
+        self.assertFalse(mode["certificate_capable"])
+        self.assertTrue(updated.direct_journey_label_pricing_enabled)
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
+        self.assertAlmostEqual(updated.time_limit, 0.5)
+        self.assertEqual(updated.direct_journey_label_early_return_negative_min_count, 4)
+        self.assertEqual(updated.max_returned_journeys, 8)
+        self.assertAlmostEqual(updated.direct_journey_label_resource_coarsening_time_bucket_size, 50.0)
+        self.assertAlmostEqual(updated.direct_journey_label_resource_coarsening_energy_bucket_size, 50.0)
+
+    def test_completion_bound_diverse_harvest_soft_return_ignores_elapsed_time(self):
+        self.assertTrue(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=False,
+                unique_count=5,
+                max_returned=30,
+                soft_min=5,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=40.0,
+            )
+        )
+        self.assertFalse(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=False,
+                unique_count=5,
+                max_returned=30,
+                soft_min=5,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=40.0,
+            )
+        )
+        self.assertTrue(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=False,
+                unique_count=5,
+                max_returned=30,
+                soft_min=5,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=7.5,
+            )
+        )
+        self.assertTrue(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=5,
+                max_returned=30,
+                soft_min=5,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=40.0,
+            )
+        )
+        self.assertTrue(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=4,
+                candidate_count=362,
+                max_returned=30,
+                soft_min=15,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=40.0,
+            )
+        )
+        self.assertTrue(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=7,
+                candidate_count=60,
+                max_returned=30,
+                soft_min=15,
+                soft_after=15.0,
+                soft_remaining=8.0,
+                duplicate_saturation_after_time=5.0,
+                elapsed=5.1,
+                remaining=40.0,
+            )
+        )
+        self.assertFalse(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=7,
+                candidate_count=60,
+                max_returned=30,
+                soft_min=15,
+                soft_after=15.0,
+                soft_remaining=8.0,
+                duplicate_saturation_after_time=5.0,
+                elapsed=4.9,
+                remaining=40.0,
+            )
+        )
+        self.assertFalse(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=False,
+                unique_count=4,
+                candidate_count=362,
+                max_returned=30,
+                soft_min=15,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=40.0,
+            )
+        )
+        self.assertFalse(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=4,
+                candidate_count=20,
+                max_returned=30,
+                soft_min=15,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=40.0,
+            )
+        )
+        self.assertFalse(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=7,
+                candidate_count=80,
+                new_task_set_count=0,
+                max_returned=30,
+                soft_min=15,
+                soft_min_new_task_sets=1,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=40.0,
+            )
+        )
+        self.assertFalse(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=7,
+                candidate_count=80,
+                new_task_set_count=0,
+                max_returned=30,
+                soft_min=15,
+                soft_min_new_task_sets=1,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=7.5,
+            )
+        )
+        self.assertTrue(
+            _direct_label_diverse_harvest_soft_return_ready(
+                completion_bound_enabled=True,
+                completion_bound_elapsed_soft_return_enabled=True,
+                unique_count=7,
+                candidate_count=80,
+                new_task_set_count=1,
+                max_returned=30,
+                soft_min=15,
+                soft_min_new_task_sets=1,
+                soft_after=10.0,
+                soft_remaining=8.0,
+                elapsed=12.0,
+                remaining=7.5,
+            )
+        )
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_journey_pricing_dual_selector_tail_only_gate(self):
@@ -1639,8 +2253,58 @@ class BPCFutureTests(unittest.TestCase):
             dominant_task_set_costs={frozenset({1}): 0.0},
         )
         self.assertEqual(result.journeys, [])
-        self.assertGreater(result.existing_journeys_filtered + result.dominated_task_set_journeys_filtered, 0)
+        self.assertGreater(
+            result.existing_journeys_filtered
+            + result.dominated_task_set_journeys_filtered
+            + result.duplicate_candidates_filtered,
+            0,
+        )
         self.assertEqual(result.reason, "negative_journeys_already_in_pool")
+
+    def test_direct_journey_label_beam_cap_keeps_best_labels(self):
+        store: dict[int, list[_DirectJourneyLabel]] = {}
+        labels = [
+            _DirectJourneyLabel(end_time=1.0, value=5.0, mask=1, trips=tuple()),
+            _DirectJourneyLabel(end_time=5.0, value=1.0, mask=1, trips=tuple()),
+            _DirectJourneyLabel(end_time=2.0, value=2.0, mask=1, trips=tuple()),
+        ]
+
+        for label in labels:
+            self.assertTrue(
+                _add_direct_journey_label(
+                    store,
+                    1,
+                    label,
+                    max_labels_per_node=2,
+                    time_bucket_size=0.0,
+                )
+            )
+
+        kept = store[1]
+        self.assertEqual(len(kept), 2)
+        self.assertEqual([(round(item.value, 1), round(item.end_time, 1)) for item in kept], [(1.0, 5.0), (2.0, 2.0)])
+        self.assertNotIn(labels[0], kept)
+
+    def test_direct_journey_label_cross_count_dominance_uses_fewer_sorties(self):
+        stores: list[dict[int, list[_DirectJourneyLabel]]] = [dict() for _ in range(4)]
+        one_sortie = _DirectJourneyLabel(end_time=10.0, value=5.0, mask=3, trips=tuple())
+        two_sortie_worse = _DirectJourneyLabel(end_time=12.0, value=7.0, mask=3, trips=tuple())
+        zero_sortie_not_dominated = _DirectJourneyLabel(end_time=9.0, value=4.0, mask=3, trips=tuple())
+
+        added, pruned = _add_direct_journey_label_with_cross_count_dominance(stores, 1, 3, one_sortie)
+        self.assertTrue(added)
+        self.assertEqual(pruned, 0)
+
+        added, pruned = _add_direct_journey_label_with_cross_count_dominance(stores, 2, 3, two_sortie_worse)
+        self.assertFalse(added)
+        self.assertEqual(pruned, 1)
+        self.assertEqual(stores[2].get(3, []), [])
+
+        added, pruned = _add_direct_journey_label_with_cross_count_dominance(stores, 0, 3, zero_sortie_not_dominated)
+        self.assertTrue(added)
+        self.assertEqual(pruned, 1)
+        self.assertEqual(stores[1].get(3, []), [])
+        self.assertEqual(stores[0][3], [zero_sortie_not_dominated])
 
     def test_negative_journey_candidate_selection_keeps_best_per_task_mask(self):
         selected = _select_negative_journey_candidates(
@@ -1667,6 +2331,33 @@ class BPCFutureTests(unittest.TestCase):
                 JourneyPricingConfig(early_return_unique_masks_enabled=True),
             ),
             2,
+        )
+
+    def test_early_return_can_require_new_task_set_masks(self):
+        candidates = [
+            (-5.0, ((1, 0.0),), 3),
+            (-4.0, ((2, 0.0),), 5),
+            (-3.0, ((3, 0.0),), 7),
+        ]
+        config = JourneyPricingConfig(
+            early_return_unique_masks_enabled=True,
+            early_return_new_task_set_min_count=2,
+        )
+        self.assertFalse(
+            _early_return_negative_candidates_ready(
+                candidates[:2],
+                config,
+                {3: 10.0, 5: 11.0},
+                min_count=2,
+            )
+        )
+        self.assertTrue(
+            _early_return_negative_candidates_ready(
+                candidates,
+                config,
+                {3: 10.0},
+                min_count=2,
+            )
         )
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
@@ -2094,6 +2785,47 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(result.exhausted)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_streaming_label_physical_catalog_reports_cache_hit_on_reuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
+            data = load_future_data(str(graph_path))
+        trip_cache: dict[tuple, object] = {}
+        config = JourneyPricingConfig(
+            time_bucket_size=5.0,
+            start_time_step=10.0,
+            max_tasks_per_trip=1,
+            time_limit=5.0,
+            max_candidate_trips=0,
+            max_dp_states=1000,
+            streaming_pricing_enabled=True,
+            streaming_profile_batch_size=1,
+            profile_labeling_enabled=True,
+            profile_labeling_best_first_enabled=True,
+            profile_labeling_physical_catalog_resume_enabled=True,
+        )
+
+        first = price_journeys(
+            data,
+            duals=JourneyDuals(cover={1: 200.0}, fleet_limit=0.0),
+            branch_constraints=tuple(),
+            config=config,
+            trip_cache=trip_cache,
+        )
+        second = price_journeys(
+            data,
+            duals=JourneyDuals(cover={1: 201.0}, fleet_limit=0.0),
+            branch_constraints=tuple(),
+            config=config,
+            trip_cache=trip_cache,
+        )
+
+        self.assertTrue(first.label_physical_catalog)
+        self.assertFalse(first.profile_catalog_hit)
+        self.assertTrue(second.label_physical_catalog)
+        self.assertTrue(second.profile_catalog_hit)
+        self.assertGreaterEqual(second.profile_catalog_size, first.profile_catalog_size)
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_streaming_journey_pricing_can_still_certificate_no_negative(self):
         with tempfile.TemporaryDirectory() as tmp:
             graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
@@ -2140,6 +2872,61 @@ class BPCFutureTests(unittest.TestCase):
         self.assertLess(result.best_reduced_cost, 0.0)
         self.assertEqual(result.reason, "direct_label_partial_negative_journey")
         self.assertFalse(result.exhausted)
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_direct_journey_label_pricing_runs_when_profile_frontend_disabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
+            data = load_future_data(str(graph_path))
+        result = price_journeys(
+            data,
+            duals=JourneyDuals(cover={1: 0.0}, fleet_limit=0.0),
+            branch_constraints=tuple(),
+            config=JourneyPricingConfig(
+                time_bucket_size=5.0,
+                start_time_step=10.0,
+                max_tasks_per_trip=1,
+                time_limit=5.0,
+                max_candidate_trips=0,
+                max_dp_states=1000,
+                profile_pricing_enabled=False,
+                direct_journey_label_pricing_enabled=True,
+                direct_journey_label_early_return_negative=False,
+                direct_journey_label_completion_bound_enabled=True,
+                direct_journey_label_completion_bound_time_buckets=5,
+                direct_journey_label_completion_bound_energy_buckets=5,
+            ),
+        )
+        self.assertTrue(result.exhausted)
+        self.assertEqual(result.journeys, [])
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertEqual(result.reason, "direct_label_no_negative_journey")
+        self.assertTrue(result.completion_bound_enabled)
+
+    def test_select_diverse_journey_candidates_filters_high_task_overlap(self):
+        first = SimpleNamespace(task_set=(1, 2, 3), signature=("first",))
+        duplicate_task_set = SimpleNamespace(task_set=(1, 2, 3), signature=("duplicate",))
+        high_overlap = SimpleNamespace(task_set=(1, 2, 3, 4), signature=("high_overlap",))
+        disjoint = SimpleNamespace(task_set=(5,), signature=("disjoint",))
+        low_overlap = SimpleNamespace(task_set=(2, 6), signature=("low_overlap",))
+
+        selection = _select_diverse_journey_candidates(
+            [
+                (-10.0, first),
+                (-11.0, duplicate_task_set),
+                (-9.0, high_overlap),
+                (-8.0, disjoint),
+                (-7.0, low_overlap),
+            ],
+            max_returned=3,
+            top_k_strongest=1,
+            max_jaccard=0.4,
+        )
+
+        self.assertEqual(selection.candidate_negative_count, 5)
+        self.assertEqual([journey.signature[0] for journey in selection.journeys], ["duplicate", "disjoint", "low_overlap"])
+        self.assertEqual(selection.rejected_overlap_count, 1)
+        self.assertEqual(selection.rejected_duplicate_task_set_count, 1)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_direct_journey_label_pricing_can_certificate_no_negative(self):
@@ -2532,6 +3319,57 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(result.ng_certificate_from_relaxation)
         self.assertEqual(result.reason, "ng_dssr_relaxed_no_negative_journey")
 
+    def test_ng_preprobe_certificate_flag_alone_starts_profile_probe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
+            data = load_future_data(str(graph_path))
+
+        certificate = JourneyPricingResult(
+            [],
+            True,
+            0.25,
+            12,
+            0,
+            4,
+            0,
+            "OPTIMAL",
+            "ng_dssr_relaxed_no_negative_journey",
+            ng_relaxation_enabled=True,
+            ng_certificate_from_relaxation=True,
+            ng_best_relaxed_reduced_cost=0.25,
+        )
+
+        def fake_ng_probe(*_args, **kwargs):
+            self.assertFalse(kwargs["fallback_to_elementary"])
+            self.assertTrue(kwargs["config"].direct_journey_label_ng_certificate_enabled)
+            return certificate
+
+        with patch(
+            "BPC_future.pricing.journey_pricing._price_journeys_by_direct_ng_dssr",
+            side_effect=fake_ng_probe,
+        ), patch(
+            "BPC_future.pricing.journey_pricing._generate_negative_sortie_profiles",
+            side_effect=AssertionError("profile pricing should not run after an NG certificate"),
+        ):
+            result = _price_journeys_by_profiles(
+                data,
+                JourneyDuals(cover={1: 0.0}, fleet_limit=0.0),
+                config=JourneyPricingConfig(
+                    profile_pricing_enabled=True,
+                    direct_journey_label_pricing_enabled=False,
+                    direct_journey_label_ng_dssr_enabled=True,
+                    direct_journey_label_ng_exact_probe_enabled=False,
+                    direct_journey_label_ng_certificate_enabled=False,
+                    direct_journey_label_ng_probe_certificate_enabled=True,
+                ),
+                cuts=tuple(),
+                trip_cache=None,
+            )
+
+        self.assertTrue(result.exhausted)
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertTrue(result.ng_certificate_from_relaxation)
+
     def test_ng_preprobe_certificate_can_close_ryan_foster_branch_pricing(self):
         with tempfile.TemporaryDirectory() as tmp:
             graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
@@ -2749,6 +3587,33 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(first.reason, second.reason)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_direct_journey_completion_bound_cache_key_ignores_fleet_dual(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
+            data = load_future_data(str(graph_path))
+        config = JourneyPricingConfig(
+            time_bucket_size=5.0,
+            start_time_step=10.0,
+            max_tasks_per_trip=1,
+            time_limit=5.0,
+            max_candidate_trips=0,
+            max_dp_states=1000,
+            direct_journey_label_pricing_enabled=True,
+            direct_journey_label_early_return_negative=False,
+            direct_journey_label_task_set_bound_pruning_enabled=False,
+            direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_completion_bound_time_buckets=5,
+            direct_journey_label_completion_bound_energy_buckets=4,
+            direct_journey_label_completion_bound_two_cycle_enabled=True,
+        )
+        low_fleet_dual = JourneyDuals(cover={1: 3.0}, fleet_limit=-10.0)
+        high_fleet_dual = JourneyDuals(cover={1: 3.0}, fleet_limit=25.0)
+        self.assertEqual(
+            _direct_completion_bound_cache_key(data, low_fleet_dual, config),
+            _direct_completion_bound_cache_key(data, high_fleet_dual, config),
+        )
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_direct_journey_label_two_cycle_completion_bound_audit_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
@@ -2805,6 +3670,73 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(len(bound.node_values[0]), 6)
         self.assertEqual(len(bound.node_values[0][0]), 5)
         self.assertTrue(math.isfinite(bound.partial_value(0, -1, 6, 0, 0.0, 0.0)))
+
+    def test_direct_journey_completion_bound_caches_arc_enumeration(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 10.0, 2: 5.0}, fleet_limit=0.0)
+        bound = _DirectJourneyCompletionBound(
+            data,
+            duals,
+            time_buckets=5,
+            energy_buckets=4,
+            max_tasks_per_sortie=2,
+            sortie_limit=2,
+            two_cycle_enabled=True,
+        )
+        fresh = _DirectJourneyCompletionBound(
+            data,
+            duals,
+            time_buckets=5,
+            energy_buckets=4,
+            max_tasks_per_sortie=2,
+            sortie_limit=2,
+            two_cycle_enabled=True,
+        )
+
+        self.assertGreater(len(bound._task_transition_cache), 0)
+        self.assertGreater(len(bound._return_completion_cache), 0)
+        transition_cache_size = len(bound._task_transition_cache)
+        return_cache_size = len(bound._return_completion_cache)
+
+        transitions = bound._task_transitions(
+            0,
+            1,
+            time_bucket=0,
+            depart_time=bound._bucket_time(0),
+            energy_used=bound._bucket_energy(0),
+        )
+        self.assertIs(
+            transitions,
+            bound._task_transitions(
+                0,
+                1,
+                time_bucket=0,
+                depart_time=bound._bucket_time(0),
+                energy_used=bound._bucket_energy(0),
+            ),
+        )
+        self.assertEqual(len(bound._task_transition_cache), transition_cache_size)
+
+        return_candidates = bound._return_arc_completion_candidates(
+            1,
+            depart_time=bound._bucket_time(0),
+            energy_used=bound._bucket_energy(0),
+        )
+        self.assertIs(
+            return_candidates,
+            bound._return_arc_completion_candidates(
+                1,
+                depart_time=bound._bucket_time(0),
+                energy_used=bound._bucket_energy(0),
+            ),
+        )
+        self.assertEqual(len(bound._return_completion_cache), return_cache_size)
+
+        self.assertAlmostEqual(
+            bound.partial_value(1, 0, 1, 1, 0.0, 0.0),
+            fresh.partial_value(1, 0, 1, 1, 0.0, 0.0),
+            places=9,
+        )
 
     def test_direct_journey_completion_bound_keeps_arc_option_triplets(self):
         data = replace(load_future_data("very_small"), tasks=(1,))
@@ -2962,6 +3894,53 @@ class BPCFutureTests(unittest.TestCase):
         self.assertLess(two_cycle.value(1, 0.0), 0.0)
         self.assertEqual(two_cycle.value(1, 95.0), 0.0)
         self.assertGreater(two_cycle.value(1, 95.0), two_cycle.value(1, 0.0))
+
+    def test_two_cycle_return_suffix_uses_return_ready_time(self):
+        data = replace(load_future_data("very_small"), tasks=(1,), sortie_limit=2, horizon=100.0, rho=1.0)
+        instance = dict(data.instance)
+        tasks = {str(task): dict(payload) for task, payload in data.instance["tasks"].items()}
+        tasks["1"] = {**tasks["1"], "r": 0.0, "D": 60.0, "sigma": 0.0, "c_srv": 0.0, "g": 0.0}
+        outbound = ArcOption(
+            option_id="outbound",
+            path_type="test",
+            aliases=tuple(),
+            tau=15.0,
+            energy=0.0,
+            risk=0.0,
+            distance=1.0,
+            cost=1.0,
+        )
+        inbound = ArcOption(
+            option_id="return",
+            path_type="test",
+            aliases=tuple(),
+            tau=5.0,
+            energy=0.0,
+            risk=0.0,
+            distance=1.0,
+            cost=1.0,
+        )
+        data = replace(
+            data,
+            instance={**instance, "tasks": tasks},
+            arc_options={(0, 1): (outbound,), (1, 0): (inbound,)},
+        )
+        bound = _DirectJourneyCompletionBound(
+            data,
+            JourneyDuals(cover={1: 50.0}, fleet_limit=0.0),
+            time_buckets=20,
+            energy_buckets=0,
+            max_tasks_per_sortie=1,
+            sortie_limit=2,
+            two_cycle_enabled=True,
+        )
+
+        early_return_then_future = bound.partial_value(1, 0, 0, 1, 0.0, 0.0)
+        late_return_then_future = bound.partial_value(1, 0, 0, 1, 60.0, 0.0)
+
+        self.assertLess(early_return_then_future, 0.0)
+        self.assertAlmostEqual(late_return_then_future, float(inbound.cost), places=6)
+        self.assertGreater(late_return_then_future, early_return_then_future)
 
     def test_completion_bounds_account_for_survival_energy_lower_bound(self):
         return_option = ArcOption(
@@ -3166,6 +4145,88 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIsNotNone(value)
         self.assertAlmostEqual(float(value), expected_task2)
         self.assertGreater(float(value), -50.0)
+
+    def test_unique_route_completion_bound_exact_first_step_tightens_current_time(self):
+        data = replace(
+            load_future_data("very_small"),
+            tasks=(1,),
+            sortie_limit=1,
+            horizon=10.0,
+            energy_limit=100.0,
+            arc_options={
+                (0, 1): (
+                    ArcOption(
+                        option_id="outbound",
+                        path_type="test",
+                        aliases=tuple(),
+                        tau=1.0,
+                        energy=0.0,
+                        risk=0.0,
+                        distance=1.0,
+                        cost=0.0,
+                    ),
+                ),
+                (1, 0): (
+                    ArcOption(
+                        option_id="late-return",
+                        path_type="test",
+                        aliases=tuple(),
+                        tau=1.0,
+                        energy=0.0,
+                        risk=0.0,
+                        distance=1.0,
+                        cost=0.0,
+                    ),
+                ),
+            },
+        )
+        duals = FutureDuals(
+            cover={1: 0.0},
+            task_vehicle={},
+            sortie_count={},
+            time_occupation={},
+            ordering={},
+            branches={},
+        )
+        bucketed = _UniqueRouteCompletionLowerBound(
+            data,
+            duals,
+            {1: 0},
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=1,
+            energy_buckets=1,
+        )
+        exact_first = _UniqueRouteCompletionLowerBound(
+            data,
+            duals,
+            {1: 0},
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=1,
+            energy_buckets=1,
+            exact_first_step_enabled=True,
+        )
+
+        bucketed_value = bucketed.partial_value(
+            last=1,
+            available_mask=0,
+            remaining_slots_in_sortie=0,
+            future_sorties=0,
+            current_time=9.5,
+            current_energy=0.0,
+        )
+        exact_first_value = exact_first.partial_value(
+            last=1,
+            available_mask=0,
+            remaining_slots_in_sortie=0,
+            future_sorties=0,
+            current_time=9.5,
+            current_energy=0.0,
+        )
+
+        self.assertTrue(math.isfinite(float(bucketed_value)))
+        self.assertTrue(math.isinf(float(exact_first_value)))
 
     def test_direct_journey_completion_bound_two_cycle_depot_immune_and_budget_fallback(self):
         data = replace(load_future_data("very_small"), tasks=(1,), sortie_limit=1)
@@ -3982,6 +5043,284 @@ class BPCFutureTests(unittest.TestCase):
             _journey_dual_hash(_journey_dual_vector(data, right, 1)),
         )
 
+    def test_hidden_negative_audit_reduced_cost_components_match_manual_rc(self):
+        journey = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({1, 2, 3}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=100.0,
+            fixed_vehicle_cost=0.0,
+            cost=100.0,
+            signature=("audit-components",),
+        )
+        cuts = (SubsetRowCut(tasks=(1, 2, 4), k=2), FleetLowerBoundCut(lb=1))
+        duals = JourneyDuals(cover={1: 5.0, 2: 7.0, 3: -2.0}, fleet_limit=4.0, cuts={0: 3.0, 1: 2.0})
+        components = _journey_reduced_cost_components(journey, duals, cuts)
+        self.assertAlmostEqual(components["journey_cost"], 100.0)
+        self.assertAlmostEqual(components["cover_dual_sum"], 10.0)
+        self.assertAlmostEqual(components["fleet_dual"], 4.0)
+        self.assertAlmostEqual(components["cut_dual_sum"], 5.0)
+        self.assertAlmostEqual(components["manual_true_reduced_cost"], manual_journey_reduced_cost(journey, duals, cuts))
+        self.assertAlmostEqual(components["decomposed_true_reduced_cost"], 81.0)
+        self.assertAlmostEqual(components["decomposition_abs_error"], 0.0)
+        self.assertNotEqual(_journey_cut_hash(cuts), _journey_cut_hash((SubsetRowCut(tasks=(1, 3, 4), k=2), cuts[1])))
+
+    def test_hidden_negative_audit_limits_detailed_journey_logs(self):
+        data = load_future_data("very_small")
+        journeys = [
+            JourneyColumn(
+                id=index,
+                trips=tuple(),
+                task_set=frozenset({int(data.tasks[index % len(data.tasks)])}),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=float(index),
+                fixed_vehicle_cost=0.0,
+                cost=float(index),
+                signature=("audit-limit", index),
+            )
+            for index in range(10)
+        ]
+        ordinary = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+        )
+        hidden = JourneyPricingResult(
+            journeys=journeys,
+            exhausted=False,
+            best_reduced_cost=-1.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="time_limit",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "audit.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_hidden_negative_audit(
+                    logger,
+                    data,
+                    JourneyPool(),
+                    ordinary,
+                    hidden,
+                    JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={}),
+                    tuple(),
+                    tuple(),
+                    cg_iter=7,
+                    hidden_pricing_kind="test_hidden",
+                    hidden_dual_source="true_dual",
+                    max_logged_journeys=3,
+                )
+            finally:
+                logger.close()
+
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        detailed = [record for record in records if record["event"] == "journey_hidden_negative_audit"]
+        summaries = [record for record in records if record["event"] == "journey_hidden_negative_audit_summary"]
+        reason_summaries = [
+            record for record in records if record["event"] == "journey_hidden_negative_audit_reason_summary"
+        ]
+        self.assertEqual(len(detailed), 3)
+        self.assertEqual([record["CB_journey_rank"] for record in detailed], [0, 1, 2])
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["hidden_negative_audit_candidate_count"], 10)
+        self.assertEqual(summaries[0]["hidden_negative_audit_logged_count"], 3)
+        self.assertEqual(summaries[0]["hidden_negative_audit_skipped_count"], 7)
+        self.assertEqual(len(reason_summaries), 1)
+        self.assertEqual(reason_summaries[0]["hidden_negative_audit_candidate_count"], 10)
+        self.assertEqual(reason_summaries[0]["hidden_negative_primary_reason_counts"]["not_generated"], 10)
+        self.assertEqual(
+            reason_summaries[0]["hidden_negative_candidate_reason_counts"][
+                "worker_profile_universe_missing_hidden_task_set"
+            ],
+            10,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "audit_disabled.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_hidden_negative_audit(
+                    logger,
+                    data,
+                    JourneyPool(),
+                    ordinary,
+                    hidden,
+                    JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={}),
+                    tuple(),
+                    tuple(),
+                    cg_iter=7,
+                    hidden_pricing_kind="test_hidden",
+                    hidden_dual_source="true_dual",
+                    max_logged_journeys=0,
+                )
+            finally:
+                logger.close()
+            self.assertEqual(log_path.read_text(encoding="utf-8"), "")
+
+    def test_profile_mask_diagnostics_default_to_empty(self):
+        profile = _SortieProfile(
+            sequence=(1,),
+            arc_options=tuple(),
+            lower_start=0.0,
+            upper_start=10.0,
+            end_offset=1.0,
+            cost=1.0,
+            mask=1,
+            contribution=-1.0,
+        )
+        disabled = _profile_mask_diagnostic_kwargs(
+            [profile],
+            {"reachable_task_masks": frozenset({1})},
+            JourneyPricingConfig(),
+        )
+        self.assertEqual(disabled["diagnostic_profile_task_masks"], frozenset())
+        self.assertEqual(disabled["diagnostic_reachable_task_masks"], frozenset())
+
+        enabled = _profile_mask_diagnostic_kwargs(
+            [profile],
+            {"reachable_task_masks": frozenset({1})},
+            JourneyPricingConfig(profile_mask_diagnostics_enabled=True),
+        )
+        self.assertEqual(enabled["diagnostic_profile_task_masks"], frozenset({1}))
+        self.assertEqual(enabled["diagnostic_reachable_task_masks"], frozenset({1}))
+
+    def test_hidden_negative_miss_diagnostics_summarizes_worker_pruning_signals(self):
+        ordinary = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=12,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+            profile_dominance_pruned=3,
+            existing_journeys_filtered=1,
+            task_set_resource_pruned_sequences=5,
+            dp_bound_pruned_labels=7,
+            dp_cross_count_pruned_labels=11,
+            profile_catalog_hit=True,
+            profile_negative_candidate_count=2,
+        )
+        diagnostics = _hidden_negative_miss_diagnostics(
+            ordinary,
+            signature_duplicate=True,
+            forbidden_signature_hit=False,
+            task_set_dominated=True,
+            reduced_cost_components={"decomposition_abs_error": 0.0},
+        )
+        candidates = diagnostics["hidden_negative_miss_reason_candidates"]
+        self.assertEqual(diagnostics["hidden_negative_miss_reason_primary"], "duplicate_signature_filter")
+        self.assertIn("dominant_task_set_filter", candidates)
+        self.assertIn("worker_existing_journey_filter", candidates)
+        self.assertIn("task_set_resource_pruning", candidates)
+        self.assertIn("dp_bound_pruning", candidates)
+        self.assertIn("profile_dominance_pruning", candidates)
+        self.assertIn("profile_cross_count_dominance", candidates)
+        self.assertIn("profile_catalog_reuse", candidates)
+        self.assertIn("generated_negative_candidate_but_not_returned", candidates)
+        self.assertIn("worker_local_no_column_universe_gap", candidates)
+
+    def test_hidden_negative_miss_diagnostics_flags_not_generated_and_rc_mismatch(self):
+        ordinary = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=None,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="profile_dp_incomplete",
+        )
+        diagnostics = _hidden_negative_miss_diagnostics(
+            ordinary,
+            signature_duplicate=False,
+            forbidden_signature_hit=False,
+            task_set_dominated=False,
+            reduced_cost_components={"decomposition_abs_error": 1.0e-4},
+        )
+        candidates = diagnostics["hidden_negative_miss_reason_candidates"]
+        self.assertEqual(diagnostics["hidden_negative_miss_reason_primary"], "worker_incomplete_limit")
+        self.assertIn("not_generated", candidates)
+        self.assertIn("reduced_cost_decomposition_mismatch", candidates)
+
+    def test_hidden_negative_miss_diagnostics_flags_worker_time_limit_gap(self):
+        ordinary = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=None,
+            generated_sequences=120,
+            evaluated_timed_trips=80,
+            candidate_trips=15,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="time_limit",
+        )
+        diagnostics = _hidden_negative_miss_diagnostics(
+            ordinary,
+            signature_duplicate=False,
+            forbidden_signature_hit=False,
+            task_set_dominated=False,
+            reduced_cost_components={"decomposition_abs_error": 0.0},
+        )
+        candidates = diagnostics["hidden_negative_miss_reason_candidates"]
+        self.assertEqual(diagnostics["hidden_negative_miss_reason_primary"], "worker_incomplete_time_limit")
+        self.assertIn("worker_universe_no_true_rc_negative_candidate", candidates)
+        self.assertNotIn("unknown_worker_gap", candidates)
+
+    def test_hidden_negative_miss_diagnostics_prefers_hidden_mask_specific_reason(self):
+        ordinary = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=25,
+            evaluated_timed_trips=20,
+            candidate_trips=10,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+            weak_negative_journeys_filtered=4,
+            dp_cross_count_pruned_labels=9,
+            diagnostic_profile_task_masks=frozenset({1, 2, 3}),
+            diagnostic_profile_trip_masks=frozenset({1, 2}),
+            diagnostic_reachable_task_masks=frozenset({3}),
+            diagnostic_negative_task_masks=frozenset(),
+            diagnostic_selected_task_masks=frozenset(),
+        )
+        diagnostics = _hidden_negative_miss_diagnostics(
+            ordinary,
+            signature_duplicate=False,
+            forbidden_signature_hit=False,
+            task_set_dominated=False,
+            reduced_cost_components={"decomposition_abs_error": 0.0},
+            hidden_task_mask=3,
+            hidden_trip_masks=(1, 2),
+        )
+        candidates = diagnostics["hidden_negative_miss_reason_candidates"]
+        self.assertEqual(
+            diagnostics["hidden_negative_miss_reason_primary"],
+            "worker_reached_hidden_task_set_without_negative_candidate",
+        )
+        self.assertIn("worker_true_rc_threshold_filter", candidates)
+        self.assertIn("profile_cross_count_dominance", candidates)
+        self.assertIn("worker_profile_universe_has_hidden_sortie_masks", candidates)
+
     def test_journey_exact_pricing_budget_uses_reserve_until_certificate_candidate(self):
         budget, reserve, reason = _journey_exact_pricing_budget(
             remaining=10.0,
@@ -4022,6 +5361,101 @@ class BPCFutureTests(unittest.TestCase):
         self.assertAlmostEqual(budget, 10.0)
         self.assertAlmostEqual(reserve, 0.0)
         self.assertEqual(reason, "certificate_candidate_no_reserve")
+        budget, reserve, reason = _journey_exact_pricing_budget(
+            remaining=10.0,
+            post_pricing_reserve=2.0,
+            min_pricing_time=0.1,
+            incumbent=200.0,
+            rmp_objective=200.0,
+            integer_tol=1.0e-6,
+            cg_iter=3,
+            certificate_no_reserve_enabled=True,
+            certificate_no_reserve_min_cg_iter=3,
+            deadline_safety_margin=1.0,
+        )
+        self.assertAlmostEqual(budget, 9.0)
+        self.assertAlmostEqual(reserve, 0.0)
+        self.assertEqual(reason, "certificate_candidate_no_reserve")
+
+    def test_profile_materialization_failure_skip_is_opt_in(self):
+        pricing = SimpleNamespace(reason="selected_profiles_not_a_valid_journey")
+        self.assertFalse(
+            _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                {},
+                pricing,
+            )
+        )
+        self.assertTrue(
+            _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                {"journey_skip_ordinary_retry_after_profile_materialization_failure": True},
+                pricing,
+            )
+        )
+        self.assertFalse(
+            _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                {},
+                SimpleNamespace(reason="time_limit"),
+            )
+        )
+        duplicate_only = SimpleNamespace(
+            reason="negative_journeys_already_in_pool",
+            existing_journeys_filtered=1,
+            duplicate_candidates_filtered=0,
+            dominated_task_set_journeys_filtered=0,
+            duplicate_scan_limited=False,
+        )
+        self.assertFalse(
+            _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                {},
+                duplicate_only,
+            )
+        )
+        self.assertFalse(
+            _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                {"journey_skip_ordinary_retry_after_profile_materialization_failure": True},
+                duplicate_only,
+            )
+        )
+        self.assertTrue(
+            _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                {"journey_skip_ordinary_retry_after_duplicate_only": True},
+                duplicate_only,
+            )
+        )
+        self.assertFalse(
+            _journey_skip_ordinary_retry_after_profile_materialization_failure(
+                {"journey_skip_ordinary_retry_after_duplicate_only": True},
+                SimpleNamespace(
+                    reason="negative_journeys_already_in_pool",
+                    existing_journeys_filtered=1,
+                    duplicate_candidates_filtered=0,
+                    dominated_task_set_journeys_filtered=0,
+                    duplicate_scan_limited=True,
+                ),
+            )
+        )
+
+    def test_weak_negative_filtered_retry_skip_is_opt_in_and_column_free(self):
+        weak_filtered = SimpleNamespace(weak_negative_journeys_filtered=2, journeys=[])
+        self.assertFalse(_journey_skip_ordinary_retry_after_weak_negative_filtered({}, weak_filtered))
+        self.assertTrue(
+            _journey_skip_ordinary_retry_after_weak_negative_filtered(
+                {"journey_skip_ordinary_retry_after_weak_negative_filtered": True},
+                weak_filtered,
+            )
+        )
+        self.assertFalse(
+            _journey_skip_ordinary_retry_after_weak_negative_filtered(
+                {"journey_skip_ordinary_retry_after_weak_negative_filtered": True},
+                SimpleNamespace(weak_negative_journeys_filtered=0, journeys=[]),
+            )
+        )
+        self.assertFalse(
+            _journey_skip_ordinary_retry_after_weak_negative_filtered(
+                {"journey_skip_ordinary_retry_after_weak_negative_filtered": True},
+                SimpleNamespace(weak_negative_journeys_filtered=2, journeys=[object()]),
+            )
+        )
 
     def test_journey_skip_short_exact_pricing_gate_is_conservative(self):
         config = {
@@ -4084,6 +5518,97 @@ class BPCFutureTests(unittest.TestCase):
             )
         )
 
+    def test_journey_flat_weak_column_pressure_is_conservative(self):
+        enabled = {
+            "journey_certificate_flat_weak_column_pressure_enabled": True,
+            "journey_certificate_flat_weak_column_min_flat_rounds": 1,
+            "journey_certificate_flat_weak_column_max_added_journeys": 4,
+        }
+        self.assertFalse(
+            _journey_flat_weak_column_pressure_addition(
+                {},
+                1,
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                objective_delta=0.0,
+                eps=1.0e-6,
+            )
+        )
+        self.assertFalse(
+            _journey_flat_weak_column_pressure_addition(
+                enabled,
+                1,
+                certificate_candidate=False,
+                certificate_flat_rounds=1,
+                objective_delta=0.0,
+                eps=1.0e-6,
+            )
+        )
+        self.assertFalse(
+            _journey_flat_weak_column_pressure_addition(
+                enabled,
+                1,
+                certificate_candidate=True,
+                certificate_flat_rounds=0,
+                objective_delta=0.0,
+                eps=1.0e-6,
+            )
+        )
+        self.assertFalse(
+            _journey_flat_weak_column_pressure_addition(
+                enabled,
+                1,
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                objective_delta=-0.01,
+                eps=1.0e-6,
+            )
+        )
+        self.assertFalse(
+            _journey_flat_weak_column_pressure_addition(
+                enabled,
+                5,
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                objective_delta=0.0,
+                eps=1.0e-6,
+            )
+        )
+        self.assertTrue(
+            _journey_flat_weak_column_pressure_addition(
+                enabled,
+                2,
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                objective_delta=0.0,
+                eps=1.0e-6,
+            )
+        )
+
+    def test_journey_flat_weak_heuristic_fallthrough_gate(self):
+        config = {
+            "journey_certificate_flat_weak_column_continue_exact_after_heuristic": True,
+            "journey_certificate_flat_weak_column_continue_exact_after_heuristic_rounds": 2,
+        }
+        self.assertFalse(
+            _journey_continue_exact_after_flat_weak_heuristic(
+                {},
+                flat_weak_column_rounds=10,
+            )
+        )
+        self.assertFalse(
+            _journey_continue_exact_after_flat_weak_heuristic(
+                config,
+                flat_weak_column_rounds=1,
+            )
+        )
+        self.assertTrue(
+            _journey_continue_exact_after_flat_weak_heuristic(
+                config,
+                flat_weak_column_rounds=2,
+            )
+        )
+
     def test_journey_immediate_certificate_no_reserve_config_is_opt_in(self):
         pricing_config = JourneyPricingConfig(time_limit=4.0, profile_generation_time_fraction=0.9)
         unchanged, enabled = _journey_immediate_certificate_no_reserve_config(
@@ -4138,6 +5663,140 @@ class BPCFutureTests(unittest.TestCase):
             _journey_learning_true_rc_keep_threshold({"journey_learning_true_rc_keep_threshold": 1.5}),
             1.5,
         )
+        self.assertAlmostEqual(
+            _journey_learning_certificate_true_rc_keep_threshold(
+                {
+                    "journey_learning_true_rc_keep_threshold": 0.25,
+                    "journey_learning_certificate_true_rc_keep_threshold": 1.5,
+                }
+            ),
+            1.5,
+        )
+        self.assertEqual(
+            _journey_learning_certificate_true_rc_max_kept_per_round(
+                {
+                    "journey_learning_true_rc_max_kept_per_round": 4,
+                    "journey_learning_certificate_true_rc_max_kept_per_round": 2,
+                }
+            ),
+            2,
+        )
+        self.assertAlmostEqual(
+            _journey_learning_certificate_true_rc_fallback_keep_threshold(
+                {
+                    "journey_learning_true_rc_fallback_keep_threshold": 0.0,
+                    "journey_learning_certificate_true_rc_fallback_keep_threshold": 1.5,
+                }
+            ),
+            1.5,
+        )
+        self.assertEqual(
+            _journey_learning_certificate_true_rc_fallback_max_kept_per_round(
+                {
+                    "journey_learning_true_rc_fallback_max_kept_per_round": 1,
+                    "journey_learning_certificate_true_rc_fallback_max_kept_per_round": 0,
+                }
+            ),
+            0,
+        )
+
+    def test_journey_learning_filter_parameters_tighten_certificate_candidate_only(self):
+        runtime = SimpleNamespace(
+            true_rc_keep_threshold=0.0,
+            true_rc_max_kept_per_round=4,
+            true_rc_fallback_keep_threshold=0.0,
+            true_rc_fallback_max_kept_per_round=1,
+        )
+        config = {
+            "journey_learning_certificate_true_rc_keep_threshold": 1.0,
+            "journey_learning_certificate_true_rc_max_kept_per_round": 2,
+            "journey_learning_certificate_true_rc_fallback_keep_threshold": 1.0,
+            "journey_learning_certificate_true_rc_fallback_max_kept_per_round": 0,
+        }
+        self.assertEqual(
+            _journey_learning_true_rc_filter_parameters(config, runtime, certificate_candidate=False),
+            (0.0, 4, 0.0, 1, "regular"),
+        )
+        self.assertEqual(
+            _journey_learning_true_rc_filter_parameters(config, runtime, certificate_candidate=True),
+            (1.0, 2, 1.0, 0, "certificate_candidate"),
+        )
+
+    def test_journey_learning_true_rc_filter_fills_strong_cap_with_weak_true_negatives(self):
+        class CaptureLogger:
+            def __init__(self):
+                self.events = []
+
+            def log(self, event, **payload):
+                self.events.append({"event": event, **payload})
+
+        journeys = [
+            SimpleNamespace(signature=("strong",), task_set=(1,), cost=0.0),
+            SimpleNamespace(signature=("weak-a",), task_set=(2,), cost=0.0),
+            SimpleNamespace(signature=("weak-b",), task_set=(3,), cost=0.0),
+            SimpleNamespace(signature=("positive",), task_set=(4,), cost=10.0),
+        ]
+        logger = CaptureLogger()
+        kept = _journey_learning_true_rc_filter(
+            logger,
+            journeys,
+            true_duals=JourneyDuals(cover={1: 20.0, 2: 5.0, 3: 4.0, 4: 1.0}, fleet_limit=0.0, cuts={}),
+            cuts=tuple(),
+            tol=1.0e-6,
+            keep_threshold=10.0,
+            max_kept=3,
+            fallback_keep_threshold=0.0,
+            fallback_max_kept=1,
+            cg_iter=1,
+            node_id=0,
+            depth=0,
+            pricing_kind="heuristic",
+        )
+
+        self.assertEqual([journey.signature for journey in kept], [("strong",), ("weak-a",), ("weak-b",)])
+        event = logger.events[-1]
+        self.assertEqual(event["strong_true_negative_journeys"], 1)
+        self.assertEqual(event["fallback_fill_journeys"], 2)
+        self.assertEqual(event["kept_journeys"], 3)
+
+    def test_journey_learning_true_rc_filter_certificate_context_rejects_weak_fill(self):
+        class CaptureLogger:
+            def __init__(self):
+                self.events = []
+
+            def log(self, event, **payload):
+                self.events.append({"event": event, **payload})
+
+        journeys = [
+            SimpleNamespace(signature=("strong",), task_set=(1,), cost=0.0),
+            SimpleNamespace(signature=("weak-a",), task_set=(2,), cost=0.0),
+            SimpleNamespace(signature=("weak-b",), task_set=(3,), cost=0.0),
+        ]
+        logger = CaptureLogger()
+        kept = _journey_learning_true_rc_filter(
+            logger,
+            journeys,
+            true_duals=JourneyDuals(cover={1: 20.0, 2: 0.5, 3: 0.25}, fleet_limit=0.0, cuts={}),
+            cuts=tuple(),
+            tol=1.0e-6,
+            keep_threshold=1.0,
+            max_kept=2,
+            fallback_keep_threshold=1.0,
+            fallback_max_kept=0,
+            cg_iter=1,
+            node_id=0,
+            depth=0,
+            pricing_kind="heuristic",
+            filter_context="certificate_candidate",
+        )
+
+        self.assertEqual([journey.signature for journey in kept], [("strong",)])
+        event = logger.events[-1]
+        self.assertEqual(event["filter_context"], "certificate_candidate")
+        self.assertEqual(event["strong_true_negative_journeys"], 1)
+        self.assertEqual(event["true_negative_journeys"], 3)
+        self.assertEqual(event["fallback_fill_journeys"], 0)
+        self.assertEqual(event["kept_journeys"], 1)
 
     def test_journey_learning_runtime_for_pricing_honors_round_gate(self):
         runtime = SimpleNamespace(pricing_rounds_used=0)
@@ -4164,6 +5823,83 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIsNone(
             _journey_learning_runtime_for_pricing(runtime, {"journey_learning_pricing_max_rounds": 0}, cg_iter=1, certificate_disabled=True)
         )
+
+    def test_journey_learning_dual_center_blends_gnn_anchor_only_for_smoothed_pricing(self):
+        class StubStabilizer:
+            alpha = 0.5
+
+            def update_alpha(self, _history, pricing_stats=None, branch_depth=0):
+                return self.alpha
+
+            def should_disable(self, branch_depth, certificate_mode=False):
+                return False
+
+            def smooth_task_duals(self, true_task_duals, predicted_anchor, alpha=None):
+                active_alpha = self.alpha if alpha is None else float(alpha)
+                return {
+                    int(task): active_alpha * float(predicted_anchor[int(task)])
+                    + (1.0 - active_alpha) * float(true_value)
+                    for task, true_value in true_task_duals.items()
+                }
+
+        class CaptureLogger:
+            def __init__(self):
+                self.events = []
+
+            def log(self, event, **payload):
+                self.events.append({"event": event, **payload})
+
+        runtime = _JourneyLearningRuntime(
+            stabilizer=StubStabilizer(),
+            anchor={1: 100.0, 2: 0.0},
+            objective_history=[],
+            filter_true_rc=True,
+            true_rc_tol=1.0e-5,
+            true_rc_keep_threshold=0.0,
+            true_rc_fallback_keep_threshold=0.0,
+            true_rc_fallback_max_kept_per_round=1,
+            true_rc_max_kept_per_round=4,
+            stop_after_no_strong_round=False,
+            min_kept_to_continue=1,
+            dual_center_enabled=True,
+            dual_center_weight=0.5,
+            dual_center_momentum=0.5,
+            dual_center_min_rounds=2,
+        )
+        logger = CaptureLogger()
+        true_duals_1 = JourneyDuals(cover={1: 10.0, 2: 20.0}, fleet_limit=0.0, cuts={})
+        smoothed_1, source_1, active_1 = _journey_learning_pricing_duals(
+            runtime,
+            true_duals_1,
+            rmp_objective=100.0,
+            branch_depth=0,
+            logger=logger,
+            cg_iter=1,
+            node_id=0,
+            depth=0,
+        )
+        self.assertTrue(active_1)
+        self.assertEqual(source_1, "learning_smoothed")
+        self.assertEqual(smoothed_1.cover, {1: 55.0, 2: 10.0})
+        self.assertEqual(logger.events[-1]["anchor_source"], "gnn_anchor_warming")
+
+        true_duals_2 = JourneyDuals(cover={1: 20.0, 2: 40.0}, fleet_limit=0.0, cuts={})
+        smoothed_2, _source_2, active_2 = _journey_learning_pricing_duals(
+            runtime,
+            true_duals_2,
+            rmp_objective=100.0,
+            branch_depth=0,
+            logger=logger,
+            cg_iter=2,
+            node_id=0,
+            depth=0,
+        )
+        self.assertTrue(active_2)
+        self.assertEqual(logger.events[-1]["anchor_source"], "gnn_dual_center_anchor")
+        self.assertTrue(logger.events[-1]["dual_center_active"])
+        # EMA center is {1: 15, 2: 30}; effective anchor is {1: 57.5, 2: 15}.
+        self.assertAlmostEqual(smoothed_2.cover[1], 38.75)
+        self.assertAlmostEqual(smoothed_2.cover[2], 27.5)
 
     def test_journey_learning_pricing_config_has_separate_budget_overrides(self):
         base = JourneyPricingConfig(
@@ -4210,6 +5946,7 @@ class BPCFutureTests(unittest.TestCase):
         base = JourneyPricingConfig(
             time_limit=5.0,
             direct_journey_label_pricing_enabled=True,
+            direct_journey_label_global_certificate_enabled=True,
             direct_journey_label_completion_bound_enabled=True,
             direct_journey_label_ng_dssr_enabled=True,
             direct_journey_label_ng_exact_probe_enabled=True,
@@ -4221,6 +5958,7 @@ class BPCFutureTests(unittest.TestCase):
 
         self.assertIsNot(updated, base)
         self.assertFalse(updated.direct_journey_label_pricing_enabled)
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
         self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
         self.assertFalse(updated.direct_journey_label_ng_dssr_enabled)
         self.assertFalse(updated.direct_journey_label_ng_exact_probe_enabled)
@@ -4281,7 +6019,7 @@ class BPCFutureTests(unittest.TestCase):
                 self.assertFalse(config.get("journey_learning_stagnation_forces_exact"))
                 self.assertGreaterEqual(int(config.get("journey_learning_disable_on_branch_depth_gt")), 999)
                 self.assertTrue(config.get("journey_learning_pricing_enabled"))
-                self.assertGreaterEqual(float(config.get("journey_learning_true_rc_keep_threshold", 0.0)), 1.0)
+                self.assertGreaterEqual(float(config.get("journey_learning_true_rc_keep_threshold", 0.0)), 0.0)
                 self.assertGreater(int(config.get("journey_learning_true_rc_max_kept_per_round")), 0)
                 self.assertGreater(float(config.get("journey_learning_pricing_time_limit")), 0.0)
                 self.assertEqual(int(config.get("journey_learning_pricing_max_rounds")), 0)
@@ -4319,14 +6057,57 @@ class BPCFutureTests(unittest.TestCase):
                     float(config.get("journey_certificate_completion_bound_hidden_negative_grace_time", 0.0)),
                     0.0,
                 )
+                self.assertTrue(config.get("journey_certificate_completion_bound_diverse_harvest_enabled"))
+                self.assertGreater(
+                    int(config.get("journey_certificate_completion_bound_diverse_harvest_min_journeys", 0)),
+                    0,
+                )
+                self.assertGreaterEqual(
+                    int(config.get("journey_certificate_completion_bound_diverse_harvest_max_returned_journeys", 0)),
+                    int(config.get("journey_certificate_completion_bound_diverse_harvest_min_journeys", 0)),
+                )
+                self.assertGreaterEqual(
+                    int(config.get("journey_certificate_completion_bound_diverse_harvest_top_k_strongest", 0)),
+                    0,
+                )
+                self.assertGreaterEqual(
+                    float(config.get("journey_certificate_completion_bound_diverse_harvest_grace_time", 0.0)),
+                    0.0,
+                )
                 self.assertTrue(config.get("journey_hidden_negative_patrol_enabled"))
-                self.assertGreater(int(config.get("journey_hidden_negative_patrol_max_labels_per_node", 0)), 0)
+                self.assertTrue(config.get("journey_pricing_profile_labeling_physical_catalog_resume_enabled"))
+                self.assertTrue(config.get("journey_hidden_negative_profile_catalog_seed_enabled"))
+                self.assertFalse(config.get("journey_post_seed_profile_reharvest_enabled"))
+                self.assertTrue(config.get("journey_post_seed_profile_reharvest_after_replacement_only"))
+                self.assertGreater(float(config.get("journey_post_seed_profile_reharvest_time_limit", 0.0)), 0.0)
+                self.assertGreaterEqual(
+                    int(config.get("journey_post_seed_profile_reharvest_max_returned_journeys", 0)),
+                    int(config.get("journey_post_seed_profile_reharvest_min_journeys", 0)),
+                )
+                self.assertGreater(
+                    int(config.get("journey_post_seed_profile_reharvest_streaming_profile_batch_size", 0)),
+                    0,
+                )
+                patrol_has_beam = int(config.get("journey_hidden_negative_patrol_max_labels_per_node", 0)) > 0
+                patrol_has_completion_bound = bool(config.get("journey_hidden_negative_patrol_completion_bound_enabled", False))
+                patrol_has_coarsening = bool(config.get("journey_hidden_negative_patrol_resource_coarsening_enabled", False))
+                self.assertTrue(patrol_has_beam or patrol_has_completion_bound or patrol_has_coarsening)
+                if patrol_has_coarsening:
+                    self.assertTrue(
+                        float(config.get("journey_hidden_negative_patrol_resource_coarsening_time_bucket_size", 0.0))
+                        > 0.0
+                        or float(
+                            config.get("journey_hidden_negative_patrol_resource_coarsening_energy_bucket_size", 0.0)
+                        )
+                        > 0.0
+                    )
                 self.assertGreater(float(config.get("journey_hidden_negative_patrol_time_limit", 0.0)), 0.0)
                 self.assertGreater(int(config.get("journey_hidden_negative_patrol_min_journeys", 0)), 0)
                 self.assertGreaterEqual(
                     int(config.get("journey_hidden_negative_patrol_max_returned_journeys", 0)),
                     int(config.get("journey_hidden_negative_patrol_min_journeys", 0)),
                 )
+                self.assertGreaterEqual(int(config.get("journey_hidden_negative_audit_max_logged_journeys", -1)), 0)
 
     def test_journey_required_components_fail_closed(self):
         config = load_config(Path("BPC_future/configs/moon_trek_5_journey.yaml"))
@@ -4382,6 +6163,21 @@ class BPCFutureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "partial_max_states"):
             _validate_journey_required_components(unbounded_probe)
 
+        invalid_priority_lookahead = dict(config)
+        invalid_priority_lookahead["journey_pricing_profile_labeling_priority_future_dual_weight"] = -0.1
+        with self.assertRaisesRegex(ValueError, "priority_future_dual_weight"):
+            _validate_journey_required_components(invalid_priority_lookahead)
+
+        invalid_cut_priority = dict(config)
+        invalid_cut_priority["journey_pricing_profile_labeling_priority_cut_dual_weight"] = -0.1
+        with self.assertRaisesRegex(ValueError, "priority_cut_dual_weight"):
+            _validate_journey_required_components(invalid_cut_priority)
+
+        invalid_profile_dp_cap = dict(config)
+        invalid_profile_dp_cap["journey_pricing_profile_dp_max_labels_per_mask"] = -1
+        with self.assertRaisesRegex(ValueError, "profile_dp_max_labels_per_mask"):
+            _validate_journey_required_components(invalid_profile_dp_cap)
+
         invalid_hidden_probe = dict(config)
         invalid_hidden_probe["journey_certificate_completion_bound_hidden_negative_min_journeys"] = 3
         invalid_hidden_probe["journey_certificate_completion_bound_hidden_negative_max_returned_journeys"] = 2
@@ -4409,6 +6205,39 @@ class BPCFutureTests(unittest.TestCase):
         invalid_patrol_return["journey_hidden_negative_patrol_max_returned_journeys"] = 2
         with self.assertRaisesRegex(ValueError, "patrol_max_returned_journeys"):
             _validate_journey_required_components(invalid_patrol_return)
+
+        invalid_deadline_safety = dict(config)
+        invalid_deadline_safety["journey_pricing_deadline_safety_margin"] = -0.1
+        with self.assertRaisesRegex(ValueError, "deadline_safety_margin"):
+            _validate_journey_required_components(invalid_deadline_safety)
+
+        invalid_hidden_audit_limit = dict(config)
+        invalid_hidden_audit_limit["journey_hidden_negative_audit_max_logged_journeys"] = -1
+        with self.assertRaisesRegex(ValueError, "hidden_negative_audit_max_logged_journeys"):
+            _validate_journey_required_components(invalid_hidden_audit_limit)
+
+        invalid_hidden_seed = dict(config)
+        invalid_hidden_seed["journey_hidden_negative_profile_catalog_seed_enabled"] = True
+        invalid_hidden_seed["journey_pricing_profile_labeling_physical_catalog_resume_enabled"] = False
+        with self.assertRaisesRegex(ValueError, "profile_catalog_seed_enabled"):
+            _validate_journey_required_components(invalid_hidden_seed)
+
+        invalid_reharvest = dict(config)
+        invalid_reharvest["journey_post_seed_profile_reharvest_enabled"] = True
+        invalid_reharvest["journey_post_seed_profile_reharvest_time_limit"] = 0.0
+        with self.assertRaisesRegex(ValueError, "post_seed_profile_reharvest_time_limit"):
+            _validate_journey_required_components(invalid_reharvest)
+
+        invalid_static_src_selection = dict(config)
+        invalid_static_src_selection["static_subset_row_selection"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "static_subset_row_selection"):
+            _validate_journey_required_components(invalid_static_src_selection)
+
+        invalid_pre_exact_patrol = dict(config)
+        invalid_pre_exact_patrol["journey_hidden_negative_patrol_before_exact_flat_enabled"] = True
+        invalid_pre_exact_patrol["journey_hidden_negative_patrol_before_exact_min_retry_negative_rounds"] = -1
+        with self.assertRaisesRegex(ValueError, "before_exact_min_retry_negative_rounds"):
+            _validate_journey_required_components(invalid_pre_exact_patrol)
 
     def test_learning_enabled_configs_do_not_silently_gate_learning(self):
         config_paths = sorted(Path("BPC_future/configs").glob("*.yaml"))
@@ -4564,6 +6393,45 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(filtered, [strong])
         self.assertEqual(pruned, 1)
 
+    def test_sortie_profile_catalog_filter_counts_cover_dual_once_per_task_mask(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        option = data.options(0, task)[0]
+        profile = _SortieProfile(
+            sequence=(task, task),
+            arc_options=(option,),
+            lower_start=0.0,
+            upper_start=100.0,
+            end_offset=20.0,
+            cost=5.0,
+            mask=0b1,
+            contribution=0.0,
+        )
+        duals = FutureDuals(
+            cover={task: 6.0},
+            task_vehicle={},
+            sortie_count={int(data.vehicles[0]): 0.0},
+            time_occupation={},
+            ordering={},
+            branches={},
+            cuts={},
+        )
+
+        filtered, best_profile_rc, cut_pruned = _filter_sortie_profile_catalog(
+            [profile],
+            duals,
+            base_reduced_cost=0.0,
+            config=JourneyPricingConfig(),
+            journey_cut_duals={},
+            journey_cuts=tuple(),
+            task_to_bit={task: 0},
+        )
+
+        self.assertEqual(cut_pruned, 0)
+        self.assertEqual(len(filtered), 1)
+        self.assertAlmostEqual(filtered[0].contribution, -1.0)
+        self.assertAlmostEqual(best_profile_rc, -1.0)
+
     def test_sortie_profile_filter_skips_batch_when_online_dominance_applied(self):
         data = load_future_data("very_small")
         option = data.options(0, int(data.tasks[0]))[0]
@@ -4635,6 +6503,91 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(catalog_stats.get("online_dominance_applied"), 1)
         self.assertEqual(pruned, 0)
         self.assertEqual(set(refiltered), set(profiles))
+
+    def test_label_physical_catalog_can_exhaust_instead_of_stream_callbacks_after_threshold(self):
+        data = load_future_data("very_small")
+        vehicle = data.vehicles[0]
+        task = int(data.tasks[0])
+        duals = FutureDuals(
+            cover={int(candidate): 0.0 for candidate in data.tasks},
+            task_vehicle={},
+            sortie_count={int(vehicle): 0.0},
+            time_occupation={},
+            ordering={},
+            branches={},
+            cuts={},
+        )
+        task_order = tuple(int(candidate) for candidate in data.tasks)
+        task_to_bit = {int(candidate): index for index, candidate in enumerate(data.tasks)}
+        config = JourneyPricingConfig(
+            max_tasks_per_trip=1,
+            profile_labeling_physical_catalog_resume_enabled=True,
+            streaming_pricing_enabled=True,
+            streaming_profile_batch_size=1,
+            streaming_callback_exhaust_after_profile_count=1,
+        )
+        state = _initial_sortie_label_resume_state(data, duals)
+        profile = _SortieProfile(
+            sequence=(task,),
+            arc_options=tuple(),
+            lower_start=0.0,
+            upper_start=10.0,
+            end_offset=1.0,
+            cost=-10.0,
+            mask=1 << task_to_bit[task],
+            contribution=0.0,
+        )
+        state.profiles_by_key[(profile.sequence, profile.arc_options)] = profile
+        key = _sortie_label_physical_catalog_key(
+            data,
+            config,
+            task_order,
+            1,
+            tuple(),
+        )
+        captured: dict[str, Any] = {}
+
+        def fake_advance(*args, **kwargs):
+            captured["stream_callback"] = kwargs.get("stream_callback")
+            captured["stream_profile_batch_size"] = kwargs.get("stream_profile_batch_size")
+            resume_state = args[2]
+            resume_state.exhausted = True
+            resume_state.reason = "exhausted"
+
+        def forbidden_callback(*args, **kwargs):  # pragma: no cover - defensive guard
+            raise AssertionError("stream callback should be disabled after threshold")
+
+        catalog_stats: dict[str, int] = {}
+        with patch(
+            "BPC_future.pricing.journey_pricing._advance_sortie_label_resume_state",
+            side_effect=fake_advance,
+        ):
+            profiles, _generated, _evaluated, _best_rc, exhausted, reason, _cut_pruned = (
+                _generate_negative_sortie_profiles_by_label_physical_catalog(
+                    data,
+                    duals,
+                    base_reduced_cost=0.0,
+                    config=config,
+                    deadline=None,
+                    task_order=task_order,
+                    task_to_bit=task_to_bit,
+                    trip_cache={key: state},
+                    resource_cache={},
+                    catalog_stats=catalog_stats,
+                    journey_cut_duals={},
+                    journey_cuts=tuple(),
+                    stream_callback=forbidden_callback,
+                    stream_profile_batch_size=1,
+                )
+            )
+
+        self.assertIsNone(captured["stream_callback"])
+        self.assertEqual(captured["stream_profile_batch_size"], 0)
+        self.assertEqual(catalog_stats.get("streaming_callback_exhaust_triggered"), 1)
+        self.assertEqual(catalog_stats.get("streaming_callback_exhaust_threshold"), 1)
+        self.assertTrue(exhausted)
+        self.assertEqual(reason, "exhausted")
+        self.assertEqual([item.sequence for item in profiles], [(task,)])
 
     def test_sortie_profile_online_skyline_matches_filter(self):
         data = load_future_data("very_small")
@@ -4927,6 +6880,339 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(journeys, [])
         self.assertEqual(existing_filtered, 0)
         self.assertEqual(weak_filtered, 1)
+
+    def test_journey_profile_instantiation_uses_true_rc_when_duals_are_available(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        profile = _SortieProfile(
+            sequence=trip.tasks,
+            arc_options=tuple(data.options(0, task)[0:1] + data.options(task, 0)[0:1]),
+            lower_start=trip.start_time,
+            upper_start=trip.start_time,
+            end_offset=trip.end_time - trip.start_time,
+            cost=trip.cost,
+            mask=1,
+            contribution=-2.0e-6,
+        )
+        duals = JourneyDuals(
+            cover={task: float(journey.cost) + 1.0},
+            fleet_limit=0.0,
+            cuts={},
+        )
+        journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
+            data,
+            [profile],
+            [(((0, trip.start_time),), -2.0e-6)],
+            JourneyPricingConfig(time_bucket_size=5.0, min_add_reduced_cost=1.0e-4),
+            eps=1.0e-6,
+            max_journeys=1,
+            duals=duals,
+            cuts=tuple(),
+        )
+        self.assertEqual(len(journeys), 1)
+        self.assertAlmostEqual(manual_journey_reduced_cost(journeys[0], duals), -1.0, places=6)
+        self.assertEqual(existing_filtered, 0)
+        self.assertEqual(weak_filtered, 0)
+
+    def test_profile_candidate_return_limit_decouples_true_rc_scan_from_add_limit(self):
+        base = JourneyPricingConfig(max_returned_journeys=8, duplicate_retry_factor=4)
+        self.assertEqual(_profile_candidate_return_limit(base, 8), 32)
+
+        wider_scan = JourneyPricingConfig(
+            max_returned_journeys=8,
+            duplicate_retry_factor=4,
+            profile_true_rc_candidate_scan_factor=12,
+        )
+        self.assertEqual(_profile_candidate_return_limit(wider_scan, 8), 96)
+
+        capped_scan = JourneyPricingConfig(
+            max_returned_journeys=8,
+            duplicate_retry_factor=4,
+            profile_true_rc_candidate_scan_factor=12,
+            profile_true_rc_candidate_scan_max_candidates=40,
+        )
+        self.assertEqual(_profile_candidate_return_limit(capped_scan, 8), 40)
+
+        tiny_cap = JourneyPricingConfig(
+            max_returned_journeys=8,
+            duplicate_retry_factor=4,
+            profile_true_rc_candidate_scan_factor=12,
+            profile_true_rc_candidate_scan_max_candidates=3,
+        )
+        self.assertEqual(_profile_candidate_return_limit(tiny_cap, 8), 8)
+
+    def test_journey_profile_dp_returns_materialization_window_candidate(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        profile = _SortieProfile(
+            sequence=trip.tasks,
+            arc_options=tuple(data.options(0, task)[0:1] + data.options(task, 0)[0:1]),
+            lower_start=trip.start_time,
+            upper_start=trip.start_time,
+            end_offset=trip.end_time - trip.start_time,
+            cost=trip.cost,
+            mask=1,
+            contribution=0.5,
+        )
+        stats: dict[str, int] = {}
+        selected, objective, status = _solve_best_journey_profile_dp(
+            data,
+            [profile],
+            base_reduced_cost=0.0,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            max_states=1000,
+            max_returned=1,
+            optimistic_bound_pruning=False,
+            pricing_config=JourneyPricingConfig(
+                time_bucket_size=5.0,
+                profile_true_rc_materialization_slack=1.0,
+            ),
+            dp_stats=stats,
+        )
+        self.assertEqual(status, "OPTIMAL")
+        _ = objective
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(stats.get("negative_candidate_count"), 0)
+        self.assertEqual(stats.get("materialization_candidate_count"), 1)
+        self.assertEqual(stats.get("materialization_selected_candidate_count"), 1)
+
+    def test_journey_profile_dp_returns_no_negative_only_materialization_candidate(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        profile = _SortieProfile(
+            sequence=trip.tasks,
+            arc_options=tuple(data.options(0, task)[0:1] + data.options(task, 0)[0:1]),
+            lower_start=trip.start_time,
+            upper_start=trip.start_time,
+            end_offset=trip.end_time - trip.start_time,
+            cost=trip.cost,
+            mask=1,
+            contribution=0.0,
+        )
+        stats: dict[str, int] = {}
+        selected, objective, status = _solve_best_journey_profile_dp(
+            data,
+            [profile],
+            base_reduced_cost=0.0,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            max_states=1000,
+            max_returned=1,
+            optimistic_bound_pruning=False,
+            pricing_config=JourneyPricingConfig(
+                time_bucket_size=5.0,
+                profile_no_negative_true_rc_materialization_slack=1.0,
+                profile_no_negative_true_rc_materialization_max_candidates=4,
+            ),
+            dp_stats=stats,
+        )
+        self.assertEqual(status, "OPTIMAL")
+        self.assertEqual(objective, 0.0)
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(stats.get("negative_candidate_count"), 0)
+        self.assertEqual(stats.get("materialization_selected_candidate_count"), 0)
+        self.assertEqual(stats.get("no_negative_materialization_candidate_count"), 1)
+        self.assertEqual(stats.get("no_negative_materialization_selected_for_scan_count"), 1)
+        self.assertEqual(stats.get("no_negative_materialization_selected_candidate_count"), 1)
+
+    def test_journey_profile_dp_returns_replacement_materialization_candidate(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        profile = _SortieProfile(
+            sequence=trip.tasks,
+            arc_options=tuple(data.options(0, task)[0:1] + data.options(task, 0)[0:1]),
+            lower_start=trip.start_time,
+            upper_start=trip.start_time,
+            end_offset=trip.end_time - trip.start_time,
+            cost=trip.cost,
+            mask=1,
+            contribution=0.5,
+        )
+        stats: dict[str, int] = {}
+        selected, objective, status = _solve_best_journey_profile_dp(
+            data,
+            [profile],
+            base_reduced_cost=0.0,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            max_states=100,
+            max_returned=1,
+            optimistic_bound_pruning=False,
+            selection_mode="reduced_cost",
+            dp_stats=stats,
+            dominant_task_set_cost_by_mask={1: float(data.fixed_vehicle_cost) + float(profile.cost) + 1.0},
+            pricing_config=JourneyPricingConfig(
+                profile_replacement_true_rc_materialization_slack=1.0,
+                profile_replacement_true_rc_materialization_max_candidates=4,
+            ),
+        )
+        self.assertEqual(status, "OPTIMAL")
+        self.assertEqual(len(selected), 1)
+        self.assertAlmostEqual(objective or 0.0, 0.5)
+        self.assertEqual(stats.get("replacement_materialization_candidate_count"), 1)
+        self.assertEqual(stats.get("replacement_materialization_selected_for_scan_count"), 1)
+        self.assertEqual(stats.get("replacement_materialization_selected_candidate_count"), 1)
+
+    def test_journey_profile_dp_caps_materialization_window_candidates(self):
+        data = load_future_data("very_small")
+        tasks = [int(task) for task in data.tasks[:2]]
+        profiles: list[_SortieProfile] = []
+        for index, task in enumerate(tasks):
+            trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+            self.assertIsNotNone(trip)
+            assert trip is not None
+            profiles.append(
+                _SortieProfile(
+                    sequence=trip.tasks,
+                    arc_options=tuple(data.options(0, task)[0:1] + data.options(task, 0)[0:1]),
+                    lower_start=trip.start_time,
+                    upper_start=trip.start_time,
+                    end_offset=trip.end_time - trip.start_time,
+                    cost=trip.cost,
+                    mask=1 << index,
+                    contribution=0.25 + float(index),
+                )
+            )
+        stats: dict[str, int] = {}
+        selected, _objective, status = _solve_best_journey_profile_dp(
+            data,
+            profiles,
+            base_reduced_cost=0.0,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            max_states=1000,
+            max_returned=4,
+            optimistic_bound_pruning=False,
+            pricing_config=JourneyPricingConfig(
+                time_bucket_size=5.0,
+                profile_true_rc_materialization_slack=2.0,
+                profile_true_rc_materialization_max_candidates=1,
+            ),
+            dp_stats=stats,
+        )
+        self.assertEqual(status, "OPTIMAL")
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(stats.get("materialization_candidate_count"), 2)
+        self.assertEqual(stats.get("materialization_candidate_selected_for_scan_count"), 1)
+        self.assertEqual(stats.get("materialization_candidate_cap_filtered"), 1)
+
+    def test_profile_journey_instantiation_counts_true_rc_filtered_candidate_as_weak(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        profile = _SortieProfile(
+            sequence=trip.tasks,
+            arc_options=tuple(data.options(0, task)[0:1] + data.options(task, 0)[0:1]),
+            lower_start=trip.start_time,
+            upper_start=trip.start_time,
+            end_offset=trip.end_time - trip.start_time,
+            cost=trip.cost,
+            mask=1,
+            contribution=-10.0,
+        )
+
+        journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
+            data,
+            [profile],
+            [(((0, trip.start_time),), -10.0)],
+            JourneyPricingConfig(time_bucket_size=5.0),
+            eps=1.0e-6,
+            max_journeys=1,
+            duals=JourneyDuals(cover={task: -100.0}, fleet_limit=0.0, cuts={}),
+            cuts=tuple(),
+        )
+
+        self.assertEqual(journeys, [])
+        self.assertEqual(existing_filtered, 0)
+        self.assertEqual(weak_filtered, 1)
+
+    def test_profile_candidate_selection_skips_nonmaterializable_profile_combo(self):
+        data = load_future_data("very_small")
+        first_task = int(data.tasks[0])
+        second_task = int(data.tasks[1])
+        first_trip = evaluate_timed_trip(data, (first_task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(first_trip)
+        assert first_trip is not None
+        second_trip = None
+        for start in (0.0, 1.0, 2.0, 5.0, 10.0):
+            candidate = evaluate_timed_trip(data, (second_task,), start, time_bucket_size=5.0)
+            if candidate is not None and float(candidate.start_time) < float(first_trip.end_time) - 1.0e-6:
+                second_trip = candidate
+                break
+        self.assertIsNotNone(second_trip)
+        assert second_trip is not None
+        first_options = tuple(data.options(0, first_task)[0:1] + data.options(first_task, 0)[0:1])
+        second_options = tuple(data.options(0, second_task)[0:1] + data.options(second_task, 0)[0:1])
+        profiles = [
+            _SortieProfile(
+                sequence=first_trip.tasks,
+                arc_options=first_options,
+                lower_start=first_trip.start_time,
+                upper_start=first_trip.start_time,
+                # Deliberately optimistic: profile DP can believe the next
+                # sortie fits, but true trip evaluation shows overlap.
+                end_offset=0.1,
+                cost=first_trip.cost,
+                mask=0b001,
+                contribution=-10.0,
+            ),
+            _SortieProfile(
+                sequence=second_trip.tasks,
+                arc_options=second_options,
+                lower_start=second_trip.start_time,
+                upper_start=second_trip.start_time,
+                end_offset=second_trip.end_time - second_trip.start_time,
+                cost=second_trip.cost,
+                mask=0b010,
+                contribution=-9.0,
+            ),
+        ]
+        invalid_combo = (-10.0, ((0, first_trip.start_time), (1, second_trip.start_time)), 0b011)
+        valid_combo = (-9.0, ((1, second_trip.start_time),), 0b010)
+        stats: dict[str, int] = {}
+
+        selected, status = _select_nonduplicate_negative_journey_candidates(
+            data,
+            profiles,
+            [invalid_combo, valid_combo],
+            max_returned=1,
+            selection_mode="reduced_cost",
+            forbidden_journey_signatures=frozenset(),
+            duplicate_scan_limit=10,
+            dominant_task_set_cost_by_mask=None,
+            pricing_config=JourneyPricingConfig(
+                time_bucket_size=5.0,
+                profile_materialization_feasibility_filter_enabled=True,
+            ),
+            dp_stats=stats,
+            status="OPTIMAL",
+        )
+
+        self.assertEqual(status, "OPTIMAL")
+        self.assertEqual(selected, [valid_combo])
+        self.assertEqual(stats.get("profile_materialization_infeasible_candidates_filtered"), 1)
 
     def test_sortie_partial_generalized_dominance_prunes_current_time_interval(self):
         left = SimpleNamespace(
@@ -5568,6 +7854,82 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(len(candidates[0][0]), 1)
         self.assertGreater(stats.get("cross_count_pruned_labels", 0), 0)
 
+    def test_journey_profile_dp_cross_count_pruned_label_can_enter_materialization_pool(self):
+        data = load_future_data("very_small")
+        first = _SortieProfile(
+            sequence=(1,),
+            arc_options=tuple(),
+            lower_start=0.0,
+            upper_start=100.0,
+            end_offset=10.0,
+            cost=10.0,
+            mask=0b01,
+            contribution=0.2,
+        )
+        second = _SortieProfile(
+            sequence=(2,),
+            arc_options=tuple(),
+            lower_start=10.0,
+            upper_start=100.0,
+            end_offset=10.0,
+            cost=10.0,
+            mask=0b10,
+            contribution=0.2,
+        )
+        dominant_same_mask = _SortieProfile(
+            sequence=(1, 2),
+            arc_options=tuple(),
+            lower_start=0.0,
+            upper_start=100.0,
+            end_offset=5.0,
+            cost=10.0,
+            mask=0b11,
+            contribution=0.0,
+        )
+        stats: dict[str, int] = {}
+
+        candidates, objective, status = _solve_best_journey_profile_dp(
+            data,
+            [first, second, dominant_same_mask],
+            base_reduced_cost=0.0,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            max_states=1000,
+            optimistic_bound_pruning=False,
+            cross_count_dominance=True,
+            pricing_config=JourneyPricingConfig(
+                profile_cross_count_true_rc_materialization_slack=1.0,
+                profile_cross_count_true_rc_materialization_max_candidates=4,
+            ),
+            dp_stats=stats,
+        )
+
+        self.assertEqual(status, "OPTIMAL")
+        self.assertAlmostEqual(objective or 0.0, 0.0)
+        self.assertGreater(stats.get("cross_count_pruned_labels", 0), 0)
+        self.assertEqual(stats.get("cross_count_materialization_candidate_count"), 1)
+        self.assertEqual(stats.get("cross_count_materialization_selected_for_scan_count"), 1)
+        self.assertEqual(stats.get("cross_count_materialization_selected_candidate_count"), 1)
+        self.assertTrue(any(len(selected) == 2 for selected, _objective in candidates))
+
+    def test_profile_worker_label_cap_prunes_bucket_without_certificate_semantics(self):
+        labels: dict[int, list[_JourneyLabel]] = {}
+        stats: dict[str, int] = {}
+        first = _JourneyLabel(end_time=10.0, value=1.0, selected=((0, 0.0),))
+        second = _JourneyLabel(end_time=20.0, value=0.0, selected=((1, 0.0),))
+        third = _JourneyLabel(end_time=5.0, value=2.0, selected=((2, 0.0),))
+
+        self.assertTrue(_add_profile_label(labels, 0b11, first, dp_stats=stats, max_labels_per_mask=2))
+        self.assertTrue(_add_profile_label(labels, 0b11, second, dp_stats=stats, max_labels_per_mask=2))
+        self.assertFalse(_add_profile_label(labels, 0b11, third, dp_stats=stats, max_labels_per_mask=2))
+
+        self.assertEqual(len(labels[0b11]), 2)
+        self.assertIn(first, labels[0b11])
+        self.assertIn(second, labels[0b11])
+        self.assertNotIn(third, labels[0b11])
+        self.assertEqual(stats.get("label_cap_pruned"), 1)
+
     def test_negative_journey_diverse_selection_keeps_true_negative_candidates(self):
         candidates = [
             (-10.0, ((0, 0.0),), 0b001),
@@ -5595,6 +7957,70 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(all(objective < 0.0 for objective, _selected, _mask in integer_diverse))
         self.assertGreater(len({mask for _objective, _selected, mask in integer_diverse}), 1)
         self.assertIn(candidates[0], integer_diverse)
+
+    def test_negative_journey_orthogonal_selection_prefers_low_overlap_masks(self):
+        candidates = [
+            (-10.0, ((0, 0.0),), 0b00111),
+            (-9.0, ((1, 0.0),), 0b00110),
+            (-8.0, ((2, 0.0),), 0b11000),
+            (-7.0, ((3, 0.0),), 0b100000),
+            (-6.0, ((4, 0.0),), 0b00101),
+        ]
+
+        selected = _select_negative_journey_candidates(candidates, 3, "orthogonal")
+
+        self.assertEqual(selected[0], candidates[0])
+        self.assertIn(candidates[2], selected)
+        self.assertIn(candidates[3], selected)
+        self.assertNotIn(candidates[1], selected)
+
+    def test_profile_candidate_selection_skips_dominated_task_sets_without_forbidden_signatures(self):
+        profiles = [
+            _SortieProfile(
+                sequence=(1,),
+                arc_options=tuple(),
+                lower_start=0.0,
+                upper_start=100.0,
+                end_offset=10.0,
+                cost=10.0,
+                mask=0b001,
+                contribution=-10.0,
+            ),
+            _SortieProfile(
+                sequence=(2,),
+                arc_options=tuple(),
+                lower_start=0.0,
+                upper_start=100.0,
+                end_offset=10.0,
+                cost=20.0,
+                mask=0b010,
+                contribution=-9.0,
+            ),
+        ]
+        candidates = [
+            (-10.0, ((0, 0.0),), 0b001),
+            (-9.0, ((1, 0.0),), 0b010),
+        ]
+        stats: dict[str, int] = {}
+
+        selected, status = _select_nonduplicate_negative_journey_candidates(
+            SimpleNamespace(fixed_vehicle_cost=100.0),
+            profiles,
+            candidates,
+            max_returned=1,
+            selection_mode="reduced_cost",
+            forbidden_journey_signatures=frozenset(),
+            duplicate_scan_limit=10,
+            dominant_task_set_cost_by_mask={0b001: 105.0},
+            pricing_config=None,
+            dp_stats=stats,
+            status="OPTIMAL",
+        )
+
+        self.assertEqual(status, "OPTIMAL")
+        self.assertEqual(selected, [candidates[1]])
+        self.assertEqual(stats.get("dominated_task_set_candidates_filtered"), 1)
+        self.assertEqual(stats.get("duplicate_candidates_filtered"), 1)
 
     def test_journey_progress_classifies_flat_objective_changing_dual_as_degenerate(self):
         self.assertEqual(
@@ -5927,11 +8353,17 @@ class BPCFutureTests(unittest.TestCase):
             "journey_pricing_profile_labeling_enabled": True,
             "journey_pricing_profile_labeling_physical_catalog_resume_enabled": True,
             "journey_pricing_profile_labeling_physical_catalog_share_across_branches_enabled": True,
+            "journey_pricing_profile_labeling_priority_future_dual_weight": 0.75,
+            "journey_pricing_profile_labeling_priority_cut_dual_weight": 0.5,
+            "journey_pricing_profile_dp_max_labels_per_mask": 8,
         }
         data = replace(load_future_data("very_small"), vehicles=(1,))
         pricing_config = _journey_pricing_config(data, config, 10.0, 10.0, 1.0e-6, 10.0, heuristic=False, cg_iter=1)
         self.assertTrue(pricing_config.profile_labeling_physical_catalog_resume_enabled)
         self.assertTrue(pricing_config.profile_labeling_physical_catalog_share_across_branches_enabled)
+        self.assertAlmostEqual(pricing_config.profile_labeling_priority_future_dual_weight, 0.75)
+        self.assertAlmostEqual(pricing_config.profile_labeling_priority_cut_dual_weight, 0.5)
+        self.assertEqual(pricing_config.profile_dp_max_labels_per_mask, 8)
 
         branch_override = _journey_node_depth_pricing_config(
             {
@@ -5941,6 +8373,65 @@ class BPCFutureTests(unittest.TestCase):
             depth=1,
         )
         self.assertFalse(branch_override.profile_labeling_physical_catalog_share_across_branches_enabled)
+
+    def test_sortie_partial_label_priority_can_include_future_dual_lookahead(self):
+        label = _SortiePartialLabel(
+            sequence=(1,),
+            mask=1,
+            last=1,
+            partial=_PartialNoWaitingPathProfile(
+                arc_options=tuple(),
+                lower_start=0.0,
+                upper_start=100.0,
+                offset=0.0,
+                travel_cost=100.0,
+                travel_energy=0.0,
+                service_cost=0.0,
+                service_energy=0.0,
+            ),
+        )
+        duals = FutureDuals(
+            cover={1: 0.0, 2: 60.0, 3: 40.0, 4: -100.0},
+            task_vehicle={},
+            sortie_count={1: 0.0},
+            time_occupation={},
+            ordering={},
+            branches={},
+        )
+
+        self.assertAlmostEqual(_sortie_partial_label_priority(label, duals), 100.0)
+        lookahead_priority = _sortie_partial_label_priority(
+            label,
+            duals,
+            config=JourneyPricingConfig(profile_labeling_priority_future_dual_weight=0.5),
+            task_order=(1, 2, 3, 4),
+            max_tasks=3,
+        )
+        self.assertAlmostEqual(lookahead_priority, 50.0)
+        cut_label = _SortiePartialLabel(
+            sequence=(1, 2),
+            mask=3,
+            last=2,
+            partial=_PartialNoWaitingPathProfile(
+                arc_options=tuple(),
+                lower_start=0.0,
+                upper_start=100.0,
+                offset=0.0,
+                travel_cost=100.0,
+                travel_energy=0.0,
+                service_cost=0.0,
+                service_energy=0.0,
+            ),
+        )
+        cut_priority = _sortie_partial_label_priority(
+            cut_label,
+            duals,
+            config=JourneyPricingConfig(profile_labeling_priority_cut_dual_weight=1.0),
+            cut_duals={0: -30.0},
+            cuts=(SubsetRowCut((1, 2), 2),),
+            cut_masks=(3,),
+        )
+        self.assertAlmostEqual(cut_priority, 10.0)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_journey_branch_node_requires_exact_pricing_before_branching(self):
@@ -5982,7 +8473,9 @@ class BPCFutureTests(unittest.TestCase):
             candidate_trips=0,
             selected_trips=0,
             status="OPTIMAL",
-            reason="exhausted",
+            reason="direct_label_no_negative_journey",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
         )
         fake_pool_mip = SimpleNamespace(
             status="OPTIMAL",
@@ -6096,7 +8589,9 @@ class BPCFutureTests(unittest.TestCase):
                 candidate_trips=1,
                 selected_trips=0,
                 status="OPTIMAL",
-                reason="exhausted",
+                reason="direct_label_no_negative_journey",
+                completion_bound_enabled=True,
+                global_certificate_capable=True,
             )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -6207,7 +8702,9 @@ class BPCFutureTests(unittest.TestCase):
                     candidate_trips=1,
                     selected_trips=0,
                     status="OPTIMAL",
-                    reason="exhausted",
+                    reason="direct_label_no_negative_journey",
+                    completion_bound_enabled=True,
+                    global_certificate_capable=True,
                 )
 
             with tempfile.TemporaryDirectory() as tmp:
@@ -6298,7 +8795,9 @@ class BPCFutureTests(unittest.TestCase):
                 candidate_trips=1,
                 selected_trips=0,
                 status="OPTIMAL",
-                reason="exhausted",
+                reason="direct_label_no_negative_journey",
+                completion_bound_enabled=True,
+                global_certificate_capable=True,
             )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -6384,7 +8883,9 @@ class BPCFutureTests(unittest.TestCase):
                 candidate_trips=1,
                 selected_trips=0,
                 status="OPTIMAL",
-                reason="exhausted",
+                reason="direct_label_no_negative_journey",
+                completion_bound_enabled=True,
+                global_certificate_capable=True,
             )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -6456,7 +8957,9 @@ class BPCFutureTests(unittest.TestCase):
             candidate_trips=1,
             selected_trips=0,
             status="OPTIMAL",
-            reason="exhausted",
+            reason="direct_label_no_negative_journey",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
         )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -6881,12 +9384,82 @@ class BPCFutureTests(unittest.TestCase):
             completion_bound_phase="after_retry",
         )
         self.assertTrue(hidden_mode["completion_bound"])
+        self.assertTrue(hidden_updated.direct_journey_label_global_certificate_enabled)
         self.assertTrue(hidden_mode["completion_bound_hidden_negative"])
         self.assertTrue(hidden_updated.direct_journey_label_early_return_negative)
         self.assertEqual(hidden_updated.direct_journey_label_early_return_negative_min_count, 1)
         self.assertEqual(hidden_updated.direct_journey_label_early_return_negative_grace_time, 0.25)
         self.assertEqual(hidden_updated.max_returned_journeys, 4)
         self.assertEqual(hidden_mode["completion_bound_hidden_negative_grace_time"], 0.25)
+
+        harvest_updated, harvest_mode = _journey_certificate_pricing_config(
+            {
+                "journey_certificate_completion_bound_enabled": True,
+                "journey_certificate_completion_bound_after_retry_enabled": True,
+                "journey_certificate_completion_bound_final_probe_only": True,
+                "journey_certificate_completion_bound_time_buckets": 6,
+                "journey_certificate_completion_bound_energy_buckets": 6,
+                "journey_certificate_completion_bound_hidden_negative_enabled": True,
+                "journey_certificate_completion_bound_hidden_negative_min_journeys": 2,
+                "journey_certificate_completion_bound_hidden_negative_max_returned_journeys": 4,
+                "journey_certificate_completion_bound_diverse_harvest_enabled": True,
+                "journey_certificate_completion_bound_diverse_harvest_min_journeys": 12,
+                "journey_certificate_completion_bound_diverse_harvest_max_returned_journeys": 30,
+                "journey_certificate_completion_bound_diverse_harvest_overlap_threshold": 0.35,
+                "journey_certificate_completion_bound_diverse_harvest_top_k_strongest": 6,
+                "journey_certificate_completion_bound_diverse_harvest_min_fill": 18,
+                "journey_certificate_completion_bound_diverse_harvest_min_priority_task_sets": 3,
+                "journey_certificate_completion_bound_diverse_harvest_priority_overlap_threshold": 0.55,
+                "journey_certificate_completion_bound_diverse_harvest_max_containment": 0.75,
+                "journey_certificate_completion_bound_diverse_harvest_allow_duplicate_task_sets": True,
+                "journey_certificate_completion_bound_diverse_harvest_grace_time": 0.75,
+                "journey_certificate_completion_bound_diverse_harvest_soft_return_min_journeys": 5,
+                "journey_certificate_completion_bound_diverse_harvest_soft_return_min_new_task_sets": 2,
+                "journey_certificate_completion_bound_diverse_harvest_soft_return_after_time": 10.0,
+                "journey_certificate_completion_bound_diverse_harvest_soft_return_remaining_time": 8.0,
+                "journey_certificate_completion_bound_diverse_harvest_duplicate_saturation_after_time": 4.0,
+            },
+            base,
+            certificate_candidate=False,
+            certificate_flat_rounds=0,
+            certificate_no_column_rounds=1,
+            depth=0,
+            completion_bound_phase="after_retry",
+        )
+        self.assertTrue(harvest_updated.direct_journey_label_diverse_harvest_enabled)
+        self.assertEqual(harvest_updated.direct_journey_label_early_return_negative_min_count, 12)
+        self.assertEqual(harvest_updated.max_returned_journeys, 30)
+        self.assertAlmostEqual(harvest_updated.direct_journey_label_diverse_harvest_overlap_threshold, 0.35)
+        self.assertEqual(harvest_updated.direct_journey_label_diverse_harvest_top_k_strongest, 6)
+        self.assertEqual(harvest_updated.direct_journey_label_diverse_harvest_min_fill, 18)
+        self.assertEqual(harvest_updated.direct_journey_label_diverse_harvest_min_priority_task_sets, 3)
+        self.assertAlmostEqual(
+            harvest_updated.direct_journey_label_diverse_harvest_priority_overlap_threshold,
+            0.55,
+        )
+        self.assertAlmostEqual(harvest_updated.direct_journey_label_diverse_harvest_max_containment, 0.75)
+        self.assertTrue(harvest_updated.direct_journey_label_diverse_harvest_allow_duplicate_task_sets)
+        self.assertAlmostEqual(harvest_updated.direct_journey_label_early_return_negative_grace_time, 0.75)
+        self.assertEqual(harvest_updated.direct_journey_label_diverse_harvest_soft_return_min_count, 5)
+        self.assertEqual(harvest_updated.direct_journey_label_diverse_harvest_soft_return_min_new_task_sets, 2)
+        self.assertAlmostEqual(harvest_updated.direct_journey_label_diverse_harvest_soft_return_after_time, 10.0)
+        self.assertAlmostEqual(harvest_updated.direct_journey_label_diverse_harvest_soft_return_remaining_time, 8.0)
+        self.assertAlmostEqual(
+            harvest_updated.direct_journey_label_diverse_harvest_duplicate_saturation_after_time,
+            4.0,
+        )
+        self.assertTrue(harvest_mode["completion_bound_diverse_harvest"])
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_max_returned_journeys"], 30)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_top_k_strongest"], 6)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_min_fill"], 18)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_min_priority_task_sets"], 3)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_priority_overlap_threshold"], 0.55)
+        self.assertAlmostEqual(harvest_mode["completion_bound_diverse_harvest_max_containment"], 0.75)
+        self.assertTrue(harvest_mode["completion_bound_diverse_harvest_allow_duplicate_task_sets"])
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_min_journeys"], 5)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_min_new_task_sets"], 2)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_after_time"], 10.0)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_duplicate_saturation_after_time"], 4.0)
 
         branch_updated, branch_mode = _journey_certificate_pricing_config(
             {
@@ -6973,6 +9546,7 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertTrue(mode["completion_bound"])
         self.assertTrue(updated.direct_journey_label_pricing_enabled)
+        self.assertTrue(updated.direct_journey_label_global_certificate_enabled)
         self.assertTrue(updated.direct_journey_label_completion_bound_enabled)
         self.assertEqual(updated.direct_journey_label_completion_bound_time_buckets, 12)
         self.assertEqual(updated.direct_journey_label_completion_bound_energy_buckets, 10)
@@ -6993,6 +9567,7 @@ class BPCFutureTests(unittest.TestCase):
                 "journey_certificate_completion_bound_partial_pruning_enabled": False,
                 "journey_certificate_completion_bound_unique_task_helper_enabled": True,
                 "journey_certificate_completion_bound_unique_route_helper_enabled": True,
+                "journey_certificate_completion_bound_unique_route_exact_first_step_enabled": True,
             },
             base,
             certificate_candidate=True,
@@ -7006,6 +9581,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(updated.direct_journey_label_completion_bound_partial_pruning_enabled)
         self.assertTrue(updated.direct_journey_label_completion_bound_unique_task_helper_enabled)
         self.assertTrue(updated.direct_journey_label_completion_bound_unique_route_helper_enabled)
+        self.assertTrue(updated.direct_journey_label_completion_bound_unique_route_exact_first_step_enabled)
+        self.assertTrue(mode["completion_bound_unique_route_exact_first_step"])
 
         updated, mode = _journey_certificate_pricing_config(
             {
@@ -7128,6 +9705,16 @@ class BPCFutureTests(unittest.TestCase):
             ),
             5.0,
         )
+        self.assertEqual(
+            _journey_completion_bound_probe_budget(
+                {
+                    "journey_certificate_completion_bound_after_retry_reserve_time": 2.0,
+                    "journey_certificate_completion_bound_after_retry_min_time": 1.0,
+                },
+                remaining=2.25,
+            ),
+            1.0,
+        )
 
     def test_hidden_negative_patrol_config_is_beam_limited_not_certificate(self):
         base = JourneyPricingConfig(
@@ -7158,16 +9745,43 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(mode["hidden_negative_patrol"])
         self.assertTrue(updated.direct_journey_label_pricing_enabled)
         self.assertTrue(updated.direct_journey_label_completion_bound_enabled)
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
         self.assertTrue(updated.direct_journey_label_completion_bound_two_cycle_enabled)
         self.assertTrue(updated.direct_journey_label_completion_bound_unique_task_helper_enabled)
         self.assertTrue(updated.direct_journey_label_completion_bound_unique_route_helper_enabled)
         self.assertFalse(updated.direct_journey_label_completion_bound_audit_enabled)
         self.assertEqual(updated.direct_journey_label_max_labels_per_node, 10)
+        self.assertFalse(updated.direct_journey_label_new_task_set_only)
+        self.assertFalse(mode["new_task_set_only"])
         self.assertEqual(updated.direct_journey_label_early_return_negative_min_count, 2)
         self.assertEqual(updated.max_returned_journeys, 4)
         self.assertEqual(updated.max_dp_states, 5000)
         self.assertEqual(updated.direct_journey_label_partial_max_states, 2000)
         self.assertAlmostEqual(updated.time_limit, 0.25)
+
+    def test_hidden_negative_patrol_config_can_filter_to_new_task_sets(self):
+        base = JourneyPricingConfig(
+            direct_journey_label_existing_task_set_repair_only=True,
+            direct_journey_label_completion_bound_enabled=False,
+            max_returned_journeys=8,
+        )
+        updated, mode = _journey_hidden_negative_patrol_config(
+            {
+                "journey_hidden_negative_patrol_enabled": True,
+                "journey_hidden_negative_patrol_new_task_set_only": True,
+                "journey_hidden_negative_patrol_max_labels_per_node": 10,
+                "journey_hidden_negative_patrol_time_limit": 0.25,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=1.0,
+        )
+        self.assertTrue(mode["hidden_negative_patrol"])
+        self.assertTrue(mode["new_task_set_only"])
+        self.assertTrue(updated.direct_journey_label_new_task_set_only)
+        self.assertFalse(updated.direct_journey_label_existing_task_set_repair_only)
+        self.assertTrue(updated.direct_journey_label_pricing_enabled)
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
 
     def test_hidden_negative_patrol_config_allows_full_direct_only_with_completion_bound(self):
         base = JourneyPricingConfig(
@@ -7213,6 +9827,756 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(updated.direct_journey_label_max_labels_per_node, 0)
         self.assertEqual(updated.direct_journey_label_early_return_negative_min_count, 4)
         self.assertEqual(updated.max_returned_journeys, 4)
+
+        coarsened, coarsened_mode = _journey_hidden_negative_patrol_config(
+            {
+                "journey_hidden_negative_patrol_enabled": True,
+                "journey_hidden_negative_patrol_max_labels_per_node": 0,
+                "journey_hidden_negative_patrol_completion_bound_enabled": False,
+                "journey_hidden_negative_patrol_resource_coarsening_enabled": True,
+                "journey_hidden_negative_patrol_resource_coarsening_time_bucket_size": 50.0,
+                "journey_hidden_negative_patrol_resource_coarsening_energy_bucket_size": 50.0,
+                "journey_hidden_negative_patrol_time_limit": 0.25,
+                "journey_hidden_negative_patrol_min_journeys": 3,
+                "journey_hidden_negative_patrol_max_returned_journeys": 8,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=1.0,
+        )
+        self.assertTrue(coarsened_mode["hidden_negative_patrol"])
+        self.assertTrue(coarsened_mode["resource_coarsening"])
+        self.assertFalse(coarsened.direct_journey_label_completion_bound_enabled)
+        self.assertFalse(coarsened.direct_journey_label_global_certificate_enabled)
+        self.assertEqual(coarsened.direct_journey_label_max_labels_per_node, 0)
+        self.assertAlmostEqual(coarsened.direct_journey_label_resource_coarsening_time_bucket_size, 50.0)
+        self.assertAlmostEqual(coarsened.direct_journey_label_resource_coarsening_energy_bucket_size, 50.0)
+        self.assertEqual(coarsened.direct_journey_label_early_return_negative_min_count, 3)
+        self.assertEqual(coarsened.max_returned_journeys, 8)
+
+    def test_replacement_repair_config_is_restricted_direct_worker_not_certificate(self):
+        base = JourneyPricingConfig(
+            profile_pricing_enabled=True,
+            streaming_pricing_enabled=True,
+            direct_journey_label_pricing_enabled=False,
+            direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_ng_dssr_enabled=True,
+            max_returned_journeys=8,
+            max_dp_states=12345,
+        )
+        updated, mode = _journey_replacement_repair_config(
+            {
+                "journey_replacement_repair_enabled": True,
+                "journey_replacement_repair_time_limit": 2.0,
+                "journey_replacement_repair_final_reserve_time": 1.0,
+                "journey_replacement_repair_min_journeys": 3,
+                "journey_replacement_repair_max_returned_journeys": 9,
+                "journey_replacement_repair_resource_coarsening_enabled": True,
+                "journey_replacement_repair_resource_coarsening_time_bucket_size": 50.0,
+                "journey_replacement_repair_resource_coarsening_energy_bucket_size": 25.0,
+                "journey_replacement_repair_next_sortie_cache_enabled": False,
+                "journey_replacement_repair_max_dp_states": 999,
+                "journey_replacement_repair_partial_max_states": 777,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+            target_task_sets=(frozenset({1, 2}), frozenset({3})),
+        )
+        self.assertTrue(mode["replacement_repair"])
+        self.assertFalse(mode["certificate_capable"])
+        self.assertEqual(mode["target_task_sets"], 2)
+        self.assertFalse(updated.profile_pricing_enabled)
+        self.assertFalse(updated.streaming_pricing_enabled)
+        self.assertTrue(updated.direct_journey_label_pricing_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_dssr_enabled)
+        self.assertTrue(updated.direct_journey_label_existing_task_set_repair_only)
+        self.assertEqual(updated.direct_journey_label_repair_task_sets, (frozenset({1, 2}), frozenset({3})))
+        self.assertFalse(updated.direct_journey_label_next_sortie_cache_enabled)
+        self.assertTrue(updated.direct_journey_label_early_return_negative)
+        self.assertEqual(updated.direct_journey_label_early_return_negative_min_count, 3)
+        self.assertEqual(updated.max_returned_journeys, 9)
+        self.assertEqual(updated.max_dp_states, 999)
+        self.assertEqual(updated.direct_journey_label_partial_max_states, 777)
+        self.assertAlmostEqual(updated.time_limit, 2.0)
+        self.assertAlmostEqual(updated.direct_journey_label_resource_coarsening_time_bucket_size, 50.0)
+        self.assertAlmostEqual(updated.direct_journey_label_resource_coarsening_energy_bucket_size, 25.0)
+
+        guided, guided_mode = _journey_replacement_repair_config(
+            {
+                "journey_replacement_repair_enabled": True,
+                "journey_replacement_repair_time_limit": 2.0,
+                "journey_replacement_repair_final_reserve_time": 1.0,
+                "journey_replacement_repair_completion_bound_enabled": True,
+                "journey_replacement_repair_completion_bound_time_buckets": 7,
+                "journey_replacement_repair_completion_bound_energy_buckets": 9,
+                "journey_replacement_repair_completion_bound_two_cycle_enabled": True,
+                "journey_replacement_repair_completion_bound_two_cycle_max_states": 321,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+            target_task_sets=(frozenset({4}),),
+        )
+        self.assertTrue(guided.direct_journey_label_completion_bound_enabled)
+        self.assertTrue(guided.direct_journey_label_completion_bound_two_cycle_enabled)
+        self.assertEqual(guided.direct_journey_label_completion_bound_time_buckets, 7)
+        self.assertEqual(guided.direct_journey_label_completion_bound_energy_buckets, 9)
+        self.assertEqual(guided.direct_journey_label_completion_bound_two_cycle_max_states, 321)
+        self.assertFalse(guided.direct_journey_label_global_certificate_enabled)
+        self.assertFalse(guided.direct_journey_label_completion_bound_audit_enabled)
+        self.assertTrue(guided.direct_journey_label_existing_task_set_repair_only)
+        self.assertEqual(guided.direct_journey_label_repair_task_sets, (frozenset({4}),))
+        self.assertEqual(guided_mode["target_task_sets"], 1)
+        self.assertFalse(guided_mode["certificate_capable"])
+        self.assertTrue(guided_mode["completion_bound"])
+        self.assertTrue(guided_mode["completion_bound_two_cycle"])
+
+        untargeted, untargeted_mode = _journey_replacement_repair_config(
+            {
+                "journey_replacement_repair_enabled": True,
+                "journey_replacement_repair_time_limit": 2.0,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+        )
+        self.assertIs(untargeted, base)
+        self.assertEqual(untargeted_mode, {})
+
+        branch_skipped, branch_mode = _journey_replacement_repair_config(
+            {
+                "journey_replacement_repair_enabled": True,
+                "journey_replacement_repair_time_limit": 2.0,
+                "journey_replacement_repair_root_only": True,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=1,
+        )
+        self.assertIs(branch_skipped, base)
+        self.assertEqual(branch_mode, {})
+
+    def test_direct_repair_target_masks_can_be_limited_to_recent_task_sets(self):
+        data = SimpleNamespace(tasks=(1, 2, 3, 4))
+        task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
+        dominant_costs = {
+            frozenset({1, 2}): 10.0,
+            frozenset({2, 3}): 9.0,
+            frozenset({4}): 8.0,
+        }
+
+        all_masks = _direct_repair_target_masks(data, task_to_bit, dominant_costs)
+        mask_12 = (1 << task_to_bit[1]) | (1 << task_to_bit[2])
+        mask_23 = (1 << task_to_bit[2]) | (1 << task_to_bit[3])
+        mask_4 = 1 << task_to_bit[4]
+        self.assertEqual(all_masks, frozenset({mask_12, mask_23, mask_4}))
+
+        targeted = _direct_repair_target_masks(
+            data,
+            task_to_bit,
+            dominant_costs,
+            (frozenset({2, 3}), frozenset({1, 4})),
+        )
+        self.assertEqual(targeted, frozenset({mask_23}))
+
+    def test_replacement_repair_targets_can_include_active_support(self):
+        recent = (frozenset({1, 2}), frozenset({3}))
+        active = {frozenset({3}), frozenset({4, 5})}
+
+        default_targets = _journey_replacement_repair_target_task_sets(
+            {},
+            recent_changed_task_sets=recent,
+            active_task_sets=active,
+        )
+        self.assertEqual(default_targets, recent)
+
+        combined = _journey_replacement_repair_target_task_sets(
+            {"journey_replacement_repair_target_active_task_sets_enabled": True},
+            recent_changed_task_sets=recent,
+            active_task_sets=active,
+        )
+        self.assertEqual(set(combined), {frozenset({1, 2}), frozenset({3}), frozenset({4, 5})})
+
+        active_only = _journey_replacement_repair_target_task_sets(
+            {
+                "journey_replacement_repair_target_recent_changed_task_sets_enabled": False,
+                "journey_replacement_repair_target_active_task_sets_enabled": True,
+            },
+            recent_changed_task_sets=recent,
+            active_task_sets=active,
+        )
+        self.assertEqual(set(active_only), active)
+
+    def test_replacement_repair_no_column_is_not_global_certificate(self):
+        pricing = SimpleNamespace(
+            journeys=[],
+            exhausted=False,
+            status="INCOMPLETE",
+            reason="direct_label_existing_task_set_repair_no_negative_journey",
+            completion_bound_enabled=False,
+        )
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+
+    def test_fixed_task_set_repair_targets_and_gate_are_worker_only(self):
+        recent = (frozenset({1, 2}),)
+        active = {frozenset({2, 3}), frozenset({4})}
+        targets = _journey_fixed_task_set_repair_target_task_sets(
+            {},
+            recent_changed_task_sets=recent,
+            active_task_sets=active,
+        )
+        self.assertEqual(set(targets), {frozenset({1, 2}), frozenset({2, 3}), frozenset({4})})
+
+        disabled, disabled_mode = _journey_fixed_task_set_repair_enabled(
+            {"journey_fixed_task_set_repair_enabled": True, "journey_fixed_task_set_repair_time_limit": 2.0},
+            remaining=2.5,
+            min_pricing_time=1.0,
+            depth=0,
+            target_task_sets=targets,
+        )
+        self.assertFalse(disabled)
+        self.assertEqual(disabled_mode, {})
+
+        enabled, mode = _journey_fixed_task_set_repair_enabled(
+            {
+                "journey_fixed_task_set_repair_enabled": True,
+                "journey_fixed_task_set_repair_time_limit": 2.0,
+                "journey_fixed_task_set_repair_final_reserve_time": 1.0,
+                "journey_fixed_task_set_repair_max_task_set_size": 5,
+            },
+            remaining=5.0,
+            min_pricing_time=0.5,
+            depth=0,
+            target_task_sets=targets,
+        )
+        self.assertTrue(enabled)
+        self.assertTrue(mode["fixed_task_set_repair"])
+        self.assertFalse(mode["certificate_capable"])
+        self.assertAlmostEqual(mode["time_limit"], 2.0)
+        self.assertEqual(mode["max_task_set_size"], 5)
+
+    def test_fixed_task_set_repair_finds_same_task_set_cheaper_true_negative(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        inflated = replace(journey, cost=round(float(journey.cost) + 10.0, 6))
+        pool = JourneyPool()
+        pool.add(inflated)
+        duals = JourneyDuals(
+            cover={task: float(inflated.cost) - 0.5},
+            fleet_limit=0.0,
+            cuts={},
+        )
+        pool_targets = _journey_fixed_task_set_repair_pool_targets(
+            {"journey_fixed_task_set_repair_max_target_task_sets": 4},
+            pool,
+            duals,
+            tuple(),
+        )
+        self.assertEqual(pool_targets, (frozenset({task}),))
+
+        result = _price_fixed_task_set_representatives(
+            data,
+            duals,
+            tuple(),
+            pool,
+            (frozenset({task}),),
+            {
+                "time_bucket_size": 5.0,
+                "max_tasks_per_trip": 3,
+                "journey_fixed_task_set_repair_time_limit": 1.0,
+                "journey_fixed_task_set_repair_max_task_set_size": 3,
+                "journey_fixed_task_set_repair_max_returned_journeys": 2,
+            },
+            time_limit=1.0,
+            forbidden_journey_signatures=set(),
+        )
+        self.assertEqual(result.status, "INCOMPLETE")
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(result.reason, "fixed_task_set_repair_negative_journey")
+        self.assertEqual(len(result.journeys), 1)
+        self.assertEqual(result.journeys[0].task_set, frozenset({task}))
+        self.assertLess(float(result.journeys[0].cost), float(inflated.cost))
+        self.assertLess(manual_journey_reduced_cost(result.journeys[0], duals, tuple()), -1.0e-6)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+
+    def test_new_task_set_sweep_gate_and_candidates_are_worker_only(self):
+        data = load_future_data("very_small")
+        tasks = [int(task) for task in data.tasks[:3]]
+        pool = JourneyPool()
+        first_trip = evaluate_timed_trip(data, (tasks[0],), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(first_trip)
+        assert first_trip is not None
+        first_journey = make_journey(data, (first_trip,))
+        self.assertIsNotNone(first_journey)
+        assert first_journey is not None
+        pool.add(first_journey)
+        duals = JourneyDuals(
+            cover={tasks[0]: 100.0, tasks[1]: 300.0, tasks[2]: 200.0},
+            fleet_limit=0.0,
+            cuts={},
+        )
+        candidates = _journey_new_task_set_sweep_candidate_task_sets(
+            data,
+            duals,
+            pool,
+            {
+                "journey_new_task_set_sweep_min_task_count": 1,
+                "journey_new_task_set_sweep_max_task_count": 1,
+                "journey_new_task_set_sweep_top_tasks": 3,
+                "journey_new_task_set_sweep_max_combinations": 4,
+            },
+        )
+        self.assertNotIn(frozenset({tasks[0]}), candidates)
+        self.assertEqual(candidates[0], frozenset({tasks[1]}))
+
+        disabled, disabled_mode = _journey_new_task_set_sweep_enabled(
+            {"journey_new_task_set_sweep_enabled": True, "journey_new_task_set_sweep_time_limit": 2.0},
+            remaining=2.5,
+            min_pricing_time=1.0,
+            depth=0,
+        )
+        self.assertFalse(disabled)
+        self.assertEqual(disabled_mode, {})
+
+        enabled, mode = _journey_new_task_set_sweep_enabled(
+            {
+                "journey_new_task_set_sweep_enabled": True,
+                "journey_new_task_set_sweep_time_limit": 1.0,
+                "journey_new_task_set_sweep_final_reserve_time": 1.0,
+                "journey_new_task_set_sweep_top_tasks": 3,
+                "journey_new_task_set_sweep_max_task_count": 1,
+            },
+            remaining=5.0,
+            min_pricing_time=0.5,
+            depth=0,
+        )
+        self.assertTrue(enabled)
+        self.assertTrue(mode["new_task_set_sweep"])
+        self.assertFalse(mode["certificate_capable"])
+        self.assertAlmostEqual(mode["time_limit"], 1.0)
+
+    def test_new_task_set_sweep_finds_true_negative_new_task_set(self):
+        data = load_future_data("very_small")
+        task = int(data.tasks[0])
+        trip = evaluate_timed_trip(data, (task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        pool = JourneyPool()
+        duals = JourneyDuals(
+            cover={task: float(journey.cost) + 1.0},
+            fleet_limit=0.0,
+            cuts={},
+        )
+        result = _price_new_task_set_sweep(
+            data,
+            duals,
+            tuple(),
+            pool,
+            {
+                "time_bucket_size": 5.0,
+                "max_tasks_per_trip": 3,
+                "journey_new_task_set_sweep_min_task_count": 1,
+                "journey_new_task_set_sweep_max_task_count": 1,
+                "journey_new_task_set_sweep_top_tasks": 1,
+                "journey_new_task_set_sweep_max_combinations": 1,
+                "journey_new_task_set_sweep_max_returned_journeys": 2,
+            },
+            time_limit=1.0,
+            forbidden_journey_signatures=set(),
+        )
+        self.assertEqual(result.status, "INCOMPLETE")
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(result.reason, "new_task_set_sweep_negative_journey")
+        self.assertTrue(result.direct_label_new_task_set_only)
+        self.assertEqual(result.harvest_selected_new_task_set_count, 1)
+        self.assertEqual(len(result.journeys), 1)
+        self.assertEqual(result.journeys[0].task_set, frozenset({task}))
+        self.assertLess(manual_journey_reduced_cost(result.journeys[0], duals, tuple()), -1.0e-6)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+
+    def test_profile_repair_config_is_local_profile_worker_not_certificate(self):
+        base = JourneyPricingConfig(
+            direct_journey_label_pricing_enabled=True,
+            direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_ng_dssr_enabled=True,
+            profile_labeling_enabled=False,
+            profile_labeling_physical_catalog_resume_enabled=True,
+            profile_labeling_physical_catalog_share_across_branches_enabled=True,
+            profile_best_contribution_diagnostics_enabled=True,
+            streaming_pricing_enabled=False,
+            max_returned_journeys=8,
+            max_dp_states=12345,
+            streaming_profile_batch_size=50,
+        )
+        skipped, skipped_mode = _journey_profile_repair_config(
+            {
+                "journey_profile_repair_enabled": True,
+                "journey_profile_repair_time_limit": 2.0,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+        )
+        self.assertIs(skipped, base)
+        self.assertEqual(skipped_mode, {})
+
+        updated, mode = _journey_profile_repair_config(
+            {
+                "journey_profile_repair_enabled": True,
+                "journey_profile_repair_time_limit": 2.0,
+                "journey_profile_repair_final_reserve_time": 1.0,
+                "journey_profile_repair_min_journeys": 6,
+                "journey_profile_repair_max_returned_journeys": 12,
+                "journey_profile_repair_streaming_min_negative_batch": 7,
+                "journey_profile_repair_streaming_profile_batch_size": 200,
+                "journey_profile_repair_selection_mode": "orthogonal",
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+            after_patrol=True,
+        )
+        self.assertTrue(mode["profile_repair"])
+        self.assertTrue(mode["after_patrol"])
+        self.assertFalse(updated.direct_journey_label_pricing_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_dssr_enabled)
+        self.assertTrue(updated.profile_pricing_enabled)
+        self.assertTrue(updated.profile_labeling_enabled)
+        self.assertTrue(updated.profile_labeling_resume_enabled)
+        self.assertFalse(updated.profile_labeling_physical_catalog_resume_enabled)
+        self.assertFalse(updated.profile_labeling_physical_catalog_share_across_branches_enabled)
+        self.assertFalse(updated.profile_best_contribution_diagnostics_enabled)
+        self.assertTrue(updated.streaming_pricing_enabled)
+        self.assertTrue(updated.early_return_negative)
+        self.assertTrue(updated.early_return_unique_masks_enabled)
+        self.assertEqual(updated.early_return_negative_min_count, 7)
+        self.assertEqual(updated.streaming_min_negative_batch, 7)
+        self.assertEqual(updated.streaming_profile_batch_size, 200)
+        self.assertEqual(updated.max_returned_journeys, 12)
+        self.assertEqual(updated.max_dp_states, 12345)
+        self.assertEqual(updated.journey_selection_mode, "orthogonal")
+        self.assertAlmostEqual(updated.time_limit, 2.0)
+        self.assertFalse(mode["certificate_capable"])
+        self.assertFalse(mode["physical_catalog_resume"])
+        self.assertTrue(updated.dp_cross_count_dominance_enabled)
+        self.assertTrue(mode["dp_cross_count_dominance"])
+
+        cross_count_relaxed, cross_count_relaxed_mode = _journey_profile_repair_config(
+            {
+                "journey_profile_repair_enabled": True,
+                "journey_profile_repair_time_limit": 1.0,
+                "journey_profile_repair_final_reserve_time": 0.0,
+                "journey_profile_repair_dp_cross_count_dominance_enabled": False,
+            },
+            replace(base, dp_cross_count_dominance_enabled=True),
+            remaining=5.0,
+            min_pricing_time=0.0,
+            depth=0,
+            after_patrol=True,
+        )
+        self.assertFalse(cross_count_relaxed.dp_cross_count_dominance_enabled)
+        self.assertFalse(cross_count_relaxed_mode["dp_cross_count_dominance"])
+        self.assertFalse(cross_count_relaxed_mode["certificate_capable"])
+
+        disabled, disabled_mode = _journey_profile_repair_config(
+            {
+                "journey_profile_repair_enabled": True,
+                "journey_profile_repair_time_limit": 2.0,
+                "journey_profile_repair_root_only": True,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=1,
+            after_patrol=True,
+        )
+        self.assertIs(disabled, base)
+        self.assertEqual(disabled_mode, {})
+
+        no_budget, no_budget_mode = _journey_profile_repair_config(
+            {
+                "journey_profile_repair_enabled": True,
+                "journey_profile_repair_time_limit": 2.0,
+                "journey_profile_repair_final_reserve_time": 1.0,
+            },
+            base,
+            remaining=2.5,
+            min_pricing_time=0.5,
+            depth=0,
+            after_patrol=True,
+        )
+        self.assertIs(no_budget, base)
+        self.assertEqual(no_budget_mode, {})
+
+    def test_post_seed_profile_reharvest_config_uses_seeded_catalog_only_after_replacement(self):
+        base = JourneyPricingConfig(
+            profile_pricing_enabled=False,
+            direct_journey_label_pricing_enabled=True,
+            direct_journey_label_global_certificate_enabled=True,
+            direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_ng_dssr_enabled=True,
+            profile_labeling_physical_catalog_resume_enabled=False,
+            streaming_pricing_enabled=False,
+            max_returned_journeys=6,
+            streaming_profile_batch_size=50,
+        )
+        replacement_added = _JourneyAdditionCount(
+            3,
+            new_journeys=0,
+            replacement_journeys=3,
+            unchanged_journeys=0,
+            replacement_task_sets=(frozenset({1, 2}),),
+            changed_task_sets=(frozenset({1, 2}),),
+        )
+        new_added = _JourneyAdditionCount(
+            1,
+            new_journeys=1,
+            replacement_journeys=0,
+            unchanged_journeys=0,
+            new_task_sets=(frozenset({3}),),
+            changed_task_sets=(frozenset({3}),),
+        )
+
+        skipped, skipped_mode = _journey_post_seed_profile_reharvest_config(
+            {},
+            base,
+            replacement_added,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+        )
+        self.assertIs(skipped, base)
+        self.assertEqual(skipped_mode, {})
+
+        new_skip, new_skip_mode = _journey_post_seed_profile_reharvest_config(
+            {
+                "journey_post_seed_profile_reharvest_enabled": True,
+                "journey_post_seed_profile_reharvest_time_limit": 1.0,
+                "journey_post_seed_profile_reharvest_final_reserve_time": 0.5,
+            },
+            base,
+            new_added,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+        )
+        self.assertIs(new_skip, base)
+        self.assertEqual(new_skip_mode, {})
+
+        updated, mode = _journey_post_seed_profile_reharvest_config(
+            {
+                "journey_post_seed_profile_reharvest_enabled": True,
+                "journey_post_seed_profile_reharvest_time_limit": 1.5,
+                "journey_post_seed_profile_reharvest_final_reserve_time": 0.5,
+                "journey_post_seed_profile_reharvest_min_journeys": 8,
+                "journey_post_seed_profile_reharvest_max_returned_journeys": 24,
+                "journey_post_seed_profile_reharvest_streaming_min_negative_batch": 9,
+                "journey_post_seed_profile_reharvest_streaming_profile_batch_size": 200,
+                "journey_post_seed_profile_reharvest_selection_mode": "orthogonal",
+            },
+            base,
+            replacement_added,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+        )
+        self.assertTrue(mode["post_seed_profile_reharvest"])
+        self.assertFalse(updated.direct_journey_label_pricing_enabled)
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_dssr_enabled)
+        self.assertTrue(updated.profile_pricing_enabled)
+        self.assertTrue(updated.profile_labeling_enabled)
+        self.assertTrue(updated.profile_labeling_resume_enabled)
+        self.assertTrue(updated.profile_labeling_physical_catalog_resume_enabled)
+        self.assertFalse(updated.profile_labeling_physical_catalog_share_across_branches_enabled)
+        self.assertTrue(updated.streaming_pricing_enabled)
+        self.assertTrue(updated.early_return_negative)
+        self.assertTrue(updated.early_return_unique_masks_enabled)
+        self.assertEqual(updated.early_return_negative_min_count, 9)
+        self.assertEqual(updated.streaming_min_negative_batch, 9)
+        self.assertEqual(updated.streaming_profile_batch_size, 200)
+        self.assertEqual(updated.max_returned_journeys, 24)
+        self.assertEqual(updated.journey_selection_mode, "orthogonal")
+        self.assertAlmostEqual(updated.time_limit, 1.5)
+        self.assertFalse(mode["certificate_capable"])
+        self.assertTrue(mode["physical_catalog_resume"])
+
+    def test_hidden_negative_patrol_after_small_batch_gate(self):
+        config = {
+            "journey_hidden_negative_patrol_enabled": True,
+            "journey_hidden_negative_patrol_after_small_batch_enabled": True,
+            "journey_hidden_negative_patrol_after_small_batch_max_added_journeys": 3,
+            "journey_hidden_negative_patrol_after_small_batch_min_flat_rounds": 2,
+        }
+        pricing = SimpleNamespace(journeys=[object()], status="OPTIMAL", reason="negative_journey")
+        self.assertTrue(
+            _journey_hidden_negative_patrol_after_small_batch_needed(
+                config,
+                pricing,
+                added_columns=2,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                depth=0,
+            )
+        )
+        self.assertFalse(
+            _journey_hidden_negative_patrol_after_small_batch_needed(
+                config,
+                pricing,
+                added_columns=4,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                depth=0,
+            )
+        )
+        self.assertFalse(
+            _journey_hidden_negative_patrol_after_small_batch_needed(
+                config,
+                pricing,
+                added_columns=2,
+                certificate_candidate=False,
+                certificate_flat_rounds=2,
+                depth=0,
+            )
+        )
+        self.assertFalse(
+            _journey_hidden_negative_patrol_after_small_batch_needed(
+                config,
+                pricing,
+                added_columns=2,
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+            )
+        )
+        no_column = SimpleNamespace(journeys=[], status="OPTIMAL", reason="no_negative_journey", exhausted=True)
+        self.assertFalse(
+            _journey_hidden_negative_patrol_after_small_batch_needed(
+                config,
+                no_column,
+                added_columns=1,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                depth=0,
+            )
+        )
+
+    def test_same_dual_supplement_gate_requires_small_true_dual_tail_batch(self):
+        config = {
+            "journey_same_dual_supplement_enabled": True,
+            "journey_same_dual_supplement_max_initial_added_journeys": 3,
+            "journey_same_dual_supplement_min_flat_rounds": 2,
+        }
+        self.assertTrue(
+            _journey_same_dual_supplement_needed(
+                config,
+                added_columns=2,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                depth=0,
+                pricing_dual_source="scip_certificate",
+            )
+        )
+        self.assertFalse(
+            _journey_same_dual_supplement_needed(
+                config,
+                added_columns=4,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                depth=0,
+                pricing_dual_source="scip_certificate",
+            )
+        )
+        self.assertFalse(
+            _journey_same_dual_supplement_needed(
+                config,
+                added_columns=2,
+                certificate_candidate=False,
+                certificate_flat_rounds=2,
+                depth=0,
+                pricing_dual_source="scip_certificate",
+            )
+        )
+        self.assertFalse(
+            _journey_same_dual_supplement_needed(
+                config,
+                added_columns=2,
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_certificate",
+            )
+        )
+        self.assertFalse(
+            _journey_same_dual_supplement_needed(
+                config,
+                added_columns=2,
+                certificate_candidate=True,
+                certificate_flat_rounds=2,
+                depth=0,
+                pricing_dual_source="dual_average",
+            )
+        )
+
+    def test_same_dual_supplement_config_is_worker_only_direct_label(self):
+        config = {
+            "journey_same_dual_supplement_enabled": True,
+            "journey_same_dual_supplement_time_limit": 0.75,
+            "journey_same_dual_supplement_final_reserve_time": 1.0,
+            "journey_same_dual_supplement_min_journeys": 3,
+            "journey_same_dual_supplement_max_returned_journeys": 12,
+            "journey_same_dual_supplement_resource_coarsening_enabled": True,
+            "journey_same_dual_supplement_resource_coarsening_time_bucket_size": 50.0,
+            "journey_same_dual_supplement_resource_coarsening_energy_bucket_size": 25.0,
+            "journey_same_dual_supplement_max_dp_states": 1234,
+        }
+        base = JourneyPricingConfig(
+            profile_pricing_enabled=True,
+            streaming_pricing_enabled=True,
+            direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_global_certificate_enabled=True,
+            max_returned_journeys=4,
+        )
+        updated, mode = _journey_same_dual_supplement_config(
+            config,
+            base,
+            remaining=5.0,
+            min_pricing_time=0.2,
+        )
+        self.assertTrue(mode["same_dual_supplement"])
+        self.assertFalse(updated.profile_pricing_enabled)
+        self.assertFalse(updated.streaming_pricing_enabled)
+        self.assertTrue(updated.direct_journey_label_pricing_enabled)
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_two_cycle_enabled)
+        self.assertTrue(updated.direct_journey_label_early_return_negative)
+        self.assertEqual(updated.direct_journey_label_early_return_negative_min_count, 3)
+        self.assertEqual(updated.max_returned_journeys, 12)
+        self.assertEqual(updated.max_dp_states, 1234)
+        self.assertAlmostEqual(updated.time_limit, 0.75)
+        self.assertAlmostEqual(updated.direct_journey_label_resource_coarsening_time_bucket_size, 50.0)
+        self.assertAlmostEqual(updated.direct_journey_label_resource_coarsening_energy_bucket_size, 25.0)
 
     def test_pre_retry_completion_reserve_requires_low_remaining_threshold(self):
         config = {
@@ -7269,6 +10633,38 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertEqual(reserve, 0.0)
 
+        reserve = _journey_pre_retry_completion_reserve_time(
+            config,
+            remaining=8.0,
+            exact_time_limit=4.0,
+            min_pricing_time=0.2,
+            certificate_candidate=False,
+            final_completion_bound_eligible=True,
+            exact_completion_bound_enabled=False,
+        )
+        self.assertEqual(reserve, 0.0)
+
+        config["journey_retry_incomplete_no_column_min_time"] = 1.0
+        reserve = _journey_pre_retry_completion_reserve_time(
+            config,
+            remaining=8.0,
+            exact_time_limit=2.0,
+            min_pricing_time=0.2,
+            final_completion_bound_eligible=True,
+            exact_completion_bound_enabled=False,
+        )
+        self.assertEqual(reserve, 0.0)
+
+        reserve = _journey_pre_retry_completion_reserve_time(
+            config,
+            remaining=8.0,
+            exact_time_limit=3.0,
+            min_pricing_time=0.2,
+            final_completion_bound_eligible=True,
+            exact_completion_bound_enabled=False,
+        )
+        self.assertEqual(reserve, 1.5)
+
     def test_completion_bound_final_probe_verifies_profile_no_column_certificates(self):
         config = {"journey_certificate_completion_bound_after_retry_enabled": True}
         exhausted_no_column = SimpleNamespace(exhausted=True, journeys=[])
@@ -7276,14 +10672,30 @@ class BPCFutureTests(unittest.TestCase):
             exhausted=True,
             journeys=[],
             completion_bound_enabled=True,
+            status="OPTIMAL",
+            reason="direct_label_no_negative_journey",
+            global_certificate_capable=False,
         )
         incomplete_no_column = SimpleNamespace(exhausted=False, journeys=[])
         incomplete_candidate = SimpleNamespace(exhausted=False, journeys=[object()])
+        duplicate_only = SimpleNamespace(
+            exhausted=False,
+            journeys=[],
+            pricing_state=PRICING_STATE_DUPLICATE_ONLY,
+        )
+        certified_no_negative = SimpleNamespace(
+            exhausted=True,
+            journeys=[],
+            pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+            global_certificate_capable=True,
+        )
 
         self.assertTrue(_journey_completion_bound_final_probe_needed(config, exhausted_no_column))
-        self.assertFalse(_journey_completion_bound_final_probe_needed(config, exhausted_completion_bound_no_column))
+        self.assertTrue(_journey_completion_bound_final_probe_needed(config, exhausted_completion_bound_no_column))
         self.assertTrue(_journey_completion_bound_final_probe_needed(config, incomplete_no_column))
         self.assertFalse(_journey_completion_bound_final_probe_needed(config, incomplete_candidate))
+        self.assertTrue(_journey_completion_bound_final_probe_needed(config, duplicate_only))
+        self.assertFalse(_journey_completion_bound_final_probe_needed(config, certified_no_negative))
         self.assertTrue(
             _journey_completion_bound_final_probe_needed(
                 config,
@@ -7299,6 +10711,470 @@ class BPCFutureTests(unittest.TestCase):
             )
         )
         self.assertFalse(_journey_completion_bound_final_probe_needed({}, incomplete_no_column))
+
+    def test_only_completion_bound_direct_label_no_column_is_global_certificate(self):
+        profile_no_column = SimpleNamespace(
+            exhausted=True,
+            journeys=[],
+            status="OPTIMAL",
+            reason="no_negative_journey",
+            completion_bound_enabled=False,
+        )
+        completion_bound_no_column = SimpleNamespace(
+            exhausted=True,
+            journeys=[],
+            status="OPTIMAL",
+            reason="direct_label_no_negative_journey",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
+        )
+        completion_bound_worker_no_column = SimpleNamespace(
+            exhausted=True,
+            journeys=[],
+            status="OPTIMAL",
+            reason="direct_label_no_negative_journey",
+            completion_bound_enabled=True,
+            global_certificate_capable=False,
+        )
+        completion_bound_negative = SimpleNamespace(
+            exhausted=True,
+            journeys=[object()],
+            status="OPTIMAL",
+            reason="direct_label_negative_journey",
+            completion_bound_enabled=True,
+        )
+        completion_bound_local_reason = SimpleNamespace(
+            exhausted=True,
+            journeys=[],
+            status="OPTIMAL",
+            reason="no_negative_journey",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
+        )
+
+        self.assertFalse(_journey_pricing_is_global_certificate(profile_no_column))
+        self.assertEqual(
+            _journey_pricing_certificate_rejection_reason(profile_no_column),
+            "profile_exhausted_requires_direct_label_final_judge",
+        )
+        self.assertTrue(_journey_pricing_is_global_certificate(completion_bound_no_column))
+        self.assertFalse(_journey_pricing_is_global_certificate(completion_bound_worker_no_column))
+        self.assertEqual(
+            _journey_pricing_certificate_rejection_reason(completion_bound_worker_no_column),
+            "completion_bound_worker_requires_direct_label_final_judge",
+        )
+        self.assertFalse(_journey_pricing_is_global_certificate(completion_bound_negative))
+        self.assertEqual(
+            _journey_pricing_certificate_rejection_reason(completion_bound_negative),
+            "negative_journey_requires_column_addition",
+        )
+        self.assertFalse(_journey_pricing_is_global_certificate(completion_bound_local_reason))
+        self.assertEqual(
+            _journey_pricing_certificate_rejection_reason(completion_bound_local_reason),
+            "direct_label_final_judge_not_no_column_certificate",
+        )
+
+    def test_journey_pricing_state_uses_explicit_certificate_semantics(self):
+        found_negative = JourneyPricingResult(
+            journeys=[SimpleNamespace(signature=("j",), task_set=(1,))],
+            exhausted=False,
+            best_reduced_cost=-1.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="partial_negative_journey",
+        )
+        local_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+            completion_bound_enabled=False,
+        )
+        certified_no_negative = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="direct_label_no_negative_journey",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
+        )
+        completion_bound_worker_no_negative = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="direct_label_no_negative_journey",
+            completion_bound_enabled=True,
+            global_certificate_capable=False,
+        )
+        incomplete = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=None,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="time_limit",
+        )
+        incomplete_duplicate = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=-1.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="negative_journeys_already_in_pool",
+            existing_journeys_filtered=1,
+        )
+        duplicate_only = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=-1.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="negative_journeys_already_in_pool",
+            existing_journeys_filtered=1,
+        )
+        dominated_only = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=-1.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="dominated_task_set_journeys_filtered",
+            dominated_task_set_journeys_filtered=1,
+        )
+
+        self.assertEqual(found_negative.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(local_no_column.pricing_state, PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED)
+        self.assertEqual(certified_no_negative.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertEqual(
+            completion_bound_worker_no_negative.pricing_state,
+            PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED,
+        )
+        self.assertEqual(incomplete.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(incomplete_duplicate.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(duplicate_only.pricing_state, PRICING_STATE_DUPLICATE_ONLY)
+        self.assertEqual(dominated_only.pricing_state, PRICING_STATE_DUPLICATE_ONLY)
+        self.assertEqual(_journey_pricing_state(incomplete_duplicate), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(_journey_pricing_state(duplicate_only), PRICING_STATE_DUPLICATE_ONLY)
+        self.assertEqual(_journey_pricing_state(dominated_only), PRICING_STATE_DUPLICATE_ONLY)
+        self.assertEqual(_journey_pricing_state(certified_no_negative), PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertTrue(_journey_pricing_is_global_certificate(certified_no_negative))
+        self.assertFalse(_journey_pricing_is_global_certificate(completion_bound_worker_no_negative))
+        self.assertFalse(_journey_pricing_is_global_certificate(local_no_column))
+
+    def test_duplicate_only_final_judge_certifies_when_negative_rmp_columns_are_at_upper_bound(self):
+        pricing = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=-2.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="negative_journeys_already_in_pool",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
+            existing_journeys_filtered=3,
+        )
+        pool = SimpleNamespace(
+            journeys=[
+                SimpleNamespace(signature=("upper",), task_set=frozenset({1}), cost=1.0),
+                SimpleNamespace(signature=("free",), task_set=frozenset({2}), cost=1.0),
+            ]
+        )
+        audit_solution = SimpleNamespace(
+            optimal=True,
+            status="OPTIMAL",
+            objective=10.0,
+            reduced_costs={0: -2.0, 1: 0.25},
+            variable_values={0: 1.0, 1: 0.0},
+        )
+
+        with patch("BPC_future.solver.journey_driver.solve_journey_rmp", return_value=audit_solution):
+            promoted = _journey_promote_duplicate_only_final_judge_certificate(
+                SimpleNamespace(),
+                {},
+                pool,
+                tuple(),
+                tuple(),
+                None,
+                pricing,
+                FutureLogger(None, console=False),
+                4,
+                node_id=2,
+                depth=1,
+            )
+
+        self.assertEqual(_journey_pricing_state(promoted), PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertTrue(_journey_pricing_is_global_certificate(promoted))
+        self.assertEqual(promoted.reason, "direct_label_duplicate_only_no_new_column_certificate")
+        self.assertEqual(promoted.best_reduced_cost, 0.0)
+
+    def test_duplicate_only_final_judge_does_not_certify_negative_rmp_column_below_upper_bound(self):
+        pricing = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=-2.0,
+            generated_sequences=0,
+            evaluated_timed_trips=0,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="negative_journeys_already_in_pool",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
+            existing_journeys_filtered=3,
+        )
+        pool = SimpleNamespace(
+            journeys=[
+                SimpleNamespace(signature=("not_upper",), task_set=frozenset({1}), cost=1.0),
+            ]
+        )
+        audit_solution = SimpleNamespace(
+            optimal=True,
+            status="OPTIMAL",
+            objective=10.0,
+            reduced_costs={0: -2.0},
+            variable_values={0: 0.5},
+        )
+
+        with patch("BPC_future.solver.journey_driver.solve_journey_rmp", return_value=audit_solution):
+            promoted = _journey_promote_duplicate_only_final_judge_certificate(
+                SimpleNamespace(),
+                {},
+                pool,
+                tuple(),
+                tuple(),
+                None,
+                pricing,
+                FutureLogger(None, console=False),
+                4,
+                node_id=2,
+                depth=1,
+            )
+
+        self.assertEqual(_journey_pricing_state(promoted), PRICING_STATE_DUPLICATE_ONLY)
+        self.assertFalse(_journey_pricing_is_global_certificate(promoted))
+
+    def test_diverse_journey_harvest_keeps_strongest_and_fills_when_overlap_blocks(self):
+        candidates = [
+            (-10.0, SimpleNamespace(signature=("a",), task_set=(1, 2))),
+            (-9.0, SimpleNamespace(signature=("b",), task_set=(2, 3))),
+            (-8.0, SimpleNamespace(signature=("c",), task_set=(1, 3))),
+            (-7.0, SimpleNamespace(signature=("d",), task_set=(4,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=4,
+            top_k_strongest=1,
+            min_fill=3,
+            max_jaccard=0.0,
+            max_containment=0.0,
+        )
+
+        self.assertEqual(selection.candidate_negative_count, 4)
+        self.assertEqual(selection.selected_count, 3)
+        self.assertEqual(selection.rejected_overlap_count, 2)
+        self.assertEqual(selection.rejected_duplicate_task_set_count, 0)
+        self.assertEqual(selection.fallback_fill_count, 1)
+        self.assertEqual(selection.best_true_rc, -10.0)
+        self.assertEqual(selection.worst_selected_true_rc, -7.0)
+        self.assertEqual([journey.signature for journey in selection.journeys], [("a",), ("b",), ("d",)])
+        self.assertIsNotNone(selection.avg_pairwise_jaccard)
+
+    def test_diverse_journey_harvest_does_not_fallback_fill_duplicate_task_sets_by_default(self):
+        candidates = [
+            (-10.0, SimpleNamespace(signature=("a",), task_set=(1, 2))),
+            (-9.0, SimpleNamespace(signature=("a2",), task_set=(1, 2))),
+            (-8.0, SimpleNamespace(signature=("b",), task_set=(3,))),
+            (-7.0, SimpleNamespace(signature=("c",), task_set=(4,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=4,
+            top_k_strongest=2,
+            min_fill=4,
+            max_jaccard=0.0,
+            max_containment=0.0,
+        )
+
+        self.assertEqual(selection.candidate_negative_count, 4)
+        self.assertEqual(selection.selected_count, 3)
+        self.assertEqual(selection.rejected_duplicate_task_set_count, 1)
+        self.assertEqual(selection.fallback_fill_count, 0)
+        self.assertEqual([journey.signature for journey in selection.journeys], [("a",), ("b",), ("c",)])
+
+    def test_diverse_journey_harvest_can_opt_in_duplicate_task_set_fill(self):
+        candidates = [
+            (-10.0, SimpleNamespace(signature=("a",), task_set=(1, 2))),
+            (-9.0, SimpleNamespace(signature=("a2",), task_set=(1, 2))),
+            (-8.0, SimpleNamespace(signature=("b",), task_set=(3,))),
+            (-7.0, SimpleNamespace(signature=("c",), task_set=(4,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=4,
+            top_k_strongest=2,
+            min_fill=4,
+            max_jaccard=0.0,
+            max_containment=0.0,
+            allow_duplicate_task_sets=True,
+        )
+
+        self.assertEqual(selection.candidate_negative_count, 4)
+        self.assertEqual(selection.selected_count, 4)
+        self.assertEqual(selection.rejected_duplicate_task_set_count, 0)
+        self.assertEqual([journey.signature for journey in selection.journeys], [("a",), ("a2",), ("b",), ("c",)])
+
+    def test_diverse_journey_harvest_prefers_new_task_sets_before_replacements(self):
+        candidates = [
+            (-20.0, SimpleNamespace(signature=("replacement_strong",), task_set=(1, 2))),
+            (-5.0, SimpleNamespace(signature=("new_a",), task_set=(3,))),
+            (-4.0, SimpleNamespace(signature=("new_b",), task_set=(4,))),
+            (-3.0, SimpleNamespace(signature=("replacement_fill",), task_set=(2, 5))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=3,
+            top_k_strongest=1,
+            min_fill=3,
+            max_jaccard=0.0,
+            max_containment=0.0,
+            existing_task_sets={frozenset((1, 2)), frozenset((2, 5))},
+        )
+
+        self.assertEqual(selection.candidate_negative_count, 4)
+        self.assertEqual(selection.candidate_new_task_set_count, 2)
+        self.assertEqual(selection.selected_new_task_set_count, 2)
+        self.assertEqual(selection.selected_replacement_task_set_count, 1)
+        self.assertEqual(
+            [journey.signature for journey in selection.journeys],
+            [("replacement_strong",), ("new_a",), ("new_b",)],
+        )
+
+    def test_diverse_journey_harvest_strongest_phase_uses_global_true_rc(self):
+        candidates = [
+            (-20.0, SimpleNamespace(signature=("replacement_strong",), task_set=(1, 2))),
+            (-5.0, SimpleNamespace(signature=("new_a",), task_set=(3,))),
+            (-4.0, SimpleNamespace(signature=("new_b",), task_set=(4,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=1,
+            top_k_strongest=1,
+            min_fill=1,
+            existing_task_sets={frozenset((1, 2))},
+            prefer_new_task_sets=True,
+        )
+
+        self.assertEqual(selection.selected_count, 1)
+        self.assertEqual(selection.selected_replacement_task_set_count, 1)
+        self.assertEqual([journey.signature for journey in selection.journeys], [("replacement_strong",)])
+
+    def test_diverse_journey_harvest_new_task_set_quota_overrides_strong_replacements(self):
+        candidates = [
+            (-30.0, SimpleNamespace(signature=("replacement_a",), task_set=(1, 2))),
+            (-29.0, SimpleNamespace(signature=("replacement_b",), task_set=(2, 5))),
+            (-4.0, SimpleNamespace(signature=("new_a",), task_set=(3,))),
+            (-3.0, SimpleNamespace(signature=("new_b",), task_set=(4,))),
+            (-2.0, SimpleNamespace(signature=("new_c",), task_set=(6,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=4,
+            top_k_strongest=2,
+            min_fill=4,
+            min_new_task_sets=2,
+            existing_task_sets={frozenset((1, 2)), frozenset((2, 5))},
+            prefer_new_task_sets=True,
+        )
+
+        self.assertEqual(selection.candidate_new_task_set_count, 3)
+        self.assertGreaterEqual(selection.selected_new_task_set_count, 2)
+        self.assertIn(("new_a",), [journey.signature for journey in selection.journeys])
+        self.assertIn(("new_b",), [journey.signature for journey in selection.journeys])
+
+    def test_diverse_journey_harvest_priority_task_set_quota_keeps_active_support(self):
+        candidates = [
+            (-50.0, SimpleNamespace(signature=("inactive_replacement",), task_set=(1, 2))),
+            (-40.0, SimpleNamespace(signature=("inactive_replacement_2",), task_set=(2, 5))),
+            (-3.0, SimpleNamespace(signature=("active_repair",), task_set=(7, 8))),
+            (-2.0, SimpleNamespace(signature=("new_direction",), task_set=(9,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=3,
+            top_k_strongest=2,
+            min_fill=3,
+            min_priority_task_sets=1,
+            existing_task_sets={frozenset((1, 2)), frozenset((2, 5)), frozenset((7, 8))},
+            priority_task_sets={frozenset((7, 8))},
+            prefer_new_task_sets=True,
+        )
+
+        self.assertEqual(selection.candidate_priority_task_set_count, 1)
+        self.assertEqual(selection.selected_priority_task_set_count, 1)
+        self.assertIn(("active_repair",), [journey.signature for journey in selection.journeys])
+
+    def test_diverse_journey_harvest_priority_overlap_keeps_near_active_support(self):
+        candidates = [
+            (-50.0, SimpleNamespace(signature=("far_strong",), task_set=(8, 9))),
+            (-3.0, SimpleNamespace(signature=("near_active",), task_set=(1, 2, 4))),
+            (-2.0, SimpleNamespace(signature=("weak_new",), task_set=(6,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=2,
+            top_k_strongest=1,
+            min_fill=2,
+            min_priority_task_sets=1,
+            existing_task_sets={frozenset((8, 9))},
+            priority_task_sets={frozenset((1, 2, 3))},
+            priority_overlap_threshold=0.5,
+            prefer_new_task_sets=True,
+        )
+
+        self.assertEqual(selection.candidate_priority_task_set_count, 1)
+        self.assertEqual(selection.selected_priority_task_set_count, 1)
+        self.assertIn(("near_active",), [journey.signature for journey in selection.journeys])
 
     def test_completion_bound_escalation_only_after_budget_hit_with_time(self):
         config = {
@@ -7684,8 +11560,27 @@ class BPCFutureTests(unittest.TestCase):
             "journey_pricing_max_returned_journeys": 64,
             "journey_pricing_late_max_returned_journeys": 256,
             "journey_pricing_late_max_returned_min_cg_iter": 3,
+            "journey_pricing_late_early_return_negative_min_count": 32,
+            "journey_pricing_late_early_return_new_task_set_min_count": 6,
+            "journey_pricing_late_streaming_min_negative_batch": 48,
+            "journey_pricing_late_streaming_min_returned_journeys": 7,
+            "journey_pricing_late_selection_mode": "integer_diverse",
+            "journey_pricing_late_profile_true_rc_materialization_slack": 2.5,
+            "journey_pricing_late_profile_true_rc_materialization_max_candidates": 17,
+            "journey_pricing_late_profile_no_negative_true_rc_materialization_slack": 0.75,
+            "journey_pricing_late_profile_no_negative_true_rc_materialization_max_candidates": 11,
+            "journey_pricing_late_profile_replacement_true_rc_materialization_slack": 1.25,
+            "journey_pricing_late_profile_replacement_true_rc_materialization_max_candidates": 19,
+            "journey_pricing_late_profile_cross_count_true_rc_materialization_slack": 1.75,
+            "journey_pricing_late_profile_cross_count_true_rc_materialization_max_candidates": 23,
+            "journey_pricing_late_profile_true_rc_candidate_scan_factor": 9,
+            "journey_pricing_late_profile_true_rc_candidate_scan_max_candidates": 211,
+            "journey_pricing_dp_cross_count_dominance_enabled": True,
+            "journey_pricing_late_dp_cross_count_dominance_enabled": False,
             "journey_pricing_streaming_enabled": True,
             "journey_pricing_streaming_min_cg_iter": 3,
+            "journey_pricing_streaming_min_negative_batch": 12,
+            "journey_pricing_early_return_negative_min_count": 10,
             "journey_pricing_time_limit": 5.0,
         }
         early = _journey_pricing_config(
@@ -7749,6 +11644,40 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(early.direct_journey_label_ng_dssr_enabled)
         self.assertEqual(early.max_returned_journeys, 64)
         self.assertEqual(late.max_returned_journeys, 256)
+        self.assertEqual(early.early_return_negative_min_count, 10)
+        self.assertEqual(early.early_return_new_task_set_min_count, 0)
+        self.assertEqual(early.streaming_min_negative_batch, 12)
+        self.assertEqual(early.streaming_min_returned_journeys, 1)
+        self.assertEqual(early.journey_selection_mode, "reduced_cost")
+        self.assertEqual(early.direct_journey_label_early_return_negative_min_count, 10)
+        self.assertEqual(late.early_return_negative_min_count, 32)
+        self.assertEqual(late.early_return_new_task_set_min_count, 6)
+        self.assertEqual(late.streaming_min_negative_batch, 48)
+        self.assertEqual(late.streaming_min_returned_journeys, 7)
+        self.assertEqual(late.journey_selection_mode, "integer_diverse")
+        self.assertAlmostEqual(late.profile_true_rc_materialization_slack, 2.5)
+        self.assertEqual(late.profile_true_rc_materialization_max_candidates, 17)
+        self.assertAlmostEqual(late.profile_no_negative_true_rc_materialization_slack, 0.75)
+        self.assertEqual(late.profile_no_negative_true_rc_materialization_max_candidates, 11)
+        self.assertAlmostEqual(late.profile_replacement_true_rc_materialization_slack, 1.25)
+        self.assertEqual(late.profile_replacement_true_rc_materialization_max_candidates, 19)
+        self.assertAlmostEqual(late.profile_cross_count_true_rc_materialization_slack, 1.75)
+        self.assertEqual(late.profile_cross_count_true_rc_materialization_max_candidates, 23)
+        self.assertEqual(late.profile_true_rc_candidate_scan_factor, 9)
+        self.assertEqual(late.profile_true_rc_candidate_scan_max_candidates, 211)
+        self.assertAlmostEqual(early.profile_true_rc_materialization_slack, 0.0)
+        self.assertEqual(early.profile_true_rc_materialization_max_candidates, 0)
+        self.assertAlmostEqual(early.profile_no_negative_true_rc_materialization_slack, 0.0)
+        self.assertEqual(early.profile_no_negative_true_rc_materialization_max_candidates, 0)
+        self.assertAlmostEqual(early.profile_replacement_true_rc_materialization_slack, 0.0)
+        self.assertEqual(early.profile_replacement_true_rc_materialization_max_candidates, 0)
+        self.assertAlmostEqual(early.profile_cross_count_true_rc_materialization_slack, 0.0)
+        self.assertEqual(early.profile_cross_count_true_rc_materialization_max_candidates, 0)
+        self.assertEqual(early.profile_true_rc_candidate_scan_factor, 1)
+        self.assertEqual(early.profile_true_rc_candidate_scan_max_candidates, 0)
+        self.assertTrue(early.dp_cross_count_dominance_enabled)
+        self.assertFalse(late.dp_cross_count_dominance_enabled)
+        self.assertEqual(late.direct_journey_label_early_return_negative_min_count, 32)
         self.assertTrue(late.direct_journey_label_ng_dssr_enabled)
         self.assertEqual(late.direct_journey_label_ng_memory_size, 5)
         self.assertEqual(late.direct_journey_label_dssr_max_iterations, 3)
@@ -7773,6 +11702,7 @@ class BPCFutureTests(unittest.TestCase):
             cg_iter=4,
         )
         self.assertTrue(direct.direct_journey_label_pricing_enabled)
+        self.assertEqual(direct.direct_journey_label_early_return_negative_min_count, 32)
 
         alias_config = {
             "journey_pricing_direct_label_enabled": True,
@@ -7982,6 +11912,25 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIn("subset_row", kinds)
         self.assertNotIn("sortie_lower_bound", kinds)
         self.assertTrue(_journey_task_set_dominance_safe(tuple(cuts), tuple()))
+
+    def test_journey_static_cuts_compact_selection_keeps_valid_budgeted_src(self):
+        data = load_future_data("very_small")
+        cuts = _journey_static_cuts(
+            data,
+            {
+                "cuts_enabled": True,
+                "fleet_lower_bound_cut_enabled": True,
+                "static_subset_row_cuts_enabled": True,
+                "static_subset_row_cut_budget": 3,
+                "static_subset_row_selection": "compact",
+            },
+        )
+        subset_cuts = [cut for cut in cuts if isinstance(cut, SubsetRowCut)]
+        self.assertEqual(len(subset_cuts), 3)
+        self.assertTrue(all(cut.kind == "subset_row" and len(cut.tasks) >= 3 for cut in subset_cuts))
+        self.assertTrue(_journey_task_set_dominance_safe(tuple(cuts), tuple()))
+        score = _journey_static_subset_row_compactness_score(data, tuple(int(task) for task in data.tasks[:3]))
+        self.assertTrue(math.isfinite(score))
 
     def test_journey_profile_pruning_is_not_safe_for_nonzero_fleet_cut_dual(self):
         cuts = (FleetLowerBoundCut(1),)

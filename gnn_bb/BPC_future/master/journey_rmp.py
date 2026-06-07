@@ -7,7 +7,7 @@ negative reduced-cost journey remains.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Any
 
@@ -52,6 +52,7 @@ class JourneyRMPSolution:
     variable_count: int
     constraint_count: int
     reduced_costs: dict[int, float]
+    variable_values: dict[int, float] = field(default_factory=dict)
 
     @property
     def optimal(self) -> bool:
@@ -170,10 +171,11 @@ def solve_journey_rmp(
         return JourneyRMPSolution(status, None, None, [], len(x), model.getNConss(), {})
     if dual_capture.duals is None:
         raise RuntimeError("SCIP did not call BPC_future journey dual capture pricer")
+    variable_values = {index: float(model.getVal(var)) for index, var in x.items()}
     values = [
-        (journeys[index], float(model.getVal(var)))
-        for index, var in x.items()
-        if float(model.getVal(var)) > 1.0e-9
+        (journeys[index], value)
+        for index, value in variable_values.items()
+        if value > 1.0e-9
     ]
     reduced_costs = {}
     if capture_reduced_costs:
@@ -186,6 +188,7 @@ def solve_journey_rmp(
         variable_count=len(x),
         constraint_count=model.getNConss(),
         reduced_costs=reduced_costs,
+        variable_values=variable_values,
     )
 
 
