@@ -47,3 +47,34 @@ complete proof is available.
 The current restricted pool integer solve is a primal device. It can produce an
 incumbent and can close a node only when its integer objective matches the exact
 grid LP bound after exhausted pricing.
+
+
+  <!-- PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future.py \
+  --config BPC_future/configs/moon_trek_20_smoke.yaml \
+  --time-limit 3600 \
+  --results-csv BPC_future/results/probe_root_tail_zero_tasks20_pair_3600_budgetfix_20260608.csv \
+  --log-dir BPC_future/results/logs_probe_root_tail_zero_tasks20_pair_3600_budgetfix_20260608 \
+  --solution-dir BPC_future/results/solutions_probe_root_tail_zero_tasks20_pair_3600_budgetfix_20260608 \
+  --set journey_dual_stabilization_enabled=True \
+  --set journey_dual_stabilization_tail_only_enabled=True \
+  --set journey_dual_stabilization_certificate_candidate_enabled=True \
+  --set journey_dual_stabilization_mode=l1_reference \
+  --set journey_dual_stabilization_reference_mode=root_tail_zero \
+  --set journey_dual_stabilization_time_limit=0.5 \
+  --instances \
+  BPC_future/data/generated/moon_trek_60/logical_graphs/apollo15_20km/tasks_20/apollo15_20km_tasks20_02_seed21018_logical_graph.json \
+  BPC_future/data/generated/moon_trek_60/logical_graphs/tranquillitatis_balmer_like_20km/tasks_20/tranquillitatis_balmer_like_20km_tasks20_01_seed21000_logical_graph.json \
+  2>&1 | awk '
+    /\[BPC_future/ && /(journey node|journey branch|journey fathom|finish)/ {
+      print
+      fflush()
+    }
+    /journey_pricing/ && /(exact_completion_bound|direct_label_partial_state_budget|CERTIFIED_NO_NEGATIVE|FOUND_NEGATIVE|time_limit)/ {
+      print
+      fflush()
+    }
+    /: status=/ || /BPC_future CSV written:/ || /Traceback|ValueError|Error/ {
+      print
+      fflush()
+    }
+  ' -->

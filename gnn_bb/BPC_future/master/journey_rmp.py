@@ -68,6 +68,17 @@ class JourneyDualStabilizationResult:
     constraint_count: int
 
 
+@dataclass
+class JourneyAnalyticCenterDualResult:
+    status: str
+    duals: JourneyDuals | None
+    objective_value: float | None
+    variable_count: int
+    constraint_count: int
+    barrier_iterations: int | None = None
+    solver: str = "gurobi"
+
+
 class _JourneyDualCapture:
     def __init__(self, cover_cons: dict[int, Any], fleet_cons: Any | None, cut_cons: dict[int, Any]) -> None:
         from pyscipopt import Pricer
@@ -199,6 +210,87 @@ def manual_journey_reduced_cost(journey: JourneyColumn, duals: JourneyDuals, cut
     for cut_index, cut in enumerate(cuts):
         rc -= float((duals.cuts or {}).get(int(cut_index), 0.0)) * _journey_cut_coefficient(cut, journey)
     return round(rc, 9)
+
+
+def solve_journey_gurobi_barrier_dual(
+    data: FutureData,
+    journeys: list[JourneyColumn],
+    *,
+    cuts: tuple[FutureCut, ...] = tuple(),
+    fleet_limit: int | None = None,
+    time_limit: float = 1.0,
+    verbose: bool = False,
+) -> JourneyAnalyticCenterDualResult:
+    """Solve the current journey RMP with Gurobi barrier and return row duals.
+
+    This is a sidecar dual selector for pricing experiments.  It must not be
+    used by itself as a node certificate: the official certificate remains the
+    SCIP true-dual exact-pricing closure in the driver.
+    """
+
+    try:
+        import gurobipy as gp
+    except Exception:
+        return JourneyAnalyticCenterDualResult("UNAVAILABLE", None, None, len(journeys), 0)
+
+    model = gp.Model(f"bpc_future_journey_barrier_{data.name}")
+    model.Params.OutputFlag = 1 if verbose else 0
+    model.Params.Method = 2
+    model.Params.Crossover = 0
+    model.Params.Threads = 1
+    if float(time_limit) > 0.0:
+        model.Params.TimeLimit = float(time_limit)
+
+    x = {
+        index: model.addVar(lb=0.0, ub=1.0, obj=float(journey.cost), name=f"x_journey[{index}]")
+        for index, journey in enumerate(journeys)
+    }
+    model.ModelSense = gp.GRB.MINIMIZE
+
+    cover_cons = {}
+    for task in data.tasks:
+        expr = gp.quicksum(var for index, var in x.items() if int(task) in journeys[index].task_set)
+        cover_cons[int(task)] = model.addConstr(expr == 1.0, name=f"cover[{task}]")
+
+    active_fleet_limit = len(data.vehicles) if fleet_limit is None else max(1, min(int(fleet_limit), len(data.vehicles)))
+    fleet_cons = model.addConstr(gp.quicksum(x.values()) <= float(active_fleet_limit), name="fleet_limit")
+
+    cut_cons = {}
+    for cut_index, cut in enumerate(cuts):
+        if not _journey_cut_supported(cut):
+            raise ValueError(f"unsupported journey cut kind {getattr(cut, 'kind', '')!r}")
+        expr = gp.LinExpr()
+        for index, var in x.items():
+            coeff = _journey_cut_coefficient(cut, journeys[index])
+            if abs(coeff) > 0.0:
+                expr.add(var, float(coeff))
+        if cut.sense == "<=":
+            cut_cons[cut_index] = model.addConstr(expr <= float(cut.rhs), name=f"cut[{cut_index},{cut.kind}]")
+        elif cut.sense == ">=":
+            cut_cons[cut_index] = model.addConstr(expr >= float(cut.rhs), name=f"cut[{cut_index},{cut.kind}]")
+        elif cut.sense == "==":
+            cut_cons[cut_index] = model.addConstr(expr == float(cut.rhs), name=f"cut[{cut_index},{cut.kind}]")
+        else:
+            raise ValueError(f"unsupported cut sense {cut.sense!r}")
+
+    model.optimize()
+    status = _gurobi_status_name(int(model.Status), gp)
+    if int(model.Status) != int(gp.GRB.OPTIMAL):
+        return JourneyAnalyticCenterDualResult(status, None, None, len(x), model.NumConstrs)
+
+    duals = JourneyDuals(
+        cover={task: float(cons.Pi) for task, cons in cover_cons.items()},
+        fleet_limit=float(fleet_cons.Pi),
+        cuts={key: float(cons.Pi) for key, cons in cut_cons.items()},
+    )
+    return JourneyAnalyticCenterDualResult(
+        status,
+        duals,
+        float(model.ObjVal),
+        len(x),
+        model.NumConstrs,
+        barrier_iterations=int(model.BarIterCount),
+    )
 
 
 def solve_journey_stabilized_dual(
@@ -449,3 +541,14 @@ def _status_name(status: Any) -> str:
         "timelimit": "TIME_LIMIT",
     }
     return mapping.get(text, text.upper())
+
+
+def _gurobi_status_name(status: int, gp: Any) -> str:
+    mapping = {
+        int(gp.GRB.OPTIMAL): "OPTIMAL",
+        int(gp.GRB.INFEASIBLE): "INFEASIBLE",
+        int(gp.GRB.UNBOUNDED): "UNBOUNDED",
+        int(gp.GRB.INF_OR_UNBD): "INF_OR_UNBD",
+        int(gp.GRB.TIME_LIMIT): "TIME_LIMIT",
+    }
+    return mapping.get(int(status), str(status))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import json
 import tempfile
@@ -34,6 +35,7 @@ from BPC_future.core.journey import JourneyColumn, JourneyPool, build_journey_po
 from BPC_future.master.journey_rmp import (
     JourneyDuals,
     manual_journey_reduced_cost,
+    solve_journey_gurobi_barrier_dual,
     solve_journey_pool_master,
     solve_journey_rmp,
     solve_journey_stabilized_dual,
@@ -72,10 +74,13 @@ from BPC_future.pricing.journey_pricing import (
     _direct_ng_partial_branch_pruning_safe,
     _direct_ng_neighborhoods,
     _direct_label_diverse_harvest_soft_return_ready,
+    _direct_completed_journey_suffix_optimistic_objective,
     _direct_completion_bound_cache_key,
     _direct_repair_target_masks,
     _direct_ng_relaxed_iteration,
+    _direct_sortie_partial_completion_bound_check,
     _direct_sortie_profiles_to_trips,
+    _cover_dual_sum_for_mask,
     _generate_negative_sortie_profiles,
     _generate_negative_sortie_profiles_by_label_physical_catalog,
     _generate_negative_sortie_profiles_by_best_first_labels,
@@ -168,6 +173,7 @@ from BPC_future.solver.journey_driver import (
     _journey_exact_pricing_budget,
     _journey_flat_weak_column_pressure_addition,
     _journey_continue_exact_after_flat_weak_heuristic,
+    _journey_analytic_center_priority_task_sets,
     _journey_dual_current_pool_validation,
     _journey_dual_optimal_inequality_bounds,
     _journey_dual_hash,
@@ -1067,8 +1073,8 @@ class BPCFutureTests(unittest.TestCase):
         )
         pricing = SimpleNamespace(
             journeys=(
-                SimpleNamespace(signature="replacement"),
-                SimpleNamespace(signature="new"),
+                SimpleNamespace(signature="replacement", task_set=frozenset({1, 2})),
+                SimpleNamespace(signature="new", task_set=frozenset({3})),
             )
         )
         events: list[tuple[str, dict[str, Any]]] = []
@@ -1090,6 +1096,15 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(payload["active_new_task_set_count"], 0)
         self.assertEqual(payload["active_replacement_task_set_count"], 1)
         self.assertEqual(payload["inactive_changed_task_set_count"], 1)
+        self.assertEqual(payload["addition_productivity_class"], "active_replacement_task_set")
+        self.assertEqual(payload["requested_task_set_count"], 2)
+        self.assertEqual(payload["changed_task_set_count"], 2)
+        self.assertEqual(payload["new_task_set_count"], 1)
+        self.assertEqual(payload["replacement_task_set_count"], 1)
+        self.assertEqual(payload["changed_journey_ratio"], 1.0)
+        self.assertEqual(payload["new_journey_ratio"], 0.5)
+        self.assertEqual(payload["replacement_journey_ratio"], 0.5)
+        self.assertEqual(payload["unchanged_journey_ratio"], 0.0)
 
     def test_pre_exact_completion_bound_handoff_is_tail_only(self):
         config = {
@@ -1500,6 +1515,39 @@ class BPCFutureTests(unittest.TestCase):
             self.assertAlmostEqual(solver_rc, manual, places=5)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_gurobi_barrier_dual_matches_current_rmp_face_when_available(self):
+        try:
+            import gurobipy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"gurobipy unavailable: {exc}")
+        data = replace(load_future_data("very_small"), vehicles=(1, 2, 3, 4))
+        trips = _single_task_grid_trips(data, bucket=20.0)
+        journey_pool = build_journey_pool(data, trips, max_trips_per_journey=1, max_columns=200)
+        solution = solve_journey_rmp(data, journey_pool.journeys)
+        self.assertTrue(solution.optimal)
+        assert solution.objective is not None
+        result = solve_journey_gurobi_barrier_dual(
+            data,
+            journey_pool.journeys,
+            time_limit=2.0,
+        )
+        if result.status == "UNAVAILABLE":
+            self.skipTest("gurobi sidecar unavailable")
+        self.assertEqual(result.status, "OPTIMAL")
+        self.assertIsNotNone(result.duals)
+        self.assertIsNotNone(result.objective_value)
+        assert result.duals is not None and result.objective_value is not None
+        self.assertAlmostEqual(result.objective_value, solution.objective, places=5)
+        min_rc, negative_count = _journey_dual_current_pool_validation(
+            journey_pool.journeys,
+            result.duals,
+            tuple(),
+            tolerance=1.0e-5,
+        )
+        self.assertIsNotNone(min_rc)
+        self.assertEqual(negative_count, 0)
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_journey_stabilized_dual_supports_fleet_lower_cut(self):
         data = replace(load_future_data("very_small"), vehicles=(1, 2, 3, 4))
         trips = _single_task_grid_trips(data, bucket=20.0)
@@ -1620,6 +1668,28 @@ class BPCFutureTests(unittest.TestCase):
         self.assertLess(min_rc, 0.0)
         self.assertGreater(negative_count, 0)
 
+    def test_journey_analytic_center_priority_sets_are_ranking_hints(self):
+        data = load_future_data("very_small")
+        center = JourneyDuals(
+            cover={int(task): float(index + 1) for index, task in enumerate(data.tasks)},
+            fleet_limit=0.0,
+        )
+        scip = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0)
+        priority_sets = _journey_analytic_center_priority_task_sets(
+            data,
+            {
+                "journey_analytic_center_priority_top_tasks": 3,
+                "journey_analytic_center_priority_max_task_set_size": 2,
+                "journey_analytic_center_priority_max_task_sets": 10,
+            },
+            center,
+            scip,
+        )
+        self.assertTrue(priority_sets)
+        strongest = max(data.tasks, key=lambda task: center.cover[int(task)])
+        self.assertIn(frozenset({int(strongest)}), priority_sets)
+        self.assertTrue(all(isinstance(task_set, frozenset) for task_set in priority_sets))
+
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_journey_pricing_dual_selector_returns_valid_stabilized_source(self):
         data = replace(load_future_data("very_small"), vehicles=(1, 2, 3, 4))
@@ -1656,6 +1726,107 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertIsNotNone(min_rc)
         self.assertEqual(negative_count, 0)
+
+    def test_journey_pricing_dual_selector_reference_mode_is_opt_in(self):
+        data = replace(load_future_data("very_small"), vehicles=(1, 2, 3, 4))
+        trips = _single_task_grid_trips(data, bucket=20.0)
+        journey_pool = build_journey_pool(data, trips, max_trips_per_journey=2, max_columns=400)
+        scip = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        previous = JourneyDuals(
+            cover={int(task): float(index + 1) for index, task in enumerate(data.tasks)},
+            fleet_limit=0.0,
+            cuts={},
+        )
+
+        def _run_selector(config: dict[str, Any], **selector_kwargs: Any) -> Any:
+            with patch("BPC_future.solver.journey_driver.solve_journey_stabilized_dual") as stabilized:
+                stabilized.return_value = SimpleNamespace(
+                    status="OPTIMAL",
+                    duals=scip,
+                    objective_value=0.0,
+                    variable_count=1,
+                    constraint_count=1,
+                )
+                selected, source = _select_journey_pricing_duals(
+                    data,
+                    {
+                        "journey_dual_stabilization_enabled": True,
+                        "journey_dual_stabilization_mode": "l1_reference",
+                        "journey_dual_stabilization_time_limit": 0.1,
+                        **config,
+                    },
+                    journey_pool,
+                    tuple(),
+                    len(data.vehicles),
+                    0.0,
+                    scip,
+                    previous,
+                    FutureLogger(None, console=False),
+                    1,
+                    progress_classification="dual_changed_degenerate",
+                    **selector_kwargs,
+                )
+                self.assertIs(selected, scip)
+                self.assertEqual(source, "stabilized")
+                return stabilized.call_args.kwargs
+
+        default_kwargs = _run_selector({})
+        self.assertIs(default_kwargs["reference"], previous)
+
+        zero_kwargs = _run_selector({"journey_dual_stabilization_reference_mode": "zero"})
+        self.assertIsNone(zero_kwargs["reference"])
+
+        scip_kwargs = _run_selector({"journey_dual_stabilization_reference_mode": "scip"})
+        self.assertIs(scip_kwargs["reference"], scip)
+
+        root_tail_kwargs = _run_selector(
+            {"journey_dual_stabilization_reference_mode": "root_tail_zero"},
+            incumbent=0.0,
+            certificate_flat_rounds=1,
+            node_id=0,
+            depth=0,
+        )
+        self.assertIsNone(root_tail_kwargs["reference"])
+
+    def test_journey_pricing_dual_selector_root_tail_zero_gate_preserves_branch_path(self):
+        data = replace(load_future_data("very_small"), vehicles=(1, 2, 3, 4))
+        trips = _single_task_grid_trips(data, bucket=20.0)
+        journey_pool = build_journey_pool(data, trips, max_trips_per_journey=2, max_columns=400)
+        scip = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        config = {
+            "journey_dual_stabilization_enabled": True,
+            "journey_dual_stabilization_mode": "l1_reference",
+            "journey_dual_stabilization_reference_mode": "root_tail_zero",
+            "journey_dual_stabilization_time_limit": 0.1,
+        }
+
+        def _select(**selector_kwargs: Any) -> tuple[JourneyDuals, str, int]:
+            with patch("BPC_future.solver.journey_driver.solve_journey_stabilized_dual") as stabilized:
+                selected, source = _select_journey_pricing_duals(
+                    data,
+                    config,
+                    journey_pool,
+                    tuple(),
+                    len(data.vehicles),
+                    0.0,
+                    scip,
+                    scip,
+                    FutureLogger(None, console=False),
+                    1,
+                    progress_classification="dual_changed_degenerate",
+                    **selector_kwargs,
+                )
+                return selected, source, int(stabilized.call_count)
+
+        selected, source, calls = _select(incumbent=0.0, certificate_flat_rounds=1, node_id=0, depth=1)
+        self.assertIs(selected, scip)
+        self.assertEqual(source, "scip")
+        self.assertEqual(calls, 0)
+
+        selected, source, calls = _select(incumbent=math.inf, certificate_flat_rounds=1, node_id=0, depth=0)
+        self.assertIs(selected, scip)
+        self.assertEqual(source, "scip")
+        self.assertEqual(calls, 0)
 
     def test_journey_exact_pricing_duals_force_scip_for_certificate_modes(self):
         scip = JourneyDuals(cover={1: 1.0}, fleet_limit=0.0)
@@ -4228,6 +4399,122 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(math.isfinite(float(bucketed_value)))
         self.assertTrue(math.isinf(float(exact_first_value)))
 
+    def test_unique_route_completion_bound_reports_cache_hits(self):
+        data = replace(load_future_data("very_small"), tasks=(1,), sortie_limit=1)
+        duals = FutureDuals(
+            cover={1: 50.0},
+            task_vehicle={},
+            sortie_count={},
+            time_occupation={},
+            ordering={},
+            branches={},
+        )
+        bound = _UniqueRouteCompletionLowerBound(
+            data,
+            duals,
+            {1: 0},
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=5,
+            energy_buckets=5,
+            exact_first_step_enabled=True,
+        )
+
+        first = bound.partial_value(
+            last=0,
+            available_mask=1,
+            remaining_slots_in_sortie=1,
+            future_sorties=0,
+            current_time=0.0,
+            current_energy=0.0,
+        )
+        second = bound.partial_value(
+            last=0,
+            available_mask=1,
+            remaining_slots_in_sortie=1,
+            future_sorties=0,
+            current_time=0.0,
+            current_energy=0.0,
+        )
+
+        self.assertEqual(first, second)
+        self.assertGreaterEqual(bound.partial_cache_misses, 1)
+        self.assertGreaterEqual(bound.partial_cache_hits, 1)
+        self.assertEqual(bound.exact_first_step_cache_misses, 1)
+        self.assertEqual(bound.exact_first_step_cache_hits, 1)
+        self.assertEqual(len(bound._exact_first_step_cache), 1)
+
+    def test_unique_route_exact_first_step_cache_cap_keeps_computing(self):
+        data = replace(load_future_data("very_small"), tasks=(1,), sortie_limit=1)
+        bound = _UniqueRouteCompletionLowerBound(
+            data,
+            FutureDuals(
+                cover={1: 50.0},
+                task_vehicle={},
+                sortie_count={},
+                time_occupation={},
+                ordering={},
+                branches={},
+            ),
+            {1: 0},
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=5,
+            energy_buckets=5,
+            exact_first_step_enabled=True,
+        )
+        bound.EXACT_FIRST_STEP_CACHE_MAX_SIZE = 1
+
+        first = bound.partial_value(0, 1, 1, 0, current_time=0.0, current_energy=0.0)
+        second = bound.partial_value(0, 1, 1, 0, current_time=0.1, current_energy=0.0)
+        first_again = bound.partial_value(0, 1, 1, 0, current_time=0.0, current_energy=0.0)
+
+        self.assertTrue(math.isfinite(float(first)))
+        self.assertTrue(math.isfinite(float(second)))
+        self.assertEqual(first, first_again)
+        self.assertEqual(len(bound._exact_first_step_cache), 1)
+        self.assertEqual(bound.exact_first_step_cache_hits, 1)
+        self.assertEqual(bound.exact_first_step_cache_misses, 2)
+
+    def test_unique_route_exact_first_step_skips_when_bucketed_bound_infeasible(self):
+        data = replace(
+            load_future_data("very_small"),
+            tasks=(1,),
+            sortie_limit=1,
+            arc_options={(0, 1): tuple(), (1, 0): tuple()},
+        )
+        bound = _UniqueRouteCompletionLowerBound(
+            data,
+            FutureDuals(
+                cover={1: 0.0},
+                task_vehicle={},
+                sortie_count={},
+                time_occupation={},
+                ordering={},
+                branches={},
+            ),
+            {1: 0},
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=5,
+            energy_buckets=5,
+            exact_first_step_enabled=True,
+        )
+
+        value = bound.partial_value(
+            last=1,
+            available_mask=0,
+            remaining_slots_in_sortie=0,
+            future_sorties=0,
+            current_time=0.0,
+            current_energy=0.0,
+        )
+
+        self.assertTrue(math.isinf(float(value)))
+        self.assertEqual(bound.exact_first_step_cache_hits, 0)
+        self.assertEqual(bound.exact_first_step_cache_misses, 0)
+        self.assertEqual(len(bound._exact_first_step_cache), 0)
+
     def test_direct_journey_completion_bound_two_cycle_depot_immune_and_budget_fallback(self):
         data = replace(load_future_data("very_small"), tasks=(1,), sortie_limit=1)
         duals = JourneyDuals(cover={1: 0.0}, fleet_limit=0.0)
@@ -6074,9 +6361,10 @@ class BPCFutureTests(unittest.TestCase):
                     float(config.get("journey_certificate_completion_bound_diverse_harvest_grace_time", 0.0)),
                     0.0,
                 )
+                self.assertTrue(config.get("journey_pricing_direct_journey_label_cross_count_dominance_enabled"))
                 self.assertTrue(config.get("journey_hidden_negative_patrol_enabled"))
                 self.assertTrue(config.get("journey_pricing_profile_labeling_physical_catalog_resume_enabled"))
-                self.assertTrue(config.get("journey_hidden_negative_profile_catalog_seed_enabled"))
+                self.assertFalse(config.get("journey_hidden_negative_profile_catalog_seed_enabled"))
                 self.assertFalse(config.get("journey_post_seed_profile_reharvest_enabled"))
                 self.assertTrue(config.get("journey_post_seed_profile_reharvest_after_replacement_only"))
                 self.assertGreater(float(config.get("journey_post_seed_profile_reharvest_time_limit", 0.0)), 0.0)
@@ -6108,6 +6396,56 @@ class BPCFutureTests(unittest.TestCase):
                     int(config.get("journey_hidden_negative_patrol_min_journeys", 0)),
                 )
                 self.assertGreaterEqual(int(config.get("journey_hidden_negative_audit_max_logged_journeys", -1)), 0)
+
+    def test_frozen_5_10_mainline_artifacts_are_unchanged(self):
+        locked_hashes = {
+            Path("BPC_future/configs/moon_trek_5_journey.yaml"):
+                "a2e351c7b89b4d37caff49474e5d9d281396de2edcd4c2a9e64444e0bf4435ce",
+            Path("BPC_future/configs/moon_trek_10_journey.yaml"):
+                "f8f896ad9502b36480d46d5b0484171ff6ca64c75ac2057d8750eee5a95b7313",
+            Path("BPC_future/data/learning_dual/hardtail_20260604/hierarchical_option_gat_hardtail.pt"):
+                "ef7e8a4acdb9d2d6f60a6bd6038ed75d3e89ac72408acd237e5c1054fefcf88d",
+        }
+        for path, expected_hash in locked_hashes.items():
+            with self.subTest(path=str(path)):
+                self.assertTrue(path.exists(), path)
+                actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+                self.assertEqual(actual_hash, expected_hash)
+
+    def test_20_task_completion_bound_budget_is_not_smoke_capped(self):
+        config = load_config(Path("BPC_future/configs/moon_trek_20_smoke.yaml"))
+        self.assertGreaterEqual(int(config.get("journey_certificate_completion_bound_max_sequences", 0)), 1500000)
+        self.assertGreaterEqual(int(config.get("journey_certificate_completion_bound_max_dp_states", 0)), 500000)
+        self.assertGreaterEqual(int(config.get("journey_certificate_completion_bound_partial_max_states", 0)), 1500000)
+        self.assertTrue(config.get("journey_certificate_completion_bound_escalation_enabled"))
+        self.assertGreater(
+            int(config.get("journey_certificate_completion_bound_escalation_partial_max_states", 0)),
+            int(config.get("journey_certificate_completion_bound_partial_max_states", 0)),
+        )
+
+    def test_20_task_completion_bound_prioritizes_active_support_repairs(self):
+        config = load_config(Path("BPC_future/configs/moon_trek_20_smoke.yaml"))
+        self.assertGreater(
+            int(config.get("journey_certificate_completion_bound_diverse_harvest_min_priority_task_sets", 0)),
+            0,
+        )
+        self.assertEqual(
+            float(config.get("journey_certificate_completion_bound_diverse_harvest_priority_overlap_threshold", 0.0)),
+            1.0,
+        )
+
+    def test_20_task_flat_weak_replacement_repair_stays_experimental(self):
+        config = load_config(Path("BPC_future/configs/moon_trek_20_smoke.yaml"))
+        self.assertFalse(config.get("journey_certificate_flat_weak_column_pressure_enabled"))
+        self.assertFalse(config.get("journey_replacement_repair_enabled"))
+        self.assertFalse(config.get("journey_replacement_repair_after_flat_weak_enabled"))
+        self.assertTrue(config.get("journey_replacement_repair_root_only"))
+        self.assertGreater(float(config.get("journey_replacement_repair_time_limit", 0.0)), 0.0)
+        self.assertGreater(int(config.get("journey_replacement_repair_min_journeys", 0)), 0)
+        self.assertGreaterEqual(
+            int(config.get("journey_replacement_repair_max_returned_journeys", 0)),
+            int(config.get("journey_replacement_repair_min_journeys", 0)),
+        )
 
     def test_journey_required_components_fail_closed(self):
         config = load_config(Path("BPC_future/configs/moon_trek_5_journey.yaml"))
@@ -7132,6 +7470,7 @@ class BPCFutureTests(unittest.TestCase):
             mask=1,
             contribution=-10.0,
         )
+        stats: dict[str, object] = {}
 
         journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
             data,
@@ -7142,11 +7481,17 @@ class BPCFutureTests(unittest.TestCase):
             max_journeys=1,
             duals=JourneyDuals(cover={task: -100.0}, fleet_limit=0.0, cuts={}),
             cuts=tuple(),
+            dp_stats=stats,
         )
 
         self.assertEqual(journeys, [])
         self.assertEqual(existing_filtered, 0)
         self.assertEqual(weak_filtered, 1)
+        self.assertEqual(stats.get("profile_weak_filtered_materialized_count"), 1)
+        self.assertEqual(stats.get("profile_weak_filtered_best_rough_rc"), -10.0)
+        self.assertGreater(float(stats.get("profile_weak_filtered_best_true_rc", 0.0)), 0.0)
+        self.assertGreater(float(stats.get("profile_weak_filtered_max_true_minus_rough", 0.0)), 10.0)
+        self.assertEqual(stats.get("profile_weak_filtered_max_true_minus_rough_mask"), 1)
 
     def test_profile_candidate_selection_skips_nonmaterializable_profile_combo(self):
         data = load_future_data("very_small")
@@ -7308,6 +7653,23 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(_add_sortie_partial_label(labels, worse, active_label_ids=active_ids))
         self.assertEqual(labels, [better])
         self.assertNotIn(id(worse), active_ids)
+
+    def test_cover_dual_sum_for_mask_uses_cache(self):
+        duals = FutureDuals(
+            cover={1: 2.5, 2: -1.0, 3: 4.0},
+            task_vehicle={},
+            sortie_count={},
+            time_occupation={},
+            ordering={},
+            branches={},
+        )
+        task_to_bit = {1: 0, 2: 1, 3: 2}
+        cache = {}
+
+        self.assertAlmostEqual(_cover_dual_sum_for_mask(0b101, duals, task_to_bit, cache), 6.5)
+        self.assertEqual(cache, {0b101: 6.5})
+        duals.cover[1] = 100.0
+        self.assertAlmostEqual(_cover_dual_sum_for_mask(0b101, duals, task_to_bit, cache), 6.5)
 
     def test_journey_profile_dp_early_return_waits_for_min_count(self):
         data = load_future_data("very_small")
@@ -9410,6 +9772,13 @@ class BPCFutureTests(unittest.TestCase):
                 "journey_certificate_completion_bound_diverse_harvest_min_fill": 18,
                 "journey_certificate_completion_bound_diverse_harvest_min_priority_task_sets": 3,
                 "journey_certificate_completion_bound_diverse_harvest_priority_overlap_threshold": 0.55,
+                "journey_certificate_completion_bound_diverse_harvest_support_aware_enabled": True,
+                "journey_certificate_completion_bound_diverse_harvest_support_overlap_threshold": 0.45,
+                "journey_certificate_completion_bound_diverse_harvest_replacement_cap": 7,
+                "journey_certificate_completion_bound_diverse_harvest_strong_replacement_threshold": -0.0002,
+                "journey_certificate_completion_bound_mask_closure_enabled": True,
+                "journey_certificate_completion_bound_mask_closure_max_masks": 4,
+                "journey_certificate_completion_bound_mask_closure_max_columns_per_mask": 3,
                 "journey_certificate_completion_bound_diverse_harvest_max_containment": 0.75,
                 "journey_certificate_completion_bound_diverse_harvest_allow_duplicate_task_sets": True,
                 "journey_certificate_completion_bound_diverse_harvest_grace_time": 0.75,
@@ -9437,6 +9806,16 @@ class BPCFutureTests(unittest.TestCase):
             harvest_updated.direct_journey_label_diverse_harvest_priority_overlap_threshold,
             0.55,
         )
+        self.assertTrue(harvest_updated.direct_journey_label_diverse_harvest_support_aware_enabled)
+        self.assertAlmostEqual(harvest_updated.direct_journey_label_diverse_harvest_support_overlap_threshold, 0.45)
+        self.assertEqual(harvest_updated.direct_journey_label_diverse_harvest_replacement_cap, 7)
+        self.assertAlmostEqual(
+            harvest_updated.direct_journey_label_diverse_harvest_strong_replacement_threshold,
+            -0.0002,
+        )
+        self.assertTrue(harvest_updated.direct_journey_label_mask_closure_enabled)
+        self.assertEqual(harvest_updated.direct_journey_label_mask_closure_max_masks, 4)
+        self.assertEqual(harvest_updated.direct_journey_label_mask_closure_max_columns_per_mask, 3)
         self.assertAlmostEqual(harvest_updated.direct_journey_label_diverse_harvest_max_containment, 0.75)
         self.assertTrue(harvest_updated.direct_journey_label_diverse_harvest_allow_duplicate_task_sets)
         self.assertAlmostEqual(harvest_updated.direct_journey_label_early_return_negative_grace_time, 0.75)
@@ -9454,6 +9833,13 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_min_fill"], 18)
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_min_priority_task_sets"], 3)
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_priority_overlap_threshold"], 0.55)
+        self.assertTrue(harvest_mode["completion_bound_diverse_harvest_support_aware"])
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_support_overlap_threshold"], 0.45)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_replacement_cap"], 7)
+        self.assertEqual(harvest_mode["completion_bound_diverse_harvest_strong_replacement_threshold"], -0.0002)
+        self.assertTrue(harvest_mode["completion_bound_mask_closure"])
+        self.assertEqual(harvest_mode["completion_bound_mask_closure_max_masks"], 4)
+        self.assertEqual(harvest_mode["completion_bound_mask_closure_max_columns_per_mask"], 3)
         self.assertAlmostEqual(harvest_mode["completion_bound_diverse_harvest_max_containment"], 0.75)
         self.assertTrue(harvest_mode["completion_bound_diverse_harvest_allow_duplicate_task_sets"])
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_min_journeys"], 5)
@@ -11175,6 +11561,218 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(selection.candidate_priority_task_set_count, 1)
         self.assertEqual(selection.selected_priority_task_set_count, 1)
         self.assertIn(("near_active",), [journey.signature for journey in selection.journeys])
+
+    def test_support_aware_harvest_prioritizes_active_support_changes(self):
+        candidates = [
+            (-100.0, SimpleNamespace(signature=("weak_replacement_a",), task_set=(1, 2))),
+            (-90.0, SimpleNamespace(signature=("weak_replacement_b",), task_set=(3, 4))),
+            (-80.0, SimpleNamespace(signature=("weak_replacement_c",), task_set=(5, 6))),
+            (-10.0, SimpleNamespace(signature=("support_change",), task_set=(9, 10))),
+            (-8.0, SimpleNamespace(signature=("new_mask",), task_set=(11,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=4,
+            top_k_strongest=0,
+            min_fill=4,
+            existing_task_sets={
+                frozenset((1, 2)),
+                frozenset((3, 4)),
+                frozenset((5, 6)),
+                frozenset((9, 10)),
+            },
+            priority_task_sets={frozenset((1, 2)), frozenset((3, 4))},
+            support_aware_enabled=True,
+            support_task_sets={frozenset((1, 2)), frozenset((3, 4))},
+            support_overlap_threshold=0.1,
+            replacement_cap=1,
+            strong_replacement_threshold=-200.0,
+            prefer_new_task_sets=True,
+        )
+
+        signatures = [journey.signature for journey in selection.journeys]
+        self.assertIn(("new_mask",), signatures)
+        self.assertIn(("support_change",), signatures)
+        self.assertEqual(selection.candidate_support_changing_count, 3)
+        self.assertGreaterEqual(selection.selected_support_changing_count, 2)
+        self.assertEqual(selection.selected_weak_replacement_count, 1)
+
+    def test_support_aware_harvest_replacement_cap_is_soft_for_min_fill(self):
+        candidates = [
+            (-10.0, SimpleNamespace(signature=("weak_a",), task_set=(1, 2))),
+            (-9.0, SimpleNamespace(signature=("weak_b",), task_set=(3, 4))),
+            (-8.0, SimpleNamespace(signature=("weak_c",), task_set=(5, 6))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=3,
+            top_k_strongest=0,
+            min_fill=3,
+            existing_task_sets={frozenset((1, 2)), frozenset((3, 4)), frozenset((5, 6))},
+            support_aware_enabled=True,
+            replacement_cap=1,
+            strong_replacement_threshold=-100.0,
+        )
+
+        self.assertEqual(selection.selected_count, 3)
+        self.assertEqual(selection.selected_weak_replacement_count, 3)
+        self.assertEqual(selection.fallback_fill_count, 2)
+
+    def test_unique_route_partial_bound_gets_available_mask_without_unique_task(self):
+        class FakeUniqueRoute:
+            full_mask = 0b111
+
+            def __init__(self):
+                self.calls = []
+
+            def partial_value(
+                self,
+                last,
+                available_mask,
+                remaining_slots_in_sortie,
+                future_sorties,
+                current_time,
+                current_energy,
+            ):
+                self.calls.append(int(available_mask))
+                return 0.0
+
+        unique_route = FakeUniqueRoute()
+        label = _SortiePartialLabel(
+            sequence=(2,),
+            mask=0b010,
+            last=2,
+            partial=SimpleNamespace(
+                lower_start=0.0,
+                upper_start=100.0,
+                offset=0.0,
+                travel_cost=0.0,
+                service_cost=0.0,
+                travel_energy=0.0,
+                service_energy=0.0,
+            ),
+        )
+
+        _direct_sortie_partial_completion_bound_check(
+            SimpleNamespace(sortie_limit=2),
+            FutureDuals({}, {}, {}, {}, {}, {}),
+            label,
+            {1: 0, 2: 1, 3: 2},
+            base_reduced_cost=-10.0,
+            journey_label_value=0.0,
+            journey_label_mask=0b001,
+            journey_label_count=0,
+            earliest_start=0.0,
+            completion_bound=None,
+            unique_task_bound=None,
+            unique_route_bound=unique_route,
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=3,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            eps=1.0e-6,
+        )
+
+        self.assertEqual(unique_route.calls, [0b100])
+
+    def test_unique_route_suffix_bound_gets_available_mask_without_unique_task(self):
+        class FakeUniqueRoute:
+            full_mask = 0b111
+
+            def __init__(self):
+                self.calls = []
+
+            def future_value(self, available_mask, remaining_sorties, current_time=0.0):
+                self.calls.append(int(available_mask))
+                return 0.0
+
+        unique_route = FakeUniqueRoute()
+
+        _direct_completed_journey_suffix_optimistic_objective(
+            SimpleNamespace(),
+            new_mask=0b011,
+            new_end_time=0.0,
+            new_objective=-10.0,
+            remaining_sorties=1,
+            completion_bound=None,
+            unique_task_bound=None,
+            unique_route_bound=unique_route,
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=3,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+        )
+
+        self.assertEqual(unique_route.calls, [0b100])
+
+    def test_mask_closure_harvest_keeps_multiple_active_replacements(self):
+        candidates = [
+            (-10.0, SimpleNamespace(signature=("active_a",), task_set=(1, 2))),
+            (-9.0, SimpleNamespace(signature=("active_b",), task_set=(1, 2))),
+            (-8.0, SimpleNamespace(signature=("active_c",), task_set=(1, 2))),
+            (-7.0, SimpleNamespace(signature=("other_a",), task_set=(3, 4))),
+            (-6.0, SimpleNamespace(signature=("other_b",), task_set=(3, 4))),
+            (-5.0, SimpleNamespace(signature=("new_mask",), task_set=(5,))),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=5,
+            top_k_strongest=1,
+            min_fill=5,
+            existing_task_sets={frozenset((1, 2)), frozenset((3, 4))},
+            priority_task_sets={frozenset((1, 2))},
+            support_aware_enabled=True,
+            support_task_sets={frozenset((1, 2))},
+            mask_closure_enabled=True,
+            mask_closure_max_masks=1,
+            mask_closure_max_columns_per_mask=3,
+            prefer_new_task_sets=True,
+        )
+
+        signatures = [journey.signature for journey in selection.journeys]
+        self.assertIn(("active_a",), signatures)
+        self.assertIn(("active_b",), signatures)
+        self.assertIn(("active_c",), signatures)
+        self.assertEqual(selection.mask_closure_candidate_task_set_count, 2)
+        self.assertEqual(selection.mask_closure_selected_task_set_count, 1)
+        self.assertEqual(selection.mask_closure_selected_count, 2)
+
+    def test_harvest_respects_task_set_dominance_before_mask_closure(self):
+        candidates = [
+            (-20.0, SimpleNamespace(signature=("same_strong_rc",), task_set=(1, 2), cost=90.0)),
+            (-8.0, SimpleNamespace(signature=("same_lowest_cost",), task_set=(1, 2), cost=80.0)),
+            (-7.0, SimpleNamespace(signature=("same_dominated",), task_set=(1, 2), cost=110.0)),
+            (-6.0, SimpleNamespace(signature=("new_higher_cost",), task_set=(3,), cost=70.0)),
+            (-5.0, SimpleNamespace(signature=("new_lowest_cost",), task_set=(3,), cost=60.0)),
+        ]
+
+        selection = _select_diverse_journey_candidates(
+            candidates,
+            max_returned=5,
+            top_k_strongest=5,
+            min_fill=5,
+            dominant_task_set_costs={frozenset((1, 2)): 100.0},
+            existing_task_sets={frozenset((1, 2))},
+            mask_closure_enabled=True,
+            mask_closure_max_masks=2,
+            mask_closure_max_columns_per_mask=3,
+            allow_duplicate_task_sets=True,
+        )
+
+        self.assertTrue(selection.task_set_dominance_enabled)
+        self.assertEqual(selection.candidate_negative_count, 5)
+        self.assertEqual(selection.task_set_dominance_collapsed_count, 3)
+        self.assertEqual(selection.mask_closure_selected_count, 0)
+        self.assertEqual(selection.selected_count, 2)
+        self.assertEqual(
+            [journey.signature for journey in selection.journeys],
+            [("same_lowest_cost",), ("new_lowest_cost",)],
+        )
 
     def test_completion_bound_escalation_only_after_budget_hit_with_time(self):
         config = {

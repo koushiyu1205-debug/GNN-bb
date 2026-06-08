@@ -3,6 +3,616 @@
 This document records optimization paths that looked plausible but did not
 improve the current exact-safe mainline.  Revisit them only with new evidence.
 
+## 2026-06-08: Zero-Reference Stabilized Dual Is Promising But Not A 10-Task Breakthrough
+
+Context:
+
+- Hard 10-task roots were dominated by degenerate true-dual tails: completion-bound
+  final judge returned inactive replacement columns, RMP re-solved on a flat
+  objective face, then another true-dual final judge exposed the next small
+  replacement batch.
+- Existing official stabilized-dual support was exact-safe only after current
+  pool dual feasibility and dual-objective checks, but its `l1_reference` mode
+  followed the previous/SCIP dual by default.  A new opt-in
+  `journey_dual_stabilization_reference_mode=zero` lets the same L1 selector
+  minimize distance to the zero vector instead, while preserving the same
+  official feasibility checks before certificate pricing may use the dual.
+
+Change:
+
+- Added `journey_dual_stabilization_reference_mode` in
+  `_select_journey_pricing_duals` with allowed modes:
+  `previous`/`previous_pricing`/`last`, `scip`/`current`/`true`, and
+  `zero`/`none`/`origin`.
+- Default behavior remains `previous`: use the previous pricing dual when
+  available, otherwise SCIP's current dual.
+- The log now records both `reference` (effective reference) and
+  `reference_mode` (requested mode).  Zero-reference results still enter
+  exact/certificate pricing only as `stabilized_certificate` after objective
+  match and current-pool nonnegative reduced-cost validation.
+
+Probe evidence:
+
+- `tranq10_01` zero-reference probe:
+  `BPC_future/results/probe_zero_ref_dual_stab_tranq10_01_20260608.csv`.
+  Result: exact `OPTIMAL`, `75.852985s`, primal/dual `202.698698`,
+  `12` RMP solves, `22` pricing calls, `10` exact calls, `473` columns.
+  This fixes the previous `240s` timeout / `253s` profile run.  The only
+  completion-bound retry was a final
+  `stabilized_certificate / CERTIFIED_NO_NEGATIVE` at `cg_iter=12`.
+- `tranq10_09` zero-reference probe:
+  `BPC_future/results/probe_zero_ref_dual_stab_tranq10_09_20260608.csv`.
+  Result: exact `OPTIMAL`, `162.861692s`, primal/dual `203.102839`,
+  `18` RMP solves, `44` pricing calls, `26` exact calls, `493` columns.
+  This improves the current safe baseline around `193.24s`, but final judge
+  still had three negative replacement retries before the certificate.
+- `tranq10_04` zero-reference probe:
+  `BPC_future/results/probe_zero_ref_dual_stab_tranq10_04_20260608.csv`.
+  Result: exact `OPTIMAL`, `181.821925s`, primal/dual `207.893439`,
+  `16` RMP solves, `39` pricing calls, `23` exact calls, `463` columns.
+  This improves the current full-run timing around `232.27s`, but still needs
+  three completion-bound negative retries before final proof.
+
+Full-suite A/B evidence:
+
+- Full 10-task zero-reference run:
+  `BPC_future/results/all_tasks10_zero_ref_dual_stab_20260608.csv`.
+  Command used the normal 10-task config with opt-in
+  `journey_dual_stabilization_reference_mode=zero`, learning still enabled,
+  and a `240s` per-instance engineering limit.
+- Result: `20/20` exact `OPTIMAL`, total solve time `1353.69s`, max
+  `212.28s`, `8/20` above `60s`, `3/20` above `120s`, `2/20` above `200s`.
+  All finish records had `open_nodes=0` and `pricing_incomplete_nodes=0`.
+- Compared with `BPC_future/results/full_tasks10_20260608.csv`, zero-reference
+  improved total finite runtime by about `301.16s` and converted
+  `tranq10_01` from `TIME_LIMIT` at `238.13s` to exact `OPTIMAL` at
+  `118.85s`.
+- The gains were concentrated on Tranquillitatis root-tail cases:
+  `tranq10_02` `44.54s -> 15.13s`, `tranq10_05` `108.48s -> 39.16s`,
+  `tranq10_07` `136.59s -> 70.86s`, and `tranq10_10` `70.51s -> 43.31s`.
+- Apollo branch-heavy cases regressed under the same opt-in:
+  `apollo10_04` `163.90s -> 212.28s` and `15 -> 19` nodes;
+  `apollo10_07` `54.51s -> 95.69s` and `9 -> 17` nodes.  This is the
+  decisive reason not to promote zero-reference globally.
+- Certificate audit found no worker-local false certificate.  Every
+  `global_certificate=True` pricing record was
+  `CERTIFIED_NO_NEGATIVE / direct_label_no_negative_journey` with source
+  `scip_certificate` or `stabilized_certificate`.  Branch leaves can also close
+  through `DUPLICATE_ONLY` followed by
+  `journey_duplicate_only_certificate_audit exact_safe=true`; one Apollo leaf
+  had a negative reduced-cost column only at its upper bound, which is exact-safe
+  for fathoming but is not treated as a global no-negative certificate.
+
+Diagnosis:
+
+- The effect is real on sampled Tranquillitatis root-tail hard cases: zero
+  reference reduces degenerate dual ping-pong enough to remove the `tranq10_01`
+  timeout and cut roughly 20-30% from `tranq10_04`/`tranq10_09`.
+- It does not solve the 10-task target.  `tranq10_01` remains above `60s`, and
+  `tranq10_04`/`tranq10_09` remain far above `60s`; full-suite A/B also shows
+  Apollo branch-heavy regressions.
+- Completion-bound additions in these probes are still mostly inactive
+  replacement columns.  Zero-reference changes the dual face enough to shorten
+  the tail, but it does not create broad active-support or new-task-set impact.
+
+Decision:
+
+- Keep the opt-in code and test.  It is exact-safe by construction and is the
+  first tail-dual probe in this round with a clear positive signal.
+- Do not enable it in the main 5/10/20 configs.  The full 10-task A/B shows
+  useful Tranquillitatis root-tail gains, but Apollo branch-heavy regressions
+  are too large for a global default.
+- If revisited, gate it narrowly to root-tail certificate candidates after
+  branch risk is ruled out, and compare against Apollo10_04/Apollo10_07 before
+  promoting.
+- If promoted after A/B, keep the certificate logs audited for
+  `pricing_dual_source=stabilized_certificate`, `pricing_state=CERTIFIED_NO_NEGATIVE`,
+  and `current_pool_negative_reduced_cost_count=0`.
+
+Implementation follow-up:
+
+- Added opt-in `journey_dual_stabilization_reference_mode=root_tail_zero`.
+  Unlike global `zero`, this mode attempts zero-reference stabilization only
+  when the selector is at a root-tail certificate candidate.  By default it
+  requires `depth <= 0`, `certificate_candidate=True`, and
+  `certificate_flat_rounds >= 0`; otherwise it logs
+  `reason=root_tail_zero_gate` and returns the SCIP dual without solving the
+  stabilized-dual LP.  This keeps branch nodes on the baseline dual path.
+- Two-instance probe:
+  `BPC_future/results/probe_root_tail_zero_gate_apollo10_07_tranq10_09_20260608.csv`.
+  `apollo10_07` returned to baseline behavior: exact `OPTIMAL` in `53.672909s`,
+  `9` nodes, root branch `RF(2,10)`, and `0` accepted stabilized duals.
+  The global-zero run had taken `95.691864s` and `17` nodes.
+- The same gated run preserved the root-tail benefit on `tranq10_09`: exact
+  `OPTIMAL` in `161.774780s`, `1` node, `13` accepted stabilized duals, all at
+  `depth=0` with `reference=zero`, and final certificate
+  `stabilized_certificate / CERTIFIED_NO_NEGATIVE /
+  direct_label_no_negative_journey`.
+- Full 10-task gated run:
+  `BPC_future/results/all_tasks10_root_tail_zero_gate_20260608.csv`.
+  Result: `20/20` exact `OPTIMAL`, total solve time `1227.015s`, max
+  `180.381s`, `7/20` above `60s`, `3/20` above `120s`, `0/20` above `200s`.
+  This improves both the full baseline (`1654.859s`, one `TIME_LIMIT`) and
+  global zero-reference (`1353.694s`, max `212.277s`).
+- Apollo branch-heavy behavior is preserved: Apollo total time `444.260s` vs
+  baseline `451.084s` and global zero `536.910s`; Apollo total nodes `52`,
+  matching baseline and avoiding global zero's `64` nodes.  Key hard cases:
+  `apollo10_04` `161.277s / 15 nodes` vs baseline `163.896s / 15 nodes` and
+  global zero `212.277s / 19 nodes`; `apollo10_07` `53.603s / 9 nodes` vs
+  baseline `54.509s / 9 nodes` and global zero `95.692s / 17 nodes`.
+- Tranquillitatis root-tail benefit is preserved: Tranq total time `782.755s`
+  vs baseline `1203.775s` and global zero `816.784s`.  `tranq10_01` becomes
+  exact `OPTIMAL` in `108.670s` instead of the baseline `238.130s`
+  `TIME_LIMIT`; `tranq10_04` improves to `180.381s`, and `tranq10_09` to
+  `163.085s`.
+- Full-suite gate audit found no bad stabilized-dual acceptance and no false
+  global certificate.  Every accepted stabilized dual had
+  `reference=zero`, `reference_mode=root_tail_zero`, `depth=0`,
+  `objective_matches=True`, `current_pool_dual_feasible=True`, and
+  `current_pool_negative_reduced_cost_count=0`.  Every global certificate was
+  `CERTIFIED_NO_NEGATIVE / direct_label_no_negative_journey` with source
+  `scip_certificate` or `stabilized_certificate`.
+- This gate is now a strong candidate for the 10-task mainline, but it should
+  still be checked on the 5-task full suite for no regression and on selected
+  20-task hard probes before being promoted to default.
+
+## 2026-06-07: Relaxed 5/10 Runs Show Exactness Is Mostly Restored, But 10-Task Tail Proof Is Still Too Expensive
+
+Context:
+
+- After enabling direct-label cross-count dominance in the mainline configs,
+  the full 5-task and 10-task suites were rerun with exact-safe certificate
+  semantics: profile/streaming no-column is local and uncertified; official
+  node convergence still requires true-dual direct-label / completion-bound
+  final judge.
+- The 10-task target time of `60s` is a performance target, not a hard
+  correctness cutoff.  A `240s` full-suite run was used to expose where the
+  exact proof is slow instead of prematurely stopping every hard tail.
+
+Evidence:
+
+- 5-task full suite:
+  `BPC_future/results/all_tasks05_cross_count_current_20260607.csv`.
+  All `20/20` instances are exact `OPTIMAL`; average `0.920s`, median
+  `0.947s`, max `1.925s`.
+- 10-task full suite with `240s` limit:
+  `BPC_future/results/all_tasks10_cross_count_current_240s_20260607.csv`.
+  `19/20` instances are exact `OPTIMAL`; one instance,
+  `tranquillitatis_balmer_like_20km_tasks10_01_seed11000`, hit `TIME_LIMIT`.
+  Among exact instances, average `80.336s`, median `58.068s`, max
+  `228.295s`.
+- The remaining timeout was rerun alone with `900s`:
+  `BPC_future/results/probe_tranq10_01_cross_count_long900_20260607.csv`.
+  It reached exact root `OPTIMAL` in `290.014s`, primal/dual `202.698698`,
+  gap `0.0`, `1` node, `19` RMP solves, `48` pricing calls, `29` exact
+  pricing calls, `10.58M` generated sequences, `446` columns.
+
+Diagnosis:
+
+- The slow 10-task cases split into two different families.
+- Branch-tree hard case:
+  `apollo15_20km_tasks10_04_seed11055` is exact `OPTIMAL` at `228.30s` but
+  uses `19` branch nodes, `35` RMP solves, `110` pricing calls, and `75`
+  exact pricing calls.  Its bottleneck is repeated true-dual certificate work
+  across branch nodes, not a single root tail.
+- Root-tail hard cases:
+  `tranq10_01`, `tranq10_04`, `tranq10_07`, `tranq10_09`, and `tranq10_06`
+  are all root-only or root-dominated.  Profile/heuristic pricing works early,
+  then fails in the tail with `partial_profile_scan_no_negative_journey` while
+  exact streaming/direct-label keeps finding true-RC negative columns.
+- The worst pattern is not simply "cannot find columns": the final judge often
+  spends about a minute, returns only a few weak negative columns, and the RMP
+  objective remains flat.  This repeats until the last heavy no-negative
+  certificate finally closes the root node.
+- Therefore the main unsolved issue is the degenerate tail proof loop:
+  true-dual final judge becomes an expensive column worker, and the returned
+  columns are too weak or too redundant to move the RMP basis quickly.
+
+Current decision:
+
+- Keep cross-count dominance enabled: it is exact-safe and gives a small,
+  repeatable search reduction.
+- Do not treat the 2026-06-07 performance as a global regression.  Compared
+  with the earlier `120s` runs, the current line certifies many instances that
+  previously timed out.  The higher average is partly because hard cases are
+  now allowed to run to proof.
+- The next performance work should target root-tail degeneracy and final-judge
+  productivity, not early profile scanning.  The most relevant next probes are:
+  stronger true-RC negative-column harvesting from the final judge, active-rate
+  logging for returned columns, and a proof-safe way to avoid repeated
+  `negative_journeys_already_in_pool` / weak-negative cycles.
+
+## 2026-06-07: Direct-Label Cross-Count Dominance Is A Small Safe Win, Not The Tail Breakthrough
+
+Context:
+
+- After the dominance-aware harvest run, the remaining hard-tail bottleneck on
+  `tranq10_09` was still two expensive true-dual completion-bound final-judge
+  calls.  The existing direct-label cross-count dominance rule was exact-safe
+  but disabled by default in the mainline configs.
+- The rule only compares labels with the same visited-task mask.  A label using
+  fewer sorties and no worse end time / reduced-cost value dominates a label
+  using more sorties because it leaves at least as much remaining sortie
+  capacity for future extensions.
+
+Probe:
+
+- Command:
+  `/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future.py --config BPC_future/configs/moon_trek_10_journey.yaml --set journey_pricing_direct_journey_label_cross_count_dominance_enabled=True --instances BPC_future/data/generated/moon_trek_60/logical_graphs/tranquillitatis_balmer_like_20km/tasks_10/tranquillitatis_balmer_like_20km_tasks10_09_seed11144_logical_graph.json --time-limit 600 --results-csv BPC_future/results/probe_direct_cross_count_tranq10_09_long600_20260607.csv --log-dir BPC_future/results/logs/probe_direct_cross_count_tranq10_09_long600_20260607 --solution-dir BPC_future/results/solutions/probe_direct_cross_count_tranq10_09_long600_20260607`.
+
+Outcome:
+
+- Result remained exact root `OPTIMAL`: primal `203.102839`, dual
+  `203.102839`, gap `0.0`, `1` node, `492` columns.
+- Wall-clock improved from the dominance-aware baseline `235.26s` to
+  `223.18s`.
+- Total generated sequences fell from about `7.85M` to about `7.17M`.
+- `direct_label_cross_count_pruned_labels` was `9970` across the run.
+- In the two heavy completion-bound calls:
+  - `cg_iter=20`: generated sequences dropped from `2.97M` to `2.63M`;
+    `direct_label_cross_count_pruned_labels=5307`.
+  - `cg_iter=21`: generated sequences dropped from `2.92M` to `2.58M`;
+    `direct_label_cross_count_pruned_labels=4663`.
+
+Decision:
+
+- Enable `journey_pricing_direct_journey_label_cross_count_dominance_enabled`
+  in the 5/10/20 mainline configs.  It is exact-safe and gives a repeatable
+  small reduction in final-judge search.
+- Do not over-credit it.  The last two completion-bound calls still generate
+  millions of labels, so the dominant unresolved issue is still the true-dual
+  certificate DP, not duplicate harvest or ordinary worker behavior.
+
+Follow-up: 15x15 completion-bound buckets are worse.
+
+- Probe:
+  `/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future.py --config BPC_future/configs/moon_trek_10_journey.yaml --set journey_certificate_completion_bound_time_buckets=15 --set journey_certificate_completion_bound_energy_buckets=15 --instances BPC_future/data/generated/moon_trek_60/logical_graphs/tranquillitatis_balmer_like_20km/tasks_10/tranquillitatis_balmer_like_20km_tasks10_09_seed11144_logical_graph.json --time-limit 600 --results-csv BPC_future/results/probe_cb_15x15_cross_count_tranq10_09_long600_20260607.csv --log-dir BPC_future/results/logs/probe_cb_15x15_cross_count_tranq10_09_long600_20260607 --solution-dir BPC_future/results/solutions/probe_cb_15x15_cross_count_tranq10_09_long600_20260607`.
+- Result remained exact `OPTIMAL`, primal/dual `203.102839`, but wall-clock
+  worsened to `284.61s`.
+- CB calls increased from `3` to `4`, total generated sequences rose from
+  about `7.17M` to about `9.47M`, and `two_cycle_state_count` rose from
+  `83853` to `177408`.
+- The finer table found additional tail negative replacements instead of
+  shortening the proof.  Keep the current `10x10` completion-bound buckets for
+  this mainline.
+
+## 2026-06-07: Task-Set-Dominance-Aware Harvest Removes Duplicate Batches But Does Not Shorten The Certificate Enough
+
+Context:
+
+- The relaxed `tranq10_09` run showed that mask closure was incompatible with
+  the current `JourneyPool` task-set dominance semantics: the pool keeps only
+  one representative per task set, so multiple physical alternatives for the
+  same mask mostly become unchanged replacements after the expensive final
+  judge has already found them.
+
+Implementation:
+
+- `_select_diverse_journey_candidates` now accepts
+  `dominant_task_set_costs`.
+- When task-set dominance is active, the selector collapses candidates by task
+  set before harvest selection and keeps only the raw-cost-best candidate for
+  each task set.  This mirrors `JourneyPool.add`, where raw cost is the
+  dominance criterion for identical master-column coefficients.
+- Mask closure is automatically disabled in this mode because same-mask
+  multi-column closure cannot survive the pool's one-representative-per-task-set
+  rule.
+- Added a regression test:
+  `test_harvest_respects_task_set_dominance_before_mask_closure`.
+
+Validation:
+
+- Compile:
+  `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m compileall -q BPC_future/pricing/journey_pricing.py BPC_future/solver/journey_driver.py BPC_future/tests/test_bpc_future.py`.
+- Unit tests:
+  `python -m unittest BPC_future.tests.test_bpc_future -k harvest -v` and
+  `python -m unittest BPC_future.tests.test_bpc_future.BPCFutureTests.test_certificate_completion_bound_is_tail_and_root_only -v`.
+- 5-task smoke:
+  `BPC_future/results/probe_dominance_aware_harvest_smoke_tasks05_20260607.csv`
+  solved `apollo15_20km_tasks05_01_seed6000` exactly in about `1.95s`.
+
+Hard-tail probe:
+
+- Result file:
+  `BPC_future/results/probe_dominance_aware_harvest_tranq10_09_long600_20260607.csv`.
+- Instance:
+  `tranquillitatis_balmer_like_20km_tasks10_09_seed11144`.
+- Outcome remained exact root `OPTIMAL`: primal `203.102839`, dual
+  `203.102839`, gap `0.0`, `1` node.
+- Wall-clock was `235.26s`, only slightly better than the previous relaxed
+  mask-closure run (`238.64s`).
+- Final column count dropped from `514` to `492`, showing the duplicate/unchanged
+  batch issue was real and mostly removed.
+- Completion-bound retries dropped from `5` calls to `3` calls, but total CB
+  time stayed high: about `157.9s`.
+- CB additions became clean:
+  - `cg_iter=12`: requested `10`, added `10`, duplicate/unchanged `0`.
+  - `cg_iter=20`: requested `9`, added `9`, duplicate/unchanged `0`.
+- The last two heavy CB calls still dominated:
+  - `cg_iter=20`: about `76.1s`, found `9` negative replacements after
+    generating about `2.97M` sequences.
+  - `cg_iter=21`: about `74.3s`, certified no negative after generating about
+    `2.92M` sequences.
+
+Decision:
+
+- Keep the dominance-aware harvest.  It aligns final-judge output with what
+  the master can actually accept and reduces column bloat.
+- Do not expect it to solve hard tails by itself.  After duplicate batches are
+  removed, the bottleneck is clearly the expensive true-dual final-judge search
+  on the degenerate tail.
+- Next proof-side work should target the certificate DP itself: stronger
+  completion-bound pruning, cheaper exact no-negative certification, or a
+  tail dual center that reduces the number of near-identical replacement probes
+  before the final judge is invoked.
+
+## 2026-06-07: Long Tranq10-09 Run Proves Exactness But Exposes Final-Judge And Duplicate-Replacement Bottlenecks
+
+Context:
+
+- `tranq10_09` was rerun with the current support-aware harvest and mask
+  closure mainline under a relaxed `600s` time limit to get the real optimality
+  certificate instead of stopping at the former `120s` target.
+- Command:
+  `/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future.py --config BPC_future/configs/moon_trek_10_journey.yaml --instances BPC_future/data/generated/moon_trek_60/logical_graphs/tranquillitatis_balmer_like_20km/tasks_10/tranquillitatis_balmer_like_20km_tasks10_09_seed11144_logical_graph.json --time-limit 600 --results-csv BPC_future/results/probe_mask_closure_tranq10_09_long600_20260607.csv --log-dir BPC_future/results/logs/probe_mask_closure_tranq10_09_long600_20260607 --solution-dir BPC_future/results/solutions/probe_mask_closure_tranq10_09_long600_20260607`.
+
+Outcome:
+
+- Status is true root `OPTIMAL`: primal `203.102839`, dual `203.102839`,
+  gap `0.0`, `1` node, `24` RMP solves, `66` pricing calls,
+  `42` exact pricing calls, `514` final columns.
+- Wall-clock was `238.64s`.  The old `120s` runs failed because the instance
+  still needed another final-judge negative-column loop plus a full
+  no-negative certificate after the target time.
+- The objective reached `203.102839` by `cg_iter=9` and stayed exactly flat
+  through `cg_iter=24`.  The active support hash also stayed unchanged in all
+  logged tail diagnostics.  This is a degenerate replacement tail, not a
+  primal incumbent discovery problem.
+
+Timing breakdown:
+
+- `exact_completion_bound_retry`: `5` calls, about `148.6s` total.  This is
+  the dominant cost.
+- Regular `exact`: `23` calls, about `73.9s` total.
+- `heuristic`: `24` calls, only about `2.8s` total.
+- `exact_retry`: `3` calls, about `4.4s` total.
+- `same_dual_supplement`: `6` calls, about `3.6s` total.
+
+Completion-bound detail:
+
+- `cg_iter=14`: CB took `6.98s`, found `12` selected negatives; only `4`
+  were added and `8` were duplicate-filtered.
+- `cg_iter=16`: CB took `10.88s`, found `15` selected negatives; only `5`
+  were added and `10` were duplicate-filtered.
+- `cg_iter=22`: CB took `11.65s`, found `14` selected negatives; only `3`
+  were added and `11` were duplicate-filtered.
+- `cg_iter=23`: CB took `36.16s`, found `11` selected negatives; only `5`
+  were added and `6` were duplicate-filtered.
+- `cg_iter=24`: CB took `82.92s` and finally returned
+  `CERTIFIED_NO_NEGATIVE` / `direct_label_no_negative_journey`.  This single
+  proof generated `3,298,327` sequences and `3,807,263` LB-pruned labels;
+  bound build time was only about `1.63s`, so the bottleneck is the forward
+  final-judge search, not bound construction.
+
+Diagnosis:
+
+- The certificate chain is now semantically correct: ordinary/profile
+  `no_negative_journey` is only local/uncertified.  In this same run, ordinary
+  exact reported local no-column at `cg_iter=14` and `16`, but CB then found
+  hidden negative columns.  Only the final CB `CERTIFIED_NO_NEGATIVE` at
+  `cg_iter=24` proved convergence.
+- Support-aware harvest and mask closure help expose the failure mode, but the
+  selected CB candidates are still mostly replacement columns under existing
+  masks/task sets.  They do not change the LP objective or active support.
+- The harvest selector is currently allowed to count candidates before the
+  master duplicate/signature filter.  In the long run, CB selected `52`
+  negative candidates across four negative retries, but only `17` were added.
+  The remaining `35` were filtered as duplicates after the expensive judge
+  work had already been paid for.
+- Learning remained enabled, but it was not the tail bottleneck in this run:
+  it contributed early true-RC-kept columns, then alpha decayed to `0.05` and
+  most tail rounds produced no strong true-RC candidates, forcing true-dual
+  exact pricing.
+
+Next useful changes:
+
+- Make final-judge harvest addability-aware before selection: remove or
+  heavily deprioritize candidates whose journey signature already exists in
+  the master/forbidden set before counting them toward `min_fill` or
+  `max_returned_journeys`.
+- Treat replacement harvest as a bounded fallback.  Prefer genuinely addable
+  new signatures and support-changing masks; do not spend the whole CB batch
+  budget on duplicates that will be discarded by `add_journeys`.
+- Improve the final no-negative certificate search itself.  The last proof
+  still costs `82.9s` after two-cycle and resource completion bounds, so the
+  next proof-side work should target stronger pruning or a cheaper exact
+  certificate path rather than more early worker heuristics.
+
+## 2026-06-07: Mask Closure Helps Batch Replacements But Still Does Not Close Tranq10-09
+
+Context:
+
+- Support-aware harvest showed that the `tranq10_09` completion-bound final
+  judge candidate universe had no new/support-changing task-set directions.
+  The next hypothesis was that repeated replacement alternatives under the
+  same active/repeated task masks should be closed in the same expensive judge
+  call instead of reappearing one by one in later rounds.
+
+Implementation:
+
+- `JourneyPricingConfig` now exposes
+  `direct_journey_label_mask_closure_enabled`,
+  `direct_journey_label_mask_closure_max_masks`, and
+  `direct_journey_label_mask_closure_max_columns_per_mask`.
+- Final-judge diverse harvest can now bypass the one-column-per-task-set rule
+  only for bounded active/repeated replacement masks.  All selected columns
+  still come from true-RC negative direct-label/completion-bound candidates.
+- The 5/10/20 mainline configs enable mask closure with max `8` masks and max
+  `6` columns per mask.  The global `max_returned_journeys` cap still limits
+  the total returned batch size.
+- Logs now include:
+  `harvest_mask_closure_candidate_task_set_count`,
+  `harvest_mask_closure_selected_count`, and
+  `harvest_mask_closure_selected_task_set_count`.
+
+Validation:
+
+- Compile:
+  `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m compileall -q BPC_future/pricing/journey_pricing.py BPC_future/solver/journey_driver.py BPC_future/tests/test_bpc_future.py`.
+- Unit tests:
+  `python -m unittest BPC_future.tests.test_bpc_future -k mask_closure -v`,
+  `python -m unittest BPC_future.tests.test_bpc_future -k diverse_journey_harvest -v`,
+  `python -m unittest BPC_future.tests.test_bpc_future -k support_aware -v`, and
+  `python -m unittest BPC_future.tests.test_bpc_future.BPCFutureTests.test_certificate_completion_bound_is_tail_and_root_only -v`.
+- 5-task smoke:
+  `BPC_future/results/probe_mask_closure_smoke_tasks05_20260607.csv`
+  solved `apollo15_20km_tasks05_01_seed6000` exactly in about `2.02s`.
+
+Hard-tail probe:
+
+- Result file:
+  `BPC_future/results/probe_mask_closure_tranq10_09_20260607.csv`.
+- Instance:
+  `tranquillitatis_balmer_like_20km_tasks10_09_seed11144`.
+- Outcome stayed root `TIME_LIMIT`, primal `203.102839`, no dual bound, about
+  `114.47s`, with `485` columns.  This is faster than the immediately previous
+  support-aware-only probe (`119.20s`, `477` columns) but still not exact.
+- Completion-bound retries showed mask closure did fire:
+  - `cg_iter=12`: `candidate_negative_count=38`, selected `20`,
+    `new_cand=0`, `support_cand=0`, closure selected `15` columns across
+    `3` masks.
+  - `cg_iter=17`: `candidate_negative_count=28`, selected `14`,
+    `new_cand=0`, `support_cand=0`, closure selected `9` columns across
+    `3` masks.
+- The final incomplete reason was `weak_negative_journeys_filtered`, not a
+  completed no-negative certificate.
+
+Decision:
+
+- Keep mask closure infrastructure and counters.  It does exactly what it is
+  supposed to do: batch repeated replacement alternatives from the same masks.
+- Do not treat it as a complete `tranq10_09` solution.  It reduced some tail
+  cost but did not create new/support-changing directions or close the global
+  certificate.
+- The remaining replacement-tail issue is now sharper: after batching repeated
+  replacements, the tail still ends with weak true-RC negatives and no final
+  certificate.  The next useful work is likely a stronger no-candidate/weak-tail
+  proof bound or a policy for weak-negative certificate handoff, not more
+  replacement harvesting.
+
+## 2026-06-07: Support-Aware Harvest Is Implemented, But Tranq10-09 Has No Support-Changing Candidates
+
+Context:
+
+- The final-judge diverse harvest selector was upgraded to a support-aware
+  bucket order: new task-set directions, low-overlap active-support changes,
+  strong replacements, and then capped weak replacements.
+- The exactness boundary is unchanged.  The selector only ranks true-RC
+  negative journeys already found by the true-dual direct-label /
+  completion-bound judge.
+
+Implementation:
+
+- `JourneyPricingConfig` now exposes
+  `direct_journey_label_diverse_harvest_support_aware_enabled`,
+  `direct_journey_label_diverse_harvest_support_overlap_threshold`,
+  `direct_journey_label_diverse_harvest_replacement_cap`, and
+  `direct_journey_label_diverse_harvest_strong_replacement_threshold`.
+- The 5/10/20 mainline configs enable support-aware harvest with
+  support overlap `0.6`, weak replacement cap `8`, and strong replacement
+  threshold `-1e-4`.
+- Logs now include support-aware counters:
+  `harvest_candidate_support_changing_count`,
+  `harvest_selected_support_changing_count`,
+  `harvest_selected_strong_replacement_count`, and
+  `harvest_selected_weak_replacement_count`.
+
+Validation:
+
+- Compile:
+  `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m compileall -q BPC_future/pricing/journey_pricing.py BPC_future/solver/journey_driver.py BPC_future/tests/test_bpc_future.py`.
+- Unit tests:
+  `python -m unittest BPC_future.tests.test_bpc_future -k diverse_journey_harvest -v`,
+  `python -m unittest BPC_future.tests.test_bpc_future -k support_aware -v`, and
+  `python -m unittest BPC_future.tests.test_bpc_future.BPCFutureTests.test_certificate_completion_bound_is_tail_and_root_only -v`.
+- 5-task smoke:
+  `BPC_future/results/probe_support_aware_harvest_smoke_tasks05_20260607.csv`
+  solved `apollo15_20km_tasks05_01_seed6000` exactly in about `1.98s` with
+  `CERTIFIED_NO_NEGATIVE/global_certificate=true`.
+
+Hard-tail probe:
+
+- Result file:
+  `BPC_future/results/probe_support_aware_harvest_tranq10_09_20260607.csv`.
+- Instance:
+  `tranquillitatis_balmer_like_20km_tasks10_09_seed11144`.
+- Outcome stayed root `TIME_LIMIT`, primal `203.102839`, no dual bound, about
+  `119.20s`, with `477` columns.
+- The two completion-bound retries showed the selector was active but had no
+  support-changing material:
+  - `cg_iter=11`: `candidate_negative_count=141`, selected `10`, `new_cand=0`,
+    `support_cand=0`, all `10` selected were strong replacements.
+  - `cg_iter=12`: `candidate_negative_count=201`, selected `8`, `new_cand=0`,
+    `support_cand=0`, all `8` selected were strong replacements.
+
+Decision:
+
+- Keep the support-aware harvest infrastructure and counters.  It is
+  exact-safe and makes the real failure mode visible.
+- Do not expect support-aware ordering alone to break the current
+  `tranq10_09` replacement tail.  The final judge candidate universe contained
+  no new/support-changing task-set directions in the tested rounds.
+- The next replacement-tail step should be mask closure or another mechanism
+  that deliberately exhausts repeated replacement alternatives for the same
+  active masks, rather than only reordering distinct task sets.
+
+## 2026-06-07: Dynamic SRC Separation Does Not Hit The Current Tranq10-09 Tail
+
+Context:
+
+- Static SRC budget sweeps had already failed to recover the old fast
+  `tranq10_09` path, but dynamic SRC activation timing had not been checked
+  against the current exact-safe mainline.
+- The hypothesis was that the root tail might become fractional in a way that
+  static lexicographic SRC missed, and that dynamically separated subset-row
+  cuts could reduce the replacement-only pricing tail without changing
+  certificate semantics.  SRC coefficients depend only on task sets in journey
+  mode, so this remains exact-safe with current task-set dominance.
+
+Probes:
+
+- `BPC_future/results/probe_dynamic_src_tranq10_09_20260607.csv`
+  enabled dynamic SRC for the first three CG rounds on
+  `tranquillitatis_balmer_like_20km_tasks10_09_seed11144`.
+- `BPC_future/results/probe_dynamic_src_late_tranq10_09_20260607.csv`
+  extended the same separator through CG round 25 with the same moderate
+  budget:
+  `journey_dynamic_subset_row_cut_budget=280`,
+  `journey_dynamic_subset_row_max_added=25`, and
+  `journey_dynamic_subset_row_max_subset_size=6`.
+
+Observed behavior:
+
+- Both probes stayed root `TIME_LIMIT`, primal `203.102839`, no dual
+  certificate, with the same `492` columns as the current baseline.
+- The early probe ran three separation attempts; the late probe ran 21
+  attempts.  Every attempt generated `281` candidate cuts and found
+  `violated=0`, `added=0`.
+- The final completion-bound retries remained replacement-only:
+  the late probe's final CB selected `9` negative journeys with
+  `harvest_selected_new_task_set_count=0` and
+  `harvest_selected_replacement_task_set_count=9`.
+
+Decision:
+
+- Do not enable `journey_dynamic_subset_row_cuts_enabled` in the 5/10/20
+  mainline configs from this evidence.  On the current hard root, the dynamic
+  separator simply does not find violated cuts; extending its activation window
+  only adds small overhead.
+- Future cut work should improve cut candidate quality or add a different
+  valid inequality family.  Do not continue changing dynamic SRC round/budget
+  parameters blindly.
+
 ## 2026-06-07: Flat-Weak Column Pressure Still Does Not Break the Current Hard Tail
 
 Context:
@@ -5986,3 +6596,148 @@ Decision:
 - If revisited, it must be a separate opt-in flag with a cheaper monotone cache
   or a selective trigger.  Do not fold it into the current mainline exact-first
   partial-route bound.
+
+## 2026-06-08: 20-Task Probe Stopped on Final-Judge State Budget, Not Wall Clock
+
+Context:
+
+- Two 20-task root-tail-zero probes were launched with an outer `--time-limit
+  3600`, but both ended as `TIME_LIMIT` far earlier:
+  `apollo15_20km_tasks20_02_seed21018` at about `965.70s` and
+  `tranquillitatis_balmer_like_20km_tasks20_01_seed21000` at about `256.62s`.
+- The CSV had incumbent primal values but `dual_bound=None` and `gap=None`, so
+  neither run had an official no-negative certificate.
+
+Diagnosis:
+
+- The last root-node pricing path was:
+  ordinary exact and retry found only weak/filtered negatives, hidden-negative
+  patrol hit its small patrol `time_limit`, and the completion-bound final judge
+  returned `INCOMPLETE` with reason `direct_label_partial_state_budget`.
+- `journey_driver` maps any `PRICING_INCOMPLETE` node to `search_incomplete`,
+  and the final solve status is then reported as `TIME_LIMIT` even when the
+  wall-clock deadline has not expired.
+- The 20-task config still used smoke-level final-judge budgets:
+  `max_sequences=120000`, `max_dp_states=120000`,
+  `partial_max_states=50000`.  That was too small for a 20-task proof probe.
+
+Fix:
+
+- Freeze the current 5/10 exact-safe baseline separately in
+  `docs/frozen_5_10_mainline_20260608.md` and lock its config/model hashes in
+  tests before changing 20-task settings.
+- Raise only the 20-task completion-bound proof budgets to
+  `max_sequences=1500000`, `max_dp_states=500000`,
+  `partial_max_states=1500000`, with an exact-safe escalation retry budget of
+  `3000000/1000000/3000000` when the final judge hits proof-state budgets while
+  enough outer time remains.
+
+Decision:
+
+- Do not relax the official certificate rule.  `OPTIMAL` still requires the
+  true-dual direct-label completion-bound final judge to prove no negative
+  journey or return exact negative columns.
+- Do not move these larger 20-task budgets into the frozen 5/10 configs unless
+  the frozen benchmark lock is intentionally updated.
+
+## 2026-06-08: Flat-Weak Replacement Repair Did Not Improve 20-Task Root Tail
+
+Context:
+
+- Existing logs showed that hard 20-task roots add many negative columns whose
+  task sets do not intersect the current active support.  On
+  `tranquillitatis_balmer_like_20km_tasks20_01_seed21000`, the active-changed
+  ratio was only about `3.5%` in the target-200 probe.
+- A conservative worker-only experiment added an opt-in
+  `journey_replacement_repair_after_flat_weak_enabled` path.  It reused the
+  existing direct-label replacement-repair worker after flat/weak ordinary
+  exact additions.  The path was certificate-safe because no-column results
+  stayed worker-local and only the final completion-bound judge could certify.
+
+Probe:
+
+- Config experiment: enable
+  `journey_certificate_flat_weak_column_pressure_enabled`,
+  `journey_replacement_repair_enabled`, and
+  `journey_replacement_repair_after_flat_weak_enabled` for the 20-task config.
+- Instance:
+  `tranquillitatis_balmer_like_20km_tasks20_01_seed21000`.
+- Result:
+  `BPC_future/results/probe_target200_tranq20_01_flatweak_repair_20260608.csv`
+  ended `TIME_LIMIT` at `94.228310s`, primal `387.429624`, no dual certificate.
+
+Diagnosis:
+
+- The repair trigger fired only once at `cg_iter=3`; the repair worker spent its
+  `4.0s` budget and returned no columns because candidate task sets were
+  dominated.
+- The run still produced mostly inactive-only additions:
+  `50` changed-inactive-only events versus `4` active-replacement events.
+- It failed early at `cg_iter=54` with `weak_negative_journeys_filtered` from
+  ordinary exact and retry, before reaching a valid final certificate path.
+
+Decision:
+
+- Keep the helper code opt-in for future controlled probes, but leave
+  `journey_replacement_repair_after_flat_weak_enabled=False` and
+  `journey_replacement_repair_enabled=False` in the 20-task default config.
+- Do not promote this path to default.  The next useful direction is to fix
+  ordinary profile-worker batching or weak-negative handling before the final
+  judge, not to add an early replacement-repair sidecar.
+
+## 2026-06-08: Profile True-RC Scan Widening Is Not the 20-Task Root-Tail Fix
+
+Context:
+
+- A new diagnostic split was added for profile materialization failures:
+  `profile_selected_unmaterialized_candidate_count`,
+  `profile_weak_filtered_materialized_count`,
+  `profile_weak_filtered_best_rough_rc`,
+  `profile_weak_filtered_best_true_rc`,
+  `profile_weak_filtered_max_true_minus_rough`, and
+  `profile_weak_filtered_max_true_minus_rough_mask`.
+- On `tranquillitatis_balmer_like_20km_tasks20_01_seed21000`, the hard tail is
+  not caused by non-materializable profile combinations.  The selected profile
+  candidates materialize, but true reduced-cost rescoring turns many rough
+  negatives into positive columns.
+
+Probe results:
+
+- Baseline-style diagnostic run reached `cg_iter=59` with `48` weak-filtered
+  materialized candidates, best rough RC about `-13.825467`, best true RC about
+  `+1.374968`, and max `true - rough` gap about `26.138630`.
+- Setting late `profile_true_rc_candidate_scan_factor=4` and cap `192` did not
+  widen the effective selected candidate count: streaming/profile DP still
+  stopped at `48` candidates because `early_return_negative_min_count` was
+  still `48`.  It finished `TIME_LIMIT` at `220.580979s`, primal `383.763369`.
+- Raising late early-return and streaming negative batches to `192` did widen
+  the candidate universe and found more true negative columns, but it spent too
+  much time inside profile DP.  The same instance finished `TIME_LIMIT` at
+  `220.182908s`, primal `385.878303`, with large DP times such as `34.371205s`
+  and `33.498948s` in tail exact calls.
+- Enabling only `journey_certificate_flat_weak_column_pressure_enabled` was also
+  negative: `certificate_flat_rounds` stayed `0`, so the gate did not trigger a
+  useful completion-bound path.  The run stopped early at `88.017025s`, primal
+  `387.429624`, reason `weak_negative_journeys_filtered`.
+
+Diagnosis:
+
+- The profile-worker rough objective is a ranking heuristic in the tail, not a
+  reliable proxy for true journey reduced cost.  Large rough-negative batches
+  can be systematically positive under true-RC rescoring.
+- Increasing only the true-RC scan factor is ineffective while streaming
+  early-return stops after `48` unique-mask rough candidates.
+- Increasing the early-return target enough to expose deeper candidates is
+  exact-safe but too expensive and still mostly adds inactive-only task sets.
+- The useful tail columns in the scan-factor run came from completion-bound
+  direct-label harvest: at `cg_iter=59`, `exact_completion_bound_retry` found
+  `10` columns including an active replacement task set.
+
+Decision:
+
+- Do not promote late profile true-RC scan widening or batch `192` to default.
+- Do not re-enable flat-weak pressure by itself; it does not fire when flat
+  rounds are not accumulating.
+- The next promising direction is an exact-safe, budgeted completion-bound
+  harvest trigger for root-tail active-support repair, rather than wider
+  ordinary profile-DP scanning.

@@ -21,6 +21,7 @@ from BPC_future.master.journey_rmp import (
     JourneyDuals,
     _journey_cut_coefficient,
     manual_journey_reduced_cost,
+    solve_journey_gurobi_barrier_dual,
     solve_journey_pool_master,
     solve_journey_rmp,
     solve_journey_stabilized_dual,
@@ -334,6 +335,8 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 integer_tol=integer_tol,
                 remaining_time=max(0.0, time_limit - (time.perf_counter() - started)),
                 certificate_flat_rounds=certificate_flat_rounds,
+                node_id=0,
+                depth=0,
             )
         dual_vector = _journey_dual_vector(data, pricing_duals, len(cuts))
         dual_hash = _journey_dual_hash(dual_vector)
@@ -2826,6 +2829,106 @@ def _process_journey_branch_node(
             )
         return weak
 
+    def seed_and_reharvest_hidden_negative_pricing(
+        pricing_result: Any,
+        added: int,
+        *,
+        pricing_kind: str,
+        duals: Any,
+        pricing_dual_source: str,
+        base_pricing_config: JourneyPricingConfig,
+    ) -> tuple[int, list[Any], list[frozenset[int]]]:
+        _seed_hidden_negative_profile_catalog(
+            logger,
+            data,
+            config,
+            pricing_result,
+            duals,
+            base_pricing_config,
+            pricing_trip_cache if pricing_trip_cache is not None else {},
+            node.branch_constraints,
+            cg_iter,
+            pricing_kind=pricing_kind,
+            node_id=node.id,
+            depth=node.depth,
+        )
+        if int(added) <= 0:
+            return 0, [], []
+        reharvest_remaining = max(0.0, deadline - time.perf_counter())
+        reharvest_config, reharvest_mode = _journey_post_seed_profile_reharvest_config(
+            config,
+            base_pricing_config,
+            added,
+            remaining=reharvest_remaining,
+            min_pricing_time=min_pricing_time,
+            depth=node.depth,
+        )
+        if not reharvest_mode:
+            return 0, [], []
+        logger.log(
+            "journey_post_seed_profile_reharvest",
+            node_id=node.id,
+            depth=node.depth,
+            cg_iter=cg_iter,
+            previous_pricing_kind=pricing_kind,
+            previous_added_journeys=int(added),
+            previous_new_journeys=int(getattr(added, "new_journeys", int(added))),
+            previous_replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+            remaining=round(float(reharvest_remaining), 6),
+            reharvest_mode=reharvest_mode,
+            certificate_capable=False,
+        )
+        reharvest_pricing = price_journeys(
+            data,
+            duals,
+            node.branch_constraints,
+            config=reharvest_config,
+            cuts=tuple(cuts),
+            trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+            resource_cache=pricing_resource_cache,
+            forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                journey_pool, node.branch_constraints
+            ),
+            dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                journey_pool, cuts, node.branch_constraints
+            ),
+            priority_task_sets=active_task_sets,
+        )
+        stats.pricing_calls += 1
+        stats.exact_pricing_calls += 1
+        stats.generated_sequences += reharvest_pricing.generated_sequences
+        stats.evaluated_timed_trips += reharvest_pricing.evaluated_timed_trips
+        _log_journey_pricing(
+            logger,
+            reharvest_pricing,
+            cg_iter,
+            pricing_kind="exact_post_seed_profile_reharvest",
+            config=reharvest_config,
+            pricing_dual_source=pricing_dual_source,
+            node_id=node.id,
+            depth=node.depth,
+        )
+        if not reharvest_pricing.journeys:
+            return 0, [], []
+        reharvest_added = _add_priced_journeys(journey_pool, reharvest_pricing.journeys)
+        _log_journey_addition(
+            logger,
+            reharvest_pricing,
+            reharvest_added,
+            cg_iter,
+            pricing_kind="exact_post_seed_profile_reharvest",
+            node_id=node.id,
+            depth=node.depth,
+            active_task_sets=active_task_sets,
+        )
+        if int(reharvest_added) <= 0:
+            return 0, [], []
+        return (
+            int(reharvest_added),
+            list(reharvest_pricing.journeys),
+            list(getattr(reharvest_added, "changed_task_sets", tuple())),
+        )
+
     for cg_iter in range(1, max_cg + 1):
         if time.perf_counter() >= deadline:
             return payload("PRICING_INCOMPLETE", reason="time_limit")
@@ -2945,6 +3048,8 @@ def _process_journey_branch_node(
                 integer_tol=integer_tol,
                 remaining_time=max(0.0, deadline - time.perf_counter()),
                 certificate_flat_rounds=certificate_flat_rounds,
+                node_id=node.id,
+                depth=node.depth,
             )
         dual_vector = _journey_dual_vector(data, pricing_duals, len(cuts))
         dual_hash = _journey_dual_hash(dual_vector)
@@ -3044,6 +3149,7 @@ def _process_journey_branch_node(
         )
         learning_heuristic_allowed = active_learning_runtime is not None
         heuristic_allowed = bool(base_heuristic_allowed or learning_heuristic_allowed)
+        heuristic_no_column = False
         if heuristic_allowed:
             remaining = max(0.0, deadline - time.perf_counter())
             if remaining <= min_pricing_time:
@@ -3144,7 +3250,7 @@ def _process_journey_branch_node(
                         depth=node.depth,
                         pricing_kind="heuristic",
                         filter_context=learning_filter_context,
-                )
+                    )
                 if priced_journeys:
                     pricing_for_add = replace(pricing, journeys=list(priced_journeys))
                     if learning_smoothed and learning_runtime is not None and learning_runtime.filter_true_rc:
@@ -3255,7 +3361,10 @@ def _process_journey_branch_node(
                             flat_weak_column_rounds=certificate_flat_weak_column_rounds,
                         ):
                             continue
+                    else:
+                        heuristic_no_column = True
                 elif learning_smoothed and learning_runtime is not None:
+                    heuristic_no_column = True
                     _journey_learning_handle_smoothed_pricing_result(
                         logger,
                         learning_runtime,
@@ -3268,6 +3377,8 @@ def _process_journey_branch_node(
                         depth=node.depth,
                         pricing_kind="heuristic",
                     )
+                else:
+                    heuristic_no_column = True
 
         remaining = max(0.0, deadline - time.perf_counter())
         if remaining <= min_pricing_time:
@@ -3593,6 +3704,130 @@ def _process_journey_branch_node(
                                 depth=node.depth,
                             )
                         continue
+        if not bool(exact_config.direct_journey_label_completion_bound_enabled):
+            analytic_duals, analytic_dual_mode = _journey_analytic_center_worker_duals(
+                data,
+                config,
+                node_journeys,
+                tuple(cuts),
+                fleet_limit=active_fleet_limit,
+                rmp_objective=float(solution.objective),
+                scip_duals=solution.duals,
+                certificate_candidate=certificate_candidate,
+                certificate_flat_rounds=certificate_flat_rounds,
+                heuristic_no_column=heuristic_no_column,
+                progress_classification=progress_classification,
+                logger=logger,
+                cg_iter=cg_iter,
+                node_id=node.id,
+                depth=node.depth,
+            )
+            analytic_remaining = max(0.0, deadline - time.perf_counter())
+            if analytic_duals is not None and analytic_remaining > min_pricing_time:
+                analytic_config, analytic_pricing_mode = _journey_analytic_center_worker_pricing_config(
+                    config,
+                    exact_config,
+                    remaining=analytic_remaining,
+                    min_pricing_time=min_pricing_time,
+                )
+                if analytic_pricing_mode:
+                    analytic_priority_task_sets = _journey_analytic_center_priority_task_sets(
+                        data,
+                        config,
+                        analytic_duals,
+                        solution.duals,
+                    )
+                    combined_priority_task_sets = set(active_task_sets or set())
+                    combined_priority_task_sets.update(analytic_priority_task_sets)
+                    logger.log(
+                        "journey_analytic_center_worker",
+                        node_id=node.id,
+                        depth=node.depth,
+                        cg_iter=cg_iter,
+                        remaining=round(float(analytic_remaining), 6),
+                        dual_mode=analytic_dual_mode,
+                        pricing_mode=analytic_pricing_mode,
+                        priority_task_set_count=len(combined_priority_task_sets),
+                        analytic_priority_task_set_count=len(analytic_priority_task_sets),
+                        pricing_dual_source="scip_with_analytic_center_priority",
+                        certificate_capable=False,
+                    )
+                    analytic_pricing = price_journeys(
+                        data,
+                        solution.duals,
+                        node.branch_constraints,
+                        config=analytic_config,
+                        cuts=tuple(cuts),
+                        trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                        resource_cache=pricing_resource_cache,
+                        forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                            journey_pool, node.branch_constraints
+                        ),
+                        dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                            journey_pool, cuts, node.branch_constraints
+                        ),
+                        priority_task_sets=combined_priority_task_sets,
+                        priority_duals=analytic_duals,
+                    )
+                    stats.pricing_calls += 1
+                    stats.exact_pricing_calls += 1
+                    stats.generated_sequences += analytic_pricing.generated_sequences
+                    stats.evaluated_timed_trips += analytic_pricing.evaluated_timed_trips
+                    _log_journey_pricing(
+                        logger,
+                        analytic_pricing,
+                        cg_iter,
+                        pricing_kind="exact_analytic_center_priority_worker",
+                        config=analytic_config,
+                        pricing_dual_source="scip_with_analytic_center_priority",
+                        node_id=node.id,
+                        depth=node.depth,
+                    )
+                    if analytic_pricing.journeys:
+                        added = _add_priced_journeys(journey_pool, analytic_pricing.journeys)
+                        _log_journey_addition(
+                            logger,
+                            analytic_pricing,
+                            added,
+                            cg_iter,
+                            pricing_kind="exact_analytic_center_priority_worker",
+                            node_id=node.id,
+                            depth=node.depth,
+                            active_task_sets=active_task_sets,
+                        )
+                        if added > 0:
+                            flat_weak_addition = note_flat_weak_addition(added, "exact_analytic_center_priority_worker")
+                            if not bool(flat_weak_addition):
+                                certificate_no_column_rounds = 0
+                                retry_negative_after_no_column_rounds = 0
+                            recent_priced_journeys = list(analytic_pricing.journeys)
+                            recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                            if _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
+                                local_incumbent, local_solution = _run_journey_pool_incumbent_probe(
+                                    data,
+                                    config,
+                                    journey_pool,
+                                    logger,
+                                    cg_iter,
+                                    local_incumbent,
+                                    local_solution,
+                                    fleet_limit=active_fleet_limit,
+                                    remaining=max(0.0, deadline - time.perf_counter()),
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                )
+                                active_fleet_limit = _update_journey_fleet_limit(
+                                    data,
+                                    logger,
+                                    active_fleet_limit,
+                                    local_incumbent,
+                                    local_solution,
+                                    cg_iter,
+                                    slack=_journey_fleet_limit_slack(config),
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                )
+                            continue
         deadline_safety_margin = max(0.0, float(config.get("journey_pricing_deadline_safety_margin", 1.0)))
         remaining_after_pre_exact_worker = max(0.0, deadline - time.perf_counter() - deadline_safety_margin)
         if remaining_after_pre_exact_worker <= float(min_pricing_time):
@@ -3841,6 +4076,38 @@ def _process_journey_branch_node(
                         recent_priced_journeys.extend(supplement.priced_journeys)
                         recent_changed_task_sets = list(
                             dict.fromkeys((*recent_changed_task_sets, *supplement.changed_task_sets))
+                        )
+                if bool(flat_weak_addition):
+                    repair_supplement = _run_journey_replacement_repair_after_flat_weak(
+                        data,
+                        config,
+                        journey_pool,
+                        exact_config,
+                        solution.duals,
+                        tuple(cuts),
+                        node.branch_constraints,
+                        logger,
+                        cg_iter,
+                        node_id=node.id,
+                        depth=node.depth,
+                        deadline=deadline,
+                        min_pricing_time=min_pricing_time,
+                        trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                        resource_cache=pricing_resource_cache,
+                        active_task_sets=active_task_sets,
+                        recent_changed_task_sets=recent_changed_task_sets,
+                        previous_pricing=pricing,
+                        previous_pricing_kind=exact_pricing_kind,
+                    )
+                    stats.pricing_calls += int(repair_supplement.pricing_calls)
+                    stats.exact_pricing_calls += int(repair_supplement.exact_pricing_calls)
+                    stats.generated_sequences += int(repair_supplement.generated_sequences)
+                    stats.evaluated_timed_trips += int(repair_supplement.evaluated_timed_trips)
+                    if int(repair_supplement.added) > 0:
+                        added += int(repair_supplement.added)
+                        recent_priced_journeys.extend(repair_supplement.priced_journeys)
+                        recent_changed_task_sets = list(
+                            dict.fromkeys((*recent_changed_task_sets, *repair_supplement.changed_task_sets))
                         )
             if added > 0 and _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
                 local_incumbent, local_solution = _run_journey_pool_incumbent_probe(
@@ -4606,9 +4873,36 @@ def _process_journey_branch_node(
                         active_task_sets=active_task_sets,
                     )
                     if added > 0:
+                        reharvest_added = 0
+                        reharvest_priced_journeys: list[Any] = []
+                        reharvest_changed_task_sets: list[frozenset[int]] = []
+                        if retry_pricing_kind in {
+                            "exact_completion_bound_retry",
+                            "exact_completion_bound_escalation_retry",
+                        }:
+                            reharvest_added, reharvest_priced_journeys, reharvest_changed_task_sets = (
+                                seed_and_reharvest_hidden_negative_pricing(
+                                    pricing,
+                                    added,
+                                    pricing_kind=retry_pricing_kind,
+                                    duals=final_duals,
+                                    pricing_dual_source=final_dual_source,
+                                    base_pricing_config=exact_config,
+                                )
+                            )
                         flat_weak_addition = note_flat_weak_addition(added, retry_pricing_kind)
                         if not bool(flat_weak_addition):
                             certificate_no_column_rounds = 0
+                        if int(reharvest_added) > 0:
+                            certificate_no_column_rounds = 0
+                        if reharvest_priced_journeys:
+                            recent_priced_journeys = list(pricing.journeys)
+                            recent_priced_journeys.extend(reharvest_priced_journeys)
+                            recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                            recent_changed_task_sets.extend(reharvest_changed_task_sets)
+                        else:
+                            recent_priced_journeys = list(pricing.journeys)
+                            recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
                         retry_negative_after_no_column_rounds += 1
                         continue
                     duplicate_resolved_by_final_probe = False
@@ -4735,9 +5029,36 @@ def _process_journey_branch_node(
                                         active_task_sets=active_task_sets,
                                     )
                                     if added > 0:
+                                        reharvest_added = 0
+                                        reharvest_priced_journeys: list[Any] = []
+                                        reharvest_changed_task_sets: list[frozenset[int]] = []
+                                        reharvest_added, reharvest_priced_journeys, reharvest_changed_task_sets = (
+                                            seed_and_reharvest_hidden_negative_pricing(
+                                                pricing,
+                                                added,
+                                                pricing_kind=retry_pricing_kind,
+                                                duals=final_duals,
+                                                pricing_dual_source=final_dual_source,
+                                                base_pricing_config=exact_config,
+                                            )
+                                        )
                                         flat_weak_addition = note_flat_weak_addition(added, retry_pricing_kind)
                                         if not bool(flat_weak_addition):
                                             certificate_no_column_rounds = 0
+                                        if int(reharvest_added) > 0:
+                                            certificate_no_column_rounds = 0
+                                        if reharvest_priced_journeys:
+                                            recent_priced_journeys = list(pricing.journeys)
+                                            recent_priced_journeys.extend(reharvest_priced_journeys)
+                                            recent_changed_task_sets = list(
+                                                getattr(added, "changed_task_sets", tuple())
+                                            )
+                                            recent_changed_task_sets.extend(reharvest_changed_task_sets)
+                                        else:
+                                            recent_priced_journeys = list(pricing.journeys)
+                                            recent_changed_task_sets = list(
+                                                getattr(added, "changed_task_sets", tuple())
+                                            )
                                         retry_negative_after_no_column_rounds += 1
                                         continue
                                 pricing = _journey_promote_duplicate_only_final_judge_certificate(
@@ -6683,6 +7004,37 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                     "journey_certificate_completion_bound_diverse_harvest_priority_overlap_threshold "
                     "must be in [0, 1]"
                 )
+            harvest_support_overlap = float(
+                config.get("journey_certificate_completion_bound_diverse_harvest_support_overlap_threshold", 0.6)
+            )
+            if harvest_support_overlap < 0.0 or harvest_support_overlap > 1.0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_support_overlap_threshold "
+                    "must be in [0, 1]"
+                )
+            harvest_replacement_cap = int(
+                config.get("journey_certificate_completion_bound_diverse_harvest_replacement_cap", 8)
+            )
+            if harvest_replacement_cap < 0:
+                raise ValueError(
+                    "journey_certificate_completion_bound_diverse_harvest_replacement_cap "
+                    "must be nonnegative"
+                )
+            if bool(config.get("journey_certificate_completion_bound_mask_closure_enabled", False)):
+                mask_closure_max_masks = int(
+                    config.get("journey_certificate_completion_bound_mask_closure_max_masks", 8)
+                )
+                if mask_closure_max_masks <= 0:
+                    raise ValueError(
+                        "journey_certificate_completion_bound_mask_closure_max_masks must be positive"
+                    )
+                mask_closure_max_columns_per_mask = int(
+                    config.get("journey_certificate_completion_bound_mask_closure_max_columns_per_mask", 6)
+                )
+                if mask_closure_max_columns_per_mask <= 0:
+                    raise ValueError(
+                        "journey_certificate_completion_bound_mask_closure_max_columns_per_mask must be positive"
+                    )
             harvest_soft_min_new_task_sets = int(
                 config.get(
                     "journey_certificate_completion_bound_diverse_harvest_soft_return_min_new_task_sets",
@@ -6918,6 +7270,63 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 raise ValueError(
                     "journey_hidden_negative_patrol_after_small_batch_min_flat_rounds must be nonnegative"
                 )
+        if bool(config.get("journey_analytic_center_worker_enabled", False)):
+            if float(config.get("journey_analytic_center_dual_time_limit", 1.0)) <= 0.0:
+                raise ValueError(
+                    "journey_analytic_center_worker_enabled=True requires "
+                    "journey_analytic_center_dual_time_limit > 0"
+                )
+            if float(config.get("journey_analytic_center_worker_time_limit", 1.0)) <= 0.0:
+                raise ValueError(
+                    "journey_analytic_center_worker_enabled=True requires "
+                    "journey_analytic_center_worker_time_limit > 0"
+                )
+            if int(config.get("journey_analytic_center_worker_min_flat_rounds", 3)) < 0:
+                raise ValueError("journey_analytic_center_worker_min_flat_rounds must be nonnegative")
+            if int(config.get("journey_analytic_center_worker_max_labels_per_node", 0)) < 0:
+                raise ValueError("journey_analytic_center_worker_max_labels_per_node must be nonnegative")
+            score_mode = str(config.get("journey_analytic_center_priority_score_mode", "center")).strip().lower()
+            if score_mode not in {"center", "center_minus_scip", "abs_center_minus_scip"}:
+                raise ValueError(
+                    "journey_analytic_center_priority_score_mode must be one of "
+                    "center, center_minus_scip, abs_center_minus_scip"
+                )
+            if int(config.get("journey_analytic_center_priority_top_tasks", 6)) <= 0:
+                raise ValueError("journey_analytic_center_priority_top_tasks must be positive")
+            if int(config.get("journey_analytic_center_priority_max_task_set_size", 3)) <= 0:
+                raise ValueError("journey_analytic_center_priority_max_task_set_size must be positive")
+            if int(config.get("journey_analytic_center_priority_max_task_sets", 64)) <= 0:
+                raise ValueError("journey_analytic_center_priority_max_task_sets must be positive")
+            center_priority_overlap = float(config.get("journey_analytic_center_worker_priority_overlap_threshold", 0.34))
+            if center_priority_overlap < 0.0 or center_priority_overlap > 1.0:
+                raise ValueError("journey_analytic_center_worker_priority_overlap_threshold must be in [0, 1]")
+            center_min_journeys = int(config.get("journey_analytic_center_worker_min_journeys", 4))
+            center_max_returned = int(config.get("journey_analytic_center_worker_max_returned_journeys", 24))
+            if center_min_journeys <= 0:
+                raise ValueError("journey_analytic_center_worker_min_journeys must be positive")
+            if center_max_returned < center_min_journeys:
+                raise ValueError(
+                    "journey_analytic_center_worker_max_returned_journeys must be at least "
+                    "journey_analytic_center_worker_min_journeys"
+                )
+            if bool(config.get("journey_analytic_center_worker_resource_coarsening_enabled", False)):
+                center_time_bucket = float(
+                    config.get("journey_analytic_center_worker_resource_coarsening_time_bucket_size", 0.0)
+                )
+                center_energy_bucket = float(
+                    config.get("journey_analytic_center_worker_resource_coarsening_energy_bucket_size", 0.0)
+                )
+                if center_time_bucket <= 0.0 and center_energy_bucket <= 0.0:
+                    raise ValueError(
+                        "journey_analytic_center_worker_resource_coarsening_enabled=True requires "
+                        "a positive time or energy bucket size"
+                    )
+            if float(config.get("journey_analytic_center_dual_tolerance", 1.0e-6)) < 0.0:
+                raise ValueError("journey_analytic_center_dual_tolerance must be nonnegative")
+            if float(config.get("journey_analytic_center_true_rc_tol", 1.0e-5)) < 0.0:
+                raise ValueError("journey_analytic_center_true_rc_tol must be nonnegative")
+            if int(config.get("journey_analytic_center_true_rc_max_kept_per_round", 0)) < 0:
+                raise ValueError("journey_analytic_center_true_rc_max_kept_per_round must be nonnegative")
         if bool(config.get("journey_same_dual_supplement_enabled", False)):
             if int(config.get("journey_same_dual_supplement_max_rounds", 1)) <= 0:
                 raise ValueError("journey_same_dual_supplement_max_rounds must be positive")
@@ -8137,6 +8546,308 @@ def _journey_dual_average_direct_patrol_config(
     return patrol_config, patrol_mode
 
 
+def _journey_analytic_center_worker_duals(
+    data: FutureData,
+    config: dict[str, Any],
+    journeys: list[Any],
+    cuts: tuple[FutureCut, ...],
+    *,
+    fleet_limit: int,
+    rmp_objective: float,
+    scip_duals: JourneyDuals,
+    certificate_candidate: bool,
+    certificate_flat_rounds: int,
+    heuristic_no_column: bool,
+    progress_classification: str,
+    logger: FutureLogger,
+    cg_iter: int,
+    node_id: int,
+    depth: int,
+) -> tuple[JourneyDuals | None, dict[str, Any]]:
+    """Return a barrier/no-crossover dual center for worker-only pricing.
+
+    The Gurobi solve is deliberately a sidecar.  Its dual can only guide a
+    bounded direct-label worker after it passes current-pool feasibility checks;
+    no miss from this path is allowed to certify a node.
+    """
+
+    if not bool(config.get("journey_analytic_center_worker_enabled", False)):
+        return None, {}
+    if bool(config.get("journey_analytic_center_worker_root_only", True)) and int(depth) > 0:
+        return None, {"reason": "branch_depth_disabled"}
+    if bool(config.get("journey_analytic_center_worker_require_certificate_candidate", True)) and not bool(
+        certificate_candidate
+    ):
+        return None, {"reason": "not_certificate_candidate"}
+    min_flat = max(0, int(config.get("journey_analytic_center_worker_min_flat_rounds", 3)))
+    if int(certificate_flat_rounds) < min_flat:
+        return None, {"reason": "insufficient_flat_rounds", "min_flat_rounds": int(min_flat)}
+    if bool(config.get("journey_analytic_center_worker_require_heuristic_no_column", True)) and not bool(
+        heuristic_no_column
+    ):
+        return None, {"reason": "heuristic_not_exhausted"}
+
+    sidecar_time_limit = max(0.0, float(config.get("journey_analytic_center_dual_time_limit", 1.0)))
+    result = solve_journey_gurobi_barrier_dual(
+        data,
+        list(journeys),
+        cuts=cuts,
+        fleet_limit=int(fleet_limit),
+        time_limit=sidecar_time_limit,
+        verbose=bool(config.get("journey_analytic_center_dual_verbose", False)),
+    )
+    tol = max(0.0, float(config.get("journey_analytic_center_dual_tolerance", 1.0e-6)))
+    objective_matches = (
+        result.objective_value is not None
+        and abs(float(result.objective_value) - float(rmp_objective)) <= max(10.0 * tol, 1.0e-6)
+    )
+    pool_min_rc: float | None = None
+    pool_negative_count: int | None = None
+    if result.duals is not None:
+        pool_min_rc, pool_negative_count = _journey_dual_current_pool_validation(
+            list(journeys),
+            result.duals,
+            cuts,
+            tolerance=max(10.0 * tol, 1.0e-6),
+        )
+    accepted = bool(result.status == "OPTIMAL" and result.duals is not None and objective_matches and pool_negative_count == 0)
+    if result.status != "OPTIMAL":
+        reason = "sidecar_not_optimal"
+    elif result.duals is None:
+        reason = "sidecar_no_duals"
+    elif not objective_matches:
+        reason = "objective_mismatch"
+    elif pool_negative_count != 0:
+        reason = "current_pool_dual_infeasible"
+    else:
+        reason = "accepted"
+    mode = {
+        "analytic_center_worker": True,
+        "status": str(result.status),
+        "accepted": bool(accepted),
+        "reason": str(reason),
+        "sidecar_time_limit": round(float(sidecar_time_limit), 6),
+        "rmp_objective": round(float(rmp_objective), 9),
+        "barrier_objective": None if result.objective_value is None else round(float(result.objective_value), 9),
+        "barrier_iterations": result.barrier_iterations,
+        "variable_count": int(result.variable_count),
+        "constraint_count": int(result.constraint_count),
+        "objective_matches": bool(objective_matches),
+        "current_pool_min_reduced_cost": None if pool_min_rc is None else round(float(pool_min_rc), 9),
+        "current_pool_negative_reduced_cost_count": None
+        if pool_negative_count is None
+        else int(pool_negative_count),
+        "certificate_candidate": bool(certificate_candidate),
+        "certificate_flat_rounds": int(certificate_flat_rounds),
+        "heuristic_no_column": bool(heuristic_no_column),
+        "progress_classification": str(progress_classification),
+    }
+    logger.log(
+        "journey_analytic_center_dual",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        **mode,
+    )
+    return (result.duals, mode) if accepted and result.duals is not None else (None, mode)
+
+
+def _journey_analytic_center_priority_task_sets(
+    data: FutureData,
+    config: dict[str, Any],
+    center_duals: JourneyDuals,
+    scip_duals: JourneyDuals,
+) -> tuple[frozenset[int], ...]:
+    """Build task-set hints from a sidecar dual center.
+
+    These sets are ranking hints only.  They are never used in reduced-cost
+    arithmetic and therefore cannot affect the official no-negative certificate.
+    """
+
+    score_mode = str(config.get("journey_analytic_center_priority_score_mode", "center")).strip().lower()
+    scored: list[tuple[float, int]] = []
+    for task in data.tasks:
+        task_id = int(task)
+        center_value = float(center_duals.cover.get(task_id, 0.0))
+        scip_value = float(scip_duals.cover.get(task_id, 0.0))
+        if score_mode == "center_minus_scip":
+            score = center_value - scip_value
+        elif score_mode == "abs_center_minus_scip":
+            score = abs(center_value - scip_value)
+        else:
+            score = center_value
+        scored.append((float(score), task_id))
+    scored.sort(key=lambda item: (-float(item[0]), int(item[1])))
+    top_tasks = [
+        int(task)
+        for score, task in scored
+        if score >= float(config.get("journey_analytic_center_priority_min_score", -math.inf))
+    ]
+    top_limit = max(1, int(config.get("journey_analytic_center_priority_top_tasks", min(6, len(data.tasks)))))
+    top_tasks = top_tasks[:top_limit]
+    max_size = max(1, int(config.get("journey_analytic_center_priority_max_task_set_size", 3)))
+    max_sets = max(1, int(config.get("journey_analytic_center_priority_max_task_sets", 64)))
+    priority_sets: list[frozenset[int]] = []
+    for size in range(1, min(max_size, len(top_tasks)) + 1):
+        for combo in itertools.combinations(top_tasks, size):
+            priority_sets.append(frozenset(int(task) for task in combo))
+            if len(priority_sets) >= max_sets:
+                return tuple(priority_sets)
+    return tuple(priority_sets)
+
+
+def _journey_analytic_center_worker_pricing_config(
+    config: dict[str, Any],
+    pricing_config: JourneyPricingConfig,
+    *,
+    remaining: float,
+    min_pricing_time: float,
+) -> tuple[JourneyPricingConfig, dict[str, Any]]:
+    if not bool(config.get("journey_analytic_center_worker_enabled", False)):
+        return pricing_config, {}
+    requested = max(0.0, float(config.get("journey_analytic_center_worker_time_limit", 1.0)))
+    reserve = max(
+        float(min_pricing_time),
+        float(config.get("journey_analytic_center_worker_final_reserve_time", 1.0)),
+    )
+    time_limit = min(requested, max(0.0, float(remaining) - reserve))
+    if time_limit <= 0.0:
+        return pricing_config, {}
+
+    min_journeys = max(1, int(config.get("journey_analytic_center_worker_min_journeys", 4)))
+    max_returned = max(
+        min_journeys,
+        int(config.get("journey_analytic_center_worker_max_returned_journeys", pricing_config.max_returned_journeys)),
+    )
+    resource_coarsening_enabled = bool(
+        config.get("journey_analytic_center_worker_resource_coarsening_enabled", False)
+    )
+    time_bucket = (
+        max(0.0, float(config.get("journey_analytic_center_worker_resource_coarsening_time_bucket_size", 50.0)))
+        if resource_coarsening_enabled
+        else 0.0
+    )
+    energy_bucket = (
+        max(0.0, float(config.get("journey_analytic_center_worker_resource_coarsening_energy_bucket_size", 50.0)))
+        if resource_coarsening_enabled
+        else 0.0
+    )
+    updated = replace(
+        pricing_config,
+        profile_pricing_enabled=False,
+        streaming_pricing_enabled=False,
+        direct_journey_label_pricing_enabled=True,
+        direct_journey_label_global_certificate_enabled=False,
+        direct_journey_label_completion_bound_enabled=False,
+        direct_journey_label_completion_bound_audit_enabled=False,
+        direct_journey_label_completion_bound_unique_task_helper_enabled=False,
+        direct_journey_label_completion_bound_unique_route_helper_enabled=False,
+        direct_journey_label_completion_bound_two_cycle_enabled=False,
+        direct_journey_label_next_sortie_cache_enabled=bool(
+            config.get("journey_analytic_center_worker_next_sortie_cache_enabled", False)
+        ),
+        direct_journey_label_max_labels_per_node=max(
+            0,
+            int(config.get("journey_analytic_center_worker_max_labels_per_node", 0)),
+        ),
+        direct_journey_label_resource_coarsening_time_bucket_size=time_bucket,
+        direct_journey_label_resource_coarsening_energy_bucket_size=energy_bucket,
+        direct_journey_label_existing_task_set_repair_only=False,
+        direct_journey_label_new_task_set_only=bool(
+            config.get("journey_analytic_center_worker_new_task_set_only", False)
+        ),
+        direct_journey_label_diverse_harvest_enabled=bool(
+            config.get("journey_analytic_center_worker_diverse_harvest_enabled", True)
+        ),
+        direct_journey_label_diverse_harvest_min_priority_task_sets=max(
+            0,
+            int(config.get("journey_analytic_center_worker_min_priority_task_sets", min_journeys)),
+        ),
+        direct_journey_label_diverse_harvest_priority_overlap_threshold=min(
+            1.0,
+            max(
+                0.0,
+                float(config.get("journey_analytic_center_worker_priority_overlap_threshold", 0.34)),
+            ),
+        ),
+        direct_journey_label_early_return_negative=True,
+        direct_journey_label_early_return_negative_min_count=min_journeys,
+        direct_journey_label_early_return_negative_grace_time=max(
+            0.0,
+            float(config.get("journey_analytic_center_worker_grace_time", 0.0)),
+        ),
+        max_returned_journeys=max_returned,
+        time_limit=float(time_limit),
+    )
+    mode = {
+        "time_limit": round(float(time_limit), 6),
+        "min_journeys": int(min_journeys),
+        "max_returned_journeys": int(max_returned),
+        "max_labels_per_node": int(updated.direct_journey_label_max_labels_per_node),
+        "resource_coarsening": bool(resource_coarsening_enabled),
+        "resource_coarsening_time_bucket_size": round(float(time_bucket), 6),
+        "resource_coarsening_energy_bucket_size": round(float(energy_bucket), 6),
+        "next_sortie_cache": bool(updated.direct_journey_label_next_sortie_cache_enabled),
+        "diverse_harvest": bool(updated.direct_journey_label_diverse_harvest_enabled),
+        "min_priority_task_sets": int(updated.direct_journey_label_diverse_harvest_min_priority_task_sets),
+        "priority_overlap_threshold": round(
+            float(updated.direct_journey_label_diverse_harvest_priority_overlap_threshold),
+            6,
+        ),
+        "certificate_capable": False,
+    }
+    return updated, mode
+
+
+def _journey_analytic_center_true_rc_filtered_pricing(
+    logger: FutureLogger,
+    pricing: Any,
+    *,
+    true_duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    config: dict[str, Any],
+    cg_iter: int,
+    node_id: int,
+    depth: int,
+    pricing_kind: str,
+) -> Any:
+    tol = max(0.0, float(config.get("journey_analytic_center_true_rc_tol", 1.0e-5)))
+    max_kept = max(0, int(config.get("journey_analytic_center_true_rc_max_kept_per_round", 0)))
+    scored: list[tuple[float, Any]] = []
+    best_true_rc: float | None = None
+    for journey in getattr(pricing, "journeys", []) or []:
+        true_rc = float(manual_journey_reduced_cost(journey, true_duals, cuts))
+        best_true_rc = true_rc if best_true_rc is None else min(float(best_true_rc), true_rc)
+        if true_rc < -tol:
+            scored.append((true_rc, journey))
+    scored.sort(key=lambda item: (round(item[0], 9), getattr(item[1], "signature", tuple())))
+    kept = [journey for _true_rc, journey in scored[:max_kept if max_kept > 0 else None]]
+    logger.log(
+        "journey_analytic_center_true_rc_filter",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        pricing_kind=pricing_kind,
+        candidate_journeys=len(getattr(pricing, "journeys", []) or []),
+        true_negative_journeys=len(scored),
+        kept_journeys=len(kept),
+        true_rc_tol=round(float(tol), 9),
+        true_rc_max_kept_per_round=int(max_kept),
+        best_center_reduced_cost=None
+        if getattr(pricing, "best_reduced_cost", None) is None
+        else round(float(pricing.best_reduced_cost), 9),
+        best_true_reduced_cost=None if best_true_rc is None else round(float(best_true_rc), 9),
+    )
+    if kept:
+        return replace(pricing, journeys=kept)
+    reason = (
+        "analytic_center_filtered_no_true_negative_journey"
+        if getattr(pricing, "journeys", None)
+        else "analytic_center_no_column_requires_true_dual"
+    )
+    return replace(pricing, journeys=[], exhausted=False, status="INCOMPLETE", reason=reason)
+
+
 def _journey_retry_duals_after_average_filter(
     pricing: Any,
     scip_duals: JourneyDuals,
@@ -8167,6 +8878,8 @@ def _select_journey_pricing_duals(
     integer_tol: float = 1.0e-6,
     remaining_time: float | None = None,
     certificate_flat_rounds: int | None = None,
+    node_id: int = 0,
+    depth: int = 0,
 ) -> tuple[JourneyDuals, str]:
     if not bool(config.get("journey_dual_stabilization_enabled", False)):
         return scip_duals, "scip"
@@ -8179,7 +8892,8 @@ def _select_journey_pricing_duals(
     if bool(config.get("journey_dual_stabilization_disable_on_certificate_candidate", False)) and certificate_candidate:
         logger.log(
             "journey_dual_stabilization",
-            node_id=0,
+            node_id=int(node_id),
+            depth=int(depth),
             cg_iter=cg_iter,
             status="SKIPPED",
             accepted=False,
@@ -8206,7 +8920,8 @@ def _select_journey_pricing_duals(
     ):
         logger.log(
             "journey_dual_stabilization",
-            node_id=0,
+            node_id=int(node_id),
+            depth=int(depth),
             cg_iter=cg_iter,
             status="SKIPPED",
             accepted=False,
@@ -8233,7 +8948,8 @@ def _select_journey_pricing_duals(
         if str(progress_classification) not in allowed and not (certificate_gate_enabled and certificate_candidate):
             logger.log(
                 "journey_dual_stabilization",
-                node_id=0,
+                node_id=int(node_id),
+                depth=int(depth),
                 cg_iter=cg_iter,
                 status="SKIPPED",
                 accepted=False,
@@ -8245,7 +8961,60 @@ def _select_journey_pricing_duals(
             )
             return scip_duals, "scip"
     tolerance = float(config.get("journey_dual_stabilization_tolerance", 1.0e-6))
-    reference = previous_pricing_duals if previous_pricing_duals is not None else scip_duals
+    reference_mode = str(config.get("journey_dual_stabilization_reference_mode", "previous")).strip().lower()
+    root_tail_zero_modes = {"root_tail_zero", "root-zero", "root_zero", "tail_zero", "auto_zero"}
+    if reference_mode in root_tail_zero_modes:
+        max_depth = int(config.get("journey_dual_stabilization_root_tail_zero_max_depth", 0))
+        min_flat_rounds = int(config.get("journey_dual_stabilization_root_tail_zero_min_flat_rounds", 0))
+        require_certificate = bool(
+            config.get("journey_dual_stabilization_root_tail_zero_requires_certificate_candidate", True)
+        )
+        flat_rounds = 0 if certificate_flat_rounds is None else int(certificate_flat_rounds)
+        depth_gate = int(depth) <= max_depth
+        certificate_gate = (not require_certificate) or certificate_candidate
+        flat_gate = flat_rounds >= min_flat_rounds
+        if not (depth_gate and certificate_gate and flat_gate):
+            logger.log(
+                "journey_dual_stabilization",
+                node_id=int(node_id),
+                depth=int(depth),
+                cg_iter=cg_iter,
+                status="SKIPPED",
+                accepted=False,
+                reason="root_tail_zero_gate",
+                reference_mode=reference_mode,
+                root_tail_zero_max_depth=max_depth,
+                root_tail_zero_min_flat_rounds=min_flat_rounds,
+                root_tail_zero_requires_certificate_candidate=require_certificate,
+                depth_gate=depth_gate,
+                certificate_gate=certificate_gate,
+                flat_gate=flat_gate,
+                certificate_flat_rounds=flat_rounds,
+                progress_classification=str(progress_classification),
+                certificate_candidate=certificate_candidate,
+                certificate_gate_enabled=bool(config.get("journey_dual_stabilization_certificate_candidate_enabled", False)),
+                pricing_dual_source="scip",
+            )
+            return scip_duals, "scip"
+        # `solve_journey_stabilized_dual` interprets a missing reference as the
+        # zero vector for its L1 objective.  The result still has to pass the
+        # official current-pool dual feasibility and objective checks below.
+        reference = None
+        effective_reference = "zero"
+    elif reference_mode in {"previous", "previous_pricing", "last"}:
+        reference = previous_pricing_duals if previous_pricing_duals is not None else scip_duals
+        effective_reference = "previous" if previous_pricing_duals is not None else "scip"
+    elif reference_mode in {"scip", "current", "true"}:
+        reference = scip_duals
+        effective_reference = "scip"
+    elif reference_mode in {"zero", "none", "origin"}:
+        # `solve_journey_stabilized_dual` interprets a missing reference as the
+        # zero vector for its L1 objective.  The result still has to pass the
+        # official current-pool dual feasibility and objective checks below.
+        reference = None
+        effective_reference = "zero"
+    else:
+        raise ValueError(f"unsupported journey_dual_stabilization_reference_mode {reference_mode!r}")
     cover_upper_bounds: dict[int, float] = {}
     pair_upper_bounds: dict[tuple[int, int], float] = {}
     if bool(config.get("journey_dual_optimal_inequalities_enabled", False)):
@@ -8286,7 +9055,8 @@ def _select_journey_pricing_duals(
     accepted = bool(result.duals is not None and objective_matches and current_pool_dual_feasible)
     logger.log(
         "journey_dual_stabilization",
-        node_id=0,
+        node_id=int(node_id),
+        depth=int(depth),
         cg_iter=cg_iter,
         status=result.status,
         accepted=accepted,
@@ -8294,7 +9064,8 @@ def _select_journey_pricing_duals(
         dual_objective=None if result.objective_value is None else round(float(result.objective_value), 9),
         variable_count=result.variable_count,
         constraint_count=result.constraint_count,
-        reference="previous" if previous_pricing_duals is not None else "scip",
+        reference=effective_reference,
+        reference_mode=reference_mode,
         mode=str(config.get("journey_dual_stabilization_mode", "l1_reference")),
         tail_only_enabled=bool(config.get("journey_dual_stabilization_tail_only_enabled", False)),
         progress_classification=str(progress_classification),
@@ -10449,6 +11220,12 @@ def _journey_certificate_pricing_config(
                     False,
                 )
             ),
+            direct_journey_label_profile_timing_enabled=bool(
+                config.get(
+                    "journey_certificate_completion_bound_profile_timing_enabled",
+                    updated.direct_journey_label_profile_timing_enabled,
+                )
+            ),
         )
         completion_bound_max_sequences = int(config.get("journey_certificate_completion_bound_max_sequences", 0))
         completion_bound_max_dp_states = int(config.get("journey_certificate_completion_bound_max_dp_states", 0))
@@ -10568,6 +11345,51 @@ def _journey_certificate_pricing_config(
                         updated.direct_journey_label_diverse_harvest_priority_overlap_threshold,
                     )
                 ),
+                direct_journey_label_diverse_harvest_support_aware_enabled=bool(
+                    config.get("journey_certificate_completion_bound_diverse_harvest_support_aware_enabled", False)
+                ),
+                direct_journey_label_diverse_harvest_support_overlap_threshold=float(
+                    config.get(
+                        "journey_certificate_completion_bound_diverse_harvest_support_overlap_threshold",
+                        updated.direct_journey_label_diverse_harvest_support_overlap_threshold,
+                    )
+                ),
+                direct_journey_label_diverse_harvest_replacement_cap=max(
+                    0,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_diverse_harvest_replacement_cap",
+                            updated.direct_journey_label_diverse_harvest_replacement_cap,
+                        )
+                    ),
+                ),
+                direct_journey_label_diverse_harvest_strong_replacement_threshold=float(
+                    config.get(
+                        "journey_certificate_completion_bound_diverse_harvest_strong_replacement_threshold",
+                        updated.direct_journey_label_diverse_harvest_strong_replacement_threshold,
+                    )
+                ),
+                direct_journey_label_mask_closure_enabled=bool(
+                    config.get("journey_certificate_completion_bound_mask_closure_enabled", False)
+                ),
+                direct_journey_label_mask_closure_max_masks=max(
+                    0,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_mask_closure_max_masks",
+                            updated.direct_journey_label_mask_closure_max_masks,
+                        )
+                    ),
+                ),
+                direct_journey_label_mask_closure_max_columns_per_mask=max(
+                    0,
+                    int(
+                        config.get(
+                            "journey_certificate_completion_bound_mask_closure_max_columns_per_mask",
+                            updated.direct_journey_label_mask_closure_max_columns_per_mask,
+                        )
+                    ),
+                ),
                 direct_journey_label_diverse_harvest_max_containment=float(
                     config.get("journey_certificate_completion_bound_diverse_harvest_max_containment", 0.8)
                 ),
@@ -10624,6 +11446,7 @@ def _journey_certificate_pricing_config(
             )
         mode["completion_bound"] = True
         mode["completion_bound_final_probe_only"] = bool(completion_bound_final_probe_only)
+        mode["completion_bound_profile_timing"] = bool(updated.direct_journey_label_profile_timing_enabled)
         mode["completion_bound_hidden_negative"] = bool(
             config.get("journey_certificate_completion_bound_hidden_negative_enabled", False)
         )
@@ -10663,6 +11486,27 @@ def _journey_certificate_pricing_config(
             mode["completion_bound_diverse_harvest_priority_overlap_threshold"] = round(
                 float(updated.direct_journey_label_diverse_harvest_priority_overlap_threshold),
                 6,
+            )
+            mode["completion_bound_diverse_harvest_support_aware"] = bool(
+                updated.direct_journey_label_diverse_harvest_support_aware_enabled
+            )
+            mode["completion_bound_diverse_harvest_support_overlap_threshold"] = round(
+                float(updated.direct_journey_label_diverse_harvest_support_overlap_threshold),
+                6,
+            )
+            mode["completion_bound_diverse_harvest_replacement_cap"] = int(
+                updated.direct_journey_label_diverse_harvest_replacement_cap
+            )
+            mode["completion_bound_diverse_harvest_strong_replacement_threshold"] = round(
+                float(updated.direct_journey_label_diverse_harvest_strong_replacement_threshold),
+                9,
+            )
+            mode["completion_bound_mask_closure"] = bool(updated.direct_journey_label_mask_closure_enabled)
+            mode["completion_bound_mask_closure_max_masks"] = int(
+                updated.direct_journey_label_mask_closure_max_masks
+            )
+            mode["completion_bound_mask_closure_max_columns_per_mask"] = int(
+                updated.direct_journey_label_mask_closure_max_columns_per_mask
             )
             mode["completion_bound_diverse_harvest_max_containment"] = round(
                 float(updated.direct_journey_label_diverse_harvest_max_containment),
@@ -11653,6 +12497,12 @@ def _journey_pricing_config(
                 config.get("journey_pricing_direct_journey_label_completion_bound_elapsed_soft_return_enabled", True),
             )
         ),
+        direct_journey_label_profile_timing_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_profile_timing_enabled",
+                config.get("journey_pricing_direct_journey_label_profile_timing_enabled", False),
+            )
+        ),
         direct_journey_label_partial_max_states=int(
             config.get(
                 f"{prefix}_direct_journey_label_partial_max_states",
@@ -12105,6 +12955,18 @@ def _log_journey_pricing(
         direct_label_diverse_harvest_priority_overlap_threshold=None
         if config is None
         else round(float(getattr(config, "direct_journey_label_diverse_harvest_priority_overlap_threshold", 1.0)), 6),
+        direct_label_harvest_support_aware_enabled=bool(
+            getattr(pricing, "direct_label_harvest_support_aware_enabled", False)
+        ),
+        direct_label_harvest_support_overlap_threshold=None
+        if config is None
+        else round(float(getattr(config, "direct_journey_label_diverse_harvest_support_overlap_threshold", 0.6)), 6),
+        direct_label_harvest_replacement_cap=None
+        if config is None
+        else int(getattr(config, "direct_journey_label_diverse_harvest_replacement_cap", 0)),
+        direct_label_harvest_strong_replacement_threshold=None
+        if config is None
+        else round(float(getattr(config, "direct_journey_label_diverse_harvest_strong_replacement_threshold", 0.0)), 9),
         direct_label_harvest_candidate_count=getattr(pricing, "direct_label_harvest_candidate_count", 0),
         direct_label_harvest_selected_count=getattr(pricing, "direct_label_harvest_selected_count", 0),
         direct_label_harvest_overlap_deferred=getattr(
@@ -12132,6 +12994,34 @@ def _log_journey_pricing(
         ),
         direct_label_harvest_selected_priority_task_set_count=int(
             getattr(pricing, "direct_label_harvest_selected_priority_task_set_count", 0)
+        ),
+        direct_label_harvest_candidate_support_changing_count=int(
+            getattr(pricing, "direct_label_harvest_candidate_support_changing_count", 0)
+        ),
+        direct_label_harvest_selected_support_changing_count=int(
+            getattr(pricing, "direct_label_harvest_selected_support_changing_count", 0)
+        ),
+        direct_label_harvest_selected_strong_replacement_count=int(
+            getattr(pricing, "direct_label_harvest_selected_strong_replacement_count", 0)
+        ),
+        direct_label_harvest_selected_weak_replacement_count=int(
+            getattr(pricing, "direct_label_harvest_selected_weak_replacement_count", 0)
+        ),
+        direct_label_harvest_task_set_dominance_enabled=bool(
+            getattr(pricing, "direct_label_harvest_task_set_dominance_enabled", False)
+        ),
+        direct_label_harvest_task_set_dominance_collapsed_count=int(
+            getattr(pricing, "direct_label_harvest_task_set_dominance_collapsed_count", 0)
+        ),
+        direct_label_mask_closure_enabled=bool(getattr(pricing, "direct_label_mask_closure_enabled", False)),
+        direct_label_mask_closure_candidate_task_set_count=int(
+            getattr(pricing, "direct_label_mask_closure_candidate_task_set_count", 0)
+        ),
+        direct_label_mask_closure_selected_count=int(
+            getattr(pricing, "direct_label_mask_closure_selected_count", 0)
+        ),
+        direct_label_mask_closure_selected_task_set_count=int(
+            getattr(pricing, "direct_label_mask_closure_selected_task_set_count", 0)
         ),
         direct_label_harvest_best_true_rc=None
         if getattr(pricing, "direct_label_harvest_best_true_rc", None) is None
@@ -12163,6 +13053,33 @@ def _log_journey_pricing(
         harvest_selected_priority_task_set_count=int(
             getattr(pricing, "harvest_selected_priority_task_set_count", 0)
         ),
+        harvest_support_aware_enabled=bool(getattr(pricing, "harvest_support_aware_enabled", False)),
+        harvest_candidate_support_changing_count=int(
+            getattr(pricing, "harvest_candidate_support_changing_count", 0)
+        ),
+        harvest_selected_support_changing_count=int(
+            getattr(pricing, "harvest_selected_support_changing_count", 0)
+        ),
+        harvest_selected_strong_replacement_count=int(
+            getattr(pricing, "harvest_selected_strong_replacement_count", 0)
+        ),
+        harvest_selected_weak_replacement_count=int(
+            getattr(pricing, "harvest_selected_weak_replacement_count", 0)
+        ),
+        harvest_task_set_dominance_enabled=bool(getattr(pricing, "harvest_task_set_dominance_enabled", False)),
+        harvest_task_set_dominance_collapsed_count=int(
+            getattr(pricing, "harvest_task_set_dominance_collapsed_count", 0)
+        ),
+        harvest_mask_closure_enabled=bool(getattr(pricing, "harvest_mask_closure_enabled", False)),
+        harvest_mask_closure_candidate_task_set_count=int(
+            getattr(pricing, "harvest_mask_closure_candidate_task_set_count", 0)
+        ),
+        harvest_mask_closure_selected_count=int(
+            getattr(pricing, "harvest_mask_closure_selected_count", 0)
+        ),
+        harvest_mask_closure_selected_task_set_count=int(
+            getattr(pricing, "harvest_mask_closure_selected_task_set_count", 0)
+        ),
         harvest_best_true_rc=None
         if getattr(pricing, "harvest_best_true_rc", None) is None
         else round(float(getattr(pricing, "harvest_best_true_rc")), 9),
@@ -12179,6 +13096,99 @@ def _log_journey_pricing(
         direct_label_resource_coarsening_energy_bucket_size=round(
             float(getattr(pricing, "direct_label_resource_coarsening_energy_bucket_size", 0.0)),
             6,
+        ),
+        direct_label_unique_route_future_cache_hits=int(
+            getattr(pricing, "direct_label_unique_route_future_cache_hits", 0)
+        ),
+        direct_label_unique_route_future_cache_misses=int(
+            getattr(pricing, "direct_label_unique_route_future_cache_misses", 0)
+        ),
+        direct_label_unique_route_future_cache_size=int(
+            getattr(pricing, "direct_label_unique_route_future_cache_size", 0)
+        ),
+        direct_label_unique_route_partial_cache_hits=int(
+            getattr(pricing, "direct_label_unique_route_partial_cache_hits", 0)
+        ),
+        direct_label_unique_route_partial_cache_misses=int(
+            getattr(pricing, "direct_label_unique_route_partial_cache_misses", 0)
+        ),
+        direct_label_unique_route_partial_cache_size=int(
+            getattr(pricing, "direct_label_unique_route_partial_cache_size", 0)
+        ),
+        direct_label_unique_route_exact_first_step_cache_hits=int(
+            getattr(pricing, "direct_label_unique_route_exact_first_step_cache_hits", 0)
+        ),
+        direct_label_unique_route_exact_first_step_cache_misses=int(
+            getattr(pricing, "direct_label_unique_route_exact_first_step_cache_misses", 0)
+        ),
+        direct_label_unique_route_exact_first_step_cache_size=int(
+            getattr(pricing, "direct_label_unique_route_exact_first_step_cache_size", 0)
+        ),
+        direct_label_profile_timing_enabled=bool(
+            getattr(pricing, "direct_label_profile_timing_enabled", False)
+        ),
+        direct_label_profile_next_sortie_calls=int(
+            getattr(pricing, "direct_label_profile_next_sortie_calls", 0)
+        ),
+        direct_label_profile_next_sortie_total_time=round(
+            float(getattr(pricing, "direct_label_profile_next_sortie_total_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_partial_heap_pops=int(
+            getattr(pricing, "direct_label_profile_partial_heap_pops", 0)
+        ),
+        direct_label_profile_extension_attempts=int(
+            getattr(pricing, "direct_label_profile_extension_attempts", 0)
+        ),
+        direct_label_profile_option_attempts=int(
+            getattr(pricing, "direct_label_profile_option_attempts", 0)
+        ),
+        direct_label_profile_bound_checks=int(getattr(pricing, "direct_label_profile_bound_checks", 0)),
+        direct_label_profile_dominance_checks=int(
+            getattr(pricing, "direct_label_profile_dominance_checks", 0)
+        ),
+        direct_label_profile_completion_calls=int(
+            getattr(pricing, "direct_label_profile_completion_calls", 0)
+        ),
+        direct_label_profile_resource_precheck_time=round(
+            float(getattr(pricing, "direct_label_profile_resource_precheck_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_extend_time=round(
+            float(getattr(pricing, "direct_label_profile_extend_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_bound_check_time=round(
+            float(getattr(pricing, "direct_label_profile_bound_check_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_dominance_time=round(
+            float(getattr(pricing, "direct_label_profile_dominance_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_completion_time=round(
+            float(getattr(pricing, "direct_label_profile_completion_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_partial_bound_dual_sum_time=round(
+            float(getattr(pricing, "direct_label_profile_partial_bound_dual_sum_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_partial_bound_unique_task_time=round(
+            float(getattr(pricing, "direct_label_profile_partial_bound_unique_task_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_partial_bound_unique_route_time=round(
+            float(getattr(pricing, "direct_label_profile_partial_bound_unique_route_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_partial_bound_completion_route_time=round(
+            float(getattr(pricing, "direct_label_profile_partial_bound_completion_route_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_partial_bound_cut_time=round(
+            float(getattr(pricing, "direct_label_profile_partial_bound_cut_time", 0.0)),
+            9,
         ),
         dp_bound_pruned_labels=getattr(pricing, "dp_bound_pruned_labels", 0),
         dp_disjoint_bound_pruned_labels=getattr(pricing, "dp_disjoint_bound_pruned_labels", 0),
@@ -12333,6 +13343,26 @@ def _log_journey_pricing(
             pricing,
             "profile_materialization_infeasible_candidates_filtered",
             0,
+        ),
+        profile_selected_unmaterialized_candidate_count=int(
+            getattr(pricing, "profile_selected_unmaterialized_candidate_count", 0)
+        ),
+        profile_weak_filtered_materialized_count=int(
+            getattr(pricing, "profile_weak_filtered_materialized_count", 0)
+        ),
+        profile_weak_filtered_best_rough_rc=None
+        if getattr(pricing, "profile_weak_filtered_best_rough_rc", None) is None
+        else round(float(getattr(pricing, "profile_weak_filtered_best_rough_rc")), 9),
+        profile_weak_filtered_best_true_rc=None
+        if getattr(pricing, "profile_weak_filtered_best_true_rc", None) is None
+        else round(float(getattr(pricing, "profile_weak_filtered_best_true_rc")), 9),
+        profile_weak_filtered_max_true_minus_rough=None
+        if getattr(pricing, "profile_weak_filtered_max_true_minus_rough", None) is None
+        else round(float(getattr(pricing, "profile_weak_filtered_max_true_minus_rough")), 9),
+        profile_weak_filtered_max_true_minus_rough_mask=getattr(
+            pricing,
+            "profile_weak_filtered_max_true_minus_rough_mask",
+            None,
         ),
         duplicate_candidate_scan_count=getattr(pricing, "duplicate_candidate_scan_count", 0),
         duplicate_candidates_filtered=getattr(pricing, "duplicate_candidates_filtered", 0),
@@ -12911,29 +13941,60 @@ def _log_journey_addition(
 ) -> None:
     requested = len(getattr(pricing, "journeys", []) or [])
     signatures = [str(getattr(journey, "signature", "")) for journey in getattr(pricing, "journeys", []) or []]
+    requested_task_sets = {
+        frozenset(int(task) for task in getattr(journey, "task_set", frozenset()))
+        for journey in getattr(pricing, "journeys", []) or []
+        if getattr(journey, "task_set", frozenset())
+    }
     new_journeys = int(getattr(added, "new_journeys", int(added)))
     replacement_journeys = int(getattr(added, "replacement_journeys", 0))
     unchanged_journeys = int(getattr(added, "unchanged_journeys", max(0, requested - int(added))))
+    changed_task_sets = {
+        frozenset(int(task) for task in task_set)
+        for task_set in getattr(added, "changed_task_sets", tuple())
+    }
+    new_task_sets = {
+        frozenset(int(task) for task in task_set)
+        for task_set in getattr(added, "new_task_sets", tuple())
+    }
+    replacement_task_sets = {
+        frozenset(int(task) for task in task_set)
+        for task_set in getattr(added, "replacement_task_sets", tuple())
+    }
+    requested_denominator = max(1, int(requested))
     support_payload: dict[str, int | None] = {
         "active_changed_task_set_count": None,
         "active_new_task_set_count": None,
         "active_replacement_task_set_count": None,
         "inactive_changed_task_set_count": None,
+        "active_changed_task_set_hash": None,
+        "inactive_changed_task_set_hash": None,
+        "addition_productivity_class": None,
     }
     if active_task_sets is not None:
         active = {frozenset(int(task) for task in task_set) for task_set in active_task_sets}
-        changed = {frozenset(int(task) for task in task_set) for task_set in getattr(added, "changed_task_sets", tuple())}
-        new_sets = {frozenset(int(task) for task in task_set) for task_set in getattr(added, "new_task_sets", tuple())}
-        replacement_sets = {
-            frozenset(int(task) for task in task_set)
-            for task_set in getattr(added, "replacement_task_sets", tuple())
-        }
-        active_changed = changed.intersection(active)
+        active_changed = changed_task_sets.intersection(active)
+        inactive_changed = changed_task_sets.difference(active)
+        if int(added) <= 0:
+            productivity_class = "no_changed_columns"
+        elif not changed_task_sets:
+            productivity_class = "no_changed_task_sets"
+        elif not active_changed:
+            productivity_class = "changed_inactive_only"
+        elif new_task_sets.intersection(active):
+            productivity_class = "active_new_task_set"
+        elif replacement_task_sets.intersection(active):
+            productivity_class = "active_replacement_task_set"
+        else:
+            productivity_class = "active_other_changed_task_set"
         support_payload = {
             "active_changed_task_set_count": len(active_changed),
-            "active_new_task_set_count": len(new_sets.intersection(active)),
-            "active_replacement_task_set_count": len(replacement_sets.intersection(active)),
-            "inactive_changed_task_set_count": max(0, len(changed) - len(active_changed)),
+            "active_new_task_set_count": len(new_task_sets.intersection(active)),
+            "active_replacement_task_set_count": len(replacement_task_sets.intersection(active)),
+            "inactive_changed_task_set_count": len(inactive_changed),
+            "active_changed_task_set_hash": _hash_strings([str(sorted(task_set)) for task_set in sorted(active_changed, key=lambda item: tuple(sorted(item)))]),
+            "inactive_changed_task_set_hash": _hash_strings([str(sorted(task_set)) for task_set in sorted(inactive_changed, key=lambda item: tuple(sorted(item)))]),
+            "addition_productivity_class": productivity_class,
         }
     logger.log(
         "journey_column_addition",
@@ -12947,7 +14008,37 @@ def _log_journey_addition(
         replacement_journeys=replacement_journeys,
         unchanged_journeys=unchanged_journeys,
         duplicate_journeys=max(0, requested - int(added)),
+        changed_journey_ratio=round(float(int(added)) / float(requested_denominator), 9),
+        new_journey_ratio=round(float(new_journeys) / float(requested_denominator), 9),
+        replacement_journey_ratio=round(float(replacement_journeys) / float(requested_denominator), 9),
+        unchanged_journey_ratio=round(float(unchanged_journeys) / float(requested_denominator), 9),
+        requested_task_set_count=len(requested_task_sets),
+        changed_task_set_count=len(changed_task_sets),
+        new_task_set_count=len(new_task_sets),
+        replacement_task_set_count=len(replacement_task_sets),
         candidate_signature_hash=_hash_strings(signatures),
+        requested_task_set_hash=_hash_strings(
+            [str(sorted(task_set)) for task_set in sorted(requested_task_sets, key=lambda item: tuple(sorted(item)))]
+        ),
+        changed_task_set_hash=_hash_strings(
+            [str(sorted(task_set)) for task_set in sorted(changed_task_sets, key=lambda item: tuple(sorted(item)))]
+        ),
+        new_task_set_hash=_hash_strings(
+            [str(sorted(task_set)) for task_set in sorted(new_task_sets, key=lambda item: tuple(sorted(item)))]
+        ),
+        replacement_task_set_hash=_hash_strings(
+            [str(sorted(task_set)) for task_set in sorted(replacement_task_sets, key=lambda item: tuple(sorted(item)))]
+        ),
+        pricing_state=_journey_pricing_state(pricing),
+        pricing_reason=str(getattr(pricing, "reason", "")),
+        pricing_best_reduced_cost=None
+        if getattr(pricing, "best_reduced_cost", None) is None
+        else round(float(getattr(pricing, "best_reduced_cost")), 9),
+        pricing_completion_bound_enabled=bool(getattr(pricing, "completion_bound_enabled", False)),
+        pricing_harvest_selected_count=int(getattr(pricing, "harvest_selected_count", 0)),
+        pricing_direct_label_harvest_selected_count=int(
+            getattr(pricing, "direct_label_harvest_selected_count", 0)
+        ),
         **support_payload,
     )
 
@@ -13260,6 +14351,144 @@ def _run_journey_same_dual_supplement(
         result.priced_journeys.extend(supplement_pricing.journeys)
         result.changed_task_sets.extend(getattr(added, "changed_task_sets", tuple()))
         previous_added = int(added)
+    return result
+
+
+def _run_journey_replacement_repair_after_flat_weak(
+    data: FutureData,
+    config: dict[str, Any],
+    journey_pool: JourneyPool,
+    base_pricing_config: JourneyPricingConfig,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...],
+    logger: FutureLogger,
+    cg_iter: int,
+    *,
+    node_id: int,
+    depth: int,
+    deadline: float,
+    min_pricing_time: float,
+    trip_cache: dict[tuple, Any] | None,
+    resource_cache: dict[tuple, Any] | None,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None,
+    recent_changed_task_sets: tuple[frozenset[int], ...] | list[frozenset[int]],
+    previous_pricing: Any,
+    previous_pricing_kind: str,
+) -> _JourneySameDualSupplementResult:
+    """Run bounded existing-task-set repair after weak tail progress.
+
+    This is a worker-only supplement.  It may add true-dual negative journeys
+    for task sets already represented in the RMP pool, but a miss is ignored
+    and never participates in the official no-negative certificate.
+    """
+
+    result = _JourneySameDualSupplementResult()
+    if not bool(config.get("journey_replacement_repair_after_flat_weak_enabled", False)):
+        return result
+    if not bool(config.get("journey_replacement_repair_enabled", False)):
+        return result
+    remaining = max(0.0, float(deadline) - time.perf_counter())
+    target_task_sets = _journey_replacement_repair_target_task_sets(
+        config,
+        recent_changed_task_sets=recent_changed_task_sets,
+        active_task_sets=active_task_sets,
+    )
+    replacement_config, replacement_mode = _journey_replacement_repair_config(
+        config,
+        base_pricing_config,
+        remaining=remaining,
+        min_pricing_time=min_pricing_time,
+        depth=depth,
+        target_task_sets=target_task_sets,
+    )
+    dominant_task_set_costs = _journey_pricing_dominant_task_set_costs(
+        journey_pool,
+        cuts,
+        branch_constraints,
+    )
+    if not replacement_mode or not dominant_task_set_costs:
+        return result
+    logger.log(
+        "journey_replacement_repair_after_flat_weak",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        remaining=round(float(remaining), 6),
+        previous_pricing_kind=str(previous_pricing_kind),
+        previous_status=str(getattr(previous_pricing, "status", "")),
+        previous_reason=str(getattr(previous_pricing, "reason", "")),
+        replacement_mode=replacement_mode,
+        known_task_sets=len(dominant_task_set_costs),
+        target_task_sets=len(target_task_sets),
+        direct_journey_label_pricing_enabled=True,
+        existing_task_set_repair_only=True,
+        certificate_capable=False,
+        exact_safe=True,
+    )
+    repair_pricing = price_journeys(
+        data,
+        duals,
+        branch_constraints,
+        config=replacement_config,
+        cuts=tuple(cuts),
+        trip_cache=trip_cache if trip_cache is not None else {},
+        resource_cache=resource_cache,
+        forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+            journey_pool,
+            branch_constraints,
+        ),
+        dominant_task_set_costs=dominant_task_set_costs,
+    )
+    result.pricing_calls += 1
+    result.exact_pricing_calls += 1
+    result.generated_sequences += int(repair_pricing.generated_sequences)
+    result.evaluated_timed_trips += int(repair_pricing.evaluated_timed_trips)
+    _log_journey_pricing(
+        logger,
+        repair_pricing,
+        cg_iter,
+        pricing_kind="exact_replacement_repair_after_flat_weak",
+        config=replacement_config,
+        pricing_dual_source="scip_replacement_repair_after_flat_weak",
+        node_id=node_id,
+        depth=depth,
+    )
+    _log_hidden_negative_audit(
+        logger,
+        data,
+        journey_pool,
+        previous_pricing,
+        repair_pricing,
+        duals,
+        tuple(cuts),
+        branch_constraints,
+        cg_iter,
+        node_id=node_id,
+        depth=depth,
+        hidden_pricing_kind="exact_replacement_repair_after_flat_weak",
+        hidden_dual_source="scip_replacement_repair_after_flat_weak",
+        max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
+        trigger="replacement_repair_after_flat_weak",
+    )
+    if not repair_pricing.journeys:
+        return result
+    added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
+    _log_journey_addition(
+        logger,
+        repair_pricing,
+        added,
+        cg_iter,
+        pricing_kind="exact_replacement_repair_after_flat_weak",
+        node_id=node_id,
+        depth=depth,
+        active_task_sets=active_task_sets,
+    )
+    if int(added) <= 0:
+        return result
+    result.added += int(added)
+    result.priced_journeys.extend(repair_pricing.journeys)
+    result.changed_task_sets.extend(getattr(added, "changed_task_sets", tuple()))
     return result
 
 
@@ -13629,6 +14858,12 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "profile_cross_count_materialization_candidate_cap_filtered",
         "profile_cross_count_materialization_selected_candidate_count",
         "profile_materialization_infeasible_candidates_filtered",
+        "profile_selected_unmaterialized_candidate_count",
+        "profile_weak_filtered_materialized_count",
+        "profile_weak_filtered_best_rough_rc",
+        "profile_weak_filtered_best_true_rc",
+        "profile_weak_filtered_max_true_minus_rough",
+        "profile_weak_filtered_max_true_minus_rough_mask",
         "task_set_resource_pruned_sequences",
         "partial_profile_bound_pruned_labels",
         "dp_bound_pruned_labels",
@@ -13650,6 +14885,17 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "harvest_candidate_new_task_set_count",
         "harvest_selected_new_task_set_count",
         "harvest_selected_replacement_task_set_count",
+        "harvest_support_aware_enabled",
+        "harvest_candidate_support_changing_count",
+        "harvest_selected_support_changing_count",
+        "harvest_selected_strong_replacement_count",
+        "harvest_selected_weak_replacement_count",
+        "harvest_task_set_dominance_enabled",
+        "harvest_task_set_dominance_collapsed_count",
+        "harvest_mask_closure_enabled",
+        "harvest_mask_closure_candidate_task_set_count",
+        "harvest_mask_closure_selected_count",
+        "harvest_mask_closure_selected_task_set_count",
         "harvest_best_true_rc",
         "harvest_worst_selected_true_rc",
         "harvest_avg_pairwise_jaccard",
@@ -13657,6 +14903,15 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "duplicate_candidate_scan_count",
         "duplicate_candidates_filtered",
         "duplicate_scan_limited",
+        "direct_label_unique_route_future_cache_hits",
+        "direct_label_unique_route_future_cache_misses",
+        "direct_label_unique_route_future_cache_size",
+        "direct_label_unique_route_partial_cache_hits",
+        "direct_label_unique_route_partial_cache_misses",
+        "direct_label_unique_route_partial_cache_size",
+        "direct_label_unique_route_exact_first_step_cache_hits",
+        "direct_label_unique_route_exact_first_step_cache_misses",
+        "direct_label_unique_route_exact_first_step_cache_size",
         "dominated_task_set_journeys_filtered",
         "label_physical_catalog",
         "label_physical_catalog_exhausted",
