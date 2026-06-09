@@ -89,6 +89,7 @@ from BPC_future.pricing.journey_pricing import (
     _cut_masks,
     _add_profile_label,
     _add_sortie_partial_label,
+    _SortiePartialDominanceIndex,
     _dominates_sortie_partial_label,
     _early_return_candidate_count,
     _early_return_negative_candidates_ready,
@@ -154,6 +155,8 @@ from BPC_future.solver.journey_driver import (
     _journey_fixed_task_set_repair_enabled,
     _journey_fixed_task_set_repair_pool_targets,
     _journey_fixed_task_set_repair_target_task_sets,
+    _journey_final_judge_replacement_repair_target_task_sets,
+    _journey_final_judge_same_dual_supplement_needed,
     _journey_new_task_set_sweep_candidate_task_sets,
     _journey_new_task_set_sweep_enabled,
     _journey_hidden_negative_patrol_config,
@@ -3221,6 +3224,61 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(result.ng_fallback_to_elementary)
         self.assertFalse(result.ng_certificate_from_relaxation)
 
+    def test_direct_journey_label_completion_bound_uses_ng_certificate_preprobe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
+            data = load_future_data(str(graph_path))
+
+        ng_certificate = JourneyPricingResult(
+            [],
+            True,
+            0.0,
+            12,
+            0,
+            6,
+            0,
+            "OPTIMAL",
+            "ng_dssr_relaxed_no_negative_journey",
+            ng_relaxation_enabled=True,
+            ng_dssr_iterations=1,
+            ng_certificate_from_relaxation=True,
+            global_certificate_capable=True,
+            pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+        )
+        with (
+            patch(
+                "BPC_future.pricing.journey_pricing._price_journeys_by_direct_ng_dssr",
+                return_value=ng_certificate,
+            ) as ng_mock,
+            patch("BPC_future.pricing.journey_pricing._price_journeys_by_direct_labels") as elementary_mock,
+        ):
+            result = price_journeys(
+                data,
+                duals=JourneyDuals(cover={1: 0.0}, fleet_limit=0.0),
+                branch_constraints=tuple(),
+                config=JourneyPricingConfig(
+                    time_bucket_size=5.0,
+                    start_time_step=10.0,
+                    max_tasks_per_trip=1,
+                    time_limit=5.0,
+                    max_candidate_trips=0,
+                    max_dp_states=1000,
+                    direct_journey_label_pricing_enabled=True,
+                    direct_journey_label_completion_bound_enabled=True,
+                    direct_journey_label_ng_dssr_enabled=True,
+                    direct_journey_label_ng_exact_probe_enabled=True,
+                    direct_journey_label_ng_probe_certificate_enabled=True,
+                    direct_journey_label_ng_completion_bound_preprobe_enabled=True,
+                ),
+            )
+
+        self.assertIs(result, ng_certificate)
+        self.assertTrue(result.exhausted)
+        self.assertTrue(result.ng_certificate_from_relaxation)
+        self.assertEqual(result.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        ng_mock.assert_called_once()
+        elementary_mock.assert_not_called()
+
     def test_direct_ng_certificate_dominance_key_can_include_visit_mask(self):
         data = load_future_data("very_small")
         task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
@@ -4462,6 +4520,7 @@ class BPCFutureTests(unittest.TestCase):
             time_buckets=5,
             energy_buckets=5,
             exact_first_step_enabled=True,
+            exact_first_step_bucket_diagnostics_enabled=True,
         )
         bound.EXACT_FIRST_STEP_CACHE_MAX_SIZE = 1
 
@@ -4475,6 +4534,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(len(bound._exact_first_step_cache), 1)
         self.assertEqual(bound.exact_first_step_cache_hits, 1)
         self.assertEqual(bound.exact_first_step_cache_misses, 2)
+        self.assertEqual(len(bound._exact_first_step_resource_bucket_keys), 1)
+        self.assertEqual(bound.exact_first_step_resource_bucket_revisits, 1)
 
     def test_unique_route_exact_first_step_skips_when_bucketed_bound_infeasible(self):
         data = replace(
@@ -4514,6 +4575,91 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(bound.exact_first_step_cache_hits, 0)
         self.assertEqual(bound.exact_first_step_cache_misses, 0)
         self.assertEqual(len(bound._exact_first_step_cache), 0)
+
+    def test_unique_route_max_tasks_gate_is_explicit_for_twenty_tasks(self):
+        base_data = load_future_data("very_small")
+        instance = json.loads(json.dumps(base_data.instance))
+        template = dict(instance["tasks"]["1"])
+        for task in range(2, 21):
+            payload = dict(template)
+            payload["id"] = str(task)
+            instance["tasks"][str(task)] = payload
+        data = replace(
+            base_data,
+            instance=instance,
+            tasks=tuple(range(1, 21)),
+            sortie_limit=1,
+            arc_options={
+                (source, target): base_data.arc_options.get(
+                    (0 if source == 0 else ((source - 1) % len(base_data.tasks)) + 1,
+                     0 if target == 0 else ((target - 1) % len(base_data.tasks)) + 1),
+                    base_data.arc_options[(0, 0)],
+                )
+                for source in range(0, 21)
+                for target in range(0, 21)
+            },
+        )
+        task_to_bit = {task: index for index, task in enumerate(data.tasks)}
+        duals = FutureDuals(
+            cover={task: 0.0 for task in data.tasks},
+            task_vehicle={},
+            sortie_count={},
+            time_occupation={},
+            ordering={},
+            branches={},
+        )
+
+        default_bound = _UniqueRouteCompletionLowerBound(
+            data,
+            duals,
+            task_to_bit,
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=1,
+            energy_buckets=0,
+        )
+        enabled_bound = _UniqueRouteCompletionLowerBound(
+            data,
+            duals,
+            task_to_bit,
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=1,
+            energy_buckets=0,
+            exact_mask_limit=20,
+        )
+
+        self.assertFalse(default_bound.enabled)
+        self.assertTrue(enabled_bound.enabled)
+        self.assertEqual(enabled_bound.full_mask, (1 << 20) - 1)
+
+    def test_unique_route_cache_budget_returns_no_bound(self):
+        data = replace(load_future_data("very_small"), tasks=(1,), sortie_limit=1)
+        duals = FutureDuals(
+            cover={1: 50.0},
+            task_vehicle={},
+            sortie_count={},
+            time_occupation={},
+            ordering={},
+            branches={},
+        )
+        bound = _UniqueRouteCompletionLowerBound(
+            data,
+            duals,
+            {1: 0},
+            max_tasks_per_sortie=1,
+            sortie_limit=1,
+            time_buckets=5,
+            energy_buckets=5,
+            exact_first_step_enabled=True,
+            exact_mask_limit=20,
+            cache_state_limit=1,
+        )
+
+        value = bound.partial_value(0, 1, 1, 0, current_time=0.0, current_energy=0.0)
+
+        self.assertIsNone(value)
+        self.assertGreater(bound.cache_budget_exceeded_count, 0)
 
     def test_direct_journey_completion_bound_two_cycle_depot_immune_and_budget_fallback(self):
         data = replace(load_future_data("very_small"), tasks=(1,), sortie_limit=1)
@@ -6606,6 +6752,7 @@ class BPCFutureTests(unittest.TestCase):
                 "journey_pricing_direct_journey_label_ng_probe_time_limit": 1.5,
                 "journey_pricing_direct_journey_label_ng_probe_min_journeys_for_early_return": 9,
                 "journey_pricing_direct_journey_label_ng_probe_certificate_enabled": True,
+                "journey_pricing_direct_journey_label_ng_completion_bound_preprobe_enabled": True,
                 "journey_pricing_direct_journey_label_ng_reset_memory_between_sorties_enabled": True,
                 "journey_pricing_direct_journey_label_ng_visit_mask_dominance_enabled": True,
                 "journey_pricing_streaming_final_dp_time_reserve": 2.25,
@@ -6620,6 +6767,7 @@ class BPCFutureTests(unittest.TestCase):
         self.assertAlmostEqual(pricing_config.direct_journey_label_ng_probe_time_limit, 1.5)
         self.assertEqual(pricing_config.direct_journey_label_ng_probe_min_journeys_for_early_return, 9)
         self.assertTrue(pricing_config.direct_journey_label_ng_probe_certificate_enabled)
+        self.assertTrue(pricing_config.direct_journey_label_ng_completion_bound_preprobe_enabled)
         self.assertTrue(pricing_config.direct_journey_label_ng_reset_memory_between_sorties_enabled)
         self.assertTrue(pricing_config.direct_journey_label_ng_visit_mask_dominance_enabled)
         self.assertAlmostEqual(pricing_config.streaming_final_dp_time_reserve, 2.25)
@@ -6652,6 +6800,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(enabled)
         self.assertTrue(updated.direct_journey_label_ng_dssr_enabled)
         self.assertTrue(updated.direct_journey_label_ng_exact_probe_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_probe_certificate_enabled)
         self.assertEqual(updated.direct_journey_label_ng_max_labels, 123)
         self.assertEqual(updated.direct_journey_label_ng_min_negative_journeys, 7)
         self.assertAlmostEqual(updated.direct_journey_label_ng_probe_time_limit, 0.6)
@@ -6664,6 +6814,80 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertIs(branch_updated, base)
         self.assertFalse(branch_enabled)
+
+    def test_journey_tail_ng_worker_config_is_tail_gated_and_uncertified(self):
+        base = JourneyPricingConfig(
+            direct_journey_label_ng_dssr_enabled=False,
+            direct_journey_label_ng_exact_probe_enabled=False,
+            direct_journey_label_ng_certificate_enabled=True,
+            direct_journey_label_ng_probe_certificate_enabled=True,
+            direct_journey_label_ng_memory_size=8,
+            direct_journey_label_dssr_max_iterations=4,
+            direct_journey_label_ng_max_labels=50,
+            direct_journey_label_ng_min_negative_journeys=2,
+            direct_journey_label_ng_probe_time_limit=0.2,
+            direct_journey_label_ng_probe_min_journeys_for_early_return=1,
+        )
+        config = {
+            "journey_tail_ng_worker_enabled": True,
+            "journey_tail_ng_worker_min_cg_iter": 4,
+            "journey_tail_ng_worker_min_flat_rounds": 2,
+            "journey_tail_ng_worker_min_retry_no_column_rounds": 1,
+            "journey_tail_ng_worker_memory_size": 5,
+            "journey_tail_ng_worker_dssr_max_iterations": 2,
+            "journey_tail_ng_worker_max_labels": 123,
+            "journey_tail_ng_worker_min_negative_journeys": 7,
+            "journey_tail_ng_worker_probe_time_limit": 0.4,
+            "journey_tail_ng_worker_probe_min_journeys_for_early_return": 3,
+        }
+
+        early, enabled = _journey_retry_force_ng_config(
+            config,
+            base,
+            depth=0,
+            cg_iter=3,
+            certificate_candidate=True,
+            certificate_flat_rounds=2,
+            retry_negative_after_no_column_rounds=1,
+            progress_classification="stalled_same_dual_support",
+        )
+        self.assertIs(early, base)
+        self.assertFalse(enabled)
+
+        not_tail, enabled = _journey_retry_force_ng_config(
+            config,
+            base,
+            depth=0,
+            cg_iter=4,
+            certificate_candidate=True,
+            certificate_flat_rounds=2,
+            retry_negative_after_no_column_rounds=1,
+            progress_classification="objective_improved",
+        )
+        self.assertIs(not_tail, base)
+        self.assertFalse(enabled)
+
+        updated, enabled = _journey_retry_force_ng_config(
+            config,
+            base,
+            depth=0,
+            cg_iter=4,
+            certificate_candidate=True,
+            certificate_flat_rounds=2,
+            retry_negative_after_no_column_rounds=1,
+            progress_classification="stalled_same_dual_support",
+        )
+        self.assertTrue(enabled)
+        self.assertTrue(updated.direct_journey_label_ng_dssr_enabled)
+        self.assertTrue(updated.direct_journey_label_ng_exact_probe_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_probe_certificate_enabled)
+        self.assertEqual(updated.direct_journey_label_ng_memory_size, 5)
+        self.assertEqual(updated.direct_journey_label_dssr_max_iterations, 2)
+        self.assertEqual(updated.direct_journey_label_ng_max_labels, 123)
+        self.assertEqual(updated.direct_journey_label_ng_min_negative_journeys, 7)
+        self.assertAlmostEqual(updated.direct_journey_label_ng_probe_time_limit, 0.4)
+        self.assertEqual(updated.direct_journey_label_ng_probe_min_journeys_for_early_return, 3)
 
     def test_sortie_profile_cross_dominance_is_exact_safe(self):
         data = load_future_data("very_small")
@@ -7653,6 +7877,67 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(_add_sortie_partial_label(labels, worse, active_label_ids=active_ids))
         self.assertEqual(labels, [better])
         self.assertNotIn(id(worse), active_ids)
+
+    def test_sortie_partial_dominance_index_matches_list_scan(self):
+        def label(
+            sequence: tuple[int, ...],
+            lower_start: float,
+            upper_start: float,
+            offset: float,
+            travel_cost: float,
+            travel_energy: float,
+        ) -> _SortiePartialLabel:
+            mask = 0
+            for task in sequence:
+                mask |= 1 << int(task)
+            return _SortiePartialLabel(
+                sequence=sequence,
+                mask=mask,
+                last=sequence[-1],
+                partial=_PartialNoWaitingPathProfile(
+                    arc_options=tuple(),
+                    lower_start=lower_start,
+                    upper_start=upper_start,
+                    offset=offset,
+                    travel_cost=travel_cost,
+                    travel_energy=travel_energy,
+                    service_cost=0.0,
+                    service_energy=0.0,
+                ),
+            )
+
+        base = [
+            label((1, 2), 0.0, 100.0, 10.0, 10.0, 5.0),
+            label((2, 1), 5.0, 90.0, 12.0, 12.0, 5.0),
+            label((3, 1), 0.0, 80.0, 30.0, 6.0, 8.0),
+        ]
+        candidates = [
+            label((4, 1), 6.0, 80.0, 14.0, 14.0, 5.0),
+            label((5, 1), 0.0, 110.0, 8.0, 8.0, 4.0),
+            label((6, 1), 50.0, 60.0, 50.0, 50.0, 50.0),
+        ]
+        for candidate in candidates:
+            list_scan = list(base)
+            indexed = list(base)
+            active_list = {id(item) for item in list_scan}
+            active_indexed = {id(item) for item in indexed}
+            dominance_index = _SortiePartialDominanceIndex(indexed)
+
+            list_result = _add_sortie_partial_label(
+                list_scan,
+                candidate,
+                active_label_ids=active_list,
+            )
+            indexed_result = _add_sortie_partial_label(
+                indexed,
+                candidate,
+                active_label_ids=active_indexed,
+                dominance_index=dominance_index,
+            )
+
+            self.assertEqual(indexed_result, list_result)
+            self.assertEqual([item.sequence for item in indexed], [item.sequence for item in list_scan])
+            self.assertEqual(active_indexed, active_list)
 
     def test_cover_dual_sum_for_mask_uses_cache(self):
         duals = FutureDuals(
@@ -9700,6 +9985,7 @@ class BPCFutureTests(unittest.TestCase):
                 "journey_certificate_completion_bound_two_cycle_enabled": True,
                 "journey_certificate_completion_bound_two_cycle_max_states": 1112,
                 "journey_certificate_completion_bound_next_sortie_trip_return_limit": 222,
+                "journey_certificate_completion_bound_generalized_partial_dominance_enabled": True,
             },
             base,
             certificate_candidate=False,
@@ -9725,6 +10011,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(updated.direct_journey_label_early_return_negative_min_count, 0)
         self.assertFalse(updated.direct_journey_label_next_sortie_cache_enabled)
         self.assertFalse(mode["completion_bound_next_sortie_cache"])
+        self.assertTrue(updated.generalized_partial_dominance_enabled)
+        self.assertTrue(mode["completion_bound_generalized_partial_dominance"])
 
         hidden_updated, hidden_mode = _journey_certificate_pricing_config(
             {
@@ -9846,6 +10134,37 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_min_new_task_sets"], 2)
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_after_time"], 10.0)
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_duplicate_saturation_after_time"], 4.0)
+
+        alias_updated, alias_mode = _journey_certificate_pricing_config(
+            {
+                "journey_certificate_completion_bound_enabled": True,
+                "journey_certificate_completion_bound_after_retry_enabled": True,
+                "journey_certificate_completion_bound_final_probe_only": True,
+                "journey_certificate_completion_bound_time_buckets": 6,
+                "journey_certificate_completion_bound_energy_buckets": 6,
+                "journey_final_judge_harvesting_enabled": True,
+                "journey_final_judge_harvesting_max_columns": 64,
+                "journey_final_judge_harvesting_late_max_columns": 128,
+                "journey_final_judge_harvesting_top_k_strongest": 5,
+                "journey_final_judge_harvesting_min_new_masks": 16,
+                "journey_final_judge_harvesting_replacement_cap": 8,
+            },
+            base,
+            certificate_candidate=False,
+            certificate_flat_rounds=0,
+            certificate_no_column_rounds=1,
+            depth=0,
+            completion_bound_phase="after_retry",
+        )
+        self.assertTrue(alias_updated.direct_journey_label_diverse_harvest_enabled)
+        self.assertTrue(alias_updated.direct_journey_label_diverse_harvest_support_aware_enabled)
+        self.assertEqual(alias_updated.max_returned_journeys, 128)
+        self.assertEqual(alias_updated.direct_journey_label_diverse_harvest_top_k_strongest, 5)
+        self.assertEqual(alias_updated.direct_journey_label_diverse_harvest_min_new_task_sets, 16)
+        self.assertEqual(alias_updated.direct_journey_label_diverse_harvest_replacement_cap, 8)
+        self.assertEqual(alias_mode["completion_bound_diverse_harvest_max_returned_journeys"], 128)
+        self.assertTrue(alias_mode["final_judge_harvesting_alias_enabled"])
+        self.assertEqual(alias_mode["final_judge_harvesting_late_max_columns"], 128)
 
         branch_updated, branch_mode = _journey_certificate_pricing_config(
             {
@@ -10036,6 +10355,60 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(updated.direct_journey_label_completion_bound_enabled)
         self.assertTrue(mode["completion_bound"])
 
+    def test_completion_bound_ng_preprobe_is_certificate_only_and_opt_in(self):
+        base = JourneyPricingConfig(
+            direct_journey_label_ng_dssr_enabled=False,
+            direct_journey_label_ng_exact_probe_enabled=False,
+            direct_journey_label_ng_probe_certificate_enabled=False,
+            direct_journey_label_ng_completion_bound_preprobe_enabled=False,
+            direct_journey_label_ng_memory_size=8,
+            direct_journey_label_ng_max_labels=50,
+            direct_journey_label_ng_probe_time_limit=0.0,
+        )
+
+        disabled, disabled_mode = _journey_certificate_pricing_config(
+            {
+                "journey_certificate_completion_bound_enabled": True,
+                "journey_certificate_completion_bound_after_retry_enabled": True,
+            },
+            base,
+            certificate_candidate=True,
+            certificate_flat_rounds=1,
+            depth=0,
+            completion_bound_phase="after_retry",
+        )
+        self.assertTrue(disabled.direct_journey_label_completion_bound_enabled)
+        self.assertFalse(disabled.direct_journey_label_ng_completion_bound_preprobe_enabled)
+        self.assertNotIn("completion_bound_ng_preprobe", disabled_mode)
+
+        updated, mode = _journey_certificate_pricing_config(
+            {
+                "journey_certificate_completion_bound_enabled": True,
+                "journey_certificate_completion_bound_after_retry_enabled": True,
+                "journey_certificate_completion_bound_ng_preprobe_enabled": True,
+                "journey_certificate_completion_bound_ng_preprobe_time_limit": 3.5,
+                "journey_certificate_completion_bound_ng_preprobe_memory_size": 6,
+                "journey_certificate_completion_bound_ng_preprobe_max_labels": 1234,
+                "journey_certificate_completion_bound_ng_preprobe_max_iterations": 3,
+            },
+            base,
+            certificate_candidate=True,
+            certificate_flat_rounds=1,
+            depth=0,
+            completion_bound_phase="after_retry",
+        )
+        self.assertTrue(updated.direct_journey_label_completion_bound_enabled)
+        self.assertTrue(updated.direct_journey_label_ng_dssr_enabled)
+        self.assertTrue(updated.direct_journey_label_ng_exact_probe_enabled)
+        self.assertTrue(updated.direct_journey_label_ng_probe_certificate_enabled)
+        self.assertTrue(updated.direct_journey_label_ng_completion_bound_preprobe_enabled)
+        self.assertAlmostEqual(updated.direct_journey_label_ng_probe_time_limit, 3.5)
+        self.assertEqual(updated.direct_journey_label_ng_memory_size, 6)
+        self.assertEqual(updated.direct_journey_label_ng_max_labels, 1234)
+        self.assertEqual(updated.direct_journey_label_dssr_max_iterations, 3)
+        self.assertTrue(mode["completion_bound_ng_preprobe"])
+        self.assertAlmostEqual(mode["completion_bound_ng_preprobe_time_limit"], 3.5)
+
     def test_retry_budget_completion_reserve_is_opt_in_and_bounded(self):
         budget, reserve = _journey_retry_budget_with_completion_reserve(
             {},
@@ -10168,6 +10541,58 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(updated.direct_journey_label_existing_task_set_repair_only)
         self.assertTrue(updated.direct_journey_label_pricing_enabled)
         self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
+
+    def test_hidden_negative_patrol_config_can_run_tail_ng_worker_without_certificate(self):
+        base = JourneyPricingConfig(
+            direct_journey_label_ng_dssr_enabled=False,
+            direct_journey_label_ng_exact_probe_enabled=False,
+            direct_journey_label_ng_certificate_enabled=True,
+            direct_journey_label_ng_probe_certificate_enabled=True,
+            direct_journey_label_ng_memory_size=8,
+            direct_journey_label_ng_max_labels=50,
+            direct_journey_label_dssr_max_iterations=4,
+            direct_journey_label_completion_bound_enabled=False,
+            max_returned_journeys=8,
+        )
+        updated, mode = _journey_hidden_negative_patrol_config(
+            {
+                "journey_hidden_negative_patrol_enabled": True,
+                "journey_hidden_negative_patrol_max_labels_per_node": 0,
+                "journey_hidden_negative_patrol_completion_bound_enabled": False,
+                "journey_hidden_negative_patrol_time_limit": 0.05,
+                "journey_tail_ng_worker_enabled": True,
+                "journey_tail_ng_worker_min_cg_iter": 4,
+                "journey_tail_ng_worker_min_flat_rounds": 2,
+                "journey_tail_ng_worker_min_retry_no_column_rounds": 1,
+                "journey_tail_ng_worker_memory_size": 5,
+                "journey_tail_ng_worker_dssr_max_iterations": 2,
+                "journey_tail_ng_worker_max_labels": 123,
+                "journey_tail_ng_worker_probe_time_limit": 0.4,
+                "journey_tail_ng_worker_probe_min_journeys_for_early_return": 3,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=1.0,
+            depth=0,
+            cg_iter=4,
+            certificate_candidate=True,
+            certificate_flat_rounds=2,
+            retry_negative_after_no_column_rounds=1,
+            progress_classification="stalled_same_dual_support",
+        )
+        self.assertTrue(mode["hidden_negative_patrol"])
+        self.assertTrue(mode["tail_ng_worker"])
+        self.assertTrue(updated.direct_journey_label_pricing_enabled)
+        self.assertTrue(updated.direct_journey_label_ng_dssr_enabled)
+        self.assertTrue(updated.direct_journey_label_ng_exact_probe_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_ng_probe_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
+        self.assertEqual(updated.direct_journey_label_ng_memory_size, 5)
+        self.assertEqual(updated.direct_journey_label_ng_max_labels, 123)
+        self.assertEqual(updated.direct_journey_label_dssr_max_iterations, 2)
+        self.assertAlmostEqual(updated.time_limit, 0.4)
 
     def test_hidden_negative_patrol_config_allows_full_direct_only_with_completion_bound(self):
         base = JourneyPricingConfig(
@@ -10347,6 +10772,288 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertIs(branch_skipped, base)
         self.assertEqual(branch_mode, {})
+
+    def test_final_judge_replacement_repair_can_enable_worker_without_global_repair(self):
+        base = JourneyPricingConfig(
+            profile_pricing_enabled=True,
+            streaming_pricing_enabled=True,
+            direct_journey_label_pricing_enabled=False,
+            direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_global_certificate_enabled=True,
+            direct_journey_label_ng_dssr_enabled=True,
+            max_returned_journeys=8,
+            max_dp_states=12345,
+        )
+        ordinary, ordinary_mode = _journey_replacement_repair_config(
+            {
+                "journey_replacement_repair_enabled": False,
+                "journey_final_judge_replacement_repair_enabled": True,
+                "journey_replacement_repair_time_limit": 2.0,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+            target_task_sets=(frozenset({1, 2}),),
+        )
+        self.assertIs(ordinary, base)
+        self.assertEqual(ordinary_mode, {})
+
+        updated, mode = _journey_replacement_repair_config(
+            {
+                "journey_replacement_repair_enabled": False,
+                "journey_final_judge_replacement_repair_enabled": True,
+                "journey_replacement_repair_time_limit": 2.0,
+                "journey_replacement_repair_final_reserve_time": 1.0,
+                "journey_replacement_repair_min_journeys": 2,
+                "journey_replacement_repair_max_returned_journeys": 6,
+            },
+            base,
+            remaining=10.0,
+            min_pricing_time=0.5,
+            depth=0,
+            target_task_sets=(frozenset({1, 2}),),
+            final_judge_repair=True,
+        )
+        self.assertTrue(mode["replacement_repair"])
+        self.assertTrue(mode["final_judge_replacement_repair"])
+        self.assertFalse(mode["certificate_capable"])
+        self.assertFalse(updated.direct_journey_label_global_certificate_enabled)
+        self.assertFalse(updated.direct_journey_label_completion_bound_enabled)
+        self.assertTrue(updated.direct_journey_label_existing_task_set_repair_only)
+        self.assertEqual(updated.direct_journey_label_repair_task_sets, (frozenset({1, 2}),))
+        self.assertEqual(updated.direct_journey_label_early_return_negative_min_count, 2)
+        self.assertEqual(updated.max_returned_journeys, 6)
+
+    def test_final_judge_replacement_repair_targets_only_replacement_tail(self):
+        pricing = SimpleNamespace(
+            journeys=[
+                SimpleNamespace(task_set=frozenset({1, 2})),
+                SimpleNamespace(task_set=frozenset({3, 4})),
+            ],
+            direct_label_harvest_selected_new_task_set_count=0,
+        )
+        added = _JourneyAdditionCount(
+            2,
+            new_journeys=0,
+            replacement_journeys=2,
+            unchanged_journeys=0,
+            replacement_task_sets=(frozenset({1, 2}), frozenset({5})),
+            changed_task_sets=(frozenset({1, 2}), frozenset({5})),
+        )
+
+        disabled = _journey_final_judge_replacement_repair_target_task_sets(
+            {},
+            pricing,
+            added,
+            pricing_kind="exact_completion_bound_retry",
+        )
+        self.assertEqual(disabled, tuple())
+
+        non_final = _journey_final_judge_replacement_repair_target_task_sets(
+            {"journey_final_judge_replacement_repair_enabled": True},
+            pricing,
+            added,
+            pricing_kind="exact",
+        )
+        self.assertEqual(non_final, tuple())
+
+        targets = _journey_final_judge_replacement_repair_target_task_sets(
+            {
+                "journey_final_judge_replacement_repair_enabled": True,
+                "journey_final_judge_replacement_repair_max_target_task_sets": 8,
+            },
+            pricing,
+            added,
+            pricing_kind="exact_completion_bound_retry",
+        )
+        self.assertEqual(targets, (frozenset({1, 2}), frozenset({5})))
+
+        new_column_batch = _JourneyAdditionCount(
+            2,
+            new_journeys=1,
+            replacement_journeys=1,
+            unchanged_journeys=0,
+            new_task_sets=(frozenset({7}),),
+            replacement_task_sets=(frozenset({1, 2}),),
+            changed_task_sets=(frozenset({7}), frozenset({1, 2})),
+        )
+        blocked_by_new = _journey_final_judge_replacement_repair_target_task_sets(
+            {"journey_final_judge_replacement_repair_enabled": True},
+            pricing,
+            new_column_batch,
+            pricing_kind="exact_completion_bound_retry",
+        )
+        self.assertEqual(blocked_by_new, tuple())
+
+        selected_new = SimpleNamespace(
+            journeys=[SimpleNamespace(task_set=frozenset({1, 2}))],
+            direct_label_harvest_selected_new_task_set_count=1,
+        )
+        blocked_by_selected_new = _journey_final_judge_replacement_repair_target_task_sets(
+            {"journey_final_judge_replacement_repair_enabled": True},
+            selected_new,
+            added,
+            pricing_kind="exact_completion_bound_retry",
+        )
+        self.assertEqual(blocked_by_selected_new, tuple())
+
+    def test_final_judge_same_dual_supplement_gate_targets_small_clean_replacement_tail(self):
+        base_config = {
+            "journey_same_dual_supplement_enabled": True,
+            "journey_same_dual_supplement_disable_on_branch_depth_gt": 0,
+            "journey_same_dual_supplement_min_flat_rounds": 1,
+            "journey_same_dual_supplement_max_initial_added_journeys": 4,
+            "journey_same_dual_supplement_require_scip_dual": True,
+            "journey_final_judge_same_dual_supplement_enabled": True,
+        }
+        clean_pricing = SimpleNamespace(
+            direct_label_harvest_selected_weak_replacement_count=0,
+            direct_label_harvest_fallback_fill_count=0,
+            direct_label_harvest_candidate_count=12,
+        )
+        small_replacement = _JourneyAdditionCount(
+            2,
+            new_journeys=0,
+            replacement_journeys=2,
+            unchanged_journeys=0,
+            replacement_task_sets=(frozenset({1, 2}), frozenset({3})),
+            changed_task_sets=(frozenset({1, 2}), frozenset({3})),
+        )
+        self.assertTrue(
+            _journey_final_judge_same_dual_supplement_needed(
+                base_config,
+                clean_pricing,
+                small_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
+
+        disabled = dict(base_config, journey_final_judge_same_dual_supplement_enabled=False)
+        self.assertFalse(
+            _journey_final_judge_same_dual_supplement_needed(
+                disabled,
+                clean_pricing,
+                small_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
+
+        large_replacement = _JourneyAdditionCount(
+            5,
+            new_journeys=0,
+            replacement_journeys=5,
+            unchanged_journeys=0,
+            replacement_task_sets=(frozenset({1}),),
+            changed_task_sets=(frozenset({1}),),
+        )
+        self.assertFalse(
+            _journey_final_judge_same_dual_supplement_needed(
+                base_config,
+                clean_pricing,
+                large_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
+
+        weak_pricing = SimpleNamespace(
+            direct_label_harvest_selected_weak_replacement_count=1,
+            direct_label_harvest_fallback_fill_count=0,
+        )
+        self.assertFalse(
+            _journey_final_judge_same_dual_supplement_needed(
+                base_config,
+                weak_pricing,
+                small_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
+
+        fallback_pricing = SimpleNamespace(
+            direct_label_harvest_selected_weak_replacement_count=0,
+            direct_label_harvest_fallback_fill_count=1,
+            direct_label_harvest_candidate_count=12,
+        )
+        self.assertFalse(
+            _journey_final_judge_same_dual_supplement_needed(
+                base_config,
+                fallback_pricing,
+                small_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
+
+        candidate_window_config = dict(
+            base_config,
+            journey_final_judge_same_dual_supplement_min_candidate_negative_count=8,
+            journey_final_judge_same_dual_supplement_max_candidate_negative_count=20,
+        )
+        self.assertTrue(
+            _journey_final_judge_same_dual_supplement_needed(
+                candidate_window_config,
+                clean_pricing,
+                small_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
+        low_candidate_pricing = SimpleNamespace(
+            direct_label_harvest_selected_weak_replacement_count=0,
+            direct_label_harvest_fallback_fill_count=0,
+            direct_label_harvest_candidate_count=6,
+        )
+        self.assertFalse(
+            _journey_final_judge_same_dual_supplement_needed(
+                candidate_window_config,
+                low_candidate_pricing,
+                small_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
+        high_candidate_pricing = SimpleNamespace(
+            direct_label_harvest_selected_weak_replacement_count=0,
+            direct_label_harvest_fallback_fill_count=0,
+            direct_label_harvest_candidate_count=22,
+        )
+        self.assertFalse(
+            _journey_final_judge_same_dual_supplement_needed(
+                candidate_window_config,
+                high_candidate_pricing,
+                small_replacement,
+                pricing_kind="exact_completion_bound_retry",
+                certificate_candidate=True,
+                certificate_flat_rounds=1,
+                depth=0,
+                pricing_dual_source="scip_true_dual",
+            )
+        )
 
     def test_direct_repair_target_masks_can_be_limited_to_recent_task_sets(self):
         data = SimpleNamespace(tasks=(1, 2, 3, 4))

@@ -17,6 +17,9 @@ from BPC_future.core.data import ArcOption, FutureData
 from BPC_future.core.journey import JourneyColumn, make_journey
 from BPC_future.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
 from BPC_future.master.rmp import FutureDuals, manual_reduced_cost
+from BPC_future.pricing.journey_harvesting import (
+    _select_diverse_journey_candidates as _harvesting_select_diverse_journey_candidates,
+)
 from BPC_future.pricing.trip_pricing import (
     _PartialNoWaitingPathProfile,
     PricingConfig,
@@ -99,6 +102,8 @@ class JourneyPricingConfig:
     direct_journey_label_completion_bound_unique_task_helper_enabled: bool = False
     direct_journey_label_completion_bound_unique_route_helper_enabled: bool = False
     direct_journey_label_completion_bound_unique_route_exact_first_step_enabled: bool = False
+    direct_journey_label_completion_bound_unique_route_max_tasks: int = 16
+    direct_journey_label_completion_bound_unique_route_cache_max_states: int = 0
     direct_journey_label_completion_bound_two_cycle_enabled: bool = False
     direct_journey_label_completion_bound_two_cycle_max_states: int = 0
     direct_journey_label_completion_bound_elapsed_soft_return_enabled: bool = True
@@ -114,6 +119,7 @@ class JourneyPricingConfig:
     direct_journey_label_ng_probe_time_limit: float = 0.0
     direct_journey_label_ng_probe_min_journeys_for_early_return: int = 1
     direct_journey_label_ng_probe_certificate_enabled: bool = False
+    direct_journey_label_ng_completion_bound_preprobe_enabled: bool = False
     direct_journey_label_ng_dominance_enabled: bool = True
     direct_journey_label_ng_sequence_key_enabled: bool = True
     direct_journey_label_ng_visit_mask_dominance_enabled: bool = False
@@ -244,6 +250,10 @@ class JourneyPricingResult:
     direct_label_harvest_overlap_deferred: int = 0
     direct_label_harvest_duplicate_task_set_rejected_count: int = 0
     direct_label_harvest_fallback_fill_count: int = 0
+    direct_label_harvest_fallback_fill_new_mask_count: int = 0
+    direct_label_harvest_fallback_fill_replacement_count: int = 0
+    direct_label_harvest_fallback_fill_support_changing_count: int = 0
+    direct_label_harvest_fallback_fill_weak_replacement_count: int = 0
     direct_label_harvest_candidate_new_task_set_count: int = 0
     direct_label_harvest_selected_new_task_set_count: int = 0
     direct_label_harvest_selected_replacement_task_set_count: int = 0
@@ -269,6 +279,10 @@ class JourneyPricingResult:
     harvest_rejected_overlap_count: int = 0
     harvest_rejected_duplicate_task_set_count: int = 0
     harvest_fallback_fill_count: int = 0
+    harvest_fallback_fill_new_mask_count: int = 0
+    harvest_fallback_fill_replacement_count: int = 0
+    harvest_fallback_fill_support_changing_count: int = 0
+    harvest_fallback_fill_weak_replacement_count: int = 0
     harvest_candidate_new_task_set_count: int = 0
     harvest_selected_new_task_set_count: int = 0
     harvest_selected_replacement_task_set_count: int = 0
@@ -291,6 +305,10 @@ class JourneyPricingResult:
     direct_label_resource_coarsening_time_bucket_size: float = 0.0
     direct_label_resource_coarsening_energy_bucket_size: float = 0.0
     direct_label_completion_bound_unique_route_exact_first_step_enabled: bool = False
+    direct_label_completion_bound_unique_route_max_tasks: int = 16
+    direct_label_completion_bound_unique_route_cache_max_states: int = 0
+    direct_label_completion_bound_unique_route_enabled: bool = False
+    direct_label_unique_route_cache_budget_exceeded_count: int = 0
     direct_label_unique_route_future_cache_hits: int = 0
     direct_label_unique_route_future_cache_misses: int = 0
     direct_label_unique_route_future_cache_size: int = 0
@@ -300,6 +318,8 @@ class JourneyPricingResult:
     direct_label_unique_route_exact_first_step_cache_hits: int = 0
     direct_label_unique_route_exact_first_step_cache_misses: int = 0
     direct_label_unique_route_exact_first_step_cache_size: int = 0
+    direct_label_unique_route_exact_first_step_resource_bucket_count: int = 0
+    direct_label_unique_route_exact_first_step_resource_bucket_revisits: int = 0
     direct_label_profile_timing_enabled: bool = False
     direct_label_profile_next_sortie_calls: int = 0
     direct_label_profile_next_sortie_total_time: float = 0.0
@@ -312,6 +332,9 @@ class JourneyPricingResult:
     direct_label_profile_resource_precheck_time: float = 0.0
     direct_label_profile_extend_time: float = 0.0
     direct_label_profile_bound_check_time: float = 0.0
+    direct_label_profile_pre_dominance_checks: int = 0
+    direct_label_profile_pre_dominance_pruned: int = 0
+    direct_label_profile_pre_dominance_time: float = 0.0
     direct_label_profile_dominance_time: float = 0.0
     direct_label_profile_completion_time: float = 0.0
     direct_label_profile_partial_bound_dual_sum_time: float = 0.0
@@ -319,6 +342,10 @@ class JourneyPricingResult:
     direct_label_profile_partial_bound_unique_route_time: float = 0.0
     direct_label_profile_partial_bound_completion_route_time: float = 0.0
     direct_label_profile_partial_bound_cut_time: float = 0.0
+    direct_label_profile_partial_bucket_count: int = 0
+    direct_label_profile_partial_bucket_label_count: int = 0
+    direct_label_profile_partial_bucket_max_size: int = 0
+    direct_label_profile_partial_bucket_mean_size: float = 0.0
     dp_disjoint_bound_pruned_labels: int = 0
     dominated_task_set_journeys_filtered: int = 0
     task_set_resource_pruned_sequences: int = 0
@@ -518,6 +545,10 @@ class _DiverseJourneySelection:
     rejected_overlap_count: int
     rejected_duplicate_task_set_count: int
     fallback_fill_count: int
+    fallback_fill_new_mask_count: int
+    fallback_fill_replacement_count: int
+    fallback_fill_support_changing_count: int
+    fallback_fill_weak_replacement_count: int
     candidate_new_task_set_count: int
     selected_new_task_set_count: int
     selected_replacement_task_set_count: int
@@ -950,6 +981,10 @@ def _select_diverse_journey_candidates(
         rejected_overlap_count=int(rejected_overlap),
         rejected_duplicate_task_set_count=int(rejected_duplicate_task_set),
         fallback_fill_count=int(fallback_fill),
+        fallback_fill_new_mask_count=0,
+        fallback_fill_replacement_count=0,
+        fallback_fill_support_changing_count=0,
+        fallback_fill_weak_replacement_count=0,
         candidate_new_task_set_count=int(candidate_new_task_set_count),
         selected_new_task_set_count=int(selected_new_task_set_count),
         selected_replacement_task_set_count=int(len(selected_journeys) - selected_new_task_set_count),
@@ -966,6 +1001,11 @@ def _select_diverse_journey_candidates(
         worst_selected_true_rc=None if not selected_rcs else max(selected_rcs),
         avg_pairwise_jaccard=_avg_pairwise_journey_task_jaccard(selected_journeys),
     )
+
+
+# Keep the historical private name as a compatibility shim for existing tests
+# and call sites; the selector implementation now lives in journey_harvesting.
+_select_diverse_journey_candidates = _harvesting_select_diverse_journey_candidates
 
 
 @dataclass(frozen=True, slots=True)
@@ -1038,6 +1078,63 @@ class _SortiePartialLabel:
     mask: int
     last: int
     partial: _PartialNoWaitingPathProfile
+
+
+class _SortiePartialDominanceIndex:
+    """Exact dominance scan accelerator for one ``(mask, last)`` bucket.
+
+    The index never decides dominance by itself.  It only selects a necessary
+    superset of labels that could dominate, or be dominated by, a candidate;
+    every selected label is still checked by ``_dominates_sortie_partial_label``.
+    """
+
+    __slots__ = ("labels", "_travel_cost_entries", "_offset_entries")
+
+    def __init__(self, labels: list["_SortiePartialLabel"]) -> None:
+        self.labels = labels
+        self._travel_cost_entries: list[tuple[float, int, "_SortiePartialLabel"]] = []
+        self._offset_entries: list[tuple[float, int, "_SortiePartialLabel"]] = []
+        self.rebuild()
+
+    def rebuild(self) -> None:
+        self._travel_cost_entries = sorted(
+            (float(label.partial.travel_cost), id(label), label) for label in self.labels
+        )
+        self._offset_entries = sorted((float(label.partial.offset), id(label), label) for label in self.labels)
+
+    def add(self, label: "_SortiePartialLabel") -> None:
+        bisect.insort(self._travel_cost_entries, (float(label.partial.travel_cost), id(label), label))
+        bisect.insort(self._offset_entries, (float(label.partial.offset), id(label), label))
+
+    def labels_that_may_dominate(self, candidate: "_SortiePartialLabel") -> list["_SortiePartialLabel"]:
+        eps = 1.0e-9
+        cost_stop = bisect.bisect_right(
+            self._travel_cost_entries,
+            (float(candidate.partial.travel_cost) + eps, math.inf),
+        )
+        offset_stop = bisect.bisect_right(
+            self._offset_entries,
+            (float(candidate.partial.offset) + eps, math.inf),
+        )
+        if cost_stop <= offset_stop:
+            return [entry[2] for entry in self._travel_cost_entries[:cost_stop]]
+        return [entry[2] for entry in self._offset_entries[:offset_stop]]
+
+    def labels_that_may_be_dominated_by(self, candidate: "_SortiePartialLabel") -> list["_SortiePartialLabel"]:
+        eps = 1.0e-9
+        cost_start = bisect.bisect_left(
+            self._travel_cost_entries,
+            (float(candidate.partial.travel_cost) - eps, -1),
+        )
+        offset_start = bisect.bisect_left(
+            self._offset_entries,
+            (float(candidate.partial.offset) - eps, -1),
+        )
+        cost_count = len(self._travel_cost_entries) - int(cost_start)
+        offset_count = len(self._offset_entries) - int(offset_start)
+        if cost_count <= offset_count:
+            return [entry[2] for entry in self._travel_cost_entries[cost_start:]]
+        return [entry[2] for entry in self._offset_entries[offset_start:]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -2495,6 +2592,10 @@ class _PositiveSubsetCutRewardBound:
         self.best_by_slots = best_by_slots
 
 
+class _UniqueRouteBoundBudgetExceeded(Exception):
+    """Internal signal that unique-route helper should skip this query."""
+
+
 class _UniqueRouteCompletionLowerBound:
     """Task-unique route suffix bound for small direct-journey pricing calls.
 
@@ -2518,9 +2619,15 @@ class _UniqueRouteCompletionLowerBound:
         time_buckets: int,
         energy_buckets: int,
         exact_first_step_enabled: bool = False,
+        exact_first_step_bucket_diagnostics_enabled: bool = False,
+        exact_mask_limit: int | None = None,
+        cache_state_limit: int = 0,
     ) -> None:
-        self.enabled = len(task_to_bit) <= self.EXACT_MASK_LIMIT
+        self.exact_mask_limit = self.EXACT_MASK_LIMIT if exact_mask_limit is None else max(0, int(exact_mask_limit))
+        self.enabled = len(task_to_bit) <= int(self.exact_mask_limit)
         self.exact_first_step_enabled = bool(exact_first_step_enabled)
+        self.exact_first_step_bucket_diagnostics_enabled = bool(exact_first_step_bucket_diagnostics_enabled)
+        self.cache_state_limit = max(0, int(cache_state_limit))
         self.horizon = max(0.0, float(data.horizon))
         self.bucket_count = max(1, int(time_buckets))
         self.bucket_width = self.horizon / float(self.bucket_count) if self.horizon > 0.0 else 1.0
@@ -2535,6 +2642,7 @@ class _UniqueRouteCompletionLowerBound:
         self.survival_energy_rate = max(0.0, float(data.survival_energy_rate))
         self.tasks = tuple(int(task) for task in data.tasks if int(task) in task_to_bit)
         self.task_to_bit = {int(task): int(bit) for task, bit in task_to_bit.items()}
+        self.task_bits = tuple((int(task), 1 << int(self.task_to_bit[int(task)])) for task in self.tasks)
         self.full_mask = (1 << len(task_to_bit)) - 1 if self.enabled else 0
         self.max_tasks_per_sortie = max(1, int(max_tasks_per_sortie))
         self.sortie_limit = max(0, int(sortie_limit))
@@ -2551,21 +2659,27 @@ class _UniqueRouteCompletionLowerBound:
         self._future_cache: dict[tuple[int, int, int], float] = {}
         self._partial_cache: dict[tuple[int, int, int, int, int, int], float] = {}
         self._exact_first_step_cache: dict[tuple[int, int, int, int, float, float], float] = {}
+        self._exact_first_step_resource_bucket_keys: set[tuple[int, int, int, int, int, int]] = set()
         self.future_cache_hits = 0
         self.future_cache_misses = 0
         self.partial_cache_hits = 0
         self.partial_cache_misses = 0
         self.exact_first_step_cache_hits = 0
         self.exact_first_step_cache_misses = 0
+        self.exact_first_step_resource_bucket_revisits = 0
+        self.cache_budget_exceeded_count = 0
 
     def future_value(self, available_mask: int, remaining_sorties: int, current_time: float = 0.0) -> float | None:
         if not self.enabled:
             return None
-        return self._future_value(
-            int(available_mask) & int(self.full_mask),
-            max(0, int(remaining_sorties)),
-            self._bucket_of_time(float(current_time)),
-        )
+        try:
+            return self._future_value(
+                int(available_mask) & int(self.full_mask),
+                max(0, int(remaining_sorties)),
+                self._bucket_of_time(float(current_time)),
+            )
+        except _UniqueRouteBoundBudgetExceeded:
+            return None
 
     def partial_value(
         self,
@@ -2581,30 +2695,50 @@ class _UniqueRouteCompletionLowerBound:
         bounded_mask = int(available_mask) & int(self.full_mask)
         slots = max(0, int(remaining_slots_in_sortie))
         future = max(0, int(future_sorties))
-        bucketed = self._partial_value(
-            int(last),
-            int(bounded_mask),
-            int(slots),
-            int(future),
-            self._bucket_of_time(float(current_time)),
-            self._bucket_of_energy(float(current_energy)),
-        )
+        try:
+            bucketed = self._partial_value(
+                int(last),
+                int(bounded_mask),
+                int(slots),
+                int(future),
+                self._bucket_of_time(float(current_time)),
+                self._bucket_of_energy(float(current_energy)),
+            )
+        except _UniqueRouteBoundBudgetExceeded:
+            return None
         if not self.exact_first_step_enabled:
             return float(bucketed)
         if float(bucketed) == math.inf:
             return float(bucketed)
-        exact_first = self._partial_value_exact_first_step(
-            int(last),
-            int(bounded_mask),
-            int(slots),
-            int(future),
-            float(current_time),
-            float(current_energy),
-        )
+        try:
+            exact_first = self._partial_value_exact_first_step(
+                int(last),
+                int(bounded_mask),
+                int(slots),
+                int(future),
+                float(current_time),
+                float(current_energy),
+            )
+        except _UniqueRouteBoundBudgetExceeded:
+            return float(bucketed)
         # Both values are optimistic lower bounds.  Taking the larger one keeps
         # the proof safe while recovering precision lost by flooring the
         # current prefix resources into a coarse bucket.
         return max(float(bucketed), float(exact_first))
+
+    def _cache_state_count(self) -> int:
+        return (
+            len(self._future_cache)
+            + len(self._partial_cache)
+            + len(self._exact_first_step_cache)
+        )
+
+    def _ensure_cache_budget(self) -> None:
+        if self.cache_state_limit <= 0:
+            return
+        if self._cache_state_count() >= int(self.cache_state_limit):
+            self.cache_budget_exceeded_count += 1
+            raise _UniqueRouteBoundBudgetExceeded
 
     def _bucket_of_time(self, value: float) -> int:
         if self.horizon <= 0.0:
@@ -2638,11 +2772,11 @@ class _UniqueRouteCompletionLowerBound:
         if cached is not None:
             self.future_cache_hits += 1
             return cached
+        self._ensure_cache_budget()
         self.future_cache_misses += 1
         best = 0.0
         if int(remaining_sorties) > 0 and int(available_mask) > 0:
-            for task in self.tasks:
-                bit = 1 << self.task_to_bit[int(task)]
+            for task, bit in self.task_bits:
                 if not (int(available_mask) & int(bit)):
                     continue
                 depart_time = self._bucket_time(int(bucket))
@@ -2673,6 +2807,7 @@ class _UniqueRouteCompletionLowerBound:
                     )
                     if candidate < best:
                         best = candidate
+        self._ensure_cache_budget()
         self._future_cache[key] = float(best)
         return float(best)
 
@@ -2697,6 +2832,7 @@ class _UniqueRouteCompletionLowerBound:
         if cached is not None:
             self.partial_cache_hits += 1
             return cached
+        self._ensure_cache_budget()
         self.partial_cache_misses += 1
         best = float("inf")
         depart_time = self._bucket_time(int(bucket))
@@ -2721,8 +2857,7 @@ class _UniqueRouteCompletionLowerBound:
             if candidate < best:
                 best = candidate
         if int(remaining_slots_in_sortie) > 0 and int(available_mask) > 0:
-            for task in self.tasks:
-                bit = 1 << self.task_to_bit[int(task)]
+            for task, bit in self.task_bits:
                 if not (int(available_mask) & int(bit)):
                     continue
                 for option in self.arc_options.get((int(last), int(task)), tuple()):
@@ -2761,6 +2896,7 @@ class _UniqueRouteCompletionLowerBound:
             # No relaxed completion exists from this partial route.  The exact
             # label cannot produce a feasible journey either.
             best = float("inf")
+        self._ensure_cache_budget()
         self._partial_cache[key] = float(best)
         return float(best)
 
@@ -2787,7 +2923,21 @@ class _UniqueRouteCompletionLowerBound:
         if cached is not None:
             self.exact_first_step_cache_hits += 1
             return cached
+        self._ensure_cache_budget()
         self.exact_first_step_cache_misses += 1
+        if self.exact_first_step_bucket_diagnostics_enabled:
+            bucket_key = (
+                int(last),
+                int(available_mask),
+                int(remaining_slots_in_sortie),
+                int(future_sorties),
+                self._bucket_of_time(float(bounded_time)),
+                self._bucket_of_energy(float(bounded_energy)),
+            )
+            if bucket_key in self._exact_first_step_resource_bucket_keys:
+                self.exact_first_step_resource_bucket_revisits += 1
+            else:
+                self._exact_first_step_resource_bucket_keys.add(bucket_key)
         best = float("inf")
         depart_time = float(bounded_time)
         energy_used = float(bounded_energy)
@@ -2811,12 +2961,13 @@ class _UniqueRouteCompletionLowerBound:
                 int(future_sorties),
                 float(return_time),
             )
-            candidate = float(option.cost) + (0.0 if future_lb is None else float(future_lb))
+            if future_lb is None:
+                raise _UniqueRouteBoundBudgetExceeded
+            candidate = float(option.cost) + float(future_lb)
             if float(candidate) < float(best):
                 best = float(candidate)
         if int(remaining_slots_in_sortie) > 0 and int(available_mask) > 0:
-            for task in self.tasks:
-                bit = 1 << self.task_to_bit[int(task)]
+            for task, bit in self.task_bits:
                 if not (int(available_mask) & int(bit)):
                     continue
                 for option in self.arc_options.get((int(last), int(task)), tuple()):
@@ -2851,6 +3002,7 @@ class _UniqueRouteCompletionLowerBound:
                     if float(candidate) < float(best):
                         best = float(candidate)
         if len(self._exact_first_step_cache) < int(self.EXACT_FIRST_STEP_CACHE_MAX_SIZE):
+            self._ensure_cache_budget()
             self._exact_first_step_cache[key] = float(best)
         return float(best)
 
@@ -2910,6 +3062,7 @@ def price_journeys(
     forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
     dominant_task_set_costs: dict[frozenset[int], float] | None = None,
     priority_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    active_support_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
     priority_duals: JourneyDuals | None = None,
 ) -> JourneyPricingResult:
     """Return at most one most-negative journey or an exact no-negative certificate."""
@@ -2942,19 +3095,7 @@ def price_journeys(
         and bool(direct_branch_safe)
         and not bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
     ):
-        if bool(config.direct_journey_label_ng_dssr_enabled) and not bool(
-            config.direct_journey_label_completion_bound_enabled
-        ):
-            return _price_journeys_by_direct_ng_dssr(
-                data,
-                duals,
-                config=config,
-                cuts=cuts,
-                branch_constraints=branch_constraints,
-                forbidden_journey_signatures=forbidden_journey_signatures,
-                dominant_task_set_costs=dominant_task_set_costs,
-            )
-        return _price_journeys_by_direct_labels(
+        return _price_journeys_by_direct_labels_with_ng_preprobe(
             data,
             duals,
             config=config,
@@ -2963,6 +3104,7 @@ def price_journeys(
             forbidden_journey_signatures=forbidden_journey_signatures,
             dominant_task_set_costs=dominant_task_set_costs,
             priority_task_sets=priority_task_sets,
+            active_support_task_sets=active_support_task_sets,
             priority_duals=priority_duals,
             resource_cache=resource_cache,
         )
@@ -3220,8 +3362,140 @@ def _merge_ng_probe_pricing_result(
             if result.journeys
             else "ng_probe_profile_merged_negative_journey"
         ),
+        pricing_state=PRICING_STATE_FOUND_NEGATIVE,
     )
     return _attach_ng_probe_stats(merged, ng_probe)
+
+
+def _price_journeys_by_direct_labels_with_ng_preprobe(
+    data: FutureData,
+    duals: JourneyDuals,
+    *,
+    config: JourneyPricingConfig,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
+    forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
+    dominant_task_set_costs: dict[frozenset[int], float] | None = None,
+    priority_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    active_support_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    priority_duals: JourneyDuals | None = None,
+    resource_cache: dict[tuple, Any] | None = None,
+) -> JourneyPricingResult:
+    """Run optional NG/DSSR proof before the elementary direct-label judge.
+
+    The NG relaxation is a true-dual direct-label front-end.  It may return
+    materialized elementary negative journeys.  When certificate mode is
+    enabled, a relaxed no-negative result is a valid certificate for the
+    elementary problem because the relaxed state space contains every elementary
+    journey.  If the preprobe cannot certify or find enough negative journeys,
+    the existing elementary completion-bound judge remains the authoritative
+    fallback.
+    """
+
+    if bool(config.direct_journey_label_ng_dssr_enabled):
+        if not bool(config.direct_journey_label_completion_bound_enabled):
+            return _price_journeys_by_direct_ng_dssr(
+                data,
+                duals,
+                config=config,
+                cuts=cuts,
+                branch_constraints=branch_constraints,
+                forbidden_journey_signatures=forbidden_journey_signatures,
+                dominant_task_set_costs=dominant_task_set_costs,
+            )
+        if not bool(config.direct_journey_label_ng_completion_bound_preprobe_enabled):
+            return _price_journeys_by_direct_labels(
+                data,
+                duals,
+                config=config,
+                cuts=cuts,
+                branch_constraints=branch_constraints,
+                forbidden_journey_signatures=forbidden_journey_signatures,
+                dominant_task_set_costs=dominant_task_set_costs,
+                priority_task_sets=priority_task_sets,
+                active_support_task_sets=active_support_task_sets,
+                priority_duals=priority_duals,
+                resource_cache=resource_cache,
+            )
+        probe_allowed = (
+            bool(config.direct_journey_label_ng_exact_probe_enabled)
+            or bool(config.direct_journey_label_ng_certificate_enabled)
+            or bool(config.direct_journey_label_ng_probe_certificate_enabled)
+        )
+        if probe_allowed:
+            probe_config = replace(
+                config,
+                direct_journey_label_ng_certificate_enabled=bool(
+                    config.direct_journey_label_ng_certificate_enabled
+                    or (
+                        config.direct_journey_label_ng_probe_certificate_enabled
+                        and _direct_ng_branch_certificate_safe(branch_constraints)
+                    )
+                ),
+            )
+            probe_time_limit = float(config.direct_journey_label_ng_probe_time_limit)
+            if probe_time_limit > 0.0 and float(config.time_limit) > 0.0:
+                probe_config = replace(probe_config, time_limit=min(float(config.time_limit), probe_time_limit))
+            ng_probe = _price_journeys_by_direct_ng_dssr(
+                data,
+                duals,
+                config=probe_config,
+                cuts=cuts,
+                branch_constraints=branch_constraints,
+                forbidden_journey_signatures=forbidden_journey_signatures,
+                dominant_task_set_costs=dominant_task_set_costs,
+                fallback_to_elementary=False,
+            )
+            min_early_return = max(1, int(config.direct_journey_label_ng_probe_min_journeys_for_early_return))
+            if ng_probe.journeys and len(ng_probe.journeys) >= min_early_return:
+                return ng_probe
+            if (
+                bool(probe_config.direct_journey_label_ng_certificate_enabled)
+                and bool(ng_probe.exhausted)
+                and str(ng_probe.status) == "OPTIMAL"
+                and bool(ng_probe.ng_certificate_from_relaxation)
+            ):
+                return ng_probe
+            if float(config.time_limit) > 0.0:
+                remaining = max(0.0, float(config.time_limit) - float(ng_probe.profile_generation_time))
+                if remaining <= 0.0:
+                    return ng_probe
+                config = replace(config, time_limit=remaining)
+            fallback = _price_journeys_by_direct_labels(
+                data,
+                duals,
+                config=config,
+                cuts=cuts,
+                branch_constraints=branch_constraints,
+                forbidden_journey_signatures=forbidden_journey_signatures,
+                dominant_task_set_costs=dominant_task_set_costs,
+                priority_task_sets=priority_task_sets,
+                active_support_task_sets=active_support_task_sets,
+                priority_duals=priority_duals,
+                resource_cache=resource_cache,
+            )
+            return _merge_ng_probe_pricing_result(
+                fallback,
+                ng_probe,
+                duals=duals,
+                cuts=cuts,
+                max_returned=max(1, int(config.max_returned_journeys)),
+                eps=float(config.eps),
+            )
+
+    return _price_journeys_by_direct_labels(
+        data,
+        duals,
+        config=config,
+        cuts=cuts,
+        branch_constraints=branch_constraints,
+        forbidden_journey_signatures=forbidden_journey_signatures,
+        dominant_task_set_costs=dominant_task_set_costs,
+        priority_task_sets=priority_task_sets,
+        active_support_task_sets=active_support_task_sets,
+        priority_duals=priority_duals,
+        resource_cache=resource_cache,
+    )
 
 
 def _price_journeys_by_profiles(
@@ -3297,19 +3571,7 @@ def _price_journeys_by_profiles(
         and bool(direct_branch_safe)
         and not bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
     ):
-        if bool(config.direct_journey_label_ng_dssr_enabled) and not bool(
-            config.direct_journey_label_completion_bound_enabled
-        ):
-            return _price_journeys_by_direct_ng_dssr(
-                data,
-                duals,
-                config=config,
-                cuts=cuts,
-                branch_constraints=branch_constraints,
-                forbidden_journey_signatures=forbidden_journey_signatures,
-                dominant_task_set_costs=dominant_task_set_costs,
-            )
-        return _price_journeys_by_direct_labels(
+        return _price_journeys_by_direct_labels_with_ng_preprobe(
             data,
             duals,
             config=config,
@@ -4345,6 +4607,7 @@ def _price_journeys_by_direct_labels(
     forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None = None,
     dominant_task_set_costs: dict[frozenset[int], float] | None = None,
     priority_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    active_support_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
     priority_duals: JourneyDuals | None = None,
     resource_cache: dict[tuple, Any] | None = None,
 ) -> JourneyPricingResult:
@@ -4426,6 +4689,10 @@ def _price_journeys_by_direct_labels(
     direct_label_harvest_overlap_deferred = 0
     direct_label_harvest_duplicate_task_set_rejected_count = 0
     direct_label_harvest_fallback_fill_count = 0
+    direct_label_harvest_fallback_fill_new_mask_count = 0
+    direct_label_harvest_fallback_fill_replacement_count = 0
+    direct_label_harvest_fallback_fill_support_changing_count = 0
+    direct_label_harvest_fallback_fill_weak_replacement_count = 0
     direct_label_harvest_candidate_new_task_set_count = 0
     direct_label_harvest_selected_new_task_set_count = 0
     direct_label_harvest_selected_replacement_task_set_count = 0
@@ -4456,6 +4723,9 @@ def _price_journeys_by_direct_labels(
         "resource_precheck_ns": 0,
         "extend_ns": 0,
         "bound_check_ns": 0,
+        "pre_dominance_checks": 0,
+        "pre_dominance_pruned": 0,
+        "pre_dominance_ns": 0,
         "dominance_ns": 0,
         "completion_ns": 0,
         "partial_bound_dual_sum_ns": 0,
@@ -4463,6 +4733,9 @@ def _price_journeys_by_direct_labels(
         "partial_bound_unique_route_ns": 0,
         "partial_bound_completion_route_ns": 0,
         "partial_bound_cut_ns": 0,
+        "partial_bucket_count": 0,
+        "partial_bucket_label_count": 0,
+        "partial_bucket_max_size": 0,
     }
     selected_candidate_cache_len = -1
     selected_candidate_cache: tuple[JourneyColumn, ...] | None = None
@@ -4535,6 +4808,13 @@ def _price_journeys_by_direct_labels(
                     exact_first_step_enabled=bool(
                         config.direct_journey_label_completion_bound_unique_route_exact_first_step_enabled
                     ),
+                    exact_first_step_bucket_diagnostics_enabled=bool(
+                        config.direct_journey_label_profile_timing_enabled
+                    ),
+                    exact_mask_limit=int(config.direct_journey_label_completion_bound_unique_route_max_tasks),
+                    cache_state_limit=int(
+                        config.direct_journey_label_completion_bound_unique_route_cache_max_states
+                    ),
                 )
             # Sortie-level completion pruning depends on the current journey label
             # value, sortie count, and end time.  A profile cache keyed only by
@@ -4573,6 +4853,9 @@ def _price_journeys_by_direct_labels(
                 exact_first_step_enabled=bool(
                     config.direct_journey_label_completion_bound_unique_route_exact_first_step_enabled
                 ),
+                exact_first_step_bucket_diagnostics_enabled=bool(config.direct_journey_label_profile_timing_enabled),
+                exact_mask_limit=int(config.direct_journey_label_completion_bound_unique_route_max_tasks),
+                cache_state_limit=int(config.direct_journey_label_completion_bound_unique_route_cache_max_states),
             )
         if bool(config.direct_journey_label_completion_bound_partial_pruning_enabled):
             use_next_sortie_cache = False
@@ -4620,6 +4903,10 @@ def _price_journeys_by_direct_labels(
         nonlocal direct_label_harvest_overlap_deferred
         nonlocal direct_label_harvest_duplicate_task_set_rejected_count
         nonlocal direct_label_harvest_fallback_fill_count
+        nonlocal direct_label_harvest_fallback_fill_new_mask_count
+        nonlocal direct_label_harvest_fallback_fill_replacement_count
+        nonlocal direct_label_harvest_fallback_fill_support_changing_count
+        nonlocal direct_label_harvest_fallback_fill_weak_replacement_count
         nonlocal direct_label_harvest_candidate_new_task_set_count
         nonlocal direct_label_harvest_selected_new_task_set_count
         nonlocal direct_label_harvest_selected_replacement_task_set_count
@@ -4664,7 +4951,7 @@ def _price_journeys_by_direct_labels(
                 support_aware_enabled=bool(
                     config.direct_journey_label_diverse_harvest_support_aware_enabled
                 ),
-                support_task_sets=set(priority_task_sets or set()),
+                support_task_sets=set(active_support_task_sets or set()),
                 support_overlap_threshold=float(
                     config.direct_journey_label_diverse_harvest_support_overlap_threshold
                 ),
@@ -4689,6 +4976,14 @@ def _price_journeys_by_direct_labels(
                 selection.rejected_duplicate_task_set_count
             )
             direct_label_harvest_fallback_fill_count = int(selection.fallback_fill_count)
+            direct_label_harvest_fallback_fill_new_mask_count = int(selection.fallback_fill_new_mask_count)
+            direct_label_harvest_fallback_fill_replacement_count = int(selection.fallback_fill_replacement_count)
+            direct_label_harvest_fallback_fill_support_changing_count = int(
+                selection.fallback_fill_support_changing_count
+            )
+            direct_label_harvest_fallback_fill_weak_replacement_count = int(
+                selection.fallback_fill_weak_replacement_count
+            )
             direct_label_harvest_candidate_new_task_set_count = int(selection.candidate_new_task_set_count)
             direct_label_harvest_selected_new_task_set_count = int(selection.selected_new_task_set_count)
             direct_label_harvest_selected_replacement_task_set_count = int(
@@ -4745,6 +5040,10 @@ def _price_journeys_by_direct_labels(
         direct_label_harvest_overlap_deferred = 0
         direct_label_harvest_duplicate_task_set_rejected_count = 0
         direct_label_harvest_fallback_fill_count = 0
+        direct_label_harvest_fallback_fill_new_mask_count = 0
+        direct_label_harvest_fallback_fill_replacement_count = 0
+        direct_label_harvest_fallback_fill_support_changing_count = 0
+        direct_label_harvest_fallback_fill_weak_replacement_count = 0
         existing_keys = set(dominant_task_set_costs or {})
         direct_label_harvest_candidate_new_task_set_count = sum(
             1 for _objective, journey in selected_with_objective if _journey_column_task_set(journey) not in existing_keys
@@ -4988,6 +5287,18 @@ def _price_journeys_by_direct_labels(
             "direct_label_completion_bound_unique_route_exact_first_step_enabled": bool(
                 config.direct_journey_label_completion_bound_unique_route_exact_first_step_enabled
             ),
+            "direct_label_completion_bound_unique_route_max_tasks": int(
+                config.direct_journey_label_completion_bound_unique_route_max_tasks
+            ),
+            "direct_label_completion_bound_unique_route_cache_max_states": int(
+                config.direct_journey_label_completion_bound_unique_route_cache_max_states
+            ),
+            "direct_label_completion_bound_unique_route_enabled": bool(
+                unique_route_bound is not None and unique_route_bound.enabled
+            ),
+            "direct_label_unique_route_cache_budget_exceeded_count": 0
+            if unique_route_bound is None
+            else int(unique_route_bound.cache_budget_exceeded_count),
             "direct_label_unique_route_future_cache_hits": 0
             if unique_route_bound is None
             else int(unique_route_bound.future_cache_hits),
@@ -5015,6 +5326,12 @@ def _price_journeys_by_direct_labels(
             "direct_label_unique_route_exact_first_step_cache_size": 0
             if unique_route_bound is None
             else len(unique_route_bound._exact_first_step_cache),
+            "direct_label_unique_route_exact_first_step_resource_bucket_count": 0
+            if unique_route_bound is None
+            else len(unique_route_bound._exact_first_step_resource_bucket_keys),
+            "direct_label_unique_route_exact_first_step_resource_bucket_revisits": 0
+            if unique_route_bound is None
+            else int(unique_route_bound.exact_first_step_resource_bucket_revisits),
             "direct_label_profile_timing_enabled": bool(config.direct_journey_label_profile_timing_enabled),
             "direct_label_profile_next_sortie_calls": int(
                 direct_label_profile_stats.get("next_sortie_calls", 0)
@@ -5039,6 +5356,12 @@ def _price_journeys_by_direct_labels(
             "direct_label_profile_completion_calls": int(
                 direct_label_profile_stats.get("completion_calls", 0)
             ),
+            "direct_label_profile_pre_dominance_checks": int(
+                direct_label_profile_stats.get("pre_dominance_checks", 0)
+            ),
+            "direct_label_profile_pre_dominance_pruned": int(
+                direct_label_profile_stats.get("pre_dominance_pruned", 0)
+            ),
             "direct_label_profile_resource_precheck_time": round(
                 float(direct_label_profile_stats.get("resource_precheck_ns", 0)) / 1.0e9,
                 9,
@@ -5049,6 +5372,10 @@ def _price_journeys_by_direct_labels(
             ),
             "direct_label_profile_bound_check_time": round(
                 float(direct_label_profile_stats.get("bound_check_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_pre_dominance_time": round(
+                float(direct_label_profile_stats.get("pre_dominance_ns", 0)) / 1.0e9,
                 9,
             ),
             "direct_label_profile_dominance_time": round(
@@ -5079,6 +5406,24 @@ def _price_journeys_by_direct_labels(
                 float(direct_label_profile_stats.get("partial_bound_cut_ns", 0)) / 1.0e9,
                 9,
             ),
+            "direct_label_profile_partial_bucket_count": int(
+                direct_label_profile_stats.get("partial_bucket_count", 0)
+            ),
+            "direct_label_profile_partial_bucket_label_count": int(
+                direct_label_profile_stats.get("partial_bucket_label_count", 0)
+            ),
+            "direct_label_profile_partial_bucket_max_size": int(
+                direct_label_profile_stats.get("partial_bucket_max_size", 0)
+            ),
+            "direct_label_profile_partial_bucket_mean_size": (
+                0.0
+                if int(direct_label_profile_stats.get("partial_bucket_count", 0)) <= 0
+                else round(
+                    float(direct_label_profile_stats.get("partial_bucket_label_count", 0))
+                    / float(direct_label_profile_stats.get("partial_bucket_count", 1)),
+                    9,
+                )
+            ),
             "direct_label_diverse_harvest_enabled": bool(config.direct_journey_label_diverse_harvest_enabled),
             "direct_label_harvest_support_aware_enabled": bool(
                 config.direct_journey_label_diverse_harvest_support_aware_enabled
@@ -5093,6 +5438,18 @@ def _price_journeys_by_direct_labels(
                 direct_label_harvest_duplicate_task_set_rejected_count
             ),
             "direct_label_harvest_fallback_fill_count": int(direct_label_harvest_fallback_fill_count),
+            "direct_label_harvest_fallback_fill_new_mask_count": int(
+                direct_label_harvest_fallback_fill_new_mask_count
+            ),
+            "direct_label_harvest_fallback_fill_replacement_count": int(
+                direct_label_harvest_fallback_fill_replacement_count
+            ),
+            "direct_label_harvest_fallback_fill_support_changing_count": int(
+                direct_label_harvest_fallback_fill_support_changing_count
+            ),
+            "direct_label_harvest_fallback_fill_weak_replacement_count": int(
+                direct_label_harvest_fallback_fill_weak_replacement_count
+            ),
             "direct_label_harvest_candidate_new_task_set_count": int(
                 direct_label_harvest_candidate_new_task_set_count
             ),
@@ -5146,6 +5503,16 @@ def _price_journeys_by_direct_labels(
                 direct_label_harvest_duplicate_task_set_rejected_count
             ),
             "harvest_fallback_fill_count": int(direct_label_harvest_fallback_fill_count),
+            "harvest_fallback_fill_new_mask_count": int(direct_label_harvest_fallback_fill_new_mask_count),
+            "harvest_fallback_fill_replacement_count": int(
+                direct_label_harvest_fallback_fill_replacement_count
+            ),
+            "harvest_fallback_fill_support_changing_count": int(
+                direct_label_harvest_fallback_fill_support_changing_count
+            ),
+            "harvest_fallback_fill_weak_replacement_count": int(
+                direct_label_harvest_fallback_fill_weak_replacement_count
+            ),
             "harvest_candidate_new_task_set_count": int(direct_label_harvest_candidate_new_task_set_count),
             "harvest_selected_new_task_set_count": int(direct_label_harvest_selected_new_task_set_count),
             "harvest_selected_replacement_task_set_count": int(
@@ -5840,6 +6207,17 @@ def _direct_next_sortie_trips(
         pruned_count: int,
     ) -> tuple[list[tuple[_DirectSortieSegment, float, int]], int, int, str, int, int]:
         if profile_enabled:
+            bucket_sizes = [len(bucket) for bucket in labels_by_key.values()]
+            profile_stats["partial_bucket_count"] = int(profile_stats.get("partial_bucket_count", 0)) + len(
+                bucket_sizes
+            )
+            profile_stats["partial_bucket_label_count"] = int(
+                profile_stats.get("partial_bucket_label_count", 0)
+            ) + sum(bucket_sizes)
+            profile_stats["partial_bucket_max_size"] = max(
+                int(profile_stats.get("partial_bucket_max_size", 0)),
+                max(bucket_sizes, default=0),
+            )
             profile_stats["next_sortie_total_ns"] = int(profile_stats.get("next_sortie_total_ns", 0)) + (
                 time.perf_counter_ns() - int(profile_started_ns)
             )
@@ -5862,6 +6240,12 @@ def _direct_next_sortie_trips(
         ),
     )
     labels_by_key: dict[tuple[int, int], list[_SortiePartialLabel]] = {(0, 0): [initial]}
+    use_dominance_index = len(data.tasks) <= 10
+    dominance_index_by_key: dict[tuple[int, int], _SortiePartialDominanceIndex] = (
+        {(0, 0): _SortiePartialDominanceIndex(labels_by_key[(0, 0)])}
+        if bool(use_dominance_index)
+        else {}
+    )
     active_label_ids: set[int] = {id(initial)}
     heap: list[tuple[float, int, float, tuple[int, ...], int, _SortiePartialLabel]] = [
         (_sortie_partial_label_priority(initial, duals), 0, 0.0, tuple(), 0, initial)
@@ -5952,6 +6336,29 @@ def _direct_next_sortie_trips(
                         bound_pruned,
                     )
                 new_label = _SortiePartialLabel(sequence=sequence, mask=local_mask, last=task, partial=extended)
+                label_key = (local_mask, task)
+                labels_for_key = labels_by_key.get(label_key)
+                if labels_for_key is None:
+                    labels_for_key = []
+                    labels_by_key[label_key] = labels_for_key
+                    if bool(use_dominance_index):
+                        dominance_index_by_key[label_key] = _SortiePartialDominanceIndex(labels_for_key)
+                dominance_index = dominance_index_by_key.get(label_key)
+                if labels_for_key:
+                    _profile_inc("pre_dominance_checks")
+                    _pre_dominance_started_ns = time.perf_counter_ns() if profile_enabled else 0
+                    if _sortie_partial_label_dominated_by_existing(
+                        labels_for_key,
+                        new_label,
+                        generalized=bool(config.generalized_partial_dominance_enabled),
+                        time_bucket_size=float(config.direct_journey_label_resource_coarsening_time_bucket_size),
+                        energy_bucket_size=float(config.direct_journey_label_resource_coarsening_energy_bucket_size),
+                        dominance_index=dominance_index,
+                    ):
+                        _profile_add("pre_dominance_ns", _pre_dominance_started_ns)
+                        _profile_inc("pre_dominance_pruned")
+                        continue
+                    _profile_add("pre_dominance_ns", _pre_dominance_started_ns)
                 if (
                     completion_bound is not None
                     or unique_task_bound is not None
@@ -5995,13 +6402,16 @@ def _direct_next_sortie_trips(
                 _profile_inc("dominance_checks")
                 _dominance_started_ns = time.perf_counter_ns() if profile_enabled else 0
                 if not _add_sortie_partial_label(
-                    labels_by_key.setdefault((local_mask, task), []),
+                    labels_for_key,
                     new_label,
+                    generalized=bool(config.generalized_partial_dominance_enabled),
+                    candidate_not_dominated=True,
                     max_labels_per_node=int(config.direct_journey_label_max_labels_per_node),
                     rank_key=lambda item: _sortie_partial_label_priority(item, duals),
                     active_label_ids=active_label_ids,
                     time_bucket_size=float(config.direct_journey_label_resource_coarsening_time_bucket_size),
                     energy_bucket_size=float(config.direct_journey_label_resource_coarsening_energy_bucket_size),
+                    dominance_index=dominance_index,
                 ):
                     _profile_add("dominance_ns", _dominance_started_ns)
                     continue
@@ -6506,6 +6916,7 @@ def _direct_next_sortie_profiles(
                 if not _add_sortie_partial_label(
                     labels_by_key.setdefault((local_mask, task), []),
                     new_label,
+                    generalized=bool(config.generalized_partial_dominance_enabled),
                     max_labels_per_node=int(config.direct_journey_label_max_labels_per_node),
                     rank_key=lambda item: _sortie_partial_label_priority(item, duals),
                     time_bucket_size=float(config.direct_journey_label_resource_coarsening_time_bucket_size),
@@ -9661,23 +10072,34 @@ def _add_sortie_partial_label(
     candidate: _SortiePartialLabel,
     *,
     generalized: bool = False,
+    candidate_not_dominated: bool = False,
     active_label_ids: set[int] | None = None,
     max_labels_per_node: int = 0,
     rank_key: Callable[[_SortiePartialLabel], float] | None = None,
     time_bucket_size: float = 0.0,
     energy_bucket_size: float = 0.0,
+    dominance_index: _SortiePartialDominanceIndex | None = None,
 ) -> bool:
-    for old in labels:
-        if _dominates_sortie_partial_label(
-            old,
+    if not bool(candidate_not_dominated):
+        if _sortie_partial_label_dominated_by_existing(
+            labels,
             candidate,
             generalized=generalized,
             time_bucket_size=float(time_bucket_size),
             energy_bucket_size=float(energy_bucket_size),
+            dominance_index=dominance_index,
         ):
             return False
-    survivors: list[_SortiePartialLabel] = []
-    for old in labels:
+    candidate_scan = (
+        dominance_index.labels_that_may_be_dominated_by(candidate)
+        if dominance_index is not None
+        and not bool(generalized)
+        and float(time_bucket_size) <= 0.0
+        and float(energy_bucket_size) <= 0.0
+        else labels
+    )
+    dominated_ids: set[int] = set()
+    for old in candidate_scan:
         if _dominates_sortie_partial_label(
             candidate,
             old,
@@ -9685,14 +10107,18 @@ def _add_sortie_partial_label(
             time_bucket_size=float(time_bucket_size),
             energy_bucket_size=float(energy_bucket_size),
         ):
-            if active_label_ids is not None:
-                active_label_ids.discard(id(old))
-            continue
-        survivors.append(old)
-    labels[:] = survivors
+            dominated_ids.add(id(old))
+    if dominated_ids:
+        if active_label_ids is not None:
+            active_label_ids.difference_update(dominated_ids)
+        labels[:] = [old for old in labels if id(old) not in dominated_ids]
+        if dominance_index is not None:
+            dominance_index.rebuild()
     labels.append(candidate)
     if active_label_ids is not None:
         active_label_ids.add(id(candidate))
+    if dominance_index is not None:
+        dominance_index.add(candidate)
     max_labels = max(0, int(max_labels_per_node))
     if max_labels > 0 and len(labels) > max_labels:
         if rank_key is None:
@@ -9719,11 +10145,42 @@ def _add_sortie_partial_label(
                 active_label_ids.discard(id(old))
         kept = any(item is candidate for item in survivors)
         labels[:] = survivors
+        if dominance_index is not None:
+            dominance_index.rebuild()
         if not kept:
             if active_label_ids is not None:
                 active_label_ids.discard(id(candidate))
             return False
     return True
+
+
+def _sortie_partial_label_dominated_by_existing(
+    labels: list[_SortiePartialLabel],
+    candidate: _SortiePartialLabel,
+    *,
+    generalized: bool = False,
+    time_bucket_size: float = 0.0,
+    energy_bucket_size: float = 0.0,
+    dominance_index: _SortiePartialDominanceIndex | None = None,
+) -> bool:
+    scan = (
+        dominance_index.labels_that_may_dominate(candidate)
+        if dominance_index is not None
+        and not bool(generalized)
+        and float(time_bucket_size) <= 0.0
+        and float(energy_bucket_size) <= 0.0
+        else labels
+    )
+    for old in scan:
+        if _dominates_sortie_partial_label(
+            old,
+            candidate,
+            generalized=generalized,
+            time_bucket_size=float(time_bucket_size),
+            energy_bucket_size=float(energy_bucket_size),
+        ):
+            return True
+    return False
 
 
 def _dominates_sortie_partial_label(
@@ -9736,6 +10193,31 @@ def _dominates_sortie_partial_label(
 ) -> bool:
     a = left.partial
     b = right.partial
+    if not bool(generalized) and float(time_bucket_size) <= 0.0 and float(energy_bucket_size) <= 0.0:
+        eps = 1.0e-9
+        if a.lower_start > b.lower_start + eps:
+            return False
+        if a.upper_start < b.upper_start - eps:
+            return False
+        if a.offset > b.offset + eps:
+            return False
+        if a.travel_cost > b.travel_cost + eps:
+            return False
+        if a.travel_energy > b.travel_energy + eps:
+            return False
+        if a.service_cost > b.service_cost + eps:
+            return False
+        if a.service_energy > b.service_energy + eps:
+            return False
+        return bool(
+            a.lower_start < b.lower_start - eps
+            or a.upper_start > b.upper_start + eps
+            or a.offset < b.offset - eps
+            or a.travel_cost < b.travel_cost - eps
+            or a.travel_energy < b.travel_energy - eps
+            or a.service_cost < b.service_cost - eps
+            or a.service_energy < b.service_energy - eps
+        )
     a_lower_start = a.lower_start
     a_upper_start = a.upper_start
     a_offset = a.offset

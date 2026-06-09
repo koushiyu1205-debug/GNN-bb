@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from BPC_future.core.data import load_future_data
 from BPC_future.core.fleet_bound import apply_fleet_bound_override
+from BPC_future.pricing.trip_pricing import _clear_sequence_resource_precheck_cache
 from BPC_future.solver.driver import solve_bpc_future, write_solution
 from BPC_future.solver.journey_driver import solve_bpc_future_journey
 from BPC_future.solver.logger import FutureLogger
@@ -52,6 +53,7 @@ def main() -> None:
     results_csv.parent.mkdir(parents=True, exist_ok=True)
     rows = []
     for name in config.get("instances", ["very_small"]):
+        _clear_sequence_resource_precheck_cache()
         data = load_future_data(str(name), instance_dir=config.get("instance_dir", "json/instances"))
         data, fleet_diag = apply_fleet_bound_override(data, config)
         logger = FutureLogger(log_dir / f"{name}.jsonl", console=not args.quiet)
@@ -93,6 +95,7 @@ def main() -> None:
             f"gap={result.gap}, time={result.solving_time}s, nodes={result.node_count}, cols={result.columns}",
             flush=True,
         )
+        _clear_sequence_resource_precheck_cache()
         gc.collect()
         torch_module = sys.modules.get("torch")
         if torch_module is not None:
