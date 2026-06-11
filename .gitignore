@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+gnn_bb/BPC_future/logical_graph/tasks_*/

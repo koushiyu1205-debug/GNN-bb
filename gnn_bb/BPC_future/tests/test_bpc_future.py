@@ -12385,6 +12385,203 @@ class BPCFutureTests(unittest.TestCase):
 
         self.assertEqual(unique_route.calls, [0b100])
 
+    def test_available_mask_partial_bound_gets_available_mask_without_unique_helpers(self):
+        class FakeAvailableMaskBound:
+            full_mask = 0b111
+            disabled = False
+
+            def __init__(self):
+                self.calls = []
+
+            def lower_bound_for_partial(
+                self,
+                *,
+                last,
+                available_mask,
+                remaining_slots_current_sortie,
+                remaining_sorties_after_current,
+                remaining_capacity=None,
+                remaining_energy=None,
+                remaining_occupation=None,
+            ):
+                self.calls.append(
+                    (
+                        int(last),
+                        int(available_mask),
+                        int(remaining_slots_current_sortie),
+                        int(remaining_sorties_after_current),
+                    )
+                )
+                return SimpleNamespace(value=0.0, disabled=False)
+
+        amcb = FakeAvailableMaskBound()
+        label = _SortiePartialLabel(
+            sequence=(2,),
+            mask=0b010,
+            last=2,
+            partial=SimpleNamespace(
+                lower_start=0.0,
+                upper_start=100.0,
+                offset=0.0,
+                travel_cost=0.0,
+                service_cost=0.0,
+                travel_energy=0.0,
+                service_energy=0.0,
+            ),
+        )
+        data = SimpleNamespace(
+            sortie_limit=2,
+            capacity=100.0,
+            energy_limit=100.0,
+            rho=1.0,
+            horizon=100.0,
+            task_value=lambda task, field: 1.0 if field == "d" else 0.0,
+        )
+
+        _direct_sortie_partial_completion_bound_check(
+            data,
+            FutureDuals({}, {}, {}, {}, {}, {}),
+            label,
+            {1: 0, 2: 1, 3: 2},
+            base_reduced_cost=-10.0,
+            journey_label_value=0.0,
+            journey_label_mask=0b001,
+            journey_label_count=0,
+            earliest_start=0.0,
+            completion_bound=None,
+            amcb_bound=amcb,
+            unique_task_bound=None,
+            unique_route_bound=None,
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=3,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            eps=1.0e-6,
+        )
+
+        self.assertEqual(amcb.calls, [(2, 0b100, 2, 1)])
+
+    def test_available_mask_partial_bound_skips_when_unique_route_enabled(self):
+        class FakeUniqueRoute:
+            full_mask = 0b111
+            enabled = True
+
+            def partial_value(self, *args, **kwargs):
+                return 0.0
+
+        class FakeAvailableMaskBound:
+            full_mask = 0b111
+            disabled = False
+
+            def __init__(self):
+                self.calls = 0
+
+            def lower_bound_for_partial(self, **kwargs):
+                self.calls += 1
+                return SimpleNamespace(value=0.0, disabled=False)
+
+        amcb = FakeAvailableMaskBound()
+        label = _SortiePartialLabel(
+            sequence=(2,),
+            mask=0b010,
+            last=2,
+            partial=SimpleNamespace(
+                lower_start=0.0,
+                upper_start=100.0,
+                offset=0.0,
+                travel_cost=0.0,
+                service_cost=0.0,
+                travel_energy=0.0,
+                service_energy=0.0,
+            ),
+        )
+        data = SimpleNamespace(sortie_limit=2)
+
+        _direct_sortie_partial_completion_bound_check(
+            data,
+            FutureDuals({}, {}, {}, {}, {}, {}),
+            label,
+            {1: 0, 2: 1, 3: 2},
+            base_reduced_cost=-10.0,
+            journey_label_value=0.0,
+            journey_label_mask=0b001,
+            journey_label_count=0,
+            earliest_start=0.0,
+            completion_bound=None,
+            amcb_bound=amcb,
+            unique_task_bound=None,
+            unique_route_bound=FakeUniqueRoute(),
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=3,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            eps=1.0e-6,
+        )
+
+        self.assertEqual(amcb.calls, 0)
+
+    def test_available_mask_partial_bound_runs_when_unique_route_disabled(self):
+        class FakeUniqueRoute:
+            full_mask = 0b111
+            enabled = False
+
+            def partial_value(self, *args, **kwargs):
+                return None
+
+        class FakeAvailableMaskBound:
+            full_mask = 0b111
+            disabled = False
+
+            def __init__(self):
+                self.calls = []
+
+            def lower_bound_for_partial(self, *, available_mask, **kwargs):
+                self.calls.append(int(available_mask))
+                return SimpleNamespace(value=0.0, disabled=False)
+
+        amcb = FakeAvailableMaskBound()
+        label = _SortiePartialLabel(
+            sequence=(2,),
+            mask=0b010,
+            last=2,
+            partial=SimpleNamespace(
+                lower_start=0.0,
+                upper_start=100.0,
+                offset=0.0,
+                travel_cost=0.0,
+                service_cost=0.0,
+                travel_energy=0.0,
+                service_energy=0.0,
+            ),
+        )
+        data = SimpleNamespace(sortie_limit=2)
+
+        _direct_sortie_partial_completion_bound_check(
+            data,
+            FutureDuals({}, {}, {}, {}, {}, {}),
+            label,
+            {1: 0, 2: 1, 3: 2},
+            base_reduced_cost=-10.0,
+            journey_label_value=0.0,
+            journey_label_mask=0b001,
+            journey_label_count=0,
+            earliest_start=0.0,
+            completion_bound=None,
+            amcb_bound=amcb,
+            unique_task_bound=None,
+            unique_route_bound=FakeUniqueRoute(),
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=3,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            eps=1.0e-6,
+        )
+
+        self.assertEqual(amcb.calls, [0b100])
+
     def test_unique_route_suffix_bound_gets_available_mask_without_unique_task(self):
         class FakeUniqueRoute:
             full_mask = 0b111
@@ -12415,6 +12612,79 @@ class BPCFutureTests(unittest.TestCase):
         )
 
         self.assertEqual(unique_route.calls, [0b100])
+
+    def test_available_mask_suffix_bound_gets_available_mask_without_unique_helpers(self):
+        class FakeAvailableMaskBound:
+            full_mask = 0b111
+            disabled = False
+
+            def __init__(self):
+                self.calls = []
+
+            def lower_bound_for_suffix(self, *, available_mask, remaining_sorties):
+                self.calls.append((int(available_mask), int(remaining_sorties)))
+                return SimpleNamespace(value=0.0, disabled=False)
+
+        amcb = FakeAvailableMaskBound()
+
+        _direct_completed_journey_suffix_optimistic_objective(
+            SimpleNamespace(),
+            new_mask=0b011,
+            new_end_time=0.0,
+            new_objective=-10.0,
+            remaining_sorties=1,
+            completion_bound=None,
+            amcb_bound=amcb,
+            unique_task_bound=None,
+            unique_route_bound=None,
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=3,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+        )
+
+        self.assertEqual(amcb.calls, [(0b100, 1)])
+
+    def test_available_mask_suffix_bound_skips_when_unique_route_enabled(self):
+        class FakeUniqueRoute:
+            full_mask = 0b111
+            enabled = True
+
+            def future_value(self, *args, **kwargs):
+                return 0.0
+
+        class FakeAvailableMaskBound:
+            full_mask = 0b111
+            disabled = False
+
+            def __init__(self):
+                self.calls = 0
+
+            def lower_bound_for_suffix(self, **kwargs):
+                self.calls += 1
+                return SimpleNamespace(value=0.0, disabled=False)
+
+        amcb = FakeAvailableMaskBound()
+
+        _direct_completed_journey_suffix_optimistic_objective(
+            SimpleNamespace(),
+            new_mask=0b011,
+            new_end_time=0.0,
+            new_objective=-10.0,
+            remaining_sorties=1,
+            completion_bound=None,
+            amcb_bound=amcb,
+            unique_task_bound=None,
+            unique_route_bound=FakeUniqueRoute(),
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=3,
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+        )
+
+        self.assertEqual(amcb.calls, 0)
 
     def test_mask_closure_harvest_keeps_multiple_active_replacements(self):
         candidates = [

@@ -20,6 +20,8 @@ from BPC_future.master.rmp import FutureDuals, manual_reduced_cost
 from BPC_future.pricing.journey_harvesting import (
     _select_diverse_journey_candidates as _harvesting_select_diverse_journey_candidates,
 )
+from BPC_future.pricing.available_mask_completion_bound import AvailableMaskCompletionBound
+from BPC_future.pricing.resource_pareto_completion import ResourceParetoCompletionEnvelope
 from BPC_future.pricing.trip_pricing import (
     _PartialNoWaitingPathProfile,
     PricingConfig,
@@ -95,10 +97,21 @@ class JourneyPricingConfig:
     direct_journey_label_new_task_set_only: bool = False
     direct_journey_label_task_set_bound_pruning_enabled: bool = True
     direct_journey_label_completion_bound_enabled: bool = False
+    direct_journey_label_completion_bound_mode: str = "bucket"
     direct_journey_label_completion_bound_time_buckets: int = 10
     direct_journey_label_completion_bound_energy_buckets: int = 0
     direct_journey_label_completion_bound_partial_pruning_enabled: bool = True
     direct_journey_label_completion_bound_audit_enabled: bool = False
+    direct_journey_label_resource_pareto_completion_enabled: bool = False
+    direct_journey_label_resource_pareto_completion_max_front_size: int = 5000
+    direct_journey_label_resource_pareto_completion_time_eps: float = 1.0e-3
+    direct_journey_label_resource_pareto_completion_energy_eps: float = 1.0e-3
+    direct_journey_label_resource_pareto_completion_load_eps: float = 1.0e-6
+    direct_journey_label_resource_pareto_completion_rc_eps: float = 1.0e-9
+    direct_journey_label_resource_pareto_completion_lazy_enabled: bool = True
+    direct_journey_label_available_mask_completion_bound_enabled: bool = False
+    direct_journey_label_available_mask_completion_bound_max_subset_size: int = 6
+    direct_journey_label_available_mask_completion_bound_max_states: int = 200000
     direct_journey_label_completion_bound_unique_task_helper_enabled: bool = False
     direct_journey_label_completion_bound_unique_route_helper_enabled: bool = False
     direct_journey_label_completion_bound_unique_route_exact_first_step_enabled: bool = False
@@ -341,6 +354,7 @@ class JourneyPricingResult:
     direct_label_profile_partial_bound_unique_task_time: float = 0.0
     direct_label_profile_partial_bound_unique_route_time: float = 0.0
     direct_label_profile_partial_bound_completion_route_time: float = 0.0
+    direct_label_profile_partial_bound_resource_pareto_time: float = 0.0
     direct_label_profile_partial_bound_cut_time: float = 0.0
     direct_label_profile_partial_bucket_count: int = 0
     direct_label_profile_partial_bucket_label_count: int = 0
@@ -386,12 +400,46 @@ class JourneyPricingResult:
     lb_partial_pruned_unique_task_winner: int = 0
     lb_partial_pruned_unique_route_winner: int = 0
     lb_partial_pruned_completion_route_winner: int = 0
+    lb_partial_pruned_resource_pareto_winner: int = 0
+    lb_partial_pruned_resource_pareto_infeasible: int = 0
+    lb_partial_pruned_available_mask_winner: int = 0
     lb_partial_pruned_route_finish_winner: int = 0
     lb_suffix_pruned_unique_task_winner: int = 0
     lb_suffix_pruned_unique_route_winner: int = 0
     lb_suffix_pruned_completion_route_winner: int = 0
+    lb_suffix_pruned_resource_pareto_winner: int = 0
+    lb_suffix_pruned_available_mask_winner: int = 0
     lb_partial_cut_reward_positive_checks: int = 0
     lb_suffix_cut_reward_positive_checks: int = 0
+    amcb_enabled: bool = False
+    amcb_build_time: float = 0.0
+    amcb_query_count: int = 0
+    amcb_pruned_labels: int = 0
+    amcb_partial_winner_count: int = 0
+    amcb_suffix_winner_count: int = 0
+    amcb_state_count: int = 0
+    amcb_closed_subset_count: int = 0
+    amcb_tail_state_count: int = 0
+    amcb_disabled: bool = False
+    amcb_disable_reason: str | None = None
+    amcb_skipped_by_unique_route: bool = False
+    amcb_resource_filtered_subsets: int = 0
+    rpce_enabled: bool = False
+    rpce_build_time: float = 0.0
+    rpce_arc_front_count: int = 0
+    rpce_sortie_front_count: int = 0
+    rpce_tail_front_count: int = 0
+    rpce_overflow_state_count: int = 0
+    rpce_disabled_state_count: int = 0
+    rpce_runtime_disabled: bool = False
+    rpce_disable_reason: str | None = None
+    rpce_query_count: int = 0
+    rpce_query_feasible_count: int = 0
+    rpce_query_disabled_count: int = 0
+    rpce_pruned_labels: int = 0
+    rpce_resource_infeasible_labels: int = 0
+    rpce_min_lb: float | None = None
+    rpce_mean_lb: float | None = None
     generated_next_sorties_before_bound: int = 0
     generated_next_sorties_after_bound: int = 0
     two_cycle_enabled: bool = False
@@ -4732,6 +4780,7 @@ def _price_journeys_by_direct_labels(
         "partial_bound_unique_task_ns": 0,
         "partial_bound_unique_route_ns": 0,
         "partial_bound_completion_route_ns": 0,
+        "partial_bound_resource_pareto_ns": 0,
         "partial_bound_cut_ns": 0,
         "partial_bucket_count": 0,
         "partial_bucket_label_count": 0,
@@ -4741,6 +4790,8 @@ def _price_journeys_by_direct_labels(
     selected_candidate_cache: tuple[JourneyColumn, ...] | None = None
     task_set_continuation_bound = None
     completion_bound = None
+    rpce_bound: ResourceParetoCompletionEnvelope | None = None
+    amcb_bound: AvailableMaskCompletionBound | None = None
     completion_bound_cache_hit = False
     completion_bound_cache_stored = False
     completion_bound_reported_build_time = 0.0
@@ -4760,33 +4811,70 @@ def _price_journeys_by_direct_labels(
         )
     completion_bound_cut_safe = _direct_completion_bound_cut_safe(cut_duals, cuts)
     if bool(config.direct_journey_label_completion_bound_enabled) and completion_bound_cut_safe:
-        cache_key = None if resource_cache is None else _direct_completion_bound_cache_key(data, duals, config)
-        cached = None if cache_key is None else resource_cache.get(cache_key)
-        if isinstance(cached, _DirectJourneyCompletionBound):
-            completion_bound = cached
-            completion_bound_cache_hit = True
-            _reset_direct_completion_bound_query_stats(completion_bound)
-            completion_bound_reported_build_time = 0.0
-        else:
-            completion_bound = _DirectJourneyCompletionBound(
+        completion_bound_mode = str(config.direct_journey_label_completion_bound_mode or "bucket").strip().lower()
+        if completion_bound_mode not in {"bucket", "hybrid", "resource_pareto"}:
+            completion_bound_mode = "bucket"
+        bucket_completion_enabled = completion_bound_mode in {"bucket", "hybrid"}
+        rpce_completion_enabled = bool(
+            config.direct_journey_label_resource_pareto_completion_enabled
+            or completion_bound_mode == "resource_pareto"
+        )
+        amcb_completion_enabled = bool(
+            config.direct_journey_label_available_mask_completion_bound_enabled
+        )
+        if bucket_completion_enabled:
+            cache_key = None if resource_cache is None else _direct_completion_bound_cache_key(data, duals, config)
+            cached = None if cache_key is None else resource_cache.get(cache_key)
+            if isinstance(cached, _DirectJourneyCompletionBound):
+                completion_bound = cached
+                completion_bound_cache_hit = True
+                _reset_direct_completion_bound_query_stats(completion_bound)
+                completion_bound_reported_build_time = 0.0
+            else:
+                completion_bound = _DirectJourneyCompletionBound(
+                    data,
+                    duals,
+                    time_buckets=int(config.direct_journey_label_completion_bound_time_buckets),
+                    energy_buckets=int(config.direct_journey_label_completion_bound_energy_buckets),
+                    max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                    sortie_limit=int(data.sortie_limit),
+                    two_cycle_enabled=bool(config.direct_journey_label_completion_bound_two_cycle_enabled),
+                    two_cycle_max_states=int(config.direct_journey_label_completion_bound_two_cycle_max_states),
+                    deadline=deadline,
+                )
+                completion_bound_reported_build_time = float(completion_bound.build_time)
+                if (
+                    cache_key is not None
+                    and resource_cache is not None
+                    and _direct_completion_bound_cacheable(completion_bound)
+                ):
+                    resource_cache[cache_key] = completion_bound
+                    completion_bound_cache_stored = True
+        if rpce_completion_enabled and (deadline is None or time.perf_counter() <= float(deadline)):
+            rpce_bound = ResourceParetoCompletionEnvelope(
                 data,
                 duals,
-                time_buckets=int(config.direct_journey_label_completion_bound_time_buckets),
-                energy_buckets=int(config.direct_journey_label_completion_bound_energy_buckets),
                 max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
                 sortie_limit=int(data.sortie_limit),
-                two_cycle_enabled=bool(config.direct_journey_label_completion_bound_two_cycle_enabled),
-                two_cycle_max_states=int(config.direct_journey_label_completion_bound_two_cycle_max_states),
+                max_front_size=int(config.direct_journey_label_resource_pareto_completion_max_front_size),
+                time_eps=float(config.direct_journey_label_resource_pareto_completion_time_eps),
+                energy_eps=float(config.direct_journey_label_resource_pareto_completion_energy_eps),
+                load_eps=float(config.direct_journey_label_resource_pareto_completion_load_eps),
+                rc_eps=float(config.direct_journey_label_resource_pareto_completion_rc_eps),
+                lazy_enabled=bool(config.direct_journey_label_resource_pareto_completion_lazy_enabled),
                 deadline=deadline,
             )
-            completion_bound_reported_build_time = float(completion_bound.build_time)
-            if (
-                cache_key is not None
-                and resource_cache is not None
-                and _direct_completion_bound_cacheable(completion_bound)
-            ):
-                resource_cache[cache_key] = completion_bound
-                completion_bound_cache_stored = True
+        if amcb_completion_enabled and (deadline is None or time.perf_counter() <= float(deadline)):
+            amcb_bound = AvailableMaskCompletionBound(
+                data,
+                duals,
+                task_to_bit,
+                max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                sortie_limit=int(data.sortie_limit),
+                max_subset_size=int(config.direct_journey_label_available_mask_completion_bound_max_subset_size),
+                max_states=int(config.direct_journey_label_available_mask_completion_bound_max_states),
+                deadline=deadline,
+            )
         if deadline is None or time.perf_counter() <= float(deadline):
             if bool(config.direct_journey_label_completion_bound_unique_task_helper_enabled):
                 unique_task_bound = _UniqueTaskVisitLowerBound(data, trip_duals, task_to_bit)
@@ -4826,6 +4914,8 @@ def _price_journeys_by_direct_labels(
                 use_next_sortie_cache = False
     if (
         completion_bound is None
+        and rpce_bound is None
+        and amcb_bound is None
         and completion_bound_cut_safe
         and (deadline is None or time.perf_counter() <= float(deadline))
         and (
@@ -5133,7 +5223,7 @@ def _price_journeys_by_direct_labels(
                 now = time.perf_counter()
                 remaining = None if deadline is None else float(deadline) - float(now)
                 if _direct_label_diverse_harvest_soft_return_ready(
-                    completion_bound_enabled=completion_bound is not None,
+                    completion_bound_enabled=completion_bound is not None or rpce_bound is not None or amcb_bound is not None,
                     completion_bound_elapsed_soft_return_enabled=bool(
                         config.direct_journey_label_completion_bound_elapsed_soft_return_enabled
                     ),
@@ -5229,8 +5319,17 @@ def _price_journeys_by_direct_labels(
         }
 
     def _completion_bound_kwargs() -> dict[str, Any]:
+        rpce_stats = {} if rpce_bound is None else rpce_bound.stats()
+        amcb_stats = {} if amcb_bound is None else amcb_bound.stats()
+        amcb_partial_winners = int(completion_bound_stats.get("partial_pruned_available_mask_winner", 0))
+        amcb_suffix_winners = int(completion_bound_stats.get("suffix_pruned_available_mask_winner", 0))
+        amcb_skipped_by_unique_route = (
+            amcb_bound is not None
+            and unique_route_bound is not None
+            and bool(getattr(unique_route_bound, "enabled", True))
+        )
         return {
-            "completion_bound_enabled": completion_bound is not None,
+            "completion_bound_enabled": completion_bound is not None or rpce_bound is not None or amcb_bound is not None,
             "global_certificate_capable": bool(config.direct_journey_label_global_certificate_enabled),
             "completion_bound_cache_hit": bool(completion_bound_cache_hit),
             "completion_bound_cache_stored": bool(completion_bound_cache_stored),
@@ -5260,6 +5359,13 @@ def _price_journeys_by_direct_labels(
             "lb_partial_pruned_completion_route_winner": int(
                 completion_bound_stats.get("partial_pruned_completion_route_winner", 0)
             ),
+            "lb_partial_pruned_resource_pareto_winner": int(
+                completion_bound_stats.get("partial_pruned_resource_pareto_winner", 0)
+            ),
+            "lb_partial_pruned_resource_pareto_infeasible": int(
+                completion_bound_stats.get("partial_pruned_resource_pareto_infeasible", 0)
+            ),
+            "lb_partial_pruned_available_mask_winner": int(amcb_partial_winners),
             "lb_partial_pruned_route_finish_winner": int(
                 completion_bound_stats.get("partial_pruned_route_finish_winner", 0)
             ),
@@ -5272,12 +5378,51 @@ def _price_journeys_by_direct_labels(
             "lb_suffix_pruned_completion_route_winner": int(
                 completion_bound_stats.get("suffix_pruned_completion_route_winner", 0)
             ),
+            "lb_suffix_pruned_resource_pareto_winner": int(
+                completion_bound_stats.get("suffix_pruned_resource_pareto_winner", 0)
+            ),
+            "lb_suffix_pruned_available_mask_winner": int(amcb_suffix_winners),
             "lb_partial_cut_reward_positive_checks": int(
                 completion_bound_stats.get("partial_cut_reward_positive_checks", 0)
             ),
             "lb_suffix_cut_reward_positive_checks": int(
                 completion_bound_stats.get("suffix_cut_reward_positive_checks", 0)
             ),
+            "amcb_enabled": amcb_bound is not None,
+            "amcb_build_time": round(float(amcb_stats.get("build_time", 0.0)), 9),
+            "amcb_query_count": int(amcb_stats.get("query_count", 0)),
+            "amcb_pruned_labels": int(amcb_partial_winners) + int(amcb_suffix_winners),
+            "amcb_partial_winner_count": int(amcb_partial_winners),
+            "amcb_suffix_winner_count": int(amcb_suffix_winners),
+            "amcb_state_count": int(amcb_stats.get("state_count", 0)),
+            "amcb_closed_subset_count": int(amcb_stats.get("closed_subset_count", 0)),
+            "amcb_tail_state_count": int(amcb_stats.get("tail_state_count", 0)),
+            "amcb_disabled": bool(amcb_stats.get("disabled", False)),
+            "amcb_disable_reason": amcb_stats.get("disable_reason", None),
+            "amcb_skipped_by_unique_route": bool(amcb_skipped_by_unique_route),
+            "amcb_resource_filtered_subsets": int(amcb_stats.get("resource_filtered_subsets", 0)),
+            "rpce_enabled": rpce_bound is not None,
+            "rpce_build_time": round(float(rpce_stats.get("build_time", 0.0)), 9),
+            "rpce_arc_front_count": int(rpce_stats.get("arc_front_count", 0)),
+            "rpce_sortie_front_count": int(rpce_stats.get("sortie_front_count", 0)),
+            "rpce_tail_front_count": int(rpce_stats.get("tail_front_count", 0)),
+            "rpce_overflow_state_count": int(rpce_stats.get("overflow_state_count", 0)),
+            "rpce_disabled_state_count": int(rpce_stats.get("disabled_state_count", 0)),
+            "rpce_runtime_disabled": bool(rpce_stats.get("runtime_disabled", False)),
+            "rpce_disable_reason": rpce_stats.get("disable_reason", None),
+            "rpce_query_count": int(rpce_stats.get("query_count", 0)),
+            "rpce_query_feasible_count": int(rpce_stats.get("query_feasible_count", 0)),
+            "rpce_query_disabled_count": int(rpce_stats.get("query_disabled_count", 0)),
+            "rpce_pruned_labels": int(
+                completion_bound_stats.get("partial_pruned_resource_pareto_winner", 0)
+            )
+            + int(completion_bound_stats.get("suffix_pruned_resource_pareto_winner", 0))
+            + int(completion_bound_stats.get("partial_pruned_resource_pareto_infeasible", 0)),
+            "rpce_resource_infeasible_labels": int(
+                completion_bound_stats.get("partial_pruned_resource_pareto_infeasible", 0)
+            ),
+            "rpce_min_lb": rpce_stats.get("min_lb", None),
+            "rpce_mean_lb": rpce_stats.get("mean_lb", None),
             "generated_next_sorties_before_bound": int(generated_next_sorties_before_bound),
             "generated_next_sorties_after_bound": int(generated_next_sorties_after_bound),
             "direct_label_max_labels_per_node": int(direct_label_max_labels_per_node),
@@ -5400,6 +5545,10 @@ def _price_journeys_by_direct_labels(
             ),
             "direct_label_profile_partial_bound_completion_route_time": round(
                 float(direct_label_profile_stats.get("partial_bound_completion_route_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_partial_bound_resource_pareto_time": round(
+                float(direct_label_profile_stats.get("partial_bound_resource_pareto_ns", 0)) / 1.0e9,
                 9,
             ),
             "direct_label_profile_partial_bound_cut_time": round(
@@ -5738,6 +5887,16 @@ def _price_journeys_by_direct_labels(
             eval_inc = int(profile_eval_inc) + int(instantiate_eval_inc)
             incomplete_reason = incomplete_reason or conversion_reason
         else:
+            active_rpce_bound = (
+                rpce_bound
+                if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True))
+                else None
+            )
+            active_amcb_bound = (
+                amcb_bound
+                if amcb_bound is not None and not bool(getattr(amcb_bound, "disabled", False))
+                else None
+            )
             next_trips, gen_inc, eval_inc, incomplete_reason, bound_checked_inc, bound_pruned_inc = _direct_next_sortie_trips(
                 data,
                 trip_duals,
@@ -5751,6 +5910,8 @@ def _price_journeys_by_direct_labels(
                 journey_label_mask=int(label.mask),
                 journey_label_count=int(count),
                 completion_bound=completion_bound,
+                rpce_bound=active_rpce_bound,
+                amcb_bound=active_amcb_bound,
                 unique_task_bound=unique_task_bound,
                 unique_route_bound=unique_route_bound,
                 positive_cut_reward_bound=positive_cut_reward_bound,
@@ -5775,9 +5936,10 @@ def _price_journeys_by_direct_labels(
                             int(trip_mask),
                         )
                     )
-                    if completion_bound is not None and bool(config.direct_journey_label_early_return_negative)
-                    else None
-                ),
+                        if (completion_bound is not None or active_rpce_bound is not None or active_amcb_bound is not None)
+                        and bool(config.direct_journey_label_early_return_negative)
+                        else None
+                    ),
             )
             expanded_before_completion_bound += int(bound_checked_inc)
             expanded_after_completion_bound += max(0, int(bound_checked_inc) - int(bound_pruned_inc))
@@ -5857,8 +6019,20 @@ def _price_journeys_by_direct_labels(
                 if best_objective is None
                 else min(float(best_objective), float(new_label_objective))
             )
+            active_rpce_bound = (
+                rpce_bound
+                if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True))
+                else None
+            )
+            active_amcb_bound = (
+                amcb_bound
+                if amcb_bound is not None and not bool(getattr(amcb_bound, "disabled", False))
+                else None
+            )
             if (
                 completion_bound is not None
+                or active_rpce_bound is not None
+                or active_amcb_bound is not None
                 or unique_task_bound is not None
                 or unique_route_bound is not None
                 or positive_cut_reward_bound is not None
@@ -5871,6 +6045,8 @@ def _price_journeys_by_direct_labels(
                     new_objective=float(new_label_objective),
                     remaining_sorties=int(remaining_sorties),
                     completion_bound=completion_bound,
+                    rpce_bound=active_rpce_bound,
+                    amcb_bound=active_amcb_bound,
                     unique_task_bound=unique_task_bound,
                     unique_route_bound=unique_route_bound,
                     positive_cut_reward_bound=positive_cut_reward_bound,
@@ -5931,7 +6107,24 @@ def _price_journeys_by_direct_labels(
                 cut_masks,
                 cut_value_cache,
             )
-            if completion_bound is not None:
+            active_rpce_bound = (
+                rpce_bound
+                if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True))
+                else None
+            )
+            active_amcb_bound = (
+                amcb_bound
+                if amcb_bound is not None and not bool(getattr(amcb_bound, "disabled", False))
+                else None
+            )
+            if (
+                completion_bound is not None
+                or active_rpce_bound is not None
+                or active_amcb_bound is not None
+                or unique_task_bound is not None
+                or unique_route_bound is not None
+                or positive_cut_reward_bound is not None
+            ):
                 remaining_sorties = int(data.sortie_limit) - (int(count) + 1)
                 priority, _priority_winner, _priority_cut_reward = _direct_completed_journey_suffix_optimistic_objective(
                     data,
@@ -5940,6 +6133,8 @@ def _price_journeys_by_direct_labels(
                     new_objective=float(new_label_objective),
                     remaining_sorties=int(remaining_sorties),
                     completion_bound=completion_bound,
+                    rpce_bound=active_rpce_bound,
+                    amcb_bound=active_amcb_bound,
                     unique_task_bound=unique_task_bound,
                     unique_route_bound=unique_route_bound,
                     positive_cut_reward_bound=positive_cut_reward_bound,
@@ -6175,6 +6370,8 @@ def _direct_next_sortie_trips(
     journey_label_mask: int = 0,
     journey_label_count: int = 0,
     completion_bound: _DirectJourneyCompletionBound | None = None,
+    rpce_bound: ResourceParetoCompletionEnvelope | None = None,
+    amcb_bound: AvailableMaskCompletionBound | None = None,
     unique_task_bound: _UniqueTaskVisitLowerBound | None = None,
     unique_route_bound: "_UniqueRouteCompletionLowerBound | None" = None,
     positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None" = None,
@@ -6359,8 +6556,20 @@ def _direct_next_sortie_trips(
                         _profile_inc("pre_dominance_pruned")
                         continue
                     _profile_add("pre_dominance_ns", _pre_dominance_started_ns)
+                active_rpce_bound = (
+                    rpce_bound
+                    if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True))
+                    else None
+                )
+                active_amcb_bound = (
+                    amcb_bound
+                    if amcb_bound is not None and not bool(getattr(amcb_bound, "disabled", False))
+                    else None
+                )
                 if (
                     completion_bound is not None
+                    or active_rpce_bound is not None
+                    or active_amcb_bound is not None
                     or unique_task_bound is not None
                     or unique_route_bound is not None
                     or positive_cut_reward_bound is not None
@@ -6379,6 +6588,8 @@ def _direct_next_sortie_trips(
                         journey_label_count=int(journey_label_count),
                         earliest_start=float(earliest_start),
                         completion_bound=completion_bound,
+                        rpce_bound=active_rpce_bound,
+                        amcb_bound=active_amcb_bound,
                         unique_task_bound=unique_task_bound,
                         unique_route_bound=unique_route_bound,
                         positive_cut_reward_bound=positive_cut_reward_bound,
@@ -6469,6 +6680,8 @@ def _direct_next_sortie_trips(
                     journey_label_mask=int(journey_label_mask),
                     journey_label_count=int(journey_label_count),
                     completion_bound=completion_bound,
+                    rpce_bound=rpce_bound,
+                    amcb_bound=amcb_bound,
                     unique_task_bound=unique_task_bound,
                     unique_route_bound=unique_route_bound,
                     positive_cut_reward_bound=positive_cut_reward_bound,
@@ -6563,6 +6776,8 @@ def _direct_sortie_partial_completion_bound_check(
     journey_label_count: int,
     earliest_start: float,
     completion_bound: _DirectJourneyCompletionBound | None,
+    rpce_bound: ResourceParetoCompletionEnvelope | None = None,
+    amcb_bound: AvailableMaskCompletionBound | None = None,
     unique_task_bound: _UniqueTaskVisitLowerBound | None,
     unique_route_bound: "_UniqueRouteCompletionLowerBound | None",
     positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None",
@@ -6611,6 +6826,8 @@ def _direct_sortie_partial_completion_bound_check(
         available_mask = int(unique_task_bound.full_mask) ^ (int(journey_label_mask) | int(label.mask))
     elif unique_route_bound is not None:
         available_mask = int(unique_route_bound.full_mask) ^ (int(journey_label_mask) | int(label.mask))
+    elif amcb_bound is not None:
+        available_mask = int(amcb_bound.full_mask) ^ (int(journey_label_mask) | int(label.mask))
     if unique_task_bound is not None and remaining_visit_capacity > 0:
         _unique_task_started_ns = time.perf_counter_ns() if profile_enabled else 0
         remaining_lb = unique_task_bound.value(int(available_mask), int(remaining_visit_capacity))
@@ -6680,6 +6897,47 @@ def _direct_sortie_partial_completion_bound_check(
             remaining_lb = float(relaxed_route_lb)
             remaining_lb_winner = "completion_route"
         _profile_add("partial_bound_completion_route_ns", _completion_route_started_ns)
+    if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True)):
+        _rpce_started_ns = time.perf_counter_ns() if profile_enabled else 0
+        current_load = sum(float(data.task_value(int(task), "d")) for task in label.sequence)
+        rpce_result = rpce_bound.partial_value(
+            int(label.last),
+            max(0, int(max_tasks_per_sortie) - len(label.sequence)),
+            max(0, int(remaining_sorties)),
+            float(start_lb) + float(label.partial.offset),
+            float(label.partial.travel_energy) + float(label.partial.service_energy),
+            float(current_load),
+            current_mask=int(label.mask),
+        )
+        if bool(rpce_result.infeasible):
+            _profile_add("partial_bound_resource_pareto_ns", _rpce_started_ns)
+            _increment_completion_bound_stat(completion_bound_stats, "partial_pruned_labels")
+            _increment_completion_bound_stat(completion_bound_stats, "partial_pruned_resource_pareto_infeasible")
+            return True, float("inf")
+        if rpce_result.value is not None and math.isfinite(float(rpce_result.value)):
+            if remaining_lb is None or float(rpce_result.value) > float(remaining_lb):
+                remaining_lb = float(rpce_result.value)
+                remaining_lb_winner = "resource_pareto"
+        _profile_add("partial_bound_resource_pareto_ns", _rpce_started_ns)
+    unique_route_amcb_skip = (
+        unique_route_bound is not None
+        and bool(getattr(unique_route_bound, "enabled", True))
+    )
+    if (
+        amcb_bound is not None
+        and not bool(getattr(amcb_bound, "disabled", False))
+        and not bool(unique_route_amcb_skip)
+    ):
+        amcb_result = amcb_bound.lower_bound_for_partial(
+            last=int(label.last),
+            available_mask=int(available_mask),
+            remaining_slots_current_sortie=max(0, int(max_tasks_per_sortie) - len(label.sequence)),
+            remaining_sorties_after_current=max(0, int(remaining_sorties)),
+        )
+        if amcb_result.value is not None and math.isfinite(float(amcb_result.value)):
+            if remaining_lb is None or float(amcb_result.value) > float(remaining_lb):
+                remaining_lb = float(amcb_result.value)
+                remaining_lb_winner = "available_mask"
     if completion_bound is not None and len(label.sequence) >= int(max_tasks_per_sortie):
         _completion_route_started_ns = time.perf_counter_ns() if profile_enabled else 0
         try:
@@ -6748,6 +7006,8 @@ def _direct_completed_journey_suffix_optimistic_objective(
     new_objective: float,
     remaining_sorties: int,
     completion_bound: _DirectJourneyCompletionBound | None,
+    rpce_bound: ResourceParetoCompletionEnvelope | None = None,
+    amcb_bound: AvailableMaskCompletionBound | None = None,
     unique_task_bound: _UniqueTaskVisitLowerBound | None,
     unique_route_bound: "_UniqueRouteCompletionLowerBound | None",
     positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None",
@@ -6761,11 +7021,36 @@ def _direct_completed_journey_suffix_optimistic_objective(
     if completion_bound is not None:
         suffix_lb = completion_bound.value(int(remaining_sorties), float(new_end_time))
         suffix_lb_winner = "completion_route"
+    if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True)):
+        rpce_result = rpce_bound.suffix_value(int(remaining_sorties), float(new_end_time))
+        if rpce_result.value is not None and math.isfinite(float(rpce_result.value)):
+            if float(rpce_result.value) > float(suffix_lb):
+                suffix_lb = float(rpce_result.value)
+                suffix_lb_winner = "resource_pareto"
     available_mask = 0
     if unique_task_bound is not None:
         available_mask = int(unique_task_bound.full_mask) ^ int(new_mask)
     elif unique_route_bound is not None:
         available_mask = int(unique_route_bound.full_mask) ^ int(new_mask)
+    elif amcb_bound is not None:
+        available_mask = int(amcb_bound.full_mask) ^ int(new_mask)
+    unique_route_amcb_skip = (
+        unique_route_bound is not None
+        and bool(getattr(unique_route_bound, "enabled", True))
+    )
+    if (
+        amcb_bound is not None
+        and not bool(getattr(amcb_bound, "disabled", False))
+        and not bool(unique_route_amcb_skip)
+    ):
+        amcb_result = amcb_bound.lower_bound_for_suffix(
+            available_mask=int(available_mask),
+            remaining_sorties=int(remaining_sorties),
+        )
+        if amcb_result.value is not None and math.isfinite(float(amcb_result.value)):
+            if float(amcb_result.value) > float(suffix_lb):
+                suffix_lb = float(amcb_result.value)
+                suffix_lb_winner = "available_mask"
     if unique_task_bound is not None:
         unique_suffix_lb = unique_task_bound.value(
             int(available_mask),
@@ -6802,7 +7087,9 @@ def _direct_completed_journey_suffix_bound_prunes(
     new_end_time: float,
     new_objective: float,
     remaining_sorties: int,
-    completion_bound: _DirectJourneyCompletionBound,
+    completion_bound: _DirectJourneyCompletionBound | None,
+    rpce_bound: ResourceParetoCompletionEnvelope | None = None,
+    amcb_bound: AvailableMaskCompletionBound | None = None,
     unique_task_bound: _UniqueTaskVisitLowerBound | None,
     unique_route_bound: "_UniqueRouteCompletionLowerBound | None",
     positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None",
@@ -6820,6 +7107,8 @@ def _direct_completed_journey_suffix_bound_prunes(
         new_objective=float(new_objective),
         remaining_sorties=int(remaining_sorties),
         completion_bound=completion_bound,
+        rpce_bound=rpce_bound,
+        amcb_bound=amcb_bound,
         unique_task_bound=unique_task_bound,
         unique_route_bound=unique_route_bound,
         positive_cut_reward_bound=positive_cut_reward_bound,
@@ -7061,6 +7350,8 @@ def _complete_direct_sortie_label_trips(
     journey_label_mask: int = 0,
     journey_label_count: int = 0,
     completion_bound: _DirectJourneyCompletionBound | None = None,
+    rpce_bound: ResourceParetoCompletionEnvelope | None = None,
+    amcb_bound: AvailableMaskCompletionBound | None = None,
     unique_task_bound: _UniqueTaskVisitLowerBound | None = None,
     unique_route_bound: "_UniqueRouteCompletionLowerBound | None" = None,
     positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None" = None,
@@ -7119,7 +7410,24 @@ def _complete_direct_sortie_label_trips(
                 cut_value_cache if cut_value_cache is not None else {},
             )
         )
-        if completion_bound is not None:
+        active_rpce_bound = (
+            rpce_bound
+            if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True))
+            else None
+        )
+        active_amcb_bound = (
+            amcb_bound
+            if amcb_bound is not None and not bool(getattr(amcb_bound, "disabled", False))
+            else None
+        )
+        if (
+            completion_bound is not None
+            or active_rpce_bound is not None
+            or active_amcb_bound is not None
+            or unique_task_bound is not None
+            or unique_route_bound is not None
+            or positive_cut_reward_bound is not None
+        ):
             bound_checked += 1
             remaining_sorties = int(data.sortie_limit) - int(journey_label_count) - 1
             if _direct_completed_journey_suffix_bound_prunes(
@@ -7129,6 +7437,8 @@ def _complete_direct_sortie_label_trips(
                 new_objective=float(provisional_objective),
                 remaining_sorties=int(remaining_sorties),
                 completion_bound=completion_bound,
+                rpce_bound=active_rpce_bound,
+                amcb_bound=active_amcb_bound,
                 unique_task_bound=unique_task_bound,
                 unique_route_bound=unique_route_bound,
                 positive_cut_reward_bound=positive_cut_reward_bound,

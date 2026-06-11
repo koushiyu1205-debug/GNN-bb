@@ -7232,6 +7232,25 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
             config.get("journey_certificate_completion_bound_required", False),
         )
     )
+    completion_bound_mode = str(config.get("journey_certificate_completion_bound_mode", "bucket")).strip().lower()
+    if completion_bound_mode not in {"bucket", "hybrid", "resource_pareto"}:
+        raise ValueError(
+            "journey_certificate_completion_bound_mode must be one of bucket, hybrid, resource_pareto"
+        )
+    if int(config.get("journey_resource_pareto_completion_max_front_size", 5000)) < 0:
+        raise ValueError("journey_resource_pareto_completion_max_front_size must be nonnegative")
+    if int(config.get("journey_available_mask_completion_bound_max_subset_size", 6)) < 0:
+        raise ValueError("journey_available_mask_completion_bound_max_subset_size must be nonnegative")
+    if int(config.get("journey_available_mask_completion_bound_max_states", 200000)) < 0:
+        raise ValueError("journey_available_mask_completion_bound_max_states must be nonnegative")
+    for key in (
+        "journey_resource_pareto_completion_time_eps",
+        "journey_resource_pareto_completion_energy_eps",
+        "journey_resource_pareto_completion_load_eps",
+        "journey_resource_pareto_completion_rc_eps",
+    ):
+        if float(config.get(key, 0.0)) < 0.0:
+            raise ValueError(f"{key} must be nonnegative")
     if completion_bound_required:
         if not bool(config.get("journey_certificate_completion_bound_enabled", False)):
             raise ValueError(
@@ -11813,11 +11832,22 @@ def _journey_certificate_pricing_config(
             if pricing_energy_bucket_value is not None
             else 10
         )
+        completion_bound_mode = str(config.get("journey_certificate_completion_bound_mode", "bucket")).strip().lower()
+        if completion_bound_mode not in {"bucket", "hybrid", "resource_pareto"}:
+            completion_bound_mode = "bucket"
+        rpce_enabled = bool(
+            config.get(
+                "journey_resource_pareto_completion_enabled",
+                completion_bound_mode == "resource_pareto",
+            )
+        )
+        amcb_enabled = bool(config.get("journey_available_mask_completion_bound_enabled", False))
         updated = replace(
             updated,
             direct_journey_label_pricing_enabled=True,
             direct_journey_label_global_certificate_enabled=True,
             direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_completion_bound_mode=completion_bound_mode,
             direct_journey_label_completion_bound_time_buckets=int(
                 config.get(
                     "journey_certificate_completion_bound_time_buckets",
@@ -11850,6 +11880,39 @@ def _journey_certificate_pricing_config(
                         updated.direct_journey_label_completion_bound_audit_enabled,
                     ),
                 )
+            ),
+            direct_journey_label_resource_pareto_completion_enabled=bool(rpce_enabled),
+            direct_journey_label_resource_pareto_completion_max_front_size=max(
+                0,
+                int(config.get("journey_resource_pareto_completion_max_front_size", 5000)),
+            ),
+            direct_journey_label_resource_pareto_completion_time_eps=max(
+                0.0,
+                float(config.get("journey_resource_pareto_completion_time_eps", 1.0e-3)),
+            ),
+            direct_journey_label_resource_pareto_completion_energy_eps=max(
+                0.0,
+                float(config.get("journey_resource_pareto_completion_energy_eps", 1.0e-3)),
+            ),
+            direct_journey_label_resource_pareto_completion_load_eps=max(
+                0.0,
+                float(config.get("journey_resource_pareto_completion_load_eps", 1.0e-6)),
+            ),
+            direct_journey_label_resource_pareto_completion_rc_eps=max(
+                0.0,
+                float(config.get("journey_resource_pareto_completion_rc_eps", 1.0e-9)),
+            ),
+            direct_journey_label_resource_pareto_completion_lazy_enabled=bool(
+                config.get("journey_resource_pareto_completion_lazy_enabled", True)
+            ),
+            direct_journey_label_available_mask_completion_bound_enabled=bool(amcb_enabled),
+            direct_journey_label_available_mask_completion_bound_max_subset_size=max(
+                0,
+                int(config.get("journey_available_mask_completion_bound_max_subset_size", updated.max_tasks_per_trip)),
+            ),
+            direct_journey_label_available_mask_completion_bound_max_states=max(
+                0,
+                int(config.get("journey_available_mask_completion_bound_max_states", 200000)),
             ),
             direct_journey_label_completion_bound_unique_task_helper_enabled=bool(
                 config.get(
@@ -12187,6 +12250,43 @@ def _journey_certificate_pricing_config(
                 max_returned_journeys=max(int(updated.max_returned_journeys), harvest_max_returned),
             )
         mode["completion_bound"] = True
+        mode["completion_bound_mode"] = str(updated.direct_journey_label_completion_bound_mode)
+        mode["resource_pareto_completion"] = bool(
+            updated.direct_journey_label_resource_pareto_completion_enabled
+        )
+        if mode["resource_pareto_completion"]:
+            mode["resource_pareto_completion_max_front_size"] = int(
+                updated.direct_journey_label_resource_pareto_completion_max_front_size
+            )
+            mode["resource_pareto_completion_time_eps"] = round(
+                float(updated.direct_journey_label_resource_pareto_completion_time_eps),
+                9,
+            )
+            mode["resource_pareto_completion_energy_eps"] = round(
+                float(updated.direct_journey_label_resource_pareto_completion_energy_eps),
+                9,
+            )
+            mode["resource_pareto_completion_load_eps"] = round(
+                float(updated.direct_journey_label_resource_pareto_completion_load_eps),
+                9,
+            )
+            mode["resource_pareto_completion_rc_eps"] = round(
+                float(updated.direct_journey_label_resource_pareto_completion_rc_eps),
+                12,
+            )
+            mode["resource_pareto_completion_lazy"] = bool(
+                updated.direct_journey_label_resource_pareto_completion_lazy_enabled
+            )
+        mode["available_mask_completion_bound"] = bool(
+            updated.direct_journey_label_available_mask_completion_bound_enabled
+        )
+        if mode["available_mask_completion_bound"]:
+            mode["available_mask_completion_bound_max_subset_size"] = int(
+                updated.direct_journey_label_available_mask_completion_bound_max_subset_size
+            )
+            mode["available_mask_completion_bound_max_states"] = int(
+                updated.direct_journey_label_available_mask_completion_bound_max_states
+            )
         mode["completion_bound_final_probe_only"] = bool(completion_bound_final_probe_only)
         mode["completion_bound_profile_timing"] = bool(updated.direct_journey_label_profile_timing_enabled)
         mode["completion_bound_generalized_partial_dominance"] = bool(
@@ -13286,6 +13386,12 @@ def _journey_pricing_config(
                 config.get("journey_pricing_direct_journey_label_completion_bound_enabled", False),
             )
         ),
+        direct_journey_label_completion_bound_mode=str(
+            config.get(
+                f"{prefix}_direct_journey_label_completion_bound_mode",
+                config.get("journey_pricing_direct_journey_label_completion_bound_mode", "bucket"),
+            )
+        ),
         direct_journey_label_completion_bound_time_buckets=int(
             config.get(
                 f"{prefix}_direct_journey_label_completion_bound_time_buckets",
@@ -13308,6 +13414,72 @@ def _journey_pricing_config(
             config.get(
                 f"{prefix}_direct_journey_label_completion_bound_audit_enabled",
                 config.get("journey_pricing_direct_journey_label_completion_bound_audit_enabled", False),
+            )
+        ),
+        direct_journey_label_resource_pareto_completion_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_resource_pareto_completion_enabled",
+                config.get("journey_pricing_direct_journey_label_resource_pareto_completion_enabled", False),
+            )
+        ),
+        direct_journey_label_resource_pareto_completion_max_front_size=int(
+            config.get(
+                f"{prefix}_direct_journey_label_resource_pareto_completion_max_front_size",
+                config.get("journey_pricing_direct_journey_label_resource_pareto_completion_max_front_size", 5000),
+            )
+        ),
+        direct_journey_label_resource_pareto_completion_time_eps=float(
+            config.get(
+                f"{prefix}_direct_journey_label_resource_pareto_completion_time_eps",
+                config.get("journey_pricing_direct_journey_label_resource_pareto_completion_time_eps", 1.0e-3),
+            )
+        ),
+        direct_journey_label_resource_pareto_completion_energy_eps=float(
+            config.get(
+                f"{prefix}_direct_journey_label_resource_pareto_completion_energy_eps",
+                config.get("journey_pricing_direct_journey_label_resource_pareto_completion_energy_eps", 1.0e-3),
+            )
+        ),
+        direct_journey_label_resource_pareto_completion_load_eps=float(
+            config.get(
+                f"{prefix}_direct_journey_label_resource_pareto_completion_load_eps",
+                config.get("journey_pricing_direct_journey_label_resource_pareto_completion_load_eps", 1.0e-6),
+            )
+        ),
+        direct_journey_label_resource_pareto_completion_rc_eps=float(
+            config.get(
+                f"{prefix}_direct_journey_label_resource_pareto_completion_rc_eps",
+                config.get("journey_pricing_direct_journey_label_resource_pareto_completion_rc_eps", 1.0e-9),
+            )
+        ),
+        direct_journey_label_resource_pareto_completion_lazy_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_resource_pareto_completion_lazy_enabled",
+                config.get("journey_pricing_direct_journey_label_resource_pareto_completion_lazy_enabled", True),
+            )
+        ),
+        direct_journey_label_available_mask_completion_bound_enabled=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_available_mask_completion_bound_enabled",
+                config.get("journey_pricing_direct_journey_label_available_mask_completion_bound_enabled", False),
+            )
+        ),
+        direct_journey_label_available_mask_completion_bound_max_subset_size=int(
+            config.get(
+                f"{prefix}_direct_journey_label_available_mask_completion_bound_max_subset_size",
+                config.get(
+                    "journey_pricing_direct_journey_label_available_mask_completion_bound_max_subset_size",
+                    config.get("max_tasks_per_trip", 6),
+                ),
+            )
+        ),
+        direct_journey_label_available_mask_completion_bound_max_states=int(
+            config.get(
+                f"{prefix}_direct_journey_label_available_mask_completion_bound_max_states",
+                config.get(
+                    "journey_pricing_direct_journey_label_available_mask_completion_bound_max_states",
+                    200000,
+                ),
             )
         ),
         direct_journey_label_completion_bound_unique_task_helper_enabled=bool(
@@ -14109,6 +14281,10 @@ def _log_journey_pricing(
             float(getattr(pricing, "direct_label_profile_partial_bound_completion_route_time", 0.0)),
             9,
         ),
+        direct_label_profile_partial_bound_resource_pareto_time=round(
+            float(getattr(pricing, "direct_label_profile_partial_bound_resource_pareto_time", 0.0)),
+            9,
+        ),
         direct_label_profile_partial_bound_cut_time=round(
             float(getattr(pricing, "direct_label_profile_partial_bound_cut_time", 0.0)),
             9,
@@ -14165,14 +14341,54 @@ def _log_journey_pricing(
         lb_partial_pruned_completion_route_winner=getattr(
             pricing, "lb_partial_pruned_completion_route_winner", 0
         ),
+        lb_partial_pruned_resource_pareto_winner=getattr(pricing, "lb_partial_pruned_resource_pareto_winner", 0),
+        lb_partial_pruned_resource_pareto_infeasible=getattr(
+            pricing, "lb_partial_pruned_resource_pareto_infeasible", 0
+        ),
         lb_partial_pruned_route_finish_winner=getattr(pricing, "lb_partial_pruned_route_finish_winner", 0),
         lb_suffix_pruned_unique_task_winner=getattr(pricing, "lb_suffix_pruned_unique_task_winner", 0),
         lb_suffix_pruned_unique_route_winner=getattr(pricing, "lb_suffix_pruned_unique_route_winner", 0),
         lb_suffix_pruned_completion_route_winner=getattr(
             pricing, "lb_suffix_pruned_completion_route_winner", 0
         ),
+        lb_suffix_pruned_resource_pareto_winner=getattr(pricing, "lb_suffix_pruned_resource_pareto_winner", 0),
+        lb_partial_pruned_available_mask_winner=getattr(pricing, "lb_partial_pruned_available_mask_winner", 0),
+        lb_suffix_pruned_available_mask_winner=getattr(pricing, "lb_suffix_pruned_available_mask_winner", 0),
         lb_partial_cut_reward_positive_checks=getattr(pricing, "lb_partial_cut_reward_positive_checks", 0),
         lb_suffix_cut_reward_positive_checks=getattr(pricing, "lb_suffix_cut_reward_positive_checks", 0),
+        amcb_enabled=bool(getattr(pricing, "amcb_enabled", False)),
+        amcb_build_time=round(float(getattr(pricing, "amcb_build_time", 0.0)), 9),
+        amcb_query_count=int(getattr(pricing, "amcb_query_count", 0)),
+        amcb_pruned_labels=int(getattr(pricing, "amcb_pruned_labels", 0)),
+        amcb_partial_winner_count=int(getattr(pricing, "amcb_partial_winner_count", 0)),
+        amcb_suffix_winner_count=int(getattr(pricing, "amcb_suffix_winner_count", 0)),
+        amcb_state_count=int(getattr(pricing, "amcb_state_count", 0)),
+        amcb_closed_subset_count=int(getattr(pricing, "amcb_closed_subset_count", 0)),
+        amcb_tail_state_count=int(getattr(pricing, "amcb_tail_state_count", 0)),
+        amcb_disabled=bool(getattr(pricing, "amcb_disabled", False)),
+        amcb_disable_reason=getattr(pricing, "amcb_disable_reason", None),
+        amcb_skipped_by_unique_route=bool(getattr(pricing, "amcb_skipped_by_unique_route", False)),
+        amcb_resource_filtered_subsets=int(getattr(pricing, "amcb_resource_filtered_subsets", 0)),
+        rpce_enabled=bool(getattr(pricing, "rpce_enabled", False)),
+        rpce_build_time=round(float(getattr(pricing, "rpce_build_time", 0.0)), 9),
+        rpce_arc_front_count=int(getattr(pricing, "rpce_arc_front_count", 0)),
+        rpce_sortie_front_count=int(getattr(pricing, "rpce_sortie_front_count", 0)),
+        rpce_tail_front_count=int(getattr(pricing, "rpce_tail_front_count", 0)),
+        rpce_overflow_state_count=int(getattr(pricing, "rpce_overflow_state_count", 0)),
+        rpce_disabled_state_count=int(getattr(pricing, "rpce_disabled_state_count", 0)),
+        rpce_runtime_disabled=bool(getattr(pricing, "rpce_runtime_disabled", False)),
+        rpce_disable_reason=getattr(pricing, "rpce_disable_reason", None),
+        rpce_query_count=int(getattr(pricing, "rpce_query_count", 0)),
+        rpce_query_feasible_count=int(getattr(pricing, "rpce_query_feasible_count", 0)),
+        rpce_query_disabled_count=int(getattr(pricing, "rpce_query_disabled_count", 0)),
+        rpce_pruned_labels=int(getattr(pricing, "rpce_pruned_labels", 0)),
+        rpce_resource_infeasible_labels=int(getattr(pricing, "rpce_resource_infeasible_labels", 0)),
+        rpce_min_lb=None
+        if getattr(pricing, "rpce_min_lb", None) is None
+        else round(float(getattr(pricing, "rpce_min_lb")), 9),
+        rpce_mean_lb=None
+        if getattr(pricing, "rpce_mean_lb", None) is None
+        else round(float(getattr(pricing, "rpce_mean_lb")), 9),
         generated_next_sorties_before_bound=getattr(pricing, "generated_next_sorties_before_bound", 0),
         generated_next_sorties_after_bound=getattr(pricing, "generated_next_sorties_after_bound", 0),
         two_cycle_enabled=bool(getattr(pricing, "two_cycle_enabled", False)),
@@ -16118,6 +16334,35 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "label_resume_profiles",
         "label_resume_exhausted",
         "completion_bound_enabled",
+        "amcb_enabled",
+        "amcb_build_time",
+        "amcb_query_count",
+        "amcb_pruned_labels",
+        "amcb_partial_winner_count",
+        "amcb_suffix_winner_count",
+        "amcb_state_count",
+        "amcb_closed_subset_count",
+        "amcb_tail_state_count",
+        "amcb_disabled",
+        "amcb_disable_reason",
+        "amcb_skipped_by_unique_route",
+        "amcb_resource_filtered_subsets",
+        "rpce_enabled",
+        "rpce_build_time",
+        "rpce_arc_front_count",
+        "rpce_sortie_front_count",
+        "rpce_tail_front_count",
+        "rpce_overflow_state_count",
+        "rpce_disabled_state_count",
+        "rpce_runtime_disabled",
+        "rpce_disable_reason",
+        "rpce_query_count",
+        "rpce_query_feasible_count",
+        "rpce_query_disabled_count",
+        "rpce_pruned_labels",
+        "rpce_resource_infeasible_labels",
+        "rpce_min_lb",
+        "rpce_mean_lb",
         "two_cycle_enabled",
         "two_cycle_table_complete",
         "ng_relaxation_enabled",

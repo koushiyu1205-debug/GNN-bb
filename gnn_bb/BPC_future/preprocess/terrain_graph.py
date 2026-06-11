@@ -95,6 +95,7 @@ def build_logical_graph_payload(
     scenario_path: str | Path,
     *,
     config: TerrainGraphConfig = TerrainGraphConfig(),
+    use_scipy_dijkstra: bool = False,
 ) -> dict[str, Any]:
     grid = load_terrain_grid(terrain_dir)
     scenario = json.loads(Path(scenario_path).read_text(encoding="utf-8"))
@@ -104,6 +105,7 @@ def build_logical_graph_payload(
         scenario,
         scenario_path=scenario_path,
         source_shape=grid.shape,
+        use_scipy_dijkstra=use_scipy_dijkstra,
     )
 
 
@@ -113,7 +115,15 @@ def build_logical_graph_payload_from_graph(
     *,
     scenario_path: str | Path | None = None,
     source_shape: tuple[int, int] | None = None,
+    use_scipy_dijkstra: bool = False,
 ) -> dict[str, Any]:
+    if use_scipy_dijkstra:
+        return _build_logical_graph_payload_from_graph_scipy(
+            graph,
+            scenario,
+            scenario_path=scenario_path,
+            source_shape=source_shape,
+        )
     nodes = _logical_nodes(graph, scenario)
     edges: list[dict[str, Any]] = []
     shortest_path_objectives = (
@@ -188,6 +198,136 @@ def build_logical_graph_payload_from_graph(
             "dx_km": graph.dx_km,
             "dy_km": graph.dy_km,
             "config": asdict(graph.config),
+        },
+        "logical_graph": {
+            "node_count": len(nodes),
+            "directed_edge_count": len(edges),
+            "feasible_directed_edge_count": sum(1 for edge in edges if edge.get("feasible")),
+            "nodes": nodes,
+            "edges": edges,
+        },
+        "scenario": {
+            "seed": scenario.get("seed"),
+            "operation_region": scenario.get("operation_region"),
+            "vehicle": scenario.get("vehicle"),
+        },
+    }
+
+
+def _build_logical_graph_payload_from_graph_scipy(
+    graph: CoarseTerrainGraph,
+    scenario: dict[str, Any],
+    *,
+    scenario_path: str | Path | None = None,
+    source_shape: tuple[int, int] | None = None,
+) -> dict[str, Any]:
+    try:
+        from scipy.sparse.csgraph import dijkstra as scipy_dijkstra
+    except Exception:
+        return build_logical_graph_payload_from_graph(
+            graph,
+            scenario,
+            scenario_path=scenario_path,
+            source_shape=source_shape,
+            use_scipy_dijkstra=False,
+        )
+
+    nodes = _logical_nodes(graph, scenario)
+    rows, cols = graph.shape
+    node_indices = [int(node["row"]) * cols + int(node["col"]) for node in nodes]
+    shortest_path_objectives = (
+        ("low_time", "travel_time_h"),
+        ("low_energy", "energy_proxy"),
+        ("low_risk", "risk_integral"),
+    )
+    edge_options: dict[tuple[str, str], list[dict[str, Any]]] = {
+        (str(origin["id"]), str(target["id"])): []
+        for origin in nodes
+        for target in nodes
+        if origin["id"] != target["id"]
+    }
+    adjacency_by_objective = _scipy_adjacency_by_objective(graph)
+    for path_type, objective in shortest_path_objectives:
+        adjacency = adjacency_by_objective[objective]
+        distances, predecessors = scipy_dijkstra(
+            adjacency,
+            directed=True,
+            indices=np.asarray(node_indices, dtype=np.int32),
+            return_predecessors=True,
+        )
+        distances = np.asarray(distances)
+        predecessors = np.asarray(predecessors)
+        if distances.ndim == 1:
+            distances = distances.reshape(1, -1)
+            predecessors = predecessors.reshape(1, -1)
+        for origin_pos, origin in enumerate(nodes):
+            source_index = int(node_indices[origin_pos])
+            predecessor_row = predecessors[origin_pos]
+            for target_pos, target in enumerate(nodes):
+                if origin_pos == target_pos:
+                    continue
+                target_index = int(node_indices[target_pos])
+                if not np.isfinite(distances[origin_pos, target_index]):
+                    continue
+                path = _reconstruct_scipy_path(predecessor_row, graph.shape, source_index, target_index)
+                if not path:
+                    continue
+                metric = _path_metric(graph, path)
+                option = _path_option_payload(graph, path, metric, path_type, objective)
+                _append_unique_path_option(edge_options[(str(origin["id"]), str(target["id"]))], option, graph.config)
+
+    edges: list[dict[str, Any]] = []
+    for origin in nodes:
+        for target in nodes:
+            if target["id"] == origin["id"]:
+                continue
+            options = edge_options[(str(origin["id"]), str(target["id"]))]
+            if not options:
+                edges.append(
+                    {
+                        "from": origin["id"],
+                        "to": target["id"],
+                        "feasible": False,
+                        "reason": "no passable physical path on coarse graph",
+                    }
+                )
+                continue
+            best = min(options, key=lambda item: (item["generalized_cost"], item["path_type"]))
+            edges.append(
+                {
+                    "from": origin["id"],
+                    "to": target["id"],
+                    "feasible": True,
+                    "option_count": int(len(options)),
+                    "best_option_by_generalized_cost": best["path_type"],
+                    "generalized_cost": best["generalized_cost"],
+                    "path_distance_km": best["path_distance_km"],
+                    "risk_integral": best["risk_integral"],
+                    "energy_proxy": best["energy_proxy"],
+                    "travel_time_min": best["travel_time_min"],
+                    "euclidean_distance_km": round(_distance(origin["xy_km"], target["xy_km"]), 6),
+                    "path_options": options,
+                }
+            )
+    return {
+        "terrain": {
+            "source_dir": str(graph.source_dir),
+            "scenario_path": "" if scenario_path is None else str(Path(scenario_path)),
+            "width_km": graph.width_km,
+            "height_km": graph.height_km,
+            "source_shape": list(source_shape or graph.shape),
+        },
+        "physical_graph": {
+            "type": "implicit 8-neighbor passable raster graph",
+            "grid_size": int(graph.config.grid_size),
+            "node_count": int(np.prod(graph.shape)),
+            "passable_node_count": int(graph.passable.sum()),
+            "blocked_node_count": int((~graph.passable).sum()),
+            "approx_undirected_edge_count": int(_count_undirected_edges(graph.passable)),
+            "dx_km": graph.dx_km,
+            "dy_km": graph.dy_km,
+            "config": asdict(graph.config),
+            "path_search_backend": "scipy.sparse.csgraph.dijkstra",
         },
         "logical_graph": {
             "node_count": len(nodes),
@@ -361,6 +501,96 @@ def _logical_nodes(graph: CoarseTerrainGraph, scenario: dict[str, Any]) -> list[
     return nodes
 
 
+_SCIPY_ADJACENCY_CACHE: dict[int, dict[str, Any]] = {}
+
+
+def _scipy_adjacency_by_objective(graph: CoarseTerrainGraph) -> dict[str, Any]:
+    cache_key = id(graph)
+    cached = _SCIPY_ADJACENCY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        from scipy.sparse import csr_matrix
+    except Exception as exc:  # pragma: no cover - caller falls back before this in normal use.
+        raise RuntimeError("SciPy sparse is required for the fast terrain graph backend") from exc
+
+    rows, cols = graph.shape
+    source_indices: list[int] = []
+    target_indices: list[int] = []
+    weights: dict[str, list[float]] = {
+        "distance_km": [],
+        "travel_time_h": [],
+        "energy_proxy": [],
+        "risk_integral": [],
+    }
+    for row in range(rows):
+        for col in range(cols):
+            if not graph.passable[row, col]:
+                continue
+            source_index = row * cols + col
+            for n_row, n_col, step_distance in _neighbors(graph, row, col):
+                edge = _edge_metrics(graph, row, col, n_row, n_col, step_distance)
+                source_indices.append(source_index)
+                target_indices.append(n_row * cols + n_col)
+                for objective in weights:
+                    weights[objective].append(_objective_value(edge, objective))
+    node_count = rows * cols
+    result = {
+        objective: csr_matrix(
+            (
+                np.asarray(values, dtype="float64"),
+                (np.asarray(source_indices, dtype="int32"), np.asarray(target_indices, dtype="int32")),
+            ),
+            shape=(node_count, node_count),
+        )
+        for objective, values in weights.items()
+    }
+    _SCIPY_ADJACENCY_CACHE[cache_key] = result
+    return result
+
+
+def _reconstruct_scipy_path(
+    predecessors: np.ndarray,
+    shape: tuple[int, int],
+    source_index: int,
+    target_index: int,
+) -> list[tuple[int, int]]:
+    if int(source_index) == int(target_index):
+        row, col = divmod(int(source_index), int(shape[1]))
+        return [(row, col)]
+    cols = int(shape[1])
+    path_indices = [int(target_index)]
+    seen = {int(target_index)}
+    current = int(target_index)
+    while current != int(source_index):
+        previous = int(predecessors[current])
+        if previous < 0 or previous in seen:
+            return []
+        path_indices.append(previous)
+        seen.add(previous)
+        current = previous
+    path_indices.reverse()
+    return [divmod(index, cols) for index in path_indices]
+
+
+def _path_metric(graph: CoarseTerrainGraph, path: list[tuple[int, int]]) -> np.ndarray:
+    metric = np.zeros(5, dtype="float64")
+    for (row, col), (n_row, n_col) in zip(path, path[1:]):
+        step = math.hypot(float(n_col - col) * graph.dx_km, float(n_row - row) * graph.dy_km)
+        edge = _edge_metrics(graph, int(row), int(col), int(n_row), int(n_col), step)
+        metric += np.array(
+            [
+                edge["distance_km"],
+                edge["risk_integral"],
+                edge["energy_proxy"],
+                edge["travel_time_h"],
+                edge["generalized_cost"],
+            ],
+            dtype="float64",
+        )
+    return metric
+
+
 def _dijkstra(
     graph: CoarseTerrainGraph,
     source: tuple[int, int],
@@ -470,6 +700,8 @@ def _objective_value(edge: dict[str, float], objective: str) -> float:
         return edge["generalized_cost"]
     if objective == "travel_time_h":
         return edge["travel_time_h"]
+    if objective == "distance_km":
+        return edge["distance_km"]
     if objective == "energy_proxy":
         return edge["energy_proxy"]
     if objective == "risk_integral":
