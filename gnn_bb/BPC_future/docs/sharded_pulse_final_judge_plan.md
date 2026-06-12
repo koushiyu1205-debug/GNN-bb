@@ -568,6 +568,78 @@ exactness 边界：
 - worker 有真实 transition pruning 信号，但仍以 `INCOMPLETE_LIMIT` 为主；
 - Apollo 5 在短时限下因 worker/audit 额外开销从 baseline `OPTIMAL` 变为 `TIME_LIMIT`，说明当前不应默认启用 active worker。
 
+### Phase 7J
+
+已完成：
+
+- 新增 adaptive second-action shard refinement 调度，默认关闭；
+- 父 first-task shard 若满足 hard incomplete 条件，可 exact-safely refine 为二级 child shards：
+  - `next-task k` for `k != first_task`
+  - `return-after-first-task`
+- refinement 只在以下条件同时满足时触发：
+  - `pulse_adaptive_sharding_enabled=True`
+  - `pulse_refine_incomplete_first_task_shards=True`
+  - parent shard 未 exhausted；
+  - parent shard 没有 found negative；
+  - parent shard `recursions >= pulse_refinement_min_recursions`；
+  - parent shard `expanded_states >= pulse_refinement_min_expanded`；
+  - 完整 child 集合数量 `<= pulse_refinement_max_children`
+- 若 `pulse_refinement_max_children` 无法覆盖完整 child partition，则不 refine，保持旧 first-task 行为，避免 partial partition 参与证明；
+- parent refined 后只累计运行指标和 `final_judge_shards_refined`，不直接参与 certificate；
+- required proof shard 改为完整 child 集合：
+  - all children certified -> parent 可视为 certified；
+  - any child negative -> parent negative；
+  - any child incomplete and no negative -> parent incomplete；
+- child 调度顺序优先高 cover dual、低 transition cost，`return-after-first-task` 放在最后；排序只影响速度，不影响 exactness；
+- audit / hidden-worker config builder 已接入同一组 adaptive refinement 字段，但默认关闭；
+- `journey_sharded_pulse_audit` payload 新增 `pulse_audit_shards_refined`。
+
+新增配置：
+
+- `journey_pulse_adaptive_sharding_enabled=False`
+- `journey_pulse_refine_incomplete_first_task_shards=False`
+- `journey_pulse_refinement_min_recursions=1000`
+- `journey_pulse_refinement_min_expanded=0`
+- `journey_pulse_refinement_max_children=32`
+- audit 前缀等价项：
+  - `journey_sharded_pulse_audit_adaptive_sharding_enabled`
+  - `journey_sharded_pulse_audit_refine_incomplete_first_task_shards`
+  - `journey_sharded_pulse_audit_refinement_min_recursions`
+  - `journey_sharded_pulse_audit_refinement_min_expanded`
+  - `journey_sharded_pulse_audit_refinement_max_children`
+- hidden-worker 前缀等价项已支持，但仍不建议默认启用 active worker。
+
+验证：
+
+- parent refined children union equals parent brute-force subset 的 toy partition 仍通过；
+- child shards pairwise disjoint 的 toy partition 仍通过；
+- parent certified iff all children certified；
+- child negative propagates to parent negative；
+- child incomplete blocks parent certificate；
+- adaptive refinement 只在 incomplete threshold 满足后触发；
+- refinement disabled / threshold too high / child cap 不能覆盖完整 partition 时保持旧 first-task 行为；
+- refined parent frontier 不被当作 proof-closed；
+- focused sharded Pulse / audit / hidden-worker 回归通过。
+
+Smoke：
+
+- driver-level audit no-refine/refine 小矩阵使用有效 mainline 配置后，official result 保持一致，但该短时限链路没有触发 `journey_sharded_pulse_audit` 事件，因此不能作为 refinement 效果证据；
+- guarded-engine real smoke 在普通 cap 下 parents 已可穷尽，因此 refinement 不触发；
+- guarded-engine stress smoke 用低 recursion cap 强制 hard parent：
+  - Apollo 5：5 parent -> 5 refined parent / 25 child shards，其中 20 certified、5 incomplete；
+  - Tranquillitatis 5：5 parent -> 5 refined parent / 25 child shards，其中 20 certified、5 incomplete；
+  - Apollo 10：10 parent -> 10 refined parent / 100 child shards，其中 90 certified、10 incomplete；
+- stress smoke 中 `global_certificate_capable=False`，未放开 official certificate。
+
+当前边界：
+
+- 不接 resume；
+- 不接 parallel；
+- 不做 adaptive multi-level refinement；
+- 不做 production default enable；
+- 不做 official certificate gate；
+- active hidden-negative worker 仍默认关闭，且当前 real smoke 不支持默认启用。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -589,9 +661,10 @@ exactness 边界：
 ## 后续建议
 
 1. 7I-A real small smoke 已完成但没有 active-worker ROI；下一步优先做 adaptive second-action shard refinement，而不是继续放大 worker 预算。
-2. 若继续 hidden-negative worker 路线，必须先加更严格触发门控：只在 legacy hidden-negative 证据、hard shard counters 或 certificate-tail 反复 incomplete 后运行。
-3. experimental certificate path 仍需等待：no-wait start-domain complete、无 unsupported cuts/branch、无 timeout、无 duplicate-only、所有 shards certified 且显式实验配置同时满足。
-4. 若后续 audit/worker 中出现 support-changing hidden negative，可继续做 Pulse hidden-negative worker mode 增强，但不得直接产生 official certificate。
-5. 若 bound ROI 在更宽小实例中持续为正，再做单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
-6. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
-7. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
+2. Phase 7J 已完成 second-action refinement 调度；下一步若继续优化，应先做 shard scheduling / ROI gate，而不是加 worker time limit。
+3. 若继续 hidden-negative worker 路线，必须先加更严格触发门控：只在 legacy hidden-negative 证据、hard shard counters 或 certificate-tail 反复 incomplete 后运行。
+4. experimental certificate path 仍需等待：no-wait start-domain complete、无 unsupported cuts/branch、无 timeout、无 duplicate-only、所有 shards certified 且显式实验配置同时满足。
+5. 若后续 audit/worker 中出现 support-changing hidden negative，可继续做 Pulse hidden-negative worker mode 增强，但不得直接产生 official certificate。
+6. 若 bound ROI 在更宽小实例中持续为正，再做单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
+7. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
+8. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。

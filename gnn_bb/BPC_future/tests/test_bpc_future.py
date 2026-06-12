@@ -15314,6 +15314,199 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(worker_pricing["global_certificate_capable"])
         self.assertEqual(worker_pricing["pricing_state"], PRICING_STATE_INCOMPLETE_LIMIT)
 
+    def test_sharded_pulse_adaptive_refinement_all_children_certify_parent(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        calls: list[tuple[int, object]] = []
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            calls.append((int(first_task_shard), second_action_shard))
+            if second_action_shard is None:
+                return _fake_transition_pulse_result(
+                    exhausted=False,
+                    status="RECURSION_LIMIT",
+                    reason="recursion_limit",
+                    recursions=10,
+                    expanded_states=10,
+                )
+            return _fake_transition_pulse_result(
+                exhausted=True,
+                status="OPTIMAL",
+                reason="exhausted",
+                recursions=2,
+                expanded_states=2,
+            )
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_refinement_min_recursions=1,
+                    pulse_refinement_min_expanded=1,
+                    pulse_refinement_max_children=3,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertTrue(_journey_pricing_is_global_certificate(result))
+        self.assertEqual(result.final_judge_shards_refined, len(data.tasks))
+        self.assertEqual(result.final_judge_shards_total, len(data.tasks) * len(data.tasks))
+        self.assertEqual(result.final_judge_shards_certified, result.final_judge_shards_total)
+        self.assertEqual(result.final_judge_shards_incomplete, 0)
+        parent_calls = [call for call in calls if call[1] is None]
+        child_calls = [call for call in calls if call[1] is not None]
+        self.assertEqual(len(parent_calls), len(data.tasks))
+        self.assertEqual(len(child_calls), len(data.tasks) * len(data.tasks))
+
+    def test_sharded_pulse_adaptive_refinement_child_incomplete_blocks_certificate(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        incomplete_child = (int(data.tasks[0]), int(data.tasks[1]))
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            if second_action_shard is None:
+                return _fake_transition_pulse_result(
+                    exhausted=False,
+                    status="RECURSION_LIMIT",
+                    reason="recursion_limit",
+                    recursions=10,
+                    expanded_states=10,
+                )
+            if (int(first_task_shard), second_action_shard) == incomplete_child:
+                return _fake_transition_pulse_result(
+                    exhausted=False,
+                    status="RECURSION_LIMIT",
+                    reason="child_recursion_limit",
+                    recursions=3,
+                    expanded_states=3,
+                )
+            return _fake_transition_pulse_result(exhausted=True, status="OPTIMAL", reason="exhausted")
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_refinement_min_recursions=1,
+                    pulse_refinement_min_expanded=1,
+                    pulse_refinement_max_children=3,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertEqual(result.final_judge_shards_refined, len(data.tasks))
+        self.assertEqual(result.final_judge_shards_incomplete, 1)
+        self.assertEqual(result.final_judge_incomplete_reason, "child_recursion_limit")
+
+    def test_sharded_pulse_adaptive_refinement_child_negative_propagates(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        negative_journey = SimpleNamespace(signature=("adaptive-child-negative",), task_set=frozenset({1, 2}))
+        negative_child = (int(data.tasks[0]), int(data.tasks[1]))
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            if second_action_shard is None:
+                return _fake_transition_pulse_result(
+                    exhausted=False,
+                    status="RECURSION_LIMIT",
+                    reason="recursion_limit",
+                    recursions=10,
+                    expanded_states=10,
+                )
+            if (int(first_task_shard), second_action_shard) == negative_child:
+                return _fake_transition_pulse_result(
+                    exhausted=False,
+                    status="FOUND_NEGATIVE",
+                    reason="found_negative",
+                    recursions=4,
+                    expanded_states=4,
+                    negative_journeys=(negative_journey,),
+                    best_true_reduced_cost=-5.0,
+                )
+            return _fake_transition_pulse_result(exhausted=True, status="OPTIMAL", reason="exhausted")
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition), patch(
+            "BPC_future.pricing.journey_pricing.manual_journey_reduced_cost",
+            return_value=-5.0,
+        ):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_refinement_min_recursions=1,
+                    pulse_refinement_min_expanded=1,
+                    pulse_refinement_max_children=3,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertEqual(result.final_judge_shards_refined, len(data.tasks))
+        self.assertEqual(result.final_judge_shards_negative_found, 1)
+        self.assertEqual(result.journeys, [negative_journey])
+
+    def test_sharded_pulse_adaptive_refinement_threshold_and_cap_guard(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            if second_action_shard is not None:
+                raise AssertionError("second-action child shard should not run")
+            return _fake_transition_pulse_result(
+                exhausted=False,
+                status="RECURSION_LIMIT",
+                reason="recursion_limit",
+                recursions=10,
+                expanded_states=10,
+            )
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition):
+            high_threshold = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_refinement_min_recursions=100,
+                    pulse_refinement_min_expanded=1,
+                    pulse_refinement_max_children=3,
+                ),
+            )
+        self.assertEqual(high_threshold.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(high_threshold.final_judge_shards_refined, 0)
+        self.assertEqual(high_threshold.final_judge_shards_total, len(data.tasks))
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition):
+            capped = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_refinement_min_recursions=1,
+                    pulse_refinement_min_expanded=1,
+                    pulse_refinement_max_children=2,
+                ),
+            )
+        self.assertEqual(capped.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(capped.final_judge_shards_refined, 0)
+        self.assertEqual(capped.final_judge_shards_total, len(data.tasks))
+
     def test_sharded_pulse_dummy_driver_smoke_default_off(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
             "CERTIFIED_NO_NEGATIVE",
@@ -17206,6 +17399,77 @@ def _with_task_waiting_allowed(data: Any, allowed: bool) -> Any:
     instance = json.loads(json.dumps(data.instance))
     instance.setdefault("scheduling", {})["task_waiting_allowed"] = bool(allowed)
     return replace(data, instance=instance)
+
+
+def _fake_transition_pulse_result(
+    *,
+    exhausted: bool,
+    status: str,
+    reason: str,
+    recursions: int = 1,
+    expanded_states: int = 1,
+    negative_journeys: tuple[Any, ...] = tuple(),
+    best_true_reduced_cost: float | None = None,
+) -> Any:
+    negative_leaves = tuple(SimpleNamespace(journey=journey) for journey in negative_journeys)
+    return SimpleNamespace(
+        candidates=tuple(),
+        exhausted=bool(exhausted),
+        status=str(status),
+        reason=str(reason),
+        generated_sortie_traces=0,
+        generated_leaves=0,
+        materialized_sorties=0,
+        materialized_journey_leaves=0,
+        materialized_journeys=0,
+        infeasible_leaves=0,
+        recursions=int(recursions),
+        expanded_states=int(expanded_states),
+        pulse_return_pruned=0,
+        pulse_time_window_pruned=0,
+        pulse_resource_pruned=0,
+        pulse_bound_pruned=0,
+        pulse_bound_prune_enabled=False,
+        pulse_bound_prune_supported=False,
+        pulse_bound_prune_fail_open_reason="disabled",
+        pulse_bound_prune_query_count=0,
+        pulse_bound_prune_winner_count=0,
+        pulse_bound_prune_time=0.0,
+        pulse_archive_pruned=0,
+        pulse_depot_ready_pruned=0,
+        pulse_branch_pruned=0,
+        pulse_negative_found=bool(negative_leaves),
+        pulse_harvested_count=0,
+        pulse_negative_pool_size=0,
+        pulse_harvested_new_task_set_count=0,
+        pulse_harvested_support_changing_count=0,
+        pulse_harvested_replacement_count=0,
+        harvested_journeys=tuple(),
+        harvest_diagnostics={},
+        best_true_reduced_cost=best_true_reduced_cost,
+        negative_leaves=negative_leaves,
+        shard_first_task=None,
+        pulse_capacity_pruned=0,
+        pulse_energy_pruned=0,
+        transition_time_window_pruned=0,
+        transition_energy_pruned=0,
+        transition_return_pruned=0,
+    )
+
+
+def _adaptive_sharded_pulse_test_config(**updates: Any) -> JourneyPricingConfig:
+    return JourneyPricingConfig(
+        sharded_final_judge_enabled=True,
+        sharded_final_judge_toy_certificate_enabled=True,
+        pulse_adaptive_sharding_enabled=True,
+        pulse_refine_incomplete_first_task_shards=True,
+        pulse_max_recursions=10,
+        time_bucket_size=5.0,
+        start_time_step=10.0,
+        max_tasks_per_trip=2,
+        max_returned_journeys=4,
+        **updates,
+    )
 
 
 def _assert_toy_pulse_same_pricing_surface(testcase: unittest.TestCase, pruned: Any, unpruned: Any) -> None:

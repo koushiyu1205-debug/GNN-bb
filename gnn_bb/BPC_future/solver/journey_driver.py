@@ -7618,6 +7618,20 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
             raise ValueError("static_subset_row_selection must be lexicographic or compact")
         if int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)) < 0:
             raise ValueError("journey_hidden_negative_audit_max_logged_journeys must be nonnegative")
+        adaptive_sharding_prefixes = (
+            "journey_pulse",
+            "journey_sharded_pulse_audit",
+            "journey_sharded_pulse_hidden_negative_worker",
+        )
+        for adaptive_prefix in adaptive_sharding_prefixes:
+            if not bool(config.get(f"{adaptive_prefix}_adaptive_sharding_enabled", False)):
+                continue
+            if int(config.get(f"{adaptive_prefix}_refinement_min_recursions", 1000)) < 0:
+                raise ValueError(f"{adaptive_prefix}_refinement_min_recursions must be nonnegative")
+            if int(config.get(f"{adaptive_prefix}_refinement_min_expanded", 0)) < 0:
+                raise ValueError(f"{adaptive_prefix}_refinement_min_expanded must be nonnegative")
+            if int(config.get(f"{adaptive_prefix}_refinement_max_children", 32)) <= 0:
+                raise ValueError(f"{adaptive_prefix}_refinement_max_children must be positive")
         if bool(config.get("journey_sharded_pulse_hidden_negative_worker_enabled", False)):
             worker_trigger = str(
                 config.get(
@@ -12756,6 +12770,24 @@ def _journey_certificate_pricing_config(
                 0,
                 int(config.get("journey_pulse_negative_harvest_limit", 0)),
             ),
+            pulse_adaptive_sharding_enabled=bool(
+                config.get("journey_pulse_adaptive_sharding_enabled", False)
+            ),
+            pulse_refine_incomplete_first_task_shards=bool(
+                config.get("journey_pulse_refine_incomplete_first_task_shards", False)
+            ),
+            pulse_refinement_min_recursions=max(
+                0,
+                int(config.get("journey_pulse_refinement_min_recursions", 1000)),
+            ),
+            pulse_refinement_min_expanded=max(
+                0,
+                int(config.get("journey_pulse_refinement_min_expanded", 0)),
+            ),
+            pulse_refinement_max_children=max(
+                1,
+                int(config.get("journey_pulse_refinement_max_children", 32)),
+            ),
             pulse_resume_enabled=bool(config.get("journey_final_judge_resume_enabled", False)),
             pulse_cache_max_states=max(0, int(config.get("journey_final_judge_cache_max_states", 0))),
             pulse_parallel_enabled=bool(config.get("journey_final_judge_parallel_enabled", False)),
@@ -12773,6 +12805,13 @@ def _journey_certificate_pricing_config(
         mode["sharded_pulse_support_aware_harvesting"] = bool(
             updated.pulse_support_aware_harvesting_enabled
         )
+        mode["sharded_pulse_adaptive_sharding"] = bool(updated.pulse_adaptive_sharding_enabled)
+        mode["sharded_pulse_refine_incomplete_first_task_shards"] = bool(
+            updated.pulse_refine_incomplete_first_task_shards
+        )
+        mode["sharded_pulse_refinement_min_recursions"] = int(updated.pulse_refinement_min_recursions)
+        mode["sharded_pulse_refinement_min_expanded"] = int(updated.pulse_refinement_min_expanded)
+        mode["sharded_pulse_refinement_max_children"] = int(updated.pulse_refinement_max_children)
         mode["sharded_pulse_resume_enabled"] = bool(updated.pulse_resume_enabled)
         mode["sharded_pulse_parallel_enabled"] = bool(updated.pulse_parallel_enabled)
         mode["sharded_pulse_parallel_workers"] = int(updated.pulse_parallel_workers)
@@ -15373,6 +15412,9 @@ def _journey_sharded_pulse_audit_payload(
         "pulse_audit_shards_negative": int(
             getattr(pulse_pricing, "final_judge_shards_negative_found", 0)
         ),
+        "pulse_audit_shards_refined": int(
+            getattr(pulse_pricing, "final_judge_shards_refined", 0)
+        ),
         "pulse_audit_bound_pruned": int(getattr(pulse_pricing, "pulse_bound_pruned", 0)),
         "pulse_audit_archive_pruned": int(getattr(pulse_pricing, "pulse_archive_pruned", 0)),
         "pulse_audit_time_window_pruned": int(
@@ -15469,6 +15511,45 @@ def _journey_sharded_pulse_audit_config(
                 )
             ),
         ),
+        pulse_adaptive_sharding_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_adaptive_sharding_enabled",
+                config.get("journey_pulse_adaptive_sharding_enabled", False),
+            )
+        ),
+        pulse_refine_incomplete_first_task_shards=bool(
+            config.get(
+                "journey_sharded_pulse_audit_refine_incomplete_first_task_shards",
+                config.get("journey_pulse_refine_incomplete_first_task_shards", False),
+            )
+        ),
+        pulse_refinement_min_recursions=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_audit_refinement_min_recursions",
+                    config.get("journey_pulse_refinement_min_recursions", 1000),
+                )
+            ),
+        ),
+        pulse_refinement_min_expanded=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_audit_refinement_min_expanded",
+                    config.get("journey_pulse_refinement_min_expanded", 0),
+                )
+            ),
+        ),
+        pulse_refinement_max_children=max(
+            1,
+            int(
+                config.get(
+                    "journey_sharded_pulse_audit_refinement_max_children",
+                    config.get("journey_pulse_refinement_max_children", 32),
+                )
+            ),
+        ),
         profile_pricing_enabled=False,
         direct_journey_label_pricing_enabled=False,
         direct_journey_label_global_certificate_enabled=False,
@@ -15558,6 +15639,45 @@ def _journey_sharded_pulse_hidden_negative_worker_config(
                 config.get(
                     "journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit",
                     config.get("journey_pulse_negative_harvest_limit", max_columns),
+                )
+            ),
+        ),
+        pulse_adaptive_sharding_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_adaptive_sharding_enabled",
+                config.get("journey_pulse_adaptive_sharding_enabled", False),
+            )
+        ),
+        pulse_refine_incomplete_first_task_shards=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_refine_incomplete_first_task_shards",
+                config.get("journey_pulse_refine_incomplete_first_task_shards", False),
+            )
+        ),
+        pulse_refinement_min_recursions=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_refinement_min_recursions",
+                    config.get("journey_pulse_refinement_min_recursions", 1000),
+                )
+            ),
+        ),
+        pulse_refinement_min_expanded=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_refinement_min_expanded",
+                    config.get("journey_pulse_refinement_min_expanded", 0),
+                )
+            ),
+        ),
+        pulse_refinement_max_children=max(
+            1,
+            int(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_refinement_max_children",
+                    config.get("journey_pulse_refinement_max_children", 32),
                 )
             ),
         ),

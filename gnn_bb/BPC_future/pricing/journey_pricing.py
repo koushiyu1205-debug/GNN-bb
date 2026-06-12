@@ -70,6 +70,11 @@ class JourneyPricingConfig:
     pulse_archive_max_records_per_key: int = 32
     pulse_support_aware_harvesting_enabled: bool = False
     pulse_negative_harvest_limit: int = 0
+    pulse_adaptive_sharding_enabled: bool = False
+    pulse_refine_incomplete_first_task_shards: bool = False
+    pulse_refinement_min_recursions: int = 1000
+    pulse_refinement_min_expanded: int = 0
+    pulse_refinement_max_children: int = 32
     pulse_resume_enabled: bool = False
     pulse_cache_max_states: int = 0
     pulse_parallel_enabled: bool = False
@@ -3322,10 +3327,12 @@ def _price_journeys_by_sharded_pulse_guarded(
     all_candidates: dict[tuple, tuple[float, JourneyColumn]] = {}
     duplicate_negative_seen = False
     incomplete_reason = ""
-    shards_total = len(tuple(data.tasks))
+    tasks = tuple(int(task) for task in data.tasks)
+    shards_total = 0
     shards_certified = 0
     shards_incomplete = 0
     shards_negative = 0
+    shards_refined = 0
     generated_traces = 0
     materialized_sorties = 0
     materialized_journeys = 0
@@ -3359,8 +3366,11 @@ def _price_journeys_by_sharded_pulse_guarded(
     if deadline is None and float(config.time_limit) > 0.0:
         deadline = time.perf_counter() + float(config.time_limit)
 
-    for task in data.tasks:
-        shard = transition_root_only_pulse(
+    def _run_transition_shard(
+        first_task: int,
+        second_action: int | str | None = None,
+    ):
+        return transition_root_only_pulse(
             data,
             duals,
             cuts=cuts,
@@ -3369,7 +3379,8 @@ def _price_journeys_by_sharded_pulse_guarded(
             eps=1.0e-6,
             max_tasks_per_sortie=int(config.max_tasks_per_trip),
             max_sorties=int(data.sortie_limit),
-            first_task_shard=int(task),
+            first_task_shard=int(first_task),
+            second_action_shard=second_action,
             branch_constraints=branch_constraints,
             deadline=deadline,
             max_recursions=int(config.pulse_max_recursions),
@@ -3384,6 +3395,83 @@ def _price_journeys_by_sharded_pulse_guarded(
             pool_masks=tuple(pool_task_sets or tuple()),
             forbidden_signatures=tuple(forbidden),
         )
+
+    def _transition_cost_lower_proxy(source: int, target: int) -> float:
+        try:
+            options = data.options(int(source), int(target))
+        except KeyError:
+            return float("inf")
+        if not options:
+            return float("inf")
+        return min(float(option.cost) for option in options)
+
+    def _second_action_child_specs(first_task: int) -> tuple[int | str, ...]:
+        next_tasks = tuple(int(task) for task in tasks if int(task) != int(first_task))
+        ordered_next = tuple(
+            sorted(
+                next_tasks,
+                key=lambda task: (
+                    -float(duals.cover.get(int(task), 0.0)),
+                    _transition_cost_lower_proxy(int(first_task), int(task)),
+                    int(task),
+                ),
+            )
+        )
+        return ordered_next + ("return",)
+
+    def _eligible_for_second_action_refinement(
+        shard: Any,
+        child_specs: tuple[int | str, ...],
+    ) -> bool:
+        if not bool(config.pulse_adaptive_sharding_enabled):
+            return False
+        if not bool(config.pulse_refine_incomplete_first_task_shards):
+            return False
+        if not child_specs:
+            return False
+        if len(child_specs) > max(0, int(config.pulse_refinement_max_children)):
+            return False
+        if bool(getattr(shard, "exhausted", False)):
+            return False
+        if str(getattr(shard, "status", "")) in {"FOUND_NEGATIVE", "FOUND_NEGATIVE_HARVESTED"}:
+            return False
+        if bool(getattr(shard, "pulse_negative_found", False)):
+            return False
+        if int(getattr(shard, "recursions", 0)) < max(0, int(config.pulse_refinement_min_recursions)):
+            return False
+        if int(getattr(shard, "expanded_states", 0)) < max(0, int(config.pulse_refinement_min_expanded)):
+            return False
+        return True
+
+    def _accumulate_shard_metrics(shard: Any) -> None:
+        nonlocal generated_traces
+        nonlocal materialized_sorties
+        nonlocal materialized_journeys
+        nonlocal pulse_recursions
+        nonlocal pulse_expanded_states
+        nonlocal pulse_resource_pruned
+        nonlocal pulse_return_pruned
+        nonlocal pulse_time_window_pruned
+        nonlocal pulse_capacity_pruned
+        nonlocal pulse_energy_pruned
+        nonlocal transition_time_window_pruned
+        nonlocal transition_energy_pruned
+        nonlocal transition_return_pruned
+        nonlocal pulse_bound_pruned
+        nonlocal pulse_bound_prune_supported
+        nonlocal pulse_bound_prune_fail_open_reason
+        nonlocal pulse_bound_prune_query_count
+        nonlocal pulse_bound_prune_winner_count
+        nonlocal pulse_bound_prune_time
+        nonlocal pulse_archive_pruned
+        nonlocal pulse_depot_ready_pruned
+        nonlocal pulse_negative_pool_size
+        nonlocal pulse_harvested_count
+        nonlocal pulse_harvested_new_task_set_count
+        nonlocal pulse_harvested_support_changing_count
+        nonlocal pulse_harvested_replacement_count
+        nonlocal best_true_rc
+
         generated_traces += int(shard.generated_sortie_traces)
         materialized_sorties += int(shard.materialized_sorties)
         materialized_journeys += int(shard.materialized_journeys)
@@ -3424,10 +3512,21 @@ def _price_journeys_by_sharded_pulse_guarded(
                 if best_true_rc is None
                 else min(float(best_true_rc), float(shard.best_true_reduced_cost))
             )
+
+    def _record_required_shard(shard: Any) -> None:
+        nonlocal duplicate_negative_seen
+        nonlocal incomplete_reason
+        nonlocal shards_total
+        nonlocal shards_certified
+        nonlocal shards_incomplete
+        nonlocal shards_negative
+
+        shards_total += 1
+        _accumulate_shard_metrics(shard)
         if not bool(shard.exhausted) and str(shard.status) not in {"FOUND_NEGATIVE", "FOUND_NEGATIVE_HARVESTED"}:
             shards_incomplete += 1
             incomplete_reason = str(shard.reason or shard.status)
-            continue
+            return
 
         shard_new_negative = False
         negative_candidates = (
@@ -3454,6 +3553,17 @@ def _price_journeys_by_sharded_pulse_guarded(
         elif bool(shard.exhausted):
             shards_certified += 1
 
+    for task in tasks:
+        parent = _run_transition_shard(int(task))
+        child_specs = _second_action_child_specs(int(task))
+        if _eligible_for_second_action_refinement(parent, child_specs):
+            shards_refined += 1
+            _accumulate_shard_metrics(parent)
+            for second_action in child_specs:
+                _record_required_shard(_run_transition_shard(int(task), second_action))
+            continue
+        _record_required_shard(parent)
+
     common = {
         "final_judge_engine": "sharded_pulse",
         "final_judge_sharded_enabled": True,
@@ -3461,6 +3571,7 @@ def _price_journeys_by_sharded_pulse_guarded(
         "final_judge_shards_certified": int(shards_certified),
         "final_judge_shards_incomplete": int(shards_incomplete),
         "final_judge_shards_negative_found": int(shards_negative),
+        "final_judge_shards_refined": int(shards_refined),
         "pulse_recursions": int(pulse_recursions),
         "pulse_expanded_states": int(pulse_expanded_states),
         "pulse_resource_pruned": int(pulse_resource_pruned),
