@@ -821,6 +821,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             pricing_dual_source=exact_dual_source,
         )
         if pricing.journeys:
+            audit_final_legacy_pricing(pricing)
             added = _add_priced_journeys(journey_pool, pricing.journeys)
             _log_journey_addition(
                 logger,

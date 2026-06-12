@@ -182,8 +182,57 @@ BPC_future/tests/test_bpc_future.py
 - audit dummy 只用于 focused tests；
 - sharded Pulse production 默认仍关闭；
 - no-wait / test-only certificate guard 不放开到普通 5/10/20；
-- 尚未跑真实 Apollo / Tranquillitatis audit-only smoke 矩阵。
+- 真实 Apollo / Tranquillitatis audit-only smoke 已完成，但仍只是小矩阵观测，不是 production certificate gate。
+
+## Phase 7H-real 小矩阵 Smoke
+
+运行目录：
+
+```text
+BPC_future/results/sharded_pulse_phase7h_real_smoke_20260612/
+```
+
+矩阵：
+
+- `very_small`
+- Apollo 5：`apollo15_20km_tasks05_01_seed6000`
+- Tranquillitatis 5：`tranquillitatis_balmer_like_20km_tasks05_01_seed6000`
+- Apollo 10：`apollo15_20km_tasks10_01_seed11000`
+
+每个实例跑两组：
+
+- baseline default；
+- baseline + sharded Pulse audit-only。
+
+audit 配置保持：
+
+- `journey_sharded_pulse_audit_enabled=True`
+- `journey_sharded_pulse_audit_after_legacy_final_judge=True`
+- `journey_sharded_pulse_audit_time_limit=3.0`
+- `journey_sharded_pulse_audit_max_recursions=100000`
+- `journey_sharded_pulse_audit_allow_certificate_effect=False`
+- `journey_sharded_pulse_audit_archive_enabled=True`
+- `journey_sharded_pulse_audit_bound_pruning_enabled=True`
+- `journey_sharded_pulse_audit_support_aware_harvesting_enabled=True`
+
+结果摘要：
+
+| 实例 | audit events | official status 是否一致 | official dual_bound 是否一致 | official pricing_state 是否一致 | critical | warning | comparison types | time-window pruned | return pruned |
+|---|---:|---:|---:|---:|---:|---:|---|---:|---:|
+| very_small | 0 | 是 | 是 | 是 | 0 | 0 | - | 0 | 0 |
+| Apollo 5 | 1 | 是 | 是 | 是 | 0 | 0 | `legacy_incomplete_pulse_incomplete` | 51343 | 2922 |
+| Tranquillitatis 5 | 1 | 是 | 是 | 是 | 0 | 0 | `legacy_incomplete_pulse_incomplete` | 42331 | 1946 |
+| Apollo 10 | 2 | 是 | 是 | 是 | 0 | 1 | `legacy_incomplete_pulse_incomplete`, `legacy_negative_pulse_incomplete` | 219537 | 2610 |
+
+结论：
+
+- `journey_sharded_pulse_audit_allow_certificate_effect=False` 生效：audit 没有改写 official `status`、`dual_bound`、`pricing_state` 或 `best_rc`。
+- 没有出现 `legacy_certified_pulse_negative` 或 `legacy_negative_pulse_certified`。
+- Apollo 10 出现一次 `legacy_negative_pulse_incomplete`，按当前规则是 warning，不阻塞；含义是 legacy 找到负列，而 Pulse audit 在 3 秒预算内 incomplete。
+- 触发 audit 的真实小实例均有 `pulse_audit_context_hash`，无 context hash 缺失。
+- Apollo 5 / Tranquillitatis 5 / Apollo 10 均观测到真实 transition pruning 信号。
+- very_small 在本轮短迭代配置中没有触发 legacy final-judge audit 事件，因此只作为“audit 不改变默认 official path”的 smoke 样本。
 
 ## 结论
 
-Phase 7H 已完成最小可验证版本：legacy final pricing 后可以运行 sharded Pulse audit，并把 agreement / disagreement / counters 写入 JSONL；audit 结果不会污染 official lower bound、pricing state 或 fathoming 逻辑。
+Phase 7H 已完成最小可验证版本和真实小矩阵 smoke：legacy final pricing 后可以运行 sharded Pulse audit，并把 agreement / disagreement / counters 写入 JSONL；audit 结果不会污染 official lower bound、pricing state 或 fathoming 逻辑。

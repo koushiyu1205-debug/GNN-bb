@@ -20,7 +20,7 @@ Phase 7D 已把 transition-state true-RC negative leaves 接入 support-aware ha
 Phase 7E 已加入 safe prefix reduced-cost lower-bound ledger 和 opt-in 弱安全 bound pruning。
 Phase 7F 已加入 bound/archive/harvest ROI diagnostics，并完成 very_small / 5-task / 10-task opt-in micro-smoke。
 Phase 7G 已补 no-wait start interval 与 `candidate_start_times_for_trip()` 时间域对齐。
-Phase 7H 已加入 audit-only small-instance legacy-equivalence smoke 链路：Pulse 只写审计日志，不影响 official lower bound / pricing_state。
+Phase 7H 已加入 audit-only small-instance legacy-equivalence smoke 链路并完成真实小矩阵 smoke：Pulse 只写审计日志，不影响 official lower bound / pricing_state。
 
 ## Exactness 边界
 
@@ -475,9 +475,12 @@ micro-smoke 观察：
 - critical disagreement type 覆盖：
   - `legacy_certified_pulse_negative`
   - `legacy_negative_pulse_certified`
+- warning disagreement type 覆盖：
   - `legacy_certified_pulse_incomplete`
   - `legacy_incomplete_pulse_certified`
   - `legacy_negative_pulse_incomplete`
+  - `legacy_incomplete_pulse_negative`
+  - 其他非一致状态
 
 验证：
 
@@ -491,6 +494,14 @@ micro-smoke 观察：
 - audit timeout 记录 `AUDIT_INCOMPLETE`，不影响 official result；
 - waiting-allowed instance 下 audit 可运行，但仍无 official certificate effect；
 - audit log 中 bound/archive/time-window/return/harvest counters 可观测。
+- 真实小矩阵 audit-only smoke：
+  - `very_small`
+  - Apollo 5
+  - Tranquillitatis 5
+  - Apollo 10
+- 真实小矩阵中 official `status` / `dual_bound` / `pricing_state` / `best_rc` 均未被 audit 改写；
+- 真实小矩阵中未出现 `legacy_certified_pulse_negative` 或 `legacy_negative_pulse_certified`；
+- Apollo 10 出现一次 `legacy_negative_pulse_incomplete`，按 warning 记录，不阻塞。
 
 仍未实现：
 
@@ -520,9 +531,9 @@ micro-smoke 观察：
 
 ## 后续建议
 
-1. 下一步优先做 Phase 7H-real audit smoke：very_small / Apollo 5 / Tranquillitatis 5 / 一个 10-task，只比较 legacy 与 Pulse audit 日志，不允许 official certificate effect。
-2. 若 audit disagreement 为零且 counters 有意义，再考虑 experimental certificate path；仍只能在 no-wait start-domain complete / no unsupported cuts-branch 的配置下允许。
-3. 若 7H-real 中 bound ROI 持续为正，再做 Phase 7I 的单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
-4. 若 bound ROI 很弱，优先转向 adaptive second-action shard refinement，而不是增加复杂 row correction。
+1. 7H-real 已完成且没有 critical disagreement；由于 5/10 任务 audit 仍以 incomplete 为主，下一步优先做 adaptive second-action shard refinement，而不是放开 certificate gate。
+2. experimental certificate path 仍需等待：no-wait start-domain complete、无 unsupported cuts/branch、无 timeout、无 duplicate-only、所有 shards certified 且显式实验配置同时满足。
+3. 若后续 audit 中出现 support-changing hidden negative，可考虑 Pulse hidden-negative worker mode，但不得直接产生 official certificate。
+4. 若 bound ROI 在更宽小实例中持续为正，再做单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
 5. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
 6. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
