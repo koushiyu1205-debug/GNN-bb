@@ -24,7 +24,7 @@ from BPC_future.pricing.journey_harvesting import (
 from BPC_future.pricing.available_mask_completion_bound import AvailableMaskCompletionBound
 from BPC_future.pricing.resource_pareto_completion import ResourceParetoCompletionEnvelope
 from BPC_future.pricing.sharded_pulse_final_judge import build_dummy_shard_ledger
-from BPC_future.pricing.pulse_toy_exhaustive import toy_root_exhaustive_pulse
+from BPC_future.pricing.pulse_toy_exhaustive import transition_root_only_pulse
 from BPC_future.pricing.trip_pricing import (
     _PartialNoWaitingPathProfile,
     PricingConfig,
@@ -520,6 +520,11 @@ class JourneyPricingResult:
     pulse_resource_pruned: int = 0
     pulse_return_pruned: int = 0
     pulse_time_window_pruned: int = 0
+    pulse_capacity_pruned: int = 0
+    pulse_energy_pruned: int = 0
+    transition_time_window_pruned: int = 0
+    transition_energy_pruned: int = 0
+    transition_return_pruned: int = 0
     pulse_bound_pruned: int = 0
     pulse_archive_pruned: int = 0
     pulse_depot_ready_pruned: int = 0
@@ -3318,6 +3323,11 @@ def _price_journeys_by_sharded_pulse_guarded(
     pulse_resource_pruned = 0
     pulse_return_pruned = 0
     pulse_time_window_pruned = 0
+    pulse_capacity_pruned = 0
+    pulse_energy_pruned = 0
+    transition_time_window_pruned = 0
+    transition_energy_pruned = 0
+    transition_return_pruned = 0
     pulse_bound_pruned = 0
     pulse_archive_pruned = 0
     pulse_depot_ready_pruned = 0
@@ -3329,7 +3339,7 @@ def _price_journeys_by_sharded_pulse_guarded(
         deadline = time.perf_counter() + float(config.time_limit)
 
     for task in data.tasks:
-        shard = toy_root_exhaustive_pulse(
+        shard = transition_root_only_pulse(
             data,
             duals,
             cuts=cuts,
@@ -3338,17 +3348,9 @@ def _price_journeys_by_sharded_pulse_guarded(
             max_tasks_per_sortie=int(config.max_tasks_per_trip),
             max_sorties=int(data.sortie_limit),
             first_task_shard=int(task),
+            branch_constraints=branch_constraints,
             deadline=deadline,
             max_recursions=int(config.pulse_max_recursions),
-            exact_safe_pruning_enabled=bool(config.pulse_exact_safe_pruning_enabled),
-            archive_dominance_enabled=bool(config.pulse_archive_dominance_enabled),
-            archive_max_records_per_key=int(config.pulse_archive_max_records_per_key),
-            harvest_after_negative_enabled=bool(config.pulse_support_aware_harvesting_enabled),
-            support_aware_harvesting_enabled=bool(config.pulse_support_aware_harvesting_enabled),
-            negative_harvest_limit=int(config.pulse_negative_harvest_limit),
-            active_masks=tuple(active_support_task_sets or tuple()),
-            pool_masks=tuple(pool_task_sets or tuple()),
-            forbidden_signatures=tuple(forbidden),
         )
         generated_traces += int(shard.generated_sortie_traces)
         materialized_sorties += int(shard.materialized_sorties)
@@ -3358,6 +3360,11 @@ def _price_journeys_by_sharded_pulse_guarded(
         pulse_resource_pruned += int(shard.pulse_resource_pruned)
         pulse_return_pruned += int(shard.pulse_return_pruned)
         pulse_time_window_pruned += int(shard.pulse_time_window_pruned)
+        pulse_capacity_pruned += int(shard.pulse_capacity_pruned)
+        pulse_energy_pruned += int(shard.pulse_energy_pruned)
+        transition_time_window_pruned += int(shard.transition_time_window_pruned)
+        transition_energy_pruned += int(shard.transition_energy_pruned)
+        transition_return_pruned += int(shard.transition_return_pruned)
         pulse_bound_pruned += int(shard.pulse_bound_pruned)
         pulse_archive_pruned += int(shard.pulse_archive_pruned)
         pulse_depot_ready_pruned += int(shard.pulse_depot_ready_pruned)
@@ -3410,6 +3417,11 @@ def _price_journeys_by_sharded_pulse_guarded(
         "pulse_resource_pruned": int(pulse_resource_pruned),
         "pulse_return_pruned": int(pulse_return_pruned),
         "pulse_time_window_pruned": int(pulse_time_window_pruned),
+        "pulse_capacity_pruned": int(pulse_capacity_pruned),
+        "pulse_energy_pruned": int(pulse_energy_pruned),
+        "transition_time_window_pruned": int(transition_time_window_pruned),
+        "transition_energy_pruned": int(transition_energy_pruned),
+        "transition_return_pruned": int(transition_return_pruned),
         "pulse_bound_pruned": int(pulse_bound_pruned),
         "pulse_archive_pruned": int(pulse_archive_pruned),
         "pulse_depot_ready_pruned": int(pulse_depot_ready_pruned),

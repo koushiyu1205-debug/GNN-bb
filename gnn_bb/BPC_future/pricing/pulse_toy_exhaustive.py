@@ -12,6 +12,7 @@ import itertools
 import time
 from typing import Iterable, Iterator
 
+from BPC_future.core.branching import BranchConstraint
 from BPC_future.core.cuts import FutureCut
 from BPC_future.core.data import ArcOption, FutureData
 from BPC_future.core.journey import JourneyColumn
@@ -50,6 +51,7 @@ class ToyPulseExhaustiveResult:
     pulse_bound_pruned: int
     pulse_archive_pruned: int
     pulse_depot_ready_pruned: int
+    pulse_branch_pruned: int
     pulse_negative_found: bool
     pulse_harvested_count: int
     harvested_journeys: tuple[JourneyColumn, ...]
@@ -57,6 +59,8 @@ class ToyPulseExhaustiveResult:
     best_true_reduced_cost: float | None
     negative_leaves: tuple[PulseLeafCandidate, ...]
     shard_first_task: int | None = None
+    pulse_capacity_pruned: int = 0
+    pulse_energy_pruned: int = 0
 
     @property
     def found_negative(self) -> bool:
@@ -69,6 +73,18 @@ class ToyPulseExhaustiveResult:
     @property
     def journey_signatures(self) -> tuple[tuple, ...]:
         return tuple(candidate.journey.signature for candidate in self.candidates)
+
+    @property
+    def transition_time_window_pruned(self) -> int:
+        return int(self.pulse_time_window_pruned)
+
+    @property
+    def transition_energy_pruned(self) -> int:
+        return int(self.pulse_energy_pruned)
+
+    @property
+    def transition_return_pruned(self) -> int:
+        return int(self.pulse_return_pruned)
 
 
 def toy_root_exhaustive_pulse(
@@ -350,6 +366,7 @@ def toy_root_exhaustive_pulse(
         pulse_bound_pruned=int(pulse_bound_pruned),
         pulse_archive_pruned=int(pulse_archive_pruned),
         pulse_depot_ready_pruned=int(pulse_depot_ready_pruned),
+        pulse_branch_pruned=0,
         pulse_negative_found=bool(negative_leaves),
         pulse_harvested_count=len(harvested_journeys),
         harvested_journeys=harvested_journeys,
@@ -357,6 +374,417 @@ def toy_root_exhaustive_pulse(
         best_true_reduced_cost=best_true_reduced_cost,
         negative_leaves=negative_leaves,
         shard_first_task=shard_task,
+        pulse_capacity_pruned=0,
+        pulse_energy_pruned=0,
+    )
+
+
+@dataclass(frozen=True)
+class _TransitionPulseState:
+    phase: str
+    traces: tuple[PulseSortieTrace, ...]
+    remaining_tasks: tuple[int, ...]
+    last_node: int
+    current_sequence: tuple[int, ...]
+    current_arc_options: tuple[ArcOption, ...]
+    visited_task_mask: int
+    current_sortie_task_mask: int
+    sorties_used: int
+    sortie_start_time: float
+    current_time: float
+    travel_energy: float
+    service_energy: float
+    load_used: float
+    partial_exact_prefix_rc: float
+    partial_lb_prefix_rc: float
+    pending_same_mask: int
+
+
+def transition_root_only_pulse(
+    data: FutureData,
+    duals: JourneyDuals,
+    *,
+    cuts: tuple[FutureCut, ...] = tuple(),
+    time_bucket_size: float,
+    eps: float = 1.0e-6,
+    max_tasks_per_sortie: int = 0,
+    max_sorties: int | None = None,
+    root_start_time: float = 0.0,
+    first_task_shard: int | None = None,
+    second_action_shard: int | str | None = None,
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
+    deadline: float | None = None,
+    max_recursions: int = 0,
+    include_physical_paths: bool = True,
+) -> ToyPulseExhaustiveResult:
+    """Phase-7A root-only Pulse core with transition-level feasibility checks.
+
+    This test-only core keeps the Phase-3A leaf contract: every completed
+    sortie/journey is still materialized through the existing evaluator.
+    """
+
+    unsupported_branch = tuple(
+        constraint for constraint in branch_constraints if constraint.kind not in {"same_vehicle", "separate_vehicle"}
+    )
+    if unsupported_branch:
+        return _empty_transition_result(
+            status="UNSUPPORTED",
+            reason="unsupported_branch",
+            shard_first_task=None if first_task_shard is None else int(first_task_shard),
+        )
+
+    task_order = tuple(int(task) for task in data.tasks)
+    max_tasks = _toy_max_tasks_per_sortie(data, int(max_tasks_per_sortie))
+    sortie_limit = int(data.sortie_limit if max_sorties is None else max_sorties)
+    sortie_limit = max(0, min(int(data.sortie_limit), sortie_limit))
+    shard_task = None if first_task_shard is None else int(first_task_shard)
+    second_shard = _normalize_second_action_shard(second_action_shard)
+    task_to_bit = {int(task): index for index, task in enumerate(task_order)}
+    waiting_allowed = bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
+
+    candidates_by_signature: dict[tuple, PulseLeafCandidate] = {}
+    generated_sortie_traces = 0
+    materialized_sorties = 0
+    materialized_journey_leaves = 0
+    infeasible_leaves = 0
+    recursions = 0
+    expanded_states = 0
+    pulse_return_pruned = 0
+    pulse_time_window_pruned = 0
+    pulse_resource_pruned = 0
+    pulse_bound_pruned = 0
+    pulse_archive_pruned = 0
+    pulse_depot_ready_pruned = 0
+    pulse_branch_pruned = 0
+    pulse_capacity_pruned = 0
+    pulse_energy_pruned = 0
+    stop_status: str | None = None
+    stop_reason: str | None = None
+
+    def stop_requested() -> bool:
+        nonlocal stop_status, stop_reason
+        if stop_status is not None:
+            return True
+        if deadline is not None and time.perf_counter() >= float(deadline):
+            stop_status = "TIME_LIMIT"
+            stop_reason = "deadline"
+            return True
+        return False
+
+    def count_recursion() -> bool:
+        nonlocal recursions, stop_status, stop_reason
+        if stop_requested():
+            return False
+        recursions += 1
+        if int(max_recursions) > 0 and recursions > int(max_recursions):
+            stop_status = "RECURSION_LIMIT"
+            stop_reason = "max_recursions"
+            return False
+        return True
+
+    def search_depot(
+        traces: tuple[PulseSortieTrace, ...],
+        remaining_tasks: tuple[int, ...],
+        next_start_time: float,
+        visited_mask: int,
+        sorties_used: int,
+        pending_same_mask: int,
+        partial_exact_prefix_rc: float,
+        partial_lb_prefix_rc: float,
+    ) -> None:
+        nonlocal expanded_states, pulse_branch_pruned
+        if not count_recursion():
+            return
+        if int(sorties_used) >= int(sortie_limit):
+            return
+        if not remaining_tasks:
+            return
+        if pending_same_mask and not _pending_same_possible(pending_same_mask, remaining_tasks, task_to_bit):
+            pulse_branch_pruned += 1
+            return
+        expanded_states += 1
+        for task in remaining_tasks:
+            task = int(task)
+            if shard_task is not None and not traces and task != int(shard_task):
+                continue
+            for option in _safe_options(data, 0, task):
+                state = _TransitionPulseState(
+                    phase="open_sortie",
+                    traces=traces,
+                    remaining_tasks=remaining_tasks,
+                    last_node=0,
+                    current_sequence=tuple(),
+                    current_arc_options=tuple(),
+                    visited_task_mask=int(visited_mask),
+                    current_sortie_task_mask=0,
+                    sorties_used=int(sorties_used),
+                    sortie_start_time=float(next_start_time),
+                    current_time=float(next_start_time),
+                    travel_energy=0.0,
+                    service_energy=0.0,
+                    load_used=0.0,
+                    partial_exact_prefix_rc=float(partial_exact_prefix_rc),
+                    partial_lb_prefix_rc=float(partial_lb_prefix_rc),
+                    pending_same_mask=int(pending_same_mask),
+                )
+                next_state = try_extend_task(state, task, option)
+                if next_state is not None:
+                    search_open(next_state)
+
+    def search_open(state: _TransitionPulseState) -> None:
+        nonlocal expanded_states, pulse_branch_pruned
+        if not count_recursion():
+            return
+        expanded_states += 1
+        can_return_now = _second_action_allows_return(state, second_shard)
+        if can_return_now:
+            complete_sortie_by_return(state)
+        elif _is_first_sortie_second_action_point(state):
+            pulse_branch_pruned += 1
+        if len(state.current_sequence) >= int(max_tasks):
+            return
+        remaining_after_current = tuple(
+            int(task)
+            for task in state.remaining_tasks
+            if not (int(state.visited_task_mask) & (1 << int(task_to_bit[int(task)])))
+        )
+        for task in remaining_after_current:
+            task = int(task)
+            if not _second_action_allows_task(state, task, second_shard):
+                pulse_branch_pruned += 1
+                continue
+            for option in _safe_options(data, int(state.last_node), task):
+                next_state = try_extend_task(state, task, option)
+                if next_state is not None:
+                    search_open(next_state)
+
+    def try_extend_task(
+        state: _TransitionPulseState,
+        task: int,
+        option: ArcOption,
+    ) -> _TransitionPulseState | None:
+        nonlocal pulse_time_window_pruned, pulse_resource_pruned, pulse_return_pruned, pulse_branch_pruned
+        nonlocal pulse_capacity_pruned, pulse_energy_pruned
+        task = int(task)
+        bit = 1 << int(task_to_bit[int(task)])
+        if int(state.visited_task_mask) & bit:
+            pulse_branch_pruned += 1
+            return None
+        branch_update = _transition_branch_update(
+            int(state.visited_task_mask),
+            int(state.pending_same_mask),
+            task,
+            branch_constraints,
+            task_to_bit,
+        )
+        if branch_update is None:
+            pulse_branch_pruned += 1
+            return None
+        next_visited_mask, next_pending_mask = branch_update
+        remaining_after = tuple(int(item) for item in state.remaining_tasks if int(item) != task)
+        if next_pending_mask and not _pending_same_possible(next_pending_mask, remaining_after, task_to_bit):
+            pulse_branch_pruned += 1
+            return None
+        next_load = float(state.load_used) + float(data.task_value(task, "d"))
+        if next_load > float(data.capacity) + 1.0e-9:
+            pulse_resource_pruned += 1
+            pulse_capacity_pruned += 1
+            return None
+        arrival = float(state.current_time) + float(option.tau)
+        ready_time = float(data.task_value(task, "r"))
+        if waiting_allowed:
+            service_start = max(ready_time, arrival)
+        else:
+            if arrival < ready_time - 1.0e-9:
+                pulse_time_window_pruned += 1
+                return None
+            service_start = arrival
+        finish_service = service_start + float(data.task_value(task, "sigma"))
+        if finish_service > float(data.task_value(task, "D")) + 1.0e-9:
+            pulse_time_window_pruned += 1
+            return None
+        next_travel_energy = float(state.travel_energy) + float(option.energy)
+        next_service_energy = float(state.service_energy) + float(data.task_value(task, "g"))
+        survival_so_far = float(data.survival_energy_rate) * max(
+            0.0,
+            float(finish_service) - float(state.sortie_start_time),
+        )
+        if next_travel_energy + next_service_energy + survival_so_far > float(data.energy_limit) + 1.0e-9:
+            pulse_resource_pruned += 1
+            pulse_energy_pruned += 1
+            return None
+        if not _future_return_lower_bound_possible(
+            data,
+            current_time=float(finish_service),
+            sortie_start_time=float(state.sortie_start_time),
+            travel_energy=float(next_travel_energy),
+            service_energy=float(next_service_energy),
+            candidate_return_nodes=(task,) + remaining_after,
+        ):
+            pulse_return_pruned += 1
+            return None
+        next_sequence = tuple(state.current_sequence) + (task,)
+        next_arc_options = tuple(state.current_arc_options) + (option,)
+        opened_cost = 0.0
+        if not state.traces and not state.current_sequence:
+            opened_cost = float(data.fixed_vehicle_cost) - float(duals.fleet_limit)
+        transition_rc = (
+            float(opened_cost)
+            + float(option.cost)
+            + float(data.task_value(task, "c_srv"))
+            - float(duals.cover.get(int(task), 0.0))
+        )
+        return _TransitionPulseState(
+            phase="open_sortie",
+            traces=state.traces,
+            remaining_tasks=remaining_after,
+            last_node=task,
+            current_sequence=next_sequence,
+            current_arc_options=next_arc_options,
+            visited_task_mask=int(next_visited_mask),
+            current_sortie_task_mask=int(state.current_sortie_task_mask) | bit,
+            sorties_used=int(state.sorties_used),
+            sortie_start_time=float(state.sortie_start_time),
+            current_time=float(finish_service),
+            travel_energy=float(next_travel_energy),
+            service_energy=float(next_service_energy),
+            load_used=float(next_load),
+            partial_exact_prefix_rc=float(state.partial_exact_prefix_rc) + float(transition_rc),
+            partial_lb_prefix_rc=float(state.partial_lb_prefix_rc) + float(transition_rc),
+            pending_same_mask=int(next_pending_mask),
+        )
+
+    def complete_sortie_by_return(state: _TransitionPulseState) -> None:
+        nonlocal generated_sortie_traces, materialized_sorties, materialized_journey_leaves
+        nonlocal infeasible_leaves, pulse_return_pruned, pulse_branch_pruned
+        if not state.current_sequence:
+            return
+        return_options = _safe_options(data, int(state.last_node), 0)
+        if not return_options:
+            pulse_return_pruned += 1
+            return
+        for return_option in return_options:
+            if not _direct_return_option_feasible(
+                data,
+                current_time=float(state.current_time),
+                sortie_start_time=float(state.sortie_start_time),
+                travel_energy=float(state.travel_energy),
+                service_energy=float(state.service_energy),
+                return_option=return_option,
+            ):
+                pulse_return_pruned += 1
+                continue
+            trace = PulseSortieTrace(
+                sequence=tuple(state.current_sequence),
+                start_time=float(state.sortie_start_time),
+                arc_options=tuple(state.current_arc_options) + (return_option,),
+            )
+            generated_sortie_traces += 1
+            trip = materialize_pulse_sortie(
+                data,
+                trace.sequence,
+                trace.start_time,
+                arc_options=trace.arc_options,
+                time_bucket_size=float(time_bucket_size),
+                include_physical_paths=bool(include_physical_paths),
+            )
+            if trip is None:
+                infeasible_leaves += 1
+                continue
+            materialized_sorties += 1
+            next_traces = tuple(state.traces) + (trace,)
+            if int(state.pending_same_mask) == 0:
+                candidate = materialize_pulse_leaf_candidate(
+                    data,
+                    next_traces,
+                    duals,
+                    cuts=cuts,
+                    time_bucket_size=float(time_bucket_size),
+                    eps=float(eps),
+                    include_physical_paths=bool(include_physical_paths),
+                )
+                if candidate is not None:
+                    materialized_journey_leaves += 1
+                    candidates_by_signature.setdefault(candidate.journey.signature, candidate)
+                else:
+                    infeasible_leaves += 1
+            elif int(state.sorties_used) + 1 >= int(sortie_limit):
+                pulse_branch_pruned += 1
+            if int(state.sorties_used) + 1 < int(sortie_limit) and state.remaining_tasks:
+                if state.pending_same_mask and not _pending_same_possible(
+                    int(state.pending_same_mask),
+                    state.remaining_tasks,
+                    task_to_bit,
+                ):
+                    pulse_branch_pruned += 1
+                    continue
+                search_depot(
+                    next_traces,
+                    tuple(state.remaining_tasks),
+                    float(trip.end_time),
+                    int(state.visited_task_mask),
+                    int(state.sorties_used) + 1,
+                    int(state.pending_same_mask),
+                    float(state.partial_exact_prefix_rc) + float(return_option.cost),
+                    float(state.partial_lb_prefix_rc) + float(return_option.cost),
+                )
+
+    if sortie_limit > 0 and not stop_requested():
+        search_depot(
+            tuple(),
+            task_order,
+            float(root_start_time),
+            0,
+            0,
+            0,
+            0.0,
+            0.0,
+        )
+
+    candidates = tuple(
+        candidates_by_signature[signature]
+        for signature in sorted(candidates_by_signature, key=repr)
+    )
+    negative_leaves = tuple(
+        candidate for candidate in candidates if candidate.true_reduced_cost < -float(eps)
+    )
+    best_true_reduced_cost = (
+        min(float(candidate.true_reduced_cost) for candidate in candidates)
+        if candidates
+        else None
+    )
+    status = "OPTIMAL" if stop_status is None else str(stop_status)
+    reason = "exhausted" if stop_reason is None else str(stop_reason)
+    exhausted = stop_status is None
+    return ToyPulseExhaustiveResult(
+        candidates=candidates,
+        exhausted=exhausted,
+        status=status,
+        reason=reason,
+        generated_sortie_traces=int(generated_sortie_traces),
+        generated_leaves=int(materialized_journey_leaves),
+        materialized_sorties=int(materialized_sorties),
+        materialized_journey_leaves=int(materialized_journey_leaves),
+        materialized_journeys=int(materialized_journey_leaves),
+        infeasible_leaves=int(infeasible_leaves),
+        recursions=int(recursions),
+        expanded_states=int(expanded_states),
+        pulse_return_pruned=int(pulse_return_pruned),
+        pulse_time_window_pruned=int(pulse_time_window_pruned),
+        pulse_resource_pruned=int(pulse_resource_pruned),
+        pulse_bound_pruned=int(pulse_bound_pruned),
+        pulse_archive_pruned=int(pulse_archive_pruned),
+        pulse_depot_ready_pruned=int(pulse_depot_ready_pruned),
+        pulse_branch_pruned=int(pulse_branch_pruned),
+        pulse_negative_found=bool(negative_leaves),
+        pulse_harvested_count=0,
+        harvested_journeys=tuple(),
+        harvest_diagnostics={},
+        best_true_reduced_cost=best_true_reduced_cost,
+        negative_leaves=negative_leaves,
+        shard_first_task=shard_task,
+        pulse_capacity_pruned=int(pulse_capacity_pruned),
+        pulse_energy_pruned=int(pulse_energy_pruned),
     )
 
 
@@ -481,7 +909,191 @@ def _toy_exact_safe_sortie_prune_reason(
     return None
 
 
+def _empty_transition_result(
+    *,
+    status: str,
+    reason: str,
+    shard_first_task: int | None,
+) -> ToyPulseExhaustiveResult:
+    return ToyPulseExhaustiveResult(
+        candidates=tuple(),
+        exhausted=False,
+        status=str(status),
+        reason=str(reason),
+        generated_sortie_traces=0,
+        generated_leaves=0,
+        materialized_sorties=0,
+        materialized_journey_leaves=0,
+        materialized_journeys=0,
+        infeasible_leaves=0,
+        recursions=0,
+        expanded_states=0,
+        pulse_return_pruned=0,
+        pulse_time_window_pruned=0,
+        pulse_resource_pruned=0,
+        pulse_bound_pruned=0,
+        pulse_archive_pruned=0,
+        pulse_depot_ready_pruned=0,
+        pulse_branch_pruned=0,
+        pulse_negative_found=False,
+        pulse_harvested_count=0,
+        harvested_journeys=tuple(),
+        harvest_diagnostics={},
+        best_true_reduced_cost=None,
+        negative_leaves=tuple(),
+        shard_first_task=shard_first_task,
+        pulse_capacity_pruned=0,
+        pulse_energy_pruned=0,
+    )
+
+
+def _future_return_lower_bound_possible(
+    data: FutureData,
+    *,
+    current_time: float,
+    sortie_start_time: float,
+    travel_energy: float,
+    service_energy: float,
+    candidate_return_nodes: tuple[int, ...],
+) -> bool:
+    """Optimistic exact-safe check that some future return could still fit."""
+
+    best_return_time: float | None = None
+    best_return_energy: float | None = None
+    for node in candidate_return_nodes:
+        for option in _safe_options(data, int(node), 0):
+            best_return_time = float(option.tau) if best_return_time is None else min(best_return_time, float(option.tau))
+            best_return_energy = (
+                float(option.energy)
+                if best_return_energy is None
+                else min(best_return_energy, float(option.energy))
+            )
+    if best_return_time is None or best_return_energy is None:
+        return False
+    optimistic_return_time = float(current_time) + float(best_return_time)
+    optimistic_survival = float(data.survival_energy_rate) * max(
+        0.0,
+        float(optimistic_return_time) - float(sortie_start_time),
+    )
+    optimistic_energy = (
+        float(travel_energy)
+        + float(service_energy)
+        + float(best_return_energy)
+        + float(optimistic_survival)
+    )
+    if optimistic_energy > float(data.energy_limit) + 1.0e-9:
+        return False
+    optimistic_end_time = float(optimistic_return_time) + optimistic_energy / float(data.rho)
+    return optimistic_end_time <= float(data.horizon) + 1.0e-9
+
+
+def _direct_return_option_feasible(
+    data: FutureData,
+    *,
+    current_time: float,
+    sortie_start_time: float,
+    travel_energy: float,
+    service_energy: float,
+    return_option: ArcOption,
+) -> bool:
+    return_time = float(current_time) + float(return_option.tau)
+    survival_energy = float(data.survival_energy_rate) * max(
+        0.0,
+        float(return_time) - float(sortie_start_time),
+    )
+    total_energy = (
+        float(travel_energy)
+        + float(return_option.energy)
+        + float(service_energy)
+        + float(survival_energy)
+    )
+    if total_energy > float(data.energy_limit) + 1.0e-9:
+        return False
+    end_time = float(return_time) + total_energy / float(data.rho)
+    return end_time <= float(data.horizon) + 1.0e-9
+
+
+def _transition_branch_update(
+    visited_mask: int,
+    pending_same_mask: int,
+    task: int,
+    constraints: tuple[BranchConstraint, ...],
+    task_to_bit: dict[int, int],
+) -> tuple[int, int] | None:
+    task_bit_index = task_to_bit.get(int(task))
+    if task_bit_index is None:
+        return None
+    new_visited = int(visited_mask) | (1 << int(task_bit_index))
+    new_pending = int(pending_same_mask)
+    for constraint in constraints:
+        if constraint.task_j is None:
+            return None
+        left_bit_index = task_to_bit.get(int(constraint.task_i))
+        right_bit_index = task_to_bit.get(int(constraint.task_j))
+        if left_bit_index is None or right_bit_index is None:
+            continue
+        left_bit = 1 << int(left_bit_index)
+        right_bit = 1 << int(right_bit_index)
+        left = bool(new_visited & left_bit)
+        right = bool(new_visited & right_bit)
+        if constraint.kind == "separate_vehicle":
+            if left and right:
+                return None
+        elif constraint.kind == "same_vehicle":
+            if left and right:
+                new_pending &= ~left_bit
+                new_pending &= ~right_bit
+            elif left:
+                new_pending |= right_bit
+            elif right:
+                new_pending |= left_bit
+        else:
+            return None
+    return int(new_visited), int(new_pending)
+
+
+def _pending_same_possible(
+    pending_same_mask: int,
+    remaining_tasks: tuple[int, ...],
+    task_to_bit: dict[int, int],
+) -> bool:
+    remaining_mask = 0
+    for task in remaining_tasks:
+        bit_index = task_to_bit.get(int(task))
+        if bit_index is not None:
+            remaining_mask |= 1 << int(bit_index)
+    return (int(pending_same_mask) & ~int(remaining_mask)) == 0
+
+
+def _is_first_sortie_second_action_point(state: _TransitionPulseState) -> bool:
+    return not state.traces and len(state.current_sequence) == 1
+
+
+def _second_action_allows_return(
+    state: _TransitionPulseState,
+    second_shard: int | str | None,
+) -> bool:
+    if second_shard is None:
+        return True
+    if not _is_first_sortie_second_action_point(state):
+        return True
+    return second_shard == "return"
+
+
+def _second_action_allows_task(
+    state: _TransitionPulseState,
+    task: int,
+    second_shard: int | str | None,
+) -> bool:
+    if second_shard is None:
+        return True
+    if not _is_first_sortie_second_action_point(state):
+        return True
+    return second_shard != "return" and int(task) == int(second_shard)
+
+
 __all__ = [
     "ToyPulseExhaustiveResult",
+    "transition_root_only_pulse",
     "toy_root_exhaustive_pulse",
 ]

@@ -13,6 +13,8 @@
 - 默认关闭，通过 opt-in config 启用。
 
 当前实现重点是证书状态机、Phase 3A leaf materialization contract、Phase 3B toy exhaustive Pulse、Phase 3C cheap exact-safe pruning、Phase 4 structural archive / harvesting、Phase 5 guarded first-task sharded engine。
+Phase 7A 新增 test-only transition-level root-only Pulse core，用于替代“完成 trace 枚举后再验证”的方向性验证。
+Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in path，但仍不接默认 production benchmark。
 
 ## Exactness 边界
 
@@ -52,6 +54,7 @@
 
 - `BPC_future/pricing/pulse_toy_exhaustive.py`
   - root-only toy exhaustive Pulse
+  - guarded sharded engine 使用的 transition-level root-only Pulse
   - first-task shard
   - optional second-action child shard
   - exact-safe resource/time/return pruning
@@ -154,6 +157,73 @@
 - adaptive hierarchical refinement；
 - parallel worker merge。
 
+### Phase 7A
+
+已完成：
+
+- 新增 `transition_root_only_pulse()`；
+- 搜索过程中维护 open-sortie state：
+  - `phase`
+  - `last_node`
+  - `visited_task_mask`
+  - `current_sortie_task_mask`
+  - `sorties_used`
+  - `current_time`
+  - `travel_energy / service_energy / load_used`
+  - `partial_exact_prefix_rc / partial_lb_prefix_rc`
+  - `pending_same_mask`
+  - `partial trace`
+- 扩展 task transition 前检查：
+  - no-wait ready time；
+  - due time；
+  - capacity；
+  - partial energy；
+  - optimistic safe return lower bound；
+  - Ryan-Foster `same_vehicle` / `separate_vehicle` obligations；
+- return action 仍通过 Phase 3A materialization helper 回放 `evaluate_timed_trip()`；
+- completed journey 仍通过 `materialize_pulse_leaf_candidate()` 调 `make_journey()` 和 `manual_journey_reduced_cost()`；
+- 与旧 completed-trace toy exhaustive engine 在 `very_small` focused tests 上对齐；
+- 直接对齐 brute-force best true RC / found-negative / no-negative exhaustive；
+- no-wait infeasible case 中 transition-level core 在生成完整 trace 前剪掉不可行扩展，`generated_sortie_traces` 明显下降。
+- time-window / energy / return pruning 均有 `>0` toy focused tests。
+
+未实现：
+
+- production driver 默认接入；
+- resume；
+- parallel；
+- adaptive hierarchical sharding；
+- prefix RC bound pruning；
+- dominance archive 接入 transition state；
+- support-aware harvesting 接入 transition state。
+
+### Phase 7B
+
+已完成：
+
+- guarded sharded final judge 的 first-task shards 改为调用 `transition_root_only_pulse()`；
+- 旧 completed-trace toy engine 保留为测试/对照工具，不再作为 guarded sharded shard executor；
+- `very_small` all-certified 仍可在显式 toy certificate guard 下返回 `sharded_pulse_no_negative_journey`；
+- negative shard 返回 `FOUND_NEGATIVE`，不证书；
+- incomplete shard 返回 `INCOMPLETE_LIMIT`，不证书；
+- non-test instance 即使开启 toy certificate config，也不能被 test-only toy certificate 闭合；
+- driver JSONL `journey_pricing` 日志增加并可观测：
+  - `transition_time_window_pruned`
+  - `transition_energy_pruned`
+  - `transition_return_pruned`
+  - `pulse_capacity_pruned`
+  - `pulse_energy_pruned`
+
+仍未实现：
+
+- 默认 production benchmark 启用；
+- resume；
+- parallel；
+- adaptive refinement；
+- prefix RC bound pruning；
+- transition-state dominance archive；
+- transition-state harvesting。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -174,7 +244,8 @@
 ## 后续建议
 
 1. 实现真正 open-sortie incremental Pulse，而不是 completed-sortie trace 枚举。
-2. 为 prefix RC 建立可证明的 lower-bound ledger，先支持 cover/fleet，再支持 cuts。
-3. 把 same_vehicle obligations 编译到 search state，而不是只在 leaf 过滤。
-4. 实现 proof-closed prefix cache，并严格区分 frontier snapshot。
-5. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
+2. Phase 7C 接入 transition-state `StructuralKeyDominanceArchive`，并证明 archive-enabled 与 archive-disabled 在 toy 上结果一致。
+3. Phase 7D 接入 transition-state harvesting，继续保证 found-negative 后退出 proof mode。
+4. 为 prefix RC 建立可证明的 lower-bound ledger，先支持 cover/fleet，再支持 cuts。
+5. 实现 proof-closed prefix cache，并严格区分 frontier snapshot。
+6. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
