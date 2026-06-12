@@ -2241,6 +2241,21 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             node_id=0,
             depth=0,
         )
+        _run_journey_sharded_pulse_audit(
+            data,
+            config,
+            logger,
+            legacy_pricing=pricing,
+            legacy_duals=solution.duals,
+            branch_constraints=tuple(),
+            cuts=tuple(cuts),
+            journey_pool=journey_pool,
+            base_pricing_config=exact_pricing_config,
+            cg_iter=cg_iter,
+            node_id=0,
+            depth=0,
+            active_task_sets=active_task_sets,
+        )
         if not _journey_pricing_is_global_certificate(pricing):
             _log_journey_certificate_rejection(
                 logger,
@@ -15160,6 +15175,293 @@ def _journey_promote_duplicate_only_final_judge_certificate(
         depth=depth,
     )
     return pricing
+
+
+def _journey_sharded_pulse_audit_category(pricing: Any) -> str:
+    state = _journey_pricing_state(pricing)
+    if state == PRICING_STATE_CERTIFIED_NO_NEGATIVE:
+        return "certified"
+    if state == PRICING_STATE_FOUND_NEGATIVE:
+        return "found_negative"
+    if state == PRICING_STATE_DUPLICATE_ONLY:
+        return "duplicate_only"
+    if state == PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED:
+        return "local_no_column_uncertified"
+    return "incomplete"
+
+
+def _journey_sharded_pulse_audit_disagreement_type(
+    legacy_pricing: Any,
+    pulse_pricing: Any,
+) -> str:
+    legacy = _journey_sharded_pulse_audit_category(legacy_pricing)
+    pulse = _journey_sharded_pulse_audit_category(pulse_pricing)
+    if legacy == "certified" and pulse == "found_negative":
+        return "legacy_certified_but_pulse_found_negative"
+    if legacy == "found_negative" and pulse == "certified":
+        return "legacy_negative_but_pulse_certified"
+    if legacy == "certified" and pulse == "incomplete":
+        return "legacy_certified_pulse_incomplete"
+    if legacy == "incomplete" and pulse == "certified":
+        return "legacy_incomplete_pulse_certified"
+    if legacy == "found_negative" and pulse == "incomplete":
+        return "legacy_found_negative_pulse_incomplete"
+    return ""
+
+
+def _journey_sharded_pulse_audit_status(pricing: Any) -> str:
+    category = _journey_sharded_pulse_audit_category(pricing)
+    if category == "certified":
+        return PRICING_STATE_CERTIFIED_NO_NEGATIVE
+    if category == "found_negative":
+        return PRICING_STATE_FOUND_NEGATIVE
+    if category == "duplicate_only":
+        return PRICING_STATE_DUPLICATE_ONLY
+    if category == "local_no_column_uncertified":
+        return PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED
+    return "AUDIT_INCOMPLETE"
+
+
+def _journey_sharded_pulse_audit_payload(
+    legacy_pricing: Any,
+    pulse_pricing: Any,
+    *,
+    elapsed: float,
+    enabled: bool = True,
+) -> dict[str, Any]:
+    disagreement = _journey_sharded_pulse_audit_disagreement_type(legacy_pricing, pulse_pricing)
+    legacy_category = _journey_sharded_pulse_audit_category(legacy_pricing)
+    pulse_category = _journey_sharded_pulse_audit_category(pulse_pricing)
+    return {
+        "pulse_audit_enabled": bool(enabled),
+        "pulse_audit_status": _journey_sharded_pulse_audit_status(pulse_pricing),
+        "pulse_audit_reason": str(getattr(pulse_pricing, "reason", "")),
+        "pulse_audit_agrees_with_legacy": bool(
+            legacy_category == pulse_category and disagreement == ""
+        ),
+        "pulse_audit_disagreement_type": disagreement,
+        "pulse_audit_legacy_state": _journey_pricing_state(legacy_pricing),
+        "pulse_audit_legacy_best_rc": None
+        if getattr(legacy_pricing, "best_reduced_cost", None) is None
+        else round(float(getattr(legacy_pricing, "best_reduced_cost")), 9),
+        "pulse_audit_pulse_best_rc": None
+        if getattr(pulse_pricing, "best_reduced_cost", None) is None
+        else round(float(getattr(pulse_pricing, "best_reduced_cost")), 9),
+        "pulse_audit_time": round(float(elapsed), 9),
+        "pulse_audit_recursions": int(getattr(pulse_pricing, "pulse_recursions", 0)),
+        "pulse_audit_shards_total": int(getattr(pulse_pricing, "final_judge_shards_total", 0)),
+        "pulse_audit_shards_certified": int(
+            getattr(pulse_pricing, "final_judge_shards_certified", 0)
+        ),
+        "pulse_audit_shards_incomplete": int(
+            getattr(pulse_pricing, "final_judge_shards_incomplete", 0)
+        ),
+        "pulse_audit_shards_negative": int(
+            getattr(pulse_pricing, "final_judge_shards_negative_found", 0)
+        ),
+        "pulse_audit_bound_pruned": int(getattr(pulse_pricing, "pulse_bound_pruned", 0)),
+        "pulse_audit_archive_pruned": int(getattr(pulse_pricing, "pulse_archive_pruned", 0)),
+        "pulse_audit_time_window_pruned": int(
+            getattr(pulse_pricing, "transition_time_window_pruned", 0)
+        ),
+        "pulse_audit_return_pruned": int(getattr(pulse_pricing, "transition_return_pruned", 0)),
+        "pulse_audit_harvested_count": int(getattr(pulse_pricing, "pulse_harvested_count", 0)),
+    }
+
+
+def _journey_sharded_pulse_audit_config(
+    config: dict[str, Any],
+    base_pricing_config: JourneyPricingConfig,
+    *,
+    time_limit: float,
+) -> JourneyPricingConfig:
+    dummy_statuses_value = config.get(
+        "journey_sharded_pulse_audit_dummy_statuses",
+        config.get("journey_final_judge_dummy_shard_statuses", tuple()),
+    )
+    if isinstance(dummy_statuses_value, str):
+        dummy_statuses = tuple(
+            part.strip() for part in dummy_statuses_value.split(",") if part.strip()
+        )
+    else:
+        dummy_statuses = tuple(str(item) for item in (dummy_statuses_value or tuple()))
+    audit_config = replace(
+        base_pricing_config,
+        final_judge_engine="sharded_pulse",
+        sharded_final_judge_enabled=True,
+        sharded_final_judge_dummy_engine_enabled=bool(
+            config.get("journey_sharded_pulse_audit_dummy_engine_enabled", False)
+        ),
+        sharded_final_judge_dummy_mode=str(
+            config.get("journey_sharded_pulse_audit_dummy_mode", "")
+        ),
+        sharded_final_judge_allow_test_dummy_certificate=bool(
+            config.get("journey_sharded_pulse_audit_allow_test_dummy_certificate", False)
+        ),
+        sharded_final_judge_dummy_statuses=dummy_statuses,
+        sharded_final_judge_toy_certificate_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_toy_certificate_enabled",
+                config.get("journey_pulse_toy_certificate_enabled", False),
+            )
+        ),
+        pulse_max_recursions=max(
+            0,
+            int(config.get("journey_sharded_pulse_audit_max_recursions", 100000)),
+        ),
+        pulse_bound_pruning_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_bound_pruning_enabled",
+                config.get("journey_pulse_bound_pruning_enabled", False),
+            )
+        ),
+        pulse_archive_dominance_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_archive_enabled",
+                config.get("journey_pulse_archive_enabled", False),
+            )
+        ),
+        pulse_archive_max_records_per_key=max(
+            1,
+            int(
+                config.get(
+                    "journey_sharded_pulse_audit_archive_max_records_per_key",
+                    config.get("journey_pulse_archive_max_records_per_key", 32),
+                )
+            ),
+        ),
+        pulse_support_aware_harvesting_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_support_aware_harvesting_enabled",
+                config.get("journey_pulse_support_aware_harvesting_enabled", False),
+            )
+        ),
+        pulse_negative_harvest_limit=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_audit_negative_harvest_limit",
+                    config.get("journey_pulse_negative_harvest_limit", 0),
+                )
+            ),
+        ),
+        profile_pricing_enabled=False,
+        direct_journey_label_pricing_enabled=False,
+        direct_journey_label_global_certificate_enabled=False,
+        direct_journey_label_completion_bound_enabled=False,
+        max_returned_journeys=max(
+            1,
+            int(config.get("journey_sharded_pulse_audit_max_returned_journeys", 8)),
+        ),
+    )
+    return _journey_config_with_call_deadline(audit_config, time_limit=float(time_limit))
+
+
+def _run_journey_sharded_pulse_audit(
+    data: FutureData,
+    config: dict[str, Any],
+    logger: FutureLogger,
+    *,
+    legacy_pricing: Any,
+    legacy_duals: JourneyDuals,
+    branch_constraints: tuple[BranchConstraint, ...],
+    cuts: tuple[FutureCut, ...],
+    journey_pool: JourneyPool,
+    base_pricing_config: JourneyPricingConfig,
+    cg_iter: int,
+    node_id: int = 0,
+    depth: int = 0,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+) -> Any | None:
+    if not bool(config.get("journey_sharded_pulse_audit_enabled", False)):
+        return None
+    if not bool(config.get("journey_sharded_pulse_audit_after_legacy_final_judge", True)):
+        return None
+    if bool(getattr(base_pricing_config, "sharded_final_judge_enabled", False)):
+        return None
+
+    started = time.perf_counter()
+    audit_time_limit = max(
+        0.0,
+        float(config.get("journey_sharded_pulse_audit_time_limit", 5.0)),
+    )
+    if audit_time_limit <= 0.0:
+        pulse_pricing = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "pulse_audit_time_limit",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            final_judge_incomplete_reason="audit_time_limit",
+        )
+    else:
+        audit_config = _journey_sharded_pulse_audit_config(
+            config,
+            base_pricing_config,
+            time_limit=audit_time_limit,
+        )
+        try:
+            pulse_pricing = price_journeys(
+                data,
+                legacy_duals,
+                branch_constraints,
+                config=audit_config,
+                cuts=cuts,
+                trip_cache={},
+                resource_cache={},
+                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                    journey_pool, branch_constraints
+                ),
+                dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                    journey_pool, cuts, branch_constraints
+                ),
+                priority_task_sets=active_task_sets,
+                active_support_task_sets=active_task_sets,
+            )
+        except Exception as exc:  # pragma: no cover - defensive audit-only shield.
+            pulse_pricing = JourneyPricingResult(
+                [],
+                False,
+                None,
+                0,
+                0,
+                0,
+                0,
+                "INCOMPLETE",
+                f"pulse_audit_internal_error:{type(exc).__name__}",
+                pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+                final_judge_engine="sharded_pulse",
+                final_judge_sharded_enabled=True,
+                final_judge_incomplete_reason="audit_internal_error",
+            )
+    elapsed = time.perf_counter() - started
+    if bool(config.get("journey_sharded_pulse_audit_log_disagreements", True)) or not _journey_sharded_pulse_audit_payload(
+        legacy_pricing,
+        pulse_pricing,
+        elapsed=elapsed,
+    )["pulse_audit_agrees_with_legacy"]:
+        logger.log(
+            "journey_sharded_pulse_audit",
+            node_id=int(node_id),
+            depth=int(depth),
+            cg_iter=int(cg_iter),
+            pulse_audit_allow_certificate_effect=bool(
+                config.get("journey_sharded_pulse_audit_allow_certificate_effect", False)
+            ),
+            **_journey_sharded_pulse_audit_payload(
+                legacy_pricing,
+                pulse_pricing,
+                elapsed=elapsed,
+            ),
+        )
+    return pulse_pricing
 
 
 def _log_journey_certificate_rejection(

@@ -244,6 +244,8 @@ from BPC_future.solver.journey_driver import (
     _journey_pricing_certificate_rejection_reason,
     _journey_pricing_is_global_certificate,
     _journey_pricing_state,
+    _journey_sharded_pulse_audit_disagreement_type,
+    _journey_sharded_pulse_audit_payload,
     _journey_promote_duplicate_only_final_judge_certificate,
     _journey_reduced_cost_components,
     _hidden_negative_miss_diagnostics,
@@ -14825,6 +14827,9 @@ class BPCFutureTests(unittest.TestCase):
         bound_enabled: bool = False,
         support_harvest_enabled: bool = False,
         negative_harvest_limit: int = 0,
+        pulse_audit_enabled: bool = False,
+        pulse_audit_dummy_statuses: str = "",
+        pulse_audit_time_limit: float = 0.2,
     ) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
         data = load_future_data("very_small")
         if dummy_engine_enabled is None:
@@ -14858,6 +14863,17 @@ class BPCFutureTests(unittest.TestCase):
                 "journey_pulse_support_aware_harvesting_enabled": bool(support_harvest_enabled),
                 "journey_pulse_negative_harvest_limit": int(negative_harvest_limit),
                 "journey_final_judge_dummy_shard_statuses": str(dummy_statuses),
+                "journey_sharded_pulse_audit_enabled": bool(pulse_audit_enabled),
+                "journey_sharded_pulse_audit_after_legacy_final_judge": True,
+                "journey_sharded_pulse_audit_time_limit": float(pulse_audit_time_limit),
+                "journey_sharded_pulse_audit_max_recursions": 100000,
+                "journey_sharded_pulse_audit_log_disagreements": True,
+                "journey_sharded_pulse_audit_allow_certificate_effect": False,
+                "journey_sharded_pulse_audit_dummy_engine_enabled": bool(
+                    pulse_audit_dummy_statuses
+                ),
+                "journey_sharded_pulse_audit_allow_test_dummy_certificate": True,
+                "journey_sharded_pulse_audit_dummy_statuses": str(pulse_audit_dummy_statuses),
                 "journey_pricing_profile_pricing_enabled": False,
                 "journey_pricing_direct_journey_label_pricing_enabled": False,
                 "journey_pricing_max_sequences": 1,
@@ -14881,6 +14897,162 @@ class BPCFutureTests(unittest.TestCase):
             and record.get("final_judge_engine") in {"sharded_pulse", "sharded_pulse_dummy"}
         ]
         return result, records, sharded_pricing
+
+    def _pulse_audit_pricing_result(
+        self,
+        state: str,
+        *,
+        reason: str = "",
+        best_rc: float | None = None,
+    ) -> JourneyPricingResult:
+        if state == PRICING_STATE_CERTIFIED_NO_NEGATIVE:
+            if not reason:
+                reason = "sharded_pulse_no_negative_journey"
+            return JourneyPricingResult(
+                [],
+                True,
+                0.0 if best_rc is None else float(best_rc),
+                0,
+                0,
+                0,
+                0,
+                "OPTIMAL",
+                reason,
+                global_certificate_capable=True,
+                final_judge_engine="sharded_pulse"
+                if reason == "sharded_pulse_no_negative_journey"
+                else "",
+                final_judge_certificate_capable=reason == "sharded_pulse_no_negative_journey",
+                completion_bound_enabled=reason == "direct_label_no_negative_journey",
+                pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+                final_judge_shards_total=1,
+                final_judge_shards_certified=1,
+            )
+        if state == PRICING_STATE_FOUND_NEGATIVE:
+            return JourneyPricingResult(
+                [],
+                False,
+                -1.0 if best_rc is None else float(best_rc),
+                0,
+                0,
+                0,
+                0,
+                "FOUND_NEGATIVE",
+                reason or "negative_journey_found",
+                pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+                final_judge_shards_total=1,
+                final_judge_shards_negative_found=1,
+            )
+        return JourneyPricingResult(
+            [],
+            False,
+            best_rc,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            reason or "time_limit",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_shards_total=1,
+            final_judge_shards_incomplete=1,
+        )
+
+    def test_sharded_pulse_audit_payload_agreement_and_disagreements(self):
+        legacy_certified = self._pulse_audit_pricing_result(
+            PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+            reason="direct_label_no_negative_journey",
+        )
+        pulse_certified = self._pulse_audit_pricing_result(PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        payload = _journey_sharded_pulse_audit_payload(
+            legacy_certified,
+            pulse_certified,
+            elapsed=0.01,
+        )
+        self.assertTrue(payload["pulse_audit_agrees_with_legacy"])
+        self.assertEqual(payload["pulse_audit_disagreement_type"], "")
+        self.assertEqual(payload["pulse_audit_status"], PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+
+        pulse_negative = self._pulse_audit_pricing_result(PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(
+            _journey_sharded_pulse_audit_disagreement_type(legacy_certified, pulse_negative),
+            "legacy_certified_but_pulse_found_negative",
+        )
+        legacy_negative = self._pulse_audit_pricing_result(PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(
+            _journey_sharded_pulse_audit_disagreement_type(legacy_negative, pulse_certified),
+            "legacy_negative_but_pulse_certified",
+        )
+        legacy_incomplete = self._pulse_audit_pricing_result(PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(
+            _journey_sharded_pulse_audit_disagreement_type(legacy_incomplete, pulse_certified),
+            "legacy_incomplete_pulse_certified",
+        )
+
+    def test_sharded_pulse_audit_certified_log_does_not_change_official_bound(self):
+        result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=False,
+            pulse_audit_enabled=True,
+            pulse_audit_dummy_statuses="CERTIFIED_NO_NEGATIVE",
+        )
+        self.assertIsNone(result.dual_bound)
+        self.assertEqual(sharded_pricing, [])
+        audits = [record for record in records if record.get("event") == "journey_sharded_pulse_audit"]
+        self.assertTrue(audits)
+        audit = audits[-1]
+        self.assertTrue(audit["pulse_audit_enabled"])
+        self.assertFalse(audit["pulse_audit_allow_certificate_effect"])
+        self.assertEqual(audit["pulse_audit_status"], PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertEqual(audit["pulse_audit_disagreement_type"], "legacy_incomplete_pulse_certified")
+        self.assertEqual(audit["pulse_audit_shards_certified"], 1)
+        self.assertTrue(
+            all(
+                not (
+                    record.get("event") == "journey_pricing"
+                    and record.get("pricing_state") == PRICING_STATE_CERTIFIED_NO_NEGATIVE
+                )
+                for record in records
+            )
+        )
+
+    def test_sharded_pulse_audit_timeout_is_log_only(self):
+        result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=False,
+            pulse_audit_enabled=True,
+            pulse_audit_time_limit=0.0,
+        )
+        self.assertIsNone(result.dual_bound)
+        self.assertEqual(sharded_pricing, [])
+        audits = [record for record in records if record.get("event") == "journey_sharded_pulse_audit"]
+        self.assertTrue(audits)
+        audit = audits[-1]
+        self.assertEqual(audit["pulse_audit_status"], "AUDIT_INCOMPLETE")
+        self.assertEqual(audit["pulse_audit_reason"], "pulse_audit_time_limit")
+        self.assertEqual(audit["pulse_audit_recursions"], 0)
+
+    def test_sharded_pulse_audit_logs_transition_counters(self):
+        result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=False,
+            pulse_audit_enabled=True,
+            pulse_audit_dummy_statuses="FOUND_NEGATIVE",
+        )
+        self.assertIsNone(result.dual_bound)
+        self.assertEqual(sharded_pricing, [])
+        audit = [record for record in records if record.get("event") == "journey_sharded_pulse_audit"][-1]
+        self.assertEqual(audit["pulse_audit_status"], PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(audit["pulse_audit_shards_negative"], 1)
+        for key in (
+            "pulse_audit_bound_pruned",
+            "pulse_audit_archive_pruned",
+            "pulse_audit_time_window_pruned",
+            "pulse_audit_return_pruned",
+            "pulse_audit_harvested_count",
+        ):
+            self.assertIn(key, audit)
+            self.assertIsInstance(audit[key], int)
 
     def test_sharded_pulse_dummy_driver_smoke_default_off(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
