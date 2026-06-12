@@ -720,6 +720,63 @@ Smoke：
 - 不做 production default enable；
 - 不做 20/100 A/B。
 
+### Phase 7L
+
+已完成：
+
+- 新增 audit-only ROI calibration 脚本：
+  - `BPC_future/scripts/run_sharded_pulse_roi_calibration.py`
+- 默认实例矩阵：
+  - `very_small`
+  - Apollo5 balanced seed 36000
+  - Tranquillitatis5 balanced seed 136000
+  - Apollo10 balanced seed 41002
+  - Tranquillitatis10_09 balanced seed 141817
+- 默认 profile：
+  - `baseline`
+  - `audit_no_refine`
+  - `audit_refine`
+  - `audit_refine_roi_low`
+  - `audit_refine_roi_mid`
+  - `audit_refine_roi_high`
+- ROI 三档：
+  - low: `prune_rate_floor=0.001`, `min_expanded=10`, `min_time=0.0`
+  - mid: `prune_rate_floor=0.01`, `min_expanded=25`, `min_time=0.01`
+  - high: `prune_rate_floor=0.05`, `min_expanded=50`, `min_time=0.02`
+- 输出：
+  - `summary.json`
+  - `summary.csv`
+  - per-run JSONL logs
+- summary 字段覆盖：
+  - official status / dual bound / pricing state / best rc
+  - `official_unchanged_vs_baseline`
+  - audit status / comparison type / disagreement severity
+  - shard total / certified / incomplete / negative / refined
+  - low ROI shards
+  - bound/archive/time-window/energy/return/capacity pruning counters
+  - negative pool / harvested count
+  - critical disagreement flag
+- 脚本对齐 main runner，加载实例后先执行 `apply_fleet_bound_override()`，避免 Moon Trek real instances 因固定 fleet cap 造成初始 journey RMP infeasible；
+- 若 audit profile 没有触发任何 audit event，summary 显式标记 `pulse_audit_skipped=True` 与 `pulse_audit_skip_reason=legacy_not_called`，避免校准表出现不可解释空白。
+
+短时限 calibration smoke：
+
+- 运行 5 instances x 6 profiles，共 30 rows；
+- `official_unchanged_vs_baseline=True` for all rows；
+- no `legacy_certified_pulse_negative`；
+- no `legacy_negative_pulse_certified`；
+- audit profiles 在当前短 cap 下均为 warning 级 `legacy_incomplete_pulse_negative`；
+- very_small / Apollo5 / Tranquillitatis5 / Apollo10 / Tranquillitatis10_09 均出现 Pulse audit found-negative 与 harvesting signal；
+- 当前短 cap 下 `low_roi_shards=0`，说明 ROI gate 未成为主导因素；这轮结果不能直接给出 ROI floor 生产阈值。
+
+当前判断：
+
+- 当前样本更像 hidden-negative signal calibration，而不是 no-negative proof / low-ROI threshold calibration；
+- 不能据此放开 official certificate；
+- 不能默认启用 hidden worker；
+- 若继续 worker 路线，只能走 strict hard-tail retry，并继续 audit-only 对照；
+- 若要校准 ROI gate 本身，需要补 no-negative / proof-hard / forced-incomplete 样本，使 low-ROI gate 实际触发。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -741,8 +798,8 @@ Smoke：
 ## 后续建议
 
 1. 7I-A real small smoke 已完成但没有 active-worker ROI；下一步优先做 adaptive second-action shard refinement，而不是继续放大 worker 预算。
-2. Phase 7K 已完成 shard scheduling / ROI gate / audit trigger observability；下一步应先用 audit-only 小矩阵校准 ROI，而不是放开 official certificate。
-3. 若继续 hidden-negative worker 路线，必须保持 hard-tail gate：只在 legacy hidden-negative 证据、hard shard counters 或 certificate-tail 反复 incomplete 后运行。
+2. Phase 7L 已完成 audit-only calibration 脚本与短矩阵 smoke；当前短 cap 下主要观察到 hidden-negative signal，而非 low-ROI threshold signal。
+3. 若继续 hidden-negative worker 路线，必须保持 hard-tail gate：只在 audit 已显示 negative / high-prune ROI / hard-tail incomplete 后运行。
 4. experimental certificate path 仍需等待：no-wait start-domain complete、无 unsupported cuts/branch、无 timeout、无 duplicate-only、所有 shards certified 且显式实验配置同时满足。
 5. 若后续 audit/worker 中出现 support-changing hidden negative，可继续做 Pulse hidden-negative worker mode 增强，但不得直接产生 official certificate。
 6. 若 bound ROI 在更宽小实例中持续为正，再做单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
