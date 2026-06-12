@@ -246,6 +246,7 @@ from BPC_future.solver.journey_driver import (
     _journey_pricing_state,
     _journey_sharded_pulse_audit_disagreement_type,
     _journey_sharded_pulse_audit_payload,
+    _run_journey_sharded_pulse_hidden_negative_worker,
     _journey_promote_duplicate_only_final_judge_certificate,
     _journey_reduced_cost_components,
     _hidden_negative_miss_diagnostics,
@@ -14830,6 +14831,12 @@ class BPCFutureTests(unittest.TestCase):
         pulse_audit_enabled: bool = False,
         pulse_audit_dummy_statuses: str = "",
         pulse_audit_time_limit: float = 0.2,
+        hidden_worker_enabled: bool = False,
+        hidden_worker_dummy_statuses: str = "",
+        hidden_worker_time_limit: float = 0.2,
+        hidden_worker_max_recursions: int = 100000,
+        hidden_worker_harvest_enabled: bool = True,
+        hidden_worker_harvest_limit: int = 4,
         task_waiting_allowed: bool | None = None,
     ) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
         data = load_future_data("very_small")
@@ -14877,6 +14884,32 @@ class BPCFutureTests(unittest.TestCase):
                 ),
                 "journey_sharded_pulse_audit_allow_test_dummy_certificate": True,
                 "journey_sharded_pulse_audit_dummy_statuses": str(pulse_audit_dummy_statuses),
+                "journey_sharded_pulse_hidden_negative_worker_enabled": bool(
+                    hidden_worker_enabled
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_trigger": "before_legacy_final_judge",
+                "journey_sharded_pulse_hidden_negative_worker_time_limit": float(
+                    hidden_worker_time_limit
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_max_recursions": int(
+                    hidden_worker_max_recursions
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_archive_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled": bool(
+                    hidden_worker_harvest_enabled
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit": int(
+                    hidden_worker_harvest_limit
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_max_columns": 4,
+                "journey_sharded_pulse_hidden_negative_worker_dummy_engine_enabled": bool(
+                    hidden_worker_dummy_statuses
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_allow_test_dummy_certificate": True,
+                "journey_sharded_pulse_hidden_negative_worker_dummy_statuses": str(
+                    hidden_worker_dummy_statuses
+                ),
                 "journey_pricing_profile_pricing_enabled": False,
                 "journey_pricing_direct_journey_label_pricing_enabled": False,
                 "journey_pricing_max_sequences": 1,
@@ -15142,6 +15175,144 @@ class BPCFutureTests(unittest.TestCase):
                 for record in records
             )
         )
+
+    def test_sharded_pulse_hidden_negative_worker_returns_true_rc_negative_only(self):
+        data = load_future_data("very_small")
+        duals = JourneyDuals(cover={int(task): 200.0 for task in data.tasks}, fleet_limit=0.0)
+        base_config = JourneyPricingConfig(
+            time_bucket_size=5.0,
+            start_time_step=10.0,
+            max_tasks_per_trip=2,
+            time_limit=1.0,
+            max_returned_journeys=8,
+        )
+        worker = _run_journey_sharded_pulse_hidden_negative_worker(
+            data,
+            {
+                "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_time_limit": 1.0,
+                "journey_sharded_pulse_hidden_negative_worker_max_recursions": 100000,
+                "journey_sharded_pulse_hidden_negative_worker_archive_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit": 4,
+                "journey_sharded_pulse_hidden_negative_worker_max_columns": 4,
+            },
+            FutureLogger(None, console=False),
+            duals=duals,
+            branch_constraints=tuple(),
+            cuts=tuple(),
+            journey_pool=JourneyPool(),
+            base_pricing_config=base_config,
+            cg_iter=1,
+        )
+        self.assertIsNotNone(worker)
+        pricing, _worker_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_FOUND_NEGATIVE)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+        self.assertFalse(pricing.global_certificate_capable)
+        self.assertFalse(pricing.final_judge_certificate_capable)
+        self.assertEqual(pricing.final_judge_engine, "sharded_pulse")
+        self.assertTrue(pricing.journeys)
+        self.assertLess(pricing.best_reduced_cost, -1.0e-6)
+        for journey in pricing.journeys:
+            self.assertLess(manual_journey_reduced_cost(journey, duals, cuts=tuple()), -1.0e-6)
+
+    def test_sharded_pulse_hidden_negative_worker_driver_adds_negative_not_certificate(self):
+        result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=False,
+            hidden_worker_enabled=True,
+            hidden_worker_time_limit=1.0,
+            hidden_worker_harvest_enabled=True,
+            hidden_worker_harvest_limit=4,
+        )
+        self.assertIsNone(result.dual_bound)
+        worker_events = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ]
+        self.assertTrue(worker_events)
+        self.assertTrue(any(event["pulse_worker_returned_journeys"] > 0 for event in worker_events))
+        for event in worker_events:
+            self.assertFalse(event["pulse_worker_global_certificate_capable"])
+            self.assertFalse(event["pulse_worker_allow_certificate_effect"])
+            self.assertTrue(event["pulse_worker_context_hash"])
+            self.assertTrue(event["pulse_worker_true_dual_hash"])
+            self.assertTrue(event["pulse_worker_forbidden_signature_hash"])
+        worker_pricing = [
+            record
+            for record in sharded_pricing
+            if record.get("pricing_kind") == "sharded_pulse_hidden_negative_worker"
+        ]
+        self.assertTrue(worker_pricing)
+        self.assertTrue(any(record["negative_journeys"] > 0 for record in worker_pricing))
+        for record in worker_pricing:
+            self.assertFalse(record["global_certificate"])
+            self.assertFalse(record["global_certificate_capable"])
+            self.assertEqual(record["final_judge_engine"], "sharded_pulse")
+        additions = [
+            record
+            for record in records
+            if record.get("event") == "journey_column_addition"
+            and record.get("pricing_kind") == "sharded_pulse_hidden_negative_worker"
+        ]
+        self.assertTrue(additions)
+        self.assertGreater(max(int(record.get("added_journeys", 0)) for record in additions), 0)
+
+    def test_sharded_pulse_hidden_negative_worker_duplicate_only_not_certificate(self):
+        result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=False,
+            hidden_worker_enabled=True,
+            hidden_worker_dummy_statuses="DUPLICATE_ONLY",
+        )
+        self.assertIsNone(result.dual_bound)
+        worker_event = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertEqual(worker_event["pulse_worker_status"], PRICING_STATE_DUPLICATE_ONLY)
+        self.assertEqual(worker_event["pulse_worker_returned_journeys"], 0)
+        self.assertFalse(worker_event["pulse_worker_global_certificate_capable"])
+        worker_pricing = [
+            record
+            for record in sharded_pricing
+            if record.get("pricing_kind") == "sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertFalse(worker_pricing["global_certificate"])
+        self.assertEqual(worker_pricing["pricing_state"], PRICING_STATE_DUPLICATE_ONLY)
+
+    def test_sharded_pulse_hidden_negative_worker_no_negative_not_certificate(self):
+        result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=False,
+            hidden_worker_enabled=True,
+            hidden_worker_dummy_statuses="CERTIFIED_NO_NEGATIVE",
+        )
+        self.assertIsNone(result.dual_bound)
+        worker_event = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertEqual(worker_event["pulse_worker_status"], PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(
+            worker_event["pulse_worker_reason"],
+            "sharded_pulse_hidden_negative_worker_no_negative_not_certificate",
+        )
+        self.assertEqual(worker_event["pulse_worker_returned_journeys"], 0)
+        self.assertFalse(worker_event["pulse_worker_global_certificate_capable"])
+        worker_pricing = [
+            record
+            for record in sharded_pricing
+            if record.get("pricing_kind") == "sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertFalse(worker_pricing["global_certificate"])
+        self.assertFalse(worker_pricing["global_certificate_capable"])
+        self.assertEqual(worker_pricing["pricing_state"], PRICING_STATE_INCOMPLETE_LIMIT)
 
     def test_sharded_pulse_dummy_driver_smoke_default_off(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(

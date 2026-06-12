@@ -21,6 +21,7 @@ Phase 7E 已加入 safe prefix reduced-cost lower-bound ledger 和 opt-in 弱安
 Phase 7F 已加入 bound/archive/harvest ROI diagnostics，并完成 very_small / 5-task / 10-task opt-in micro-smoke。
 Phase 7G 已补 no-wait start interval 与 `candidate_start_times_for_trip()` 时间域对齐。
 Phase 7H 已加入 audit-only small-instance legacy-equivalence smoke 链路并完成真实小矩阵 smoke：Pulse 只写审计日志，不影响 official lower bound / pricing_state。
+Phase 7I-A 已加入 opt-in Sharded Pulse hidden-negative worker：Pulse 可在 legacy final judge 前主动找 true-RC 负列，但不得产生 official certificate。
 
 ## Exactness 边界
 
@@ -511,6 +512,62 @@ micro-smoke 观察：
 - 20/100 A/B；
 - cut / subset-row / fleet-cut prefix lower-bound 增强。
 
+### Phase 7I-A
+
+已完成：
+
+- 新增 Sharded Pulse hidden-negative worker，默认关闭；
+- 触发点为根节点 legacy final judge 前：
+  - `journey_sharded_pulse_hidden_negative_worker_trigger="before_legacy_final_judge"`
+- worker 使用当前 SCIP true dual / cuts / branch / forbidden-signature context；
+- worker 与 audit 复用 context hash 口径：
+  - `pulse_worker_context_hash`
+  - `pulse_worker_true_dual_hash`
+  - `pulse_worker_cut_hash`
+  - `pulse_worker_branch_hash`
+  - `pulse_worker_forbidden_signature_hash`
+- worker 可启用 transition archive / weak safe bound / support-aware harvesting；
+- worker 返回 journeys 前强制逐条 `manual_journey_reduced_cost()` 复算；
+- 非 true-RC negative journey 会被过滤；
+- worker no-negative / certified / duplicate-only / incomplete 都不会成为 official certificate；
+- worker 只有在返回并成功加入 true-RC negative journeys 时，才通过正常 RMP 加列流程影响 official 求解。
+
+新增配置：
+
+- `journey_sharded_pulse_hidden_negative_worker_enabled=False`
+- `journey_sharded_pulse_hidden_negative_worker_time_limit=3.0`
+- `journey_sharded_pulse_hidden_negative_worker_max_recursions=100000`
+- `journey_sharded_pulse_hidden_negative_worker_archive_enabled`
+- `journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled`
+- `journey_sharded_pulse_hidden_negative_worker_harvesting_enabled`
+- `journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit`
+- `journey_sharded_pulse_hidden_negative_worker_max_columns`
+
+exactness 边界：
+
+- `FOUND_NEGATIVE` / `FOUND_NEGATIVE_HARVESTED` 可作为 worker 找列结果；
+- `INCOMPLETE_LIMIT` 不证书；
+- `DUPLICATE_ONLY` 不证书；
+- hidden worker 即使底层 Pulse 完整 no-negative，也会降级为 non-certificate incomplete；
+- `global_certificate_capable=False`；
+- `final_judge_certificate_capable=False`。
+
+验证：
+
+- real `very_small` worker 返回列均满足 true-RC `< -eps`；
+- driver active path 中 worker 能加列，但不设置 `dual_bound` / certificate；
+- duplicate-only worker 不证书；
+- dummy certified worker 被降级为 `INCOMPLETE_LIMIT`；
+- worker context hash 字段非空；
+- audit / dummy / guarded sharded final judge focused regression 仍通过。
+- real small smoke 已完成：
+  - Apollo 5
+  - Tranquillitatis 5
+  - Apollo 10
+- real small smoke 中 active worker 没有返回可加列 journeys；
+- worker 有真实 transition pruning 信号，但仍以 `INCOMPLETE_LIMIT` 为主；
+- Apollo 5 在短时限下因 worker/audit 额外开销从 baseline `OPTIMAL` 变为 `TIME_LIMIT`，说明当前不应默认启用 active worker。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -531,9 +588,10 @@ micro-smoke 观察：
 
 ## 后续建议
 
-1. 7H-real 已完成且没有 critical disagreement；由于 5/10 任务 audit 仍以 incomplete 为主，下一步优先做 adaptive second-action shard refinement，而不是放开 certificate gate。
-2. experimental certificate path 仍需等待：no-wait start-domain complete、无 unsupported cuts/branch、无 timeout、无 duplicate-only、所有 shards certified 且显式实验配置同时满足。
-3. 若后续 audit 中出现 support-changing hidden negative，可考虑 Pulse hidden-negative worker mode，但不得直接产生 official certificate。
-4. 若 bound ROI 在更宽小实例中持续为正，再做单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
-5. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
-6. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
+1. 7I-A real small smoke 已完成但没有 active-worker ROI；下一步优先做 adaptive second-action shard refinement，而不是继续放大 worker 预算。
+2. 若继续 hidden-negative worker 路线，必须先加更严格触发门控：只在 legacy hidden-negative 证据、hard shard counters 或 certificate-tail 反复 incomplete 后运行。
+3. experimental certificate path 仍需等待：no-wait start-domain complete、无 unsupported cuts/branch、无 timeout、无 duplicate-only、所有 shards certified 且显式实验配置同时满足。
+4. 若后续 audit/worker 中出现 support-changing hidden negative，可继续做 Pulse hidden-negative worker mode 增强，但不得直接产生 official certificate。
+5. 若 bound ROI 在更宽小实例中持续为正，再做单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
+6. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
+7. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
