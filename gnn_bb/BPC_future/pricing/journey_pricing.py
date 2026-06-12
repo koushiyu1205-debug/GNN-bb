@@ -3351,6 +3351,8 @@ def _price_journeys_by_sharded_pulse_guarded(
             branch_constraints=branch_constraints,
             deadline=deadline,
             max_recursions=int(config.pulse_max_recursions),
+            archive_dominance_enabled=bool(config.pulse_archive_dominance_enabled) and not bool(forbidden),
+            archive_max_records_per_key=int(config.pulse_archive_max_records_per_key),
         )
         generated_traces += int(shard.generated_sortie_traces)
         materialized_sorties += int(shard.materialized_sorties)

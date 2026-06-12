@@ -224,6 +224,35 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
 - transition-state dominance archive；
 - transition-state harvesting。
 
+### Phase 7C
+
+已完成：
+
+- `transition_root_only_pulse()` 支持 opt-in `StructuralKeyDominanceArchive`；
+- archive 只在单次 DFS 调用内剪枝，不写入 proof-closed ledger，不参与 resume；
+- waiting-allowed 下使用同 structural key 且不差的 partial RC / energy / load / current_time 支配；
+- no-wait 下 structural key 包含 exact current time，record 使用 singleton interval，避免“更早时间”自动支配；
+- archive cap 继续 fail-open：表满只丢旧 record，不丢当前 state；
+- guarded sharded path 透传 `pulse_archive_dominance_enabled` 与 cap；
+- guarded path 在存在 forbidden signatures 时禁用 archive，避免 duplicate-only/forbidden signature 语义被 dominance 隐藏；
+- `pulse_archive_pruned` 在 `JourneyPricingResult` 与 driver JSONL 中可观测。
+
+验证：
+
+- archive-enabled transition Pulse 与 archive-disabled 在 toy 上 best true RC / found-negative / no-negative exhaustive 一致；
+- `pulse_archive_pruned > 0` 的 toy / guarded opt-in case；
+- no-wait archive 不误剪；
+- archive cap fail-open；
+- driver JSONL 中 archive counter 可观测。
+
+仍未实现：
+
+- resume；
+- parallel；
+- adaptive refinement；
+- prefix RC bound pruning；
+- transition-state harvesting。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -244,8 +273,7 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
 ## 后续建议
 
 1. 实现真正 open-sortie incremental Pulse，而不是 completed-sortie trace 枚举。
-2. Phase 7C 接入 transition-state `StructuralKeyDominanceArchive`，并证明 archive-enabled 与 archive-disabled 在 toy 上结果一致。
-3. Phase 7D 接入 transition-state harvesting，继续保证 found-negative 后退出 proof mode。
-4. 为 prefix RC 建立可证明的 lower-bound ledger，先支持 cover/fleet，再支持 cuts。
-5. 实现 proof-closed prefix cache，并严格区分 frontier snapshot。
-6. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
+2. Phase 7D 接入 transition-state harvesting，继续保证 found-negative 后退出 proof mode。
+3. 为 prefix RC 建立可证明的 lower-bound ledger，先支持 cover/fleet，再支持 cuts。
+4. 实现 proof-closed prefix cache，并严格区分 frontier snapshot。
+5. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。

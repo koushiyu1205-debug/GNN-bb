@@ -13316,6 +13316,93 @@ class BPCFutureTests(unittest.TestCase):
             self.assertEqual(set(transition.journey_signatures), expected)
             self.assertGreater(transition.pulse_branch_pruned, 0)
 
+    def test_transition_pulse_archive_matches_unarchived_best_and_negative(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        for duals in (
+            JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={}),
+            JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={}),
+        ):
+            unarchived = transition_root_only_pulse(
+                data,
+                duals,
+                time_bucket_size=5.0,
+                max_tasks_per_sortie=2,
+                max_sorties=2,
+            )
+            archived = transition_root_only_pulse(
+                data,
+                duals,
+                time_bucket_size=5.0,
+                max_tasks_per_sortie=2,
+                max_sorties=2,
+                archive_dominance_enabled=True,
+                archive_max_records_per_key=64,
+            )
+
+            self.assertTrue(unarchived.exhausted)
+            self.assertTrue(archived.exhausted)
+            self.assertEqual(archived.best_true_reduced_cost, unarchived.best_true_reduced_cost)
+            self.assertEqual(archived.found_negative, unarchived.found_negative)
+            self.assertEqual(
+                bool(archived.negative_leaves),
+                bool(unarchived.negative_leaves),
+            )
+        self.assertGreater(archived.pulse_archive_pruned, 0)
+
+    def test_transition_pulse_archive_cap_fail_open_matches_unarchived(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3, 4), sortie_limit=3)
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        unarchived = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=3,
+        )
+        capped = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=3,
+            archive_dominance_enabled=True,
+            archive_max_records_per_key=1,
+        )
+
+        self.assertTrue(capped.exhausted)
+        self.assertEqual(capped.best_true_reduced_cost, unarchived.best_true_reduced_cost)
+        self.assertEqual(capped.found_negative, unarchived.found_negative)
+
+    def test_transition_pulse_archive_no_wait_matches_unarchived_without_time_dominance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
+            base_data = load_future_data(str(graph_path))
+        ready_time = max(float(option.tau) for option in base_data.options(0, 1))
+        instance = json.loads(json.dumps(base_data.instance))
+        instance["tasks"]["1"]["r"] = ready_time
+        data = replace(base_data, instance=instance, sortie_limit=1)
+        duals = JourneyDuals(cover={1: 0.0}, fleet_limit=0.0, cuts={})
+        unarchived = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+        )
+        archived = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+            archive_dominance_enabled=True,
+            archive_max_records_per_key=1,
+        )
+
+        self.assertEqual(set(archived.journey_signatures), set(unarchived.journey_signatures))
+        self.assertEqual(archived.best_true_reduced_cost, unarchived.best_true_reduced_cost)
+        self.assertEqual(archived.found_negative, unarchived.found_negative)
+
     def test_toy_exhaustive_pulse_budget_hits_return_incomplete(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
         duals = JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
@@ -13821,6 +13908,26 @@ class BPCFutureTests(unittest.TestCase):
         self.assertGreater(result.transition_time_window_pruned, 0)
         self.assertEqual(result.generated_sequences, 0)
 
+    def test_sharded_pulse_guarded_archive_counter_surfaces(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3, 4), sortie_limit=3)
+        result = price_journeys(
+            data,
+            JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={}),
+            tuple(),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                final_judge_engine="sharded_pulse",
+                sharded_final_judge_enabled=True,
+                sharded_final_judge_toy_certificate_enabled=True,
+                max_tasks_per_trip=2,
+                pulse_archive_dominance_enabled=True,
+                pulse_archive_max_records_per_key=64,
+            ),
+        )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertGreater(result.pulse_archive_pruned, 0)
+
     def test_sharded_pulse_guarded_non_test_instance_never_toy_certifies(self):
         data = replace(load_future_data("very_small"), name="prod_like_instance", tasks=(1, 2), sortie_limit=2)
         result = price_journeys(
@@ -14161,6 +14268,7 @@ class BPCFutureTests(unittest.TestCase):
         allow_test_dummy_certificate: bool = True,
         allow_dummy_env: bool = True,
         toy_certificate_enabled: bool = False,
+        archive_enabled: bool = False,
     ) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
         data = load_future_data("very_small")
         if dummy_engine_enabled is None:
@@ -14189,6 +14297,7 @@ class BPCFutureTests(unittest.TestCase):
                     allow_test_dummy_certificate
                 ),
                 "journey_pulse_toy_certificate_enabled": bool(toy_certificate_enabled),
+                "journey_pulse_archive_enabled": bool(archive_enabled),
                 "journey_final_judge_dummy_shard_statuses": str(dummy_statuses),
                 "journey_pricing_profile_pricing_enabled": False,
                 "journey_pricing_direct_journey_label_pricing_enabled": False,
@@ -14307,6 +14416,20 @@ class BPCFutureTests(unittest.TestCase):
             self.assertIn(key, final_record)
             self.assertIsInstance(final_record[key], int)
         self.assertGreater(final_record["pulse_recursions"], 0)
+
+    def test_sharded_pulse_driver_smoke_archive_counter_surfaces(self):
+        result, _records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=True,
+            dummy_engine_enabled=False,
+            archive_enabled=True,
+        )
+        self.assertIsNone(result.dual_bound)
+        self.assertTrue(sharded_pricing)
+        final_record = sharded_pricing[-1]
+        self.assertEqual(final_record["final_judge_engine"], "sharded_pulse")
+        self.assertIn("pulse_archive_pruned", final_record)
+        self.assertIsInstance(final_record["pulse_archive_pruned"], int)
 
     def test_sharded_pulse_dummy_driver_smoke_incomplete_has_no_official_bound(self):
         result, _records, sharded_pricing = self._run_sharded_dummy_driver_smoke(

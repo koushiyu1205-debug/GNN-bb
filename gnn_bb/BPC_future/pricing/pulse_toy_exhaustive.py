@@ -415,6 +415,8 @@ def transition_root_only_pulse(
     branch_constraints: tuple[BranchConstraint, ...] = tuple(),
     deadline: float | None = None,
     max_recursions: int = 0,
+    archive_dominance_enabled: bool = False,
+    archive_max_records_per_key: int = 32,
     include_physical_paths: bool = True,
 ) -> ToyPulseExhaustiveResult:
     """Phase-7A root-only Pulse core with transition-level feasibility checks.
@@ -441,6 +443,11 @@ def transition_root_only_pulse(
     second_shard = _normalize_second_action_shard(second_action_shard)
     task_to_bit = {int(task): index for index, task in enumerate(task_order)}
     waiting_allowed = bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
+    archive = (
+        StructuralKeyDominanceArchive(max_records_per_key=int(archive_max_records_per_key))
+        if bool(archive_dominance_enabled)
+        else None
+    )
 
     candidates_by_signature: dict[tuple, PulseLeafCandidate] = {}
     generated_sortie_traces = 0
@@ -492,7 +499,7 @@ def transition_root_only_pulse(
         partial_exact_prefix_rc: float,
         partial_lb_prefix_rc: float,
     ) -> None:
-        nonlocal expanded_states, pulse_branch_pruned
+        nonlocal expanded_states, pulse_branch_pruned, pulse_archive_pruned, pulse_depot_ready_pruned
         if not count_recursion():
             return
         if int(sorties_used) >= int(sortie_limit):
@@ -502,6 +509,36 @@ def transition_root_only_pulse(
         if pending_same_mask and not _pending_same_possible(pending_same_mask, remaining_tasks, task_to_bit):
             pulse_branch_pruned += 1
             return
+        if archive is not None:
+            key = PulseStructuralKey(
+                phase="depot_ready",
+                last_node=0,
+                visited_task_mask=int(visited_mask),
+                current_sortie_task_mask=0,
+                sorties_used=int(sorties_used),
+                branch_state_key=_transition_archive_branch_state_key(
+                    int(pending_same_mask),
+                    waiting_allowed=waiting_allowed,
+                    current_time=float(next_start_time),
+                ),
+            )
+            decision = archive.consider(
+                key,
+                PulseArchiveRecord(
+                    partial_reduced_cost_lb=float(partial_lb_prefix_rc),
+                    exact_prefix_cost=float(partial_exact_prefix_rc),
+                    current_time=float(next_start_time),
+                    energy_used=0.0,
+                    load_used=0.0,
+                    trace_summary=tuple(trace.sequence for trace in traces),
+                    proof_mode=True,
+                ),
+                waiting_allowed=waiting_allowed,
+            )
+            if decision.dominated:
+                pulse_archive_pruned += 1
+                pulse_depot_ready_pruned += 1
+                return
         expanded_states += 1
         for task in remaining_tasks:
             task = int(task)
@@ -532,9 +569,48 @@ def transition_root_only_pulse(
                     search_open(next_state)
 
     def search_open(state: _TransitionPulseState) -> None:
-        nonlocal expanded_states, pulse_branch_pruned
+        nonlocal expanded_states, pulse_branch_pruned, pulse_archive_pruned
         if not count_recursion():
             return
+        if archive is not None:
+            survival_so_far = float(data.survival_energy_rate) * max(
+                0.0,
+                float(state.current_time) - float(state.sortie_start_time),
+            )
+            key = PulseStructuralKey(
+                phase="open_sortie",
+                last_node=int(state.last_node),
+                visited_task_mask=int(state.visited_task_mask),
+                current_sortie_task_mask=int(state.current_sortie_task_mask),
+                sorties_used=int(state.sorties_used),
+                branch_state_key=_transition_archive_branch_state_key(
+                    int(state.pending_same_mask),
+                    waiting_allowed=waiting_allowed,
+                    current_time=float(state.current_time),
+                ),
+            )
+            decision = archive.consider(
+                key,
+                PulseArchiveRecord(
+                    partial_reduced_cost_lb=float(state.partial_lb_prefix_rc),
+                    exact_prefix_cost=float(state.partial_exact_prefix_rc),
+                    current_time=float(state.current_time) if waiting_allowed else None,
+                    start_interval=None
+                    if waiting_allowed
+                    else (float(state.current_time), float(state.current_time)),
+                    energy_used=float(state.travel_energy)
+                    + float(state.service_energy)
+                    + float(survival_so_far),
+                    load_used=float(state.load_used),
+                    trace_summary=tuple(trace.sequence for trace in state.traces)
+                    + (tuple(state.current_sequence),),
+                    proof_mode=True,
+                ),
+                waiting_allowed=waiting_allowed,
+            )
+            if decision.dominated:
+                pulse_archive_pruned += 1
+                return
         expanded_states += 1
         can_return_now = _second_action_allows_return(state, second_shard)
         if can_return_now:
@@ -1050,6 +1126,17 @@ def _transition_branch_update(
         else:
             return None
     return int(new_visited), int(new_pending)
+
+
+def _transition_archive_branch_state_key(
+    pending_same_mask: int,
+    *,
+    waiting_allowed: bool,
+    current_time: float,
+) -> tuple[object, ...]:
+    if bool(waiting_allowed):
+        return (int(pending_same_mask),)
+    return (int(pending_same_mask), "exact_time", round(float(current_time), 9))
 
 
 def _pending_same_possible(
