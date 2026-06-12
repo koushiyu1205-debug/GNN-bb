@@ -735,6 +735,24 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 max_timed_evaluations=int(exact_pricing_config.max_timed_evaluations),
                 remaining=round(float(remaining), 6),
             )
+
+        def audit_final_legacy_pricing(current_pricing: Any) -> None:
+            _run_journey_sharded_pulse_audit(
+                data,
+                config,
+                logger,
+                legacy_pricing=current_pricing,
+                legacy_duals=solution.duals,
+                branch_constraints=tuple(),
+                cuts=tuple(cuts),
+                journey_pool=journey_pool,
+                base_pricing_config=exact_pricing_config,
+                cg_iter=cg_iter,
+                node_id=0,
+                depth=0,
+                active_task_sets=active_task_sets,
+            )
+
         exact_duals, exact_dual_source = _journey_exact_pricing_duals(
             solution.duals,
             pricing_duals,
@@ -2193,6 +2211,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         recent_changed_task_sets.extend(reharvest_changed_task_sets)
                                         continue
                                 if not pricing.exhausted:
+                                    audit_final_legacy_pricing(pricing)
                                     break
                                 pricing = _journey_promote_duplicate_only_final_judge_certificate(
                                     data,
@@ -2215,6 +2234,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     status="INCOMPLETE",
                                     reason="completion_bound_final_probe_disabled",
                                 )
+                                audit_final_legacy_pricing(pricing)
                                 break
                         else:
                             pricing = replace(
@@ -2223,10 +2243,13 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 status="INCOMPLETE",
                                 reason="completion_bound_final_probe_time_limit",
                             )
+                            audit_final_legacy_pricing(pricing)
                             break
                 else:
+                    audit_final_legacy_pricing(pricing)
                     break
             else:
+                audit_final_legacy_pricing(pricing)
                 break
         pricing = _journey_promote_duplicate_only_final_judge_certificate(
             data,
@@ -2241,21 +2264,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             node_id=0,
             depth=0,
         )
-        _run_journey_sharded_pulse_audit(
-            data,
-            config,
-            logger,
-            legacy_pricing=pricing,
-            legacy_duals=solution.duals,
-            branch_constraints=tuple(),
-            cuts=tuple(cuts),
-            journey_pool=journey_pool,
-            base_pricing_config=exact_pricing_config,
-            cg_iter=cg_iter,
-            node_id=0,
-            depth=0,
-            active_task_sets=active_task_sets,
-        )
+        audit_final_legacy_pricing(pricing)
         if not _journey_pricing_is_global_certificate(pricing):
             _log_journey_certificate_rejection(
                 logger,
@@ -15194,19 +15203,39 @@ def _journey_sharded_pulse_audit_disagreement_type(
     legacy_pricing: Any,
     pulse_pricing: Any,
 ) -> str:
-    legacy = _journey_sharded_pulse_audit_category(legacy_pricing)
-    pulse = _journey_sharded_pulse_audit_category(pulse_pricing)
-    if legacy == "certified" and pulse == "found_negative":
-        return "legacy_certified_but_pulse_found_negative"
-    if legacy == "found_negative" and pulse == "certified":
-        return "legacy_negative_but_pulse_certified"
-    if legacy == "certified" and pulse == "incomplete":
-        return "legacy_certified_pulse_incomplete"
-    if legacy == "incomplete" and pulse == "certified":
-        return "legacy_incomplete_pulse_certified"
-    if legacy == "found_negative" and pulse == "incomplete":
-        return "legacy_found_negative_pulse_incomplete"
-    return ""
+    comparison = _journey_sharded_pulse_audit_comparison_type(legacy_pricing, pulse_pricing)
+    legacy = _journey_sharded_pulse_audit_matrix_state(legacy_pricing)
+    pulse = _journey_sharded_pulse_audit_matrix_state(pulse_pricing)
+    return "" if legacy == pulse else comparison
+
+
+def _journey_sharded_pulse_audit_matrix_state(pricing: Any) -> str:
+    category = _journey_sharded_pulse_audit_category(pricing)
+    if category == "certified":
+        return "certified"
+    if category == "found_negative":
+        return "negative"
+    return "incomplete"
+
+
+def _journey_sharded_pulse_audit_comparison_type(
+    legacy_pricing: Any,
+    pulse_pricing: Any,
+) -> str:
+    legacy = _journey_sharded_pulse_audit_matrix_state(legacy_pricing)
+    pulse = _journey_sharded_pulse_audit_matrix_state(pulse_pricing)
+    return f"legacy_{legacy}_pulse_{pulse}"
+
+
+def _journey_sharded_pulse_audit_disagreement_severity(disagreement_type: str) -> str:
+    if disagreement_type in {
+        "legacy_certified_pulse_negative",
+        "legacy_negative_pulse_certified",
+    }:
+        return "critical"
+    if disagreement_type:
+        return "warning"
+    return "info"
 
 
 def _journey_sharded_pulse_audit_status(pricing: Any) -> str:
@@ -15228,18 +15257,29 @@ def _journey_sharded_pulse_audit_payload(
     *,
     elapsed: float,
     enabled: bool = True,
+    context_hashes: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     disagreement = _journey_sharded_pulse_audit_disagreement_type(legacy_pricing, pulse_pricing)
     legacy_category = _journey_sharded_pulse_audit_category(legacy_pricing)
     pulse_category = _journey_sharded_pulse_audit_category(pulse_pricing)
-    return {
+    hashes = context_hashes or {}
+    payload = {
         "pulse_audit_enabled": bool(enabled),
         "pulse_audit_status": _journey_sharded_pulse_audit_status(pulse_pricing),
         "pulse_audit_reason": str(getattr(pulse_pricing, "reason", "")),
+        "pulse_audit_global_certificate_capable": bool(
+            _journey_pricing_is_global_certificate(pulse_pricing)
+        ),
         "pulse_audit_agrees_with_legacy": bool(
             legacy_category == pulse_category and disagreement == ""
         ),
+        "pulse_audit_comparison_type": _journey_sharded_pulse_audit_comparison_type(
+            legacy_pricing, pulse_pricing
+        ),
         "pulse_audit_disagreement_type": disagreement,
+        "pulse_audit_disagreement_severity": _journey_sharded_pulse_audit_disagreement_severity(
+            disagreement
+        ),
         "pulse_audit_legacy_state": _journey_pricing_state(legacy_pricing),
         "pulse_audit_legacy_best_rc": None
         if getattr(legacy_pricing, "best_reduced_cost", None) is None
@@ -15267,6 +15307,16 @@ def _journey_sharded_pulse_audit_payload(
         "pulse_audit_return_pruned": int(getattr(pulse_pricing, "transition_return_pruned", 0)),
         "pulse_audit_harvested_count": int(getattr(pulse_pricing, "pulse_harvested_count", 0)),
     }
+    payload.update(
+        {
+            "pulse_audit_context_hash": str(hashes.get("context", "")),
+            "pulse_audit_true_dual_hash": str(hashes.get("true_dual", "")),
+            "pulse_audit_cut_hash": str(hashes.get("cuts", "")),
+            "pulse_audit_branch_hash": str(hashes.get("branch", "")),
+            "pulse_audit_forbidden_signature_hash": str(hashes.get("forbidden", "")),
+        }
+    )
+    return payload
 
 
 def _journey_sharded_pulse_audit_config(
@@ -15357,6 +15407,38 @@ def _journey_sharded_pulse_audit_config(
     return _journey_config_with_call_deadline(audit_config, time_limit=float(time_limit))
 
 
+def _journey_sharded_pulse_audit_context_hashes(
+    data: FutureData,
+    duals: JourneyDuals,
+    branch_constraints: tuple[BranchConstraint, ...],
+    cuts: tuple[FutureCut, ...],
+    forbidden_signatures: set[tuple] | frozenset[tuple] | tuple[tuple, ...],
+) -> dict[str, str]:
+    true_dual_hash = _journey_dual_hash(_journey_dual_vector(data, duals, len(cuts)))
+    cut_hash = _journey_cut_hash(cuts)
+    branch_hash = _hash_strings(
+        [repr(_branch_constraint_key(constraint)) for constraint in branch_constraints]
+    )
+    forbidden_hash = _hash_strings(
+        [repr(tuple(signature)) for signature in sorted(forbidden_signatures, key=repr)]
+    )
+    context_hash = _hash_strings(
+        [
+            f"dual:{true_dual_hash}",
+            f"cuts:{cut_hash}",
+            f"branch:{branch_hash}",
+            f"forbidden:{forbidden_hash}",
+        ]
+    )
+    return {
+        "context": context_hash,
+        "true_dual": true_dual_hash,
+        "cuts": cut_hash,
+        "branch": branch_hash,
+        "forbidden": forbidden_hash,
+    }
+
+
 def _run_journey_sharded_pulse_audit(
     data: FutureData,
     config: dict[str, Any],
@@ -15381,6 +15463,14 @@ def _run_journey_sharded_pulse_audit(
         return None
 
     started = time.perf_counter()
+    forbidden_signatures = _journey_forbidden_signatures_for_node(journey_pool, branch_constraints)
+    context_hashes = _journey_sharded_pulse_audit_context_hashes(
+        data,
+        legacy_duals,
+        branch_constraints,
+        cuts,
+        forbidden_signatures,
+    )
     audit_time_limit = max(
         0.0,
         float(config.get("journey_sharded_pulse_audit_time_limit", 5.0)),
@@ -15416,9 +15506,7 @@ def _run_journey_sharded_pulse_audit(
                 cuts=cuts,
                 trip_cache={},
                 resource_cache={},
-                forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
-                    journey_pool, branch_constraints
-                ),
+                forbidden_journey_signatures=forbidden_signatures,
                 dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
                     journey_pool, cuts, branch_constraints
                 ),
@@ -15446,6 +15534,7 @@ def _run_journey_sharded_pulse_audit(
         legacy_pricing,
         pulse_pricing,
         elapsed=elapsed,
+        context_hashes=context_hashes,
     )["pulse_audit_agrees_with_legacy"]:
         logger.log(
             "journey_sharded_pulse_audit",
@@ -15459,6 +15548,7 @@ def _run_journey_sharded_pulse_audit(
                 legacy_pricing,
                 pulse_pricing,
                 elapsed=elapsed,
+                context_hashes=context_hashes,
             ),
         )
     return pulse_pricing

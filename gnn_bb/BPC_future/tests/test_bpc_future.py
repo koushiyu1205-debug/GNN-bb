@@ -14830,8 +14830,11 @@ class BPCFutureTests(unittest.TestCase):
         pulse_audit_enabled: bool = False,
         pulse_audit_dummy_statuses: str = "",
         pulse_audit_time_limit: float = 0.2,
+        task_waiting_allowed: bool | None = None,
     ) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
         data = load_future_data("very_small")
+        if task_waiting_allowed is not None:
+            data = _with_task_waiting_allowed(data, bool(task_waiting_allowed))
         if dummy_engine_enabled is None:
             dummy_engine_enabled = bool(enabled)
         with tempfile.TemporaryDirectory() as tmp:
@@ -14971,23 +14974,69 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertTrue(payload["pulse_audit_agrees_with_legacy"])
         self.assertEqual(payload["pulse_audit_disagreement_type"], "")
+        self.assertEqual(payload["pulse_audit_comparison_type"], "legacy_certified_pulse_certified")
+        self.assertEqual(payload["pulse_audit_disagreement_severity"], "info")
+        self.assertTrue(payload["pulse_audit_global_certificate_capable"])
         self.assertEqual(payload["pulse_audit_status"], PRICING_STATE_CERTIFIED_NO_NEGATIVE)
 
         pulse_negative = self._pulse_audit_pricing_result(PRICING_STATE_FOUND_NEGATIVE)
         self.assertEqual(
             _journey_sharded_pulse_audit_disagreement_type(legacy_certified, pulse_negative),
-            "legacy_certified_but_pulse_found_negative",
+            "legacy_certified_pulse_negative",
         )
+        negative_payload = _journey_sharded_pulse_audit_payload(
+            legacy_certified,
+            pulse_negative,
+            elapsed=0.01,
+        )
+        self.assertEqual(negative_payload["pulse_audit_disagreement_severity"], "critical")
         legacy_negative = self._pulse_audit_pricing_result(PRICING_STATE_FOUND_NEGATIVE)
         self.assertEqual(
             _journey_sharded_pulse_audit_disagreement_type(legacy_negative, pulse_certified),
-            "legacy_negative_but_pulse_certified",
+            "legacy_negative_pulse_certified",
         )
         legacy_incomplete = self._pulse_audit_pricing_result(PRICING_STATE_INCOMPLETE_LIMIT)
         self.assertEqual(
             _journey_sharded_pulse_audit_disagreement_type(legacy_incomplete, pulse_certified),
             "legacy_incomplete_pulse_certified",
         )
+        for legacy_state, pulse_state, expected in (
+            (
+                PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+                PRICING_STATE_INCOMPLETE_LIMIT,
+                "legacy_certified_pulse_incomplete",
+            ),
+            (
+                PRICING_STATE_FOUND_NEGATIVE,
+                PRICING_STATE_FOUND_NEGATIVE,
+                "legacy_negative_pulse_negative",
+            ),
+            (
+                PRICING_STATE_FOUND_NEGATIVE,
+                PRICING_STATE_INCOMPLETE_LIMIT,
+                "legacy_negative_pulse_incomplete",
+            ),
+            (
+                PRICING_STATE_INCOMPLETE_LIMIT,
+                PRICING_STATE_FOUND_NEGATIVE,
+                "legacy_incomplete_pulse_negative",
+            ),
+            (
+                PRICING_STATE_INCOMPLETE_LIMIT,
+                PRICING_STATE_INCOMPLETE_LIMIT,
+                "legacy_incomplete_pulse_incomplete",
+            ),
+        ):
+            payload = _journey_sharded_pulse_audit_payload(
+                self._pulse_audit_pricing_result(legacy_state),
+                self._pulse_audit_pricing_result(pulse_state),
+                elapsed=0.01,
+            )
+            self.assertEqual(payload["pulse_audit_comparison_type"], expected)
+            self.assertEqual(
+                payload["pulse_audit_disagreement_type"],
+                "" if legacy_state == pulse_state else expected,
+            )
 
     def test_sharded_pulse_audit_certified_log_does_not_change_official_bound(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
@@ -15005,7 +15054,20 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(audit["pulse_audit_allow_certificate_effect"])
         self.assertEqual(audit["pulse_audit_status"], PRICING_STATE_CERTIFIED_NO_NEGATIVE)
         self.assertEqual(audit["pulse_audit_disagreement_type"], "legacy_incomplete_pulse_certified")
+        self.assertEqual(audit["pulse_audit_disagreement_severity"], "warning")
+        self.assertEqual(audit["pulse_audit_comparison_type"], "legacy_incomplete_pulse_certified")
+        self.assertTrue(audit["pulse_audit_global_certificate_capable"])
         self.assertEqual(audit["pulse_audit_shards_certified"], 1)
+        for key in (
+            "pulse_audit_context_hash",
+            "pulse_audit_true_dual_hash",
+            "pulse_audit_cut_hash",
+            "pulse_audit_branch_hash",
+            "pulse_audit_forbidden_signature_hash",
+        ):
+            self.assertIn(key, audit)
+            self.assertIsInstance(audit[key], str)
+            self.assertTrue(audit[key])
         self.assertTrue(
             all(
                 not (
@@ -15030,6 +15092,7 @@ class BPCFutureTests(unittest.TestCase):
         audit = audits[-1]
         self.assertEqual(audit["pulse_audit_status"], "AUDIT_INCOMPLETE")
         self.assertEqual(audit["pulse_audit_reason"], "pulse_audit_time_limit")
+        self.assertFalse(audit["pulse_audit_global_certificate_capable"])
         self.assertEqual(audit["pulse_audit_recursions"], 0)
 
     def test_sharded_pulse_audit_logs_transition_counters(self):
@@ -15043,6 +15106,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(sharded_pricing, [])
         audit = [record for record in records if record.get("event") == "journey_sharded_pulse_audit"][-1]
         self.assertEqual(audit["pulse_audit_status"], PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(audit["pulse_audit_disagreement_type"], "legacy_incomplete_pulse_negative")
+        self.assertEqual(audit["pulse_audit_disagreement_severity"], "warning")
         self.assertEqual(audit["pulse_audit_shards_negative"], 1)
         for key in (
             "pulse_audit_bound_pruned",
@@ -15053,6 +15118,30 @@ class BPCFutureTests(unittest.TestCase):
         ):
             self.assertIn(key, audit)
             self.assertIsInstance(audit[key], int)
+
+    def test_sharded_pulse_audit_waiting_allowed_has_no_official_certificate_effect(self):
+        result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=False,
+            pulse_audit_enabled=True,
+            pulse_audit_dummy_statuses="CERTIFIED_NO_NEGATIVE",
+            task_waiting_allowed=True,
+        )
+        self.assertIsNone(result.dual_bound)
+        self.assertEqual(sharded_pricing, [])
+        audit = [record for record in records if record.get("event") == "journey_sharded_pulse_audit"][-1]
+        self.assertEqual(audit["pulse_audit_status"], PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertTrue(audit["pulse_audit_global_certificate_capable"])
+        self.assertFalse(audit["pulse_audit_allow_certificate_effect"])
+        self.assertTrue(
+            all(
+                not (
+                    record.get("event") == "journey_pricing"
+                    and record.get("global_certificate")
+                )
+                for record in records
+            )
+        )
 
     def test_sharded_pulse_dummy_driver_smoke_default_off(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
