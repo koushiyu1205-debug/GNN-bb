@@ -1512,7 +1512,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                             depth=0,
                             completion_bound_phase="after_retry",
                         )
-                        final_config = replace(
+                        final_config = _journey_config_with_call_deadline(
                             final_config,
                             time_limit=final_probe_budget,
                             profile_generation_time_fraction=float(
@@ -1607,7 +1607,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     config,
                                     final_config,
                                 )
-                                escalation_config = replace(
+                                escalation_config = _journey_config_with_call_deadline(
                                     escalation_config,
                                     time_limit=_journey_completion_bound_probe_budget(config, escalation_remaining),
                                     profile_generation_time_fraction=float(
@@ -1717,6 +1717,10 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                         reharvest_priced_journeys: list[Any] = []
                         reharvest_changed_task_sets: list[frozenset[int]] = []
                         if reharvest_mode:
+                            reharvest_config = _journey_config_with_call_deadline(
+                                reharvest_config,
+                                time_limit=float(reharvest_config.time_limit),
+                            )
                             logger.log(
                                 "journey_post_seed_profile_reharvest",
                                 node_id=0,
@@ -1880,7 +1884,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 depth=0,
                                 completion_bound_phase="after_retry",
                             )
-                            final_config = replace(
+                            final_config = _journey_config_with_call_deadline(
                                 final_config,
                                 time_limit=final_probe_budget,
                                 profile_generation_time_fraction=float(
@@ -1970,7 +1974,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         config,
                                         final_config,
                                     )
-                                    escalation_config = replace(
+                                    escalation_config = _journey_config_with_call_deadline(
                                         escalation_config,
                                         time_limit=_journey_completion_bound_probe_budget(config, escalation_remaining),
                                         profile_generation_time_fraction=float(
@@ -2077,6 +2081,10 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         reharvest_priced_journeys: list[Any] = []
                                         reharvest_changed_task_sets: list[frozenset[int]] = []
                                         if reharvest_mode:
+                                            reharvest_config = _journey_config_with_call_deadline(
+                                                reharvest_config,
+                                                time_limit=float(reharvest_config.time_limit),
+                                            )
                                             logger.log(
                                                 "journey_post_seed_profile_reharvest",
                                                 node_id=0,
@@ -2888,6 +2896,10 @@ def _process_journey_branch_node(
         )
         if not reharvest_mode:
             return 0, [], []
+        reharvest_config = _journey_config_with_call_deadline(
+            reharvest_config,
+            time_limit=float(reharvest_config.time_limit),
+        )
         logger.log(
             "journey_post_seed_profile_reharvest",
             node_id=node.id,
@@ -3555,7 +3567,7 @@ def _process_journey_branch_node(
                 depth=node.depth,
                 completion_bound_phase="after_retry",
             )
-            handoff_config = replace(
+            handoff_config = _journey_config_with_call_deadline(
                 handoff_config,
                 time_limit=_journey_completion_bound_probe_budget(config, handoff_remaining),
                 profile_generation_time_fraction=float(
@@ -4241,7 +4253,7 @@ def _process_journey_branch_node(
                         depth=node.depth,
                         completion_bound_phase="after_retry",
                     )
-                    final_config = replace(
+                    final_config = _journey_config_with_call_deadline(
                         final_config,
                         time_limit=final_probe_budget,
                         profile_generation_time_fraction=float(
@@ -4759,7 +4771,7 @@ def _process_journey_branch_node(
                             depth=node.depth,
                             completion_bound_phase="after_retry",
                         )
-                        final_config = replace(
+                        final_config = _journey_config_with_call_deadline(
                             final_config,
                             time_limit=final_probe_budget,
                             profile_generation_time_fraction=float(
@@ -4857,7 +4869,7 @@ def _process_journey_branch_node(
                                     config,
                                     final_config,
                                 )
-                                escalation_config = replace(
+                                escalation_config = _journey_config_with_call_deadline(
                                     escalation_config,
                                     time_limit=_journey_completion_bound_probe_budget(config, escalation_remaining),
                                     profile_generation_time_fraction=float(
@@ -5069,7 +5081,7 @@ def _process_journey_branch_node(
                                 depth=node.depth,
                                 completion_bound_phase="after_retry",
                             )
-                            final_config = replace(
+                            final_config = _journey_config_with_call_deadline(
                                 final_config,
                                 time_limit=final_probe_budget,
                                 profile_generation_time_fraction=float(
@@ -5341,7 +5353,7 @@ def _process_journey_branch_node(
                             depth=node.depth,
                             completion_bound_phase="after_retry",
                         )
-                        final_config = replace(
+                        final_config = _journey_config_with_call_deadline(
                             final_config,
                             time_limit=final_probe_budget,
                             profile_generation_time_fraction=float(
@@ -6182,7 +6194,7 @@ def _process_journey_branch_node(
                     depth=node.depth,
                     completion_bound_phase="after_retry",
                 )
-                final_config = replace(
+                final_config = _journey_config_with_call_deadline(
                     final_config,
                     time_limit=final_probe_budget,
                     profile_generation_time_fraction=float(
@@ -6275,7 +6287,7 @@ def _process_journey_branch_node(
                             config,
                             final_config,
                         )
-                        escalation_config = replace(
+                        escalation_config = _journey_config_with_call_deadline(
                             escalation_config,
                             time_limit=_journey_completion_bound_probe_budget(config, escalation_remaining),
                             profile_generation_time_fraction=float(
@@ -6449,6 +6461,10 @@ def _process_journey_branch_node(
                                 reharvest_priced_journeys.extend(repair_supplement.priced_journeys)
                                 reharvest_changed_task_sets.extend(repair_supplement.changed_task_sets)
                             if reharvest_mode:
+                                reharvest_config = _journey_config_with_call_deadline(
+                                    reharvest_config,
+                                    time_limit=float(reharvest_config.time_limit),
+                                )
                                 logger.log(
                                     "journey_post_seed_profile_reharvest",
                                     node_id=node.id,
@@ -9746,9 +9762,50 @@ def _journey_completion_bound_probe_budget(config: dict[str, Any], remaining: fl
         float(config.get("journey_certificate_completion_bound_after_retry_reserve_time", 0.0)),
     )
     if reserve <= 0.0 or budget <= reserve:
-        return budget
-    probe_budget = max(0.0, budget - reserve)
+        probe_budget = budget
+    else:
+        probe_budget = max(0.0, budget - reserve)
+    min_probe_budget = max(
+        0.0,
+        float(config.get("journey_certificate_completion_bound_after_retry_min_time", 0.0)),
+    )
+    if 0.0 < probe_budget < min_probe_budget <= budget:
+        probe_budget = float(min_probe_budget)
+    final_cap = _journey_completion_bound_final_judge_time_limit(config)
+    if final_cap > 0.0:
+        probe_budget = min(float(probe_budget), float(final_cap))
     return probe_budget
+
+
+def _journey_completion_bound_final_judge_time_limit(config: dict[str, Any]) -> float:
+    for key in (
+        "journey_certificate_completion_bound_final_judge_time_limit",
+        "journey_final_judge_time_limit",
+    ):
+        if key in config:
+            return max(0.0, float(config.get(key, 0.0)))
+    if "journey_pricing_time_limit" in config:
+        return max(0.0, float(config.get("journey_pricing_time_limit", 0.0)))
+    return 0.0
+
+
+def _journey_config_with_call_deadline(
+    pricing_config: JourneyPricingConfig,
+    *,
+    time_limit: float,
+    **updates: Any,
+) -> JourneyPricingConfig:
+    budget = max(0.0, float(time_limit))
+    deadline = None if budget <= 0.0 else time.perf_counter() + budget
+    existing_deadline = getattr(pricing_config, "absolute_deadline", None)
+    if existing_deadline is not None:
+        try:
+            existing = float(existing_deadline)
+        except (TypeError, ValueError):
+            existing = 0.0
+        if math.isfinite(existing) and existing > 0.0:
+            deadline = existing if deadline is None else min(float(deadline), existing)
+    return replace(pricing_config, time_limit=budget, absolute_deadline=deadline, **updates)
 
 
 def _journey_completion_bound_probe_budget_is_viable(
@@ -12524,6 +12581,105 @@ def _journey_certificate_pricing_config(
         mode["completion_bound_two_cycle_max_states"] = int(
             updated.direct_journey_label_completion_bound_two_cycle_max_states
         )
+    sharded_pulse_allowed = (
+        (
+            bool(config.get("journey_final_judge_sharding_enabled", False))
+            or bool(config.get("journey_pulse_final_judge_enabled", False))
+        )
+        and (bool(certificate_candidate) or completion_bound_exact_proof or completion_bound_final_probe_request)
+        and (int(depth) <= 0 or not bool(config.get("journey_final_judge_sharding_root_only", True)))
+        and (
+            not bool(config.get("journey_final_judge_sharding_final_probe_only", False))
+            or completion_bound_is_final_probe
+        )
+    )
+    if sharded_pulse_allowed:
+        dummy_engine_enabled = bool(config.get("journey_sharded_pulse_dummy_engine_enabled", False))
+        dummy_mode = str(config.get("journey_sharded_pulse_dummy_mode", "") or "").strip().lower()
+        dummy_statuses: tuple[str, ...] = tuple()
+        if dummy_engine_enabled:
+            dummy_statuses_value = config.get(
+                "journey_final_judge_dummy_shard_statuses",
+                config.get("journey_final_judge_sharding_dummy_statuses", tuple()),
+            )
+            if isinstance(dummy_statuses_value, str):
+                dummy_statuses = tuple(
+                    part.strip() for part in dummy_statuses_value.split(",") if part.strip()
+                )
+            else:
+                dummy_statuses = tuple(str(item) for item in (dummy_statuses_value or tuple()))
+            if not dummy_statuses:
+                dummy_mode_statuses = {
+                    "all_certified": ("CERTIFIED_NO_NEGATIVE",),
+                    "certified": ("CERTIFIED_NO_NEGATIVE",),
+                    "negative": ("FOUND_NEGATIVE",),
+                    "found_negative": ("FOUND_NEGATIVE",),
+                    "incomplete": ("INCOMPLETE_TIME_LIMIT",),
+                    "time_limit": ("INCOMPLETE_TIME_LIMIT",),
+                    "duplicate_only": ("DUPLICATE_ONLY",),
+                }
+                dummy_statuses = dummy_mode_statuses.get(dummy_mode, tuple())
+        updated = replace(
+            updated,
+            final_judge_engine="sharded_pulse",
+            sharded_final_judge_enabled=True,
+            sharded_final_judge_dummy_engine_enabled=dummy_engine_enabled,
+            sharded_final_judge_dummy_mode=dummy_mode,
+            sharded_final_judge_allow_test_dummy_certificate=bool(
+                config.get(
+                    "journey_sharded_pulse_allow_test_dummy_certificate",
+                    config.get("allow_test_dummy_certificate", False),
+                )
+            ),
+            sharded_final_judge_dummy_statuses=dummy_statuses,
+            sharded_final_judge_toy_certificate_enabled=bool(
+                config.get("journey_pulse_toy_certificate_enabled", False)
+            ),
+            pulse_max_recursions=max(0, int(config.get("journey_pulse_max_recursions", 50000))),
+            pulse_exact_safe_pruning_enabled=bool(
+                config.get("journey_pulse_return_feasibility_pruning_enabled", False)
+                or config.get("journey_pulse_exact_safe_pruning_enabled", False)
+            ),
+            pulse_archive_dominance_enabled=bool(
+                config.get("journey_pulse_depot_ready_dominance_enabled", False)
+                or config.get("journey_pulse_archive_enabled", False)
+            ),
+            pulse_archive_max_records_per_key=max(
+                1,
+                int(config.get("journey_pulse_archive_max_records_per_key", 32)),
+            ),
+            pulse_support_aware_harvesting_enabled=bool(
+                config.get("journey_pulse_support_aware_harvesting_enabled", False)
+            ),
+            pulse_negative_harvest_limit=max(
+                0,
+                int(config.get("journey_pulse_negative_harvest_limit", 0)),
+            ),
+            pulse_resume_enabled=bool(config.get("journey_final_judge_resume_enabled", False)),
+            pulse_cache_max_states=max(0, int(config.get("journey_final_judge_cache_max_states", 0))),
+            pulse_parallel_enabled=bool(config.get("journey_final_judge_parallel_enabled", False)),
+            pulse_parallel_workers=max(1, int(config.get("journey_final_judge_parallel_workers", 1))),
+        )
+        mode["sharded_pulse_final_judge"] = True
+        mode["sharded_pulse_dummy_engine"] = bool(dummy_engine_enabled)
+        mode["sharded_pulse_toy_certificate"] = bool(
+            updated.sharded_final_judge_toy_certificate_enabled
+        )
+        mode["sharded_pulse_max_recursions"] = int(updated.pulse_max_recursions)
+        mode["sharded_pulse_exact_safe_pruning"] = bool(updated.pulse_exact_safe_pruning_enabled)
+        mode["sharded_pulse_archive"] = bool(updated.pulse_archive_dominance_enabled)
+        mode["sharded_pulse_support_aware_harvesting"] = bool(
+            updated.pulse_support_aware_harvesting_enabled
+        )
+        mode["sharded_pulse_resume_enabled"] = bool(updated.pulse_resume_enabled)
+        mode["sharded_pulse_parallel_enabled"] = bool(updated.pulse_parallel_enabled)
+        mode["sharded_pulse_parallel_workers"] = int(updated.pulse_parallel_workers)
+        if dummy_engine_enabled:
+            mode["sharded_pulse_dummy_mode"] = dummy_mode
+            mode["sharded_pulse_dummy_statuses"] = list(dummy_statuses)
+            mode["sharded_pulse_allow_test_dummy_certificate"] = bool(
+                updated.sharded_final_judge_allow_test_dummy_certificate
+            )
     return updated, mode
 
 
@@ -14356,6 +14512,43 @@ def _log_journey_pricing(
         lb_suffix_pruned_available_mask_winner=getattr(pricing, "lb_suffix_pruned_available_mask_winner", 0),
         lb_partial_cut_reward_positive_checks=getattr(pricing, "lb_partial_cut_reward_positive_checks", 0),
         lb_suffix_cut_reward_positive_checks=getattr(pricing, "lb_suffix_cut_reward_positive_checks", 0),
+        final_judge_engine=str(getattr(pricing, "final_judge_engine", "")),
+        final_judge_certificate_capable=bool(
+            getattr(pricing, "final_judge_certificate_capable", False)
+        ),
+        final_judge_sharded_enabled=bool(getattr(pricing, "final_judge_sharded_enabled", False)),
+        final_judge_dummy_engine_enabled=bool(
+            getattr(pricing, "final_judge_dummy_engine_enabled", False)
+        ),
+        final_judge_dummy_mode=str(getattr(pricing, "final_judge_dummy_mode", "")),
+        final_judge_allow_test_dummy_certificate=bool(
+            getattr(pricing, "final_judge_allow_test_dummy_certificate", False)
+        ),
+        final_judge_dummy_certificate=bool(
+            getattr(pricing, "final_judge_dummy_certificate", False)
+        ),
+        final_judge_test_only=bool(getattr(pricing, "final_judge_test_only", False)),
+        final_judge_shards_total=int(getattr(pricing, "final_judge_shards_total", 0)),
+        final_judge_shards_certified=int(getattr(pricing, "final_judge_shards_certified", 0)),
+        final_judge_shards_incomplete=int(getattr(pricing, "final_judge_shards_incomplete", 0)),
+        final_judge_shards_negative_found=int(
+            getattr(pricing, "final_judge_shards_negative_found", 0)
+        ),
+        final_judge_shards_refined=int(getattr(pricing, "final_judge_shards_refined", 0)),
+        final_judge_incomplete_reason=str(getattr(pricing, "final_judge_incomplete_reason", "")),
+        pulse_recursions=int(getattr(pricing, "pulse_recursions", 0)),
+        pulse_expanded_states=int(getattr(pricing, "pulse_expanded_states", 0)),
+        pulse_resource_pruned=int(getattr(pricing, "pulse_resource_pruned", 0)),
+        pulse_return_pruned=int(getattr(pricing, "pulse_return_pruned", 0)),
+        pulse_time_window_pruned=int(getattr(pricing, "pulse_time_window_pruned", 0)),
+        pulse_bound_pruned=int(getattr(pricing, "pulse_bound_pruned", 0)),
+        pulse_archive_pruned=int(getattr(pricing, "pulse_archive_pruned", 0)),
+        pulse_depot_ready_pruned=int(getattr(pricing, "pulse_depot_ready_pruned", 0)),
+        pulse_negative_found=bool(getattr(pricing, "pulse_negative_found", False)),
+        pulse_harvested_count=int(getattr(pricing, "pulse_harvested_count", 0)),
+        pulse_best_true_rc=None
+        if getattr(pricing, "pulse_best_true_rc", None) is None
+        else round(float(getattr(pricing, "pulse_best_true_rc")), 9),
         amcb_enabled=bool(getattr(pricing, "amcb_enabled", False)),
         amcb_build_time=round(float(getattr(pricing, "amcb_build_time", 0.0)), 9),
         amcb_query_count=int(getattr(pricing, "amcb_query_count", 0)),
@@ -14707,6 +14900,9 @@ def _log_journey_pricing(
         ng_dominance_pruned_labels=int(getattr(pricing, "ng_dominance_pruned_labels", 0)),
         ng_fallback_to_elementary=bool(getattr(pricing, "ng_fallback_to_elementary", False)),
         ng_certificate_from_relaxation=bool(getattr(pricing, "ng_certificate_from_relaxation", False)),
+        ng_certificate_limit_hit=bool(getattr(pricing, "ng_certificate_limit_hit", False)),
+        ng_probe_limit_hit=bool(getattr(pricing, "ng_probe_limit_hit", False)),
+        ng_relaxation_superset=getattr(pricing, "ng_relaxation_superset", None),
         ng_best_relaxed_reduced_cost=None
         if getattr(pricing, "ng_best_relaxed_reduced_cost", None) is None
         else round(float(getattr(pricing, "ng_best_relaxed_reduced_cost")), 9),
@@ -14781,8 +14977,11 @@ def _journey_pricing_state(pricing: Any) -> str:
         PRICING_STATE_INCOMPLETE_LIMIT,
         PRICING_STATE_DUPLICATE_ONLY,
     }:
-        if state == PRICING_STATE_CERTIFIED_NO_NEGATIVE and not bool(
-            getattr(pricing, "global_certificate_capable", False)
+        if state == PRICING_STATE_CERTIFIED_NO_NEGATIVE and not (
+            bool(getattr(pricing, "global_certificate_capable", False))
+            and str(getattr(pricing, "status", "")) == "OPTIMAL"
+            and not bool(getattr(pricing, "journeys", None))
+            and _journey_pricing_certificate_reason_allowed(pricing)
         ):
             if (
                 bool(getattr(pricing, "exhausted", False))
@@ -14798,9 +14997,8 @@ def _journey_pricing_state(pricing: Any) -> str:
         bool(getattr(pricing, "exhausted", False))
         and not bool(getattr(pricing, "journeys", None))
         and bool(getattr(pricing, "global_certificate_capable", False))
-        and bool(getattr(pricing, "completion_bound_enabled", False))
         and str(getattr(pricing, "status", "")) == "OPTIMAL"
-        and reason == "direct_label_no_negative_journey"
+        and _journey_pricing_certificate_reason_allowed(pricing)
     ):
         return PRICING_STATE_CERTIFIED_NO_NEGATIVE
     if (not bool(getattr(pricing, "exhausted", False))) or str(getattr(pricing, "status", "")) != "OPTIMAL":
@@ -14818,14 +15016,35 @@ def _journey_pricing_state(pricing: Any) -> str:
     return PRICING_STATE_INCOMPLETE_LIMIT
 
 
+def _journey_pricing_certificate_reason_allowed(pricing: Any) -> bool:
+    reason = str(getattr(pricing, "reason", ""))
+    if bool(getattr(pricing, "completion_bound_enabled", False)) and reason == "direct_label_no_negative_journey":
+        return True
+    if (
+        str(getattr(pricing, "final_judge_engine", "")) in {"sharded_pulse", "sharded_pulse_dummy"}
+        and bool(getattr(pricing, "final_judge_certificate_capable", False))
+        and reason == "sharded_pulse_no_negative_journey"
+    ):
+        return True
+    if bool(getattr(pricing, "ng_certificate_from_relaxation", False)) and reason == "ng_dssr_relaxed_no_negative_journey":
+        if bool(getattr(pricing, "ng_certificate_limit_hit", False)):
+            return False
+        if bool(getattr(pricing, "ng_probe_limit_hit", False)):
+            return False
+        if getattr(pricing, "ng_relaxation_superset", None) is not True:
+            return False
+        return True
+    return False
+
+
 def _journey_pricing_is_global_certificate(pricing: Any) -> bool:
     """Return whether a pricing result proves no journey column exists.
 
     ``exhausted=True`` is oracle-local.  Profile/streaming or NG workers may
     exhaust their own relaxed/generated universe, but that is not a journey
-    master certificate.  In the current exact-safe chain, the global certificate
-    is only a true-dual direct-label final judge that exhausts with no negative
-    journey under completion-bound mode.
+    master certificate.  Global certificates are explicit final-judge no-column
+    proofs: the legacy true-dual direct-label completion-bound judge, or the
+    sharded Pulse final judge when its ledger is certificate-capable.
     """
 
     return _journey_pricing_state(pricing) == PRICING_STATE_CERTIFIED_NO_NEGATIVE
@@ -14836,6 +15055,17 @@ def _journey_pricing_certificate_rejection_reason(pricing: Any) -> str:
         return str(getattr(pricing, "reason", "") or "pricing_incomplete")
     if getattr(pricing, "journeys", None):
         return "negative_journey_requires_column_addition"
+    if str(getattr(pricing, "final_judge_engine", "")) in {"sharded_pulse", "sharded_pulse_dummy"}:
+        if not bool(getattr(pricing, "global_certificate_capable", False)):
+            return "sharded_pulse_requires_global_certificate_capable"
+        if not bool(getattr(pricing, "final_judge_certificate_capable", False)):
+            return "sharded_pulse_requires_certificate_capable_final_judge"
+        if (
+            str(getattr(pricing, "status", "")) != "OPTIMAL"
+            or str(getattr(pricing, "reason", "")) != "sharded_pulse_no_negative_journey"
+        ):
+            return "sharded_pulse_final_judge_not_no_column_certificate"
+        return "pricing_certificate_rejected"
     if not bool(getattr(pricing, "completion_bound_enabled", False)):
         return "profile_exhausted_requires_direct_label_final_judge"
     if not bool(getattr(pricing, "global_certificate_capable", False)):
@@ -14859,166 +15089,20 @@ def _journey_duplicate_only_final_judge_can_certify(
     node_id: int = 0,
     depth: int = 0,
 ) -> bool:
-    """Audit whether an exhausted duplicate-only final judge can close the node.
+    """Return False because DUPLICATE_ONLY is never certificate evidence."""
 
-    Journey variables have an upper bound ``x_j <= 1``.  Therefore an existing
-    RMP column may legally have negative reduced cost when it is already at its
-    upper bound.  A true-dual final judge that exhausts the search and finds
-    only such existing columns has not found an addable negative column.
-
-    This helper is deliberately narrow: it never upgrades profile workers, scan
-    limited results, weak-negative filters, or non-final incomplete results.
-    Before accepting, it re-solves the current branch-node RMP with variable
-    reduced costs captured and verifies that every negative reduced-cost RMP
-    variable is fixed at its upper bound.  If any negative reduced-cost column
-    is not at the upper bound, the duplicate-only result remains uncertified.
-    """
-
-    if not bool(config.get("journey_duplicate_only_final_judge_audit_enabled", True)):
-        return False
-    if _journey_pricing_state(pricing) != PRICING_STATE_DUPLICATE_ONLY:
-        return False
-    if not bool(getattr(pricing, "exhausted", False)):
-        return False
-    if str(getattr(pricing, "status", "")) != "OPTIMAL":
-        return False
-    if getattr(pricing, "journeys", None):
-        return False
-    if not bool(getattr(pricing, "completion_bound_enabled", False)):
-        return False
-    if not bool(getattr(pricing, "global_certificate_capable", False)):
-        return False
-    if bool(getattr(pricing, "duplicate_scan_limited", False)):
-        return False
-    if int(getattr(pricing, "weak_negative_journeys_filtered", 0)) > 0:
-        return False
-    if str(getattr(pricing, "reason", "")) != "negative_journeys_already_in_pool":
-        return False
-
-    node_journeys = _filter_journeys_by_branch(journey_pool.journeys, branch_constraints)
-    if not node_journeys:
+    if _journey_pricing_state(pricing) == PRICING_STATE_DUPLICATE_ONLY:
         logger.log(
             "journey_duplicate_only_certificate_audit",
             node_id=int(node_id),
             depth=int(depth),
             cg_iter=int(cg_iter),
             accepted=False,
-            reason="empty_branch_filtered_pool",
+            reason="duplicate_only_promotion_disabled",
+            pricing_reason=str(getattr(pricing, "reason", "")),
             exact_safe=True,
         )
-        return False
-
-    audit_solution = solve_journey_rmp(
-        data,
-        node_journeys,
-        cuts=tuple(cuts),
-        fleet_limit=fleet_limit,
-        capture_reduced_costs=True,
-    )
-    rc_tol = max(
-        0.0,
-        float(config.get("journey_duplicate_only_final_judge_audit_rc_tolerance", config.get("eps", 1.0e-6))),
-    )
-    upper_tol = max(
-        0.0,
-        float(config.get("journey_duplicate_only_final_judge_audit_upper_tolerance", 1.0e-6)),
-    )
-    if not audit_solution.optimal:
-        logger.log(
-            "journey_duplicate_only_certificate_audit",
-            node_id=int(node_id),
-            depth=int(depth),
-            cg_iter=int(cg_iter),
-            accepted=False,
-            reason="rmp_not_optimal",
-            rmp_status=str(audit_solution.status),
-            node_journeys=len(node_journeys),
-            exact_safe=True,
-        )
-        return False
-
-    reduced_costs = dict(getattr(audit_solution, "reduced_costs", {}) or {})
-    variable_values = dict(getattr(audit_solution, "variable_values", {}) or {})
-    if not reduced_costs:
-        logger.log(
-            "journey_duplicate_only_certificate_audit",
-            node_id=int(node_id),
-            depth=int(depth),
-            cg_iter=int(cg_iter),
-            accepted=False,
-            reason="missing_reduced_costs",
-            rmp_status=str(audit_solution.status),
-            node_journeys=len(node_journeys),
-            exact_safe=True,
-        )
-        return False
-
-    negative_count = 0
-    negative_at_upper_count = 0
-    negative_below_upper_count = 0
-    min_reduced_cost: float | None = None
-    min_below_upper_reduced_cost: float | None = None
-    max_negative_below_upper_value: float | None = None
-    for index, rc_value in reduced_costs.items():
-        rc = float(rc_value)
-        value = float(variable_values.get(int(index), 0.0))
-        min_reduced_cost = rc if min_reduced_cost is None else min(float(min_reduced_cost), rc)
-        if rc >= -float(rc_tol):
-            continue
-        negative_count += 1
-        if value >= 1.0 - float(upper_tol):
-            negative_at_upper_count += 1
-            continue
-        negative_below_upper_count += 1
-        min_below_upper_reduced_cost = (
-            rc
-            if min_below_upper_reduced_cost is None
-            else min(float(min_below_upper_reduced_cost), rc)
-        )
-        max_negative_below_upper_value = (
-            value
-            if max_negative_below_upper_value is None
-            else max(float(max_negative_below_upper_value), value)
-        )
-
-    accepted = negative_below_upper_count == 0
-    accepted_reason = (
-        "no_negative_rmp_reduced_costs"
-        if negative_count == 0
-        else "all_negative_rmp_columns_at_upper_bound"
-    )
-    logger.log(
-        "journey_duplicate_only_certificate_audit",
-        node_id=int(node_id),
-        depth=int(depth),
-        cg_iter=int(cg_iter),
-        accepted=bool(accepted),
-        reason=accepted_reason if accepted else "negative_rmp_column_below_upper_bound",
-        pricing_reason=str(getattr(pricing, "reason", "")),
-        rmp_status=str(audit_solution.status),
-        rmp_objective=None
-        if audit_solution.objective is None
-        else round(float(audit_solution.objective), 9),
-        node_journeys=len(node_journeys),
-        reduced_cost_count=len(reduced_costs),
-        negative_reduced_cost_count=int(negative_count),
-        negative_at_upper_count=int(negative_at_upper_count),
-        negative_below_upper_count=int(negative_below_upper_count),
-        min_reduced_cost=None if min_reduced_cost is None else round(float(min_reduced_cost), 9),
-        min_below_upper_reduced_cost=None
-        if min_below_upper_reduced_cost is None
-        else round(float(min_below_upper_reduced_cost), 9),
-        max_negative_below_upper_value=None
-        if max_negative_below_upper_value is None
-        else round(float(max_negative_below_upper_value), 9),
-        rc_tolerance=round(float(rc_tol), 9),
-        upper_tolerance=round(float(upper_tol), 9),
-        existing_journeys_filtered=int(getattr(pricing, "existing_journeys_filtered", 0)),
-        duplicate_candidates_filtered=int(getattr(pricing, "duplicate_candidates_filtered", 0)),
-        dominated_task_set_journeys_filtered=int(getattr(pricing, "dominated_task_set_journeys_filtered", 0)),
-        exact_safe=True,
-    )
-    return bool(accepted)
+    return False
 
 
 def _journey_promote_duplicate_only_final_judge_certificate(
@@ -15035,7 +15119,7 @@ def _journey_promote_duplicate_only_final_judge_certificate(
     node_id: int = 0,
     depth: int = 0,
 ) -> Any:
-    if not _journey_duplicate_only_final_judge_can_certify(
+    _journey_duplicate_only_final_judge_can_certify(
         data,
         config,
         journey_pool,
@@ -15047,20 +15131,8 @@ def _journey_promote_duplicate_only_final_judge_certificate(
         cg_iter,
         node_id=node_id,
         depth=depth,
-    ):
-        return pricing
-    try:
-        return replace(
-            pricing,
-            pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
-            reason="direct_label_duplicate_only_no_new_column_certificate",
-            best_reduced_cost=0.0,
-        )
-    except TypeError:
-        setattr(pricing, "pricing_state", PRICING_STATE_CERTIFIED_NO_NEGATIVE)
-        setattr(pricing, "reason", "direct_label_duplicate_only_no_new_column_certificate")
-        setattr(pricing, "best_reduced_cost", 0.0)
-        return pricing
+    )
+    return pricing
 
 
 def _log_journey_certificate_rejection(
@@ -15432,6 +15504,10 @@ def _run_journey_same_dual_supplement(
         )
         if not supplement_mode:
             break
+        supplement_config = _journey_config_with_call_deadline(
+            supplement_config,
+            time_limit=float(supplement_config.time_limit),
+        )
         logger.log(
             "journey_same_dual_supplement",
             node_id=node_id,
@@ -15660,6 +15736,10 @@ def _run_journey_final_judge_replacement_repair(
     )
     if not repair_mode or not dominant_task_set_costs:
         return result
+    repair_config = _journey_config_with_call_deadline(
+        repair_config,
+        time_limit=float(repair_config.time_limit),
+    )
     logger.log(
         "journey_final_judge_replacement_repair",
         node_id=node_id,
@@ -16334,6 +16414,31 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "label_resume_profiles",
         "label_resume_exhausted",
         "completion_bound_enabled",
+        "final_judge_engine",
+        "final_judge_certificate_capable",
+        "final_judge_sharded_enabled",
+        "final_judge_dummy_engine_enabled",
+        "final_judge_dummy_mode",
+        "final_judge_allow_test_dummy_certificate",
+        "final_judge_dummy_certificate",
+        "final_judge_test_only",
+        "final_judge_shards_total",
+        "final_judge_shards_certified",
+        "final_judge_shards_incomplete",
+        "final_judge_shards_negative_found",
+        "final_judge_shards_refined",
+        "final_judge_incomplete_reason",
+        "pulse_recursions",
+        "pulse_expanded_states",
+        "pulse_resource_pruned",
+        "pulse_return_pruned",
+        "pulse_time_window_pruned",
+        "pulse_bound_pruned",
+        "pulse_archive_pruned",
+        "pulse_depot_ready_pruned",
+        "pulse_negative_found",
+        "pulse_harvested_count",
+        "pulse_best_true_rc",
         "amcb_enabled",
         "amcb_build_time",
         "amcb_query_count",
@@ -16370,6 +16475,10 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "ng_generated_labels",
         "ng_dominance_pruned_labels",
         "ng_fallback_to_elementary",
+        "ng_certificate_from_relaxation",
+        "ng_certificate_limit_hit",
+        "ng_probe_limit_hit",
+        "ng_relaxation_superset",
     )
     stats: dict[str, Any] = {}
     for field_name in fields:

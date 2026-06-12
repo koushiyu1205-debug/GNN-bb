@@ -7,6 +7,7 @@ import bisect
 import heapq
 import itertools
 import math
+import os
 import time
 from typing import Any, Callable
 
@@ -22,6 +23,8 @@ from BPC_future.pricing.journey_harvesting import (
 )
 from BPC_future.pricing.available_mask_completion_bound import AvailableMaskCompletionBound
 from BPC_future.pricing.resource_pareto_completion import ResourceParetoCompletionEnvelope
+from BPC_future.pricing.sharded_pulse_final_judge import build_dummy_shard_ledger
+from BPC_future.pricing.pulse_toy_exhaustive import toy_root_exhaustive_pulse
 from BPC_future.pricing.trip_pricing import (
     _PartialNoWaitingPathProfile,
     PricingConfig,
@@ -52,6 +55,24 @@ class JourneyPricingConfig:
     max_sequences: int = 0
     max_timed_evaluations: int = 0
     time_limit: float = 0.0
+    absolute_deadline: float | None = None
+    final_judge_engine: str = ""
+    sharded_final_judge_enabled: bool = False
+    sharded_final_judge_dummy_engine_enabled: bool = False
+    sharded_final_judge_dummy_mode: str = ""
+    sharded_final_judge_allow_test_dummy_certificate: bool = False
+    sharded_final_judge_dummy_statuses: tuple[str, ...] = tuple()
+    sharded_final_judge_toy_certificate_enabled: bool = False
+    pulse_max_recursions: int = 50000
+    pulse_exact_safe_pruning_enabled: bool = False
+    pulse_archive_dominance_enabled: bool = False
+    pulse_archive_max_records_per_key: int = 32
+    pulse_support_aware_harvesting_enabled: bool = False
+    pulse_negative_harvest_limit: int = 0
+    pulse_resume_enabled: bool = False
+    pulse_cache_max_states: int = 0
+    pulse_parallel_enabled: bool = False
+    pulse_parallel_workers: int = 1
     start_time_step: float = 10.0
     path_dominance_enabled: bool = True
     start_optimization_enabled: bool = True
@@ -200,6 +221,21 @@ class JourneyPricingConfig:
     journey_selection_mode: str = "reduced_cost"
     duplicate_scan_limit: int = 10000
     eps: float = 1.0e-6
+
+
+def _pricing_absolute_deadline(started: float, config: JourneyPricingConfig) -> float | None:
+    deadlines: list[float] = []
+    if float(config.time_limit) > 0.0:
+        deadlines.append(float(started) + float(config.time_limit))
+    absolute_deadline = getattr(config, "absolute_deadline", None)
+    if absolute_deadline is not None:
+        try:
+            value = float(absolute_deadline)
+        except (TypeError, ValueError):
+            value = 0.0
+        if math.isfinite(value) and value > 0.0:
+            deadlines.append(value)
+    return min(deadlines) if deadlines else None
 
 
 @dataclass
@@ -460,8 +496,36 @@ class JourneyPricingResult:
     ng_dominance_pruned_labels: int = 0
     ng_fallback_to_elementary: bool = False
     ng_certificate_from_relaxation: bool = False
+    ng_certificate_limit_hit: bool = False
+    ng_probe_limit_hit: bool = False
+    ng_relaxation_superset: bool | None = None
     ng_best_relaxed_reduced_cost: float | None = None
     global_certificate_capable: bool = False
+    final_judge_engine: str = ""
+    final_judge_certificate_capable: bool = False
+    final_judge_sharded_enabled: bool = False
+    final_judge_dummy_engine_enabled: bool = False
+    final_judge_dummy_mode: str = ""
+    final_judge_allow_test_dummy_certificate: bool = False
+    final_judge_dummy_certificate: bool = False
+    final_judge_test_only: bool = False
+    final_judge_shards_total: int = 0
+    final_judge_shards_certified: int = 0
+    final_judge_shards_incomplete: int = 0
+    final_judge_shards_negative_found: int = 0
+    final_judge_shards_refined: int = 0
+    final_judge_incomplete_reason: str = ""
+    pulse_recursions: int = 0
+    pulse_expanded_states: int = 0
+    pulse_resource_pruned: int = 0
+    pulse_return_pruned: int = 0
+    pulse_time_window_pruned: int = 0
+    pulse_bound_pruned: int = 0
+    pulse_archive_pruned: int = 0
+    pulse_depot_ready_pruned: int = 0
+    pulse_negative_found: bool = False
+    pulse_harvested_count: int = 0
+    pulse_best_true_rc: float | None = None
     pricing_state: str = ""
     diagnostic_profile_task_masks: frozenset[int] = frozenset()
     diagnostic_profile_trip_masks: frozenset[int] = frozenset()
@@ -480,6 +544,37 @@ class JourneyPricingResult:
     def __post_init__(self) -> None:
         if not str(self.pricing_state or ""):
             self.pricing_state = _infer_journey_pricing_state(self)
+        elif str(self.pricing_state) == PRICING_STATE_CERTIFIED_NO_NEGATIVE and not (
+            bool(self.global_certificate_capable)
+            and str(self.status) == "OPTIMAL"
+            and not bool(self.journeys)
+            and _pricing_certificate_reason_allowed(self)
+        ):
+            if bool(self.exhausted) and str(self.status) == "OPTIMAL":
+                self.pricing_state = PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED
+            else:
+                self.pricing_state = PRICING_STATE_INCOMPLETE_LIMIT
+
+
+def _pricing_certificate_reason_allowed(result: JourneyPricingResult) -> bool:
+    reason = str(result.reason or "")
+    if bool(result.completion_bound_enabled) and reason == "direct_label_no_negative_journey":
+        return True
+    if (
+        str(getattr(result, "final_judge_engine", "")) in {"sharded_pulse", "sharded_pulse_dummy"}
+        and bool(getattr(result, "final_judge_certificate_capable", False))
+        and reason == "sharded_pulse_no_negative_journey"
+    ):
+        return True
+    if bool(getattr(result, "ng_certificate_from_relaxation", False)) and reason == "ng_dssr_relaxed_no_negative_journey":
+        if bool(getattr(result, "ng_certificate_limit_hit", False)):
+            return False
+        if bool(getattr(result, "ng_probe_limit_hit", False)):
+            return False
+        if getattr(result, "ng_relaxation_superset", None) is not True:
+            return False
+        return True
+    return False
 
 
 def _infer_journey_pricing_state(result: JourneyPricingResult) -> str:
@@ -489,9 +584,8 @@ def _infer_journey_pricing_state(result: JourneyPricingResult) -> str:
     if (
         bool(result.exhausted)
         and bool(result.global_certificate_capable)
-        and bool(result.completion_bound_enabled)
         and str(result.status) == "OPTIMAL"
-        and reason == "direct_label_no_negative_journey"
+        and _pricing_certificate_reason_allowed(result)
     ):
         return PRICING_STATE_CERTIFIED_NO_NEGATIVE
     if not bool(result.exhausted) or str(result.status) != "OPTIMAL":
@@ -1920,6 +2014,7 @@ class _DirectJourneyCompletionBound:
         self.two_cycle_incompatible_queries = 0
         self.two_cycle_top2_replacements = 0
         self.two_cycle_build_time = 0.0
+        self.table_complete = True
         self.future_sortie_floor = 0.0
         self.build_time = 0.0
         self.state_count = 0
@@ -1964,7 +2059,7 @@ class _DirectJourneyCompletionBound:
         self.lb_min_value = min(flat_values) if flat_values else None
         self.lb_mean_value = (sum(flat_values) / float(len(flat_values))) if flat_values else None
         self.lb_negative_state_count = sum(1 for value in flat_values if value < 0.0)
-        if self.two_cycle_enabled:
+        if self.enabled and self.two_cycle_enabled:
             self._build_two_cycle_values()
         self.build_time = time.perf_counter() - started
 
@@ -2092,6 +2187,10 @@ class _DirectJourneyCompletionBound:
                 depart_time = self._bucket_time(int(time_bucket))
                 energy_used = self._bucket_energy(int(energy_bucket))
                 for node in self.nodes:
+                    if self._deadline_exceeded():
+                        self.table_complete = False
+                        self.enabled = False
+                        return {}
                     self.state_count += 1
                     best = self._return_arc_completion_value(
                         int(node),
@@ -2428,6 +2527,8 @@ def _direct_completion_bound_cache_key(
 
 
 def _direct_completion_bound_cacheable(bound: _DirectJourneyCompletionBound) -> bool:
+    if not bool(getattr(bound, "enabled", True)) or not bool(getattr(bound, "table_complete", True)):
+        return False
     if not bool(bound.two_cycle_enabled):
         return True
     # Two-cycle tables are only reusable when fully built.  A fallback table is
@@ -2670,12 +2771,14 @@ class _UniqueRouteCompletionLowerBound:
         exact_first_step_bucket_diagnostics_enabled: bool = False,
         exact_mask_limit: int | None = None,
         cache_state_limit: int = 0,
+        deadline: float | None = None,
     ) -> None:
         self.exact_mask_limit = self.EXACT_MASK_LIMIT if exact_mask_limit is None else max(0, int(exact_mask_limit))
         self.enabled = len(task_to_bit) <= int(self.exact_mask_limit)
         self.exact_first_step_enabled = bool(exact_first_step_enabled)
         self.exact_first_step_bucket_diagnostics_enabled = bool(exact_first_step_bucket_diagnostics_enabled)
         self.cache_state_limit = max(0, int(cache_state_limit))
+        self.deadline = None if deadline is None else float(deadline)
         self.horizon = max(0.0, float(data.horizon))
         self.bucket_count = max(1, int(time_buckets))
         self.bucket_width = self.horizon / float(self.bucket_count) if self.horizon > 0.0 else 1.0
@@ -2782,6 +2885,9 @@ class _UniqueRouteCompletionLowerBound:
         )
 
     def _ensure_cache_budget(self) -> None:
+        if self.deadline is not None and time.perf_counter() > float(self.deadline):
+            self.cache_budget_exceeded_count += 1
+            raise _UniqueRouteBoundBudgetExceeded
         if self.cache_state_limit <= 0:
             return
         if self._cache_state_count() >= int(self.cache_state_limit):
@@ -2825,10 +2931,12 @@ class _UniqueRouteCompletionLowerBound:
         best = 0.0
         if int(remaining_sorties) > 0 and int(available_mask) > 0:
             for task, bit in self.task_bits:
+                self._ensure_cache_budget()
                 if not (int(available_mask) & int(bit)):
                     continue
                 depart_time = self._bucket_time(int(bucket))
                 for option in self.arc_options.get((0, int(task)), tuple()):
+                    self._ensure_cache_budget()
                     arrival_time = float(depart_time) + float(option.time)
                     service_start = max(float(arrival_time), float(self.ready_time[int(task)]))
                     if service_start > self.due_arrival[int(task)] + 1.0e-9:
@@ -2886,6 +2994,7 @@ class _UniqueRouteCompletionLowerBound:
         depart_time = self._bucket_time(int(bucket))
         energy_used = self._bucket_energy(int(energy_bucket))
         for option in self.arc_options.get((int(last), 0), tuple()):
+            self._ensure_cache_budget()
             return_time = self._time_after_return(
                 float(depart_time),
                 float(option.time),
@@ -2906,9 +3015,11 @@ class _UniqueRouteCompletionLowerBound:
                 best = candidate
         if int(remaining_slots_in_sortie) > 0 and int(available_mask) > 0:
             for task, bit in self.task_bits:
+                self._ensure_cache_budget()
                 if not (int(available_mask) & int(bit)):
                     continue
                 for option in self.arc_options.get((int(last), int(task)), tuple()):
+                    self._ensure_cache_budget()
                     arrival_time = float(depart_time) + float(option.time)
                     service_start = max(float(arrival_time), float(self.ready_time[int(task)]))
                     if service_start > self.due_arrival[int(task)] + 1.0e-9:
@@ -2990,6 +3101,7 @@ class _UniqueRouteCompletionLowerBound:
         depart_time = float(bounded_time)
         energy_used = float(bounded_energy)
         for option in self.arc_options.get((int(last), 0), tuple()):
+            self._ensure_cache_budget()
             return_time = self._time_after_return(
                 float(depart_time),
                 float(option.time),
@@ -3016,9 +3128,11 @@ class _UniqueRouteCompletionLowerBound:
                 best = float(candidate)
         if int(remaining_slots_in_sortie) > 0 and int(available_mask) > 0:
             for task, bit in self.task_bits:
+                self._ensure_cache_budget()
                 if not (int(available_mask) & int(bit)):
                     continue
                 for option in self.arc_options.get((int(last), int(task)), tuple()):
+                    self._ensure_cache_budget()
                     arrival_time = float(depart_time) + float(option.time)
                     service_start = max(float(arrival_time), float(self.ready_time[int(task)]))
                     if service_start > self.due_arrival[int(task)] + 1.0e-9:
@@ -3098,6 +3212,327 @@ class _TaskSetSupersetLowerBoundCache:
         return best
 
 
+def _price_journeys_by_sharded_pulse_dummy(
+    data: FutureData,
+    *,
+    config: JourneyPricingConfig,
+) -> JourneyPricingResult:
+    ledger = build_dummy_shard_ledger(
+        data,
+        getattr(config, "sharded_final_judge_dummy_statuses", tuple()),
+    )
+    fields = ledger.result_fields()
+    pricing_state = str(fields.get("pricing_state", ""))
+    fields["final_judge_engine"] = "sharded_pulse_dummy"
+    exhausted = bool(fields.pop("exhausted"))
+    best_reduced_cost = fields.pop("best_reduced_cost")
+    status = str(fields.pop("status"))
+    reason = str(fields.pop("reason"))
+    return JourneyPricingResult(
+        [],
+        exhausted,
+        None if best_reduced_cost is None else float(best_reduced_cost),
+        0,
+        0,
+        0,
+        0,
+        status,
+        reason,
+        final_judge_dummy_engine_enabled=True,
+        final_judge_dummy_mode=str(config.sharded_final_judge_dummy_mode or ""),
+        final_judge_allow_test_dummy_certificate=bool(
+            config.sharded_final_judge_allow_test_dummy_certificate
+        ),
+        final_judge_dummy_certificate=pricing_state == PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+        final_judge_test_only=True,
+        **fields,
+    )
+
+
+def _sharded_pulse_incomplete_result(
+    *,
+    reason: str,
+    incomplete_reason: str,
+    dummy_engine_enabled: bool = False,
+    dummy_mode: str = "",
+    allow_test_dummy_certificate: bool = False,
+) -> JourneyPricingResult:
+    return JourneyPricingResult(
+        [],
+        False,
+        None,
+        0,
+        0,
+        0,
+        0,
+        "INCOMPLETE",
+        reason,
+        global_certificate_capable=False,
+        final_judge_engine="sharded_pulse_dummy" if bool(dummy_engine_enabled) else "sharded_pulse",
+        final_judge_certificate_capable=False,
+        final_judge_sharded_enabled=True,
+        final_judge_dummy_engine_enabled=bool(dummy_engine_enabled),
+        final_judge_dummy_mode=str(dummy_mode or ""),
+        final_judge_allow_test_dummy_certificate=bool(allow_test_dummy_certificate),
+        final_judge_dummy_certificate=False,
+        final_judge_test_only=bool(dummy_engine_enabled),
+        final_judge_incomplete_reason=str(incomplete_reason),
+        pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+    )
+
+
+def _sharded_pulse_dummy_engine_allowed(data: FutureData, config: JourneyPricingConfig) -> bool:
+    if not bool(config.sharded_final_judge_allow_test_dummy_certificate):
+        return False
+    env_value = str(os.environ.get("BPC_FUTURE_ALLOW_DUMMY_CERTIFICATE", "")).strip().lower()
+    if env_value not in {"1", "true", "yes", "on"}:
+        return False
+    name = str(getattr(data, "name", "") or "")
+    return name == "very_small" or name.startswith("test")
+
+
+def _price_journeys_by_sharded_pulse_guarded(
+    data: FutureData,
+    duals: JourneyDuals,
+    branch_constraints: tuple[BranchConstraint, ...],
+    *,
+    config: JourneyPricingConfig,
+    cuts: tuple[FutureCut, ...],
+    forbidden_journey_signatures: set[tuple] | frozenset[tuple] | None,
+    active_support_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None,
+    pool_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None,
+) -> JourneyPricingResult:
+    forbidden = {tuple(signature) for signature in (forbidden_journey_signatures or set())}
+    all_candidates: dict[tuple, tuple[float, JourneyColumn]] = {}
+    duplicate_negative_seen = False
+    incomplete_reason = ""
+    shards_total = len(tuple(data.tasks))
+    shards_certified = 0
+    shards_incomplete = 0
+    shards_negative = 0
+    generated_traces = 0
+    materialized_sorties = 0
+    materialized_journeys = 0
+    pulse_recursions = 0
+    pulse_expanded_states = 0
+    pulse_resource_pruned = 0
+    pulse_return_pruned = 0
+    pulse_time_window_pruned = 0
+    pulse_bound_pruned = 0
+    pulse_archive_pruned = 0
+    pulse_depot_ready_pruned = 0
+    pulse_harvested_count = 0
+    best_true_rc: float | None = None
+
+    deadline = config.absolute_deadline
+    if deadline is None and float(config.time_limit) > 0.0:
+        deadline = time.perf_counter() + float(config.time_limit)
+
+    for task in data.tasks:
+        shard = toy_root_exhaustive_pulse(
+            data,
+            duals,
+            cuts=cuts,
+            time_bucket_size=float(config.time_bucket_size),
+            eps=1.0e-6,
+            max_tasks_per_sortie=int(config.max_tasks_per_trip),
+            max_sorties=int(data.sortie_limit),
+            first_task_shard=int(task),
+            deadline=deadline,
+            max_recursions=int(config.pulse_max_recursions),
+            exact_safe_pruning_enabled=bool(config.pulse_exact_safe_pruning_enabled),
+            archive_dominance_enabled=bool(config.pulse_archive_dominance_enabled),
+            archive_max_records_per_key=int(config.pulse_archive_max_records_per_key),
+            harvest_after_negative_enabled=bool(config.pulse_support_aware_harvesting_enabled),
+            support_aware_harvesting_enabled=bool(config.pulse_support_aware_harvesting_enabled),
+            negative_harvest_limit=int(config.pulse_negative_harvest_limit),
+            active_masks=tuple(active_support_task_sets or tuple()),
+            pool_masks=tuple(pool_task_sets or tuple()),
+            forbidden_signatures=tuple(forbidden),
+        )
+        generated_traces += int(shard.generated_sortie_traces)
+        materialized_sorties += int(shard.materialized_sorties)
+        materialized_journeys += int(shard.materialized_journeys)
+        pulse_recursions += int(shard.recursions)
+        pulse_expanded_states += int(shard.expanded_states)
+        pulse_resource_pruned += int(shard.pulse_resource_pruned)
+        pulse_return_pruned += int(shard.pulse_return_pruned)
+        pulse_time_window_pruned += int(shard.pulse_time_window_pruned)
+        pulse_bound_pruned += int(shard.pulse_bound_pruned)
+        pulse_archive_pruned += int(shard.pulse_archive_pruned)
+        pulse_depot_ready_pruned += int(shard.pulse_depot_ready_pruned)
+        pulse_harvested_count += int(shard.pulse_harvested_count)
+        if shard.best_true_reduced_cost is not None:
+            best_true_rc = (
+                float(shard.best_true_reduced_cost)
+                if best_true_rc is None
+                else min(float(best_true_rc), float(shard.best_true_reduced_cost))
+            )
+        if not bool(shard.exhausted) and str(shard.status) not in {"FOUND_NEGATIVE", "FOUND_NEGATIVE_HARVESTED"}:
+            shards_incomplete += 1
+            incomplete_reason = str(shard.reason or shard.status)
+            continue
+
+        shard_new_negative = False
+        negative_candidates = (
+            tuple(shard.harvested_journeys)
+            if shard.harvested_journeys
+            else tuple(candidate.journey for candidate in shard.negative_leaves)
+        )
+        for journey in negative_candidates:
+            signature = tuple(journey.signature)
+            if signature in forbidden:
+                duplicate_negative_seen = True
+                continue
+            if not _journey_task_set_branch_allowed(journey.task_set, branch_constraints):
+                continue
+            true_rc = float(manual_journey_reduced_cost(journey, duals, cuts=cuts))
+            if true_rc >= -1.0e-6:
+                continue
+            old = all_candidates.get(signature)
+            if old is None or true_rc < float(old[0]):
+                all_candidates[signature] = (true_rc, journey)
+            shard_new_negative = True
+        if shard_new_negative:
+            shards_negative += 1
+        elif bool(shard.exhausted):
+            shards_certified += 1
+
+    common = {
+        "final_judge_engine": "sharded_pulse",
+        "final_judge_sharded_enabled": True,
+        "final_judge_shards_total": int(shards_total),
+        "final_judge_shards_certified": int(shards_certified),
+        "final_judge_shards_incomplete": int(shards_incomplete),
+        "final_judge_shards_negative_found": int(shards_negative),
+        "pulse_recursions": int(pulse_recursions),
+        "pulse_expanded_states": int(pulse_expanded_states),
+        "pulse_resource_pruned": int(pulse_resource_pruned),
+        "pulse_return_pruned": int(pulse_return_pruned),
+        "pulse_time_window_pruned": int(pulse_time_window_pruned),
+        "pulse_bound_pruned": int(pulse_bound_pruned),
+        "pulse_archive_pruned": int(pulse_archive_pruned),
+        "pulse_depot_ready_pruned": int(pulse_depot_ready_pruned),
+        "pulse_harvested_count": int(pulse_harvested_count),
+        "pulse_best_true_rc": best_true_rc,
+    }
+    if all_candidates:
+        selected = [
+            journey
+            for _rc, journey in sorted(
+                all_candidates.values(),
+                key=lambda item: (round(float(item[0]), 9), item[1].signature),
+            )[: max(1, int(config.max_returned_journeys))]
+        ]
+        return JourneyPricingResult(
+            selected,
+            False,
+            min(float(rc) for rc, _journey in all_candidates.values()),
+            int(generated_traces),
+            int(materialized_sorties),
+            int(materialized_journeys),
+            len(selected),
+            "FOUND_NEGATIVE",
+            "sharded_pulse_found_negative",
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+            final_judge_incomplete_reason="",
+            pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+            pulse_negative_found=True,
+            **common,
+        )
+
+    if duplicate_negative_seen:
+        return JourneyPricingResult(
+            [],
+            False,
+            best_true_rc,
+            int(generated_traces),
+            int(materialized_sorties),
+            int(materialized_journeys),
+            0,
+            "INCOMPLETE",
+            "sharded_pulse_duplicate_only_no_certificate",
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+            final_judge_incomplete_reason="duplicate_only",
+            pricing_state=PRICING_STATE_DUPLICATE_ONLY,
+            pulse_negative_found=True,
+            **common,
+        )
+
+    if shards_incomplete > 0:
+        return JourneyPricingResult(
+            [],
+            False,
+            best_true_rc,
+            int(generated_traces),
+            int(materialized_sorties),
+            int(materialized_journeys),
+            0,
+            "INCOMPLETE",
+            "sharded_pulse_incomplete",
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+            final_judge_incomplete_reason=incomplete_reason or "incomplete",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            pulse_negative_found=False,
+            **common,
+        )
+
+    if not _sharded_pulse_toy_certificate_allowed(data, branch_constraints, config):
+        return JourneyPricingResult(
+            [],
+            False,
+            best_true_rc,
+            int(generated_traces),
+            int(materialized_sorties),
+            int(materialized_journeys),
+            0,
+            "INCOMPLETE",
+            "sharded_pulse_toy_certificate_guard_failed",
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+            final_judge_incomplete_reason="toy_certificate_guard_failed",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            pulse_negative_found=False,
+            **common,
+        )
+
+    return JourneyPricingResult(
+        [],
+        True,
+        0.0 if best_true_rc is None else max(0.0, float(best_true_rc)),
+        int(generated_traces),
+        int(materialized_sorties),
+        int(materialized_journeys),
+        0,
+        "OPTIMAL",
+        "sharded_pulse_no_negative_journey",
+        global_certificate_capable=True,
+        final_judge_certificate_capable=True,
+        final_judge_incomplete_reason="",
+        pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+        pulse_negative_found=False,
+        **common,
+    )
+
+
+def _sharded_pulse_toy_certificate_allowed(
+    data: FutureData,
+    branch_constraints: tuple[BranchConstraint, ...],
+    config: JourneyPricingConfig,
+) -> bool:
+    if not bool(config.sharded_final_judge_toy_certificate_enabled):
+        return False
+    name = str(getattr(data, "name", "") or "")
+    if not (name == "very_small" or name.startswith("test")):
+        return False
+    if not bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True)):
+        return False
+    return all(constraint.kind in {"same_vehicle", "separate_vehicle"} for constraint in branch_constraints)
+
+
 def price_journeys(
     data: FutureData,
     duals: JourneyDuals,
@@ -3119,6 +3554,29 @@ def price_journeys(
         return JourneyPricingResult([], False, None, 0, 0, 0, 0, "UNSUPPORTED", "branch_or_cut_not_supported")
     if any(not _journey_pricing_cut_supported(cut) for cut in cuts):
         return JourneyPricingResult([], False, None, 0, 0, 0, 0, "UNSUPPORTED", "branch_or_cut_not_supported")
+    if bool(config.sharded_final_judge_enabled) or str(config.final_judge_engine) == "sharded_pulse":
+        if bool(config.sharded_final_judge_dummy_engine_enabled):
+            if not _sharded_pulse_dummy_engine_allowed(data, config):
+                return _sharded_pulse_incomplete_result(
+                    reason="sharded_pulse_dummy_engine_not_allowed",
+                    incomplete_reason="dummy_engine_not_allowed",
+                    dummy_engine_enabled=True,
+                    dummy_mode=str(config.sharded_final_judge_dummy_mode or ""),
+                    allow_test_dummy_certificate=bool(
+                        config.sharded_final_judge_allow_test_dummy_certificate
+                    ),
+                )
+            return _price_journeys_by_sharded_pulse_dummy(data, config=config)
+        return _price_journeys_by_sharded_pulse_guarded(
+            data,
+            duals,
+            branch_constraints,
+            config=config,
+            cuts=cuts,
+            forbidden_journey_signatures=forbidden_journey_signatures,
+            active_support_task_sets=active_support_task_sets,
+            pool_task_sets=set(dominant_task_set_costs or {}),
+        )
     if bool(config.profile_pricing_enabled):
         return _price_journeys_by_profiles(
             data,
@@ -3652,11 +4110,12 @@ def _price_journeys_by_profiles(
             )
         return result
     started = time.perf_counter()
-    deadline = None if float(config.time_limit) <= 0.0 else started + float(config.time_limit)
+    deadline = _pricing_absolute_deadline(started, config)
     generation_deadline = deadline
     if deadline is not None:
         fraction = min(1.0, max(0.05, float(config.profile_generation_time_fraction)))
-        generation_deadline = started + float(config.time_limit) * fraction
+        if float(config.time_limit) > 0.0:
+            generation_deadline = min(float(deadline), started + float(config.time_limit) * fraction)
     vehicle = int(data.vehicles[0])
     trip_duals = FutureDuals(
         cover={int(task): float(value) for task, value in duals.cover.items()},
@@ -4005,7 +4464,7 @@ def _price_journeys_by_direct_ng_dssr(
         )
 
     started = time.perf_counter()
-    deadline = None if float(config.time_limit) <= 0.0 else started + float(config.time_limit)
+    deadline = _pricing_absolute_deadline(started, config)
     task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
     trip_duals = FutureDuals(
         cover={int(task): float(value) for task, value in duals.cover.items()},
@@ -4181,6 +4640,7 @@ def _direct_ng_stats_kwargs(
         "ng_dominance_pruned_labels": int(stats.dominance_pruned_labels),
         "ng_fallback_to_elementary": bool(fallback),
         "ng_certificate_from_relaxation": bool(certificate),
+        "ng_relaxation_superset": True if bool(certificate) else None,
         "ng_best_relaxed_reduced_cost": stats.best_relaxed_reduced_cost,
     }
 
@@ -4660,7 +5120,7 @@ def _price_journeys_by_direct_labels(
     resource_cache: dict[tuple, Any] | None = None,
 ) -> JourneyPricingResult:
     started = time.perf_counter()
-    deadline = None if float(config.time_limit) <= 0.0 else started + float(config.time_limit)
+    deadline = _pricing_absolute_deadline(started, config)
     vehicle = int(data.vehicles[0])
     trip_duals = FutureDuals(
         cover={int(task): float(value) for task, value in duals.cover.items()},
@@ -4843,9 +5303,12 @@ def _price_journeys_by_direct_labels(
                     deadline=deadline,
                 )
                 completion_bound_reported_build_time = float(completion_bound.build_time)
+                if not bool(getattr(completion_bound, "enabled", True)):
+                    completion_bound = None
                 if (
                     cache_key is not None
                     and resource_cache is not None
+                    and completion_bound is not None
                     and _direct_completion_bound_cacheable(completion_bound)
                 ):
                     resource_cache[cache_key] = completion_bound
@@ -4903,6 +5366,7 @@ def _price_journeys_by_direct_labels(
                     cache_state_limit=int(
                         config.direct_journey_label_completion_bound_unique_route_cache_max_states
                     ),
+                    deadline=deadline,
                 )
             # Sortie-level completion pruning depends on the current journey label
             # value, sortie count, and end time.  A profile cache keyed only by
@@ -4946,6 +5410,7 @@ def _price_journeys_by_direct_labels(
                 exact_first_step_bucket_diagnostics_enabled=bool(config.direct_journey_label_profile_timing_enabled),
                 exact_mask_limit=int(config.direct_journey_label_completion_bound_unique_route_max_tasks),
                 cache_state_limit=int(config.direct_journey_label_completion_bound_unique_route_cache_max_states),
+                deadline=deadline,
             )
         if bool(config.direct_journey_label_completion_bound_partial_pruning_enabled):
             use_next_sortie_cache = False
@@ -7673,7 +8138,7 @@ def _price_journeys_by_streaming_profiles(
     """
 
     started = time.perf_counter()
-    deadline = None if float(config.time_limit) <= 0.0 else started + float(config.time_limit)
+    deadline = _pricing_absolute_deadline(started, config)
     vehicle = int(data.vehicles[0])
     trip_duals = FutureDuals(
         cover={int(task): float(value) for task, value in duals.cover.items()},
@@ -7874,7 +8339,8 @@ def _price_journeys_by_streaming_profiles(
     generation_deadline = deadline
     if deadline is not None:
         fraction = min(1.0, max(0.05, float(config.profile_generation_time_fraction)))
-        generation_deadline = started + float(config.time_limit) * fraction
+        if float(config.time_limit) > 0.0:
+            generation_deadline = min(float(deadline), started + float(config.time_limit) * fraction)
     if deadline is not None and float(config.streaming_final_dp_time_reserve) > 0.0:
         reserve = max(0.0, float(config.streaming_final_dp_time_reserve))
         reserved_deadline = max(started, float(deadline) - reserve)
