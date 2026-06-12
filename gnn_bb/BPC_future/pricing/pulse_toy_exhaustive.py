@@ -54,6 +54,10 @@ class ToyPulseExhaustiveResult:
     pulse_branch_pruned: int
     pulse_negative_found: bool
     pulse_harvested_count: int
+    pulse_negative_pool_size: int
+    pulse_harvested_new_task_set_count: int
+    pulse_harvested_support_changing_count: int
+    pulse_harvested_replacement_count: int
     harvested_journeys: tuple[JourneyColumn, ...]
     harvest_diagnostics: dict[str, object]
     best_true_reduced_cost: float | None
@@ -85,6 +89,132 @@ class ToyPulseExhaustiveResult:
     @property
     def transition_return_pruned(self) -> int:
         return int(self.pulse_return_pruned)
+
+
+def _harvest_diagnostic_int(diagnostics: dict[str, object], key: str) -> int:
+    value = diagnostics.get(key, 0)
+    if value is None:
+        return 0
+    return int(value)
+
+
+def _harvest_replacement_count(diagnostics: dict[str, object]) -> int:
+    explicit = _harvest_diagnostic_int(diagnostics, "selected_replacement_task_set_count")
+    if explicit:
+        return explicit
+    return _harvest_diagnostic_int(
+        diagnostics, "selected_strong_replacement_count"
+    ) + _harvest_diagnostic_int(diagnostics, "selected_weak_replacement_count")
+
+
+def _select_negative_leaf_harvest(
+    negative_leaves: tuple[PulseLeafCandidate, ...],
+    *,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    eps: float,
+    harvest_after_negative_enabled: bool,
+    support_aware_harvesting_enabled: bool,
+    negative_harvest_limit: int,
+    active_masks: tuple[object, ...],
+    pool_masks: tuple[object, ...],
+    forbidden_signatures: tuple[object, ...],
+) -> tuple[tuple[JourneyColumn, ...], dict[str, object]]:
+    if not bool(harvest_after_negative_enabled) or not negative_leaves:
+        return tuple(), {}
+    forbidden = {tuple(signature) for signature in (forbidden_signatures or tuple())}
+    harvest_limit = int(negative_harvest_limit) if int(negative_harvest_limit) > 0 else len(negative_leaves)
+    harvest_source = tuple(
+        candidate for candidate in negative_leaves if tuple(candidate.journey.signature) not in forbidden
+    )
+    if bool(support_aware_harvesting_enabled) and harvest_limit > 0 and harvest_source:
+        harvest = harvest_support_aware_negative_journeys(
+            (candidate.journey for candidate in harvest_source),
+            true_duals=duals,
+            cuts=cuts,
+            active_masks=active_masks,
+            pool_masks=pool_masks,
+            forbidden_signatures=forbidden,
+            eps=float(eps),
+            max_columns=harvest_limit,
+            min_new_masks=0,
+            replacement_cap=harvest_limit,
+            top_k_strongest=harvest_limit,
+            max_jaccard_selected=1.0,
+            max_jaccard_active=1.0,
+            max_containment=1.0,
+        )
+        return tuple(harvest.selected), dict(harvest.diagnostics)
+    harvested_journeys = tuple(candidate.journey for candidate in harvest_source[:harvest_limit])
+    return harvested_journeys, {
+        "candidate_negative_count": len(negative_leaves),
+        "selected_count": len(harvested_journeys),
+        "selected_new_mask_count": len(harvested_journeys),
+        "selected_new_task_set_count": len(harvested_journeys),
+        "selected_support_changing_count": len(harvested_journeys),
+        "selected_replacement_task_set_count": 0,
+    }
+
+
+@dataclass(frozen=True)
+class PrefixReducedCostLedger:
+    """Proof-side prefix reduced-cost ledger for transition Pulse.
+
+    exact_prefix_rc contains only contributions already fixed by the trace:
+    fixed/fleet once per journey, traversed arc costs, service costs, and
+    covered-task dual rewards.  lb_prefix_rc is the safe value used by bound
+    pruning; Phase 7E keeps it equal to exact_prefix_rc and only combines it
+    with fail-open lower bounds that do not include cuts.
+    """
+
+    exact_prefix_rc: float = 0.0
+    lb_prefix_rc: float = 0.0
+    covered_tasks: frozenset[int] = frozenset()
+    fixed_fleet_charged: bool = False
+
+    @classmethod
+    def root(cls) -> "PrefixReducedCostLedger":
+        return cls()
+
+    def extend_task(
+        self,
+        data: FutureData,
+        duals: JourneyDuals,
+        *,
+        task: int,
+        arc_cost: float,
+        starts_journey: bool,
+    ) -> "PrefixReducedCostLedger":
+        task = int(task)
+        if task in self.covered_tasks:
+            raise ValueError(f"task {task} already covered in prefix ledger")
+        fixed_fleet = 0.0
+        fixed_charged = bool(self.fixed_fleet_charged)
+        if bool(starts_journey):
+            if fixed_charged:
+                raise ValueError("fixed/fleet contribution already charged")
+            fixed_fleet = float(data.fixed_vehicle_cost) - float(duals.fleet_limit)
+            fixed_charged = True
+        contribution = (
+            float(fixed_fleet)
+            + float(arc_cost)
+            + float(data.task_value(task, "c_srv"))
+            - float(duals.cover.get(task, 0.0))
+        )
+        return PrefixReducedCostLedger(
+            exact_prefix_rc=float(self.exact_prefix_rc) + float(contribution),
+            lb_prefix_rc=float(self.lb_prefix_rc) + float(contribution),
+            covered_tasks=frozenset((*self.covered_tasks, task)),
+            fixed_fleet_charged=fixed_charged,
+        )
+
+    def return_to_depot(self, *, return_cost: float) -> "PrefixReducedCostLedger":
+        return PrefixReducedCostLedger(
+            exact_prefix_rc=float(self.exact_prefix_rc) + float(return_cost),
+            lb_prefix_rc=float(self.lb_prefix_rc) + float(return_cost),
+            covered_tasks=frozenset(self.covered_tasks),
+            fixed_fleet_charged=bool(self.fixed_fleet_charged),
+        )
 
 
 def toy_root_exhaustive_pulse(
@@ -303,38 +433,18 @@ def toy_root_exhaustive_pulse(
     negative_leaves = tuple(
         candidate for candidate in candidates if candidate.true_reduced_cost < -float(eps)
     )
-    harvested_journeys: tuple[JourneyColumn, ...] = tuple()
-    harvest_diagnostics: dict[str, object] = {}
-    if bool(harvest_after_negative_enabled) and negative_leaves:
-        harvest_limit = int(negative_harvest_limit) if int(negative_harvest_limit) > 0 else len(negative_leaves)
-        harvest_source = tuple(
-            candidate for candidate in negative_leaves if tuple(candidate.journey.signature) not in forbidden
-        )
-        if bool(support_aware_harvesting_enabled) and harvest_limit > 0 and harvest_source:
-            harvest = harvest_support_aware_negative_journeys(
-                (candidate.journey for candidate in harvest_source),
-                true_duals=duals,
-                cuts=cuts,
-                active_masks=active_masks,
-                pool_masks=pool_masks,
-                forbidden_signatures=forbidden,
-                eps=float(eps),
-                max_columns=harvest_limit,
-                min_new_masks=0,
-                replacement_cap=harvest_limit,
-                top_k_strongest=harvest_limit,
-                max_jaccard_selected=1.0,
-                max_jaccard_active=1.0,
-                max_containment=1.0,
-            )
-            harvested_journeys = tuple(harvest.selected)
-            harvest_diagnostics = dict(harvest.diagnostics)
-        else:
-            harvested_journeys = tuple(candidate.journey for candidate in harvest_source[:harvest_limit])
-            harvest_diagnostics = {
-                "candidate_negative_count": len(negative_leaves),
-                "selected_count": len(harvested_journeys),
-            }
+    harvested_journeys, harvest_diagnostics = _select_negative_leaf_harvest(
+        negative_leaves,
+        duals=duals,
+        cuts=cuts,
+        eps=float(eps),
+        harvest_after_negative_enabled=bool(harvest_after_negative_enabled),
+        support_aware_harvesting_enabled=bool(support_aware_harvesting_enabled),
+        negative_harvest_limit=int(negative_harvest_limit),
+        active_masks=active_masks,
+        pool_masks=pool_masks,
+        forbidden_signatures=forbidden_signatures,
+    )
     best_true_reduced_cost = (
         min(float(candidate.true_reduced_cost) for candidate in candidates)
         if candidates
@@ -369,6 +479,15 @@ def toy_root_exhaustive_pulse(
         pulse_branch_pruned=0,
         pulse_negative_found=bool(negative_leaves),
         pulse_harvested_count=len(harvested_journeys),
+        pulse_negative_pool_size=len(negative_leaves),
+        pulse_harvested_new_task_set_count=_harvest_diagnostic_int(
+            harvest_diagnostics, "selected_new_task_set_count"
+        )
+        or _harvest_diagnostic_int(harvest_diagnostics, "selected_new_mask_count"),
+        pulse_harvested_support_changing_count=_harvest_diagnostic_int(
+            harvest_diagnostics, "selected_support_changing_count"
+        ),
+        pulse_harvested_replacement_count=_harvest_replacement_count(harvest_diagnostics),
         harvested_journeys=harvested_journeys,
         harvest_diagnostics=harvest_diagnostics,
         best_true_reduced_cost=best_true_reduced_cost,
@@ -417,6 +536,13 @@ def transition_root_only_pulse(
     max_recursions: int = 0,
     archive_dominance_enabled: bool = False,
     archive_max_records_per_key: int = 32,
+    bound_pruning_enabled: bool = False,
+    harvest_after_negative_enabled: bool = False,
+    support_aware_harvesting_enabled: bool = False,
+    negative_harvest_limit: int = 0,
+    active_masks: tuple[object, ...] = tuple(),
+    pool_masks: tuple[object, ...] = tuple(),
+    forbidden_signatures: tuple[object, ...] = tuple(),
     include_physical_paths: bool = True,
 ) -> ToyPulseExhaustiveResult:
     """Phase-7A root-only Pulse core with transition-level feasibility checks.
@@ -467,6 +593,7 @@ def transition_root_only_pulse(
     pulse_energy_pruned = 0
     stop_status: str | None = None
     stop_reason: str | None = None
+    prefix_bound_pruning_supported = _prefix_rc_bound_pruning_supported(data, cuts)
 
     def stop_requested() -> bool:
         nonlocal stop_status, stop_reason
@@ -500,6 +627,7 @@ def transition_root_only_pulse(
         partial_lb_prefix_rc: float,
     ) -> None:
         nonlocal expanded_states, pulse_branch_pruned, pulse_archive_pruned, pulse_depot_ready_pruned
+        nonlocal pulse_bound_pruned
         if not count_recursion():
             return
         if int(sorties_used) >= int(sortie_limit):
@@ -539,6 +667,16 @@ def transition_root_only_pulse(
                 pulse_archive_pruned += 1
                 pulse_depot_ready_pruned += 1
                 return
+        if bool(bound_pruning_enabled) and bool(prefix_bound_pruning_supported) and traces:
+            remaining_lb = _depot_remaining_reduced_cost_lower_bound(
+                data,
+                duals,
+                remaining_tasks=remaining_tasks,
+                fixed_fleet_charged=True,
+            )
+            if remaining_lb is not None and float(partial_lb_prefix_rc) + float(remaining_lb) >= -float(eps):
+                pulse_bound_pruned += 1
+                return
         expanded_states += 1
         for task in remaining_tasks:
             task = int(task)
@@ -569,7 +707,7 @@ def transition_root_only_pulse(
                     search_open(next_state)
 
     def search_open(state: _TransitionPulseState) -> None:
-        nonlocal expanded_states, pulse_branch_pruned, pulse_archive_pruned
+        nonlocal expanded_states, pulse_branch_pruned, pulse_archive_pruned, pulse_bound_pruned
         if not count_recursion():
             return
         if archive is not None:
@@ -617,13 +755,23 @@ def transition_root_only_pulse(
             complete_sortie_by_return(state)
         elif _is_first_sortie_second_action_point(state):
             pulse_branch_pruned += 1
-        if len(state.current_sequence) >= int(max_tasks):
-            return
         remaining_after_current = tuple(
             int(task)
             for task in state.remaining_tasks
             if not (int(state.visited_task_mask) & (1 << int(task_to_bit[int(task)])))
         )
+        if bool(bound_pruning_enabled) and bool(prefix_bound_pruning_supported):
+            remaining_lb = _open_sortie_remaining_reduced_cost_lower_bound(
+                data,
+                duals,
+                current_node=int(state.last_node),
+                remaining_tasks=remaining_after_current,
+            )
+            if remaining_lb is not None and float(state.partial_lb_prefix_rc) + float(remaining_lb) >= -float(eps):
+                pulse_bound_pruned += 1
+                return
+        if len(state.current_sequence) >= int(max_tasks):
+            return
         for task in remaining_after_current:
             task = int(task)
             if not _second_action_allows_task(state, task, second_shard):
@@ -701,14 +849,16 @@ def transition_root_only_pulse(
             return None
         next_sequence = tuple(state.current_sequence) + (task,)
         next_arc_options = tuple(state.current_arc_options) + (option,)
-        opened_cost = 0.0
-        if not state.traces and not state.current_sequence:
-            opened_cost = float(data.fixed_vehicle_cost) - float(duals.fleet_limit)
-        transition_rc = (
-            float(opened_cost)
-            + float(option.cost)
-            + float(data.task_value(task, "c_srv"))
-            - float(duals.cover.get(int(task), 0.0))
+        next_ledger = _ledger_from_transition_state(
+            state,
+            task_order=task_order,
+            task_to_bit=task_to_bit,
+        ).extend_task(
+            data,
+            duals,
+            task=task,
+            arc_cost=float(option.cost),
+            starts_journey=not state.traces and not state.current_sequence,
         )
         return _TransitionPulseState(
             phase="open_sortie",
@@ -725,8 +875,8 @@ def transition_root_only_pulse(
             travel_energy=float(next_travel_energy),
             service_energy=float(next_service_energy),
             load_used=float(next_load),
-            partial_exact_prefix_rc=float(state.partial_exact_prefix_rc) + float(transition_rc),
-            partial_lb_prefix_rc=float(state.partial_lb_prefix_rc) + float(transition_rc),
+            partial_exact_prefix_rc=float(next_ledger.exact_prefix_rc),
+            partial_lb_prefix_rc=float(next_ledger.lb_prefix_rc),
             pending_same_mask=int(next_pending_mask),
         )
 
@@ -794,6 +944,11 @@ def transition_root_only_pulse(
                 ):
                     pulse_branch_pruned += 1
                     continue
+                returned_ledger = _ledger_from_transition_state(
+                    state,
+                    task_order=task_order,
+                    task_to_bit=task_to_bit,
+                ).return_to_depot(return_cost=float(return_option.cost))
                 search_depot(
                     next_traces,
                     tuple(state.remaining_tasks),
@@ -801,8 +956,8 @@ def transition_root_only_pulse(
                     int(state.visited_task_mask),
                     int(state.sorties_used) + 1,
                     int(state.pending_same_mask),
-                    float(state.partial_exact_prefix_rc) + float(return_option.cost),
-                    float(state.partial_lb_prefix_rc) + float(return_option.cost),
+                    float(returned_ledger.exact_prefix_rc),
+                    float(returned_ledger.lb_prefix_rc),
                 )
 
     if sortie_limit > 0 and not stop_requested():
@@ -824,6 +979,18 @@ def transition_root_only_pulse(
     negative_leaves = tuple(
         candidate for candidate in candidates if candidate.true_reduced_cost < -float(eps)
     )
+    harvested_journeys, harvest_diagnostics = _select_negative_leaf_harvest(
+        negative_leaves,
+        duals=duals,
+        cuts=cuts,
+        eps=float(eps),
+        harvest_after_negative_enabled=bool(harvest_after_negative_enabled),
+        support_aware_harvesting_enabled=bool(support_aware_harvesting_enabled),
+        negative_harvest_limit=int(negative_harvest_limit),
+        active_masks=active_masks,
+        pool_masks=pool_masks,
+        forbidden_signatures=forbidden_signatures,
+    )
     best_true_reduced_cost = (
         min(float(candidate.true_reduced_cost) for candidate in candidates)
         if candidates
@@ -832,6 +999,10 @@ def transition_root_only_pulse(
     status = "OPTIMAL" if stop_status is None else str(stop_status)
     reason = "exhausted" if stop_reason is None else str(stop_reason)
     exhausted = stop_status is None
+    if bool(harvest_after_negative_enabled) and negative_leaves:
+        exhausted = False
+        status = "FOUND_NEGATIVE_HARVESTED" if harvested_journeys else "FOUND_NEGATIVE"
+        reason = "harvest_after_negative"
     return ToyPulseExhaustiveResult(
         candidates=candidates,
         exhausted=exhausted,
@@ -853,9 +1024,18 @@ def transition_root_only_pulse(
         pulse_depot_ready_pruned=int(pulse_depot_ready_pruned),
         pulse_branch_pruned=int(pulse_branch_pruned),
         pulse_negative_found=bool(negative_leaves),
-        pulse_harvested_count=0,
-        harvested_journeys=tuple(),
-        harvest_diagnostics={},
+        pulse_harvested_count=len(harvested_journeys),
+        pulse_negative_pool_size=len(negative_leaves),
+        pulse_harvested_new_task_set_count=_harvest_diagnostic_int(
+            harvest_diagnostics, "selected_new_task_set_count"
+        )
+        or _harvest_diagnostic_int(harvest_diagnostics, "selected_new_mask_count"),
+        pulse_harvested_support_changing_count=_harvest_diagnostic_int(
+            harvest_diagnostics, "selected_support_changing_count"
+        ),
+        pulse_harvested_replacement_count=_harvest_replacement_count(harvest_diagnostics),
+        harvested_journeys=harvested_journeys,
+        harvest_diagnostics=harvest_diagnostics,
         best_true_reduced_cost=best_true_reduced_cost,
         negative_leaves=negative_leaves,
         shard_first_task=shard_task,
@@ -1013,6 +1193,10 @@ def _empty_transition_result(
         pulse_branch_pruned=0,
         pulse_negative_found=False,
         pulse_harvested_count=0,
+        pulse_negative_pool_size=0,
+        pulse_harvested_new_task_set_count=0,
+        pulse_harvested_support_changing_count=0,
+        pulse_harvested_replacement_count=0,
         harvested_journeys=tuple(),
         harvest_diagnostics={},
         best_true_reduced_cost=None,
@@ -1021,6 +1205,114 @@ def _empty_transition_result(
         pulse_capacity_pruned=0,
         pulse_energy_pruned=0,
     )
+
+
+def _ledger_from_transition_state(
+    state: _TransitionPulseState,
+    *,
+    task_order: tuple[int, ...],
+    task_to_bit: dict[int, int],
+) -> PrefixReducedCostLedger:
+    return PrefixReducedCostLedger(
+        exact_prefix_rc=float(state.partial_exact_prefix_rc),
+        lb_prefix_rc=float(state.partial_lb_prefix_rc),
+        covered_tasks=_tasks_from_mask(int(state.visited_task_mask), task_order, task_to_bit),
+        fixed_fleet_charged=bool(state.traces or state.current_sequence),
+    )
+
+
+def _tasks_from_mask(
+    mask: int,
+    task_order: tuple[int, ...],
+    task_to_bit: dict[int, int],
+) -> frozenset[int]:
+    return frozenset(
+        int(task)
+        for task in task_order
+        if int(mask) & (1 << int(task_to_bit[int(task)]))
+    )
+
+
+def _prefix_rc_bound_pruning_supported(data: FutureData, cuts: tuple[FutureCut, ...]) -> bool:
+    if cuts:
+        return False
+    for task in data.tasks:
+        if float(data.task_value(int(task), "c_srv")) < -1.0e-9:
+            return False
+    for options in data.arc_options.values():
+        for option in options:
+            if float(option.cost) < -1.0e-9:
+                return False
+    return True
+
+
+def _positive_cover_reward_bound(duals: JourneyDuals, tasks: tuple[int, ...]) -> float:
+    return sum(max(0.0, float(duals.cover.get(int(task), 0.0))) for task in tasks)
+
+
+def _min_arc_option_cost(data: FutureData, source: int, target: int) -> float | None:
+    options = _safe_options(data, int(source), int(target))
+    if not options:
+        return None
+    return min(float(option.cost) for option in options)
+
+
+def _min_return_cost_lower_bound(data: FutureData, candidate_return_nodes: tuple[int, ...]) -> float | None:
+    costs = [
+        float(cost)
+        for node in candidate_return_nodes
+        for cost in (_min_arc_option_cost(data, int(node), 0),)
+        if cost is not None
+    ]
+    if not costs:
+        return None
+    return min(costs)
+
+
+def _depot_remaining_reduced_cost_lower_bound(
+    data: FutureData,
+    duals: JourneyDuals,
+    *,
+    remaining_tasks: tuple[int, ...],
+    fixed_fleet_charged: bool,
+) -> float | None:
+    if not remaining_tasks:
+        return None
+    outbound_costs = [
+        float(cost)
+        for task in remaining_tasks
+        for cost in (_min_arc_option_cost(data, 0, int(task)),)
+        if cost is not None
+    ]
+    return_costs = [
+        float(cost)
+        for task in remaining_tasks
+        for cost in (_min_arc_option_cost(data, int(task), 0),)
+        if cost is not None
+    ]
+    if not outbound_costs or not return_costs:
+        return None
+    fixed_fleet = 0.0 if bool(fixed_fleet_charged) else float(data.fixed_vehicle_cost) - float(duals.fleet_limit)
+    return (
+        float(fixed_fleet)
+        + min(outbound_costs)
+        + min(return_costs)
+        - _positive_cover_reward_bound(duals, remaining_tasks)
+    )
+
+
+def _open_sortie_remaining_reduced_cost_lower_bound(
+    data: FutureData,
+    duals: JourneyDuals,
+    *,
+    current_node: int,
+    remaining_tasks: tuple[int, ...],
+) -> float | None:
+    candidate_return_nodes = (int(current_node),) + tuple(int(task) for task in remaining_tasks)
+    return_lb = _min_return_cost_lower_bound(data, candidate_return_nodes)
+    if return_lb is None:
+        return None
+    return float(return_lb) - _positive_cover_reward_bound(duals, remaining_tasks)
 
 
 def _future_return_lower_bound_possible(

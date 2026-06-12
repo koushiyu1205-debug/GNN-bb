@@ -12640,6 +12640,9 @@ def _journey_certificate_pricing_config(
                 config.get("journey_pulse_return_feasibility_pruning_enabled", False)
                 or config.get("journey_pulse_exact_safe_pruning_enabled", False)
             ),
+            pulse_bound_pruning_enabled=bool(
+                config.get("journey_pulse_bound_pruning_enabled", False)
+            ),
             pulse_archive_dominance_enabled=bool(
                 config.get("journey_pulse_depot_ready_dominance_enabled", False)
                 or config.get("journey_pulse_archive_enabled", False)
@@ -12667,6 +12670,7 @@ def _journey_certificate_pricing_config(
         )
         mode["sharded_pulse_max_recursions"] = int(updated.pulse_max_recursions)
         mode["sharded_pulse_exact_safe_pruning"] = bool(updated.pulse_exact_safe_pruning_enabled)
+        mode["sharded_pulse_bound_pruning"] = bool(updated.pulse_bound_pruning_enabled)
         mode["sharded_pulse_archive"] = bool(updated.pulse_archive_dominance_enabled)
         mode["sharded_pulse_support_aware_harvesting"] = bool(
             updated.pulse_support_aware_harvesting_enabled
@@ -14550,7 +14554,17 @@ def _log_journey_pricing(
         pulse_archive_pruned=int(getattr(pricing, "pulse_archive_pruned", 0)),
         pulse_depot_ready_pruned=int(getattr(pricing, "pulse_depot_ready_pruned", 0)),
         pulse_negative_found=bool(getattr(pricing, "pulse_negative_found", False)),
+        pulse_negative_pool_size=int(getattr(pricing, "pulse_negative_pool_size", 0)),
         pulse_harvested_count=int(getattr(pricing, "pulse_harvested_count", 0)),
+        pulse_harvested_new_task_set_count=int(
+            getattr(pricing, "pulse_harvested_new_task_set_count", 0)
+        ),
+        pulse_harvested_support_changing_count=int(
+            getattr(pricing, "pulse_harvested_support_changing_count", 0)
+        ),
+        pulse_harvested_replacement_count=int(
+            getattr(pricing, "pulse_harvested_replacement_count", 0)
+        ),
         pulse_best_true_rc=None
         if getattr(pricing, "pulse_best_true_rc", None) is None
         else round(float(getattr(pricing, "pulse_best_true_rc")), 9),
@@ -16447,7 +16461,11 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "pulse_archive_pruned",
         "pulse_depot_ready_pruned",
         "pulse_negative_found",
+        "pulse_negative_pool_size",
         "pulse_harvested_count",
+        "pulse_harvested_new_task_set_count",
+        "pulse_harvested_support_changing_count",
+        "pulse_harvested_replacement_count",
         "pulse_best_true_rc",
         "amcb_enabled",
         "amcb_build_time",

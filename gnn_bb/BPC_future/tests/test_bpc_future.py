@@ -141,7 +141,11 @@ from BPC_future.pricing.pulse_materialization import (
     materialize_pulse_leaf_candidate,
     materialize_pulse_sortie,
 )
-from BPC_future.pricing.pulse_toy_exhaustive import transition_root_only_pulse, toy_root_exhaustive_pulse
+from BPC_future.pricing.pulse_toy_exhaustive import (
+    PrefixReducedCostLedger,
+    transition_root_only_pulse,
+    toy_root_exhaustive_pulse,
+)
 from BPC_future.draw.moon_trek_viz import ScenarioConfig, TerrainGrid, sample_operational_scenario
 from BPC_future.preprocess.risk_model import RiskModelConfig, build_risk_layer, derive_slope_from_dem
 from BPC_future.preprocess.scheduling_augmentation import (
@@ -13403,6 +13407,258 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(archived.best_true_reduced_cost, unarchived.best_true_reduced_cost)
         self.assertEqual(archived.found_negative, unarchived.found_negative)
 
+    def test_transition_pulse_harvest_after_negative_exits_proof_mode(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        duals = JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        result = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            harvest_after_negative_enabled=True,
+            support_aware_harvesting_enabled=True,
+            negative_harvest_limit=4,
+        )
+
+        self.assertTrue(result.found_negative)
+        self.assertTrue(result.pulse_negative_found)
+        self.assertFalse(result.exhausted)
+        self.assertEqual(result.status, "FOUND_NEGATIVE_HARVESTED")
+        self.assertEqual(result.reason, "harvest_after_negative")
+        self.assertGreater(result.pulse_negative_pool_size, 0)
+        self.assertGreater(result.pulse_harvested_count, 0)
+
+    def test_transition_pulse_harvest_returns_only_true_rc_negatives(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        subset_cut = SubsetRowCut((1, 2), 2)
+        duals = JourneyDuals(
+            cover={1: 20.0, 2: 25.0, 3: 0.0},
+            fleet_limit=0.0,
+            cuts={0: 100.0},
+        )
+        result = transition_root_only_pulse(
+            data,
+            duals,
+            cuts=(subset_cut,),
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            harvest_after_negative_enabled=True,
+            support_aware_harvesting_enabled=True,
+            negative_harvest_limit=8,
+        )
+
+        self.assertGreater(result.pulse_harvested_count, 0)
+        for journey in result.harvested_journeys:
+            self.assertLess(manual_journey_reduced_cost(journey, duals, (subset_cut,)), -1.0e-6)
+
+    def test_transition_pulse_empty_harvest_not_certificate(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 1000.0, 2: 1000.0}, fleet_limit=0.0, cuts={})
+        all_negative = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+        )
+        forbidden = tuple(candidate.journey.signature for candidate in all_negative.negative_leaves)
+        result = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            harvest_after_negative_enabled=True,
+            support_aware_harvesting_enabled=True,
+            negative_harvest_limit=8,
+            forbidden_signatures=forbidden,
+        )
+
+        self.assertTrue(result.found_negative)
+        self.assertFalse(result.exhausted)
+        self.assertEqual(result.status, "FOUND_NEGATIVE")
+        self.assertEqual(result.pulse_harvested_count, 0)
+        self.assertEqual(result.harvested_journeys, tuple())
+
+    def test_transition_pulse_archive_harvest_matches_unarchived_best_and_negative(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3, 4), sortie_limit=3)
+        duals = JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        unarchived = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=3,
+            harvest_after_negative_enabled=True,
+            support_aware_harvesting_enabled=True,
+            negative_harvest_limit=8,
+        )
+        archived = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=3,
+            archive_dominance_enabled=True,
+            archive_max_records_per_key=64,
+            harvest_after_negative_enabled=True,
+            support_aware_harvesting_enabled=True,
+            negative_harvest_limit=8,
+        )
+
+        self.assertFalse(unarchived.exhausted)
+        self.assertFalse(archived.exhausted)
+        self.assertEqual(archived.best_true_reduced_cost, unarchived.best_true_reduced_cost)
+        self.assertEqual(archived.found_negative, unarchived.found_negative)
+        self.assertGreaterEqual(archived.pulse_harvested_count, 0)
+
+    def test_prefix_rc_ledger_matches_manual_rc_without_cuts_multisortie(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 11.0, 2: 7.0}, fleet_limit=13.0, cuts={})
+        first_trace = PulseSortieTrace(
+            sequence=(1,),
+            start_time=0.0,
+            arc_options=(data.options(0, 1)[0], data.options(1, 0)[0]),
+        )
+        first_trip = materialize_pulse_sortie(
+            data,
+            first_trace.sequence,
+            first_trace.start_time,
+            arc_options=first_trace.arc_options,
+            time_bucket_size=5.0,
+        )
+        self.assertIsNotNone(first_trip)
+        assert first_trip is not None
+        second_trace = PulseSortieTrace(
+            sequence=(2,),
+            start_time=float(first_trip.end_time),
+            arc_options=(data.options(0, 2)[0], data.options(2, 0)[0]),
+        )
+        candidate = materialize_pulse_leaf_candidate(
+            data,
+            (first_trace, second_trace),
+            duals,
+            time_bucket_size=5.0,
+            cuts=tuple(),
+        )
+        self.assertIsNotNone(candidate)
+        assert candidate is not None
+
+        ledger = PrefixReducedCostLedger.root()
+        ledger = ledger.extend_task(
+            data,
+            duals,
+            task=1,
+            arc_cost=float(first_trace.arc_options[0].cost),
+            starts_journey=True,
+        ).return_to_depot(return_cost=float(first_trace.arc_options[-1].cost))
+        ledger = ledger.extend_task(
+            data,
+            duals,
+            task=2,
+            arc_cost=float(second_trace.arc_options[0].cost),
+            starts_journey=False,
+        ).return_to_depot(return_cost=float(second_trace.arc_options[-1].cost))
+
+        self.assertTrue(ledger.fixed_fleet_charged)
+        self.assertEqual(ledger.covered_tasks, frozenset({1, 2}))
+        self.assertAlmostEqual(ledger.exact_prefix_rc, candidate.true_reduced_cost, places=6)
+        self.assertAlmostEqual(ledger.lb_prefix_rc, candidate.true_reduced_cost, places=6)
+        self.assertAlmostEqual(
+            ledger.exact_prefix_rc,
+            manual_journey_reduced_cost(candidate.journey, duals, tuple()),
+            places=6,
+        )
+
+    def test_prefix_rc_ledger_rejects_duplicate_cover_and_fixed_double_charge(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 11.0, 2: 7.0}, fleet_limit=13.0, cuts={})
+        ledger = PrefixReducedCostLedger.root().extend_task(
+            data,
+            duals,
+            task=1,
+            arc_cost=float(data.options(0, 1)[0].cost),
+            starts_journey=True,
+        )
+
+        with self.assertRaises(ValueError):
+            ledger.extend_task(
+                data,
+                duals,
+                task=1,
+                arc_cost=float(data.options(1, 1)[0].cost) if (1, 1) in data.arc_options else 0.0,
+                starts_journey=False,
+            )
+        with self.assertRaises(ValueError):
+            ledger.extend_task(
+                data,
+                duals,
+                task=2,
+                arc_cost=float(data.options(0, 2)[0].cost),
+                starts_journey=True,
+            )
+
+    def test_transition_pulse_bound_pruning_fails_open_with_cuts(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        subset_cut = SubsetRowCut((1, 2), 2)
+        duals = JourneyDuals(
+            cover={1: 110.0, 2: 0.0, 3: 0.0},
+            fleet_limit=0.0,
+            cuts={0: 100.0},
+        )
+        unpruned = transition_root_only_pulse(
+            data,
+            duals,
+            cuts=(subset_cut,),
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+        )
+        pruned = transition_root_only_pulse(
+            data,
+            duals,
+            cuts=(subset_cut,),
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            bound_pruning_enabled=True,
+        )
+
+        _assert_toy_pulse_same_pricing_surface(self, pruned, unpruned)
+        self.assertEqual(pruned.pulse_bound_pruned, 0)
+
+    def test_transition_pulse_bound_pruning_matches_unpruned_and_prunes(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 110.0, 2: 0.0, 3: 0.0}, fleet_limit=0.0, cuts={})
+        unpruned = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+        )
+        pruned = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            bound_pruning_enabled=True,
+        )
+
+        self.assertTrue(unpruned.exhausted)
+        self.assertTrue(pruned.exhausted)
+        self.assertEqual(pruned.best_true_reduced_cost, unpruned.best_true_reduced_cost)
+        self.assertEqual(pruned.found_negative, unpruned.found_negative)
+        self.assertEqual(
+            {candidate.journey.signature for candidate in pruned.negative_leaves},
+            {candidate.journey.signature for candidate in unpruned.negative_leaves},
+        )
+        self.assertEqual(not pruned.found_negative, not unpruned.found_negative)
+        self.assertGreater(pruned.pulse_bound_pruned, 0)
+
     def test_toy_exhaustive_pulse_budget_hits_return_incomplete(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
         duals = JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
@@ -13860,6 +14116,36 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(all(manual_journey_reduced_cost(journey, duals) < -1.0e-6 for journey in result.journeys))
         self.assertGreater(result.pulse_recursions, 0)
 
+    def test_sharded_pulse_guarded_harvest_diagnostics_surface(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        duals = JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        result = price_journeys(
+            data,
+            duals,
+            tuple(),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                final_judge_engine="sharded_pulse",
+                sharded_final_judge_enabled=True,
+                sharded_final_judge_toy_certificate_enabled=True,
+                max_tasks_per_trip=2,
+                max_returned_journeys=5,
+                pulse_support_aware_harvesting_enabled=True,
+                pulse_negative_harvest_limit=5,
+            ),
+            active_support_task_sets={frozenset({1})},
+            dominant_task_set_costs={frozenset({1}): 0.0},
+        )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertGreater(result.pulse_negative_pool_size, 0)
+        self.assertGreater(result.pulse_harvested_count, 0)
+        self.assertGreaterEqual(result.pulse_harvested_new_task_set_count, 0)
+        self.assertGreaterEqual(result.pulse_harvested_support_changing_count, 0)
+        self.assertGreaterEqual(result.pulse_harvested_replacement_count, 0)
+        self.assertTrue(all(manual_journey_reduced_cost(journey, duals) < -1.0e-6 for journey in result.journeys))
+
     def test_sharded_pulse_guarded_engine_incomplete_no_certificate(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
         result = price_journeys(
@@ -13927,6 +14213,28 @@ class BPCFutureTests(unittest.TestCase):
 
         self.assertEqual(result.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
         self.assertGreater(result.pulse_archive_pruned, 0)
+
+    def test_sharded_pulse_guarded_bound_counter_surfaces(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 110.0, 2: 0.0, 3: 0.0}, fleet_limit=0.0, cuts={})
+        result = price_journeys(
+            data,
+            duals,
+            tuple(),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                final_judge_engine="sharded_pulse",
+                sharded_final_judge_enabled=True,
+                sharded_final_judge_toy_certificate_enabled=True,
+                max_tasks_per_trip=2,
+                max_returned_journeys=5,
+                pulse_bound_pruning_enabled=True,
+            ),
+        )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertGreater(result.pulse_bound_pruned, 0)
 
     def test_sharded_pulse_guarded_non_test_instance_never_toy_certifies(self):
         data = replace(load_future_data("very_small"), name="prod_like_instance", tasks=(1, 2), sortie_limit=2)
@@ -13999,6 +14307,41 @@ class BPCFutureTests(unittest.TestCase):
 
         self.assertEqual(duplicate.pricing_state, PRICING_STATE_DUPLICATE_ONLY)
         self.assertEqual(duplicate.reason, "sharded_pulse_duplicate_only_no_certificate")
+        self.assertFalse(_journey_pricing_is_global_certificate(duplicate))
+
+    def test_sharded_pulse_guarded_harvest_duplicate_only_not_certificate(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 1000.0, 2: 1000.0}, fleet_limit=0.0, cuts={})
+        all_negative = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+        )
+        duplicate = price_journeys(
+            data,
+            duals,
+            tuple(),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                final_judge_engine="sharded_pulse",
+                sharded_final_judge_enabled=True,
+                sharded_final_judge_toy_certificate_enabled=True,
+                max_tasks_per_trip=2,
+                max_returned_journeys=100,
+                pulse_support_aware_harvesting_enabled=True,
+                pulse_negative_harvest_limit=100,
+            ),
+            forbidden_journey_signatures={
+                tuple(candidate.journey.signature) for candidate in all_negative.negative_leaves
+            },
+        )
+
+        self.assertEqual(duplicate.pricing_state, PRICING_STATE_DUPLICATE_ONLY)
+        self.assertEqual(duplicate.reason, "sharded_pulse_duplicate_only_no_certificate")
+        self.assertGreater(duplicate.pulse_negative_pool_size, 0)
+        self.assertEqual(duplicate.pulse_harvested_count, 0)
         self.assertFalse(_journey_pricing_is_global_certificate(duplicate))
 
     def test_sharded_pulse_guarded_unsupported_branch_not_certificate(self):
@@ -14269,6 +14612,8 @@ class BPCFutureTests(unittest.TestCase):
         allow_dummy_env: bool = True,
         toy_certificate_enabled: bool = False,
         archive_enabled: bool = False,
+        support_harvest_enabled: bool = False,
+        negative_harvest_limit: int = 0,
     ) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
         data = load_future_data("very_small")
         if dummy_engine_enabled is None:
@@ -14298,6 +14643,8 @@ class BPCFutureTests(unittest.TestCase):
                 ),
                 "journey_pulse_toy_certificate_enabled": bool(toy_certificate_enabled),
                 "journey_pulse_archive_enabled": bool(archive_enabled),
+                "journey_pulse_support_aware_harvesting_enabled": bool(support_harvest_enabled),
+                "journey_pulse_negative_harvest_limit": int(negative_harvest_limit),
                 "journey_final_judge_dummy_shard_statuses": str(dummy_statuses),
                 "journey_pricing_profile_pricing_enabled": False,
                 "journey_pricing_direct_journey_label_pricing_enabled": False,
@@ -14430,6 +14777,34 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(final_record["final_judge_engine"], "sharded_pulse")
         self.assertIn("pulse_archive_pruned", final_record)
         self.assertIsInstance(final_record["pulse_archive_pruned"], int)
+
+    def test_sharded_pulse_driver_smoke_harvest_counters_surface(self):
+        result, _records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=True,
+            dummy_engine_enabled=False,
+            support_harvest_enabled=True,
+            negative_harvest_limit=4,
+        )
+        self.assertIsNone(result.dual_bound)
+        self.assertTrue(sharded_pricing)
+        final_record = sharded_pricing[-1]
+        self.assertEqual(final_record["final_judge_engine"], "sharded_pulse")
+        self.assertFalse(final_record["global_certificate"])
+        self.assertEqual(final_record["pricing_state"], PRICING_STATE_FOUND_NEGATIVE)
+        for key in (
+            "pulse_negative_found",
+            "pulse_negative_pool_size",
+            "pulse_harvested_count",
+            "pulse_harvested_new_task_set_count",
+            "pulse_harvested_support_changing_count",
+            "pulse_harvested_replacement_count",
+            "pulse_best_true_rc",
+        ):
+            self.assertIn(key, final_record)
+        self.assertTrue(final_record["pulse_negative_found"])
+        self.assertGreater(final_record["pulse_negative_pool_size"], 0)
+        self.assertGreater(final_record["pulse_harvested_count"], 0)
 
     def test_sharded_pulse_dummy_driver_smoke_incomplete_has_no_official_bound(self):
         result, _records, sharded_pricing = self._run_sharded_dummy_driver_smoke(

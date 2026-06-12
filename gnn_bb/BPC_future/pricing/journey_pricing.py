@@ -65,6 +65,7 @@ class JourneyPricingConfig:
     sharded_final_judge_toy_certificate_enabled: bool = False
     pulse_max_recursions: int = 50000
     pulse_exact_safe_pruning_enabled: bool = False
+    pulse_bound_pruning_enabled: bool = False
     pulse_archive_dominance_enabled: bool = False
     pulse_archive_max_records_per_key: int = 32
     pulse_support_aware_harvesting_enabled: bool = False
@@ -529,7 +530,11 @@ class JourneyPricingResult:
     pulse_archive_pruned: int = 0
     pulse_depot_ready_pruned: int = 0
     pulse_negative_found: bool = False
+    pulse_negative_pool_size: int = 0
     pulse_harvested_count: int = 0
+    pulse_harvested_new_task_set_count: int = 0
+    pulse_harvested_support_changing_count: int = 0
+    pulse_harvested_replacement_count: int = 0
     pulse_best_true_rc: float | None = None
     pricing_state: str = ""
     diagnostic_profile_task_masks: frozenset[int] = frozenset()
@@ -3331,7 +3336,11 @@ def _price_journeys_by_sharded_pulse_guarded(
     pulse_bound_pruned = 0
     pulse_archive_pruned = 0
     pulse_depot_ready_pruned = 0
+    pulse_negative_pool_size = 0
     pulse_harvested_count = 0
+    pulse_harvested_new_task_set_count = 0
+    pulse_harvested_support_changing_count = 0
+    pulse_harvested_replacement_count = 0
     best_true_rc: float | None = None
 
     deadline = config.absolute_deadline
@@ -3353,6 +3362,14 @@ def _price_journeys_by_sharded_pulse_guarded(
             max_recursions=int(config.pulse_max_recursions),
             archive_dominance_enabled=bool(config.pulse_archive_dominance_enabled) and not bool(forbidden),
             archive_max_records_per_key=int(config.pulse_archive_max_records_per_key),
+            bound_pruning_enabled=bool(config.pulse_bound_pruning_enabled),
+            harvest_after_negative_enabled=bool(config.pulse_support_aware_harvesting_enabled)
+            or int(config.pulse_negative_harvest_limit) > 0,
+            support_aware_harvesting_enabled=bool(config.pulse_support_aware_harvesting_enabled),
+            negative_harvest_limit=int(config.pulse_negative_harvest_limit),
+            active_masks=tuple(active_support_task_sets or tuple()),
+            pool_masks=tuple(pool_task_sets or tuple()),
+            forbidden_signatures=tuple(forbidden),
         )
         generated_traces += int(shard.generated_sortie_traces)
         materialized_sorties += int(shard.materialized_sorties)
@@ -3370,7 +3387,11 @@ def _price_journeys_by_sharded_pulse_guarded(
         pulse_bound_pruned += int(shard.pulse_bound_pruned)
         pulse_archive_pruned += int(shard.pulse_archive_pruned)
         pulse_depot_ready_pruned += int(shard.pulse_depot_ready_pruned)
+        pulse_negative_pool_size += int(shard.pulse_negative_pool_size)
         pulse_harvested_count += int(shard.pulse_harvested_count)
+        pulse_harvested_new_task_set_count += int(shard.pulse_harvested_new_task_set_count)
+        pulse_harvested_support_changing_count += int(shard.pulse_harvested_support_changing_count)
+        pulse_harvested_replacement_count += int(shard.pulse_harvested_replacement_count)
         if shard.best_true_reduced_cost is not None:
             best_true_rc = (
                 float(shard.best_true_reduced_cost)
@@ -3427,7 +3448,11 @@ def _price_journeys_by_sharded_pulse_guarded(
         "pulse_bound_pruned": int(pulse_bound_pruned),
         "pulse_archive_pruned": int(pulse_archive_pruned),
         "pulse_depot_ready_pruned": int(pulse_depot_ready_pruned),
+        "pulse_negative_pool_size": int(pulse_negative_pool_size),
         "pulse_harvested_count": int(pulse_harvested_count),
+        "pulse_harvested_new_task_set_count": int(pulse_harvested_new_task_set_count),
+        "pulse_harvested_support_changing_count": int(pulse_harvested_support_changing_count),
+        "pulse_harvested_replacement_count": int(pulse_harvested_replacement_count),
         "pulse_best_true_rc": best_true_rc,
     }
     if all_candidates:

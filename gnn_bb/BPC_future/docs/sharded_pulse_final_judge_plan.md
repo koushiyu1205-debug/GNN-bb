@@ -15,6 +15,9 @@
 当前实现重点是证书状态机、Phase 3A leaf materialization contract、Phase 3B toy exhaustive Pulse、Phase 3C cheap exact-safe pruning、Phase 4 structural archive / harvesting、Phase 5 guarded first-task sharded engine。
 Phase 7A 新增 test-only transition-level root-only Pulse core，用于替代“完成 trace 枚举后再验证”的方向性验证。
 Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in path，但仍不接默认 production benchmark。
+Phase 7C 已把 `StructuralKeyDominanceArchive` 接入 transition state。
+Phase 7D 已把 transition-state true-RC negative leaves 接入 support-aware harvest-after-negative path。
+Phase 7E 已加入 safe prefix reduced-cost lower-bound ledger 和 opt-in 弱安全 bound pruning。
 
 ## Exactness 边界
 
@@ -60,6 +63,7 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
   - exact-safe resource/time/return pruning
   - optional archive
   - optional harvest-after-negative
+  - optional prefix RC lower-bound pruning
 
 - `BPC_future/pricing/pulse_archive.py`
   - `PulseStructuralKey`
@@ -193,9 +197,7 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
 - resume；
 - parallel；
 - adaptive hierarchical sharding；
-- prefix RC bound pruning；
-- dominance archive 接入 transition state；
-- support-aware harvesting 接入 transition state。
+- dominance archive / support-aware harvesting 之外的完整 production Pulse features。
 
 ### Phase 7B
 
@@ -220,7 +222,6 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
 - resume；
 - parallel；
 - adaptive refinement；
-- prefix RC bound pruning；
 - transition-state dominance archive；
 - transition-state harvesting。
 
@@ -250,8 +251,86 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
 - resume；
 - parallel；
 - adaptive refinement；
-- prefix RC bound pruning；
 - transition-state harvesting。
+
+### Phase 7D
+
+已完成：
+
+- `transition_root_only_pulse()` 支持 opt-in harvest-after-negative；
+- 发现 true-RC negative 后，若启用 harvest mode，返回强制退出 proof mode：
+  - `exhausted=False`
+  - `status="FOUND_NEGATIVE_HARVESTED"` 或 `FOUND_NEGATIVE`
+  - `reason="harvest_after_negative"`
+  - `global_certificate_capable=False` 由 guarded result path 保持
+- harvest 只影响返回列，不参与 shard proof closure；
+- 复用现有 `harvest_support_aware_negative_journeys()`；
+- 所有 harvested journeys 继续由 `manual_journey_reduced_cost()` 过滤为 true-RC negative；
+- forbidden signatures 保守处理：forbidden negative 仍可形成 `DUPLICATE_ONLY`，但不会进入 harvested returned columns；
+- archive + harvest 在 toy 上与 archive-disabled path 保持 best true RC / found-negative 语义一致；
+- guarded sharded path 透传 support-aware harvest config；
+- `JourneyPricingResult` 与 driver JSONL 增加：
+  - `pulse_negative_pool_size`
+  - `pulse_harvested_count`
+  - `pulse_harvested_new_task_set_count`
+  - `pulse_harvested_support_changing_count`
+  - `pulse_harvested_replacement_count`
+  - `pulse_best_true_rc`
+
+验证：
+
+- found-negative 后退出 proof mode；
+- harvested columns 全部 true-RC negative；
+- empty harvest 不证书；
+- duplicate-only 仍不证书；
+- archive + harvest consistency；
+- guarded path 与 driver JSONL harvest counters 可观测。
+
+仍未实现：
+
+- resume；
+- parallel；
+- adaptive refinement；
+- prefix RC lower-bound pruning；
+- production benchmark 默认启用。
+
+### Phase 7E
+
+已完成：
+
+- 新增 `PrefixReducedCostLedger`；
+- 明确 `C_exact_prefix` / `C_lb_prefix`：
+  - `C_exact_prefix` 只包含已经由 trace 固定的 fixed/fleet、已走 arc cost、service cost、cover dual；
+  - `C_lb_prefix` 是用于 pruning 的安全 prefix lower-bound，Phase 7E 中保持与 exact prefix 一致；
+- ledger 对重复 cover dual 和 fixed/fleet 双算 fail-fast；
+- transition state 的 prefix RC 更新改为通过 ledger helper；
+- `cuts != ()` 时 bound pruning fail-open；
+- 若 arc/service cost 存在负成本，bound pruning fail-open；
+- 新增弱安全 LB：
+  - open sortie：`min_return_cost_lower_bound - remaining_positive_cover_reward_bound`
+  - depot-ready after at least one sortie：`min_outbound_cost + min_return_cost - remaining_positive_cover_reward_bound`
+  - root depot 不直接 bound-prune，避免测试/诊断路径被剪空；
+- bound pruning 只在 `bound_pruning_enabled=True` / guarded config `pulse_bound_pruning_enabled=True` 时启用；
+- open state 先物化可返回 leaf，再用 bound pruning 剪更深 extension，避免丢失当前可观测 leaf；
+- guarded sharded path 透传 `pulse_bound_pruning_enabled` 并聚合 `pulse_bound_pruned`。
+
+验证：
+
+- prefix ledger 与 `manual_journey_reduced_cost()` 在 no-cut multi-sortie leaf 上一致；
+- fixed/fleet 不双算；
+- cover dual 不重复领取；
+- cut dual 未安全处理时 fail-open；
+- bound-pruned transition Pulse 与 unpruned 在 best true RC / found-negative / negative signatures 上一致；
+- 至少一个 toy case `pulse_bound_pruned > 0`；
+- guarded path 中 `pulse_bound_pruned` 可观测。
+
+仍未实现：
+
+- cut / subset-row / fleet-cut 的通用 prefix RC lower bound；
+- resume；
+- parallel；
+- adaptive refinement；
+- production benchmark 默认启用。
 
 ## 默认行为
 
@@ -273,7 +352,6 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
 ## 后续建议
 
 1. 实现真正 open-sortie incremental Pulse，而不是 completed-sortie trace 枚举。
-2. Phase 7D 接入 transition-state harvesting，继续保证 found-negative 后退出 proof mode。
-3. 为 prefix RC 建立可证明的 lower-bound ledger，先支持 cover/fleet，再支持 cuts。
-4. 实现 proof-closed prefix cache，并严格区分 frontier snapshot。
-5. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
+2. Phase 7F 可继续增强 prefix RC ledger，但每个 cut/fleet contribution 必须先有单独 exact-safe 证明和 pruned/unpruned 对照测试。
+3. 实现 proof-closed prefix cache，并严格区分 frontier snapshot。
+4. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
