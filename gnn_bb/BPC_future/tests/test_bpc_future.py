@@ -246,6 +246,7 @@ from BPC_future.solver.journey_driver import (
     _journey_pricing_state,
     _journey_sharded_pulse_audit_disagreement_type,
     _journey_sharded_pulse_audit_payload,
+    _run_journey_sharded_pulse_audit,
     _run_journey_sharded_pulse_hidden_negative_worker,
     _journey_promote_duplicate_only_final_judge_certificate,
     _journey_reduced_cost_components,
@@ -15507,6 +15508,334 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(capped.final_judge_shards_refined, 0)
         self.assertEqual(capped.final_judge_shards_total, len(data.tasks))
 
+    def test_sharded_pulse_audit_skip_logs_reason(self):
+        data = load_future_data("very_small")
+        legacy = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "legacy_not_called",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "pulse_audit_skip.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                result = _run_journey_sharded_pulse_audit(
+                    data,
+                    {
+                        "journey_sharded_pulse_audit_enabled": True,
+                        "journey_sharded_pulse_audit_after_legacy_final_judge": False,
+                        "journey_sharded_pulse_audit_log_skips": True,
+                    },
+                    logger,
+                    legacy_pricing=legacy,
+                    legacy_duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                    branch_constraints=tuple(),
+                    cuts=tuple(),
+                    journey_pool=JourneyPool(),
+                    base_pricing_config=JourneyPricingConfig(),
+                    cg_iter=1,
+                    trigger="after_legacy_final_judge",
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNone(result)
+        self.assertTrue(records)
+        self.assertEqual(records[-1]["event"], "journey_sharded_pulse_audit")
+        self.assertTrue(records[-1]["pulse_audit_skipped"])
+        self.assertEqual(records[-1]["pulse_audit_skip_reason"], "not_after_legacy_final_judge")
+
+    def test_sharded_pulse_audit_force_on_root_runs_after_each_pricing(self):
+        data = load_future_data("very_small")
+        legacy = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "legacy_incomplete",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "pulse_audit_force_root.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch.dict("os.environ", {"BPC_FUTURE_ALLOW_DUMMY_CERTIFICATE": "1"}):
+                    result = _run_journey_sharded_pulse_audit(
+                        data,
+                        {
+                            "journey_sharded_pulse_audit_enabled": True,
+                            "journey_sharded_pulse_audit_force_on_root": True,
+                            "journey_sharded_pulse_audit_trigger": "after_legacy_final_judge",
+                            "journey_sharded_pulse_audit_time_limit": 1.0,
+                            "journey_sharded_pulse_audit_log_disagreements": True,
+                            "journey_sharded_pulse_audit_dummy_engine_enabled": True,
+                            "journey_sharded_pulse_audit_allow_test_dummy_certificate": True,
+                            "journey_sharded_pulse_audit_dummy_statuses": "INCOMPLETE_TIME_LIMIT",
+                        },
+                        logger,
+                        legacy_pricing=legacy,
+                        legacy_duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                        branch_constraints=tuple(),
+                        cuts=tuple(),
+                        journey_pool=JourneyPool(),
+                        base_pricing_config=JourneyPricingConfig(),
+                        cg_iter=1,
+                        depth=0,
+                        trigger="after_each_final_pricing",
+                    )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNotNone(result)
+        audit = [record for record in records if record.get("event") == "journey_sharded_pulse_audit"][-1]
+        self.assertFalse(audit["pulse_audit_skipped"])
+        self.assertEqual(audit["pulse_audit_trigger"], "after_each_final_pricing")
+        self.assertEqual(audit["pulse_audit_status"], "AUDIT_INCOMPLETE")
+
+    def test_sharded_pulse_shard_priority_order_stable(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={1: 0.0, 2: 1_000_000.0, 3: 2_000_000.0}, fleet_limit=0.0, cuts={})
+        calls: list[tuple[int, object]] = []
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            calls.append((int(first_task_shard), second_action_shard))
+            return _fake_transition_pulse_result(exhausted=True, status="OPTIMAL", reason="exhausted")
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_shard_scheduling_enabled=True,
+                    pulse_adaptive_sharding_enabled=False,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertEqual([task for task, child in calls if child is None], [3, 2, 1])
+
+    def test_sharded_pulse_child_priority_order_stable(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={1: 0.0, 2: 10.0, 3: 1_000_000.0}, fleet_limit=0.0, cuts={})
+        calls: list[tuple[int, object]] = []
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            calls.append((int(first_task_shard), second_action_shard))
+            if second_action_shard is None:
+                return _fake_transition_pulse_result(
+                    exhausted=False,
+                    status="RECURSION_LIMIT",
+                    reason="recursion_limit",
+                    recursions=10,
+                    expanded_states=10,
+                )
+            return _fake_transition_pulse_result(exhausted=True, status="OPTIMAL", reason="exhausted")
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_shard_scheduling_enabled=False,
+                    pulse_refinement_min_recursions=1,
+                    pulse_refinement_min_expanded=1,
+                    pulse_refinement_max_children=3,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        child_calls_for_first = [child for task, child in calls if task == 1 and child is not None]
+        self.assertEqual(child_calls_for_first, [3, 2, "return"])
+
+    def test_sharded_pulse_low_roi_gate_blocks_refinement_not_certificate(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        calls: list[tuple[int, object]] = []
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            if second_action_shard is not None:
+                raise AssertionError("low-ROI parent shard should not be refined")
+            calls.append((int(first_task_shard), second_action_shard))
+            return _fake_transition_pulse_result(
+                exhausted=False,
+                status="RECURSION_LIMIT",
+                reason="recursion_limit",
+                recursions=10,
+                expanded_states=10,
+                generated_sortie_traces=10,
+            )
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_refinement_min_recursions=1,
+                    pulse_refinement_min_expanded=1,
+                    pulse_refinement_max_children=3,
+                    pulse_shard_roi_gate_enabled=True,
+                    pulse_shard_roi_prune_rate_floor=1.0,
+                    pulse_shard_roi_min_time=0.0,
+                    pulse_shard_roi_min_expanded=0,
+                ),
+            )
+
+        self.assertEqual(len(calls), len(data.tasks))
+        self.assertEqual(result.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertEqual(result.final_judge_shards_refined, 0)
+        self.assertEqual(result.pulse_low_roi_shards, len(data.tasks))
+        self.assertEqual(result.final_judge_incomplete_reason, "low_roi_incomplete")
+
+    def test_sharded_pulse_low_roi_gate_keeps_found_negative(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        negative_journey = SimpleNamespace(signature=("low-roi-negative",), task_set=frozenset({1}))
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **_kwargs):
+            if int(first_task_shard) == 1:
+                return _fake_transition_pulse_result(
+                    exhausted=False,
+                    status="FOUND_NEGATIVE",
+                    reason="found_negative",
+                    negative_journeys=(negative_journey,),
+                    best_true_reduced_cost=-5.0,
+                    generated_sortie_traces=10,
+                )
+            return _fake_transition_pulse_result(
+                exhausted=False,
+                status="RECURSION_LIMIT",
+                reason="recursion_limit",
+                recursions=10,
+                expanded_states=10,
+                generated_sortie_traces=10,
+            )
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition), patch(
+            "BPC_future.pricing.journey_pricing.manual_journey_reduced_cost",
+            return_value=-5.0,
+        ):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_adaptive_sharding_enabled=False,
+                    pulse_shard_roi_gate_enabled=True,
+                    pulse_shard_roi_prune_rate_floor=1.0,
+                    pulse_shard_roi_min_time=0.0,
+                    pulse_shard_roi_min_expanded=0,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(result.journeys, [negative_journey])
+        self.assertEqual(result.pulse_low_roi_shards, len(data.tasks) - 1)
+
+    def test_sharded_pulse_hidden_negative_worker_hard_tail_gate_skips_small_fast_instance(self):
+        worker = _run_journey_sharded_pulse_hidden_negative_worker(
+            load_future_data("very_small"),
+            {
+                "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_trigger": "hard_tail_only",
+                "journey_sharded_pulse_hidden_negative_worker_min_tasks": 6,
+                "journey_sharded_pulse_hidden_negative_worker_time_limit": 1.0,
+            },
+            FutureLogger(None, console=False),
+            duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+            branch_constraints=tuple(),
+            cuts=tuple(),
+            journey_pool=JourneyPool(),
+            base_pricing_config=JourneyPricingConfig(),
+            cg_iter=1,
+            certificate_candidate=True,
+            remaining_time=10.0,
+        )
+        self.assertIsNone(worker)
+
+    def test_sharded_pulse_hidden_negative_worker_hard_tail_gate_triggers_with_signal(self):
+        data = load_future_data("very_small")
+        fake_pricing = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "worker_smoke",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "hard_tail_worker.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing) as mock_price:
+                    worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                        data,
+                        {
+                            "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                            "journey_sharded_pulse_hidden_negative_worker_trigger": "hard_tail_only",
+                            "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                            "journey_sharded_pulse_hidden_negative_worker_min_remaining_time": 1.0,
+                            "journey_sharded_pulse_hidden_negative_worker_time_limit": 1.0,
+                        },
+                        logger,
+                        duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                        branch_constraints=tuple(),
+                        cuts=tuple(),
+                        journey_pool=JourneyPool(),
+                        base_pricing_config=JourneyPricingConfig(),
+                        cg_iter=1,
+                        certificate_candidate=True,
+                        remaining_time=10.0,
+                        previous_audit_signal=True,
+                    )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNotNone(worker)
+        mock_price.assert_called_once()
+        event = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertEqual(event["pulse_worker_trigger"], "hard_tail_only")
+        self.assertFalse(event["pulse_worker_global_certificate_capable"])
+
     def test_sharded_pulse_dummy_driver_smoke_default_off(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
             "CERTIFIED_NO_NEGATIVE",
@@ -17410,6 +17739,12 @@ def _fake_transition_pulse_result(
     expanded_states: int = 1,
     negative_journeys: tuple[Any, ...] = tuple(),
     best_true_reduced_cost: float | None = None,
+    generated_sortie_traces: int = 0,
+    pulse_bound_pruned: int = 0,
+    pulse_archive_pruned: int = 0,
+    transition_time_window_pruned: int = 0,
+    transition_energy_pruned: int = 0,
+    transition_return_pruned: int = 0,
 ) -> Any:
     negative_leaves = tuple(SimpleNamespace(journey=journey) for journey in negative_journeys)
     return SimpleNamespace(
@@ -17417,7 +17752,7 @@ def _fake_transition_pulse_result(
         exhausted=bool(exhausted),
         status=str(status),
         reason=str(reason),
-        generated_sortie_traces=0,
+        generated_sortie_traces=int(generated_sortie_traces),
         generated_leaves=0,
         materialized_sorties=0,
         materialized_journey_leaves=0,
@@ -17428,14 +17763,14 @@ def _fake_transition_pulse_result(
         pulse_return_pruned=0,
         pulse_time_window_pruned=0,
         pulse_resource_pruned=0,
-        pulse_bound_pruned=0,
+        pulse_bound_pruned=int(pulse_bound_pruned),
         pulse_bound_prune_enabled=False,
         pulse_bound_prune_supported=False,
         pulse_bound_prune_fail_open_reason="disabled",
         pulse_bound_prune_query_count=0,
         pulse_bound_prune_winner_count=0,
         pulse_bound_prune_time=0.0,
-        pulse_archive_pruned=0,
+        pulse_archive_pruned=int(pulse_archive_pruned),
         pulse_depot_ready_pruned=0,
         pulse_branch_pruned=0,
         pulse_negative_found=bool(negative_leaves),
@@ -17451,25 +17786,26 @@ def _fake_transition_pulse_result(
         shard_first_task=None,
         pulse_capacity_pruned=0,
         pulse_energy_pruned=0,
-        transition_time_window_pruned=0,
-        transition_energy_pruned=0,
-        transition_return_pruned=0,
+        transition_time_window_pruned=int(transition_time_window_pruned),
+        transition_energy_pruned=int(transition_energy_pruned),
+        transition_return_pruned=int(transition_return_pruned),
     )
 
 
 def _adaptive_sharded_pulse_test_config(**updates: Any) -> JourneyPricingConfig:
-    return JourneyPricingConfig(
-        sharded_final_judge_enabled=True,
-        sharded_final_judge_toy_certificate_enabled=True,
-        pulse_adaptive_sharding_enabled=True,
-        pulse_refine_incomplete_first_task_shards=True,
-        pulse_max_recursions=10,
-        time_bucket_size=5.0,
-        start_time_step=10.0,
-        max_tasks_per_trip=2,
-        max_returned_journeys=4,
-        **updates,
-    )
+    defaults: dict[str, Any] = {
+        "sharded_final_judge_enabled": True,
+        "sharded_final_judge_toy_certificate_enabled": True,
+        "pulse_adaptive_sharding_enabled": True,
+        "pulse_refine_incomplete_first_task_shards": True,
+        "pulse_max_recursions": 10,
+        "time_bucket_size": 5.0,
+        "start_time_step": 10.0,
+        "max_tasks_per_trip": 2,
+        "max_returned_journeys": 4,
+    }
+    defaults.update(updates)
+    return JourneyPricingConfig(**defaults)
 
 
 def _assert_toy_pulse_same_pricing_surface(testcase: unittest.TestCase, pruned: Any, unpruned: Any) -> None:

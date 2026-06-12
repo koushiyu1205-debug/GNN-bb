@@ -751,6 +751,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 node_id=0,
                 depth=0,
                 active_task_sets=active_task_sets,
+                trigger="after_legacy_final_judge",
             )
 
         exact_duals, exact_dual_source = _journey_exact_pricing_duals(
@@ -795,6 +796,9 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             node_id=0,
             depth=0,
             active_task_sets=active_task_sets,
+            certificate_candidate=certificate_candidate,
+            remaining_time=remaining,
+            previous_audit_signal=False,
         )
         if hidden_worker is not None:
             worker_pricing, worker_pricing_config = hidden_worker
@@ -863,8 +867,31 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             config=exact_pricing_config,
             pricing_dual_source=exact_dual_source,
         )
+        audit_ran_for_pricing = False
+        audit_trigger = str(
+            config.get("journey_sharded_pulse_audit_trigger", "after_legacy_final_judge") or ""
+        ).strip().lower()
+        if bool(config.get("journey_sharded_pulse_audit_force_on_root", False)) or audit_trigger == "after_each_final_pricing":
+            _run_journey_sharded_pulse_audit(
+                data,
+                config,
+                logger,
+                legacy_pricing=pricing,
+                legacy_duals=solution.duals,
+                branch_constraints=tuple(),
+                cuts=tuple(cuts),
+                journey_pool=journey_pool,
+                base_pricing_config=exact_pricing_config,
+                cg_iter=cg_iter,
+                node_id=0,
+                depth=0,
+                active_task_sets=active_task_sets,
+                trigger="after_each_final_pricing",
+            )
+            audit_ran_for_pricing = True
         if pricing.journeys:
-            audit_final_legacy_pricing(pricing)
+            if not audit_ran_for_pricing:
+                audit_final_legacy_pricing(pricing)
             added = _add_priced_journeys(journey_pool, pricing.journeys)
             _log_journey_addition(
                 logger,
@@ -7632,18 +7659,27 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 raise ValueError(f"{adaptive_prefix}_refinement_min_expanded must be nonnegative")
             if int(config.get(f"{adaptive_prefix}_refinement_max_children", 32)) <= 0:
                 raise ValueError(f"{adaptive_prefix}_refinement_max_children must be positive")
+        for roi_prefix in adaptive_sharding_prefixes:
+            if not bool(config.get(f"{roi_prefix}_shard_roi_gate_enabled", False)):
+                continue
+            if float(config.get(f"{roi_prefix}_shard_roi_prune_rate_floor", 0.0)) < 0.0:
+                raise ValueError(f"{roi_prefix}_shard_roi_prune_rate_floor must be nonnegative")
+            if float(config.get(f"{roi_prefix}_shard_roi_min_time", 0.0)) < 0.0:
+                raise ValueError(f"{roi_prefix}_shard_roi_min_time must be nonnegative")
+            if int(config.get(f"{roi_prefix}_shard_roi_min_expanded", 0)) < 0:
+                raise ValueError(f"{roi_prefix}_shard_roi_min_expanded must be nonnegative")
         if bool(config.get("journey_sharded_pulse_hidden_negative_worker_enabled", False)):
             worker_trigger = str(
                 config.get(
                     "journey_sharded_pulse_hidden_negative_worker_trigger",
-                    "before_legacy_final_judge",
+                    config.get("journey_sharded_pulse_worker_trigger", "before_legacy_final_judge"),
                 )
                 or ""
             ).strip().lower()
-            if worker_trigger not in {"before_legacy_final_judge"}:
+            if worker_trigger not in {"before_legacy_final_judge", "hard_tail_only"}:
                 raise ValueError(
                     "journey_sharded_pulse_hidden_negative_worker_trigger must be "
-                    "before_legacy_final_judge"
+                    "before_legacy_final_judge or hard_tail_only"
                 )
             if float(config.get("journey_sharded_pulse_hidden_negative_worker_time_limit", 3.0)) <= 0.0:
                 raise ValueError(
@@ -7662,6 +7698,20 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 raise ValueError(
                     "journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit must be nonnegative"
                 )
+            if int(config.get("journey_sharded_pulse_hidden_negative_worker_min_tasks", 0)) < 0:
+                raise ValueError("journey_sharded_pulse_hidden_negative_worker_min_tasks must be nonnegative")
+            if float(config.get("journey_sharded_pulse_hidden_negative_worker_min_remaining_time", 0.0)) < 0.0:
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_min_remaining_time must be nonnegative"
+                )
+        audit_trigger = str(
+            config.get("journey_sharded_pulse_audit_trigger", "after_legacy_final_judge") or ""
+        ).strip().lower()
+        if audit_trigger not in {"after_legacy_final_judge", "after_each_final_pricing", "on_certificate_candidate"}:
+            raise ValueError(
+                "journey_sharded_pulse_audit_trigger must be after_legacy_final_judge, "
+                "after_each_final_pricing, or on_certificate_candidate"
+            )
         if bool(config.get("journey_hidden_negative_profile_catalog_seed_enabled", False)) and not bool(
             config.get("journey_pricing_profile_labeling_physical_catalog_resume_enabled", False)
         ):
@@ -12788,6 +12838,24 @@ def _journey_certificate_pricing_config(
                 1,
                 int(config.get("journey_pulse_refinement_max_children", 32)),
             ),
+            pulse_shard_scheduling_enabled=bool(
+                config.get("journey_pulse_shard_scheduling_enabled", False)
+            ),
+            pulse_shard_roi_gate_enabled=bool(
+                config.get("journey_pulse_shard_roi_gate_enabled", False)
+            ),
+            pulse_shard_roi_prune_rate_floor=max(
+                0.0,
+                float(config.get("journey_pulse_shard_roi_prune_rate_floor", 0.0)),
+            ),
+            pulse_shard_roi_min_time=max(
+                0.0,
+                float(config.get("journey_pulse_shard_roi_min_time", 0.0)),
+            ),
+            pulse_shard_roi_min_expanded=max(
+                0,
+                int(config.get("journey_pulse_shard_roi_min_expanded", 0)),
+            ),
             pulse_resume_enabled=bool(config.get("journey_final_judge_resume_enabled", False)),
             pulse_cache_max_states=max(0, int(config.get("journey_final_judge_cache_max_states", 0))),
             pulse_parallel_enabled=bool(config.get("journey_final_judge_parallel_enabled", False)),
@@ -12812,6 +12880,12 @@ def _journey_certificate_pricing_config(
         mode["sharded_pulse_refinement_min_recursions"] = int(updated.pulse_refinement_min_recursions)
         mode["sharded_pulse_refinement_min_expanded"] = int(updated.pulse_refinement_min_expanded)
         mode["sharded_pulse_refinement_max_children"] = int(updated.pulse_refinement_max_children)
+        mode["sharded_pulse_shard_scheduling"] = bool(updated.pulse_shard_scheduling_enabled)
+        mode["sharded_pulse_shard_roi_gate"] = bool(updated.pulse_shard_roi_gate_enabled)
+        mode["sharded_pulse_shard_roi_prune_rate_floor"] = round(
+            float(updated.pulse_shard_roi_prune_rate_floor),
+            9,
+        )
         mode["sharded_pulse_resume_enabled"] = bool(updated.pulse_resume_enabled)
         mode["sharded_pulse_parallel_enabled"] = bool(updated.pulse_parallel_enabled)
         mode["sharded_pulse_parallel_workers"] = int(updated.pulse_parallel_workers)
@@ -15415,6 +15489,7 @@ def _journey_sharded_pulse_audit_payload(
         "pulse_audit_shards_refined": int(
             getattr(pulse_pricing, "final_judge_shards_refined", 0)
         ),
+        "pulse_audit_low_roi_shards": int(getattr(pulse_pricing, "pulse_low_roi_shards", 0)),
         "pulse_audit_bound_pruned": int(getattr(pulse_pricing, "pulse_bound_pruned", 0)),
         "pulse_audit_archive_pruned": int(getattr(pulse_pricing, "pulse_archive_pruned", 0)),
         "pulse_audit_time_window_pruned": int(
@@ -15550,6 +15625,45 @@ def _journey_sharded_pulse_audit_config(
                 )
             ),
         ),
+        pulse_shard_scheduling_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_shard_scheduling_enabled",
+                config.get("journey_pulse_shard_scheduling_enabled", False),
+            )
+        ),
+        pulse_shard_roi_gate_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_shard_roi_gate_enabled",
+                config.get("journey_pulse_shard_roi_gate_enabled", False),
+            )
+        ),
+        pulse_shard_roi_prune_rate_floor=max(
+            0.0,
+            float(
+                config.get(
+                    "journey_sharded_pulse_audit_shard_roi_prune_rate_floor",
+                    config.get("journey_pulse_shard_roi_prune_rate_floor", 0.0),
+                )
+            ),
+        ),
+        pulse_shard_roi_min_time=max(
+            0.0,
+            float(
+                config.get(
+                    "journey_sharded_pulse_audit_shard_roi_min_time",
+                    config.get("journey_pulse_shard_roi_min_time", 0.0),
+                )
+            ),
+        ),
+        pulse_shard_roi_min_expanded=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_audit_shard_roi_min_expanded",
+                    config.get("journey_pulse_shard_roi_min_expanded", 0),
+                )
+            ),
+        ),
         profile_pricing_enabled=False,
         direct_journey_label_pricing_enabled=False,
         direct_journey_label_global_certificate_enabled=False,
@@ -15681,6 +15795,45 @@ def _journey_sharded_pulse_hidden_negative_worker_config(
                 )
             ),
         ),
+        pulse_shard_scheduling_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_shard_scheduling_enabled",
+                config.get("journey_pulse_shard_scheduling_enabled", False),
+            )
+        ),
+        pulse_shard_roi_gate_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_gate_enabled",
+                config.get("journey_pulse_shard_roi_gate_enabled", False),
+            )
+        ),
+        pulse_shard_roi_prune_rate_floor=max(
+            0.0,
+            float(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_shard_roi_prune_rate_floor",
+                    config.get("journey_pulse_shard_roi_prune_rate_floor", 0.0),
+                )
+            ),
+        ),
+        pulse_shard_roi_min_time=max(
+            0.0,
+            float(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_shard_roi_min_time",
+                    config.get("journey_pulse_shard_roi_min_time", 0.0),
+                )
+            ),
+        ),
+        pulse_shard_roi_min_expanded=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_shard_roi_min_expanded",
+                    config.get("journey_pulse_shard_roi_min_expanded", 0),
+                )
+            ),
+        ),
         profile_pricing_enabled=False,
         direct_journey_label_pricing_enabled=False,
         direct_journey_label_global_certificate_enabled=False,
@@ -15754,6 +15907,8 @@ def _journey_sharded_pulse_hidden_negative_worker_payload(
         "pulse_worker_shards_negative": int(
             getattr(pricing, "final_judge_shards_negative_found", 0)
         ),
+        "pulse_worker_shards_refined": int(getattr(pricing, "final_judge_shards_refined", 0)),
+        "pulse_worker_low_roi_shards": int(getattr(pricing, "pulse_low_roi_shards", 0)),
         "pulse_worker_bound_pruned": int(getattr(pricing, "pulse_bound_pruned", 0)),
         "pulse_worker_archive_pruned": int(getattr(pricing, "pulse_archive_pruned", 0)),
         "pulse_worker_time_window_pruned": int(
@@ -15770,6 +15925,58 @@ def _journey_sharded_pulse_hidden_negative_worker_payload(
         "pulse_worker_branch_hash": str(hashes.get("branch", "")),
         "pulse_worker_forbidden_signature_hash": str(hashes.get("forbidden", "")),
     }
+
+
+def _log_journey_sharded_pulse_audit_skipped(
+    logger: FutureLogger,
+    config: dict[str, Any],
+    *,
+    skip_reason: str,
+    trigger: str,
+    cg_iter: int,
+    node_id: int = 0,
+    depth: int = 0,
+) -> None:
+    if not bool(config.get("journey_sharded_pulse_audit_log_skips", False)):
+        return
+    logger.log(
+        "journey_sharded_pulse_audit",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        pulse_audit_enabled=bool(config.get("journey_sharded_pulse_audit_enabled", False)),
+        pulse_audit_skipped=True,
+        pulse_audit_skip_reason=str(skip_reason),
+        pulse_audit_trigger=str(trigger),
+        pulse_audit_allow_certificate_effect=bool(
+            config.get("journey_sharded_pulse_audit_allow_certificate_effect", False)
+        ),
+    )
+
+
+def _journey_sharded_pulse_audit_trigger_allows(
+    config: dict[str, Any],
+    *,
+    trigger: str,
+    depth: int,
+) -> tuple[bool, str]:
+    if not bool(config.get("journey_sharded_pulse_audit_enabled", False)):
+        return False, "audit_disabled"
+    configured = str(
+        config.get("journey_sharded_pulse_audit_trigger", "after_legacy_final_judge") or ""
+    ).strip().lower()
+    current = str(trigger or "").strip().lower()
+    if configured == "after_each_final_pricing":
+        return True, ""
+    if configured == current:
+        return True, ""
+    if bool(config.get("journey_sharded_pulse_audit_force_on_root", False)) and int(depth) <= 0:
+        return True, ""
+    if configured == "after_legacy_final_judge":
+        return False, "not_after_legacy_final_judge"
+    if configured == "on_certificate_candidate":
+        return False, "pricing_state_not_eligible"
+    return False, f"trigger_mismatch:{configured or 'unset'}"
 
 
 def _journey_sharded_pulse_hidden_negative_worker_sanitize(
@@ -15856,18 +16063,39 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
     node_id: int = 0,
     depth: int = 0,
     active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    certificate_candidate: bool = False,
+    remaining_time: float | None = None,
+    previous_audit_signal: bool = False,
 ) -> tuple[JourneyPricingResult, JourneyPricingConfig] | None:
     if not bool(config.get("journey_sharded_pulse_hidden_negative_worker_enabled", False)):
         return None
     trigger = str(
         config.get(
             "journey_sharded_pulse_hidden_negative_worker_trigger",
-            "before_legacy_final_judge",
+            config.get("journey_sharded_pulse_worker_trigger", "before_legacy_final_judge"),
         )
         or ""
     ).strip().lower()
-    if trigger != "before_legacy_final_judge":
+    if trigger not in {"before_legacy_final_judge", "hard_tail_only"}:
         return None
+    if trigger == "hard_tail_only":
+        if not bool(certificate_candidate):
+            return None
+        min_tasks = int(config.get("journey_sharded_pulse_hidden_negative_worker_min_tasks", 6))
+        if len(tuple(data.tasks)) < max(0, min_tasks):
+            return None
+        min_remaining = float(
+            config.get("journey_sharded_pulse_hidden_negative_worker_min_remaining_time", 0.0)
+        )
+        if remaining_time is not None and float(remaining_time) < max(0.0, min_remaining):
+            return None
+        if bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_require_previous_audit_signal",
+                False,
+            )
+        ) and not bool(previous_audit_signal):
+            return None
     if bool(getattr(base_pricing_config, "sharded_final_judge_enabled", False)):
         return None
 
@@ -15978,12 +16206,45 @@ def _run_journey_sharded_pulse_audit(
     node_id: int = 0,
     depth: int = 0,
     active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    trigger: str = "after_legacy_final_judge",
 ) -> Any | None:
-    if not bool(config.get("journey_sharded_pulse_audit_enabled", False)):
+    allowed, skip_reason = _journey_sharded_pulse_audit_trigger_allows(
+        config,
+        trigger=trigger,
+        depth=depth,
+    )
+    if not allowed:
+        _log_journey_sharded_pulse_audit_skipped(
+            logger,
+            config,
+            skip_reason=skip_reason,
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+        )
         return None
     if not bool(config.get("journey_sharded_pulse_audit_after_legacy_final_judge", True)):
+        _log_journey_sharded_pulse_audit_skipped(
+            logger,
+            config,
+            skip_reason="not_after_legacy_final_judge",
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+        )
         return None
     if bool(getattr(base_pricing_config, "sharded_final_judge_enabled", False)):
+        _log_journey_sharded_pulse_audit_skipped(
+            logger,
+            config,
+            skip_reason="base_pricing_is_sharded",
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+        )
         return None
 
     started = time.perf_counter()
@@ -16065,6 +16326,9 @@ def _run_journey_sharded_pulse_audit(
             node_id=int(node_id),
             depth=int(depth),
             cg_iter=int(cg_iter),
+            pulse_audit_skipped=False,
+            pulse_audit_skip_reason="",
+            pulse_audit_trigger=str(trigger),
             pulse_audit_allow_certificate_effect=bool(
                 config.get("journey_sharded_pulse_audit_allow_certificate_effect", False)
             ),
@@ -17397,6 +17661,9 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "pulse_harvested_support_changing_count",
         "pulse_harvested_replacement_count",
         "pulse_best_true_rc",
+        "pulse_shard_scheduling_enabled",
+        "pulse_shard_roi_gate_enabled",
+        "pulse_low_roi_shards",
         "amcb_enabled",
         "amcb_build_time",
         "amcb_query_count",

@@ -75,6 +75,11 @@ class JourneyPricingConfig:
     pulse_refinement_min_recursions: int = 1000
     pulse_refinement_min_expanded: int = 0
     pulse_refinement_max_children: int = 32
+    pulse_shard_scheduling_enabled: bool = False
+    pulse_shard_roi_gate_enabled: bool = False
+    pulse_shard_roi_prune_rate_floor: float = 0.0
+    pulse_shard_roi_min_time: float = 0.0
+    pulse_shard_roi_min_expanded: int = 0
     pulse_resume_enabled: bool = False
     pulse_cache_max_states: int = 0
     pulse_parallel_enabled: bool = False
@@ -547,6 +552,9 @@ class JourneyPricingResult:
     pulse_harvested_support_changing_count: int = 0
     pulse_harvested_replacement_count: int = 0
     pulse_best_true_rc: float | None = None
+    pulse_shard_scheduling_enabled: bool = False
+    pulse_shard_roi_gate_enabled: bool = False
+    pulse_low_roi_shards: int = 0
     pricing_state: str = ""
     diagnostic_profile_task_masks: frozenset[int] = frozenset()
     diagnostic_profile_trip_masks: frozenset[int] = frozenset()
@@ -3360,6 +3368,7 @@ def _price_journeys_by_sharded_pulse_guarded(
     pulse_harvested_new_task_set_count = 0
     pulse_harvested_support_changing_count = 0
     pulse_harvested_replacement_count = 0
+    pulse_low_roi_shards = 0
     best_true_rc: float | None = None
 
     deadline = config.absolute_deadline
@@ -3369,8 +3378,9 @@ def _price_journeys_by_sharded_pulse_guarded(
     def _run_transition_shard(
         first_task: int,
         second_action: int | str | None = None,
-    ):
-        return transition_root_only_pulse(
+    ) -> tuple[Any, float]:
+        shard_started = time.perf_counter()
+        shard = transition_root_only_pulse(
             data,
             duals,
             cuts=cuts,
@@ -3395,6 +3405,7 @@ def _price_journeys_by_sharded_pulse_guarded(
             pool_masks=tuple(pool_task_sets or tuple()),
             forbidden_signatures=tuple(forbidden),
         )
+        return shard, time.perf_counter() - shard_started
 
     def _transition_cost_lower_proxy(source: int, target: int) -> float:
         try:
@@ -3419,10 +3430,62 @@ def _price_journeys_by_sharded_pulse_guarded(
         )
         return ordered_next + ("return",)
 
+    def _first_task_priority(task: int) -> tuple[float, float, int]:
+        outbound = _transition_cost_lower_proxy(0, int(task))
+        inbound = _transition_cost_lower_proxy(int(task), 0)
+        try:
+            ready_time = float(data.task_value(int(task), "ready_time"))
+        except (KeyError, TypeError, ValueError):
+            ready_time = 0.0
+        return (
+            -float(duals.cover.get(int(task), 0.0)) + float(outbound) + float(inbound),
+            ready_time,
+            int(task),
+        )
+
+    def _scheduled_first_tasks() -> tuple[int, ...]:
+        if not bool(config.pulse_shard_scheduling_enabled):
+            return tasks
+        return tuple(sorted(tasks, key=_first_task_priority))
+
+    def _shard_prune_rate(shard: Any) -> float:
+        pruned = (
+            int(getattr(shard, "pulse_bound_pruned", 0))
+            + int(getattr(shard, "pulse_archive_pruned", 0))
+            + int(getattr(shard, "transition_time_window_pruned", 0))
+            + int(getattr(shard, "transition_energy_pruned", 0))
+            + int(getattr(shard, "transition_return_pruned", 0))
+        )
+        denominator = max(
+            1,
+            int(getattr(shard, "expanded_states", 0))
+            + int(getattr(shard, "generated_sortie_traces", 0)),
+        )
+        return float(pruned) / float(denominator)
+
+    def _is_low_roi_shard(shard: Any, elapsed: float) -> bool:
+        if not bool(config.pulse_shard_roi_gate_enabled):
+            return False
+        if bool(getattr(shard, "exhausted", False)):
+            return False
+        if str(getattr(shard, "status", "")) in {"FOUND_NEGATIVE", "FOUND_NEGATIVE_HARVESTED"}:
+            return False
+        if bool(getattr(shard, "pulse_negative_found", False)):
+            return False
+        if float(elapsed) < max(0.0, float(config.pulse_shard_roi_min_time)):
+            return False
+        if int(getattr(shard, "expanded_states", 0)) < max(0, int(config.pulse_shard_roi_min_expanded)):
+            return False
+        return _shard_prune_rate(shard) < max(0.0, float(config.pulse_shard_roi_prune_rate_floor))
+
     def _eligible_for_second_action_refinement(
         shard: Any,
         child_specs: tuple[int | str, ...],
+        *,
+        low_roi: bool,
     ) -> bool:
+        if bool(low_roi):
+            return False
         if not bool(config.pulse_adaptive_sharding_enabled):
             return False
         if not bool(config.pulse_refine_incomplete_first_task_shards):
@@ -3513,19 +3576,23 @@ def _price_journeys_by_sharded_pulse_guarded(
                 else min(float(best_true_rc), float(shard.best_true_reduced_cost))
             )
 
-    def _record_required_shard(shard: Any) -> None:
+    def _record_required_shard(shard: Any, elapsed: float) -> None:
         nonlocal duplicate_negative_seen
         nonlocal incomplete_reason
         nonlocal shards_total
         nonlocal shards_certified
         nonlocal shards_incomplete
         nonlocal shards_negative
+        nonlocal pulse_low_roi_shards
 
         shards_total += 1
         _accumulate_shard_metrics(shard)
+        low_roi = _is_low_roi_shard(shard, elapsed)
+        if bool(low_roi):
+            pulse_low_roi_shards += 1
         if not bool(shard.exhausted) and str(shard.status) not in {"FOUND_NEGATIVE", "FOUND_NEGATIVE_HARVESTED"}:
             shards_incomplete += 1
-            incomplete_reason = str(shard.reason or shard.status)
+            incomplete_reason = "low_roi_incomplete" if bool(low_roi) else str(shard.reason or shard.status)
             return
 
         shard_new_negative = False
@@ -3553,16 +3620,18 @@ def _price_journeys_by_sharded_pulse_guarded(
         elif bool(shard.exhausted):
             shards_certified += 1
 
-    for task in tasks:
-        parent = _run_transition_shard(int(task))
+    for task in _scheduled_first_tasks():
+        parent, parent_elapsed = _run_transition_shard(int(task))
         child_specs = _second_action_child_specs(int(task))
-        if _eligible_for_second_action_refinement(parent, child_specs):
+        parent_low_roi = _is_low_roi_shard(parent, parent_elapsed)
+        if _eligible_for_second_action_refinement(parent, child_specs, low_roi=parent_low_roi):
             shards_refined += 1
             _accumulate_shard_metrics(parent)
             for second_action in child_specs:
-                _record_required_shard(_run_transition_shard(int(task), second_action))
+                child, child_elapsed = _run_transition_shard(int(task), second_action)
+                _record_required_shard(child, child_elapsed)
             continue
-        _record_required_shard(parent)
+        _record_required_shard(parent, parent_elapsed)
 
     common = {
         "final_judge_engine": "sharded_pulse",
@@ -3597,6 +3666,9 @@ def _price_journeys_by_sharded_pulse_guarded(
         "pulse_harvested_support_changing_count": int(pulse_harvested_support_changing_count),
         "pulse_harvested_replacement_count": int(pulse_harvested_replacement_count),
         "pulse_best_true_rc": best_true_rc,
+        "pulse_shard_scheduling_enabled": bool(config.pulse_shard_scheduling_enabled),
+        "pulse_shard_roi_gate_enabled": bool(config.pulse_shard_roi_gate_enabled),
+        "pulse_low_roi_shards": int(pulse_low_roi_shards),
     }
     if all_candidates:
         selected = [

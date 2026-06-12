@@ -640,6 +640,86 @@ Smoke：
 - 不做 official certificate gate；
 - active hidden-negative worker 仍默认关闭，且当前 real smoke 不支持默认启用。
 
+### Phase 7K
+
+已完成：
+
+- 新增 shard scheduling，默认关闭；
+- first-task shard 可按 cover dual / depot round-trip proxy / optional urgency 排序；
+- second-action child shard 可按 next-task cover dual 与 transition cost proxy 排序，`return-after-first-task` 仍放在最后；
+- 排序只影响运行顺序，不影响 shard partition、proof ledger 或 certificate 语义；
+- 新增 shard ROI gate，默认关闭；
+- 低 ROI shard 只会标记为 `LOW_ROI_INCOMPLETE` / `low_roi_incomplete`，不得 certificate；
+- low ROI 判定不会吞掉 `FOUND_NEGATIVE` / `FOUND_NEGATIVE_HARVESTED`；
+- parent shard 若被判为 low ROI，不触发 second-action refinement，避免把低收益空间继续膨胀成大量 child shards；
+- `JourneyPricingResult` 与 JSONL 增加：
+  - `pulse_shard_scheduling_enabled`
+  - `pulse_shard_roi_gate_enabled`
+  - `pulse_low_roi_shards`
+- audit payload 增加 `pulse_audit_low_roi_shards`；
+- worker payload 增加 `pulse_worker_low_roi_shards`；
+- audit trigger observability 增强：
+  - `pulse_audit_skipped`
+  - `pulse_audit_skip_reason`
+  - `pulse_audit_trigger`
+- audit 支持 trigger 配置：
+  - `after_legacy_final_judge`
+  - `after_each_final_pricing`
+  - `on_certificate_candidate`
+- root 可通过 `journey_sharded_pulse_audit_force_on_root=True` 强制 audit trigger 检查；
+- hidden-negative worker 支持 `hard_tail_only` 触发门控，默认仍关闭；
+- hard-tail worker 可按 certificate candidate、remaining time、min tasks、previous audit signal 做 strict gate，避免小快实例默认启动 worker。
+
+新增配置：
+
+- `journey_pulse_shard_scheduling_enabled=False`
+- `journey_pulse_shard_roi_gate_enabled=False`
+- `journey_pulse_shard_roi_prune_rate_floor=0.0`
+- `journey_pulse_shard_roi_min_time=0.0`
+- `journey_pulse_shard_roi_min_expanded=0`
+- audit 前缀等价项：
+  - `journey_sharded_pulse_audit_shard_scheduling_enabled`
+  - `journey_sharded_pulse_audit_shard_roi_gate_enabled`
+  - `journey_sharded_pulse_audit_shard_roi_prune_rate_floor`
+  - `journey_sharded_pulse_audit_shard_roi_min_time`
+  - `journey_sharded_pulse_audit_shard_roi_min_expanded`
+- hidden-worker 前缀等价项：
+  - `journey_sharded_pulse_hidden_negative_worker_shard_scheduling_enabled`
+  - `journey_sharded_pulse_hidden_negative_worker_shard_roi_gate_enabled`
+  - `journey_sharded_pulse_hidden_negative_worker_shard_roi_prune_rate_floor`
+  - `journey_sharded_pulse_hidden_negative_worker_shard_roi_min_time`
+  - `journey_sharded_pulse_hidden_negative_worker_shard_roi_min_expanded`
+- audit trigger：
+  - `journey_sharded_pulse_audit_trigger="after_legacy_final_judge"`
+  - `journey_sharded_pulse_audit_force_on_root=False`
+  - `journey_sharded_pulse_audit_log_skips=False`
+- worker gate：
+  - `journey_sharded_pulse_hidden_negative_worker_trigger="before_legacy_final_judge" | "hard_tail_only"`
+  - `journey_sharded_pulse_hidden_negative_worker_min_tasks`
+  - `journey_sharded_pulse_hidden_negative_worker_min_remaining_time`
+  - `journey_sharded_pulse_hidden_negative_worker_require_previous_audit_signal`
+
+验证：
+
+- audit skip 会写出 `pulse_audit_skipped=True` 和稳定 skip reason；
+- root force-on-audit 可在 `after_each_final_pricing` trigger 下产生 audit event；
+- first-task priority order 稳定，结果语义不变；
+- child priority order 稳定，结果语义不变；
+- low ROI shard 只产生 incomplete，不产生 certificate；
+- low ROI gate 不改变 found-negative correctness；
+- hard-tail worker gate 在小快实例上不会触发；
+- hard-tail worker gate 在 certificate-candidate / sufficient remaining / min-task 条件满足时可触发；
+- Phase 7J refinement、Phase 7H audit、Phase 7I worker 相关 focused regression 仍通过。
+
+当前边界：
+
+- ROI gate 是 fail-open / incomplete-only 机制，不是 proof；
+- scheduling priority 只使用 proxy，不参与 reduced-cost proof；
+- audit skip 日志只说明触发路径，不改变 official result；
+- hidden-negative worker 仍不得 certificate；
+- 不做 production default enable；
+- 不做 20/100 A/B。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -655,14 +735,14 @@ Smoke：
 2. `pulse_max_recursions` 必须在大实例上设置上限；否则 exhaustive toy search 会非常慢。
 3. bound pruning 当前只支持 no-cut / 非负 arc/service cost 的弱安全 LB；遇到未证明安全的 row/cost context 必须 fail-open。
 4. harvest-after-negative 能返回更多 true-RC negative columns，但不会产生 certificate。
-5. second-action sharding 目前是 toy partition 支持，未接自适应 refine 调度。
+5. second-action sharding 已接入 guarded adaptive refine 调度，但仍默认关闭，且不是 production 20/100 proof engine。
 6. waiting-allowed 时间域尚未完整 proof 化，guarded toy Pulse 不得用它产生 certificate。
 
 ## 后续建议
 
 1. 7I-A real small smoke 已完成但没有 active-worker ROI；下一步优先做 adaptive second-action shard refinement，而不是继续放大 worker 预算。
-2. Phase 7J 已完成 second-action refinement 调度；下一步若继续优化，应先做 shard scheduling / ROI gate，而不是加 worker time limit。
-3. 若继续 hidden-negative worker 路线，必须先加更严格触发门控：只在 legacy hidden-negative 证据、hard shard counters 或 certificate-tail 反复 incomplete 后运行。
+2. Phase 7K 已完成 shard scheduling / ROI gate / audit trigger observability；下一步应先用 audit-only 小矩阵校准 ROI，而不是放开 official certificate。
+3. 若继续 hidden-negative worker 路线，必须保持 hard-tail gate：只在 legacy hidden-negative 证据、hard shard counters 或 certificate-tail 反复 incomplete 后运行。
 4. experimental certificate path 仍需等待：no-wait start-domain complete、无 unsupported cuts/branch、无 timeout、无 duplicate-only、所有 shards certified 且显式实验配置同时满足。
 5. 若后续 audit/worker 中出现 support-changing hidden negative，可继续做 Pulse hidden-negative worker mode 增强，但不得直接产生 official certificate。
 6. 若 bound ROI 在更宽小实例中持续为正，再做单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
