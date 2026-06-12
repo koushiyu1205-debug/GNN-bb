@@ -854,6 +854,88 @@ Smoke：
 - 当前不做 resume / parallel / 20/100 A/B；
 - 当前不继续扩大 worker budget；若小矩阵 smoke 显示 no trigger 或 context mismatch，先作为 audit signal calibration 结果记录。
 
+### Phase 7N
+
+已完成：
+
+- 新增 current-context signal probe / audit-seeded worker bridge；
+- 新增 worker trigger：
+  - `journey_sharded_pulse_hidden_negative_worker_trigger="audit_signal_or_current_probe"`
+- hard-tail 条件仍然必须先满足：
+  - `certificate_candidate=True`
+  - task 数量达到 hidden-worker min-task gate
+  - remaining time 达到 hidden-worker min-remaining gate
+- signal source 分层：
+  - `none`
+  - `previous_audit`
+  - `current_context_probe`
+  - 兼容旧测试路径的 `ungated`
+- 若 previous audit negative signal 存在且 context hash 匹配：
+  - 直接按 strict worker path 运行；
+- 若没有 previous audit signal，但 current probe 显式启用：
+  - 运行短预算 current-context probe；
+  - probe 找到 true-RC negative journeys 时走正常 add-column path；
+  - probe incomplete / duplicate-only / certified-like no-negative 均不 certificate；
+- 若 previous audit signal 存在但 context hash mismatch：
+  - fail-closed，跳过 worker，不用 current probe 绕过 mismatch。
+
+新增配置：
+
+- `journey_sharded_pulse_worker_current_probe_enabled=False`
+- `journey_sharded_pulse_worker_current_probe_time_limit=1.0`
+- `journey_sharded_pulse_worker_current_probe_max_recursions=50000`
+- `journey_sharded_pulse_worker_current_probe_min_tasks=10`
+- `journey_sharded_pulse_worker_current_probe_min_remaining_time=8.0`
+- `journey_sharded_pulse_worker_current_probe_harvesting_enabled=True`
+- `journey_sharded_pulse_worker_current_probe_max_columns=16`
+- `journey_sharded_pulse_worker_current_probe_negative_harvest_limit`
+
+新增/更新日志字段：
+
+- `pulse_worker_signal_source`
+- `pulse_worker_current_probe_signal`
+- `pulse_worker_previous_audit_signal`
+- `pulse_worker_context_hash`
+- `pulse_worker_skip_reason`
+
+校准脚本新增显式 opt-in profiles：
+
+- `strict_worker_previous_signal_only`
+- `strict_worker_current_probe`
+
+exactness 边界：
+
+- current probe found negative -> 只可加列；
+- current probe no negative -> 不证书；
+- current probe incomplete -> 不证书；
+- current probe duplicate-only -> 不证书；
+- current probe empty found-negative -> 降级为 non-certificate incomplete；
+- current probe certified-like no-negative -> 降级为 non-certificate incomplete；
+- 所有 returned journeys 仍必须通过 `manual_journey_reduced_cost()` true-RC 过滤；
+- `global_certificate_capable=False`；
+- `final_judge_certificate_capable=False`；
+- 不产生 official lower bound。
+
+验证：
+
+- no previous signal + current probe negative -> `FOUND_NEGATIVE`；
+- no previous signal + current probe incomplete -> non-certificate incomplete；
+- current probe duplicate-only -> no certificate；
+- current probe empty found-negative -> non-certificate incomplete；
+- current probe certified-like result -> downgraded to incomplete；
+- previous audit negative + matching context -> worker triggers；
+- previous audit negative + context mismatch -> worker skips；
+- prune-only signal does not trigger strict mode；
+- small-fast current-probe min-task gate prevents probe from running。
+
+当前边界：
+
+- current probe 默认关闭；
+- current probe 不是 certificate oracle；
+- current probe 不默认进入 benchmark；
+- 不做 resume / parallel / 20/100 A/B；
+- 若 current probe 仍无 ROI，停止 active-worker 主线，转向 resume 或 legacy final judge 优化。
+
 ## 默认行为
 
 默认 benchmark 行为不变：

@@ -72,7 +72,13 @@ PROFILE_ORDER = (
     "audit_refine_roi_mid",
     "audit_refine_roi_high",
 )
-VALID_PROFILES = (*PROFILE_ORDER, "audit_only", "audit_plus_strict_worker")
+VALID_PROFILES = (
+    *PROFILE_ORDER,
+    "audit_only",
+    "audit_plus_strict_worker",
+    "strict_worker_previous_signal_only",
+    "strict_worker_current_probe",
+)
 
 SUMMARY_FIELDS = (
     "instance",
@@ -113,7 +119,9 @@ SUMMARY_FIELDS = (
     "pulse_worker_skipped",
     "pulse_worker_skip_reason",
     "pulse_worker_trigger",
+    "pulse_worker_signal_source",
     "pulse_worker_previous_audit_signal",
+    "pulse_worker_current_probe_signal",
     "pulse_worker_status",
     "pulse_worker_returned_journeys",
     "pulse_worker_added_journeys",
@@ -135,12 +143,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--time-limit", type=float, default=8.0)
     parser.add_argument("--audit-time-limit", type=float, default=0.5)
     parser.add_argument("--worker-time-limit", type=float, default=0.5)
+    parser.add_argument("--current-probe-time-limit", type=float, default=0.5)
     parser.add_argument("--pricing-time-limit", type=float, default=0.2)
     parser.add_argument("--max-cg-iterations", type=int, default=3)
     parser.add_argument("--audit-max-recursions", type=int, default=100000)
     parser.add_argument("--worker-max-recursions", type=int, default=100000)
+    parser.add_argument("--current-probe-max-recursions", type=int, default=50000)
     parser.add_argument("--audit-negative-harvest-limit", type=int, default=16)
     parser.add_argument("--worker-negative-harvest-limit", type=int, default=16)
+    parser.add_argument("--current-probe-negative-harvest-limit", type=int, default=16)
+    parser.add_argument("--current-probe-min-tasks", type=int, default=10)
+    parser.add_argument("--current-probe-min-remaining-time", type=float, default=0.0)
     parser.add_argument("--quiet", action="store_true")
     return parser.parse_args()
 
@@ -276,16 +289,37 @@ def _run_profile(
         "pulse_worker_skipped": bool(worker.get("pulse_worker_skipped", False)),
         "pulse_worker_skip_reason": str(worker.get("pulse_worker_skip_reason", "")),
         "pulse_worker_trigger": str(worker.get("pulse_worker_trigger", "")),
-        "pulse_worker_previous_audit_signal": bool(
-            worker.get("pulse_worker_previous_audit_signal", False)
+        "pulse_worker_signal_source": str(worker.get("pulse_worker_signal_source", "")),
+        "pulse_worker_previous_audit_signal": any(
+            bool(event.get("pulse_worker_previous_audit_signal", False))
+            for event in worker_events
+        ),
+        "pulse_worker_current_probe_signal": any(
+            bool(event.get("pulse_worker_current_probe_signal", False))
+            for event in worker_events
         ),
         "pulse_worker_status": str(worker.get("pulse_worker_status", "")),
-        "pulse_worker_returned_journeys": _as_int(worker.get("pulse_worker_returned_journeys")),
+        "pulse_worker_returned_journeys": sum(
+            _as_int(event.get("pulse_worker_returned_journeys"))
+            for event in worker_events
+        ),
         "pulse_worker_added_journeys": _worker_added_journeys(records),
-        "pulse_worker_true_rc_filtered": _as_int(worker.get("pulse_worker_true_rc_filtered")),
-        "pulse_worker_time": worker.get("pulse_worker_time"),
-        "pulse_worker_recursions": _as_int(worker.get("pulse_worker_recursions")),
-        "pulse_worker_shards_negative": _as_int(worker.get("pulse_worker_shards_negative")),
+        "pulse_worker_true_rc_filtered": sum(
+            _as_int(event.get("pulse_worker_true_rc_filtered"))
+            for event in worker_events
+        ),
+        "pulse_worker_time": sum(
+            float(event.get("pulse_worker_time") or 0.0)
+            for event in worker_events
+        ),
+        "pulse_worker_recursions": sum(
+            _as_int(event.get("pulse_worker_recursions"))
+            for event in worker_events
+        ),
+        "pulse_worker_shards_negative": sum(
+            _as_int(event.get("pulse_worker_shards_negative"))
+            for event in worker_events
+        ),
         "pulse_worker_context_hash": str(worker.get("pulse_worker_context_hash", "")),
         "critical_disagreement": str(audit.get("pulse_audit_disagreement_severity", "")) == "critical",
         "log_path": str(log_path),
@@ -363,7 +397,7 @@ def _apply_profile(config: dict[str, Any], profile: str, args: argparse.Namespac
     )
     if profile == "audit_refine":
         return
-    if profile == "audit_plus_strict_worker":
+    if profile in {"audit_plus_strict_worker", "strict_worker_previous_signal_only"}:
         config.update(
             {
                 "journey_sharded_pulse_audit_shard_roi_gate_enabled": True,
@@ -404,6 +438,69 @@ def _apply_profile(config: dict[str, Any], profile: str, args: argparse.Namespac
                 ),
                 "journey_sharded_pulse_hidden_negative_worker_shard_roi_min_time": float(
                     ROI_PRESETS["mid"]["min_time"]
+                ),
+            }
+        )
+        return
+    if profile == "strict_worker_current_probe":
+        config.update(
+            {
+                "journey_sharded_pulse_audit_shard_roi_gate_enabled": True,
+                "journey_sharded_pulse_audit_shard_roi_prune_rate_floor": float(
+                    ROI_PRESETS["mid"]["prune_rate_floor"]
+                ),
+                "journey_sharded_pulse_audit_shard_roi_min_expanded": int(
+                    ROI_PRESETS["mid"]["min_expanded"]
+                ),
+                "journey_sharded_pulse_audit_shard_roi_min_time": float(
+                    ROI_PRESETS["mid"]["min_time"]
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                "journey_sharded_pulse_hidden_negative_worker_log_skips": True,
+                "journey_sharded_pulse_hidden_negative_worker_min_tasks": 5,
+                "journey_sharded_pulse_hidden_negative_worker_min_remaining_time": 0.0,
+                "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age": 3,
+                "journey_sharded_pulse_hidden_negative_worker_time_limit": float(
+                    args.worker_time_limit
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_max_recursions": int(
+                    args.worker_max_recursions
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_archive_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit": int(
+                    args.worker_negative_harvest_limit
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_shard_scheduling_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_gate_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_prune_rate_floor": float(
+                    ROI_PRESETS["mid"]["prune_rate_floor"]
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_min_expanded": int(
+                    ROI_PRESETS["mid"]["min_expanded"]
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_min_time": float(
+                    ROI_PRESETS["mid"]["min_time"]
+                ),
+                "journey_sharded_pulse_worker_current_probe_enabled": True,
+                "journey_sharded_pulse_worker_current_probe_time_limit": float(
+                    args.current_probe_time_limit
+                ),
+                "journey_sharded_pulse_worker_current_probe_max_recursions": int(
+                    args.current_probe_max_recursions
+                ),
+                "journey_sharded_pulse_worker_current_probe_min_tasks": int(
+                    args.current_probe_min_tasks
+                ),
+                "journey_sharded_pulse_worker_current_probe_min_remaining_time": float(
+                    args.current_probe_min_remaining_time
+                ),
+                "journey_sharded_pulse_worker_current_probe_harvesting_enabled": True,
+                "journey_sharded_pulse_worker_current_probe_max_columns": 16,
+                "journey_sharded_pulse_worker_current_probe_negative_harvest_limit": int(
+                    args.current_probe_negative_harvest_limit
                 ),
             }
         )

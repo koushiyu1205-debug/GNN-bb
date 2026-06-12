@@ -16029,7 +16029,305 @@ class BPCFutureTests(unittest.TestCase):
             if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
         ][-1]
         self.assertFalse(event["pulse_worker_skipped"])
+        self.assertEqual(event["pulse_worker_signal_source"], "previous_audit")
         self.assertTrue(event["pulse_worker_previous_audit_signal"])
+
+    def test_sharded_pulse_current_probe_negative_runs_without_previous_signal(self):
+        data = load_future_data("very_small")
+        duals = JourneyDuals(cover={int(task): 200.0 for task in data.tasks}, fleet_limit=0.0)
+        base_config = JourneyPricingConfig(
+            time_bucket_size=5.0,
+            start_time_step=10.0,
+            max_tasks_per_trip=2,
+            time_limit=1.0,
+            max_returned_journeys=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "current_probe_negative.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                    data,
+                    {
+                        "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                        "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                        "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                        "journey_sharded_pulse_hidden_negative_worker_min_remaining_time": 0.0,
+                        "journey_sharded_pulse_worker_current_probe_enabled": True,
+                        "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                        "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                        "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                        "journey_sharded_pulse_worker_current_probe_max_recursions": 100000,
+                        "journey_sharded_pulse_worker_current_probe_harvesting_enabled": True,
+                        "journey_sharded_pulse_worker_current_probe_max_columns": 4,
+                    },
+                    logger,
+                    duals=duals,
+                    branch_constraints=tuple(),
+                    cuts=tuple(),
+                    journey_pool=JourneyPool(),
+                    base_pricing_config=base_config,
+                    cg_iter=2,
+                    certificate_candidate=True,
+                    remaining_time=10.0,
+                    previous_audit_signal=False,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNotNone(worker)
+        pricing, _probe_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_FOUND_NEGATIVE)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+        self.assertTrue(pricing.journeys)
+        for journey in pricing.journeys:
+            self.assertLess(manual_journey_reduced_cost(journey, duals, cuts=tuple()), -1.0e-6)
+        event = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertEqual(event["pulse_worker_signal_source"], "current_context_probe")
+        self.assertFalse(event["pulse_worker_previous_audit_signal"])
+        self.assertTrue(event["pulse_worker_current_probe_signal"])
+        self.assertGreater(event["pulse_worker_returned_journeys"], 0)
+
+    def test_sharded_pulse_current_probe_incomplete_not_certificate(self):
+        data = load_future_data("very_small")
+        fake_pricing = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "current_probe_smoke_incomplete",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "current_probe_incomplete.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing) as mock_price:
+                    worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                        data,
+                        {
+                            "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                            "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                            "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                            "journey_sharded_pulse_worker_current_probe_enabled": True,
+                            "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                            "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                            "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                        },
+                        logger,
+                        duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                        branch_constraints=tuple(),
+                        cuts=tuple(),
+                        journey_pool=JourneyPool(),
+                        base_pricing_config=JourneyPricingConfig(),
+                        cg_iter=2,
+                        certificate_candidate=True,
+                        remaining_time=10.0,
+                        previous_audit_signal=False,
+                    )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNotNone(worker)
+        mock_price.assert_called_once()
+        pricing, _probe_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+        event = [record for record in records if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"][-1]
+        self.assertEqual(event["pulse_worker_signal_source"], "current_context_probe")
+        self.assertFalse(event["pulse_worker_current_probe_signal"])
+        self.assertFalse(event["pulse_worker_global_certificate_capable"])
+
+    def test_sharded_pulse_current_probe_duplicate_only_not_certificate(self):
+        data = load_future_data("very_small")
+        fake_pricing = JourneyPricingResult(
+            [],
+            True,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "OPTIMAL",
+            "negative_journeys_already_in_pool",
+            pricing_state=PRICING_STATE_DUPLICATE_ONLY,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+        )
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing):
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+            )
+        self.assertIsNotNone(worker)
+        pricing, _probe_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_DUPLICATE_ONLY)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+
+    def test_sharded_pulse_current_probe_empty_negative_result_not_certificate(self):
+        data = load_future_data("very_small")
+        fake_pricing = JourneyPricingResult(
+            [],
+            False,
+            -1.0,
+            0,
+            0,
+            0,
+            0,
+            "FOUND_NEGATIVE",
+            "empty_harvest",
+            pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+        )
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing):
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+            )
+        self.assertIsNotNone(worker)
+        pricing, _probe_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(pricing.reason, "sharded_pulse_hidden_negative_worker_empty_negative_result")
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+        self.assertEqual(pricing.journeys, [])
+
+    def test_sharded_pulse_current_probe_certified_like_result_is_downgraded(self):
+        data = load_future_data("very_small")
+        fake_pricing = JourneyPricingResult(
+            [],
+            True,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "OPTIMAL",
+            "sharded_pulse_no_negative_journey",
+            pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            global_certificate_capable=True,
+            final_judge_certificate_capable=True,
+        )
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing):
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+            )
+        self.assertIsNotNone(worker)
+        pricing, _probe_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(pricing.reason, "sharded_pulse_hidden_negative_worker_no_negative_not_certificate")
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+
+    def test_sharded_pulse_current_probe_small_fast_gate_skips(self):
+        data = load_future_data("very_small")
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "current_probe_small_gate.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.price_journeys") as mock_price:
+                    worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                        data,
+                        {
+                            "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                            "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                            "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                            "journey_sharded_pulse_hidden_negative_worker_log_skips": True,
+                            "journey_sharded_pulse_worker_current_probe_enabled": True,
+                            "journey_sharded_pulse_worker_current_probe_min_tasks": 6,
+                            "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                            "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                        },
+                        logger,
+                        duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                        branch_constraints=tuple(),
+                        cuts=tuple(),
+                        journey_pool=JourneyPool(),
+                        base_pricing_config=JourneyPricingConfig(),
+                        cg_iter=2,
+                        certificate_candidate=True,
+                        remaining_time=10.0,
+                        previous_audit_signal=False,
+                    )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNone(worker)
+        mock_price.assert_not_called()
+        self.assertEqual(records[-1]["pulse_worker_skip_reason"], "current_probe_instance_too_small")
 
     def test_sharded_pulse_dummy_driver_smoke_default_off(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
