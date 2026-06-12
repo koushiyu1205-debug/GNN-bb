@@ -19,6 +19,7 @@ Phase 7C 已把 `StructuralKeyDominanceArchive` 接入 transition state。
 Phase 7D 已把 transition-state true-RC negative leaves 接入 support-aware harvest-after-negative path。
 Phase 7E 已加入 safe prefix reduced-cost lower-bound ledger 和 opt-in 弱安全 bound pruning。
 Phase 7F 已加入 bound/archive/harvest ROI diagnostics，并完成 very_small / 5-task / 10-task opt-in micro-smoke。
+Phase 7G 已补 no-wait start interval 与 `candidate_start_times_for_trip()` 时间域对齐。
 
 ## Exactness 边界
 
@@ -382,6 +383,46 @@ micro-smoke 观察：
 - adaptive hierarchical sharding；
 - production benchmark 默认启用。
 
+### Phase 7G
+
+已完成：
+
+- no-wait transition state 新增 start interval 与 offset：
+  - `start_interval_lb`
+  - `start_interval_ub`
+  - `current_offset`
+- no-wait 扩展 task 时用 arrival offset 更新 start interval：
+  - `s >= r_i - arrival_offset_i`
+  - `s <= D_i - sigma_i - arrival_offset_i`
+  - interval 为空时直接 time-window prune；
+- return action 使用 offset 计算 survival energy 与 horizon end-offset feasibility；
+- completed sortie 不再只使用 fixed `root_start_time`：
+  - 调用 `candidate_start_times_for_trip()`
+  - 用当前 interval 过滤 start candidates
+  - 对每个 fixed start 继续回放 `materialize_pulse_sortie()` / `evaluate_timed_trip()`
+- no-wait archive record 改为使用 start interval containment，而不是“更早时间自动支配”；
+- guarded certificate guard 收紧：
+  - waiting-allowed 数据当前不能由 guarded toy Pulse 证书化；
+  - 只有 no-wait start-domain complete path 才能走 toy certificate guard。
+
+验证：
+
+- fixed root start 会漏、interval Pulse 能找回的 no-wait toy case；
+- Pulse completed-sortie start candidates 与 `candidate_start_times_for_trip()` 一致；
+- interval Pulse 与 brute-force over candidate starts 在 toy 上 signatures / true RC / best RC 对齐；
+- multi-sortie candidate-start compatibility 通过 brute-force 对齐覆盖；
+- waiting-allowed 数据即使开启 toy certificate config 也不会 certificate；
+- 旧 no-wait archive dominance 边界继续通过。
+
+仍未实现：
+
+- waiting-allowed start interval proof logic；
+- resume；
+- parallel；
+- adaptive hierarchical sharding；
+- cut / subset-row / fleet-cut prefix lower bound；
+- production benchmark 默认启用。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -398,11 +439,13 @@ micro-smoke 观察：
 3. bound pruning 当前只支持 no-cut / 非负 arc/service cost 的弱安全 LB；遇到未证明安全的 row/cost context 必须 fail-open。
 4. harvest-after-negative 能返回更多 true-RC negative columns，但不会产生 certificate。
 5. second-action sharding 目前是 toy partition 支持，未接自适应 refine 调度。
+6. waiting-allowed 时间域尚未完整 proof 化，guarded toy Pulse 不得用它产生 certificate。
 
 ## 后续建议
 
-1. 不要直接加入 cut / subset-row / fleet-cut prefix bound；必须先用 7F diagnostics 判断 weak bound 是否有真实 ROI。
-2. 若 bound ROI 持续为正，再做 Phase 7G 的单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
-3. 若 bound ROI 很弱，优先转向 adaptive second-action shard refinement，而不是增加复杂 row correction。
-4. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
-5. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
+1. 下一步优先做 Phase 7H small-instance opt-in certificate smoke，而不是直接加入 cut / subset-row / fleet-cut prefix bound。
+2. 7H 应分离 no-certificate observation path 与 experimental certificate path，只在 no-wait start-domain complete / no unsupported cuts-branch 的配置下允许 certificate。
+3. 若 7H 中 bound ROI 持续为正，再做 Phase 7I 的单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
+4. 若 bound ROI 很弱，优先转向 adaptive second-action shard refinement，而不是增加复杂 row correction。
+5. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
+6. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。

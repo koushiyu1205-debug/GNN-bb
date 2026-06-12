@@ -3365,6 +3365,7 @@ def _price_journeys_by_sharded_pulse_guarded(
             duals,
             cuts=cuts,
             time_bucket_size=float(config.time_bucket_size),
+            start_time_step=float(config.start_time_step),
             eps=1.0e-6,
             max_tasks_per_sortie=int(config.max_tasks_per_trip),
             max_sorties=int(data.sortie_limit),
@@ -3598,7 +3599,7 @@ def _sharded_pulse_toy_certificate_allowed(
     name = str(getattr(data, "name", "") or "")
     if not (name == "very_small" or name.startswith("test")):
         return False
-    if not bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True)):
+    if bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True)):
         return False
     return all(constraint.kind in {"same_vehicle", "separate_vehicle"} for constraint in branch_constraints)
 

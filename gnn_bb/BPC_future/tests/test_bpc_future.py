@@ -23,7 +23,7 @@ except Exception:
     HAS_SCIP = False
 
 from BPC_future.core.branching import BranchConstraint, trip_allowed_by_branch
-from BPC_future.core.columns import TripPool, evaluate_timed_trip
+from BPC_future.core.columns import TripPool, candidate_start_times_for_trip, evaluate_timed_trip
 from BPC_future.core.cuts import FleetLowerBoundCut, SortieLowerBoundCut, SubsetRowCut, TimePointCapacityCut, add_cut_unique
 from BPC_future.core.data import ArcOption, _pareto_filter_arc_options, load_future_data
 from BPC_future.core.fleet_bound import (
@@ -143,6 +143,7 @@ from BPC_future.pricing.pulse_materialization import (
 )
 from BPC_future.pricing.pulse_toy_exhaustive import (
     PrefixReducedCostLedger,
+    _pulse_completed_sortie_start_candidates,
     transition_root_only_pulse,
     toy_root_exhaustive_pulse,
 )
@@ -13193,6 +13194,7 @@ class BPCFutureTests(unittest.TestCase):
         ready_time = max(float(option.tau) for option in data.options(0, 1)) + 1.0
         instance = json.loads(json.dumps(data.instance))
         instance["tasks"]["1"]["r"] = ready_time
+        instance["tasks"]["1"]["D"] = ready_time - 1.0
         no_wait_data = replace(data, instance=instance, sortie_limit=1)
         duals = JourneyDuals(cover={1: 1000.0}, fleet_limit=0.0, cuts={})
         completed_trace_toy = toy_root_exhaustive_pulse(
@@ -13708,6 +13710,127 @@ class BPCFutureTests(unittest.TestCase):
                 self.assertTrue(result.pulse_bound_prune_supported)
                 self.assertGreater(result.pulse_bound_prune_query_count, 0)
 
+    def test_transition_pulse_no_wait_interval_recovers_nonzero_start_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=5.0, inbound_energy=5.0)
+            base_data = load_future_data(str(graph_path))
+        instance = json.loads(json.dumps(base_data.instance))
+        instance["tasks"]["1"]["r"] = 20.0
+        instance["tasks"]["1"]["D"] = 60.0
+        instance.setdefault("scheduling", {})["task_waiting_allowed"] = False
+        data = replace(base_data, instance=instance, sortie_limit=1)
+        duals = JourneyDuals(cover={1: 1000.0}, fleet_limit=0.0, cuts={})
+
+        fixed_root = toy_root_exhaustive_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+            root_start_time=0.0,
+        )
+        interval = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+            root_start_time=0.0,
+        )
+        brute_force = _toy_bruteforce_candidate_start_candidates(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+        )
+
+        self.assertEqual(fixed_root.candidates, tuple())
+        self.assertTrue(interval.exhausted)
+        self.assertTrue(interval.found_negative)
+        self.assertGreater(len(interval.candidates), 0)
+        self.assertEqual(
+            _toy_candidate_signature_set(interval.candidates),
+            _toy_candidate_signature_set(brute_force),
+        )
+        self.assertEqual(interval.best_true_reduced_cost, min(c.true_reduced_cost for c in brute_force))
+
+    def test_pulse_no_wait_start_candidates_match_candidate_start_times(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=5.0, inbound_energy=5.0)
+            base_data = load_future_data(str(graph_path))
+        instance = json.loads(json.dumps(base_data.instance))
+        instance["tasks"]["1"]["r"] = 20.0
+        instance["tasks"]["1"]["D"] = 60.0
+        instance.setdefault("scheduling", {})["task_waiting_allowed"] = False
+        data = replace(base_data, instance=instance, sortie_limit=1)
+        arc_options = (tuple(data.options(0, 1))[0], tuple(data.options(1, 0))[0])
+
+        expected = candidate_start_times_for_trip(
+            data,
+            (1,),
+            arc_options,
+            start_step=5.0,
+        )
+        actual = _pulse_completed_sortie_start_candidates(
+            data,
+            (1,),
+            arc_options,
+            waiting_allowed=False,
+            fixed_start_time=0.0,
+            start_interval_lb=0.0,
+            start_interval_ub=float(data.horizon),
+            start_step=5.0,
+        )
+
+        self.assertEqual(actual, expected)
+        self.assertIsNone(evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0, arc_options=arc_options))
+        self.assertTrue(
+            any(
+                evaluate_timed_trip(data, (1,), start, time_bucket_size=5.0, arc_options=arc_options)
+                is not None
+                for start in actual
+            )
+        )
+
+    def test_transition_pulse_interval_matches_candidate_start_bruteforce(self):
+        data = load_future_data("very_small")
+        instance = json.loads(json.dumps(data.instance))
+        instance.setdefault("scheduling", {})["task_waiting_allowed"] = False
+        data = replace(data, instance=instance, tasks=tuple(data.tasks[:2]), sortie_limit=2)
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+
+        interval = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=2,
+        )
+        brute_force = _toy_bruteforce_candidate_start_candidates(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=2,
+        )
+
+        self.assertTrue(interval.exhausted)
+        self.assertEqual(
+            _toy_candidate_signature_set(interval.candidates),
+            _toy_candidate_signature_set(brute_force),
+        )
+        self.assertEqual(
+            _toy_candidate_rc_by_signature(interval.candidates),
+            _toy_candidate_rc_by_signature(brute_force),
+        )
+        self.assertEqual(interval.best_true_reduced_cost, min(c.true_reduced_cost for c in brute_force))
+        self.assertEqual(interval.found_negative, any(c.true_reduced_cost < -1.0e-6 for c in brute_force))
+
     def test_toy_exhaustive_pulse_budget_hits_return_incomplete(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
         duals = JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
@@ -13773,6 +13896,7 @@ class BPCFutureTests(unittest.TestCase):
         ready_time = max(float(option.tau) for option in base_data.options(0, 1)) + 1.0
         instance = json.loads(json.dumps(base_data.instance))
         instance["tasks"]["1"]["r"] = ready_time
+        instance["tasks"]["1"]["D"] = ready_time - 1.0
         data = replace(base_data, instance=instance, sortie_limit=1)
         duals = JourneyDuals(cover={1: 1000.0}, fleet_limit=0.0, cuts={})
         unpruned = toy_root_exhaustive_pulse(
@@ -14113,7 +14237,10 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(_journey_pricing_is_global_certificate(pricing))
 
     def test_sharded_pulse_guarded_engine_certifies_very_small_no_negative(self):
-        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2)
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2),
+            False,
+        )
         with patch(
             "BPC_future.pricing.journey_pricing.transition_root_only_pulse",
             wraps=transition_root_only_pulse,
@@ -14223,6 +14350,7 @@ class BPCFutureTests(unittest.TestCase):
         ready_time = max(float(option.tau) for option in base_data.options(0, 1)) + 1.0
         instance = json.loads(json.dumps(base_data.instance))
         instance["tasks"]["1"]["r"] = ready_time
+        instance["tasks"]["1"]["D"] = ready_time - 1.0
         data = replace(base_data, instance=instance, sortie_limit=1)
         result = price_journeys(
             data,
@@ -14244,7 +14372,10 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(result.generated_sequences, 0)
 
     def test_sharded_pulse_guarded_archive_counter_surfaces(self):
-        data = replace(load_future_data("very_small"), tasks=(1, 2, 3, 4), sortie_limit=3)
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3, 4), sortie_limit=3),
+            False,
+        )
         result = price_journeys(
             data,
             JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={}),
@@ -14292,6 +14423,25 @@ class BPCFutureTests(unittest.TestCase):
 
     def test_sharded_pulse_guarded_non_test_instance_never_toy_certifies(self):
         data = replace(load_future_data("very_small"), name="prod_like_instance", tasks=(1, 2), sortie_limit=2)
+        result = price_journeys(
+            data,
+            JourneyDuals(cover={1: 0.0, 2: 0.0}, fleet_limit=0.0, cuts={}),
+            tuple(),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                final_judge_engine="sharded_pulse",
+                sharded_final_judge_enabled=True,
+                sharded_final_judge_toy_certificate_enabled=True,
+                max_tasks_per_trip=2,
+            ),
+        )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(result.reason, "sharded_pulse_toy_certificate_guard_failed")
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+
+    def test_sharded_pulse_guarded_waiting_allowed_not_certificate(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=2)
         result = price_journeys(
             data,
             JourneyDuals(cover={1: 0.0, 2: 0.0}, fleet_limit=0.0, cuts={}),
@@ -14417,7 +14567,10 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(_journey_pricing_is_global_certificate(result))
 
     def test_sharded_pulse_guarded_separate_branch_filters_pair_negative(self):
-        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1)
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1),
+            False,
+        )
         duals = JourneyDuals(cover={1: 60.0, 2: 60.0}, fleet_limit=0.0, cuts={})
         unconstrained = price_journeys(
             data,
@@ -14452,7 +14605,10 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(_journey_pricing_is_global_certificate(separate))
 
     def test_sharded_pulse_guarded_same_branch_filters_one_sided_negative(self):
-        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1)
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1),
+            False,
+        )
         duals = JourneyDuals(cover={1: 200.0, 2: -200.0}, fleet_limit=0.0, cuts={})
         unconstrained = price_journeys(
             data,
@@ -16614,6 +16770,12 @@ def _single_task_grid_trips(data, *, bucket: float):
     return trips
 
 
+def _with_task_waiting_allowed(data: Any, allowed: bool) -> Any:
+    instance = json.loads(json.dumps(data.instance))
+    instance.setdefault("scheduling", {})["task_waiting_allowed"] = bool(allowed)
+    return replace(data, instance=instance)
+
+
 def _assert_toy_pulse_same_pricing_surface(testcase: unittest.TestCase, pruned: Any, unpruned: Any) -> None:
     testcase.assertTrue(unpruned.exhausted)
     testcase.assertTrue(pruned.exhausted)
@@ -16705,6 +16867,92 @@ def _toy_bruteforce_candidates(
                             is_negative=true_rc < -float(eps),
                         ),
                     )
+
+    return tuple(
+        candidates_by_signature[signature]
+        for signature in sorted(candidates_by_signature, key=repr)
+    )
+
+
+def _toy_bruteforce_candidate_start_candidates(
+    data: Any,
+    duals: JourneyDuals,
+    *,
+    cuts: tuple[Any, ...] = tuple(),
+    time_bucket_size: float,
+    start_time_step: float,
+    eps: float = 1.0e-6,
+    max_tasks_per_sortie: int = 0,
+    max_sorties: int | None = None,
+    first_task_shard: int | None = None,
+) -> tuple[SimpleNamespace, ...]:
+    task_order = tuple(int(task) for task in data.tasks)
+    max_tasks = _toy_test_max_tasks_per_sortie(data, max_tasks_per_sortie)
+    sortie_limit = int(data.sortie_limit if max_sorties is None else max_sorties)
+    sortie_limit = max(0, min(int(data.sortie_limit), sortie_limit))
+    shard_task = None if first_task_shard is None else int(first_task_shard)
+    candidates_by_signature: dict[tuple, SimpleNamespace] = {}
+
+    for task_count in range(1, len(task_order) + 1):
+        for ordered_tasks in itertools.permutations(task_order, task_count):
+            ordered_tasks = tuple(int(task) for task in ordered_tasks)
+            if shard_task is not None and int(ordered_tasks[0]) != shard_task:
+                continue
+            for sizes in _toy_test_sortie_size_partitions(task_count, max_tasks, sortie_limit):
+                offset = 0
+                sequences = []
+                for size in sizes:
+                    sequences.append(ordered_tasks[offset : offset + size])
+                    offset += size
+                arc_choice_groups = []
+                for sequence in sequences:
+                    arc_choices = _toy_test_arc_option_combinations(data, sequence)
+                    if not arc_choices:
+                        arc_choice_groups = []
+                        break
+                    arc_choice_groups.append(arc_choices)
+                if not arc_choice_groups:
+                    continue
+                for sortie_arc_options in itertools.product(*arc_choice_groups):
+                    partial: list[Any] = [(tuple(), 0.0)]
+                    for sequence, arc_options in zip(sequences, sortie_arc_options):
+                        next_partial: list[Any] = []
+                        starts = candidate_start_times_for_trip(
+                            data,
+                            sequence,
+                            arc_options,
+                            start_step=float(start_time_step),
+                        )
+                        for trips, earliest_start in partial:
+                            for start in starts:
+                                if float(start) < float(earliest_start) - 1.0e-9:
+                                    continue
+                                trip = evaluate_timed_trip(
+                                    data,
+                                    sequence,
+                                    float(start),
+                                    time_bucket_size=float(time_bucket_size),
+                                    arc_options=arc_options,
+                                )
+                                if trip is None:
+                                    continue
+                                next_partial.append((tuple(trips) + (trip,), float(trip.end_time)))
+                        partial = next_partial
+                        if not partial:
+                            break
+                    for trips, _end_time in partial:
+                        journey = make_journey(data, trips)
+                        if journey is None:
+                            continue
+                        true_rc = float(manual_journey_reduced_cost(journey, duals, cuts=cuts))
+                        candidates_by_signature.setdefault(
+                            journey.signature,
+                            SimpleNamespace(
+                                journey=journey,
+                                true_reduced_cost=true_rc,
+                                is_negative=true_rc < -float(eps),
+                            ),
+                        )
 
     return tuple(
         candidates_by_signature[signature]

@@ -14,6 +14,7 @@ from typing import Iterable, Iterator
 
 from BPC_future.core.branching import BranchConstraint
 from BPC_future.core.cuts import FutureCut
+from BPC_future.core.columns import candidate_start_times_for_trip
 from BPC_future.core.data import ArcOption, FutureData
 from BPC_future.core.journey import JourneyColumn
 from BPC_future.master.journey_rmp import JourneyDuals
@@ -525,6 +526,9 @@ class _TransitionPulseState:
     sorties_used: int
     sortie_start_time: float
     current_time: float
+    start_interval_lb: float
+    start_interval_ub: float
+    current_offset: float
     travel_energy: float
     service_energy: float
     load_used: float
@@ -543,6 +547,7 @@ def transition_root_only_pulse(
     max_tasks_per_sortie: int = 0,
     max_sorties: int | None = None,
     root_start_time: float = 0.0,
+    start_time_step: float | None = None,
     first_task_shard: int | None = None,
     second_action_shard: int | str | None = None,
     branch_constraints: tuple[BranchConstraint, ...] = tuple(),
@@ -583,6 +588,7 @@ def transition_root_only_pulse(
     second_shard = _normalize_second_action_shard(second_action_shard)
     task_to_bit = {int(task): index for index, task in enumerate(task_order)}
     waiting_allowed = bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
+    candidate_start_step = max(1.0e-9, float(time_bucket_size if start_time_step is None else start_time_step))
     archive = (
         StructuralKeyDominanceArchive(max_records_per_key=int(archive_max_records_per_key))
         if bool(archive_dominance_enabled)
@@ -722,6 +728,9 @@ def transition_root_only_pulse(
                     sorties_used=int(sorties_used),
                     sortie_start_time=float(next_start_time),
                     current_time=float(next_start_time),
+                    start_interval_lb=float(next_start_time),
+                    start_interval_ub=float(next_start_time if waiting_allowed else data.horizon),
+                    current_offset=0.0,
                     travel_energy=0.0,
                     service_energy=0.0,
                     load_used=0.0,
@@ -742,7 +751,9 @@ def transition_root_only_pulse(
         if archive is not None:
             survival_so_far = float(data.survival_energy_rate) * max(
                 0.0,
-                float(state.current_time) - float(state.sortie_start_time),
+                float(state.current_offset)
+                if not waiting_allowed
+                else float(state.current_time) - float(state.sortie_start_time),
             )
             key = PulseStructuralKey(
                 phase="open_sortie",
@@ -753,7 +764,6 @@ def transition_root_only_pulse(
                 branch_state_key=_transition_archive_branch_state_key(
                     int(state.pending_same_mask),
                     waiting_allowed=waiting_allowed,
-                    current_time=float(state.current_time),
                 ),
             )
             decision = archive.consider(
@@ -764,7 +774,7 @@ def transition_root_only_pulse(
                     current_time=float(state.current_time) if waiting_allowed else None,
                     start_interval=None
                     if waiting_allowed
-                    else (float(state.current_time), float(state.current_time)),
+                    else (float(state.start_interval_lb), float(state.start_interval_ub)),
                     energy_used=float(state.travel_energy)
                     + float(state.service_energy)
                     + float(survival_so_far),
@@ -849,16 +859,30 @@ def transition_root_only_pulse(
             pulse_resource_pruned += 1
             pulse_capacity_pruned += 1
             return None
-        arrival = float(state.current_time) + float(option.tau)
         ready_time = float(data.task_value(task, "r"))
+        service_time = float(data.task_value(task, "sigma"))
         if waiting_allowed:
+            arrival = float(state.current_time) + float(option.tau)
             service_start = max(ready_time, arrival)
+            finish_service = service_start + service_time
+            next_start_lb = float(state.start_interval_lb)
+            next_start_ub = float(state.start_interval_ub)
+            next_offset = max(0.0, finish_service - float(state.sortie_start_time))
+            next_current_time = float(finish_service)
         else:
-            if arrival < ready_time - 1.0e-9:
+            arrival_offset = float(state.current_offset) + float(option.tau)
+            next_start_lb = max(float(state.start_interval_lb), ready_time - arrival_offset)
+            next_start_ub = min(
+                float(state.start_interval_ub),
+                float(data.task_value(task, "D")) - service_time - arrival_offset,
+            )
+            if next_start_lb > next_start_ub + 1.0e-9:
                 pulse_time_window_pruned += 1
                 return None
-            service_start = arrival
-        finish_service = service_start + float(data.task_value(task, "sigma"))
+            service_start = next_start_lb + arrival_offset
+            finish_service = service_start + service_time
+            next_offset = arrival_offset + service_time
+            next_current_time = next_start_lb + next_offset
         if finish_service > float(data.task_value(task, "D")) + 1.0e-9:
             pulse_time_window_pruned += 1
             return None
@@ -866,7 +890,9 @@ def transition_root_only_pulse(
         next_service_energy = float(state.service_energy) + float(data.task_value(task, "g"))
         survival_so_far = float(data.survival_energy_rate) * max(
             0.0,
-            float(finish_service) - float(state.sortie_start_time),
+            float(next_offset)
+            if not waiting_allowed
+            else float(finish_service) - float(state.sortie_start_time),
         )
         if next_travel_energy + next_service_energy + survival_so_far > float(data.energy_limit) + 1.0e-9:
             pulse_resource_pruned += 1
@@ -874,8 +900,12 @@ def transition_root_only_pulse(
             return None
         if not _future_return_lower_bound_possible(
             data,
-            current_time=float(finish_service),
+            current_time=float(next_current_time),
             sortie_start_time=float(state.sortie_start_time),
+            start_interval_lb=float(next_start_lb),
+            start_interval_ub=float(next_start_ub),
+            current_offset=float(next_offset),
+            waiting_allowed=waiting_allowed,
             travel_energy=float(next_travel_energy),
             service_energy=float(next_service_energy),
             candidate_return_nodes=(task,) + remaining_after,
@@ -906,7 +936,10 @@ def transition_root_only_pulse(
             current_sortie_task_mask=int(state.current_sortie_task_mask) | bit,
             sorties_used=int(state.sorties_used),
             sortie_start_time=float(state.sortie_start_time),
-            current_time=float(finish_service),
+            current_time=float(next_current_time),
+            start_interval_lb=float(next_start_lb),
+            start_interval_ub=float(next_start_ub),
+            current_offset=float(next_offset),
             travel_energy=float(next_travel_energy),
             service_energy=float(next_service_energy),
             load_used=float(next_load),
@@ -929,71 +962,89 @@ def transition_root_only_pulse(
                 data,
                 current_time=float(state.current_time),
                 sortie_start_time=float(state.sortie_start_time),
+                start_interval_lb=float(state.start_interval_lb),
+                start_interval_ub=float(state.start_interval_ub),
+                current_offset=float(state.current_offset),
+                waiting_allowed=waiting_allowed,
                 travel_energy=float(state.travel_energy),
                 service_energy=float(state.service_energy),
                 return_option=return_option,
             ):
                 pulse_return_pruned += 1
                 continue
-            trace = PulseSortieTrace(
-                sequence=tuple(state.current_sequence),
-                start_time=float(state.sortie_start_time),
-                arc_options=tuple(state.current_arc_options) + (return_option,),
-            )
-            generated_sortie_traces += 1
-            trip = materialize_pulse_sortie(
+            start_candidates = _pulse_completed_sortie_start_candidates(
                 data,
-                trace.sequence,
-                trace.start_time,
-                arc_options=trace.arc_options,
-                time_bucket_size=float(time_bucket_size),
-                include_physical_paths=bool(include_physical_paths),
+                tuple(state.current_sequence),
+                tuple(state.current_arc_options) + (return_option,),
+                waiting_allowed=waiting_allowed,
+                fixed_start_time=float(state.sortie_start_time),
+                start_interval_lb=float(state.start_interval_lb),
+                start_interval_ub=float(state.start_interval_ub),
+                start_step=float(candidate_start_step),
             )
-            if trip is None:
-                infeasible_leaves += 1
+            if not start_candidates:
+                pulse_return_pruned += 1
                 continue
-            materialized_sorties += 1
-            next_traces = tuple(state.traces) + (trace,)
-            if int(state.pending_same_mask) == 0:
-                candidate = materialize_pulse_leaf_candidate(
+            for start_time in start_candidates:
+                trace = PulseSortieTrace(
+                    sequence=tuple(state.current_sequence),
+                    start_time=float(start_time),
+                    arc_options=tuple(state.current_arc_options) + (return_option,),
+                )
+                generated_sortie_traces += 1
+                trip = materialize_pulse_sortie(
                     data,
-                    next_traces,
-                    duals,
-                    cuts=cuts,
+                    trace.sequence,
+                    trace.start_time,
+                    arc_options=trace.arc_options,
                     time_bucket_size=float(time_bucket_size),
-                    eps=float(eps),
                     include_physical_paths=bool(include_physical_paths),
                 )
-                if candidate is not None:
-                    materialized_journey_leaves += 1
-                    candidates_by_signature.setdefault(candidate.journey.signature, candidate)
-                else:
+                if trip is None:
                     infeasible_leaves += 1
-            elif int(state.sorties_used) + 1 >= int(sortie_limit):
-                pulse_branch_pruned += 1
-            if int(state.sorties_used) + 1 < int(sortie_limit) and state.remaining_tasks:
-                if state.pending_same_mask and not _pending_same_possible(
-                    int(state.pending_same_mask),
-                    state.remaining_tasks,
-                    task_to_bit,
-                ):
-                    pulse_branch_pruned += 1
                     continue
-                returned_ledger = _ledger_from_transition_state(
-                    state,
-                    task_order=task_order,
-                    task_to_bit=task_to_bit,
-                ).return_to_depot(return_cost=float(return_option.cost))
-                search_depot(
-                    next_traces,
-                    tuple(state.remaining_tasks),
-                    float(trip.end_time),
-                    int(state.visited_task_mask),
-                    int(state.sorties_used) + 1,
-                    int(state.pending_same_mask),
-                    float(returned_ledger.exact_prefix_rc),
-                    float(returned_ledger.lb_prefix_rc),
-                )
+                materialized_sorties += 1
+                next_traces = tuple(state.traces) + (trace,)
+                if int(state.pending_same_mask) == 0:
+                    candidate = materialize_pulse_leaf_candidate(
+                        data,
+                        next_traces,
+                        duals,
+                        cuts=cuts,
+                        time_bucket_size=float(time_bucket_size),
+                        eps=float(eps),
+                        include_physical_paths=bool(include_physical_paths),
+                    )
+                    if candidate is not None:
+                        materialized_journey_leaves += 1
+                        candidates_by_signature.setdefault(candidate.journey.signature, candidate)
+                    else:
+                        infeasible_leaves += 1
+                elif int(state.sorties_used) + 1 >= int(sortie_limit):
+                    pulse_branch_pruned += 1
+                if int(state.sorties_used) + 1 < int(sortie_limit) and state.remaining_tasks:
+                    if state.pending_same_mask and not _pending_same_possible(
+                        int(state.pending_same_mask),
+                        state.remaining_tasks,
+                        task_to_bit,
+                    ):
+                        pulse_branch_pruned += 1
+                        continue
+                    returned_ledger = _ledger_from_transition_state(
+                        state,
+                        task_order=task_order,
+                        task_to_bit=task_to_bit,
+                    ).return_to_depot(return_cost=float(return_option.cost))
+                    search_depot(
+                        next_traces,
+                        tuple(state.remaining_tasks),
+                        float(trip.end_time),
+                        int(state.visited_task_mask),
+                        int(state.sorties_used) + 1,
+                        int(state.pending_same_mask),
+                        float(returned_ledger.exact_prefix_rc),
+                        float(returned_ledger.lb_prefix_rc),
+                    )
 
     if sortie_limit > 0 and not stop_requested():
         search_depot(
@@ -1379,6 +1430,10 @@ def _future_return_lower_bound_possible(
     *,
     current_time: float,
     sortie_start_time: float,
+    start_interval_lb: float,
+    start_interval_ub: float,
+    current_offset: float,
+    waiting_allowed: bool,
     travel_energy: float,
     service_energy: float,
     candidate_return_nodes: tuple[int, ...],
@@ -1398,9 +1453,12 @@ def _future_return_lower_bound_possible(
     if best_return_time is None or best_return_energy is None:
         return False
     optimistic_return_time = float(current_time) + float(best_return_time)
-    optimistic_survival = float(data.survival_energy_rate) * max(
-        0.0,
-        float(optimistic_return_time) - float(sortie_start_time),
+    optimistic_return_offset = float(current_offset) + float(best_return_time)
+    optimistic_survival = (
+        float(data.survival_energy_rate) * max(0.0, float(optimistic_return_offset))
+        if not bool(waiting_allowed)
+        else float(data.survival_energy_rate)
+        * max(0.0, float(optimistic_return_time) - float(sortie_start_time))
     )
     optimistic_energy = (
         float(travel_energy)
@@ -1410,7 +1468,13 @@ def _future_return_lower_bound_possible(
     )
     if optimistic_energy > float(data.energy_limit) + 1.0e-9:
         return False
-    optimistic_end_time = float(optimistic_return_time) + optimistic_energy / float(data.rho)
+    optimistic_end_time = (
+        float(start_interval_lb) + float(optimistic_return_offset) + optimistic_energy / float(data.rho)
+        if not bool(waiting_allowed)
+        else float(optimistic_return_time) + optimistic_energy / float(data.rho)
+    )
+    if not bool(waiting_allowed):
+        return min(float(start_interval_ub), float(data.horizon) - float(optimistic_return_offset) - optimistic_energy / float(data.rho)) >= float(start_interval_lb) - 1.0e-9
     return optimistic_end_time <= float(data.horizon) + 1.0e-9
 
 
@@ -1419,14 +1483,21 @@ def _direct_return_option_feasible(
     *,
     current_time: float,
     sortie_start_time: float,
+    start_interval_lb: float,
+    start_interval_ub: float,
+    current_offset: float,
+    waiting_allowed: bool,
     travel_energy: float,
     service_energy: float,
     return_option: ArcOption,
 ) -> bool:
     return_time = float(current_time) + float(return_option.tau)
-    survival_energy = float(data.survival_energy_rate) * max(
-        0.0,
-        float(return_time) - float(sortie_start_time),
+    return_offset = float(current_offset) + float(return_option.tau)
+    survival_energy = (
+        float(data.survival_energy_rate) * max(0.0, float(return_offset))
+        if not bool(waiting_allowed)
+        else float(data.survival_energy_rate)
+        * max(0.0, float(return_time) - float(sortie_start_time))
     )
     total_energy = (
         float(travel_energy)
@@ -1436,8 +1507,39 @@ def _direct_return_option_feasible(
     )
     if total_energy > float(data.energy_limit) + 1.0e-9:
         return False
+    if not bool(waiting_allowed):
+        end_offset = float(return_offset) + total_energy / float(data.rho)
+        return min(float(start_interval_ub), float(data.horizon) - float(end_offset)) >= float(start_interval_lb) - 1.0e-9
     end_time = float(return_time) + total_energy / float(data.rho)
     return end_time <= float(data.horizon) + 1.0e-9
+
+
+def _pulse_completed_sortie_start_candidates(
+    data: FutureData,
+    sequence: tuple[int, ...],
+    arc_options: tuple[ArcOption, ...],
+    *,
+    waiting_allowed: bool,
+    fixed_start_time: float,
+    start_interval_lb: float,
+    start_interval_ub: float,
+    start_step: float,
+) -> tuple[float, ...]:
+    if bool(waiting_allowed):
+        return (float(fixed_start_time),)
+    starts = candidate_start_times_for_trip(
+        data,
+        tuple(int(task) for task in sequence),
+        tuple(arc_options),
+        start_step=float(start_step),
+    )
+    lower = float(start_interval_lb)
+    upper = float(start_interval_ub)
+    return tuple(
+        float(start)
+        for start in starts
+        if lower - 1.0e-9 <= float(start) <= upper + 1.0e-9
+    )
 
 
 def _transition_branch_update(
@@ -1483,11 +1585,9 @@ def _transition_archive_branch_state_key(
     pending_same_mask: int,
     *,
     waiting_allowed: bool,
-    current_time: float,
+    current_time: float | None = None,
 ) -> tuple[object, ...]:
-    if bool(waiting_allowed):
-        return (int(pending_same_mask),)
-    return (int(pending_same_mask), "exact_time", round(float(current_time), 9))
+    return (int(pending_same_mask),)
 
 
 def _pending_same_possible(
@@ -1532,6 +1632,7 @@ def _second_action_allows_task(
 
 __all__ = [
     "ToyPulseExhaustiveResult",
+    "_pulse_completed_sortie_start_candidates",
     "transition_root_only_pulse",
     "toy_root_exhaustive_pulse",
 ]
