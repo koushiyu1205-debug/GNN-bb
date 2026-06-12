@@ -697,7 +697,7 @@ Smoke：
   - `journey_sharded_pulse_hidden_negative_worker_trigger="before_legacy_final_judge" | "hard_tail_only"`
   - `journey_sharded_pulse_hidden_negative_worker_min_tasks`
   - `journey_sharded_pulse_hidden_negative_worker_min_remaining_time`
-  - `journey_sharded_pulse_hidden_negative_worker_require_previous_audit_signal`
+  - `journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age`
 
 验证：
 
@@ -776,6 +776,83 @@ Smoke：
 - 不能默认启用 hidden worker；
 - 若继续 worker 路线，只能走 strict hard-tail retry，并继续 audit-only 对照；
 - 若要校准 ROI gate 本身，需要补 no-negative / proof-hard / forced-incomplete 样本，使 low-ROI gate 实际触发。
+
+### Phase 7M
+
+已完成：
+
+- 将 hidden-negative worker 收紧为 strict hard-tail mode：
+  - `journey_sharded_pulse_hidden_negative_worker_trigger="hard_tail_only"`
+  - 必须是 `certificate_candidate=True`
+  - 必须满足 remaining time / min-task 门槛
+  - 必须存在同一 node/depth、未超过 max-age 的 previous audit negative signal
+  - previous audit signal 的 context hash 必须匹配当前 true dual / cuts / branch / forbidden-signature context
+- previous audit signal 只接受 strongest signal：
+  - audit status 为 `FOUND_NEGATIVE`
+  - 或 audit comparison type 为 `legacy_incomplete_pulse_negative`
+  - 或 audit comparison type 为 `legacy_negative_pulse_negative`
+  - 或 audit shard negative count > 0
+- prune-only signal 不触发 worker：
+  - bound pruned / archive pruned / time-window pruned / return pruned 只能作为日志观测
+  - 不会进入 hard-tail worker gate
+- driver 层新增轻量 audit-signal cache：
+  - 不是 proof cache
+  - 不是 certificate cache
+  - 只用于下一轮 hard-tail worker 触发判断
+  - context mismatch 时 fail-closed 跳过 worker
+- hidden-negative worker 的输出集合仍被严格限制为：
+  - `FOUND_NEGATIVE`
+  - `FOUND_NEGATIVE_HARVESTED`
+  - `INCOMPLETE_LIMIT`
+  - `DUPLICATE_ONLY`
+- hidden-negative worker 永远不得产生：
+  - `CERTIFIED_NO_NEGATIVE`
+  - official lower bound
+  - official certificate effect
+
+新增/更新日志字段：
+
+- worker skip 可观测：
+  - `pulse_worker_skipped`
+  - `pulse_worker_skip_reason`
+  - `pulse_worker_trigger`
+- worker audit-signal gate 可观测：
+  - `pulse_worker_previous_audit_signal`
+  - `pulse_worker_context_hash`
+  - `pulse_worker_true_dual_hash`
+  - `pulse_worker_cut_hash`
+  - `pulse_worker_branch_hash`
+  - `pulse_worker_forbidden_signature_hash`
+- ROI calibration summary 新增 `audit_plus_strict_worker` profile，并记录：
+  - worker events
+  - skip reason
+  - previous-audit-signal flag
+  - returned journeys
+  - added journeys
+  - worker time / recursions
+  - worker context hash
+- `audit_plus_strict_worker` 是显式 opt-in profile，不进入脚本默认 profile 顺序；
+- 脚本额外支持 `audit_only` alias，用于 small smoke 与报告矩阵对齐。
+
+验证：
+
+- previous audit negative signal 会触发 hard-tail worker；
+- 没有 previous signal 会跳过 worker；
+- prune-only signal 不触发 worker；
+- context mismatch 会使 previous signal 失效；
+- worker 返回 journeys 前逐条 true-RC 复算；
+- worker found negative 只走正常 add-column path；
+- worker incomplete 不设置 official lower bound；
+- worker duplicate-only 不 certificate；
+- default config 行为不变。
+
+当前边界：
+
+- strict worker 仍默认关闭；
+- strict worker 不接 official certificate gate；
+- strict worker 只作为 hidden-negative column finder；
+- 当前不做 resume / parallel / 20/100 A/B；
+- 当前不继续扩大 worker budget；若小矩阵 smoke 显示 no trigger 或 context mismatch，先作为 audit signal calibration 结果记录。
 
 ## 默认行为
 

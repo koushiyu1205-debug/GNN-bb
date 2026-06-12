@@ -235,6 +235,29 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
     learning_runtime: _JourneyLearningRuntime | None = prewarmed_learning_runtime
     learning_runtime_initialized = prewarmed_learning_runtime is not None
     learning_certificate_gate_logged = False
+    sharded_pulse_audit_signal: dict[str, Any] | None = None
+
+    def _update_sharded_pulse_audit_signal(
+        pulse_pricing: Any | None,
+        *,
+        node_id: int,
+        depth: int,
+        cg_iter: int,
+    ) -> None:
+        nonlocal sharded_pulse_audit_signal
+        if pulse_pricing is None:
+            return
+        payload = getattr(pulse_pricing, "_sharded_pulse_audit_payload", None)
+        if not isinstance(payload, dict):
+            sharded_pulse_audit_signal = None
+            return
+        sharded_pulse_audit_signal = _journey_sharded_pulse_audit_signal_from_payload(
+            payload,
+            node_id=node_id,
+            depth=depth,
+            cg_iter=cg_iter,
+        )
+
     for cg_iter in range(1, max_cg + 1):
         if time.perf_counter() - started >= time_limit:
             break
@@ -737,7 +760,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             )
 
         def audit_final_legacy_pricing(current_pricing: Any) -> None:
-            _run_journey_sharded_pulse_audit(
+            audit_pricing = _run_journey_sharded_pulse_audit(
                 data,
                 config,
                 logger,
@@ -752,6 +775,12 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 depth=0,
                 active_task_sets=active_task_sets,
                 trigger="after_legacy_final_judge",
+            )
+            _update_sharded_pulse_audit_signal(
+                audit_pricing,
+                node_id=0,
+                depth=0,
+                cg_iter=cg_iter,
             )
 
         exact_duals, exact_dual_source = _journey_exact_pricing_duals(
@@ -798,7 +827,21 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             active_task_sets=active_task_sets,
             certificate_candidate=certificate_candidate,
             remaining_time=remaining,
-            previous_audit_signal=False,
+            previous_audit_signal=_journey_sharded_pulse_audit_signal_valid_for_worker(
+                sharded_pulse_audit_signal,
+                node_id=0,
+                depth=0,
+                cg_iter=cg_iter,
+                max_age=int(
+                    config.get(
+                        "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age",
+                        3,
+                    )
+                ),
+            ),
+            previous_audit_context_hashes=None
+            if sharded_pulse_audit_signal is None
+            else dict(sharded_pulse_audit_signal.get("context_hashes", {})),
         )
         if hidden_worker is not None:
             worker_pricing, worker_pricing_config = hidden_worker
@@ -872,7 +915,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             config.get("journey_sharded_pulse_audit_trigger", "after_legacy_final_judge") or ""
         ).strip().lower()
         if bool(config.get("journey_sharded_pulse_audit_force_on_root", False)) or audit_trigger == "after_each_final_pricing":
-            _run_journey_sharded_pulse_audit(
+            audit_pricing = _run_journey_sharded_pulse_audit(
                 data,
                 config,
                 logger,
@@ -887,6 +930,12 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 depth=0,
                 active_task_sets=active_task_sets,
                 trigger="after_each_final_pricing",
+            )
+            _update_sharded_pulse_audit_signal(
+                audit_pricing,
+                node_id=0,
+                depth=0,
+                cg_iter=cg_iter,
             )
             audit_ran_for_pricing = True
         if pricing.journeys:
@@ -7703,6 +7752,10 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
             if float(config.get("journey_sharded_pulse_hidden_negative_worker_min_remaining_time", 0.0)) < 0.0:
                 raise ValueError(
                     "journey_sharded_pulse_hidden_negative_worker_min_remaining_time must be nonnegative"
+                )
+            if int(config.get("journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age", 3)) <= 0:
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age must be positive"
                 )
         audit_trigger = str(
             config.get("journey_sharded_pulse_audit_trigger", "after_legacy_final_judge") or ""
@@ -15510,6 +15563,78 @@ def _journey_sharded_pulse_audit_payload(
     return payload
 
 
+def _journey_sharded_pulse_audit_payload_has_negative_signal(payload: dict[str, Any]) -> bool:
+    if str(payload.get("pulse_audit_status", "")) == PRICING_STATE_FOUND_NEGATIVE:
+        return True
+    if str(payload.get("pulse_audit_comparison_type", "")) in {
+        "legacy_incomplete_pulse_negative",
+        "legacy_negative_pulse_negative",
+    }:
+        return True
+    return _journey_sharded_pulse_audit_payload_int(payload, "pulse_audit_shards_negative") > 0
+
+
+def _journey_sharded_pulse_audit_payload_int(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    default: int = 0,
+) -> int:
+    try:
+        return int(payload.get(key, default) or default)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _journey_sharded_pulse_audit_signal_from_payload(
+    payload: dict[str, Any],
+    *,
+    node_id: int,
+    depth: int,
+    cg_iter: int,
+) -> dict[str, Any] | None:
+    if not _journey_sharded_pulse_audit_payload_has_negative_signal(payload):
+        return None
+    return {
+        "node_id": int(node_id),
+        "depth": int(depth),
+        "cg_iter": int(cg_iter),
+        "context_hashes": {
+            "context": str(payload.get("pulse_audit_context_hash", "")),
+            "true_dual": str(payload.get("pulse_audit_true_dual_hash", "")),
+            "cuts": str(payload.get("pulse_audit_cut_hash", "")),
+            "branch": str(payload.get("pulse_audit_branch_hash", "")),
+            "forbidden": str(payload.get("pulse_audit_forbidden_signature_hash", "")),
+        },
+        "comparison_type": str(payload.get("pulse_audit_comparison_type", "")),
+        "shards_negative": _journey_sharded_pulse_audit_payload_int(
+            payload, "pulse_audit_shards_negative"
+        ),
+        "harvested_count": _journey_sharded_pulse_audit_payload_int(
+            payload, "pulse_audit_harvested_count"
+        ),
+        "best_rc": payload.get("pulse_audit_pulse_best_rc"),
+    }
+
+
+def _journey_sharded_pulse_audit_signal_valid_for_worker(
+    signal: dict[str, Any] | None,
+    *,
+    node_id: int,
+    depth: int,
+    cg_iter: int,
+    max_age: int,
+) -> bool:
+    if not signal:
+        return False
+    if int(signal.get("node_id", -1)) != int(node_id):
+        return False
+    if int(signal.get("depth", -1)) != int(depth):
+        return False
+    signal_iter = int(signal.get("cg_iter", -10**9))
+    return 0 < int(cg_iter) - signal_iter <= max(1, int(max_age))
+
+
 def _journey_sharded_pulse_audit_config(
     config: dict[str, Any],
     base_pricing_config: JourneyPricingConfig,
@@ -15954,6 +16079,42 @@ def _log_journey_sharded_pulse_audit_skipped(
     )
 
 
+def _log_journey_sharded_pulse_worker_skipped(
+    logger: FutureLogger,
+    config: dict[str, Any],
+    *,
+    skip_reason: str,
+    trigger: str,
+    cg_iter: int,
+    node_id: int = 0,
+    depth: int = 0,
+    context_hashes: dict[str, str] | None = None,
+) -> None:
+    if not bool(config.get("journey_sharded_pulse_hidden_negative_worker_log_skips", False)):
+        return
+    hashes = context_hashes or {}
+    logger.log(
+        "journey_sharded_pulse_hidden_negative_worker",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        pulse_worker_enabled=bool(
+            config.get("journey_sharded_pulse_hidden_negative_worker_enabled", False)
+        ),
+        pulse_worker_skipped=True,
+        pulse_worker_skip_reason=str(skip_reason),
+        pulse_worker_trigger=str(trigger),
+        pulse_worker_allow_certificate_effect=False,
+        pulse_worker_status="SKIPPED",
+        pulse_worker_returned_journeys=0,
+        pulse_worker_context_hash=str(hashes.get("context", "")),
+        pulse_worker_true_dual_hash=str(hashes.get("true_dual", "")),
+        pulse_worker_cut_hash=str(hashes.get("cuts", "")),
+        pulse_worker_branch_hash=str(hashes.get("branch", "")),
+        pulse_worker_forbidden_signature_hash=str(hashes.get("forbidden", "")),
+    )
+
+
 def _journey_sharded_pulse_audit_trigger_allows(
     config: dict[str, Any],
     *,
@@ -16066,6 +16227,7 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
     certificate_candidate: bool = False,
     remaining_time: float | None = None,
     previous_audit_signal: bool = False,
+    previous_audit_context_hashes: dict[str, str] | None = None,
 ) -> tuple[JourneyPricingResult, JourneyPricingConfig] | None:
     if not bool(config.get("journey_sharded_pulse_hidden_negative_worker_enabled", False)):
         return None
@@ -16077,29 +16239,27 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
         or ""
     ).strip().lower()
     if trigger not in {"before_legacy_final_judge", "hard_tail_only"}:
-        return None
-    if trigger == "hard_tail_only":
-        if not bool(certificate_candidate):
-            return None
-        min_tasks = int(config.get("journey_sharded_pulse_hidden_negative_worker_min_tasks", 6))
-        if len(tuple(data.tasks)) < max(0, min_tasks):
-            return None
-        min_remaining = float(
-            config.get("journey_sharded_pulse_hidden_negative_worker_min_remaining_time", 0.0)
+        _log_journey_sharded_pulse_worker_skipped(
+            logger,
+            config,
+            skip_reason="invalid_trigger",
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
         )
-        if remaining_time is not None and float(remaining_time) < max(0.0, min_remaining):
-            return None
-        if bool(
-            config.get(
-                "journey_sharded_pulse_hidden_negative_worker_require_previous_audit_signal",
-                False,
-            )
-        ) and not bool(previous_audit_signal):
-            return None
-    if bool(getattr(base_pricing_config, "sharded_final_judge_enabled", False)):
         return None
-
-    started = time.perf_counter()
+    if bool(getattr(base_pricing_config, "sharded_final_judge_enabled", False)):
+        _log_journey_sharded_pulse_worker_skipped(
+            logger,
+            config,
+            skip_reason="base_pricing_is_sharded",
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+        )
+        return None
     forbidden_signatures = _journey_forbidden_signatures_for_node(journey_pool, branch_constraints)
     context_hashes = _journey_sharded_pulse_audit_context_hashes(
         data,
@@ -16108,6 +16268,76 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
         cuts,
         forbidden_signatures,
     )
+    if trigger == "hard_tail_only":
+        if not bool(certificate_candidate):
+            _log_journey_sharded_pulse_worker_skipped(
+                logger,
+                config,
+                skip_reason="not_certificate_candidate",
+                trigger=trigger,
+                cg_iter=cg_iter,
+                node_id=node_id,
+                depth=depth,
+                context_hashes=context_hashes,
+            )
+            return None
+        min_tasks = int(config.get("journey_sharded_pulse_hidden_negative_worker_min_tasks", 6))
+        if len(tuple(data.tasks)) < max(0, min_tasks):
+            _log_journey_sharded_pulse_worker_skipped(
+                logger,
+                config,
+                skip_reason="instance_too_small",
+                trigger=trigger,
+                cg_iter=cg_iter,
+                node_id=node_id,
+                depth=depth,
+                context_hashes=context_hashes,
+            )
+            return None
+        min_remaining = float(
+            config.get("journey_sharded_pulse_hidden_negative_worker_min_remaining_time", 0.0)
+        )
+        if remaining_time is not None and float(remaining_time) < max(0.0, min_remaining):
+            _log_journey_sharded_pulse_worker_skipped(
+                logger,
+                config,
+                skip_reason="time_remaining_too_low",
+                trigger=trigger,
+                cg_iter=cg_iter,
+                node_id=node_id,
+                depth=depth,
+                context_hashes=context_hashes,
+            )
+            return None
+        if not bool(previous_audit_signal):
+            _log_journey_sharded_pulse_worker_skipped(
+                logger,
+                config,
+                skip_reason="no_previous_audit_negative_signal",
+                trigger=trigger,
+                cg_iter=cg_iter,
+                node_id=node_id,
+                depth=depth,
+                context_hashes=context_hashes,
+            )
+            return None
+        if bool(previous_audit_signal) and previous_audit_context_hashes:
+            previous_context = str(previous_audit_context_hashes.get("context", ""))
+            current_context = str(context_hashes.get("context", ""))
+            if previous_context and current_context and previous_context != current_context:
+                _log_journey_sharded_pulse_worker_skipped(
+                    logger,
+                    config,
+                    skip_reason="audit_context_mismatch",
+                    trigger=trigger,
+                    cg_iter=cg_iter,
+                    node_id=node_id,
+                    depth=depth,
+                    context_hashes=context_hashes,
+                )
+                return None
+
+    started = time.perf_counter()
     worker_time_limit = max(
         0.0,
         float(config.get("journey_sharded_pulse_hidden_negative_worker_time_limit", 3.0)),
@@ -16180,6 +16410,9 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
         depth=int(depth),
         cg_iter=int(cg_iter),
         pulse_worker_trigger=trigger,
+        pulse_worker_skipped=False,
+        pulse_worker_skip_reason="",
+        pulse_worker_previous_audit_signal=bool(previous_audit_signal),
         pulse_worker_allow_certificate_effect=False,
         **_journey_sharded_pulse_hidden_negative_worker_payload(
             pulse_pricing,
@@ -16315,12 +16548,20 @@ def _run_journey_sharded_pulse_audit(
                 final_judge_incomplete_reason="audit_internal_error",
             )
     elapsed = time.perf_counter() - started
-    if bool(config.get("journey_sharded_pulse_audit_log_disagreements", True)) or not _journey_sharded_pulse_audit_payload(
+    audit_payload = _journey_sharded_pulse_audit_payload(
         legacy_pricing,
         pulse_pricing,
         elapsed=elapsed,
         context_hashes=context_hashes,
-    )["pulse_audit_agrees_with_legacy"]:
+    )
+    try:
+        setattr(pulse_pricing, "_sharded_pulse_audit_payload", audit_payload)
+        setattr(pulse_pricing, "_sharded_pulse_audit_context_hashes", dict(context_hashes))
+    except Exception:
+        pass
+    if bool(config.get("journey_sharded_pulse_audit_log_disagreements", True)) or not audit_payload[
+        "pulse_audit_agrees_with_legacy"
+    ]:
         logger.log(
             "journey_sharded_pulse_audit",
             node_id=int(node_id),
@@ -16332,12 +16573,7 @@ def _run_journey_sharded_pulse_audit(
             pulse_audit_allow_certificate_effect=bool(
                 config.get("journey_sharded_pulse_audit_allow_certificate_effect", False)
             ),
-            **_journey_sharded_pulse_audit_payload(
-                legacy_pricing,
-                pulse_pricing,
-                elapsed=elapsed,
-                context_hashes=context_hashes,
-            ),
+            **audit_payload,
         )
     return pulse_pricing
 

@@ -72,6 +72,7 @@ PROFILE_ORDER = (
     "audit_refine_roi_mid",
     "audit_refine_roi_high",
 )
+VALID_PROFILES = (*PROFILE_ORDER, "audit_only", "audit_plus_strict_worker")
 
 SUMMARY_FIELDS = (
     "instance",
@@ -108,6 +109,19 @@ SUMMARY_FIELDS = (
     "pulse_audit_pulse_energy_pruned",
     "pulse_audit_negative_pool_size",
     "pulse_audit_harvested_count",
+    "worker_events",
+    "pulse_worker_skipped",
+    "pulse_worker_skip_reason",
+    "pulse_worker_trigger",
+    "pulse_worker_previous_audit_signal",
+    "pulse_worker_status",
+    "pulse_worker_returned_journeys",
+    "pulse_worker_added_journeys",
+    "pulse_worker_true_rc_filtered",
+    "pulse_worker_time",
+    "pulse_worker_recursions",
+    "pulse_worker_shards_negative",
+    "pulse_worker_context_hash",
     "critical_disagreement",
     "log_path",
 )
@@ -120,10 +134,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profiles", nargs="*", default=list(PROFILE_ORDER))
     parser.add_argument("--time-limit", type=float, default=8.0)
     parser.add_argument("--audit-time-limit", type=float, default=0.5)
+    parser.add_argument("--worker-time-limit", type=float, default=0.5)
     parser.add_argument("--pricing-time-limit", type=float, default=0.2)
     parser.add_argument("--max-cg-iterations", type=int, default=3)
     parser.add_argument("--audit-max-recursions", type=int, default=100000)
+    parser.add_argument("--worker-max-recursions", type=int, default=100000)
     parser.add_argument("--audit-negative-harvest-limit", type=int, default=16)
+    parser.add_argument("--worker-negative-harvest-limit", type=int, default=16)
     parser.add_argument("--quiet", action="store_true")
     return parser.parse_args()
 
@@ -140,8 +157,8 @@ def main() -> None:
     for instance_key in args.instances:
         instance_name, locator = _resolve_instance(instance_key)
         for profile in args.profiles:
-            if profile not in PROFILE_ORDER:
-                raise ValueError(f"Unknown profile {profile!r}; expected one of {PROFILE_ORDER}")
+            if profile not in VALID_PROFILES:
+                raise ValueError(f"Unknown profile {profile!r}; expected one of {VALID_PROFILES}")
             row = _run_profile(
                 instance_name,
                 locator,
@@ -211,6 +228,12 @@ def _run_profile(
     official_pricing = _last_official_pricing(records)
     audits = [record for record in records if record.get("event") == "journey_sharded_pulse_audit"]
     audit = _last_real_audit(audits) or (audits[-1] if audits else {})
+    worker_events = [
+        record
+        for record in records
+        if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+    ]
+    worker = _last_real_worker(worker_events) or (worker_events[-1] if worker_events else {})
     inferred_skip_reason = ""
     if profile != "baseline" and not audits:
         inferred_skip_reason = "legacy_not_called"
@@ -249,6 +272,21 @@ def _run_profile(
         "pulse_audit_pulse_energy_pruned": _as_int(audit.get("pulse_audit_pulse_energy_pruned")),
         "pulse_audit_negative_pool_size": _as_int(audit.get("pulse_audit_negative_pool_size")),
         "pulse_audit_harvested_count": _as_int(audit.get("pulse_audit_harvested_count")),
+        "worker_events": len(worker_events),
+        "pulse_worker_skipped": bool(worker.get("pulse_worker_skipped", False)),
+        "pulse_worker_skip_reason": str(worker.get("pulse_worker_skip_reason", "")),
+        "pulse_worker_trigger": str(worker.get("pulse_worker_trigger", "")),
+        "pulse_worker_previous_audit_signal": bool(
+            worker.get("pulse_worker_previous_audit_signal", False)
+        ),
+        "pulse_worker_status": str(worker.get("pulse_worker_status", "")),
+        "pulse_worker_returned_journeys": _as_int(worker.get("pulse_worker_returned_journeys")),
+        "pulse_worker_added_journeys": _worker_added_journeys(records),
+        "pulse_worker_true_rc_filtered": _as_int(worker.get("pulse_worker_true_rc_filtered")),
+        "pulse_worker_time": worker.get("pulse_worker_time"),
+        "pulse_worker_recursions": _as_int(worker.get("pulse_worker_recursions")),
+        "pulse_worker_shards_negative": _as_int(worker.get("pulse_worker_shards_negative")),
+        "pulse_worker_context_hash": str(worker.get("pulse_worker_context_hash", "")),
         "critical_disagreement": str(audit.get("pulse_audit_disagreement_severity", "")) == "critical",
         "log_path": str(log_path),
     }
@@ -312,7 +350,7 @@ def _apply_profile(config: dict[str, Any], profile: str, args: argparse.Namespac
             "journey_sharded_pulse_hidden_negative_worker_enabled": False,
         }
     )
-    if profile == "audit_no_refine":
+    if profile in {"audit_no_refine", "audit_only"}:
         return
     config.update(
         {
@@ -324,6 +362,51 @@ def _apply_profile(config: dict[str, Any], profile: str, args: argparse.Namespac
         }
     )
     if profile == "audit_refine":
+        return
+    if profile == "audit_plus_strict_worker":
+        config.update(
+            {
+                "journey_sharded_pulse_audit_shard_roi_gate_enabled": True,
+                "journey_sharded_pulse_audit_shard_roi_prune_rate_floor": float(
+                    ROI_PRESETS["mid"]["prune_rate_floor"]
+                ),
+                "journey_sharded_pulse_audit_shard_roi_min_expanded": int(
+                    ROI_PRESETS["mid"]["min_expanded"]
+                ),
+                "journey_sharded_pulse_audit_shard_roi_min_time": float(
+                    ROI_PRESETS["mid"]["min_time"]
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_trigger": "hard_tail_only",
+                "journey_sharded_pulse_hidden_negative_worker_log_skips": True,
+                "journey_sharded_pulse_hidden_negative_worker_min_tasks": 5,
+                "journey_sharded_pulse_hidden_negative_worker_min_remaining_time": 0.0,
+                "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age": 3,
+                "journey_sharded_pulse_hidden_negative_worker_time_limit": float(
+                    args.worker_time_limit
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_max_recursions": int(
+                    args.worker_max_recursions
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_archive_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit": int(
+                    args.worker_negative_harvest_limit
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_shard_scheduling_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_gate_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_prune_rate_floor": float(
+                    ROI_PRESETS["mid"]["prune_rate_floor"]
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_min_expanded": int(
+                    ROI_PRESETS["mid"]["min_expanded"]
+                ),
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_min_time": float(
+                    ROI_PRESETS["mid"]["min_time"]
+                ),
+            }
+        )
         return
     suffix = profile.removeprefix("audit_refine_roi_")
     preset = ROI_PRESETS[suffix]
@@ -366,6 +449,24 @@ def _last_real_audit(records: list[dict[str, Any]]) -> dict[str, Any] | None:
         if not bool(record.get("pulse_audit_skipped", False)):
             return record
     return None
+
+
+def _last_real_worker(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for record in reversed(records):
+        if not bool(record.get("pulse_worker_skipped", False)):
+            return record
+    return None
+
+
+def _worker_added_journeys(records: list[dict[str, Any]]) -> int:
+    total = 0
+    for record in records:
+        if record.get("event") != "journey_column_addition":
+            continue
+        if record.get("pricing_kind") != "sharded_pulse_hidden_negative_worker":
+            continue
+        total += _as_int(record.get("added_journeys"))
+    return total
 
 
 def _official_unchanged(baseline: dict[str, Any] | None, row: dict[str, Any]) -> bool:
