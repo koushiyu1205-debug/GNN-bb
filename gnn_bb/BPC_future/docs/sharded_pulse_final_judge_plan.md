@@ -18,6 +18,7 @@ Phase 7B 已把该 transition core 接到 guarded sharded final judge 的 opt-in
 Phase 7C 已把 `StructuralKeyDominanceArchive` 接入 transition state。
 Phase 7D 已把 transition-state true-RC negative leaves 接入 support-aware harvest-after-negative path。
 Phase 7E 已加入 safe prefix reduced-cost lower-bound ledger 和 opt-in 弱安全 bound pruning。
+Phase 7F 已加入 bound/archive/harvest ROI diagnostics，并完成 very_small / 5-task / 10-task opt-in micro-smoke。
 
 ## Exactness 边界
 
@@ -332,6 +333,55 @@ Phase 7E 已加入 safe prefix reduced-cost lower-bound ledger 和 opt-in 弱安
 - adaptive refinement；
 - production benchmark 默认启用。
 
+### Phase 7F
+
+已完成：
+
+- `JourneyPricingResult` 与 driver JSONL 增加 bound ROI diagnostics：
+  - `pulse_bound_prune_enabled`
+  - `pulse_bound_prune_supported`
+  - `pulse_bound_prune_fail_open_reason`
+  - `pulse_bound_prune_query_count`
+  - `pulse_bound_prune_winner_count`
+  - `pulse_bound_prune_time`
+- fail-open reason 可观测：
+  - `disabled`
+  - `cuts_present`
+  - `negative_arc_cost`
+  - `negative_service_cost`
+  - `missing_return_lb`
+  - `missing_outbound_lb`
+- `pulse_bound_pruned` 继续作为 winner counter，`pulse_bound_prune_winner_count` 与其保持一致；
+- guarded sharded path 聚合所有 shard 的 bound query / winner / time diagnostics；
+- toy regression 覆盖 archive off/on 与 bound off/on 组合：
+  - best true RC 一致；
+  - found-negative 一致；
+  - negative signatures 一致；
+- driver smoke 覆盖 JSONL 中 bound diagnostics 字段可观测；
+- 完成 opt-in micro-smoke：
+  - `very_small`
+  - Apollo 5
+  - Tranquillitatis 5
+  - Apollo 10
+  - 配置矩阵 A/B/C/D/E：default baseline、sharded transition、archive、bound、harvest。
+
+micro-smoke 观察：
+
+- bound on 在该批无 cut / 非负成本小实例中均 supported；
+- `pulse_bound_pruned` 对 very_small / Apollo 5 / Tranquillitatis 5 / Apollo 10 均为正；
+- bound on 明显减少 recursions / expanded states / materialized journeys；
+- archive on 单独有正向但较弱的剪枝信号；
+- harvest 在无负列 dual 场景中没有新增返回列，这是符合预期的；
+- 非 test instance 仍由 toy certificate guard 返回 `INCOMPLETE_LIMIT`，不会形成 production certificate。
+
+仍未实现：
+
+- cut / subset-row / fleet-cut prefix lower bound；
+- resume；
+- parallel；
+- adaptive hierarchical sharding；
+- production benchmark 默认启用。
+
 ## 默认行为
 
 默认 benchmark 行为不变：
@@ -345,13 +395,14 @@ Phase 7E 已加入 safe prefix reduced-cost lower-bound ledger 和 opt-in 弱安
 
 1. 当前 production sharded Pulse 是 guarded toy root-only engine，不应当解释为完整 20/100 规模 proof engine。
 2. `pulse_max_recursions` 必须在大实例上设置上限；否则 exhaustive toy search 会非常慢。
-3. bound pruning 当前故意 fail-open；这意味着优化效果有限，但避免 unsafe pruning。
+3. bound pruning 当前只支持 no-cut / 非负 arc/service cost 的弱安全 LB；遇到未证明安全的 row/cost context 必须 fail-open。
 4. harvest-after-negative 能返回更多 true-RC negative columns，但不会产生 certificate。
 5. second-action sharding 目前是 toy partition 支持，未接自适应 refine 调度。
 
 ## 后续建议
 
-1. 实现真正 open-sortie incremental Pulse，而不是 completed-sortie trace 枚举。
-2. Phase 7F 可继续增强 prefix RC ledger，但每个 cut/fleet contribution 必须先有单独 exact-safe 证明和 pruned/unpruned 对照测试。
-3. 实现 proof-closed prefix cache，并严格区分 frontier snapshot。
-4. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。
+1. 不要直接加入 cut / subset-row / fleet-cut prefix bound；必须先用 7F diagnostics 判断 weak bound 是否有真实 ROI。
+2. 若 bound ROI 持续为正，再做 Phase 7G 的单项安全 bound 增强；每个 cut/fleet contribution 必须先有 exact-safe 证明和 pruned/unpruned 对照测试。
+3. 若 bound ROI 很弱，优先转向 adaptive second-action shard refinement，而不是增加复杂 row correction。
+4. 实现 proof-closed prefix cache 时，必须继续严格区分 frontier snapshot 与 proof-closed record。
+5. 大实例上只使用 bounded shard slices，配合 resume 和 hierarchical refine。

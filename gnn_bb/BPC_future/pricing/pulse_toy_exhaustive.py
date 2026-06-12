@@ -49,6 +49,12 @@ class ToyPulseExhaustiveResult:
     pulse_time_window_pruned: int
     pulse_resource_pruned: int
     pulse_bound_pruned: int
+    pulse_bound_prune_enabled: bool
+    pulse_bound_prune_supported: bool
+    pulse_bound_prune_fail_open_reason: str
+    pulse_bound_prune_query_count: int
+    pulse_bound_prune_winner_count: int
+    pulse_bound_prune_time: float
     pulse_archive_pruned: int
     pulse_depot_ready_pruned: int
     pulse_branch_pruned: int
@@ -474,6 +480,14 @@ def toy_root_exhaustive_pulse(
         pulse_time_window_pruned=int(pulse_time_window_pruned),
         pulse_resource_pruned=int(pulse_resource_pruned),
         pulse_bound_pruned=int(pulse_bound_pruned),
+        pulse_bound_prune_enabled=bool(bound_pruning_enabled),
+        pulse_bound_prune_supported=False,
+        pulse_bound_prune_fail_open_reason="legacy_toy_completed_trace_fail_open"
+        if bool(bound_pruning_enabled)
+        else "disabled",
+        pulse_bound_prune_query_count=0,
+        pulse_bound_prune_winner_count=0,
+        pulse_bound_prune_time=0.0,
         pulse_archive_pruned=int(pulse_archive_pruned),
         pulse_depot_ready_pruned=int(pulse_depot_ready_pruned),
         pulse_branch_pruned=0,
@@ -593,7 +607,13 @@ def transition_root_only_pulse(
     pulse_energy_pruned = 0
     stop_status: str | None = None
     stop_reason: str | None = None
-    prefix_bound_pruning_supported = _prefix_rc_bound_pruning_supported(data, cuts)
+    prefix_bound_pruning_supported, prefix_bound_fail_open_reason = _prefix_rc_bound_pruning_support(
+        data, cuts
+    )
+    pulse_bound_prune_query_count = 0
+    pulse_bound_prune_winner_count = 0
+    pulse_bound_prune_time = 0.0
+    pulse_bound_dynamic_fail_open_reason = ""
 
     def stop_requested() -> bool:
         nonlocal stop_status, stop_reason
@@ -627,7 +647,8 @@ def transition_root_only_pulse(
         partial_lb_prefix_rc: float,
     ) -> None:
         nonlocal expanded_states, pulse_branch_pruned, pulse_archive_pruned, pulse_depot_ready_pruned
-        nonlocal pulse_bound_pruned
+        nonlocal pulse_bound_pruned, pulse_bound_prune_query_count, pulse_bound_prune_winner_count
+        nonlocal pulse_bound_prune_time, pulse_bound_dynamic_fail_open_reason
         if not count_recursion():
             return
         if int(sorties_used) >= int(sortie_limit):
@@ -668,14 +689,20 @@ def transition_root_only_pulse(
                 pulse_depot_ready_pruned += 1
                 return
         if bool(bound_pruning_enabled) and bool(prefix_bound_pruning_supported) and traces:
-            remaining_lb = _depot_remaining_reduced_cost_lower_bound(
+            query_start = time.perf_counter()
+            remaining_lb, fail_reason = _depot_remaining_reduced_cost_lower_bound(
                 data,
                 duals,
                 remaining_tasks=remaining_tasks,
                 fixed_fleet_charged=True,
             )
+            pulse_bound_prune_time += time.perf_counter() - query_start
+            pulse_bound_prune_query_count += 1
+            if remaining_lb is None and fail_reason and not pulse_bound_dynamic_fail_open_reason:
+                pulse_bound_dynamic_fail_open_reason = str(fail_reason)
             if remaining_lb is not None and float(partial_lb_prefix_rc) + float(remaining_lb) >= -float(eps):
                 pulse_bound_pruned += 1
+                pulse_bound_prune_winner_count += 1
                 return
         expanded_states += 1
         for task in remaining_tasks:
@@ -708,6 +735,8 @@ def transition_root_only_pulse(
 
     def search_open(state: _TransitionPulseState) -> None:
         nonlocal expanded_states, pulse_branch_pruned, pulse_archive_pruned, pulse_bound_pruned
+        nonlocal pulse_bound_prune_query_count, pulse_bound_prune_winner_count
+        nonlocal pulse_bound_prune_time, pulse_bound_dynamic_fail_open_reason
         if not count_recursion():
             return
         if archive is not None:
@@ -761,14 +790,20 @@ def transition_root_only_pulse(
             if not (int(state.visited_task_mask) & (1 << int(task_to_bit[int(task)])))
         )
         if bool(bound_pruning_enabled) and bool(prefix_bound_pruning_supported):
-            remaining_lb = _open_sortie_remaining_reduced_cost_lower_bound(
+            query_start = time.perf_counter()
+            remaining_lb, fail_reason = _open_sortie_remaining_reduced_cost_lower_bound(
                 data,
                 duals,
                 current_node=int(state.last_node),
                 remaining_tasks=remaining_after_current,
             )
+            pulse_bound_prune_time += time.perf_counter() - query_start
+            pulse_bound_prune_query_count += 1
+            if remaining_lb is None and fail_reason and not pulse_bound_dynamic_fail_open_reason:
+                pulse_bound_dynamic_fail_open_reason = str(fail_reason)
             if remaining_lb is not None and float(state.partial_lb_prefix_rc) + float(remaining_lb) >= -float(eps):
                 pulse_bound_pruned += 1
+                pulse_bound_prune_winner_count += 1
                 return
         if len(state.current_sequence) >= int(max_tasks):
             return
@@ -1020,6 +1055,20 @@ def transition_root_only_pulse(
         pulse_time_window_pruned=int(pulse_time_window_pruned),
         pulse_resource_pruned=int(pulse_resource_pruned),
         pulse_bound_pruned=int(pulse_bound_pruned),
+        pulse_bound_prune_enabled=bool(bound_pruning_enabled),
+        pulse_bound_prune_supported=bool(bound_pruning_enabled) and bool(prefix_bound_pruning_supported),
+        pulse_bound_prune_fail_open_reason=(
+            "disabled"
+            if not bool(bound_pruning_enabled)
+            else (
+                str(prefix_bound_fail_open_reason)
+                if not bool(prefix_bound_pruning_supported)
+                else str(pulse_bound_dynamic_fail_open_reason)
+            )
+        ),
+        pulse_bound_prune_query_count=int(pulse_bound_prune_query_count),
+        pulse_bound_prune_winner_count=int(pulse_bound_prune_winner_count),
+        pulse_bound_prune_time=float(pulse_bound_prune_time),
         pulse_archive_pruned=int(pulse_archive_pruned),
         pulse_depot_ready_pruned=int(pulse_depot_ready_pruned),
         pulse_branch_pruned=int(pulse_branch_pruned),
@@ -1188,6 +1237,12 @@ def _empty_transition_result(
         pulse_time_window_pruned=0,
         pulse_resource_pruned=0,
         pulse_bound_pruned=0,
+        pulse_bound_prune_enabled=False,
+        pulse_bound_prune_supported=False,
+        pulse_bound_prune_fail_open_reason="disabled",
+        pulse_bound_prune_query_count=0,
+        pulse_bound_prune_winner_count=0,
+        pulse_bound_prune_time=0.0,
         pulse_archive_pruned=0,
         pulse_depot_ready_pruned=0,
         pulse_branch_pruned=0,
@@ -1233,17 +1288,19 @@ def _tasks_from_mask(
     )
 
 
-def _prefix_rc_bound_pruning_supported(data: FutureData, cuts: tuple[FutureCut, ...]) -> bool:
+def _prefix_rc_bound_pruning_support(
+    data: FutureData, cuts: tuple[FutureCut, ...]
+) -> tuple[bool, str]:
     if cuts:
-        return False
+        return False, "cuts_present"
     for task in data.tasks:
         if float(data.task_value(int(task), "c_srv")) < -1.0e-9:
-            return False
+            return False, "negative_service_cost"
     for options in data.arc_options.values():
         for option in options:
             if float(option.cost) < -1.0e-9:
-                return False
-    return True
+                return False, "negative_arc_cost"
+    return True, ""
 
 
 def _positive_cover_reward_bound(duals: JourneyDuals, tasks: tuple[int, ...]) -> float:
@@ -1275,9 +1332,9 @@ def _depot_remaining_reduced_cost_lower_bound(
     *,
     remaining_tasks: tuple[int, ...],
     fixed_fleet_charged: bool,
-) -> float | None:
+) -> tuple[float | None, str]:
     if not remaining_tasks:
-        return None
+        return None, ""
     outbound_costs = [
         float(cost)
         for task in remaining_tasks
@@ -1290,15 +1347,17 @@ def _depot_remaining_reduced_cost_lower_bound(
         for cost in (_min_arc_option_cost(data, int(task), 0),)
         if cost is not None
     ]
-    if not outbound_costs or not return_costs:
-        return None
+    if not outbound_costs:
+        return None, "missing_outbound_lb"
+    if not return_costs:
+        return None, "missing_return_lb"
     fixed_fleet = 0.0 if bool(fixed_fleet_charged) else float(data.fixed_vehicle_cost) - float(duals.fleet_limit)
     return (
         float(fixed_fleet)
         + min(outbound_costs)
         + min(return_costs)
         - _positive_cover_reward_bound(duals, remaining_tasks)
-    )
+    ), ""
 
 
 def _open_sortie_remaining_reduced_cost_lower_bound(
@@ -1307,12 +1366,12 @@ def _open_sortie_remaining_reduced_cost_lower_bound(
     *,
     current_node: int,
     remaining_tasks: tuple[int, ...],
-) -> float | None:
+) -> tuple[float | None, str]:
     candidate_return_nodes = (int(current_node),) + tuple(int(task) for task in remaining_tasks)
     return_lb = _min_return_cost_lower_bound(data, candidate_return_nodes)
     if return_lb is None:
-        return None
-    return float(return_lb) - _positive_cover_reward_bound(duals, remaining_tasks)
+        return None, "missing_return_lb"
+    return float(return_lb) - _positive_cover_reward_bound(duals, remaining_tasks), ""
 
 
 def _future_return_lower_bound_possible(

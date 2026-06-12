@@ -13628,6 +13628,10 @@ class BPCFutureTests(unittest.TestCase):
 
         _assert_toy_pulse_same_pricing_surface(self, pruned, unpruned)
         self.assertEqual(pruned.pulse_bound_pruned, 0)
+        self.assertTrue(pruned.pulse_bound_prune_enabled)
+        self.assertFalse(pruned.pulse_bound_prune_supported)
+        self.assertEqual(pruned.pulse_bound_prune_fail_open_reason, "cuts_present")
+        self.assertEqual(pruned.pulse_bound_prune_query_count, 0)
 
     def test_transition_pulse_bound_pruning_matches_unpruned_and_prunes(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
@@ -13650,6 +13654,12 @@ class BPCFutureTests(unittest.TestCase):
 
         self.assertTrue(unpruned.exhausted)
         self.assertTrue(pruned.exhausted)
+        self.assertFalse(unpruned.pulse_bound_prune_enabled)
+        self.assertEqual(unpruned.pulse_bound_prune_fail_open_reason, "disabled")
+        self.assertTrue(pruned.pulse_bound_prune_enabled)
+        self.assertTrue(pruned.pulse_bound_prune_supported)
+        self.assertEqual(pruned.pulse_bound_prune_fail_open_reason, "")
+        self.assertGreater(pruned.pulse_bound_prune_query_count, 0)
         self.assertEqual(pruned.best_true_reduced_cost, unpruned.best_true_reduced_cost)
         self.assertEqual(pruned.found_negative, unpruned.found_negative)
         self.assertEqual(
@@ -13658,6 +13668,45 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertEqual(not pruned.found_negative, not unpruned.found_negative)
         self.assertGreater(pruned.pulse_bound_pruned, 0)
+        self.assertEqual(pruned.pulse_bound_prune_winner_count, pruned.pulse_bound_pruned)
+        self.assertGreaterEqual(pruned.pulse_bound_prune_time, 0.0)
+
+    def test_transition_pulse_archive_bound_combinations_match(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
+        duals = JourneyDuals(cover={1: 110.0, 2: 0.0, 3: 0.0}, fleet_limit=0.0, cuts={})
+        baseline = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+        )
+        baseline_negative_signatures = {
+            candidate.journey.signature for candidate in baseline.negative_leaves
+        }
+
+        for archive_enabled, bound_enabled in itertools.product((False, True), repeat=2):
+            result = transition_root_only_pulse(
+                data,
+                duals,
+                time_bucket_size=5.0,
+                max_tasks_per_sortie=2,
+                max_sorties=2,
+                archive_dominance_enabled=archive_enabled,
+                archive_max_records_per_key=64,
+                bound_pruning_enabled=bound_enabled,
+            )
+            self.assertTrue(result.exhausted)
+            self.assertEqual(result.best_true_reduced_cost, baseline.best_true_reduced_cost)
+            self.assertEqual(result.found_negative, baseline.found_negative)
+            self.assertEqual(
+                {candidate.journey.signature for candidate in result.negative_leaves},
+                baseline_negative_signatures,
+            )
+            if bound_enabled:
+                self.assertTrue(result.pulse_bound_prune_enabled)
+                self.assertTrue(result.pulse_bound_prune_supported)
+                self.assertGreater(result.pulse_bound_prune_query_count, 0)
 
     def test_toy_exhaustive_pulse_budget_hits_return_incomplete(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
@@ -14235,6 +14284,11 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
         self.assertFalse(_journey_pricing_is_global_certificate(result))
         self.assertGreater(result.pulse_bound_pruned, 0)
+        self.assertTrue(result.pulse_bound_prune_enabled)
+        self.assertTrue(result.pulse_bound_prune_supported)
+        self.assertEqual(result.pulse_bound_prune_fail_open_reason, "")
+        self.assertGreater(result.pulse_bound_prune_query_count, 0)
+        self.assertEqual(result.pulse_bound_prune_winner_count, result.pulse_bound_pruned)
 
     def test_sharded_pulse_guarded_non_test_instance_never_toy_certifies(self):
         data = replace(load_future_data("very_small"), name="prod_like_instance", tasks=(1, 2), sortie_limit=2)
@@ -14612,6 +14666,7 @@ class BPCFutureTests(unittest.TestCase):
         allow_dummy_env: bool = True,
         toy_certificate_enabled: bool = False,
         archive_enabled: bool = False,
+        bound_enabled: bool = False,
         support_harvest_enabled: bool = False,
         negative_harvest_limit: int = 0,
     ) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
@@ -14643,6 +14698,7 @@ class BPCFutureTests(unittest.TestCase):
                 ),
                 "journey_pulse_toy_certificate_enabled": bool(toy_certificate_enabled),
                 "journey_pulse_archive_enabled": bool(archive_enabled),
+                "journey_pulse_bound_pruning_enabled": bool(bound_enabled),
                 "journey_pulse_support_aware_harvesting_enabled": bool(support_harvest_enabled),
                 "journey_pulse_negative_harvest_limit": int(negative_harvest_limit),
                 "journey_final_judge_dummy_shard_statuses": str(dummy_statuses),
@@ -14777,6 +14833,31 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(final_record["final_judge_engine"], "sharded_pulse")
         self.assertIn("pulse_archive_pruned", final_record)
         self.assertIsInstance(final_record["pulse_archive_pruned"], int)
+
+    def test_sharded_pulse_driver_smoke_bound_diagnostics_surface(self):
+        result, _records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
+            "CERTIFIED_NO_NEGATIVE",
+            enabled=True,
+            dummy_engine_enabled=False,
+            bound_enabled=True,
+        )
+        self.assertIsNone(result.dual_bound)
+        self.assertTrue(sharded_pricing)
+        final_record = sharded_pricing[-1]
+        self.assertEqual(final_record["final_judge_engine"], "sharded_pulse")
+        for key in (
+            "pulse_bound_pruned",
+            "pulse_bound_prune_enabled",
+            "pulse_bound_prune_supported",
+            "pulse_bound_prune_fail_open_reason",
+            "pulse_bound_prune_query_count",
+            "pulse_bound_prune_winner_count",
+            "pulse_bound_prune_time",
+        ):
+            self.assertIn(key, final_record)
+        self.assertTrue(final_record["pulse_bound_prune_enabled"])
+        self.assertIsInstance(final_record["pulse_bound_prune_query_count"], int)
+        self.assertIsInstance(final_record["pulse_bound_prune_winner_count"], int)
 
     def test_sharded_pulse_driver_smoke_harvest_counters_surface(self):
         result, _records, sharded_pricing = self._run_sharded_dummy_driver_smoke(

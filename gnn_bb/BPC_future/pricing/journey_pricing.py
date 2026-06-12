@@ -527,6 +527,12 @@ class JourneyPricingResult:
     transition_energy_pruned: int = 0
     transition_return_pruned: int = 0
     pulse_bound_pruned: int = 0
+    pulse_bound_prune_enabled: bool = False
+    pulse_bound_prune_supported: bool = False
+    pulse_bound_prune_fail_open_reason: str = ""
+    pulse_bound_prune_query_count: int = 0
+    pulse_bound_prune_winner_count: int = 0
+    pulse_bound_prune_time: float = 0.0
     pulse_archive_pruned: int = 0
     pulse_depot_ready_pruned: int = 0
     pulse_negative_found: bool = False
@@ -3334,6 +3340,12 @@ def _price_journeys_by_sharded_pulse_guarded(
     transition_energy_pruned = 0
     transition_return_pruned = 0
     pulse_bound_pruned = 0
+    pulse_bound_prune_enabled = bool(config.pulse_bound_pruning_enabled)
+    pulse_bound_prune_supported = bool(config.pulse_bound_pruning_enabled)
+    pulse_bound_prune_fail_open_reason = "disabled" if not bool(config.pulse_bound_pruning_enabled) else ""
+    pulse_bound_prune_query_count = 0
+    pulse_bound_prune_winner_count = 0
+    pulse_bound_prune_time = 0.0
     pulse_archive_pruned = 0
     pulse_depot_ready_pruned = 0
     pulse_negative_pool_size = 0
@@ -3385,6 +3397,19 @@ def _price_journeys_by_sharded_pulse_guarded(
         transition_energy_pruned += int(shard.transition_energy_pruned)
         transition_return_pruned += int(shard.transition_return_pruned)
         pulse_bound_pruned += int(shard.pulse_bound_pruned)
+        pulse_bound_prune_query_count += int(shard.pulse_bound_prune_query_count)
+        pulse_bound_prune_winner_count += int(shard.pulse_bound_prune_winner_count)
+        pulse_bound_prune_time += float(shard.pulse_bound_prune_time)
+        if bool(config.pulse_bound_pruning_enabled) and not bool(shard.pulse_bound_prune_supported):
+            pulse_bound_prune_supported = False
+            if not pulse_bound_prune_fail_open_reason:
+                pulse_bound_prune_fail_open_reason = str(shard.pulse_bound_prune_fail_open_reason)
+        elif (
+            bool(config.pulse_bound_pruning_enabled)
+            and str(shard.pulse_bound_prune_fail_open_reason)
+            and not pulse_bound_prune_fail_open_reason
+        ):
+            pulse_bound_prune_fail_open_reason = str(shard.pulse_bound_prune_fail_open_reason)
         pulse_archive_pruned += int(shard.pulse_archive_pruned)
         pulse_depot_ready_pruned += int(shard.pulse_depot_ready_pruned)
         pulse_negative_pool_size += int(shard.pulse_negative_pool_size)
@@ -3446,6 +3471,12 @@ def _price_journeys_by_sharded_pulse_guarded(
         "transition_energy_pruned": int(transition_energy_pruned),
         "transition_return_pruned": int(transition_return_pruned),
         "pulse_bound_pruned": int(pulse_bound_pruned),
+        "pulse_bound_prune_enabled": bool(pulse_bound_prune_enabled),
+        "pulse_bound_prune_supported": bool(pulse_bound_prune_supported),
+        "pulse_bound_prune_fail_open_reason": str(pulse_bound_prune_fail_open_reason),
+        "pulse_bound_prune_query_count": int(pulse_bound_prune_query_count),
+        "pulse_bound_prune_winner_count": int(pulse_bound_prune_winner_count),
+        "pulse_bound_prune_time": float(pulse_bound_prune_time),
         "pulse_archive_pruned": int(pulse_archive_pruned),
         "pulse_depot_ready_pruned": int(pulse_depot_ready_pruned),
         "pulse_negative_pool_size": int(pulse_negative_pool_size),
