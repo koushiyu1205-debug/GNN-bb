@@ -48,6 +48,21 @@ PRICING_STATE_INCOMPLETE_LIMIT = "INCOMPLETE_LIMIT"
 PRICING_STATE_DUPLICATE_ONLY = "DUPLICATE_ONLY"
 
 
+def _prioritize_target_first_task_shard(
+    scheduled_tasks: tuple[int, ...],
+    *,
+    enabled: bool,
+    target_sequence: tuple[int, ...],
+) -> tuple[int, ...]:
+    ordered = tuple(int(task) for task in scheduled_tasks)
+    if not bool(enabled) or not target_sequence:
+        return ordered
+    target_first = int(target_sequence[0])
+    if target_first not in ordered:
+        return ordered
+    return (target_first,) + tuple(task for task in ordered if int(task) != target_first)
+
+
 @dataclass(frozen=True)
 class JourneyPricingConfig:
     time_bucket_size: float = 10.0
@@ -80,6 +95,18 @@ class JourneyPricingConfig:
     pulse_shard_roi_prune_rate_floor: float = 0.0
     pulse_shard_roi_min_time: float = 0.0
     pulse_shard_roi_min_expanded: int = 0
+    pulse_stop_after_first_negative: bool = False
+    pulse_task_ordering: str = "natural"
+    pulse_target_first_task_priority_enabled: bool = False
+    pulse_target_first_task_priority_sequence: tuple[int, ...] = tuple()
+    pulse_target_transition_priority_enabled: bool = False
+    pulse_target_transition_priority_sequence: tuple[int, ...] = tuple()
+    pulse_target_arc_option_priority_enabled: bool = False
+    pulse_target_arc_option_priority_sequence: tuple[str, ...] = tuple()
+    pulse_target_sequence_diagnostics_enabled: bool = False
+    pulse_target_sequence_diagnostics_sequence: tuple[int, ...] = tuple()
+    pulse_target_path_diagnostics_enabled: bool = False
+    pulse_target_path_diagnostics_max_samples: int = 8
     pulse_resume_enabled: bool = False
     pulse_cache_max_states: int = 0
     pulse_parallel_enabled: bool = False
@@ -428,6 +455,10 @@ class JourneyPricingResult:
     dp_extension_attempts: int = 0
     dp_label_cap_pruned: int = 0
     dp_same_completion_pruned_labels: int = 0
+    dp_nonempty_mask_count: int = 0
+    dp_max_labels_per_mask_observed: int = 0
+    dp_labels_by_sortie_count: tuple[tuple[int, int], ...] = tuple()
+    dp_top_mask_label_counts: tuple[tuple[int, int, tuple[int, ...]], ...] = tuple()
     completion_bound_enabled: bool = False
     completion_bound_cache_hit: bool = False
     completion_bound_cache_stored: bool = False
@@ -552,17 +583,68 @@ class JourneyPricingResult:
     pulse_harvested_support_changing_count: int = 0
     pulse_harvested_replacement_count: int = 0
     pulse_best_true_rc: float | None = None
+    pulse_negative_pool_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    pulse_negative_pool_sequence_samples: tuple[tuple[tuple[int, ...], ...], ...] = tuple()
+    pulse_negative_pool_signature_samples: tuple[str, ...] = tuple()
+    pulse_harvested_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    pulse_harvested_sequence_samples: tuple[tuple[tuple[int, ...], ...], ...] = tuple()
+    pulse_harvested_signature_samples: tuple[str, ...] = tuple()
+    pulse_returned_candidate_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    pulse_returned_candidate_sequence_samples: tuple[tuple[tuple[int, ...], ...], ...] = tuple()
+    pulse_returned_candidate_signature_samples: tuple[str, ...] = tuple()
     pulse_shard_scheduling_enabled: bool = False
     pulse_shard_roi_gate_enabled: bool = False
     pulse_low_roi_shards: int = 0
+    pulse_stop_after_first_negative: bool = False
+    pulse_task_ordering: str = "natural"
+    pulse_target_first_task_priority_enabled: bool = False
+    pulse_target_first_task_priority_sequence: tuple[int, ...] = tuple()
+    pulse_target_transition_priority_enabled: bool = False
+    pulse_target_transition_priority_sequence: tuple[int, ...] = tuple()
+    pulse_target_arc_option_priority_enabled: bool = False
+    pulse_target_arc_option_priority_sequence: tuple[str, ...] = tuple()
+    pulse_target_sequence_diagnostics_enabled: bool = False
+    pulse_target_sequence: tuple[int, ...] = tuple()
+    pulse_target_sequence_reached_prefix_len: int = 0
+    pulse_target_sequence_completed: bool = False
+    pulse_target_sequence_materialized: bool = False
+    pulse_target_sequence_negative: bool = False
+    pulse_target_sequence_blocked_reason: str = ""
+    pulse_target_sequence_blocked_prefix: tuple[int, ...] = tuple()
+    pulse_target_sequence_blocked_next_task: int | None = None
+    pulse_target_sequence_transition_attempts: int = 0
+    pulse_target_sequence_transition_accepted: int = 0
+    pulse_target_sequence_prune_reason_counts: tuple[tuple[str, int], ...] = tuple()
+    pulse_target_path_diagnostics_enabled: bool = False
+    pulse_target_path_prefix_samples: tuple[str, ...] = tuple()
+    pulse_target_path_blocked_samples: tuple[str, ...] = tuple()
     pricing_state: str = ""
     diagnostic_profile_task_masks: frozenset[int] = frozenset()
     diagnostic_profile_trip_masks: frozenset[int] = frozenset()
     diagnostic_reachable_task_masks: frozenset[int] = frozenset()
     diagnostic_negative_task_masks: frozenset[int] = frozenset()
     diagnostic_selected_task_masks: frozenset[int] = frozenset()
+    diagnostic_profile_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_reachable_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_negative_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_selected_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_selected_materialized_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_selected_returned_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_selected_unmaterialized_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_selected_weak_filtered_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_selected_filtered_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
     diagnostic_best_objective_by_mask: dict[int, float] = field(default_factory=dict)
     diagnostic_best_profile_contribution_by_mask: dict[int, float] = field(default_factory=dict)
+    profile_selected_candidate_input_count: int = 0
+    profile_selected_candidate_scanned_count: int = 0
+    profile_selected_candidate_materialized_count: int = 0
+    profile_selected_candidate_returned_count: int = 0
+    profile_selected_candidate_branch_filtered_count: int = 0
+    profile_selected_candidate_duplicate_signature_filtered_count: int = 0
+    profile_selected_candidate_duplicate_task_set_filtered_count: int = 0
+    profile_selected_candidate_forbidden_signature_filtered_count: int = 0
+    profile_selected_candidate_dominated_task_set_filtered_count: int = 0
+    profile_selected_candidate_return_limit_truncated_count: int = 0
     profile_selected_unmaterialized_candidate_count: int = 0
     profile_weak_filtered_materialized_count: int = 0
     profile_weak_filtered_best_rough_rc: float | None = None
@@ -634,6 +716,62 @@ def _infer_journey_pricing_state(result: JourneyPricingResult) -> str:
 
 def _journey_column_task_set(journey: JourneyColumn) -> frozenset[int]:
     return frozenset(int(task) for task in getattr(journey, "task_set", tuple()))
+
+
+_PULSE_CANDIDATE_SAMPLE_LIMIT = 8
+
+
+def _pulse_journey_sequence_sample(journey: JourneyColumn) -> tuple[tuple[int, ...], ...]:
+    sorties: list[tuple[int, ...]] = []
+    for trip in getattr(journey, "trips", tuple()) or tuple():
+        tasks = tuple(int(task) for task in getattr(trip, "tasks", tuple()) or tuple())
+        if tasks:
+            sorties.append(tasks)
+    if sorties:
+        return tuple(sorties)
+    signature = getattr(journey, "signature", tuple()) or tuple()
+    if not isinstance(signature, (tuple, list)):
+        return tuple()
+    for trip_signature in signature:
+        if not isinstance(trip_signature, (tuple, list)) or not trip_signature:
+            continue
+        tasks_raw = trip_signature[0]
+        if not isinstance(tasks_raw, (tuple, list)):
+            continue
+        tasks = tuple(int(task) for task in tasks_raw)
+        if tasks:
+            sorties.append(tasks)
+    return tuple(sorties)
+
+
+def _pulse_journey_samples(
+    journeys: Iterable[JourneyColumn],
+    *,
+    limit: int = _PULSE_CANDIDATE_SAMPLE_LIMIT,
+) -> tuple[
+    tuple[tuple[int, ...], ...],
+    tuple[tuple[tuple[int, ...], ...], ...],
+    tuple[str, ...],
+]:
+    task_set_samples: list[tuple[int, ...]] = []
+    sequence_samples: list[tuple[tuple[int, ...], ...]] = []
+    signature_samples: list[str] = []
+    seen_task_sets: set[tuple[int, ...]] = set()
+    seen_signatures: set[str] = set()
+    sample_limit = max(0, int(limit))
+    for journey in journeys:
+        if len(task_set_samples) >= sample_limit and len(signature_samples) >= sample_limit:
+            break
+        task_set = tuple(sorted(int(task) for task in getattr(journey, "task_set", tuple()) or tuple()))
+        if task_set and task_set not in seen_task_sets and len(task_set_samples) < sample_limit:
+            seen_task_sets.add(task_set)
+            task_set_samples.append(task_set)
+        signature = str(getattr(journey, "signature", ""))
+        if signature and signature not in seen_signatures and len(signature_samples) < sample_limit:
+            seen_signatures.add(signature)
+            signature_samples.append(signature)
+            sequence_samples.append(_pulse_journey_sequence_sample(journey))
+    return tuple(task_set_samples), tuple(sequence_samples), tuple(signature_samples)
 
 
 def _task_set_mask_from_tasks(task_to_bit: dict[int, int], tasks: Any) -> int:
@@ -3368,8 +3506,48 @@ def _price_journeys_by_sharded_pulse_guarded(
     pulse_harvested_new_task_set_count = 0
     pulse_harvested_support_changing_count = 0
     pulse_harvested_replacement_count = 0
+    pulse_negative_pool_sample_journeys: list[JourneyColumn] = []
+    pulse_harvested_sample_journeys: list[JourneyColumn] = []
     pulse_low_roi_shards = 0
     best_true_rc: float | None = None
+    pulse_target_sequence_diagnostics_enabled = bool(
+        config.pulse_target_sequence_diagnostics_enabled
+    ) and bool(config.pulse_target_sequence_diagnostics_sequence)
+    pulse_target_sequence = tuple(int(task) for task in config.pulse_target_sequence_diagnostics_sequence)
+    pulse_target_first_task_priority_sequence = tuple(
+        int(task) for task in config.pulse_target_first_task_priority_sequence
+    )
+    pulse_target_first_task_priority_enabled = bool(
+        config.pulse_target_first_task_priority_enabled
+    ) and bool(pulse_target_first_task_priority_sequence)
+    pulse_target_transition_priority_sequence = tuple(
+        int(task) for task in config.pulse_target_transition_priority_sequence
+    )
+    pulse_target_transition_priority_enabled = bool(
+        config.pulse_target_transition_priority_enabled
+    ) and bool(pulse_target_transition_priority_sequence)
+    pulse_target_arc_option_priority_sequence = tuple(
+        str(option_id) for option_id in config.pulse_target_arc_option_priority_sequence
+    )
+    pulse_target_arc_option_priority_enabled = bool(
+        config.pulse_target_arc_option_priority_enabled
+    ) and bool(pulse_target_arc_option_priority_sequence)
+    pulse_target_sequence_reached_prefix_len = 0
+    pulse_target_sequence_completed = False
+    pulse_target_sequence_materialized = False
+    pulse_target_sequence_negative = False
+    pulse_target_sequence_blocked_reason = ""
+    pulse_target_sequence_blocked_prefix: tuple[int, ...] = tuple()
+    pulse_target_sequence_blocked_next_task: int | None = None
+    pulse_target_sequence_transition_attempts = 0
+    pulse_target_sequence_transition_accepted = 0
+    pulse_target_sequence_prune_reason_counts: dict[str, int] = {}
+    pulse_target_path_diagnostics_enabled = bool(
+        config.pulse_target_path_diagnostics_enabled
+    ) and bool(pulse_target_sequence_diagnostics_enabled)
+    pulse_target_path_sample_cap = max(0, int(config.pulse_target_path_diagnostics_max_samples))
+    pulse_target_path_prefix_samples: list[str] = []
+    pulse_target_path_blocked_samples: list[str] = []
 
     deadline = config.absolute_deadline
     if deadline is None and float(config.time_limit) > 0.0:
@@ -3401,6 +3579,16 @@ def _price_journeys_by_sharded_pulse_guarded(
             or int(config.pulse_negative_harvest_limit) > 0,
             support_aware_harvesting_enabled=bool(config.pulse_support_aware_harvesting_enabled),
             negative_harvest_limit=int(config.pulse_negative_harvest_limit),
+            stop_after_first_negative=bool(config.pulse_stop_after_first_negative),
+            task_ordering=str(config.pulse_task_ordering),
+            target_transition_priority_enabled=bool(pulse_target_transition_priority_enabled),
+            target_transition_priority_sequence=pulse_target_transition_priority_sequence,
+            target_arc_option_priority_enabled=bool(pulse_target_arc_option_priority_enabled),
+            target_arc_option_priority_sequence=pulse_target_arc_option_priority_sequence,
+            target_sequence_diagnostics_enabled=bool(pulse_target_sequence_diagnostics_enabled),
+            target_sequence_diagnostics_sequence=pulse_target_sequence,
+            target_path_diagnostics_enabled=bool(pulse_target_path_diagnostics_enabled),
+            target_path_diagnostics_max_samples=int(pulse_target_path_sample_cap),
             active_masks=tuple(active_support_task_sets or tuple()),
             pool_masks=tuple(pool_task_sets or tuple()),
             forbidden_signatures=tuple(forbidden),
@@ -3445,8 +3633,14 @@ def _price_journeys_by_sharded_pulse_guarded(
 
     def _scheduled_first_tasks() -> tuple[int, ...]:
         if not bool(config.pulse_shard_scheduling_enabled):
-            return tasks
-        return tuple(sorted(tasks, key=_first_task_priority))
+            scheduled = tasks
+        else:
+            scheduled = tuple(sorted(tasks, key=_first_task_priority))
+        return _prioritize_target_first_task_shard(
+            scheduled,
+            enabled=bool(pulse_target_first_task_priority_enabled),
+            target_sequence=pulse_target_first_task_priority_sequence,
+        )
 
     def _shard_prune_rate(shard: Any) -> float:
         pruned = (
@@ -3533,7 +3727,18 @@ def _price_journeys_by_sharded_pulse_guarded(
         nonlocal pulse_harvested_new_task_set_count
         nonlocal pulse_harvested_support_changing_count
         nonlocal pulse_harvested_replacement_count
+        nonlocal pulse_negative_pool_sample_journeys
+        nonlocal pulse_harvested_sample_journeys
         nonlocal best_true_rc
+        nonlocal pulse_target_sequence_reached_prefix_len
+        nonlocal pulse_target_sequence_completed
+        nonlocal pulse_target_sequence_materialized
+        nonlocal pulse_target_sequence_negative
+        nonlocal pulse_target_sequence_blocked_reason
+        nonlocal pulse_target_sequence_blocked_prefix
+        nonlocal pulse_target_sequence_blocked_next_task
+        nonlocal pulse_target_sequence_transition_attempts
+        nonlocal pulse_target_sequence_transition_accepted
 
         generated_traces += int(shard.generated_sortie_traces)
         materialized_sorties += int(shard.materialized_sorties)
@@ -3569,12 +3774,74 @@ def _price_journeys_by_sharded_pulse_guarded(
         pulse_harvested_new_task_set_count += int(shard.pulse_harvested_new_task_set_count)
         pulse_harvested_support_changing_count += int(shard.pulse_harvested_support_changing_count)
         pulse_harvested_replacement_count += int(shard.pulse_harvested_replacement_count)
+        if len(pulse_negative_pool_sample_journeys) < _PULSE_CANDIDATE_SAMPLE_LIMIT:
+            pulse_negative_pool_sample_journeys.extend(
+                candidate.journey
+                for candidate in tuple(getattr(shard, "negative_leaves", tuple()))
+                if candidate is not None
+            )
+            pulse_negative_pool_sample_journeys = pulse_negative_pool_sample_journeys[
+                :_PULSE_CANDIDATE_SAMPLE_LIMIT
+            ]
+        if len(pulse_harvested_sample_journeys) < _PULSE_CANDIDATE_SAMPLE_LIMIT:
+            pulse_harvested_sample_journeys.extend(
+                journey
+                for journey in tuple(getattr(shard, "harvested_journeys", tuple()))
+                if journey is not None
+            )
+            pulse_harvested_sample_journeys = pulse_harvested_sample_journeys[
+                :_PULSE_CANDIDATE_SAMPLE_LIMIT
+            ]
         if shard.best_true_reduced_cost is not None:
             best_true_rc = (
                 float(shard.best_true_reduced_cost)
                 if best_true_rc is None
                 else min(float(best_true_rc), float(shard.best_true_reduced_cost))
             )
+        if bool(getattr(shard, "pulse_target_sequence_diagnostics_enabled", False)):
+            pulse_target_sequence_reached_prefix_len = max(
+                int(pulse_target_sequence_reached_prefix_len),
+                int(getattr(shard, "pulse_target_sequence_reached_prefix_len", 0)),
+            )
+            pulse_target_sequence_completed = bool(pulse_target_sequence_completed) or bool(
+                getattr(shard, "pulse_target_sequence_completed", False)
+            )
+            pulse_target_sequence_materialized = bool(pulse_target_sequence_materialized) or bool(
+                getattr(shard, "pulse_target_sequence_materialized", False)
+            )
+            pulse_target_sequence_negative = bool(pulse_target_sequence_negative) or bool(
+                getattr(shard, "pulse_target_sequence_negative", False)
+            )
+            pulse_target_sequence_transition_attempts += int(
+                getattr(shard, "pulse_target_sequence_transition_attempts", 0)
+            )
+            pulse_target_sequence_transition_accepted += int(
+                getattr(shard, "pulse_target_sequence_transition_accepted", 0)
+            )
+            for reason, count in tuple(getattr(shard, "pulse_target_sequence_prune_reason_counts", tuple())):
+                pulse_target_sequence_prune_reason_counts[str(reason)] = (
+                    pulse_target_sequence_prune_reason_counts.get(str(reason), 0) + int(count)
+                )
+            for sample in tuple(getattr(shard, "pulse_target_path_prefix_samples", tuple())):
+                if len(pulse_target_path_prefix_samples) < int(pulse_target_path_sample_cap):
+                    pulse_target_path_prefix_samples.append(str(sample))
+            for sample in tuple(getattr(shard, "pulse_target_path_blocked_samples", tuple())):
+                if len(pulse_target_path_blocked_samples) < int(pulse_target_path_sample_cap):
+                    pulse_target_path_blocked_samples.append(str(sample))
+            shard_reason = str(getattr(shard, "pulse_target_sequence_blocked_reason", ""))
+            if (
+                shard_reason
+                and shard_reason != "not_target_shard"
+                and not pulse_target_sequence_blocked_reason
+                and not bool(pulse_target_sequence_materialized)
+            ):
+                pulse_target_sequence_blocked_reason = shard_reason
+                pulse_target_sequence_blocked_prefix = tuple(
+                    int(task)
+                    for task in getattr(shard, "pulse_target_sequence_blocked_prefix", tuple())
+                )
+                next_task = getattr(shard, "pulse_target_sequence_blocked_next_task", None)
+                pulse_target_sequence_blocked_next_task = None if next_task is None else int(next_task)
 
     def _record_required_shard(shard: Any, elapsed: float) -> None:
         nonlocal duplicate_negative_seen
@@ -3630,9 +3897,25 @@ def _price_journeys_by_sharded_pulse_guarded(
             for second_action in child_specs:
                 child, child_elapsed = _run_transition_shard(int(task), second_action)
                 _record_required_shard(child, child_elapsed)
+                if bool(config.pulse_stop_after_first_negative) and all_candidates:
+                    break
+            if bool(config.pulse_stop_after_first_negative) and all_candidates:
+                break
             continue
         _record_required_shard(parent, parent_elapsed)
+        if bool(config.pulse_stop_after_first_negative) and all_candidates:
+            break
 
+    (
+        pulse_negative_pool_task_set_samples,
+        pulse_negative_pool_sequence_samples,
+        pulse_negative_pool_signature_samples,
+    ) = _pulse_journey_samples(pulse_negative_pool_sample_journeys)
+    (
+        pulse_harvested_task_set_samples,
+        pulse_harvested_sequence_samples,
+        pulse_harvested_signature_samples,
+    ) = _pulse_journey_samples(pulse_harvested_sample_journeys)
     common = {
         "final_judge_engine": "sharded_pulse",
         "final_judge_sharded_enabled": True,
@@ -3666,9 +3949,58 @@ def _price_journeys_by_sharded_pulse_guarded(
         "pulse_harvested_support_changing_count": int(pulse_harvested_support_changing_count),
         "pulse_harvested_replacement_count": int(pulse_harvested_replacement_count),
         "pulse_best_true_rc": best_true_rc,
+        "pulse_negative_pool_task_set_samples": pulse_negative_pool_task_set_samples,
+        "pulse_negative_pool_sequence_samples": pulse_negative_pool_sequence_samples,
+        "pulse_negative_pool_signature_samples": pulse_negative_pool_signature_samples,
+        "pulse_harvested_task_set_samples": pulse_harvested_task_set_samples,
+        "pulse_harvested_sequence_samples": pulse_harvested_sequence_samples,
+        "pulse_harvested_signature_samples": pulse_harvested_signature_samples,
         "pulse_shard_scheduling_enabled": bool(config.pulse_shard_scheduling_enabled),
         "pulse_shard_roi_gate_enabled": bool(config.pulse_shard_roi_gate_enabled),
         "pulse_low_roi_shards": int(pulse_low_roi_shards),
+        "pulse_stop_after_first_negative": bool(config.pulse_stop_after_first_negative),
+        "pulse_task_ordering": str(config.pulse_task_ordering),
+        "pulse_target_first_task_priority_enabled": bool(
+            pulse_target_first_task_priority_enabled
+        ),
+        "pulse_target_first_task_priority_sequence": tuple(
+            pulse_target_first_task_priority_sequence
+        ),
+        "pulse_target_transition_priority_enabled": bool(
+            pulse_target_transition_priority_enabled
+        ),
+        "pulse_target_transition_priority_sequence": tuple(
+            pulse_target_transition_priority_sequence
+        ),
+        "pulse_target_arc_option_priority_enabled": bool(
+            pulse_target_arc_option_priority_enabled
+        ),
+        "pulse_target_arc_option_priority_sequence": tuple(
+            pulse_target_arc_option_priority_sequence
+        ),
+        "pulse_target_sequence_diagnostics_enabled": bool(pulse_target_sequence_diagnostics_enabled),
+        "pulse_target_sequence": tuple(pulse_target_sequence),
+        "pulse_target_sequence_reached_prefix_len": int(pulse_target_sequence_reached_prefix_len),
+        "pulse_target_sequence_completed": bool(pulse_target_sequence_completed),
+        "pulse_target_sequence_materialized": bool(pulse_target_sequence_materialized),
+        "pulse_target_sequence_negative": bool(pulse_target_sequence_negative),
+        "pulse_target_sequence_blocked_reason": ""
+        if bool(pulse_target_sequence_materialized)
+        else str(pulse_target_sequence_blocked_reason),
+        "pulse_target_sequence_blocked_prefix": tuple()
+        if bool(pulse_target_sequence_materialized)
+        else tuple(pulse_target_sequence_blocked_prefix),
+        "pulse_target_sequence_blocked_next_task": None
+        if bool(pulse_target_sequence_materialized)
+        else pulse_target_sequence_blocked_next_task,
+        "pulse_target_sequence_transition_attempts": int(pulse_target_sequence_transition_attempts),
+        "pulse_target_sequence_transition_accepted": int(pulse_target_sequence_transition_accepted),
+        "pulse_target_sequence_prune_reason_counts": tuple(
+            sorted(pulse_target_sequence_prune_reason_counts.items())
+        ),
+        "pulse_target_path_diagnostics_enabled": bool(pulse_target_path_diagnostics_enabled),
+        "pulse_target_path_prefix_samples": tuple(pulse_target_path_prefix_samples),
+        "pulse_target_path_blocked_samples": tuple(pulse_target_path_blocked_samples),
     }
     if all_candidates:
         selected = [
@@ -3678,6 +4010,11 @@ def _price_journeys_by_sharded_pulse_guarded(
                 key=lambda item: (round(float(item[0]), 9), item[1].signature),
             )[: max(1, int(config.max_returned_journeys))]
         ]
+        (
+            pulse_returned_candidate_task_set_samples,
+            pulse_returned_candidate_sequence_samples,
+            pulse_returned_candidate_signature_samples,
+        ) = _pulse_journey_samples(selected)
         return JourneyPricingResult(
             selected,
             False,
@@ -3693,6 +4030,9 @@ def _price_journeys_by_sharded_pulse_guarded(
             final_judge_incomplete_reason="",
             pricing_state=PRICING_STATE_FOUND_NEGATIVE,
             pulse_negative_found=True,
+            pulse_returned_candidate_task_set_samples=pulse_returned_candidate_task_set_samples,
+            pulse_returned_candidate_sequence_samples=pulse_returned_candidate_sequence_samples,
+            pulse_returned_candidate_signature_samples=pulse_returned_candidate_signature_samples,
             **common,
         )
 
@@ -4524,7 +4864,8 @@ def _price_journeys_by_profiles(
                 profile_dp_time,
                 **_resource_stats_kwargs(catalog_stats),
                 **_duplicate_stats_kwargs(dp_stats),
-                **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+                **_dp_profile_stats_kwargs(dp_stats, include_dp_core=False),
+                **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
             )
         if weak_filtered > 0:
             return JourneyPricingResult(
@@ -4550,7 +4891,8 @@ def _price_journeys_by_profiles(
                 profile_dp_time,
                 **_resource_stats_kwargs(catalog_stats),
                 **_duplicate_stats_kwargs(dp_stats),
-                **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+                **_dp_profile_stats_kwargs(dp_stats, include_dp_core=False),
+                **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
             )
         return JourneyPricingResult(
             [],
@@ -4575,7 +4917,8 @@ def _price_journeys_by_profiles(
             profile_dp_time,
             **_resource_stats_kwargs(catalog_stats),
             **_duplicate_stats_kwargs(dp_stats),
-            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+            **_dp_profile_stats_kwargs(dp_stats, include_dp_core=False),
+            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
         )
     if (objective is None or objective >= -float(config.eps)) and not selected_candidates:
         return JourneyPricingResult(
@@ -4599,7 +4942,8 @@ def _price_journeys_by_profiles(
             profile_dp_time=profile_dp_time,
             **_resource_stats_kwargs(catalog_stats),
             **_duplicate_stats_kwargs(dp_stats),
-            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+            **_dp_profile_stats_kwargs(dp_stats, include_dp_core=False),
+            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
         )
     journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
         data,
@@ -4652,7 +4996,8 @@ def _price_journeys_by_profiles(
             profile_dp_time,
             **_resource_stats_kwargs(catalog_stats),
             **_duplicate_stats_kwargs(dp_stats),
-            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+            **_dp_profile_stats_kwargs(dp_stats, include_dp_core=False),
+            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
         )
     return JourneyPricingResult(
         journeys,
@@ -4677,7 +5022,8 @@ def _price_journeys_by_profiles(
         profile_dp_time,
         **_resource_stats_kwargs(catalog_stats),
         **_duplicate_stats_kwargs(dp_stats),
-        **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+        **_dp_profile_stats_kwargs(dp_stats, include_dp_core=False),
+        **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
     )
 
 
@@ -8516,7 +8862,7 @@ def _price_journeys_by_streaming_profiles(
                 profile_dp_time=callback_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
-                **_profile_mask_diagnostic_kwargs(candidate_profiles, dp_stats, config),
+                **_profile_mask_diagnostic_kwargs(candidate_profiles, dp_stats, config, tuple(data.tasks)),
             )
             remember_partial(result)
             if len(journeys) < min_returned:
@@ -8555,7 +8901,7 @@ def _price_journeys_by_streaming_profiles(
                 profile_dp_time=callback_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
-                **_profile_mask_diagnostic_kwargs(candidate_profiles, dp_stats, config),
+                **_profile_mask_diagnostic_kwargs(candidate_profiles, dp_stats, config, tuple(data.tasks)),
             )
         if (
             status != "OPTIMAL"
@@ -8586,7 +8932,7 @@ def _price_journeys_by_streaming_profiles(
                 profile_dp_time=callback_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
-                **_profile_mask_diagnostic_kwargs(candidate_profiles, dp_stats, config),
+                **_profile_mask_diagnostic_kwargs(candidate_profiles, dp_stats, config, tuple(data.tasks)),
             )
         return None
 
@@ -8747,7 +9093,7 @@ def _price_journeys_by_streaming_profiles(
                 profile_dp_time=final_dp_time,
                 **_dp_profile_stats_kwargs(dp_stats),
                 **_resource_stats_kwargs(catalog_stats),
-                **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+                **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
             )
         reason_text = _profile_dp_incomplete_reason("profile_dp_incomplete", dp_stats)
         if weak_filtered > 0:
@@ -8786,7 +9132,7 @@ def _price_journeys_by_streaming_profiles(
             profile_dp_time=final_dp_time,
             **_dp_profile_stats_kwargs(dp_stats),
             **_resource_stats_kwargs(catalog_stats),
-            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
         )
     if (objective is None or objective >= -float(config.eps)) and not selected_candidates:
         return JourneyPricingResult(
@@ -8813,7 +9159,7 @@ def _price_journeys_by_streaming_profiles(
             profile_dp_time=final_dp_time,
             **_dp_profile_stats_kwargs(dp_stats),
             **_resource_stats_kwargs(catalog_stats),
-            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
         )
     journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
         data,
@@ -8867,7 +9213,7 @@ def _price_journeys_by_streaming_profiles(
             profile_dp_time=final_dp_time,
             **_dp_profile_stats_kwargs(dp_stats),
             **_resource_stats_kwargs(catalog_stats),
-            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+            **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
         )
     return JourneyPricingResult(
         journeys,
@@ -8895,7 +9241,7 @@ def _price_journeys_by_streaming_profiles(
         profile_dp_time=final_dp_time,
         **_dp_profile_stats_kwargs(dp_stats),
         **_resource_stats_kwargs(catalog_stats),
-        **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config),
+        **_profile_mask_diagnostic_kwargs(profiles, dp_stats, config, tuple(data.tasks)),
     )
 
 
@@ -8912,6 +9258,7 @@ def _duplicate_stats_kwargs(dp_stats: dict[str, int]) -> dict[str, Any]:
         "dp_extension_attempts": int(dp_stats.get("extension_attempts", 0)),
         "dp_label_cap_pruned": int(dp_stats.get("label_cap_pruned", 0)),
         "dp_same_completion_pruned_labels": int(dp_stats.get("same_completion_pruned_labels", 0)),
+        **_dp_state_explosion_diagnostic_kwargs(dp_stats),
     }
 
 
@@ -8937,15 +9284,12 @@ def _profile_candidate_return_limit(config: JourneyPricingConfig, max_returned: 
     return int(scan_limit)
 
 
-def _dp_profile_stats_kwargs(dp_stats: dict[str, int]) -> dict[str, Any]:
-    return {
-        "dp_processed_labels": int(dp_stats.get("processed_labels", 0)),
-        "dp_state_count": int(dp_stats.get("state_count", 0)),
-        "dp_profile_record_scans": int(dp_stats.get("profile_record_scans", 0)),
-        "dp_profile_time_filtered": int(dp_stats.get("profile_time_filtered", 0)),
-        "dp_extension_attempts": int(dp_stats.get("extension_attempts", 0)),
-        "dp_label_cap_pruned": int(dp_stats.get("label_cap_pruned", 0)),
-        "dp_same_completion_pruned_labels": int(dp_stats.get("same_completion_pruned_labels", 0)),
+def _dp_profile_stats_kwargs(
+    dp_stats: dict[str, int],
+    *,
+    include_dp_core: bool = True,
+) -> dict[str, Any]:
+    profile_stats = {
         "profile_negative_candidate_count": int(dp_stats.get("negative_candidate_count", 0)),
         "profile_negative_unique_mask_count": int(dp_stats.get("negative_unique_mask_count", 0)),
         "profile_negative_new_mask_count": int(dp_stats.get("negative_new_mask_count", 0)),
@@ -9003,6 +9347,56 @@ def _dp_profile_stats_kwargs(dp_stats: dict[str, int]) -> dict[str, Any]:
         "profile_materialization_infeasible_candidates_filtered": int(
             dp_stats.get("profile_materialization_infeasible_candidates_filtered", 0)
         ),
+        "diagnostic_selected_materialized_task_set_samples": tuple(
+            tuple(int(task) for task in sample)
+            for sample in dp_stats.get("diagnostic_selected_materialized_task_set_samples", tuple())
+        ),
+        "diagnostic_selected_returned_task_set_samples": tuple(
+            tuple(int(task) for task in sample)
+            for sample in dp_stats.get("diagnostic_selected_returned_task_set_samples", tuple())
+        ),
+        "diagnostic_selected_unmaterialized_task_set_samples": tuple(
+            tuple(int(task) for task in sample)
+            for sample in dp_stats.get("diagnostic_selected_unmaterialized_task_set_samples", tuple())
+        ),
+        "diagnostic_selected_weak_filtered_task_set_samples": tuple(
+            tuple(int(task) for task in sample)
+            for sample in dp_stats.get("diagnostic_selected_weak_filtered_task_set_samples", tuple())
+        ),
+        "diagnostic_selected_filtered_task_set_samples": tuple(
+            tuple(int(task) for task in sample)
+            for sample in dp_stats.get("diagnostic_selected_filtered_task_set_samples", tuple())
+        ),
+        "profile_selected_candidate_input_count": int(
+            dp_stats.get("profile_selected_candidate_input_count", 0)
+        ),
+        "profile_selected_candidate_scanned_count": int(
+            dp_stats.get("profile_selected_candidate_scanned_count", 0)
+        ),
+        "profile_selected_candidate_materialized_count": int(
+            dp_stats.get("profile_selected_candidate_materialized_count", 0)
+        ),
+        "profile_selected_candidate_returned_count": int(
+            dp_stats.get("profile_selected_candidate_returned_count", 0)
+        ),
+        "profile_selected_candidate_branch_filtered_count": int(
+            dp_stats.get("profile_selected_candidate_branch_filtered_count", 0)
+        ),
+        "profile_selected_candidate_duplicate_signature_filtered_count": int(
+            dp_stats.get("profile_selected_candidate_duplicate_signature_filtered_count", 0)
+        ),
+        "profile_selected_candidate_duplicate_task_set_filtered_count": int(
+            dp_stats.get("profile_selected_candidate_duplicate_task_set_filtered_count", 0)
+        ),
+        "profile_selected_candidate_forbidden_signature_filtered_count": int(
+            dp_stats.get("profile_selected_candidate_forbidden_signature_filtered_count", 0)
+        ),
+        "profile_selected_candidate_dominated_task_set_filtered_count": int(
+            dp_stats.get("profile_selected_candidate_dominated_task_set_filtered_count", 0)
+        ),
+        "profile_selected_candidate_return_limit_truncated_count": int(
+            dp_stats.get("profile_selected_candidate_return_limit_truncated_count", 0)
+        ),
         "profile_selected_unmaterialized_candidate_count": int(
             dp_stats.get("profile_selected_unmaterialized_candidate_count", 0)
         ),
@@ -9021,13 +9415,68 @@ def _dp_profile_stats_kwargs(dp_stats: dict[str, int]) -> dict[str, Any]:
             dp_stats.get("dominated_task_set_candidates_filtered", 0)
         ),
     }
+    if not bool(include_dp_core):
+        return profile_stats
+    return {
+        "dp_processed_labels": int(dp_stats.get("processed_labels", 0)),
+        "dp_state_count": int(dp_stats.get("state_count", 0)),
+        "dp_profile_record_scans": int(dp_stats.get("profile_record_scans", 0)),
+        "dp_profile_time_filtered": int(dp_stats.get("profile_time_filtered", 0)),
+        "dp_extension_attempts": int(dp_stats.get("extension_attempts", 0)),
+        "dp_label_cap_pruned": int(dp_stats.get("label_cap_pruned", 0)),
+        "dp_same_completion_pruned_labels": int(dp_stats.get("same_completion_pruned_labels", 0)),
+        **_dp_state_explosion_diagnostic_kwargs(dp_stats),
+        **profile_stats,
+    }
+
+
+def _dp_state_explosion_diagnostic_kwargs(dp_stats: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dp_nonempty_mask_count": int(dp_stats.get("nonempty_mask_count", 0)),
+        "dp_max_labels_per_mask_observed": int(
+            dp_stats.get("max_labels_per_mask_observed", 0)
+        ),
+        "dp_labels_by_sortie_count": tuple(
+            (int(count), int(label_count))
+            for count, label_count in dp_stats.get("labels_by_sortie_count", tuple())
+        ),
+        "dp_top_mask_label_counts": tuple(
+            (
+                int(count),
+                int(label_count),
+                tuple(int(task) for task in tasks),
+            )
+            for count, label_count, tasks in dp_stats.get("top_mask_label_counts", tuple())
+        ),
+    }
 
 
 def _profile_mask_diagnostic_kwargs(
     profiles: list[_SortieProfile],
     dp_stats: dict[str, Any] | None,
     pricing_config: JourneyPricingConfig | None = None,
+    tasks: tuple[int, ...] | None = None,
 ) -> dict[str, Any]:
+    def mask_to_task_tuple(mask: int) -> tuple[int, ...]:
+        if not tasks:
+            return tuple()
+        value = int(mask)
+        if value <= 0:
+            return tuple()
+        return tuple(int(task) for index, task in enumerate(tasks) if value & (1 << index))
+
+    def mask_sample_tuple(masks: Any, *, cap: int = 512) -> tuple[tuple[int, ...], ...]:
+        decoded: list[tuple[int, ...]] = []
+        seen: set[tuple[int, ...]] = set()
+        for raw_mask in masks or ():
+            sample = mask_to_task_tuple(int(raw_mask))
+            if not sample or sample in seen:
+                continue
+            seen.add(sample)
+            decoded.append(sample)
+        decoded.sort(key=lambda item: (len(item), item))
+        return tuple(decoded[: max(0, int(cap))])
+
     if pricing_config is None or not bool(pricing_config.profile_mask_diagnostics_enabled):
         return {
             "diagnostic_profile_task_masks": frozenset(),
@@ -9035,10 +9484,18 @@ def _profile_mask_diagnostic_kwargs(
             "diagnostic_reachable_task_masks": frozenset(),
             "diagnostic_negative_task_masks": frozenset(),
             "diagnostic_selected_task_masks": frozenset(),
+            "diagnostic_profile_task_set_samples": tuple(),
+            "diagnostic_reachable_task_set_samples": tuple(),
+            "diagnostic_negative_task_set_samples": tuple(),
+            "diagnostic_selected_task_set_samples": tuple(),
             "diagnostic_best_objective_by_mask": {},
             "diagnostic_best_profile_contribution_by_mask": {},
         }
     stats = dp_stats or {}
+    profile_masks = frozenset(int(profile.mask) for profile in profiles if int(profile.mask) > 0)
+    reachable_masks = frozenset(int(mask) for mask in stats.get("reachable_task_masks", ()))
+    negative_masks = frozenset(int(mask) for mask in stats.get("negative_task_masks", ()))
+    selected_masks = frozenset(int(mask) for mask in stats.get("selected_task_masks", ()))
     best_by_mask = stats.get("best_objective_by_mask", {})
     if not isinstance(best_by_mask, dict):
         best_by_mask = {}
@@ -9060,11 +9517,15 @@ def _profile_mask_diagnostic_kwargs(
             )[:cap]
         )
     return {
-        "diagnostic_profile_task_masks": frozenset(int(profile.mask) for profile in profiles if int(profile.mask) > 0),
-        "diagnostic_profile_trip_masks": frozenset(int(profile.mask) for profile in profiles if int(profile.mask) > 0),
-        "diagnostic_reachable_task_masks": frozenset(int(mask) for mask in stats.get("reachable_task_masks", ())),
-        "diagnostic_negative_task_masks": frozenset(int(mask) for mask in stats.get("negative_task_masks", ())),
-        "diagnostic_selected_task_masks": frozenset(int(mask) for mask in stats.get("selected_task_masks", ())),
+        "diagnostic_profile_task_masks": profile_masks,
+        "diagnostic_profile_trip_masks": profile_masks,
+        "diagnostic_reachable_task_masks": reachable_masks,
+        "diagnostic_negative_task_masks": negative_masks,
+        "diagnostic_selected_task_masks": selected_masks,
+        "diagnostic_profile_task_set_samples": mask_sample_tuple(profile_masks),
+        "diagnostic_reachable_task_set_samples": mask_sample_tuple(reachable_masks),
+        "diagnostic_negative_task_set_samples": mask_sample_tuple(negative_masks),
+        "diagnostic_selected_task_set_samples": mask_sample_tuple(selected_masks),
         "diagnostic_best_objective_by_mask": {
             int(mask): float(value)
             for mask, value in best_by_mask.items()
@@ -11378,6 +11839,7 @@ def _solve_best_journey_profile_dp(
     cut_value_cache: dict[int, float] = {}
     early_candidates: list[tuple[float, tuple[tuple[int, float], ...], int]] = []
     task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
+    bit_to_task = {index: int(task) for task, index in task_to_bit.items()}
     ordered = sorted(
         enumerate(profiles),
         key=lambda item: (item[1].upper_start + item[1].end_offset, item[1].lower_start, item[1].contribution, item[1].sequence),
@@ -11504,6 +11966,38 @@ def _solve_best_journey_profile_dp(
             for mask in labels_by_mask.keys()
             if int(mask) > 0
         )
+        labels_by_sortie_count: list[tuple[int, int]] = []
+        top_mask_label_counts: list[tuple[int, int, tuple[int, ...]]] = []
+        nonempty_mask_count = 0
+        max_labels_per_mask_observed = 0
+        for sortie_count, labels_by_mask in enumerate(labels_by_count):
+            labels_in_count = 0
+            for raw_mask, labels in labels_by_mask.items():
+                mask = int(raw_mask)
+                if mask <= 0:
+                    continue
+                label_count = len(labels)
+                if label_count <= 0:
+                    continue
+                nonempty_mask_count += 1
+                labels_in_count += int(label_count)
+                max_labels_per_mask_observed = max(
+                    max_labels_per_mask_observed,
+                    int(label_count),
+                )
+                tasks = tuple(
+                    int(bit_to_task[bit])
+                    for bit in range(len(data.tasks))
+                    if bool(mask & (1 << bit)) and bit in bit_to_task
+                )
+                top_mask_label_counts.append((int(sortie_count), int(label_count), tasks))
+            if labels_in_count > 0:
+                labels_by_sortie_count.append((int(sortie_count), int(labels_in_count)))
+        top_mask_label_counts.sort(key=lambda item: (-int(item[1]), int(item[0]), item[2]))
+        dp_stats["nonempty_mask_count"] = int(nonempty_mask_count)
+        dp_stats["max_labels_per_mask_observed"] = int(max_labels_per_mask_observed)
+        dp_stats["labels_by_sortie_count"] = tuple(labels_by_sortie_count)
+        dp_stats["top_mask_label_counts"] = tuple(top_mask_label_counts[:8])
 
     for count in range(int(data.sortie_limit)):
         if deadline is not None and time.perf_counter() > deadline:
@@ -13214,10 +13708,25 @@ def _instantiate_profile_journey_candidates(
     weak_negative_filtered = 0
     unmaterialized_candidates = 0
     weak_materialized_count = 0
+    selected_input_count = len(selected_candidates)
+    selected_scanned_count = 0
+    selected_materialized_count = 0
+    selected_returned_count = 0
+    selected_branch_filtered_count = 0
+    selected_duplicate_signature_filtered_count = 0
+    selected_duplicate_task_set_filtered_count = 0
+    selected_forbidden_signature_filtered_count = 0
+    selected_dominated_task_set_filtered_count = 0
+    selected_return_limit_truncated_count = 0
     weak_best_rough: float | None = None
     weak_best_true: float | None = None
     weak_max_gap: float | None = None
     weak_max_gap_mask: int | None = None
+    selected_materialized_samples: list[tuple[int, ...]] = []
+    selected_returned_samples: list[tuple[int, ...]] = []
+    selected_unmaterialized_samples: list[tuple[int, ...]] = []
+    selected_weak_filtered_samples: list[tuple[int, ...]] = []
+    selected_filtered_samples: list[tuple[int, ...]] = []
     add_threshold = max(float(eps), float(config.min_add_reduced_cost))
 
     def selected_mask(selected: tuple[tuple[int, float], ...]) -> int:
@@ -13227,6 +13736,31 @@ def _instantiate_profile_journey_candidates(
             if 0 <= index < len(profiles):
                 mask |= int(getattr(profiles[index], "mask", 0))
         return int(mask)
+
+    def selected_task_tuple(selected: tuple[tuple[int, float], ...]) -> tuple[int, ...]:
+        mask = selected_mask(selected)
+        if mask <= 0:
+            return tuple()
+        return tuple(int(task) for index, task in enumerate(data.tasks) if mask & (1 << index))
+
+    def record_sample(samples: list[tuple[int, ...]], selected: tuple[tuple[int, float], ...]) -> None:
+        sample = selected_task_tuple(selected)
+        if not sample or sample in samples or len(samples) >= 32:
+            return
+        samples.append(sample)
+
+    def merge_sample_stat(key: str, samples: list[tuple[int, ...]]) -> None:
+        if dp_stats is None:
+            return
+        merged: list[tuple[int, ...]] = []
+        for raw_sample in tuple(dp_stats.get(key, tuple())):
+            sample = tuple(int(task) for task in raw_sample)
+            if sample and sample not in merged:
+                merged.append(sample)
+        for sample in samples:
+            if sample and sample not in merged and len(merged) < 32:
+                merged.append(sample)
+        dp_stats[key] = tuple(merged)
 
     def record_weak_materialized(
         selected: tuple[tuple[int, float], ...],
@@ -13253,6 +13787,41 @@ def _instantiate_profile_journey_candidates(
     def flush_stats() -> None:
         if dp_stats is None:
             return
+        dp_stats["profile_selected_candidate_input_count"] = int(
+            dp_stats.get("profile_selected_candidate_input_count", 0)
+        ) + int(selected_input_count)
+        dp_stats["profile_selected_candidate_scanned_count"] = int(
+            dp_stats.get("profile_selected_candidate_scanned_count", 0)
+        ) + int(selected_scanned_count)
+        dp_stats["profile_selected_candidate_materialized_count"] = int(
+            dp_stats.get("profile_selected_candidate_materialized_count", 0)
+        ) + int(selected_materialized_count)
+        dp_stats["profile_selected_candidate_returned_count"] = int(
+            dp_stats.get("profile_selected_candidate_returned_count", 0)
+        ) + int(selected_returned_count)
+        dp_stats["profile_selected_candidate_branch_filtered_count"] = int(
+            dp_stats.get("profile_selected_candidate_branch_filtered_count", 0)
+        ) + int(selected_branch_filtered_count)
+        dp_stats["profile_selected_candidate_duplicate_signature_filtered_count"] = int(
+            dp_stats.get("profile_selected_candidate_duplicate_signature_filtered_count", 0)
+        ) + int(selected_duplicate_signature_filtered_count)
+        dp_stats["profile_selected_candidate_duplicate_task_set_filtered_count"] = int(
+            dp_stats.get("profile_selected_candidate_duplicate_task_set_filtered_count", 0)
+        ) + int(selected_duplicate_task_set_filtered_count)
+        dp_stats["profile_selected_candidate_forbidden_signature_filtered_count"] = int(
+            dp_stats.get("profile_selected_candidate_forbidden_signature_filtered_count", 0)
+        ) + int(selected_forbidden_signature_filtered_count)
+        dp_stats["profile_selected_candidate_dominated_task_set_filtered_count"] = int(
+            dp_stats.get("profile_selected_candidate_dominated_task_set_filtered_count", 0)
+        ) + int(selected_dominated_task_set_filtered_count)
+        dp_stats["profile_selected_candidate_return_limit_truncated_count"] = int(
+            dp_stats.get("profile_selected_candidate_return_limit_truncated_count", 0)
+        ) + int(selected_return_limit_truncated_count)
+        merge_sample_stat("diagnostic_selected_materialized_task_set_samples", selected_materialized_samples)
+        merge_sample_stat("diagnostic_selected_returned_task_set_samples", selected_returned_samples)
+        merge_sample_stat("diagnostic_selected_unmaterialized_task_set_samples", selected_unmaterialized_samples)
+        merge_sample_stat("diagnostic_selected_weak_filtered_task_set_samples", selected_weak_filtered_samples)
+        merge_sample_stat("diagnostic_selected_filtered_task_set_samples", selected_filtered_samples)
         if unmaterialized_candidates > 0:
             dp_stats["profile_selected_unmaterialized_candidate_count"] = int(
                 dp_stats.get("profile_selected_unmaterialized_candidate_count", 0)
@@ -13272,18 +13841,25 @@ def _instantiate_profile_journey_candidates(
                 dp_stats["profile_weak_filtered_max_true_minus_rough"] = weak_max_gap
                 dp_stats["profile_weak_filtered_max_true_minus_rough_mask"] = weak_max_gap_mask
 
-    for selected, objective in selected_candidates:
+    for selected_index, (selected, objective) in enumerate(selected_candidates):
+        selected_scanned_count += 1
         if objective >= -float(eps) and duals is None:
             continue
         if objective >= -add_threshold and duals is None:
             weak_negative_filtered += 1
+            record_sample(selected_weak_filtered_samples, selected)
             continue
         trips = _instantiate_profile_journey(data, profiles, selected, config)
         journey = make_journey(data, trips)
         if journey is None:
             unmaterialized_candidates += 1
+            record_sample(selected_unmaterialized_samples, selected)
             continue
+        selected_materialized_count += 1
+        record_sample(selected_materialized_samples, selected)
         if journey.signature in seen:
+            selected_duplicate_signature_filtered_count += 1
+            record_sample(selected_filtered_samples, selected)
             continue
         true_objective = float(objective)
         if duals is not None:
@@ -13291,28 +13867,44 @@ def _instantiate_profile_journey_candidates(
         if true_objective >= -float(eps):
             weak_negative_filtered += 1
             record_weak_materialized(selected, float(objective), true_objective)
+            record_sample(selected_weak_filtered_samples, selected)
             continue
         if true_objective >= -add_threshold:
             weak_negative_filtered += 1
             record_weak_materialized(selected, float(objective), true_objective)
+            record_sample(selected_weak_filtered_samples, selected)
             continue
         if not _journey_task_set_branch_allowed(journey.task_set, branch_constraints):
             existing_filtered += 1
+            selected_branch_filtered_count += 1
+            record_sample(selected_filtered_samples, selected)
             continue
         task_set_key = frozenset(int(task) for task in journey.task_set)
         if task_set_key in seen_task_sets:
             existing_filtered += 1
+            selected_duplicate_task_set_filtered_count += 1
+            record_sample(selected_filtered_samples, selected)
             continue
         if journey.signature in forbidden:
             existing_filtered += 1
+            selected_forbidden_signature_filtered_count += 1
+            record_sample(selected_filtered_samples, selected)
             continue
         if _journey_task_set_cost_dominated(journey, dominant_task_set_costs):
             existing_filtered += 1
+            selected_dominated_task_set_filtered_count += 1
+            record_sample(selected_filtered_samples, selected)
             continue
         seen.add(journey.signature)
         seen_task_sets.add(task_set_key)
         journeys.append(journey)
+        selected_returned_count += 1
+        record_sample(selected_returned_samples, selected)
         if max_journeys is not None and len(journeys) >= int(max_journeys):
+            selected_return_limit_truncated_count = max(
+                0,
+                int(len(selected_candidates)) - int(selected_index) - 1,
+            )
             break
     flush_stats()
     return journeys, existing_filtered, weak_negative_filtered

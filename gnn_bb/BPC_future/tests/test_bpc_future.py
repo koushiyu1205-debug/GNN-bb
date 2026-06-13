@@ -100,6 +100,7 @@ from BPC_future.pricing.journey_pricing import (
     _journey_task_set_branch_allowed,
     _profile_candidate_return_limit,
     _journey_same_completion_possible,
+    _prioritize_target_first_task_shard,
     _price_journeys_by_direct_labels,
     _price_journeys_by_profiles,
     _price_journeys_by_streaming_profiles,
@@ -244,19 +245,25 @@ from BPC_future.solver.journey_driver import (
     _journey_pricing_certificate_rejection_reason,
     _journey_pricing_is_global_certificate,
     _journey_pricing_state,
+    _journey_pool_structure_diagnostics,
     _journey_sharded_pulse_audit_context_hashes,
     _journey_sharded_pulse_audit_disagreement_type,
     _journey_sharded_pulse_audit_payload_has_negative_signal,
     _journey_sharded_pulse_audit_signal_from_payload,
     _journey_sharded_pulse_audit_signal_valid_for_worker,
+    _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows,
     _journey_sharded_pulse_audit_payload,
+    _journey_sharded_pulse_worker_followup_reserve_filtered,
     _run_journey_sharded_pulse_audit,
     _run_journey_sharded_pulse_hidden_negative_worker,
+    _journey_sharded_pulse_worker_failure_cooldown_rounds,
+    _journey_sharded_pulse_worker_success_cooldown_rounds,
     _journey_promote_duplicate_only_final_judge_certificate,
     _journey_reduced_cost_components,
     _hidden_negative_miss_diagnostics,
     _log_hidden_negative_audit,
     _log_journey_addition,
+    _log_journey_pricing,
     _journey_task_set_dominance_safe,
     _journey_forbidden_signatures_for_node,
     _add_priced_journeys,
@@ -1141,10 +1148,237 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(payload["changed_task_set_count"], 2)
         self.assertEqual(payload["new_task_set_count"], 1)
         self.assertEqual(payload["replacement_task_set_count"], 1)
+        self.assertEqual(payload["requested_task_set_samples"], [[3], [1, 2]])
+        self.assertEqual(payload["changed_task_set_samples"], [[3], [1, 2]])
+        self.assertEqual(payload["new_task_set_samples"], [[3]])
+        self.assertEqual(payload["replacement_task_set_samples"], [[1, 2]])
+        self.assertEqual(payload["active_changed_task_set_samples"], [[1, 2]])
+        self.assertEqual(payload["inactive_changed_task_set_samples"], [[3]])
+        self.assertFalse(payload["changed_task_set_samples_truncated"])
         self.assertEqual(payload["changed_journey_ratio"], 1.0)
         self.assertEqual(payload["new_journey_ratio"], 0.5)
         self.assertEqual(payload["replacement_journey_ratio"], 0.5)
         self.assertEqual(payload["unchanged_journey_ratio"], 0.0)
+
+    def test_journey_pool_structure_diagnostics_tracks_pool_and_active_support(self):
+        journeys = [
+            SimpleNamespace(task_set=frozenset({1}), signature="a"),
+            SimpleNamespace(task_set=frozenset({1}), signature="a2"),
+            SimpleNamespace(task_set=frozenset({1, 2}), signature="b"),
+            SimpleNamespace(task_set=frozenset({3, 4, 5}), signature="c"),
+        ]
+        pool = SimpleNamespace(
+            journeys=journeys,
+            task_set_dominance_enabled=False,
+        )
+        active_values = [
+            (journeys[0], 0.5),
+            (journeys[1], 0.25),
+            (journeys[2], 1.0),
+            (journeys[3], 0.0),
+        ]
+
+        diagnostics = _journey_pool_structure_diagnostics(pool, active_values)
+
+        self.assertEqual(diagnostics["pool_journey_count"], 4)
+        self.assertEqual(diagnostics["pool_unique_task_set_count"], 3)
+        self.assertEqual(diagnostics["pool_duplicate_task_set_count"], 1)
+        self.assertEqual(diagnostics["pool_max_journeys_per_task_set"], 2)
+        self.assertEqual(diagnostics["pool_singleton_task_set_count"], 1)
+        self.assertEqual(diagnostics["pool_multi_task_set_count"], 2)
+        self.assertEqual(diagnostics["pool_task_set_size_hist"], {"1": 2, "2": 1, "3": 1})
+        self.assertFalse(diagnostics["pool_task_set_dominance_enabled"])
+        self.assertEqual(diagnostics["pool_active_journey_count"], 3)
+        self.assertEqual(diagnostics["pool_active_task_set_count"], 2)
+        self.assertEqual(diagnostics["pool_active_duplicate_task_set_count"], 1)
+        self.assertAlmostEqual(diagnostics["pool_active_duplicate_task_set_ratio"], 1.0 / 3.0)
+        self.assertAlmostEqual(diagnostics["pool_active_avg_journeys_per_task_set"], 1.5)
+        self.assertEqual(diagnostics["pool_active_fractional_journey_count"], 2)
+        self.assertEqual(diagnostics["pool_active_fractional_value_sum"], 0.75)
+        self.assertEqual(diagnostics["pool_active_fractional_value_max"], 0.5)
+        self.assertEqual(diagnostics["pool_active_fractional_value_min"], 0.25)
+        self.assertEqual(diagnostics["pool_active_fractional_small_value_count"], 1)
+        self.assertEqual(diagnostics["pool_active_total_value"], 1.75)
+        self.assertEqual(diagnostics["pool_active_max_value"], 1.0)
+        self.assertEqual(diagnostics["pool_active_task_count_union"], 2)
+        self.assertEqual(
+            diagnostics["pool_active_top_task_set_value_samples"],
+            [[1.0, 1, [1, 2]], [0.75, 2, [1]]],
+        )
+
+    def test_journey_pricing_log_reports_negative_task_set_samples(self):
+        pricing = SimpleNamespace(
+            journeys=(
+                SimpleNamespace(
+                    task_set=frozenset({2, 4}),
+                    signature=(((2, 4), ("a",), 0.0),),
+                    trips=(SimpleNamespace(tasks=(2, 4)),),
+                ),
+                SimpleNamespace(
+                    task_set=frozenset({1}),
+                    signature=(((1,), ("b",), 0.0),),
+                    trips=(SimpleNamespace(tasks=(1,)),),
+                ),
+                SimpleNamespace(
+                    task_set=frozenset({2, 4}),
+                    signature=(((2, 4), ("c",), 1.0),),
+                    trips=(SimpleNamespace(tasks=(2, 4)),),
+                ),
+            ),
+            best_reduced_cost=-1.5,
+            candidate_trips=3,
+            selected_trips=2,
+            exhausted=False,
+            status="TIME_LIMIT",
+            reason="negative_journey",
+            generated_sequences=10,
+            evaluated_timed_trips=8,
+        )
+        events: list[tuple[str, dict[str, Any]]] = []
+        logger = SimpleNamespace(log=lambda name, **payload: events.append((name, payload)))
+
+        _log_journey_pricing(logger, pricing, 4, pricing_kind="exact")
+
+        self.assertEqual(events[0][0], "journey_pricing")
+        payload = events[0][1]
+        self.assertEqual(payload["negative_journeys"], 3)
+        self.assertEqual(payload["negative_journey_task_set_count"], 2)
+        self.assertEqual(payload["negative_journey_task_set_samples"], [[1], [2, 4]])
+        self.assertEqual(payload["negative_journey_task_set_sample_count"], 2)
+        self.assertFalse(payload["negative_journey_task_set_samples_truncated"])
+        self.assertTrue(payload["negative_journey_task_set_hash"])
+        self.assertEqual(payload["negative_journey_signature_count"], 3)
+        self.assertEqual(
+            payload["negative_journey_sequence_samples"],
+            [[[2, 4]], [[1]], [[2, 4]]],
+        )
+        self.assertEqual(payload["negative_journey_sequence_sample_count"], 3)
+        self.assertFalse(payload["negative_journey_sequence_samples_truncated"])
+        self.assertEqual(payload["negative_journey_signature_sample_count"], 3)
+        self.assertFalse(payload["negative_journey_signature_samples_truncated"])
+        self.assertTrue(payload["negative_journey_signature_hash"])
+
+    def test_sharded_pulse_worker_success_cooldown_uses_active_support_gate(self):
+        config = {
+            "journey_sharded_pulse_hidden_negative_worker_continue_only_on_active_support": True,
+            "journey_sharded_pulse_hidden_negative_worker_inactive_success_cooldown_rounds": 2,
+        }
+        inactive_added = _JourneyAdditionCount(
+            1,
+            new_journeys=1,
+            replacement_journeys=0,
+            unchanged_journeys=0,
+            new_task_sets=(frozenset({3}),),
+            replacement_task_sets=tuple(),
+            changed_task_sets=(frozenset({3}),),
+        )
+        active_added = _JourneyAdditionCount(
+            1,
+            new_journeys=0,
+            replacement_journeys=1,
+            unchanged_journeys=0,
+            new_task_sets=tuple(),
+            replacement_task_sets=(frozenset({1, 2}),),
+            changed_task_sets=(frozenset({1, 2}),),
+        )
+
+        self.assertEqual(
+            _journey_sharded_pulse_worker_success_cooldown_rounds(
+                config,
+                inactive_added,
+                active_task_sets={frozenset({1, 2})},
+            ),
+            2,
+        )
+        self.assertEqual(
+            _journey_sharded_pulse_worker_success_cooldown_rounds(
+                config,
+                active_added,
+                active_task_sets={frozenset({1, 2})},
+            ),
+            0,
+        )
+        self.assertEqual(
+            _journey_sharded_pulse_worker_success_cooldown_rounds(
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_continue_only_on_active_support": False,
+                    "journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds": 1,
+                    "journey_sharded_pulse_hidden_negative_worker_inactive_success_cooldown_rounds": 2,
+                },
+                inactive_added,
+                active_task_sets={frozenset({1, 2})},
+            ),
+            1,
+        )
+
+    def test_sharded_pulse_worker_failure_cooldown_only_after_no_changed_columns(self):
+        config = {
+            "journey_sharded_pulse_hidden_negative_worker_failure_cooldown_rounds": 2,
+        }
+        empty_pricing = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "worker_no_column",
+        )
+        negative_pricing = replace(
+            empty_pricing,
+            journeys=[object()],
+            status="FOUND_NEGATIVE",
+            reason="worker_negative",
+        )
+        changed_added = _JourneyAdditionCount(
+            1,
+            new_journeys=1,
+            replacement_journeys=0,
+            unchanged_journeys=0,
+            new_task_sets=(frozenset({1}),),
+            replacement_task_sets=tuple(),
+            changed_task_sets=(frozenset({1}),),
+        )
+        unchanged_added = _JourneyAdditionCount(
+            0,
+            new_journeys=0,
+            replacement_journeys=0,
+            unchanged_journeys=1,
+        )
+
+        self.assertEqual(
+            _journey_sharded_pulse_worker_failure_cooldown_rounds(config, empty_pricing),
+            2,
+        )
+        self.assertEqual(
+            _journey_sharded_pulse_worker_failure_cooldown_rounds(config, negative_pricing),
+            0,
+        )
+        self.assertEqual(
+            _journey_sharded_pulse_worker_failure_cooldown_rounds(
+                config,
+                negative_pricing,
+                added=changed_added,
+            ),
+            0,
+        )
+        self.assertEqual(
+            _journey_sharded_pulse_worker_failure_cooldown_rounds(
+                config,
+                negative_pricing,
+                added=unchanged_added,
+            ),
+            2,
+        )
+        self.assertEqual(
+            _journey_sharded_pulse_worker_failure_cooldown_rounds(
+                {},
+                empty_pricing,
+            ),
+            0,
+        )
 
     def test_pre_exact_completion_bound_handoff_is_tail_only(self):
         config = {
@@ -5662,14 +5896,25 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertEqual(disabled["diagnostic_profile_task_masks"], frozenset())
         self.assertEqual(disabled["diagnostic_reachable_task_masks"], frozenset())
+        self.assertEqual(disabled["diagnostic_profile_task_set_samples"], tuple())
+        self.assertEqual(disabled["diagnostic_reachable_task_set_samples"], tuple())
 
         enabled = _profile_mask_diagnostic_kwargs(
             [profile],
-            {"reachable_task_masks": frozenset({1})},
+            {
+                "reachable_task_masks": frozenset({1}),
+                "negative_task_masks": frozenset({1}),
+                "selected_task_masks": frozenset({1}),
+            },
             JourneyPricingConfig(profile_mask_diagnostics_enabled=True),
+            (10,),
         )
         self.assertEqual(enabled["diagnostic_profile_task_masks"], frozenset({1}))
         self.assertEqual(enabled["diagnostic_reachable_task_masks"], frozenset({1}))
+        self.assertEqual(enabled["diagnostic_profile_task_set_samples"], ((10,),))
+        self.assertEqual(enabled["diagnostic_reachable_task_set_samples"], ((10,),))
+        self.assertEqual(enabled["diagnostic_negative_task_set_samples"], ((10,),))
+        self.assertEqual(enabled["diagnostic_selected_task_set_samples"], ((10,),))
 
     def test_hidden_negative_miss_diagnostics_summarizes_worker_pruning_signals(self):
         ordinary = JourneyPricingResult(
@@ -7331,6 +7576,7 @@ class BPCFutureTests(unittest.TestCase):
             mask=1,
             contribution=-10.0,
         )
+        stats: dict[str, object] = {}
         journeys, filtered, weak_filtered = _instantiate_profile_journey_candidates(
             data,
             [profile],
@@ -7339,10 +7585,17 @@ class BPCFutureTests(unittest.TestCase):
             eps=1.0e-6,
             forbidden_journey_signatures={journey.signature},
             max_journeys=1,
+            dp_stats=stats,
         )
         self.assertEqual(journeys, [])
         self.assertEqual(filtered, 1)
         self.assertEqual(weak_filtered, 0)
+        self.assertEqual(stats.get("profile_selected_candidate_input_count"), 1)
+        self.assertEqual(stats.get("profile_selected_candidate_scanned_count"), 1)
+        self.assertEqual(stats.get("profile_selected_candidate_materialized_count"), 1)
+        self.assertEqual(stats.get("profile_selected_candidate_returned_count"), 0)
+        self.assertEqual(stats.get("profile_selected_candidate_forbidden_signature_filtered_count"), 1)
+        self.assertEqual(stats.get("diagnostic_selected_filtered_task_set_samples"), ((task,),))
 
     def test_journey_profile_dp_skips_forbidden_duplicate_candidate(self):
         data = load_future_data("very_small")
@@ -7756,6 +8009,12 @@ class BPCFutureTests(unittest.TestCase):
         self.assertGreater(float(stats.get("profile_weak_filtered_best_true_rc", 0.0)), 0.0)
         self.assertGreater(float(stats.get("profile_weak_filtered_max_true_minus_rough", 0.0)), 10.0)
         self.assertEqual(stats.get("profile_weak_filtered_max_true_minus_rough_mask"), 1)
+        self.assertEqual(stats.get("profile_selected_candidate_input_count"), 1)
+        self.assertEqual(stats.get("profile_selected_candidate_scanned_count"), 1)
+        self.assertEqual(stats.get("profile_selected_candidate_materialized_count"), 1)
+        self.assertEqual(stats.get("profile_selected_candidate_returned_count"), 0)
+        self.assertEqual(stats.get("diagnostic_selected_materialized_task_set_samples"), ((task,),))
+        self.assertEqual(stats.get("diagnostic_selected_weak_filtered_task_set_samples"), ((task,),))
 
     def test_profile_candidate_selection_skips_nonmaterializable_profile_combo(self):
         data = load_future_data("very_small")
@@ -8066,6 +8325,10 @@ class BPCFutureTests(unittest.TestCase):
         self.assertGreater(stats.get("processed_labels", 0), 0)
         self.assertGreater(stats.get("state_count", 0), 0)
         self.assertGreater(stats.get("profile_record_scans", 0), 0)
+        self.assertEqual(stats.get("nonempty_mask_count"), 1)
+        self.assertEqual(stats.get("max_labels_per_mask_observed"), 1)
+        self.assertEqual(stats.get("labels_by_sortie_count"), ((1, 1),))
+        self.assertEqual(stats.get("top_mask_label_counts"), ((1, 1, (task,)),))
 
     def test_profile_cut_penalty_pruning_is_sign_guarded(self):
         data = load_future_data("very_small")
@@ -13267,6 +13530,284 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(returns.candidates, tuple())
         self.assertGreater(returns.transition_return_pruned, 0)
 
+    def test_transition_pulse_target_sequence_reachability_materialized(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=1)
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        result = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=1,
+            target_sequence_diagnostics_enabled=True,
+            target_sequence_diagnostics_sequence=(1, 2),
+        )
+
+        self.assertTrue(result.exhausted)
+        self.assertTrue(result.pulse_target_sequence_diagnostics_enabled)
+        self.assertEqual(result.pulse_target_sequence, (1, 2))
+        self.assertEqual(result.pulse_target_sequence_reached_prefix_len, 2)
+        self.assertTrue(result.pulse_target_sequence_completed)
+        self.assertTrue(result.pulse_target_sequence_materialized)
+        self.assertEqual(result.pulse_target_sequence_blocked_reason, "")
+        self.assertGreater(result.pulse_target_sequence_transition_attempts, 0)
+        self.assertGreater(result.pulse_target_sequence_transition_accepted, 0)
+
+    def test_transition_pulse_target_sequence_reachability_reports_prune_reason(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1, capacity=0.1)
+        duals = JourneyDuals(cover={1: 1000.0, 2: 1000.0}, fleet_limit=0.0, cuts={})
+        result = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+            target_sequence_diagnostics_enabled=True,
+            target_sequence_diagnostics_sequence=(1,),
+        )
+
+        self.assertTrue(result.exhausted)
+        self.assertFalse(result.pulse_target_sequence_materialized)
+        self.assertEqual(result.pulse_target_sequence_reached_prefix_len, 0)
+        self.assertEqual(result.pulse_target_sequence_blocked_reason, "capacity")
+        self.assertEqual(result.pulse_target_sequence_blocked_prefix, tuple())
+        self.assertEqual(result.pulse_target_sequence_blocked_next_task, 1)
+        self.assertGreater(result.pulse_target_sequence_transition_attempts, 0)
+        self.assertEqual(result.pulse_target_sequence_transition_accepted, 0)
+        self.assertIn(("capacity", result.pulse_target_sequence_transition_attempts), result.pulse_target_sequence_prune_reason_counts)
+
+    def test_sharded_pulse_target_first_task_priority_reorders_only_target(self):
+        self.assertEqual(
+            _prioritize_target_first_task_shard(
+                (2, 4, 8, 1),
+                enabled=False,
+                target_sequence=(8, 15, 5),
+            ),
+            (2, 4, 8, 1),
+        )
+        self.assertEqual(
+            _prioritize_target_first_task_shard(
+                (2, 4, 8, 1),
+                enabled=True,
+                target_sequence=(8, 15, 5),
+            ),
+            (8, 2, 4, 1),
+        )
+        self.assertEqual(
+            _prioritize_target_first_task_shard(
+                (2, 4, 8, 1),
+                enabled=True,
+                target_sequence=(7, 15, 5),
+            ),
+            (2, 4, 8, 1),
+        )
+
+    def test_transition_pulse_target_transition_priority_reaches_next_target_earlier(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=1)
+        duals = JourneyDuals(
+            cover={int(task): 0.0 for task in data.tasks},
+            fleet_limit=0.0,
+            cuts={},
+        )
+        disabled = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=3,
+            max_sorties=1,
+            first_task_shard=1,
+            max_recursions=3,
+            target_sequence_diagnostics_enabled=True,
+            target_sequence_diagnostics_sequence=(1, 3),
+        )
+        enabled = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=3,
+            max_sorties=1,
+            first_task_shard=1,
+            max_recursions=3,
+            target_transition_priority_enabled=True,
+            target_transition_priority_sequence=(1, 3),
+            target_sequence_diagnostics_enabled=True,
+            target_sequence_diagnostics_sequence=(1, 3),
+        )
+
+        self.assertFalse(disabled.pulse_target_transition_priority_enabled)
+        self.assertEqual(disabled.pulse_target_sequence_reached_prefix_len, 1)
+        self.assertFalse(disabled.pulse_target_sequence_materialized)
+        self.assertTrue(enabled.pulse_target_transition_priority_enabled)
+        self.assertEqual(enabled.pulse_target_transition_priority_sequence, (1, 3))
+        self.assertEqual(enabled.pulse_target_sequence_reached_prefix_len, 2)
+        self.assertTrue(enabled.pulse_target_sequence_materialized)
+
+    def test_transition_pulse_target_arc_option_priority_moves_preferred_option_first(self):
+        base = load_future_data("very_small")
+        base_option = base.arc_options[(0, 1)][0]
+        slow = ArcOption(
+            "0->1:slow",
+            "slow",
+            tuple(),
+            tau=float(base_option.tau) + 1.0,
+            energy=float(base_option.energy),
+            risk=float(base_option.risk),
+            distance=float(base_option.distance),
+            cost=float(base_option.cost),
+            path_cells=base_option.path_cells,
+            path_xy=base_option.path_xy,
+        )
+        fast = ArcOption(
+            "0->1:fast",
+            "fast",
+            tuple(),
+            tau=float(base_option.tau),
+            energy=float(base_option.energy),
+            risk=float(base_option.risk),
+            distance=float(base_option.distance),
+            cost=float(base_option.cost) + 10.0,
+            path_cells=base_option.path_cells,
+            path_xy=base_option.path_xy,
+        )
+        arc_options = dict(base.arc_options)
+        arc_options[(0, 1)] = (slow, fast)
+        data = replace(base, tasks=(1,), sortie_limit=1, arc_options=arc_options)
+        duals = JourneyDuals(cover={1: 0.0}, fleet_limit=0.0, cuts={})
+
+        disabled = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+            first_task_shard=1,
+            target_sequence_diagnostics_enabled=True,
+            target_sequence_diagnostics_sequence=(1,),
+            target_path_diagnostics_enabled=True,
+            target_path_diagnostics_max_samples=4,
+            max_recursions=20,
+        )
+        enabled = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=1,
+            max_sorties=1,
+            first_task_shard=1,
+            target_arc_option_priority_enabled=True,
+            target_arc_option_priority_sequence=("0->1:fast",),
+            target_sequence_diagnostics_enabled=True,
+            target_sequence_diagnostics_sequence=(1,),
+            target_path_diagnostics_enabled=True,
+            target_path_diagnostics_max_samples=4,
+            max_recursions=20,
+        )
+
+        self.assertFalse(disabled.pulse_target_arc_option_priority_enabled)
+        self.assertIn("arc_ids=0->1:slow", disabled.pulse_target_path_prefix_samples[0])
+        self.assertTrue(enabled.pulse_target_arc_option_priority_enabled)
+        self.assertEqual(enabled.pulse_target_arc_option_priority_sequence, ("0->1:fast",))
+        self.assertIn("arc_ids=0->1:fast", enabled.pulse_target_path_prefix_samples[0])
+        self.assertTrue(enabled.pulse_target_sequence_materialized)
+
+    def test_transition_pulse_target_path_diagnostics_record_time_window_sample(self):
+        base = load_future_data("very_small")
+        instance = json.loads(json.dumps(base.instance))
+        instance.setdefault("scheduling", {})["task_waiting_allowed"] = False
+        instance["tasks"]["2"]["D"] = 1.0
+        data = replace(base, instance=instance, tasks=(1, 2), sortie_limit=1)
+        duals = JourneyDuals(cover={1: 0.0, 2: 0.0}, fleet_limit=0.0, cuts={})
+
+        result = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=1,
+            first_task_shard=1,
+            target_transition_priority_enabled=True,
+            target_transition_priority_sequence=(1, 2),
+            target_sequence_diagnostics_enabled=True,
+            target_sequence_diagnostics_sequence=(1, 2),
+            target_path_diagnostics_enabled=True,
+            target_path_diagnostics_max_samples=4,
+            max_recursions=20,
+        )
+
+        self.assertTrue(result.pulse_target_path_diagnostics_enabled)
+        self.assertEqual(result.pulse_target_sequence_reached_prefix_len, 1)
+        self.assertEqual(result.pulse_target_sequence_blocked_reason, "time_window")
+        self.assertEqual(result.pulse_target_sequence_blocked_prefix, (1,))
+        self.assertEqual(result.pulse_target_sequence_blocked_next_task, 2)
+        self.assertTrue(result.pulse_target_path_prefix_samples)
+        self.assertTrue(result.pulse_target_path_blocked_samples)
+        blocked = result.pulse_target_path_blocked_samples[0]
+        self.assertIn("reason=time_window", blocked)
+        self.assertIn("prefix=1", blocked)
+        self.assertIn("next=2", blocked)
+        self.assertIn("arc_ids=0->1:legacy|1->2:legacy", blocked)
+        self.assertIn("next_start_ub=", blocked)
+
+    def test_sharded_pulse_target_sequence_diagnostics_surface_in_pricing_log(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1)
+        duals = JourneyDuals(cover={1: 0.0, 2: 0.0}, fleet_limit=0.0, cuts={})
+        config = JourneyPricingConfig(
+            profile_pricing_enabled=False,
+            final_judge_engine="sharded_pulse",
+            sharded_final_judge_enabled=True,
+            sharded_final_judge_toy_certificate_enabled=True,
+            max_tasks_per_trip=2,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            pulse_target_sequence_diagnostics_enabled=True,
+            pulse_target_sequence_diagnostics_sequence=(1, 2),
+            pulse_target_first_task_priority_enabled=True,
+            pulse_target_first_task_priority_sequence=(1, 2),
+            pulse_target_transition_priority_enabled=True,
+            pulse_target_transition_priority_sequence=(1, 2),
+            pulse_target_arc_option_priority_enabled=True,
+            pulse_target_arc_option_priority_sequence=("0->1:legacy", "1->2:legacy"),
+            pulse_target_path_diagnostics_enabled=True,
+            pulse_target_path_diagnostics_max_samples=4,
+        )
+        result = price_journeys(data, duals, tuple(), config=config)
+
+        self.assertEqual(result.final_judge_engine, "sharded_pulse")
+        self.assertTrue(result.pulse_target_first_task_priority_enabled)
+        self.assertEqual(result.pulse_target_first_task_priority_sequence, (1, 2))
+        self.assertTrue(result.pulse_target_transition_priority_enabled)
+        self.assertEqual(result.pulse_target_transition_priority_sequence, (1, 2))
+        self.assertTrue(result.pulse_target_arc_option_priority_enabled)
+        self.assertEqual(result.pulse_target_arc_option_priority_sequence, ("0->1:legacy", "1->2:legacy"))
+        self.assertTrue(result.pulse_target_path_diagnostics_enabled)
+        self.assertTrue(result.pulse_target_path_prefix_samples)
+        self.assertTrue(result.pulse_target_sequence_materialized)
+        self.assertEqual(result.pulse_target_sequence_reached_prefix_len, 2)
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "target_sequence_pricing.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_pricing(logger, result, 1, pricing_kind="target_sequence_test", config=config)
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(records[-1]["pulse_target_sequence"], [1, 2])
+        self.assertTrue(records[-1]["pulse_target_first_task_priority_enabled"])
+        self.assertEqual(records[-1]["pulse_target_first_task_priority_sequence"], [1, 2])
+        self.assertTrue(records[-1]["pulse_target_transition_priority_enabled"])
+        self.assertEqual(records[-1]["pulse_target_transition_priority_sequence"], [1, 2])
+        self.assertTrue(records[-1]["pulse_target_arc_option_priority_enabled"])
+        self.assertEqual(
+            records[-1]["pulse_target_arc_option_priority_sequence"],
+            ["0->1:legacy", "1->2:legacy"],
+        )
+        self.assertTrue(records[-1]["pulse_target_path_diagnostics_enabled"])
+        self.assertTrue(records[-1]["pulse_target_path_prefix_samples"])
+        self.assertEqual(records[-1]["pulse_target_sequence_reached_prefix_len"], 2)
+        self.assertTrue(records[-1]["pulse_target_sequence_materialized"])
+        self.assertEqual(records[-1]["pulse_target_sequence_blocked_reason"], "")
+
     def test_transition_pulse_first_task_shards_partition_toy(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
         duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
@@ -13838,6 +14379,103 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertEqual(interval.best_true_reduced_cost, min(c.true_reduced_cost for c in brute_force))
         self.assertEqual(interval.found_negative, any(c.true_reduced_cost < -1.0e-6 for c in brute_force))
+
+    def test_transition_pulse_stop_after_first_negative_exits_current_shard(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 1000.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+
+        full = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+        )
+        early = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            stop_after_first_negative=True,
+        )
+
+        self.assertTrue(full.exhausted)
+        self.assertTrue(full.found_negative)
+        self.assertFalse(early.exhausted)
+        self.assertEqual(early.status, "FOUND_NEGATIVE")
+        self.assertEqual(early.reason, "stop_after_first_negative")
+        self.assertTrue(early.found_negative)
+        self.assertLess(early.generated_sortie_traces, full.generated_sortie_traces)
+        self.assertLess(early.recursions, full.recursions)
+
+    def test_transition_pulse_task_ordering_preserves_exhaustive_surface(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2),
+            False,
+        )
+        duals = JourneyDuals(cover={1: 0.0, 2: 25.0, 3: 1000.0}, fleet_limit=0.0, cuts={})
+
+        natural = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            task_ordering="natural",
+        )
+        ordered = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            task_ordering="reduced_cost_proxy",
+        )
+
+        _assert_toy_pulse_same_pricing_surface(self, ordered, natural)
+
+    def test_transition_pulse_task_ordering_reduces_early_stop_search(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2),
+            False,
+        )
+        duals = JourneyDuals(cover={1: 0.0, 2: 0.0, 3: 1000.0}, fleet_limit=0.0, cuts={})
+
+        natural = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            stop_after_first_negative=True,
+            task_ordering="natural",
+        )
+        ordered = transition_root_only_pulse(
+            data,
+            duals,
+            time_bucket_size=5.0,
+            start_time_step=5.0,
+            max_tasks_per_sortie=2,
+            max_sorties=2,
+            stop_after_first_negative=True,
+            task_ordering="reduced_cost_proxy",
+        )
+
+        self.assertEqual(natural.status, "FOUND_NEGATIVE")
+        self.assertEqual(ordered.status, "FOUND_NEGATIVE")
+        self.assertTrue(natural.found_negative)
+        self.assertTrue(ordered.found_negative)
+        self.assertLess(ordered.generated_sortie_traces, natural.generated_sortie_traces)
+        self.assertLess(ordered.recursions, natural.recursions)
 
     def test_toy_exhaustive_pulse_budget_hits_return_incomplete(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), sortie_limit=2)
@@ -15764,6 +16402,93 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(result.journeys, [negative_journey])
         self.assertEqual(result.pulse_low_roi_shards, len(data.tasks) - 1)
 
+    def test_sharded_pulse_stop_after_first_negative_passes_to_transition_core(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        negative_journey = SimpleNamespace(signature=("stop-first-negative",), task_set=frozenset({1}))
+        stop_flags: list[bool] = []
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **kwargs):
+            del first_task_shard, second_action_shard
+            stop_flags.append(bool(kwargs.get("stop_after_first_negative", False)))
+            return _fake_transition_pulse_result(
+                exhausted=False,
+                status="FOUND_NEGATIVE",
+                reason="stop_after_first_negative",
+                recursions=4,
+                expanded_states=4,
+                negative_journeys=(negative_journey,),
+                best_true_reduced_cost=-5.0,
+            )
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition), patch(
+            "BPC_future.pricing.journey_pricing.manual_journey_reduced_cost",
+            return_value=-5.0,
+        ):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_adaptive_sharding_enabled=False,
+                    pulse_stop_after_first_negative=True,
+                    max_returned_journeys=1,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertEqual(result.journeys, [negative_journey])
+        self.assertEqual(result.final_judge_shards_total, 1)
+        self.assertEqual(stop_flags, [True])
+        self.assertTrue(result.pulse_stop_after_first_negative)
+
+    def test_sharded_pulse_task_ordering_passes_to_transition_core(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2, 3)),
+            False,
+        )
+        duals = JourneyDuals(cover={int(task): 0.0 for task in data.tasks}, fleet_limit=0.0, cuts={})
+        negative_journey = SimpleNamespace(signature=("ordered-negative",), task_set=frozenset({1}))
+        orderings: list[str] = []
+
+        def fake_transition(*_args, first_task_shard=None, second_action_shard=None, **kwargs):
+            del first_task_shard, second_action_shard
+            orderings.append(str(kwargs.get("task_ordering", "")))
+            return _fake_transition_pulse_result(
+                exhausted=False,
+                status="FOUND_NEGATIVE",
+                reason="ordered_negative",
+                recursions=3,
+                expanded_states=3,
+                negative_journeys=(negative_journey,),
+                best_true_reduced_cost=-5.0,
+            )
+
+        with patch("BPC_future.pricing.journey_pricing.transition_root_only_pulse", side_effect=fake_transition), patch(
+            "BPC_future.pricing.journey_pricing.manual_journey_reduced_cost",
+            return_value=-5.0,
+        ):
+            result = price_journeys(
+                data,
+                duals,
+                tuple(),
+                config=_adaptive_sharded_pulse_test_config(
+                    pulse_adaptive_sharding_enabled=False,
+                    pulse_task_ordering="reduced_cost_proxy",
+                    max_returned_journeys=1,
+                ),
+            )
+
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(result.journeys, [negative_journey])
+        self.assertEqual(orderings, ["reduced_cost_proxy"] * len(orderings))
+        self.assertGreater(len(orderings), 0)
+        self.assertEqual(result.pulse_task_ordering, "reduced_cost_proxy")
+
     def test_sharded_pulse_hidden_negative_worker_hard_tail_gate_skips_small_fast_instance(self):
         worker = _run_journey_sharded_pulse_hidden_negative_worker(
             load_future_data("very_small"),
@@ -16329,6 +17054,533 @@ class BPCFutureTests(unittest.TestCase):
         mock_price.assert_not_called()
         self.assertEqual(records[-1]["pulse_worker_skip_reason"], "current_probe_instance_too_small")
 
+    def test_sharded_pulse_worker_impact_filter_keeps_new_and_active_support(self):
+        data = load_future_data("very_small")
+
+        def journey(tasks: tuple[int, ...], cost: float, suffix: str) -> JourneyColumn:
+            return JourneyColumn(
+                id=-1,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=tuple(((tuple(tasks), (suffix,), float(cost)),)),
+            )
+
+        pool = JourneyPool()
+        pool.add(journey((1,), 10.0, "incumbent_active"))
+        pool.add(journey((2,), 5.0, "incumbent_weak"))
+        active_replacement = journey((1,), 4.0, "active_replacement")
+        weak_replacement = journey((2,), 5.0, "weak_replacement")
+        new_task_set = journey((3,), 4.0, "new_task_set")
+        fake_pricing = JourneyPricingResult(
+            [weak_replacement, active_replacement, new_task_set],
+            False,
+            -10.0,
+            0,
+            0,
+            0,
+            3,
+            "FOUND_NEGATIVE",
+            "impact_filter_candidates",
+            pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        duals = JourneyDuals(cover={1: 100.0, 2: 100.0, 3: 100.0}, fleet_limit=0.0, cuts={})
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing):
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode": "require_new_or_active_support",
+                },
+                FutureLogger(None, console=False),
+                duals=duals,
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=pool,
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+                active_task_sets={frozenset({1})},
+            )
+
+        self.assertIsNotNone(worker)
+        pricing, _worker_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual([set(journey.task_set) for journey in pricing.journeys], [{1}, {3}])
+        self.assertEqual(pricing.pulse_worker_impact_filter_candidate_count, 3)
+        self.assertEqual(pricing.pulse_worker_impact_filter_selected_count, 2)
+        self.assertEqual(pricing.pulse_worker_impact_filter_dropped_count, 1)
+        self.assertEqual(pricing.pulse_worker_impact_filter_selected_new_task_set_count, 1)
+        self.assertEqual(
+            pricing.pulse_worker_impact_filter_selected_active_support_changing_count,
+            1,
+        )
+        self.assertIsNone(pricing.pulse_worker_impact_filter_min_true_rc)
+        self.assertAlmostEqual(pricing.pulse_worker_impact_filter_selected_best_true_rc, -96.0)
+        self.assertEqual(pricing.pulse_worker_impact_filter_rc_threshold_dropped_count, 0)
+        for selected in pricing.journeys:
+            self.assertLess(manual_journey_reduced_cost(selected, duals, cuts=tuple()), -1.0e-6)
+
+    def test_sharded_pulse_worker_impact_filter_true_rc_threshold(self):
+        data = load_future_data("very_small")
+
+        def journey(tasks: tuple[int, ...], cost: float, suffix: str) -> JourneyColumn:
+            return JourneyColumn(
+                id=-1,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=tuple(((tuple(tasks), (suffix,), float(cost)),)),
+            )
+
+        pool = JourneyPool()
+        strong_new = journey((3,), 4.0, "strong_new")
+        weak_new = journey((4,), 80.0, "weak_new")
+        fake_pricing = JourneyPricingResult(
+            [weak_new, strong_new],
+            False,
+            -96.0,
+            0,
+            0,
+            0,
+            2,
+            "FOUND_NEGATIVE",
+            "impact_filter_candidates",
+            pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        duals = JourneyDuals(cover={3: 100.0, 4: 100.0}, fleet_limit=0.0, cuts={})
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing):
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode": "require_new_or_active_support",
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc": -50.0,
+                },
+                FutureLogger(None, console=False),
+                duals=duals,
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=pool,
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+                active_task_sets=set(),
+            )
+
+        self.assertIsNotNone(worker)
+        pricing, _worker_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual([set(journey.task_set) for journey in pricing.journeys], [{3}])
+        self.assertEqual(pricing.pulse_worker_impact_filter_candidate_count, 2)
+        self.assertEqual(pricing.pulse_worker_impact_filter_selected_count, 1)
+        self.assertEqual(pricing.pulse_worker_impact_filter_dropped_count, 1)
+        self.assertEqual(pricing.pulse_worker_impact_filter_selected_new_task_set_count, 1)
+        self.assertAlmostEqual(pricing.pulse_worker_impact_filter_min_true_rc, -50.0)
+        self.assertAlmostEqual(pricing.pulse_worker_impact_filter_selected_best_true_rc, -96.0)
+        self.assertEqual(pricing.pulse_worker_impact_filter_rc_threshold_dropped_count, 1)
+
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing):
+            filtered_empty = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode": "require_new_or_active_support",
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc": -200.0,
+                },
+                FutureLogger(None, console=False),
+                duals=duals,
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=pool,
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+                active_task_sets=set(),
+            )
+
+        self.assertIsNotNone(filtered_empty)
+        empty_pricing, _worker_config = filtered_empty
+        self.assertEqual(_journey_pricing_state(empty_pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(empty_pricing.reason, "sharded_pulse_hidden_negative_worker_impact_filtered_empty")
+        self.assertFalse(_journey_pricing_is_global_certificate(empty_pricing))
+        self.assertEqual(empty_pricing.journeys, [])
+        self.assertAlmostEqual(empty_pricing.pulse_worker_impact_filter_min_true_rc, -200.0)
+        self.assertIsNone(empty_pricing.pulse_worker_impact_filter_selected_best_true_rc)
+        self.assertEqual(empty_pricing.pulse_worker_impact_filter_rc_threshold_dropped_count, 2)
+
+    def test_sharded_pulse_worker_followup_reserve_skips_before_call_when_budget_too_low(self):
+        data = load_future_data("very_small")
+        with patch("BPC_future.solver.journey_driver.price_journeys") as mock_price:
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                    "journey_sharded_pulse_hidden_negative_worker_min_followup_time_after_add": 0.5,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=0.1,
+                previous_audit_signal=False,
+                active_task_sets=set(),
+            )
+
+        self.assertIsNone(worker)
+        mock_price.assert_not_called()
+
+    def test_sharded_pulse_worker_max_cg_iter_skips_before_call(self):
+        data = load_future_data("very_small")
+        with patch("BPC_future.solver.journey_driver.price_journeys") as mock_price:
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_hidden_negative_worker_max_cg_iter": 1,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+                active_task_sets=set(),
+            )
+
+        self.assertIsNone(worker)
+        mock_price.assert_not_called()
+
+    def test_sharded_pulse_current_probe_hard_tail_fingerprint_gate(self):
+        config = {
+            "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled": True,
+            "journey_sharded_pulse_worker_current_probe_min_certificate_flat_rounds": 2,
+            "journey_sharded_pulse_worker_current_probe_min_no_column_rounds": 3,
+        }
+        self.assertFalse(
+            _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows(
+                config,
+                certificate_flat_rounds=1,
+                certificate_no_column_rounds=2,
+            )
+        )
+        self.assertTrue(
+            _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows(
+                config,
+                certificate_flat_rounds=2,
+                certificate_no_column_rounds=0,
+            )
+        )
+        self.assertTrue(
+            _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows(
+                config,
+                certificate_flat_rounds=0,
+                certificate_no_column_rounds=3,
+            )
+        )
+        self.assertTrue(
+            _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows(
+                {},
+                certificate_flat_rounds=0,
+                certificate_no_column_rounds=0,
+            )
+        )
+
+    def test_sharded_pulse_worker_current_probe_hard_tail_fingerprint_skips_before_call(self):
+        data = load_future_data("very_small")
+        with patch("BPC_future.solver.journey_driver.price_journeys") as mock_price:
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                    "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_certificate_flat_rounds": 2,
+                    "journey_sharded_pulse_worker_current_probe_min_no_column_rounds": 2,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+                active_task_sets=set(),
+                certificate_flat_rounds=1,
+                certificate_no_column_rounds=0,
+            )
+
+        self.assertIsNone(worker)
+        mock_price.assert_not_called()
+
+    def test_sharded_pulse_worker_followup_reserve_empty_not_certificate(self):
+        candidate = JourneyColumn(
+            id=-1,
+            trips=tuple(),
+            task_set=frozenset({1}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=4.0,
+            fixed_vehicle_cost=0.0,
+            cost=4.0,
+            signature=(((1,), ("reserve-candidate",), 4.0),),
+        )
+        fake_pricing = JourneyPricingResult(
+            [candidate],
+            False,
+            -96.0,
+            0,
+            0,
+            0,
+            1,
+            "FOUND_NEGATIVE",
+            "reserve_candidate",
+            pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        pricing = _journey_sharded_pulse_worker_followup_reserve_filtered(
+            fake_pricing,
+            min_followup_time=0.5,
+            remaining_after_worker=0.1,
+        )
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(pricing.reason, "sharded_pulse_hidden_negative_worker_followup_reserve")
+        self.assertEqual(pricing.journeys, [])
+        self.assertAlmostEqual(pricing.best_reduced_cost, -96.0)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+        self.assertAlmostEqual(pricing.pulse_worker_followup_reserve_min_time, 0.5)
+        self.assertLess(pricing.pulse_worker_followup_reserve_remaining_time, 0.5)
+        self.assertEqual(pricing.pulse_worker_followup_reserve_dropped_journeys, 1)
+
+    def test_sharded_pulse_hidden_negative_worker_caps_call_time_by_remaining_time(self):
+        data = load_future_data("very_small")
+        fake_pricing = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "mock_no_column",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing) as mock_price:
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(time_limit=10.0),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=0.25,
+                previous_audit_signal=False,
+            )
+
+        self.assertIsNotNone(worker)
+        _pricing, worker_config = worker
+        self.assertAlmostEqual(float(worker_config.time_limit), 0.25)
+        called_config = mock_price.call_args.kwargs["config"]
+        self.assertAlmostEqual(float(called_config.time_limit), 0.25)
+        self.assertIsNotNone(called_config.absolute_deadline)
+
+    def test_sharded_pulse_hidden_negative_worker_reserves_post_call_time(self):
+        data = load_future_data("very_small")
+        fake_pricing = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "mock_no_column",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing) as mock_price:
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                    "journey_sharded_pulse_hidden_negative_worker_post_call_time_reserve": 0.1,
+                },
+                FutureLogger(None, console=False),
+                duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=JourneyPool(),
+                base_pricing_config=JourneyPricingConfig(time_limit=10.0),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=0.25,
+                previous_audit_signal=False,
+            )
+
+        self.assertIsNotNone(worker)
+        _pricing, worker_config = worker
+        self.assertAlmostEqual(float(worker_config.time_limit), 0.15)
+        called_config = mock_price.call_args.kwargs["config"]
+        self.assertAlmostEqual(float(called_config.time_limit), 0.15)
+
+    def test_sharded_pulse_worker_impact_filter_empty_not_certificate(self):
+        data = load_future_data("very_small")
+
+        def journey(tasks: tuple[int, ...], cost: float, suffix: str) -> JourneyColumn:
+            return JourneyColumn(
+                id=-1,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=tuple(((tuple(tasks), (suffix,), float(cost)),)),
+            )
+
+        pool = JourneyPool()
+        pool.add(journey((1,), 5.0, "incumbent"))
+        weak_replacement = journey((1,), 5.0, "weak_replacement")
+        fake_pricing = JourneyPricingResult(
+            [weak_replacement],
+            False,
+            -10.0,
+            0,
+            0,
+            0,
+            1,
+            "FOUND_NEGATIVE",
+            "impact_filter_candidates",
+            pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+        )
+        duals = JourneyDuals(cover={1: 100.0}, fleet_limit=0.0, cuts={})
+        with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing):
+            worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                    "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                    "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_enabled": True,
+                    "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                    "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                    "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode": "require_new_or_active_support",
+                },
+                FutureLogger(None, console=False),
+                duals=duals,
+                branch_constraints=tuple(),
+                cuts=tuple(),
+                journey_pool=pool,
+                base_pricing_config=JourneyPricingConfig(),
+                cg_iter=2,
+                certificate_candidate=True,
+                remaining_time=10.0,
+                previous_audit_signal=False,
+                active_task_sets={frozenset({2})},
+            )
+
+        self.assertIsNotNone(worker)
+        pricing, _worker_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertEqual(pricing.reason, "sharded_pulse_hidden_negative_worker_impact_filtered_empty")
+        self.assertEqual(pricing.journeys, [])
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+        self.assertEqual(pricing.pulse_worker_impact_filter_candidate_count, 1)
+        self.assertEqual(pricing.pulse_worker_impact_filter_selected_count, 0)
+        self.assertEqual(pricing.pulse_worker_impact_filter_dropped_count, 1)
+
     def test_sharded_pulse_dummy_driver_smoke_default_off(self):
         result, records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
             "CERTIFIED_NO_NEGATIVE",
@@ -16484,11 +17736,23 @@ class BPCFutureTests(unittest.TestCase):
             "pulse_harvested_support_changing_count",
             "pulse_harvested_replacement_count",
             "pulse_best_true_rc",
+            "pulse_negative_pool_task_set_samples",
+            "pulse_negative_pool_sequence_samples",
+            "pulse_negative_pool_signature_samples",
+            "pulse_harvested_task_set_samples",
+            "pulse_harvested_sequence_samples",
+            "pulse_harvested_signature_samples",
+            "pulse_returned_candidate_task_set_samples",
+            "pulse_returned_candidate_sequence_samples",
+            "pulse_returned_candidate_signature_samples",
         ):
             self.assertIn(key, final_record)
         self.assertTrue(final_record["pulse_negative_found"])
         self.assertGreater(final_record["pulse_negative_pool_size"], 0)
         self.assertGreater(final_record["pulse_harvested_count"], 0)
+        self.assertTrue(final_record["pulse_negative_pool_task_set_samples"])
+        self.assertTrue(final_record["pulse_negative_pool_sequence_samples"])
+        self.assertTrue(final_record["pulse_negative_pool_signature_samples"])
 
     def test_sharded_pulse_dummy_driver_smoke_incomplete_has_no_official_bound(self):
         result, _records, sharded_pricing = self._run_sharded_dummy_driver_smoke(
@@ -18201,6 +19465,4052 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIn(result.status, {"OPTIMAL", "TIME_LIMIT"})
         self.assertIsNotNone(result.primal_bound)
         self.assertGreater(result.columns, len(data.tasks))
+
+    def test_sharded_pulse_roi_calibration_phase7o_profiles_and_fields(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        required_profiles = {
+            "baseline",
+            "audit_only",
+            "strict_worker_previous_signal_only",
+            "strict_worker_current_probe",
+            "strict_worker_current_probe_support_aware",
+            "strict_worker_current_probe_support_aware_low_budget",
+            "strict_worker_current_probe_support_aware_mid_budget",
+            "strict_worker_current_probe_support_aware_impact_filter",
+            "strict_worker_current_probe_hard_tail_only",
+            "strict_worker_delayed_hard_tail_only",
+            "strict_worker_delayed_current_probe_impact",
+            "strict_worker_delayed_current_probe_impact_low_budget",
+            "strict_worker_delayed_current_probe_impact_ultra_low_budget",
+            "strict_worker_delayed_current_probe_impact_low_budget_cooldown",
+            "strict_worker_delayed_current_probe_impact_20_only_cooldown",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_reserve",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_reserve_active_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_deep_reserve_active_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_active_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_followup_reserve",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_early_cg",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_failure_cooldown",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_hard_tail_fingerprint",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown_ordered",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_scan",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_no_roi_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_priority",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_transition_priority",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_path_diagnostic",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_arc_option_priority",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_residual_target_priority_roi_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_diagnostic",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_roi_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_roi_gate",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_diagnostic",
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_roi_gate",
+            "experimental_profile_dp_cap_2000_20_only",
+            "experimental_profile_dp_cap_3000_20_only",
+            "experimental_profile_dp_mask_label_cap_16_20_only",
+            "experimental_profile_dp_mask_label_cap_32_20_only",
+            "experimental_early_new_task_set_quota_3_20_only",
+            "experimental_early_new_task_set_quota_3_return12_20_only",
+            "experimental_pricing_time_0_6_20_only",
+            "experimental_pricing_time_1_0_20_only",
+        }
+        self.assertTrue(required_profiles.issubset(set(roi.VALID_PROFILES)))
+        required_fields = {
+            "scale",
+            "repeat_index",
+            "wall_time",
+            "official_result_changed_vs_baseline",
+            "objective_mismatch_vs_baseline",
+            "exact_completion_bound_retry_count",
+            "exact_completion_bound_retry_time",
+            "final_judge_max_single_call_time",
+            "worker_triggered",
+            "worker_pruned_total",
+            "worker_continue_same_iteration_events",
+            "worker_added_new_task_set_count",
+            "worker_added_replacement_count",
+            "worker_addition_productivity_class",
+            "worker_shards_total",
+            "worker_shards_incomplete",
+            "worker_low_roi_shards",
+            "worker_negative_pool_task_set_samples",
+            "worker_negative_pool_sequence_samples",
+            "worker_negative_pool_signature_samples",
+            "worker_harvested_task_set_samples",
+            "worker_harvested_sequence_samples",
+            "worker_harvested_signature_samples",
+            "worker_returned_candidate_task_set_samples",
+            "worker_returned_candidate_sequence_samples",
+            "worker_returned_candidate_signature_samples",
+            "pool_diag_events",
+            "pool_journeys_last",
+            "pool_unique_task_sets_last",
+            "pool_duplicate_task_sets_last",
+            "pool_duplicate_task_set_ratio_last",
+            "pool_duplicate_task_set_ratio_max",
+            "pool_active_journeys_last",
+            "pool_active_task_sets_last",
+            "pool_active_duplicate_task_set_ratio_last",
+            "pool_active_duplicate_task_set_ratio_max",
+            "pool_active_avg_journeys_per_task_set_last",
+            "pool_active_fractional_ratio_last",
+            "pool_active_fractional_ratio_max",
+            "pool_active_fractional_value_sum_last",
+            "pool_active_fractional_value_max_last",
+            "pool_active_fractional_value_min_last",
+            "pool_active_fractional_small_value_count_last",
+            "pool_active_task_set_hash_first",
+            "pool_active_top_task_set_value_samples_last",
+            "pool_active_task_set_hash_last",
+            "pool_active_task_set_hash_sequence",
+            "pool_active_task_set_hash_unique_count",
+            "pool_active_task_set_hash_churn_count",
+            "pool_active_top_task_set_value_samples_first",
+            "pool_active_trajectory_class",
+            "pool_active_trajectory_reason",
+            "early_column_addition_events",
+            "early_column_addition_kind_sequence",
+            "early_column_primary_task_set_sequence",
+            "early_column_changed_task_set_hash_sequence",
+            "early_column_new_task_set_hash_sequence",
+            "early_column_productivity_class_sequence",
+            "early_column_active_hash_before_sequence",
+            "early_column_active_hash_after_sequence",
+            "early_column_active_hash_transition_count",
+            "early_column_changed_active_relation_before_sequence",
+            "early_column_changed_active_relation_after_sequence",
+            "early_column_active_changed_task_set_count",
+            "early_column_trajectory_class",
+            "early_column_trajectory_reason",
+            "dual_stabilization_events",
+            "dual_stabilization_accepted_count",
+            "dual_stabilization_skipped_count",
+            "dual_stabilization_status_sequence",
+            "dual_stabilization_source_sequence",
+            "dual_stabilization_mode_sequence",
+            "dual_stabilization_reference_sequence",
+            "dual_stabilization_first_accepted_cg_iter",
+            "dual_stabilization_current_pool_negative_count_max",
+            "dual_stabilization_objective_mismatch_count",
+            "dual_stabilization_current_pool_infeasible_count",
+            "dual_stabilization_time",
+            "dual_stabilization_effect_class",
+            "profile_dp_tail_records",
+            "profile_dp_tail_incomplete_count",
+            "profile_dp_tail_negative_count",
+            "profile_dp_tail_no_negative_count",
+            "profile_dp_tail_state_cap_hit_count",
+            "profile_dp_tail_mask_cap_incomplete_count",
+            "profile_dp_tail_time",
+            "profile_dp_tail_state_count_max",
+            "profile_dp_tail_processed_labels_max",
+            "profile_dp_tail_extension_attempts",
+            "profile_dp_tail_nonempty_mask_count_max",
+            "profile_dp_tail_max_labels_per_mask_observed_max",
+            "profile_dp_tail_top_mask_label_counts",
+            "profile_dp_tail_min_best_rc",
+            "profile_dp_tail_class",
+            "profile_dp_tail_reason",
+            "profile_dp_tail_label_cap_pruned",
+            "profile_dp_tail_selected_candidate_input_count",
+            "profile_dp_tail_selected_candidate_scanned_count",
+            "profile_dp_tail_selected_candidate_materialized_count",
+            "profile_dp_tail_selected_candidate_returned_count",
+            "profile_dp_tail_selected_candidate_filtered_count",
+            "profile_dp_tail_selected_unmaterialized_candidate_count",
+            "profile_dp_tail_materialization_candidate_count",
+            "profile_dp_tail_materialization_selected_candidate_count",
+            "profile_dp_tail_materialization_infeasible_filtered_count",
+            "profile_dp_tail_hotspot_class",
+            "profile_dp_tail_hotspot_reason",
+            "official_negative_journey_task_set_count",
+            "official_negative_journey_task_set_hash",
+            "official_negative_journey_task_set_samples",
+            "official_negative_journey_sequence_samples",
+            "official_negative_journey_signature_samples",
+            "official_negative_first_task_set",
+            "official_negative_first_task_count",
+            "official_negative_profile_dp_top_overlap",
+            "official_negative_profile_dp_top_jaccard",
+            "official_negative_profile_dp_top_relation",
+            "official_negative_profile_dp_top_exact",
+            "followup_rmp_objective_delta",
+            "followup_worker_active_task_set_count",
+            "followup_worker_active_task_set_ratio",
+            "followup_wall_after_worker",
+            "followup_pricing_calls",
+            "followup_generated_sequences",
+            "followup_evaluated_timed_trips",
+            "followup_legacy_final_judge_time",
+            "followup_completion_retry_time",
+            "followup_last_pricing_kind",
+            "followup_tail_outcome",
+            "followup_negative_pricing_calls",
+            "followup_incomplete_pricing_calls",
+            "followup_min_best_rc",
+            "followup_pricing_state_sequence",
+            "followup_first_negative_task_set_hash",
+            "followup_first_negative_task_set",
+            "followup_first_negative_task_count",
+            "followup_first_negative_overlap_to_worker",
+            "followup_first_negative_jaccard_to_worker",
+            "followup_first_negative_relation_to_worker",
+            "worker_vs_ordinary_first_worker_task_set",
+            "worker_vs_ordinary_first_followup_task_set",
+            "worker_vs_ordinary_task_set_overlap",
+            "worker_vs_ordinary_task_set_jaccard",
+            "worker_vs_ordinary_task_set_relation",
+            "worker_vs_ordinary_disjoint",
+            "worker_vs_ordinary_worker_task_count",
+            "worker_vs_ordinary_followup_task_count",
+            "worker_vs_ordinary_task_count_delta",
+            "worker_vs_ordinary_worker_added_before_followup",
+            "worker_vs_ordinary_followup_returned_after_worker",
+            "worker_vs_ordinary_contrast_class",
+            "worker_vs_ordinary_negative_pool_overlap",
+            "worker_vs_ordinary_negative_pool_jaccard",
+            "worker_vs_ordinary_negative_pool_relation",
+            "worker_vs_ordinary_negative_pool_exact",
+            "worker_vs_ordinary_harvested_overlap",
+            "worker_vs_ordinary_harvested_jaccard",
+            "worker_vs_ordinary_harvested_relation",
+            "worker_vs_ordinary_harvested_exact",
+            "worker_vs_ordinary_returned_candidate_overlap",
+            "worker_vs_ordinary_returned_candidate_jaccard",
+            "worker_vs_ordinary_returned_candidate_relation",
+            "worker_vs_ordinary_returned_candidate_exact",
+            "worker_target_sequence_task_set",
+            "worker_target_negative_pool_overlap",
+            "worker_target_negative_pool_jaccard",
+            "worker_target_negative_pool_relation",
+            "worker_target_negative_pool_exact",
+            "worker_target_harvested_overlap",
+            "worker_target_harvested_jaccard",
+            "worker_target_harvested_relation",
+            "worker_target_harvested_exact",
+            "worker_target_returned_candidate_overlap",
+            "worker_target_returned_candidate_jaccard",
+            "worker_target_returned_candidate_relation",
+            "worker_target_returned_candidate_exact",
+            "followup_first_negative_profile_dp_top_overlap",
+            "followup_first_negative_profile_dp_top_jaccard",
+            "followup_first_negative_profile_dp_top_relation",
+            "followup_first_negative_profile_dp_top_exact",
+            "followup_first_negative_profile_reachable_overlap",
+            "followup_first_negative_profile_reachable_jaccard",
+            "followup_first_negative_profile_reachable_relation",
+            "followup_first_negative_profile_reachable_exact",
+            "followup_first_negative_profile_negative_overlap",
+            "followup_first_negative_profile_negative_jaccard",
+            "followup_first_negative_profile_negative_relation",
+            "followup_first_negative_profile_negative_exact",
+            "followup_first_negative_profile_selected_overlap",
+            "followup_first_negative_profile_selected_jaccard",
+            "followup_first_negative_profile_selected_relation",
+            "followup_first_negative_profile_selected_exact",
+            "followup_first_negative_profile_materialized_overlap",
+            "followup_first_negative_profile_materialized_jaccard",
+            "followup_first_negative_profile_materialized_relation",
+            "followup_first_negative_profile_materialized_exact",
+            "followup_first_negative_profile_returned_overlap",
+            "followup_first_negative_profile_returned_jaccard",
+            "followup_first_negative_profile_returned_relation",
+            "followup_first_negative_profile_returned_exact",
+            "followup_first_negative_profile_unmaterialized_overlap",
+            "followup_first_negative_profile_unmaterialized_jaccard",
+            "followup_first_negative_profile_unmaterialized_relation",
+            "followup_first_negative_profile_unmaterialized_exact",
+            "followup_first_negative_profile_weak_filtered_overlap",
+            "followup_first_negative_profile_weak_filtered_jaccard",
+            "followup_first_negative_profile_weak_filtered_relation",
+            "followup_first_negative_profile_weak_filtered_exact",
+            "followup_first_negative_profile_filtered_overlap",
+            "followup_first_negative_profile_filtered_jaccard",
+            "followup_first_negative_profile_filtered_relation",
+            "followup_first_negative_profile_filtered_exact",
+            "followup_proof_tail_bridge_class",
+            "followup_proof_tail_bridge_reason",
+            "followup_returned_residual_tail_class",
+            "followup_returned_residual_tail_reason",
+            "followup_negative_task_set_sequence",
+            "followup_negative_task_set_unique_count",
+            "followup_negative_task_set_repeat_count",
+            "followup_first_negative_addition_productivity_class",
+            "followup_first_negative_added_journeys",
+            "followup_first_negative_added_new_task_set_count",
+            "followup_first_negative_added_replacement_count",
+            "followup_first_negative_added_support_changing_count",
+            "followup_post_first_negative_rmp_objective_delta",
+            "followup_post_first_negative_dual_l1_delta",
+            "followup_first_negative_active_after_addition",
+            "followup_first_negative_active_value_after_addition",
+            "followup_first_negative_active_journey_count_after_addition",
+            "followup_first_negative_active_relation_after_addition",
+            "followup_active_fractional_ratio_after_first_negative",
+            "followup_active_total_value_after_first_negative",
+            "followup_active_task_set_hash_after_first_negative",
+            "followup_rmp_residual_impact_class",
+            "followup_rmp_residual_impact_reason",
+            "followup_first_negative_active_persistence_count",
+            "followup_first_negative_active_value_sequence",
+            "followup_first_negative_active_last_value",
+            "followup_active_basis_hash_sequence_after_first_negative",
+            "followup_active_basis_unique_count_after_first_negative",
+            "followup_active_basis_churn_count_after_first_negative",
+            "followup_negative_family_after_first_count",
+            "followup_negative_family_after_first_relation_sequence",
+            "followup_negative_family_after_first_disjoint_count",
+            "followup_negative_family_after_first_overlapping_count",
+            "followup_negative_family_after_first_same_count",
+            "followup_negative_family_after_first_max_overlap",
+            "followup_negative_family_after_first_max_jaccard",
+            "followup_residual_family_chain_class",
+            "followup_residual_family_chain_reason",
+            "followup_post_first_negative_pool_duplicate_task_sets",
+            "followup_post_first_negative_pool_duplicate_task_set_ratio",
+            "followup_post_first_negative_pool_active_duplicate_task_sets",
+            "followup_post_first_negative_pool_active_duplicate_task_set_ratio",
+            "followup_post_first_negative_pool_avg_journeys_per_task_set",
+            "followup_post_first_negative_pool_max_journeys_per_task_set",
+            "followup_post_first_negative_pool_active_avg_journeys_per_task_set",
+            "followup_post_first_negative_pool_active_fractional_value_sum",
+            "followup_post_first_negative_pool_active_fractional_value_max",
+            "followup_post_first_negative_pool_active_fractional_value_min",
+            "followup_post_first_negative_pool_active_fractional_small_value_count",
+            "followup_rmp_degeneracy_pressure_class",
+            "followup_rmp_degeneracy_pressure_reason",
+            "followup_post_first_negative_dual_objective_abs_ratio",
+            "followup_post_first_negative_dual_move_class",
+            "followup_pool_compression_candidate_class",
+            "followup_pool_compression_candidate_reason",
+            "followup_rmp_stabilization_candidate_class",
+            "followup_rmp_stabilization_candidate_reason",
+            "followup_stabilization_diagnostic_design_class",
+            "followup_stabilization_diagnostic_design_reason",
+            "followup_stabilization_diagnostic_recommended_profile",
+            "followup_stabilization_diagnostic_guarded_config_keys",
+            "followup_stabilization_diagnostic_certificate_effect_allowed",
+            "followup_stabilization_probe_enabled",
+            "followup_stabilization_probe_status",
+            "followup_stabilization_probe_reason",
+            "followup_stabilization_probe_mode",
+            "followup_stabilization_probe_candidate_source",
+            "followup_stabilization_probe_anchor_weight",
+            "followup_stabilization_probe_context_hash_required",
+            "followup_stabilization_probe_context_hash",
+            "followup_stabilization_probe_certificate_effect_allowed",
+            "followup_stabilization_probe_official_effect_allowed",
+            "followup_stabilization_probe_mutates_rmp",
+            "followup_stabilization_probe_design_profile",
+            "followup_profile_selected_candidate_input_count",
+            "followup_profile_selected_candidate_scanned_count",
+            "followup_profile_selected_candidate_materialized_count",
+            "followup_profile_selected_candidate_returned_count",
+            "followup_profile_selected_candidate_filtered_count",
+            "followup_profile_selected_candidate_return_limit_truncated_count",
+            "followup_terminal_after_negative_incomplete",
+            "followup_last_pricing_time_limit",
+            "followup_profile_dp_incomplete_count",
+            "followup_profile_dp_incomplete_class",
+            "followup_profile_dp_state_cap_hit",
+            "followup_profile_dp_min_best_rc",
+            "followup_profile_dp_max_labels_per_mask_observed",
+            "followup_profile_dp_nonempty_mask_count",
+            "followup_profile_dp_labels_by_sortie_count",
+            "followup_profile_dp_top_mask_label_counts",
+            "pulse_worker_followup_wall_after_worker",
+            "pulse_worker_followup_profile_dp_incomplete_class",
+            "pulse_worker_followup_profile_dp_max_labels_per_mask_observed",
+            "pulse_worker_followup_profile_dp_nonempty_mask_count",
+            "pulse_worker_followup_profile_dp_labels_by_sortie_count",
+            "pulse_worker_followup_profile_dp_top_mask_label_counts",
+            "pulse_worker_followup_first_negative_task_set_hash",
+            "pulse_worker_followup_first_negative_task_set",
+            "pulse_worker_followup_first_negative_task_count",
+            "pulse_worker_followup_first_negative_overlap_to_worker",
+            "pulse_worker_followup_first_negative_jaccard_to_worker",
+            "pulse_worker_followup_first_negative_relation_to_worker",
+            "pulse_worker_vs_ordinary_first_worker_task_set",
+            "pulse_worker_vs_ordinary_first_followup_task_set",
+            "pulse_worker_vs_ordinary_task_set_overlap",
+            "pulse_worker_vs_ordinary_task_set_jaccard",
+            "pulse_worker_vs_ordinary_task_set_relation",
+            "pulse_worker_vs_ordinary_disjoint",
+            "pulse_worker_vs_ordinary_worker_task_count",
+            "pulse_worker_vs_ordinary_followup_task_count",
+            "pulse_worker_vs_ordinary_task_count_delta",
+            "pulse_worker_vs_ordinary_worker_added_before_followup",
+            "pulse_worker_vs_ordinary_followup_returned_after_worker",
+            "pulse_worker_vs_ordinary_contrast_class",
+            "pulse_worker_vs_ordinary_negative_pool_overlap",
+            "pulse_worker_vs_ordinary_negative_pool_jaccard",
+            "pulse_worker_vs_ordinary_negative_pool_relation",
+            "pulse_worker_vs_ordinary_negative_pool_exact",
+            "pulse_worker_vs_ordinary_harvested_overlap",
+            "pulse_worker_vs_ordinary_harvested_jaccard",
+            "pulse_worker_vs_ordinary_harvested_relation",
+            "pulse_worker_vs_ordinary_harvested_exact",
+            "pulse_worker_vs_ordinary_returned_candidate_overlap",
+            "pulse_worker_vs_ordinary_returned_candidate_jaccard",
+            "pulse_worker_vs_ordinary_returned_candidate_relation",
+            "pulse_worker_vs_ordinary_returned_candidate_exact",
+            "pulse_worker_target_sequence_task_set",
+            "pulse_worker_target_negative_pool_overlap",
+            "pulse_worker_target_negative_pool_jaccard",
+            "pulse_worker_target_negative_pool_relation",
+            "pulse_worker_target_negative_pool_exact",
+            "pulse_worker_target_harvested_overlap",
+            "pulse_worker_target_harvested_jaccard",
+            "pulse_worker_target_harvested_relation",
+            "pulse_worker_target_harvested_exact",
+            "pulse_worker_target_returned_candidate_overlap",
+            "pulse_worker_target_returned_candidate_jaccard",
+            "pulse_worker_target_returned_candidate_relation",
+            "pulse_worker_target_returned_candidate_exact",
+            "pulse_worker_followup_first_negative_profile_dp_top_overlap",
+            "pulse_worker_followup_first_negative_profile_dp_top_jaccard",
+            "pulse_worker_followup_first_negative_profile_dp_top_relation",
+            "pulse_worker_followup_first_negative_profile_dp_top_exact",
+            "pulse_worker_followup_first_negative_profile_reachable_overlap",
+            "pulse_worker_followup_first_negative_profile_reachable_jaccard",
+            "pulse_worker_followup_first_negative_profile_reachable_relation",
+            "pulse_worker_followup_first_negative_profile_reachable_exact",
+            "pulse_worker_followup_first_negative_profile_negative_overlap",
+            "pulse_worker_followup_first_negative_profile_negative_jaccard",
+            "pulse_worker_followup_first_negative_profile_negative_relation",
+            "pulse_worker_followup_first_negative_profile_negative_exact",
+            "pulse_worker_followup_first_negative_profile_selected_overlap",
+            "pulse_worker_followup_first_negative_profile_selected_jaccard",
+            "pulse_worker_followup_first_negative_profile_selected_relation",
+            "pulse_worker_followup_first_negative_profile_selected_exact",
+            "pulse_worker_followup_first_negative_profile_materialized_overlap",
+            "pulse_worker_followup_first_negative_profile_materialized_jaccard",
+            "pulse_worker_followup_first_negative_profile_materialized_relation",
+            "pulse_worker_followup_first_negative_profile_materialized_exact",
+            "pulse_worker_followup_first_negative_profile_returned_overlap",
+            "pulse_worker_followup_first_negative_profile_returned_jaccard",
+            "pulse_worker_followup_first_negative_profile_returned_relation",
+            "pulse_worker_followup_first_negative_profile_returned_exact",
+            "pulse_worker_followup_first_negative_profile_unmaterialized_overlap",
+            "pulse_worker_followup_first_negative_profile_unmaterialized_jaccard",
+            "pulse_worker_followup_first_negative_profile_unmaterialized_relation",
+            "pulse_worker_followup_first_negative_profile_unmaterialized_exact",
+            "pulse_worker_followup_first_negative_profile_weak_filtered_overlap",
+            "pulse_worker_followup_first_negative_profile_weak_filtered_jaccard",
+            "pulse_worker_followup_first_negative_profile_weak_filtered_relation",
+            "pulse_worker_followup_first_negative_profile_weak_filtered_exact",
+            "pulse_worker_followup_first_negative_profile_filtered_overlap",
+            "pulse_worker_followup_first_negative_profile_filtered_jaccard",
+            "pulse_worker_followup_first_negative_profile_filtered_relation",
+            "pulse_worker_followup_first_negative_profile_filtered_exact",
+            "pulse_worker_followup_proof_tail_bridge_class",
+            "pulse_worker_followup_proof_tail_bridge_reason",
+            "pulse_worker_followup_returned_residual_tail_class",
+            "pulse_worker_followup_returned_residual_tail_reason",
+            "pulse_worker_followup_negative_task_set_sequence",
+            "pulse_worker_followup_negative_task_set_unique_count",
+            "pulse_worker_followup_negative_task_set_repeat_count",
+            "pulse_worker_followup_first_negative_addition_productivity_class",
+            "pulse_worker_followup_first_negative_added_journeys",
+            "pulse_worker_followup_first_negative_added_new_task_set_count",
+            "pulse_worker_followup_first_negative_added_replacement_count",
+            "pulse_worker_followup_first_negative_added_support_changing_count",
+            "pulse_worker_followup_post_first_negative_rmp_objective_delta",
+            "pulse_worker_followup_post_first_negative_dual_l1_delta",
+            "pulse_worker_followup_first_negative_active_after_addition",
+            "pulse_worker_followup_first_negative_active_value_after_addition",
+            "pulse_worker_followup_first_negative_active_journey_count_after_addition",
+            "pulse_worker_followup_first_negative_active_relation_after_addition",
+            "pulse_worker_followup_active_fractional_ratio_after_first_negative",
+            "pulse_worker_followup_active_total_value_after_first_negative",
+            "pulse_worker_followup_active_task_set_hash_after_first_negative",
+            "pulse_worker_followup_rmp_residual_impact_class",
+            "pulse_worker_followup_rmp_residual_impact_reason",
+            "pulse_worker_followup_first_negative_active_persistence_count",
+            "pulse_worker_followup_first_negative_active_value_sequence",
+            "pulse_worker_followup_first_negative_active_last_value",
+            "pulse_worker_followup_active_basis_hash_sequence_after_first_negative",
+            "pulse_worker_followup_active_basis_unique_count_after_first_negative",
+            "pulse_worker_followup_active_basis_churn_count_after_first_negative",
+            "pulse_worker_followup_negative_family_after_first_count",
+            "pulse_worker_followup_negative_family_after_first_relation_sequence",
+            "pulse_worker_followup_negative_family_after_first_disjoint_count",
+            "pulse_worker_followup_negative_family_after_first_overlapping_count",
+            "pulse_worker_followup_negative_family_after_first_same_count",
+            "pulse_worker_followup_negative_family_after_first_max_overlap",
+            "pulse_worker_followup_negative_family_after_first_max_jaccard",
+            "pulse_worker_followup_residual_family_chain_class",
+            "pulse_worker_followup_residual_family_chain_reason",
+            "pulse_worker_followup_post_first_negative_pool_duplicate_task_sets",
+            "pulse_worker_followup_post_first_negative_pool_duplicate_task_set_ratio",
+            "pulse_worker_followup_post_first_negative_pool_active_duplicate_task_sets",
+            "pulse_worker_followup_post_first_negative_pool_active_duplicate_task_set_ratio",
+            "pulse_worker_followup_post_first_negative_pool_avg_journeys_per_task_set",
+            "pulse_worker_followup_post_first_negative_pool_max_journeys_per_task_set",
+            "pulse_worker_followup_post_first_negative_pool_active_avg_journeys_per_task_set",
+            "pulse_worker_followup_post_first_negative_pool_active_fractional_value_sum",
+            "pulse_worker_followup_post_first_negative_pool_active_fractional_value_max",
+            "pulse_worker_followup_post_first_negative_pool_active_fractional_value_min",
+            "pulse_worker_followup_post_first_negative_pool_active_fractional_small_value_count",
+            "pulse_worker_followup_rmp_degeneracy_pressure_class",
+            "pulse_worker_followup_rmp_degeneracy_pressure_reason",
+            "pulse_worker_followup_post_first_negative_dual_objective_abs_ratio",
+            "pulse_worker_followup_post_first_negative_dual_move_class",
+            "pulse_worker_followup_pool_compression_candidate_class",
+            "pulse_worker_followup_pool_compression_candidate_reason",
+            "pulse_worker_followup_rmp_stabilization_candidate_class",
+            "pulse_worker_followup_rmp_stabilization_candidate_reason",
+            "pulse_worker_followup_stabilization_diagnostic_design_class",
+            "pulse_worker_followup_stabilization_diagnostic_design_reason",
+            "pulse_worker_followup_stabilization_diagnostic_recommended_profile",
+            "pulse_worker_followup_stabilization_diagnostic_guarded_config_keys",
+            "pulse_worker_followup_stabilization_diagnostic_certificate_effect_allowed",
+            "pulse_worker_followup_stabilization_probe_enabled",
+            "pulse_worker_followup_stabilization_probe_status",
+            "pulse_worker_followup_stabilization_probe_reason",
+            "pulse_worker_followup_stabilization_probe_mode",
+            "pulse_worker_followup_stabilization_probe_candidate_source",
+            "pulse_worker_followup_stabilization_probe_anchor_weight",
+            "pulse_worker_followup_stabilization_probe_context_hash_required",
+            "pulse_worker_followup_stabilization_probe_context_hash",
+            "pulse_worker_followup_stabilization_probe_certificate_effect_allowed",
+            "pulse_worker_followup_stabilization_probe_official_effect_allowed",
+            "pulse_worker_followup_stabilization_probe_mutates_rmp",
+            "pulse_worker_followup_stabilization_probe_design_profile",
+            "pulse_worker_followup_profile_selected_candidate_input_count",
+            "pulse_worker_followup_profile_selected_candidate_scanned_count",
+            "pulse_worker_followup_profile_selected_candidate_materialized_count",
+            "pulse_worker_followup_profile_selected_candidate_returned_count",
+            "pulse_worker_followup_profile_selected_candidate_filtered_count",
+            "pulse_worker_followup_profile_selected_candidate_return_limit_truncated_count",
+            "pulse_residual_replay_events",
+            "pulse_residual_replay_checked",
+            "pulse_residual_replay_materialized",
+            "pulse_residual_replay_negative",
+            "pulse_residual_replay_rc_mismatch_count",
+            "pulse_residual_replay_signature_mismatch_count",
+            "pulse_residual_replay_first_status",
+            "pulse_residual_replay_first_sequence",
+            "pulse_residual_replay_first_original_true_rc",
+            "pulse_residual_replay_first_replay_true_rc",
+            "pulse_residual_replay_first_rc_delta",
+            "pulse_worker_continue_same_iteration_events",
+            "worker_target_sequence",
+            "worker_target_first_task_priority_enabled",
+            "worker_target_first_task_priority_sequence",
+            "worker_target_transition_priority_enabled",
+            "worker_target_transition_priority_sequence",
+            "worker_target_arc_option_priority_enabled",
+            "worker_target_arc_option_priority_sequence",
+            "worker_target_sequence_reached_prefix_len",
+            "worker_target_sequence_completed",
+            "worker_target_sequence_materialized",
+            "worker_target_sequence_negative",
+            "worker_target_sequence_blocked_reason",
+            "worker_target_sequence_blocked_prefix",
+            "worker_target_sequence_blocked_next_task",
+            "worker_target_sequence_transition_attempts",
+            "worker_target_sequence_transition_accepted",
+            "worker_target_sequence_prune_reason_counts",
+            "worker_target_path_diagnostics_enabled",
+            "worker_target_path_prefix_samples",
+            "worker_target_path_blocked_samples",
+            "auto_residual_target_applied",
+            "auto_residual_target_sequence",
+            "auto_residual_target_source_profile",
+            "auto_residual_target_source_context_hash",
+            "auto_residual_target_context_match",
+            "auto_residual_target_candidate_sequence",
+            "auto_residual_target_source_gate",
+            "auto_residual_target_source_gate_reason",
+            "active_residual_source_candidate",
+            "active_residual_source_candidate_sequence",
+            "active_residual_source_context_hash",
+            "active_residual_source_relation",
+            "active_residual_source_active_signal_count",
+            "active_residual_source_gate_reason",
+            "active_residual_source_passed",
+            "active_residual_source_search_candidate_count",
+            "active_residual_source_search_passed_count",
+            "active_residual_source_search_blocked_count",
+            "active_residual_source_search_blocked_disjoint_count",
+            "active_residual_source_search_blocked_no_active_count",
+            "active_residual_source_search_blocked_relation_count",
+            "active_residual_source_search_first_passed_profile",
+            "active_residual_source_search_first_passed_sequence",
+            "active_residual_source_search_first_passed_relation",
+            "active_residual_source_search_first_passed_context_hash",
+            "active_residual_source_search_first_blocked_profile",
+            "active_residual_source_search_first_blocked_sequence",
+            "active_residual_source_search_first_blocked_reason",
+            "active_residual_source_search_outcome_class",
+            "active_residual_source_search_recommendation",
+            "pulse_worker_impact_filter_min_true_rc",
+            "pulse_worker_impact_filter_selected_best_true_rc",
+            "pulse_worker_impact_filter_rc_threshold_dropped_count",
+            "pulse_worker_shards_total",
+            "pulse_worker_shards_incomplete",
+            "pulse_worker_low_roi_shards",
+            "pulse_worker_followup_reserve_min_time",
+            "pulse_worker_followup_reserve_remaining_time",
+            "pulse_worker_followup_reserve_dropped_journeys",
+            "pivot_recommendation_class",
+            "pivot_recommendation_reason",
+            "improvement_class",
+        }
+        self.assertTrue(required_fields.issubset(set(roi.SUMMARY_FIELDS)))
+        for preset in ("tranq10_06", "apollo10_04", "apollo10_09", "tranq20_01"):
+            self.assertIn(preset, roi.INSTANCE_PRESETS)
+            self.assertTrue(Path(roi.INSTANCE_PRESETS[preset]).exists())
+        self.assertEqual(len(roi.INSTANCE_GROUPS["phase7o_5_gate"]), 20)
+        self.assertEqual(len(roi.INSTANCE_GROUPS["balanced10_all"]), 20)
+        self.assertTrue(all(Path(path).exists() for path in roi.INSTANCE_GROUPS["phase7o_5_gate"]))
+        self.assertEqual(
+            roi._expand_instance_args(["phase7o_10_gate"]),
+            [
+                "apollo10",
+                "tranq10_09",
+                "tranq10_04",
+                "tranq10_01",
+                "tranq10_06",
+                "apollo10_04",
+                "apollo10_09",
+            ],
+        )
+        self.assertEqual(roi._expand_instance_args(["apollo10", "apollo10"]), ["apollo10"])
+        self.assertEqual(
+            roi._expand_profile_args(["phase8o_active_source_search"]),
+            [
+                "baseline",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_scan",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_no_roi_gate",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_roi_gate",
+            ],
+        )
+        self.assertEqual(
+            roi._expand_profile_args(["baseline", "phase8o_active_source_search"]),
+            roi._expand_profile_args(["phase8o_active_source_search"]),
+        )
+        phase8p_profiles = roi._expand_profile_args(["phase8p_active_source_seed_matrix"])
+        self.assertEqual(
+            phase8p_profiles,
+            [
+                "baseline",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown_ordered",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_scan",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_no_roi_gate",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_priority",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_roi_gate",
+            ],
+        )
+        self.assertEqual(len(phase8p_profiles), len(set(phase8p_profiles)))
+        self.assertIn("tranq20_01", roi.INSTANCE_GROUPS["phase8p_20_source_seed_matrix"])
+        self.assertIn(
+            "mt20_greedy_apollo_01",
+            roi.INSTANCE_GROUPS["phase8p_20_source_seed_matrix"],
+        )
+        self.assertNotIn("apollo20_01", roi.INSTANCE_GROUPS["phase8p_20_source_seed_matrix"])
+        phase8q_profiles = roi._expand_profile_args(["phase8q_passed_source_roi_validation"])
+        self.assertEqual(
+            phase8q_profiles,
+            [
+                "baseline",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_priority",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_diagnostic",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_roi_gate",
+            ],
+        )
+        self.assertEqual(len(phase8q_profiles), len(set(phase8q_profiles)))
+        phase9a_profiles = roi._expand_profile_args(["phase9a_profile_dp_bridge_diagnostics"])
+        self.assertEqual(
+            phase9a_profiles,
+            [
+                "baseline",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_priority",
+                "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_diagnostic",
+            ],
+        )
+        self.assertEqual(len(phase9a_profiles), len(set(phase9a_profiles)))
+        phase9b_profiles = roi._expand_profile_args(["phase9b_returned_residual_tail_attribution"])
+        self.assertEqual(phase9b_profiles, phase9a_profiles)
+        self.assertEqual(len(phase9b_profiles), len(set(phase9b_profiles)))
+        phase9c_profiles = roi._expand_profile_args(["phase9c_rmp_residual_active_support_attribution"])
+        self.assertEqual(phase9c_profiles, phase9a_profiles)
+        self.assertEqual(len(phase9c_profiles), len(set(phase9c_profiles)))
+        phase9d_profiles = roi._expand_profile_args(["phase9d_residual_family_chain_attribution"])
+        self.assertEqual(phase9d_profiles, phase9a_profiles)
+        self.assertEqual(len(phase9d_profiles), len(set(phase9d_profiles)))
+        phase9e_profiles = roi._expand_profile_args(["phase9e_rmp_degeneracy_pool_pressure_attribution"])
+        self.assertEqual(phase9e_profiles, phase9a_profiles)
+        self.assertEqual(len(phase9e_profiles), len(set(phase9e_profiles)))
+        phase9f_profiles = roi._expand_profile_args(["phase9f_rmp_stabilization_pool_compression_diagnostics"])
+        self.assertEqual(phase9f_profiles, phase9a_profiles)
+        self.assertEqual(len(phase9f_profiles), len(set(phase9f_profiles)))
+        phase9g_profiles = roi._expand_profile_args(["phase9g_rmp_dual_stabilization_diagnostic_design"])
+        self.assertEqual(phase9g_profiles, phase9a_profiles)
+        self.assertEqual(len(phase9g_profiles), len(set(phase9g_profiles)))
+        phase9h_profiles = roi._expand_profile_args(["phase9h_rmp_dual_stabilization_probe_skeleton"])
+        self.assertEqual(phase9h_profiles, phase9a_profiles)
+        self.assertEqual(len(phase9h_profiles), len(set(phase9h_profiles)))
+        phase9i_profiles = roi._expand_profile_args(["phase9i_rmp_dual_stabilization_ab"])
+        self.assertEqual(
+            phase9i_profiles,
+            [
+                "baseline",
+                "experimental_l1_previous_dual_stabilization_20_only",
+                "experimental_l1_zero_dual_stabilization_20_only",
+            ],
+        )
+        self.assertEqual(len(phase9i_profiles), len(set(phase9i_profiles)))
+        phase9j_profiles = roi._expand_profile_args(
+            ["phase9j_rmp_dual_stabilization_repeat_ab"]
+        )
+        self.assertEqual(phase9j_profiles, phase9i_profiles)
+        self.assertEqual(len(phase9j_profiles), len(set(phase9j_profiles)))
+        phase9k_profiles = roi._expand_profile_args(
+            ["phase9k_rmp_dual_stabilization_hardset_ab"]
+        )
+        self.assertEqual(phase9k_profiles, phase9i_profiles)
+        self.assertEqual(len(phase9k_profiles), len(set(phase9k_profiles)))
+        self.assertEqual(
+            roi._expand_instance_args(["phase9k_dual_stabilization_gate"]),
+            [
+                "apollo5",
+                "tranq5",
+                "apollo10",
+                "tranq10_09",
+                "tranq10_04",
+                "mt20_greedy_apollo_01",
+                "tranq20_01",
+                "mt20_greedy_tranq_01",
+            ],
+        )
+        phase9l_profiles = roi._expand_profile_args(
+            ["phase9l_previous_dual_stabilization_gate_ab"]
+        )
+        self.assertEqual(
+            phase9l_profiles,
+            [
+                "baseline",
+                "experimental_l1_previous_dual_stabilization_20_only",
+            ],
+        )
+        self.assertNotIn("experimental_l1_zero_dual_stabilization_20_only", phase9l_profiles)
+        phase9l_instances = roi._expand_instance_args(
+            ["phase9l_previous_dual_stabilization_gate"]
+        )
+        self.assertEqual(len(phase9l_instances), 43)
+        self.assertEqual(
+            phase9l_instances[:20],
+            list(roi.INSTANCE_GROUPS["balanced5_all"]),
+        )
+        self.assertEqual(
+            phase9l_instances[20:40],
+            list(roi.INSTANCE_GROUPS["balanced10_all"]),
+        )
+        self.assertEqual(
+            phase9l_instances[40:],
+            list(roi.INSTANCE_GROUPS["phase7o_20_smoke"]),
+        )
+        self.assertEqual(
+            roi._expand_profile_args(["phase10a_profile_dp_tail_diagnostics"]),
+            ["baseline"],
+        )
+        self.assertEqual(
+            roi._expand_profile_args(["phase10b_profile_dp_state_cap_sensitivity"]),
+            [
+                "baseline",
+                "experimental_profile_dp_cap_2000_20_only",
+                "experimental_profile_dp_cap_3000_20_only",
+            ],
+        )
+        self.assertEqual(
+            roi._expand_instance_args(["phase10b_profile_dp_state_cap_gate"]),
+            [
+                "apollo5",
+                "tranq5",
+                "apollo10",
+                "tranq10_09",
+                "tranq10_04",
+                "tranq20_01",
+                "mt20_greedy_apollo_01",
+                "mt20_greedy_tranq_01",
+            ],
+        )
+        self.assertEqual(
+            roi._expand_profile_args(["phase10c_profile_dp_mask_hotspot_sensitivity"]),
+            [
+                "baseline",
+                "experimental_profile_dp_mask_label_cap_16_20_only",
+                "experimental_profile_dp_mask_label_cap_32_20_only",
+            ],
+        )
+        self.assertEqual(
+            roi._expand_instance_args(["phase10c_profile_dp_mask_hotspot_gate"]),
+            roi._expand_instance_args(["phase10b_profile_dp_state_cap_gate"]),
+        )
+        self.assertEqual(
+            roi._expand_profile_args(["phase11a_profile_pricing_time_sensitivity"]),
+            [
+                "baseline",
+                "experimental_pricing_time_0_6_20_only",
+                "experimental_pricing_time_1_0_20_only",
+            ],
+        )
+        self.assertEqual(
+            roi._expand_profile_args(["phase11b_profile_selection_mode_sensitivity"]),
+            [
+                "baseline",
+                "experimental_profile_selection_integer_diverse_20_only",
+                "experimental_profile_selection_orthogonal_20_only",
+            ],
+        )
+        self.assertEqual(
+            roi._run_log_path(
+                Path("logs"),
+                "tranq20_01",
+                "experimental_l1_zero_dual_stabilization_20_only",
+                repeat_count=1,
+                repeat_index=0,
+            ),
+            Path("logs")
+            / "tranq20_01__experimental_l1_zero_dual_stabilization_20_only.jsonl",
+        )
+        self.assertEqual(
+            roi._run_log_path(
+                Path("logs"),
+                "tranq20_01",
+                "experimental_l1_zero_dual_stabilization_20_only",
+                repeat_count=2,
+                repeat_index=1,
+            ),
+            Path("logs")
+            / "tranq20_01__experimental_l1_zero_dual_stabilization_20_only__r1.jsonl",
+        )
+
+    def test_sharded_pulse_roi_calibration_pivot_classifier(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        self.assertEqual(
+            roi._classify_pivot_recommendation({"critical_disagreement": True})[0],
+            "correctness_blocker",
+        )
+        self.assertEqual(
+            roi._classify_pivot_recommendation(
+                {
+                    "followup_profile_dp_state_cap_hit": True,
+                    "followup_profile_dp_incomplete_class": "profile_dp_state_cap_hit",
+                }
+            )[0],
+            "profile_dp_state_cap",
+        )
+        self.assertEqual(
+            roi._classify_pivot_recommendation(
+                {"followup_first_negative_relation_to_worker": "disjoint_task_set"}
+            )[0],
+            "residual_disjoint_negative",
+        )
+        self.assertEqual(
+            roi._classify_pivot_recommendation({"pool_duplicate_task_set_ratio_last": 0.25})[0],
+            "pool_duplicate_pressure",
+        )
+        self.assertEqual(
+            roi._classify_pivot_recommendation({"pool_active_fractional_ratio_last": 0.75})[0],
+            "rmp_fractional_active_pressure",
+        )
+        self.assertEqual(
+            roi._classify_pivot_recommendation({"worker_added_journeys": 1})[0],
+            "worker_column_impact_unclear",
+        )
+        self.assertEqual(
+            roi._classify_pivot_recommendation({})[0],
+            "no_clear_pivot_signal",
+        )
+        self.assertEqual(
+            roi._classify_improvement(
+                {
+                    "official_status": "TIME_LIMIT",
+                    "primal": 100.0,
+                    "wall_time": 10.0,
+                    "gap": None,
+                    "exact_completion_bound_retry_count": 0,
+                },
+                {
+                    "official_status": "TIME_LIMIT",
+                    "scale": 20,
+                    "primal": 120.0,
+                    "wall_time": 1.0,
+                    "gap": None,
+                    "exact_completion_bound_retry_count": 0,
+                    "critical_disagreement": False,
+                    "critical_disagreement_count": 0,
+                    "objective_mismatch_vs_baseline": False,
+                },
+            ),
+            "worsened",
+        )
+
+    def test_sharded_pulse_roi_calibration_proof_tail_bridge_classifier(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        base = {
+            "first_negative_task_set": (1, 2, 3),
+            "profile_returned_exact": False,
+            "profile_materialized_exact": False,
+            "profile_unmaterialized_exact": False,
+            "profile_weak_filtered_exact": False,
+            "profile_filtered_exact": False,
+            "profile_selected_exact": False,
+            "profile_negative_exact": False,
+            "profile_reachable_exact": False,
+            "profile_dp_top_exact": False,
+            "profile_dp_state_cap_hit": False,
+            "profile_dp_incomplete_class": "no_profile_dp_incomplete",
+            "best_overlap": 0,
+            "selected_candidate_filtered_count": 0,
+            "selected_candidate_return_limit_truncated_count": 0,
+        }
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(
+                **{**base, "first_negative_task_set": tuple()}
+            )[0],
+            "no_followup_negative",
+        )
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(**{**base, "profile_returned_exact": True})[0],
+            "profile_returned_residual_exact",
+        )
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(**{**base, "profile_materialized_exact": True})[0],
+            "profile_materialized_residual_not_returned",
+        )
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(**{**base, "profile_weak_filtered_exact": True})[0],
+            "profile_weak_filtered_residual",
+        )
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(**{**base, "profile_negative_exact": True})[0],
+            "profile_negative_residual_not_selected",
+        )
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(**{**base, "profile_dp_state_cap_hit": True})[0],
+            "profile_dp_state_cap_missing_residual",
+        )
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(**{**base, "best_overlap": 2})[0],
+            "profile_overlap_without_exact_residual",
+        )
+        self.assertEqual(
+            roi._classify_followup_proof_tail_bridge(**base)[0],
+            "profile_no_residual_signal",
+        )
+        self.assertEqual(
+            roi._classify_returned_residual_tail(
+                proof_tail_bridge_class="profile_returned_residual_exact",
+                first_negative_task_set=(1, 2, 3),
+                negative_pricing_calls=2,
+                negative_task_set_unique_count=2,
+                negative_task_set_repeat_count=0,
+                terminal_after_negative_incomplete=False,
+                first_negative_added_journeys=1,
+                first_negative_added_new_task_set_count=1,
+                first_negative_added_replacement_count=0,
+                first_negative_added_support_changing_count=0,
+                post_first_negative_objective_delta=-1.0,
+                post_first_negative_dual_l1_delta=1.0,
+            )[0],
+            "returned_residual_then_new_negative_family",
+        )
+        self.assertEqual(
+            roi._classify_returned_residual_tail(
+                proof_tail_bridge_class="profile_returned_residual_exact",
+                first_negative_task_set=(1, 2, 3),
+                negative_pricing_calls=2,
+                negative_task_set_unique_count=1,
+                negative_task_set_repeat_count=1,
+                terminal_after_negative_incomplete=False,
+                first_negative_added_journeys=1,
+                first_negative_added_new_task_set_count=1,
+                first_negative_added_replacement_count=0,
+                first_negative_added_support_changing_count=0,
+                post_first_negative_objective_delta=-1.0,
+                post_first_negative_dual_l1_delta=1.0,
+            )[0],
+            "returned_residual_repeated_same_task_set",
+        )
+        self.assertEqual(
+            roi._classify_returned_residual_tail(
+                proof_tail_bridge_class="profile_returned_residual_exact",
+                first_negative_task_set=(1, 2, 3),
+                negative_pricing_calls=1,
+                negative_task_set_unique_count=1,
+                negative_task_set_repeat_count=0,
+                terminal_after_negative_incomplete=False,
+                first_negative_added_journeys=1,
+                first_negative_added_new_task_set_count=0,
+                first_negative_added_replacement_count=1,
+                first_negative_added_support_changing_count=0,
+                post_first_negative_objective_delta=0.0,
+                post_first_negative_dual_l1_delta=2.0,
+            )[0],
+            "returned_residual_degenerate_dual_move",
+        )
+        self.assertEqual(
+            roi._classify_returned_residual_tail(
+                proof_tail_bridge_class="profile_returned_residual_exact",
+                first_negative_task_set=(1, 2, 3),
+                negative_pricing_calls=1,
+                negative_task_set_unique_count=1,
+                negative_task_set_repeat_count=0,
+                terminal_after_negative_incomplete=False,
+                first_negative_added_journeys=0,
+                first_negative_added_new_task_set_count=0,
+                first_negative_added_replacement_count=0,
+                first_negative_added_support_changing_count=0,
+                post_first_negative_objective_delta=None,
+                post_first_negative_dual_l1_delta=None,
+            )[0],
+            "returned_residual_no_addition_record",
+        )
+        self.assertEqual(
+            roi._classify_rmp_residual_impact(
+                first_negative_task_set=(1, 2, 3),
+                active_relation="same_task_set",
+                active_value=1.0,
+                active_journey_count=1,
+                first_negative_added_journeys=1,
+                first_negative_added_new_task_set_count=1,
+                first_negative_added_support_changing_count=0,
+                negative_task_set_unique_count=2,
+                post_first_negative_objective_delta=-1.0,
+                post_first_negative_dual_l1_delta=2.0,
+                active_fractional_ratio=0.0,
+            )[0],
+            "active_residual_then_new_negative_family",
+        )
+        self.assertEqual(
+            roi._classify_rmp_residual_impact(
+                first_negative_task_set=(1, 2, 3),
+                active_relation="disjoint_task_set",
+                active_value=None,
+                active_journey_count=0,
+                first_negative_added_journeys=1,
+                first_negative_added_new_task_set_count=1,
+                first_negative_added_support_changing_count=0,
+                negative_task_set_unique_count=2,
+                post_first_negative_objective_delta=-1.0,
+                post_first_negative_dual_l1_delta=2.0,
+                active_fractional_ratio=0.0,
+            )[0],
+            "inactive_residual_then_new_negative_family",
+        )
+        self.assertEqual(
+            roi._classify_residual_family_chain(
+                first_negative_task_set=(1, 2, 3),
+                active_persistence_count=2,
+                active_last_value=1.0,
+                active_basis_unique_count=1,
+                active_basis_churn_count=0,
+                negative_family_after_first_count=2,
+                negative_family_same_count=0,
+                negative_family_overlapping_count=2,
+                negative_family_disjoint_count=0,
+            )[0],
+            "persistent_active_residual_with_overlapping_new_family",
+        )
+        self.assertEqual(
+            roi._classify_residual_family_chain(
+                first_negative_task_set=(1, 2, 3),
+                active_persistence_count=1,
+                active_last_value=1.0,
+                active_basis_unique_count=2,
+                active_basis_churn_count=1,
+                negative_family_after_first_count=2,
+                negative_family_same_count=0,
+                negative_family_overlapping_count=0,
+                negative_family_disjoint_count=2,
+            )[0],
+            "persistent_active_residual_with_disjoint_new_family",
+        )
+        self.assertEqual(
+            roi._classify_residual_family_chain(
+                first_negative_task_set=(1, 2, 3),
+                active_persistence_count=0,
+                active_last_value=None,
+                active_basis_unique_count=2,
+                active_basis_churn_count=1,
+                negative_family_after_first_count=1,
+                negative_family_same_count=0,
+                negative_family_overlapping_count=0,
+                negative_family_disjoint_count=1,
+            )[0],
+            "active_basis_churn_with_new_family",
+        )
+        self.assertEqual(
+            roi._classify_rmp_degeneracy_pressure(
+                first_negative_task_set=(1, 2, 3),
+                active_basis_unique_count=1,
+                active_basis_churn_count=0,
+                negative_family_after_first_count=2,
+                negative_family_overlapping_count=2,
+                negative_family_disjoint_count=0,
+                pool_duplicate_task_set_ratio=0.0,
+                pool_active_duplicate_task_set_ratio=0.0,
+                active_fractional_ratio=0.0,
+                active_fractional_value_sum=0.0,
+                post_first_negative_objective_delta=-1.0,
+                post_first_negative_dual_l1_delta=2.0,
+            )[0],
+            "stable_basis_overlapping_family_with_dual_move",
+        )
+        self.assertEqual(
+            roi._classify_rmp_degeneracy_pressure(
+                first_negative_task_set=(1, 2, 3),
+                active_basis_unique_count=1,
+                active_basis_churn_count=0,
+                negative_family_after_first_count=0,
+                negative_family_overlapping_count=0,
+                negative_family_disjoint_count=0,
+                pool_duplicate_task_set_ratio=0.25,
+                pool_active_duplicate_task_set_ratio=0.0,
+                active_fractional_ratio=0.0,
+                active_fractional_value_sum=0.0,
+                post_first_negative_objective_delta=-1.0,
+                post_first_negative_dual_l1_delta=2.0,
+            )[0],
+            "pool_duplicate_pressure",
+        )
+        self.assertEqual(
+            roi._classify_rmp_degeneracy_pressure(
+                first_negative_task_set=(1, 2, 3),
+                active_basis_unique_count=1,
+                active_basis_churn_count=0,
+                negative_family_after_first_count=0,
+                negative_family_overlapping_count=0,
+                negative_family_disjoint_count=0,
+                pool_duplicate_task_set_ratio=0.0,
+                pool_active_duplicate_task_set_ratio=0.0,
+                active_fractional_ratio=0.75,
+                active_fractional_value_sum=1.2,
+                post_first_negative_objective_delta=-1.0,
+                post_first_negative_dual_l1_delta=2.0,
+            )[0],
+            "active_fractional_pressure",
+        )
+        dual_class, dual_ratio = roi._classify_dual_move(-10.0, 45.0)
+        self.assertEqual(dual_class, "large_dual_move_relative_to_objective")
+        self.assertAlmostEqual(dual_ratio, 4.5)
+        self.assertEqual(
+            roi._classify_pool_compression_candidate(
+                pool_duplicate_task_set_ratio=0.0,
+                pool_active_duplicate_task_set_ratio=0.0,
+                pool_max_journeys_per_task_set=3,
+                pool_avg_journeys_per_task_set=1.0,
+                pool_active_avg_journeys_per_task_set=1.0,
+            )[0],
+            "pool_compression_candidate",
+        )
+        self.assertEqual(
+            roi._classify_rmp_stabilization_candidate(
+                rmp_degeneracy_pressure_class="active_fractional_pressure",
+                dual_move_class="large_dual_move_relative_to_objective",
+                pool_compression_candidate_class="no_pool_compression_signal",
+                active_fractional_ratio=0.75,
+                active_fractional_value_sum=1.2,
+            )[0],
+            "active_family_stabilization_candidate",
+        )
+        self.assertEqual(
+            roi._classify_rmp_stabilization_candidate(
+                rmp_degeneracy_pressure_class="stable_basis_overlapping_family_with_dual_move",
+                dual_move_class="proportional_dual_objective_move",
+                pool_compression_candidate_class="no_pool_compression_signal",
+                active_fractional_ratio=0.0,
+                active_fractional_value_sum=0.0,
+            )[0],
+            "stable_basis_dual_stabilization_candidate",
+        )
+        active_design = roi._stabilization_diagnostic_design(
+            rmp_stabilization_candidate_class="active_family_stabilization_candidate",
+            rmp_stabilization_candidate_reason="active_fractional_ratio=0.75",
+            rmp_degeneracy_pressure_class="active_fractional_pressure",
+            dual_move_class="large_dual_move_relative_to_objective",
+            pool_compression_candidate_class="no_pool_compression_signal",
+        )
+        self.assertEqual(active_design["design_class"], "active_family_stabilization_diagnostic")
+        self.assertEqual(
+            active_design["recommended_profile"],
+            "diagnostic_active_family_dual_anchor_audit_only",
+        )
+        self.assertFalse(active_design["certificate_effect_allowed"])
+        self.assertIn(
+            "journey_rmp_stabilization_diagnostic_allow_certificate_effect",
+            active_design["guarded_config_keys"],
+        )
+        stable_basis_design = roi._stabilization_diagnostic_design(
+            rmp_stabilization_candidate_class="stable_basis_dual_stabilization_candidate",
+            rmp_stabilization_candidate_reason="dual_move_class=proportional_dual_objective_move",
+            rmp_degeneracy_pressure_class="stable_basis_overlapping_family_with_dual_move",
+            dual_move_class="proportional_dual_objective_move",
+            pool_compression_candidate_class="no_pool_compression_signal",
+        )
+        self.assertEqual(
+            stable_basis_design["design_class"],
+            "stable_basis_dual_stabilization_diagnostic",
+        )
+        self.assertEqual(
+            stable_basis_design["recommended_profile"],
+            "diagnostic_stable_basis_dual_anchor_audit_only",
+        )
+        self.assertFalse(stable_basis_design["certificate_effect_allowed"])
+        active_probe = roi._stabilization_probe_skeleton(
+            stabilization_diagnostic_design=active_design,
+            rmp_stabilization_candidate_class="active_family_stabilization_candidate",
+            rmp_stabilization_candidate_reason="active_fractional_ratio=0.75",
+            context_hash="ctx-active",
+        )
+        self.assertTrue(active_probe["enabled"])
+        self.assertEqual(active_probe["status"], "audit_only_probe_planned")
+        self.assertEqual(active_probe["mode"], "active_family_dual_anchor")
+        self.assertAlmostEqual(active_probe["anchor_weight"], 0.10)
+        self.assertTrue(active_probe["context_hash_required"])
+        self.assertEqual(active_probe["context_hash"], "ctx-active")
+        self.assertFalse(active_probe["certificate_effect_allowed"])
+        self.assertFalse(active_probe["official_effect_allowed"])
+        self.assertFalse(active_probe["mutates_rmp"])
+        stable_probe_missing_context = roi._stabilization_probe_skeleton(
+            stabilization_diagnostic_design=stable_basis_design,
+            rmp_stabilization_candidate_class="stable_basis_dual_stabilization_candidate",
+            rmp_stabilization_candidate_reason="dual_move_class=proportional_dual_objective_move",
+            context_hash="",
+        )
+        self.assertFalse(stable_probe_missing_context["enabled"])
+        self.assertEqual(
+            stable_probe_missing_context["status"],
+            "blocked_missing_context_hash",
+        )
+        self.assertEqual(stable_probe_missing_context["mode"], "stable_basis_dual_anchor")
+        self.assertFalse(stable_probe_missing_context["mutates_rmp"])
+        no_design_probe = roi._stabilization_probe_skeleton(
+            stabilization_diagnostic_design=roi._stabilization_diagnostic_design(
+                rmp_stabilization_candidate_class="no_stabilization_candidate",
+                rmp_stabilization_candidate_reason="pressure_class=no_pressure",
+                rmp_degeneracy_pressure_class="no_pressure",
+                dual_move_class="no_dual_move",
+                pool_compression_candidate_class="no_pool_compression_signal",
+            ),
+            rmp_stabilization_candidate_class="no_stabilization_candidate",
+            rmp_stabilization_candidate_reason="pressure_class=no_pressure",
+            context_hash="ctx-unused",
+        )
+        self.assertFalse(no_design_probe["enabled"])
+        self.assertEqual(no_design_probe["status"], "no_stabilization_design")
+        self.assertFalse(no_design_probe["context_hash_required"])
+
+    def test_sharded_pulse_roi_calibration_pool_structure_metrics_are_summarized(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        empty = roi._pool_structure_metrics([])
+        self.assertEqual(empty["pool_diag_events"], 0)
+        self.assertIsNone(empty["pool_duplicate_task_set_ratio_last"])
+        self.assertEqual(empty["pool_active_trajectory_class"], "no_pool_diagnostics")
+        self.assertEqual(empty["pool_active_task_set_hash_unique_count"], 0)
+        self.assertEqual(empty["pool_active_task_set_hash_churn_count"], 0)
+
+        metrics = roi._pool_structure_metrics(
+            [
+                {
+                    "event": "journey_pool_structure_diagnostics",
+                    "pool_journey_count": 4,
+                    "pool_unique_task_set_count": 3,
+                    "pool_duplicate_task_set_count": 1,
+                    "pool_duplicate_task_set_ratio": 0.25,
+                    "pool_avg_journeys_per_task_set": 1.333333333,
+                    "pool_max_journeys_per_task_set": 2,
+                    "pool_active_journey_count": 2,
+                    "pool_active_task_set_count": 2,
+                    "pool_active_duplicate_task_set_count": 0,
+                    "pool_active_duplicate_task_set_ratio": 0.0,
+                    "pool_active_avg_journeys_per_task_set": 1.0,
+                    "pool_active_fractional_journey_count": 1,
+                    "pool_active_fractional_ratio": 0.5,
+                    "pool_active_fractional_value_sum": 0.5,
+                    "pool_active_fractional_value_max": 0.5,
+                    "pool_active_fractional_value_min": 0.5,
+                    "pool_active_fractional_small_value_count": 0,
+                    "pool_active_total_value": 1.5,
+                    "pool_active_max_value": 1.0,
+                    "pool_active_singleton_task_set_count": 1,
+                    "pool_active_multi_task_set_count": 1,
+                    "pool_active_task_count_union": 3,
+                    "pool_active_task_set_hash": "first",
+                    "pool_active_top_task_set_value_samples": [[1.0, 1, [1, 2]], [0.5, 1, [3]]],
+                },
+                {
+                    "event": "journey_pool_structure_diagnostics",
+                    "pool_journey_count": 6,
+                    "pool_unique_task_set_count": 4,
+                    "pool_duplicate_task_set_count": 2,
+                    "pool_duplicate_task_set_ratio": 0.333333333,
+                    "pool_avg_journeys_per_task_set": 1.5,
+                    "pool_max_journeys_per_task_set": 3,
+                    "pool_active_journey_count": 3,
+                    "pool_active_task_set_count": 2,
+                    "pool_active_duplicate_task_set_count": 1,
+                    "pool_active_duplicate_task_set_ratio": 0.333333333,
+                    "pool_active_avg_journeys_per_task_set": 1.5,
+                    "pool_active_fractional_journey_count": 2,
+                    "pool_active_fractional_ratio": 0.666666667,
+                    "pool_active_fractional_value_sum": 1.1,
+                    "pool_active_fractional_value_max": 0.6,
+                    "pool_active_fractional_value_min": 0.5,
+                    "pool_active_fractional_small_value_count": 0,
+                    "pool_active_total_value": 2.0,
+                    "pool_active_max_value": 0.9,
+                    "pool_active_singleton_task_set_count": 0,
+                    "pool_active_multi_task_set_count": 2,
+                    "pool_active_task_count_union": 4,
+                    "pool_active_task_set_hash": "second",
+                    "pool_active_top_task_set_value_samples": [[1.1, 2, [2, 4]], [0.9, 1, [1, 3]]],
+                },
+            ]
+        )
+
+        self.assertEqual(metrics["pool_diag_events"], 2)
+        self.assertEqual(metrics["pool_journeys_last"], 6)
+        self.assertEqual(metrics["pool_unique_task_sets_last"], 4)
+        self.assertEqual(metrics["pool_duplicate_task_sets_last"], 2)
+        self.assertEqual(metrics["pool_duplicate_task_set_ratio_max"], 0.333333333)
+        self.assertEqual(metrics["pool_active_journeys_last"], 3)
+        self.assertEqual(metrics["pool_active_task_sets_last"], 2)
+        self.assertEqual(metrics["pool_active_duplicate_task_sets_last"], 1)
+        self.assertEqual(metrics["pool_active_duplicate_task_set_ratio_max"], 0.333333333)
+        self.assertEqual(metrics["pool_active_avg_journeys_per_task_set_last"], 1.5)
+        self.assertEqual(metrics["pool_active_fractional_ratio_max"], 0.666666667)
+        self.assertEqual(metrics["pool_active_fractional_value_sum_last"], 1.1)
+        self.assertEqual(metrics["pool_active_fractional_value_max_last"], 0.6)
+        self.assertEqual(metrics["pool_active_fractional_value_min_last"], 0.5)
+        self.assertEqual(metrics["pool_active_fractional_small_value_count_last"], 0)
+        self.assertEqual(
+            metrics["pool_active_top_task_set_value_samples_last"],
+            "[[1.1,2,[2,4]],[0.9,1,[1,3]]]",
+        )
+        self.assertEqual(
+            metrics["pool_active_top_task_set_value_samples_first"],
+            "[[1.0,1,[1,2]],[0.5,1,[3]]]",
+        )
+        self.assertEqual(metrics["pool_active_task_set_hash_first"], "first")
+        self.assertEqual(metrics["pool_active_task_set_hash_last"], "second")
+        self.assertEqual(metrics["pool_active_task_set_hash_sequence"], '["first","second"]')
+        self.assertEqual(metrics["pool_active_task_set_hash_unique_count"], 2)
+        self.assertEqual(metrics["pool_active_task_set_hash_churn_count"], 1)
+        self.assertEqual(metrics["pool_active_trajectory_class"], "churn_active_basis")
+        self.assertIn("changed 1 times", metrics["pool_active_trajectory_reason"])
+
+    def test_sharded_pulse_roi_calibration_early_column_trajectory_metrics_are_summarized(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        empty = roi._early_column_trajectory_metrics([])
+        self.assertEqual(empty["early_column_addition_events"], 0)
+        self.assertEqual(empty["early_column_trajectory_class"], "no_early_additions")
+
+        metrics = roi._early_column_trajectory_metrics(
+            [
+                {
+                    "event": "journey_pool_structure_diagnostics",
+                    "pool_active_task_set_hash": "basis-before",
+                    "pool_active_top_task_set_value_samples": [[1.0, 1, [1, 2]]],
+                },
+                {
+                    "event": "journey_column_addition",
+                    "pricing_kind": "heuristic",
+                    "changed_task_set_hash": "changed-hash",
+                    "new_task_set_hash": "new-hash",
+                    "changed_task_set_samples": [[3, 4]],
+                    "new_task_set_samples": [[3, 4]],
+                    "addition_productivity_class": "changed_inactive_only",
+                    "active_changed_task_set_count": 0,
+                },
+                {
+                    "event": "journey_pool_structure_diagnostics",
+                    "pool_active_task_set_hash": "basis-after",
+                    "pool_active_top_task_set_value_samples": [[1.0, 1, [3, 4]]],
+                },
+            ]
+        )
+
+        self.assertEqual(metrics["early_column_addition_events"], 1)
+        self.assertEqual(metrics["early_column_addition_kind_sequence"], '["heuristic"]')
+        self.assertEqual(metrics["early_column_primary_task_set_sequence"], "[[3,4]]")
+        self.assertEqual(metrics["early_column_changed_task_set_hash_sequence"], '["changed-hash"]')
+        self.assertEqual(metrics["early_column_new_task_set_hash_sequence"], '["new-hash"]')
+        self.assertEqual(
+            metrics["early_column_productivity_class_sequence"],
+            '["changed_inactive_only"]',
+        )
+        self.assertEqual(
+            metrics["early_column_active_hash_before_sequence"],
+            '["basis-before"]',
+        )
+        self.assertEqual(
+            metrics["early_column_active_hash_after_sequence"],
+            '["basis-after"]',
+        )
+        self.assertEqual(metrics["early_column_active_hash_transition_count"], 1)
+        self.assertEqual(
+            metrics["early_column_changed_active_relation_before_sequence"],
+            '["disjoint_task_set"]',
+        )
+        self.assertEqual(
+            metrics["early_column_changed_active_relation_after_sequence"],
+            '["same_task_set"]',
+        )
+        self.assertEqual(metrics["early_column_active_changed_task_set_count"], 0)
+        self.assertEqual(
+            metrics["early_column_trajectory_class"],
+            "inactive_addition_enters_active_basis",
+        )
+
+    def test_sharded_pulse_roi_calibration_dual_stabilization_metrics_are_summarized(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        empty = roi._dual_stabilization_metrics([])
+        self.assertEqual(empty["dual_stabilization_events"], 0)
+        self.assertEqual(empty["dual_stabilization_effect_class"], "not_run")
+
+        metrics = roi._dual_stabilization_metrics(
+            [
+                {
+                    "event": "journey_dual_stabilization",
+                    "cg_iter": 1,
+                    "status": "SKIPPED",
+                    "accepted": False,
+                    "reason": "not_tail_degenerate",
+                    "pricing_dual_source": "scip",
+                    "time": 0.1,
+                },
+                {
+                    "event": "journey_dual_stabilization",
+                    "cg_iter": 2,
+                    "status": "OPTIMAL",
+                    "accepted": True,
+                    "mode": "l1_reference",
+                    "reference": "previous",
+                    "objective_matches": True,
+                    "current_pool_dual_feasible": True,
+                    "current_pool_negative_reduced_cost_count": 0,
+                    "pricing_dual_source": "stabilized",
+                    "time": 0.2,
+                },
+                {
+                    "event": "journey_dual_stabilization",
+                    "cg_iter": 3,
+                    "status": "TIMELIMIT",
+                    "accepted": False,
+                    "mode": "l1_reference",
+                    "reference": "zero",
+                    "objective_matches": False,
+                    "current_pool_dual_feasible": False,
+                    "current_pool_negative_reduced_cost_count": 2,
+                    "pricing_dual_source": "scip",
+                    "time": 0.3,
+                },
+            ]
+        )
+        self.assertEqual(metrics["dual_stabilization_events"], 3)
+        self.assertEqual(metrics["dual_stabilization_accepted_count"], 1)
+        self.assertEqual(metrics["dual_stabilization_skipped_count"], 1)
+        self.assertEqual(metrics["dual_stabilization_first_accepted_cg_iter"], 2)
+        self.assertEqual(metrics["dual_stabilization_current_pool_negative_count_max"], 2)
+        self.assertEqual(metrics["dual_stabilization_objective_mismatch_count"], 1)
+        self.assertEqual(metrics["dual_stabilization_current_pool_infeasible_count"], 1)
+        self.assertAlmostEqual(metrics["dual_stabilization_time"], 0.6)
+        self.assertEqual(metrics["dual_stabilization_effect_class"], "accepted_stabilized_dual")
+        self.assertEqual(
+            metrics["dual_stabilization_source_sequence"],
+            "scip|stabilized|scip",
+        )
+
+    def test_sharded_pulse_roi_calibration_profile_dp_tail_metrics_are_summarized(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        empty = roi._profile_dp_tail_metrics([])
+        self.assertEqual(empty["profile_dp_tail_records"], 0)
+        self.assertEqual(empty["profile_dp_tail_class"], "no_profile_dp_tail")
+
+        metrics = roi._profile_dp_tail_metrics(
+            [
+                {
+                    "event": "journey_pricing",
+                    "pricing_kind": "exact",
+                    "pricing_state": "INCOMPLETE_LIMIT",
+                    "reason": "profile_dp_incomplete_state_cap",
+                    "profile_dp_time": 0.1,
+                    "dp_state_count": 100,
+                    "pricing_max_dp_states": 100,
+                    "dp_processed_labels": 25,
+                    "dp_extension_attempts": 40,
+                    "dp_nonempty_mask_count": 9,
+                    "dp_max_labels_per_mask_observed": 5,
+                    "dp_top_mask_label_counts": [(1, 5, (2, 3))],
+                    "dp_label_cap_pruned": 4,
+                    "profile_selected_candidate_input_count": 3,
+                    "profile_selected_candidate_scanned_count": 2,
+                    "profile_selected_candidate_materialized_count": 1,
+                    "profile_selected_candidate_returned_count": 0,
+                    "profile_selected_candidate_duplicate_task_set_filtered_count": 1,
+                    "profile_selected_unmaterialized_candidate_count": 1,
+                    "profile_materialization_candidate_count": 2,
+                    "profile_materialization_selected_candidate_count": 1,
+                    "profile_materialization_infeasible_candidates_filtered": 1,
+                    "best_reduced_cost": -2.0,
+                },
+                {
+                    "event": "journey_pricing",
+                    "pricing_kind": "exact",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "reason": "profile_dp_found_negative",
+                    "profile_dp_time": 0.2,
+                    "dp_state_count": 50,
+                    "pricing_max_dp_states": 100,
+                    "dp_processed_labels": 30,
+                    "dp_extension_attempts": 60,
+                    "dp_nonempty_mask_count": 7,
+                    "dp_max_labels_per_mask_observed": 3,
+                    "best_reduced_cost": -3.5,
+                },
+                {
+                    "event": "journey_pricing",
+                    "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "reason": "profile_dp_incomplete_state_cap",
+                    "profile_dp_time": 9.0,
+                    "dp_state_count": 999,
+                },
+            ]
+        )
+        self.assertEqual(metrics["profile_dp_tail_records"], 2)
+        self.assertEqual(metrics["profile_dp_tail_incomplete_count"], 1)
+        self.assertEqual(metrics["profile_dp_tail_negative_count"], 2)
+        self.assertEqual(metrics["profile_dp_tail_state_cap_hit_count"], 1)
+        self.assertEqual(metrics["profile_dp_tail_state_count_max"], 100)
+        self.assertEqual(metrics["profile_dp_tail_processed_labels_max"], 30)
+        self.assertEqual(metrics["profile_dp_tail_extension_attempts"], 100)
+        self.assertEqual(metrics["profile_dp_tail_nonempty_mask_count_max"], 9)
+        self.assertEqual(metrics["profile_dp_tail_max_labels_per_mask_observed_max"], 5)
+        self.assertAlmostEqual(metrics["profile_dp_tail_time"], 0.3)
+        self.assertEqual(metrics["profile_dp_tail_min_best_rc"], -3.5)
+        self.assertEqual(metrics["profile_dp_tail_class"], "profile_dp_state_cap_tail")
+        self.assertEqual(metrics["profile_dp_tail_label_cap_pruned"], 4)
+        self.assertEqual(metrics["profile_dp_tail_selected_candidate_input_count"], 3)
+        self.assertEqual(metrics["profile_dp_tail_selected_candidate_scanned_count"], 2)
+        self.assertEqual(metrics["profile_dp_tail_selected_candidate_materialized_count"], 1)
+        self.assertEqual(metrics["profile_dp_tail_selected_candidate_returned_count"], 0)
+        self.assertEqual(metrics["profile_dp_tail_selected_candidate_filtered_count"], 1)
+        self.assertEqual(metrics["profile_dp_tail_selected_unmaterialized_candidate_count"], 1)
+        self.assertEqual(metrics["profile_dp_tail_materialization_candidate_count"], 2)
+        self.assertEqual(metrics["profile_dp_tail_materialization_selected_candidate_count"], 1)
+        self.assertEqual(metrics["profile_dp_tail_materialization_infeasible_filtered_count"], 1)
+        self.assertEqual(metrics["profile_dp_tail_hotspot_class"], "profile_dp_label_cap_active")
+
+    def test_sharded_pulse_roi_calibration_worker_followup_metrics_are_attributed(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        no_addition = roi._worker_followup_metrics(
+            [
+                {
+                    "event": "journey_pricing",
+                    "cg_iter": 1,
+                    "pricing_kind": "exact",
+                    "generated_sequences": 7,
+                    "evaluated_timed_trips": 9,
+                }
+            ]
+        )
+        self.assertEqual(no_addition["pricing_calls"], 0)
+        self.assertIsNone(no_addition["wall_after_worker"])
+        self.assertEqual(no_addition["pricing_state_sequence"], "")
+        self.assertFalse(no_addition["terminal_after_negative_incomplete"])
+        self.assertEqual(no_addition["profile_dp_incomplete_count"], 0)
+        self.assertEqual(no_addition["profile_dp_incomplete_class"], "no_worker_add")
+        self.assertIsNone(no_addition["profile_dp_min_best_rc"])
+        self.assertEqual(no_addition["profile_dp_max_labels_per_mask_observed"], 0)
+        self.assertEqual(no_addition["profile_dp_nonempty_mask_count"], 0)
+        self.assertEqual(no_addition["profile_dp_labels_by_sortie_count"], "")
+        self.assertEqual(no_addition["profile_dp_top_mask_label_counts"], "")
+        self.assertEqual(no_addition["first_negative_task_set"], "")
+        self.assertIsNone(no_addition["first_negative_jaccard_to_worker"])
+        self.assertEqual(no_addition["first_negative_relation_to_worker"], "no_worker_add")
+        self.assertEqual(no_addition["worker_vs_ordinary_first_worker_task_set"], "")
+        self.assertEqual(no_addition["worker_vs_ordinary_first_followup_task_set"], "")
+        self.assertEqual(no_addition["worker_vs_ordinary_task_set_overlap"], 0)
+        self.assertIsNone(no_addition["worker_vs_ordinary_task_set_jaccard"])
+        self.assertEqual(no_addition["worker_vs_ordinary_task_set_relation"], "no_worker_add")
+        self.assertFalse(no_addition["worker_vs_ordinary_disjoint"])
+        self.assertEqual(no_addition["worker_vs_ordinary_worker_task_count"], 0)
+        self.assertEqual(no_addition["worker_vs_ordinary_followup_task_count"], 0)
+        self.assertIsNone(no_addition["worker_vs_ordinary_task_count_delta"])
+        self.assertFalse(no_addition["worker_vs_ordinary_worker_added_before_followup"])
+        self.assertFalse(no_addition["worker_vs_ordinary_followup_returned_after_worker"])
+        self.assertEqual(no_addition["worker_vs_ordinary_contrast_class"], "no_worker_add")
+        self.assertEqual(no_addition["worker_negative_pool_task_set_samples"], "")
+        self.assertEqual(no_addition["worker_negative_pool_sequence_samples"], "")
+        self.assertEqual(no_addition["worker_negative_pool_signature_samples"], "")
+        self.assertEqual(no_addition["worker_harvested_task_set_samples"], "")
+        self.assertEqual(no_addition["worker_harvested_sequence_samples"], "")
+        self.assertEqual(no_addition["worker_harvested_signature_samples"], "")
+        self.assertEqual(no_addition["worker_returned_candidate_task_set_samples"], "")
+        self.assertEqual(no_addition["worker_returned_candidate_sequence_samples"], "")
+        self.assertEqual(no_addition["worker_returned_candidate_signature_samples"], "")
+        self.assertEqual(no_addition["worker_vs_ordinary_negative_pool_overlap"], 0)
+        self.assertIsNone(no_addition["worker_vs_ordinary_negative_pool_jaccard"])
+        self.assertEqual(no_addition["worker_vs_ordinary_negative_pool_relation"], "no_worker_add")
+        self.assertFalse(no_addition["worker_vs_ordinary_negative_pool_exact"])
+        self.assertEqual(no_addition["worker_vs_ordinary_harvested_overlap"], 0)
+        self.assertIsNone(no_addition["worker_vs_ordinary_harvested_jaccard"])
+        self.assertEqual(no_addition["worker_vs_ordinary_harvested_relation"], "no_worker_add")
+        self.assertFalse(no_addition["worker_vs_ordinary_harvested_exact"])
+        self.assertEqual(no_addition["worker_vs_ordinary_returned_candidate_overlap"], 0)
+        self.assertIsNone(no_addition["worker_vs_ordinary_returned_candidate_jaccard"])
+        self.assertEqual(no_addition["worker_vs_ordinary_returned_candidate_relation"], "no_worker_add")
+        self.assertFalse(no_addition["worker_vs_ordinary_returned_candidate_exact"])
+        self.assertEqual(no_addition["worker_target_sequence_task_set"], "")
+        self.assertEqual(no_addition["worker_target_negative_pool_overlap"], 0)
+        self.assertIsNone(no_addition["worker_target_negative_pool_jaccard"])
+        self.assertEqual(no_addition["worker_target_negative_pool_relation"], "no_worker_add")
+        self.assertFalse(no_addition["worker_target_negative_pool_exact"])
+        self.assertEqual(no_addition["worker_target_harvested_overlap"], 0)
+        self.assertFalse(no_addition["worker_target_harvested_exact"])
+        self.assertEqual(no_addition["worker_target_returned_candidate_overlap"], 0)
+        self.assertFalse(no_addition["worker_target_returned_candidate_exact"])
+        self.assertEqual(no_addition["first_negative_profile_dp_top_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_dp_top_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_dp_top_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_dp_top_exact"])
+        self.assertEqual(no_addition["first_negative_profile_reachable_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_reachable_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_reachable_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_reachable_exact"])
+        self.assertEqual(no_addition["first_negative_profile_negative_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_negative_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_negative_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_negative_exact"])
+        self.assertEqual(no_addition["first_negative_profile_selected_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_selected_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_selected_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_selected_exact"])
+        self.assertEqual(no_addition["first_negative_profile_materialized_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_materialized_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_materialized_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_materialized_exact"])
+        self.assertEqual(no_addition["first_negative_profile_returned_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_returned_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_returned_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_returned_exact"])
+        self.assertEqual(no_addition["first_negative_profile_unmaterialized_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_unmaterialized_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_unmaterialized_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_unmaterialized_exact"])
+        self.assertEqual(no_addition["first_negative_profile_weak_filtered_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_weak_filtered_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_weak_filtered_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_weak_filtered_exact"])
+        self.assertEqual(no_addition["first_negative_profile_filtered_overlap"], 0)
+        self.assertIsNone(no_addition["first_negative_profile_filtered_jaccard"])
+        self.assertEqual(no_addition["first_negative_profile_filtered_relation"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_profile_filtered_exact"])
+        self.assertEqual(no_addition["profile_selected_candidate_input_count"], 0)
+        self.assertEqual(no_addition["profile_selected_candidate_scanned_count"], 0)
+        self.assertEqual(no_addition["profile_selected_candidate_materialized_count"], 0)
+        self.assertEqual(no_addition["profile_selected_candidate_returned_count"], 0)
+        self.assertEqual(no_addition["profile_selected_candidate_filtered_count"], 0)
+        self.assertEqual(no_addition["profile_selected_candidate_return_limit_truncated_count"], 0)
+        self.assertEqual(no_addition["proof_tail_bridge_class"], "no_worker_add")
+        self.assertEqual(no_addition["returned_residual_tail_class"], "no_worker_add")
+        self.assertFalse(no_addition["first_negative_active_after_addition"])
+        self.assertEqual(no_addition["rmp_residual_impact_class"], "no_worker_add")
+        self.assertFalse(no_addition["stabilization_probe_enabled"])
+        self.assertEqual(no_addition["stabilization_probe_status"], "no_worker_add")
+        self.assertFalse(no_addition["stabilization_probe_context_hash_required"])
+        self.assertFalse(no_addition["stabilization_probe_certificate_effect_allowed"])
+        self.assertFalse(no_addition["stabilization_probe_official_effect_allowed"])
+        self.assertFalse(no_addition["stabilization_probe_mutates_rmp"])
+
+        records = [
+            {"event": "journey_rmp_dual_diagnostics", "cg_iter": 1, "time": 0.1},
+            {
+                "event": "journey_sharded_pulse_hidden_negative_worker",
+                "cg_iter": 1,
+                "pulse_worker_status": "FOUND_NEGATIVE",
+                "pulse_worker_context_hash": "ctx-worker",
+                "time": 0.15,
+            },
+            {
+                "event": "journey_pricing",
+                "cg_iter": 1,
+                "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                "generated_sequences": 5,
+                "evaluated_timed_trips": 5,
+                "time": 0.16,
+            },
+            {
+                "event": "journey_column_addition",
+                "cg_iter": 1,
+                "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                "added_journeys": 1,
+                "changed_task_set_samples": [[1, 2, 3]],
+                "time": 0.2,
+            },
+            {
+                "event": "journey_rmp_dual_diagnostics",
+                "cg_iter": 2,
+                "objective_delta": -3.0,
+                "dual_l1_delta": 4.5,
+                "worker_followup_changed_task_set_count": 3,
+                "worker_followup_active_changed_task_set_count": 1,
+                "worker_followup_inactive_changed_task_set_count": 2,
+                "time": 0.25,
+            },
+            {
+                "event": "journey_pricing",
+                "cg_iter": 2,
+                "pricing_kind": "heuristic",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "reason": "profile_dp_incomplete",
+                "generated_sequences": 10,
+                "evaluated_timed_trips": 11,
+                "best_reduced_cost": -1.0,
+                "dp_state_count": 40,
+                "dp_processed_labels": 50,
+                "dp_extension_attempts": 60,
+                "dp_max_labels_per_mask_observed": 3,
+                "dp_nonempty_mask_count": 4,
+                "dp_labels_by_sortie_count": [[1, 4], [2, 2]],
+                "dp_top_mask_label_counts": [[1, 3, [1, 2]]],
+                "profile_dp_time": 0.12,
+                "pricing_max_dp_states": 100,
+                "time": 0.4,
+            },
+            {
+                "event": "journey_pricing",
+                "cg_iter": 2,
+                "pricing_kind": "exact",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "reason": "profile_dp_incomplete",
+                "generated_sequences": 2,
+                "evaluated_timed_trips": 3,
+                "best_reduced_cost": 0.2,
+                "dp_state_count": 100,
+                "dp_processed_labels": 80,
+                "dp_extension_attempts": 90,
+                "dp_max_labels_per_mask_observed": 7,
+                "dp_nonempty_mask_count": 9,
+                "dp_labels_by_sortie_count": [[1, 6], [2, 5]],
+                "dp_top_mask_label_counts": [[2, 7, [2, 3, 4]], [1, 4, [2, 3]]],
+                "profile_dp_time": 0.2,
+                "pricing_max_dp_states": 100,
+                "time": 0.5,
+            },
+            {
+                "event": "journey_exact_pricing_completion_bound_retry",
+                "cg_iter": 2,
+                "time": 0.6,
+            },
+            {
+                "event": "journey_pricing",
+                "cg_iter": 2,
+                "pricing_kind": "exact_completion_bound_retry",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "reason": "retry_incomplete",
+                "generated_sequences": 1,
+                "evaluated_timed_trips": 1,
+                "best_reduced_cost": 0.1,
+                "time": 0.7,
+            },
+            {"event": "journey_hidden_negative_audit", "cg_iter": 2, "time": 0.8},
+            {
+                "event": "journey_sharded_pulse_hidden_negative_worker",
+                "cg_iter": 2,
+                "pulse_worker_status": "FOUND_NEGATIVE",
+                "time": 0.9,
+            },
+            {"event": "finish", "time": 1.2},
+        ]
+        metrics = roi._worker_followup_metrics(records)
+        self.assertAlmostEqual(metrics["next_rmp_objective_delta"], -3.0)
+        self.assertAlmostEqual(metrics["next_dual_l1_delta"], 4.5)
+        self.assertEqual(metrics["worker_changed_task_set_count"], 3)
+        self.assertEqual(metrics["worker_active_task_set_count"], 1)
+        self.assertEqual(metrics["worker_inactive_task_set_count"], 2)
+        self.assertAlmostEqual(metrics["worker_active_task_set_ratio"], 1.0 / 3.0)
+        self.assertAlmostEqual(metrics["wall_after_worker"], 1.0)
+        self.assertEqual(metrics["pricing_calls"], 3)
+        self.assertEqual(metrics["heuristic_pricing_calls"], 1)
+        self.assertEqual(metrics["exact_pricing_calls"], 2)
+        self.assertEqual(metrics["exact_retry_pricing_calls"], 1)
+        self.assertEqual(metrics["generated_sequences"], 13)
+        self.assertEqual(metrics["evaluated_timed_trips"], 15)
+        self.assertEqual(metrics["legacy_after_worker_calls"], 2)
+        self.assertAlmostEqual(metrics["legacy_after_worker_time"], 1.2)
+        self.assertEqual(metrics["completion_retry_after_worker_count"], 2)
+        self.assertAlmostEqual(metrics["completion_retry_after_worker_time"], 1.3)
+        self.assertEqual(metrics["hidden_negative_after_worker_count"], 1)
+        self.assertEqual(metrics["worker_negative_after_worker_count"], 1)
+        self.assertEqual(metrics["last_pricing_kind"], "exact_completion_bound_retry")
+        self.assertEqual(metrics["last_pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertEqual(metrics["last_pricing_reason"], "retry_incomplete")
+        self.assertAlmostEqual(metrics["last_best_rc"], 0.1)
+        self.assertEqual(metrics["tail_outcome"], "followup_incomplete_negative_best_rc")
+        self.assertEqual(metrics["negative_pricing_calls"], 0)
+        self.assertEqual(metrics["incomplete_pricing_calls"], 3)
+        self.assertAlmostEqual(metrics["min_best_rc"], -1.0)
+        self.assertIn("heuristic:INCOMPLETE_LIMIT:profile_dp_incomplete", metrics["pricing_state_sequence"])
+        self.assertFalse(metrics["terminal_after_negative_incomplete"])
+        self.assertEqual(metrics["last_pricing_max_dp_states"], 0)
+        self.assertEqual(metrics["profile_dp_incomplete_count"], 2)
+        self.assertEqual(metrics["profile_dp_incomplete_class"], "profile_dp_state_cap_hit")
+        self.assertTrue(metrics["profile_dp_state_cap_hit"])
+        self.assertEqual(metrics["profile_dp_state_count_max"], 100)
+        self.assertEqual(metrics["profile_dp_processed_labels_max"], 80)
+        self.assertEqual(metrics["profile_dp_extension_attempts"], 150)
+        self.assertAlmostEqual(metrics["profile_dp_time"], 0.32)
+        self.assertAlmostEqual(metrics["profile_dp_min_best_rc"], -1.0)
+        self.assertEqual(metrics["profile_dp_max_labels_per_mask_observed"], 7)
+        self.assertEqual(metrics["profile_dp_nonempty_mask_count"], 9)
+        self.assertEqual(metrics["profile_dp_labels_by_sortie_count"], "[[1,6],[2,5]]")
+        self.assertEqual(
+            metrics["profile_dp_top_mask_label_counts"],
+            "[[2,7,[2,3,4]],[1,4,[2,3]]]",
+        )
+        self.assertEqual(metrics["worker_vs_ordinary_first_worker_task_set"], "1,2,3")
+        self.assertEqual(metrics["worker_vs_ordinary_first_followup_task_set"], "")
+        self.assertEqual(metrics["worker_vs_ordinary_task_set_relation"], "unknown")
+        self.assertFalse(metrics["worker_vs_ordinary_disjoint"])
+        self.assertEqual(metrics["worker_vs_ordinary_worker_task_count"], 3)
+        self.assertEqual(metrics["worker_vs_ordinary_followup_task_count"], 0)
+        self.assertIsNone(metrics["worker_vs_ordinary_task_count_delta"])
+        self.assertTrue(metrics["worker_vs_ordinary_worker_added_before_followup"])
+        self.assertFalse(metrics["worker_vs_ordinary_followup_returned_after_worker"])
+        self.assertEqual(metrics["worker_vs_ordinary_contrast_class"], "no_followup_negative")
+        self.assertEqual(
+            roi._classify_followup_profile_dp_incomplete(
+                [{"reason": "profile_dp_incomplete"}],
+                min_best_rc=0.2,
+                state_cap_hit=False,
+            ),
+            "profile_dp_positive_best_rc_incomplete",
+        )
+
+        terminal_after_negative = roi._worker_followup_metrics(
+            [
+                {
+                    "event": "journey_pricing",
+                    "cg_iter": 1,
+                    "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                    "pulse_negative_pool_task_set_samples": [[1, 2, 3], [2, 3, 4]],
+                    "pulse_negative_pool_sequence_samples": [[[1, 2, 3]], [[2, 3, 4]]],
+                    "pulse_negative_pool_signature_samples": ["worker", "residual"],
+                    "pulse_harvested_task_set_samples": [[1, 2, 3]],
+                    "pulse_harvested_sequence_samples": [[[1, 2, 3]]],
+                    "pulse_harvested_signature_samples": ["worker"],
+                    "pulse_returned_candidate_task_set_samples": [[1, 2, 3]],
+                    "pulse_returned_candidate_sequence_samples": [[[1, 2, 3]]],
+                    "pulse_returned_candidate_signature_samples": ["worker"],
+                    "pulse_worker_target_sequence": [2, 3, 4],
+                    "pulse_worker_context_hash": "ctx-terminal",
+                    "time": 0.1,
+                },
+                {
+                    "event": "journey_column_addition",
+                    "cg_iter": 1,
+                    "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                    "added_journeys": 1,
+                    "changed_task_set_samples": [[1, 2, 3]],
+                    "time": 0.2,
+                },
+                {
+                    "event": "journey_pricing",
+                    "cg_iter": 2,
+                    "pricing_kind": "heuristic",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "reason": "partial_dp_negative_journey",
+                    "best_reduced_cost": -2.5,
+                    "negative_journey_task_set_hash": "residual",
+                    "negative_journey_task_set_samples": [[2, 3, 4]],
+                    "negative_journey_sequence_samples": [[[2, 3, 4]]],
+                    "negative_journey_signature_samples": ["(((2, 3, 4), ('p',), 0.0),)"],
+                    "pricing_time_limit": 0.2,
+                    "pricing_max_dp_states": 1000,
+                    "profile_dp_time": 0.03,
+                    "dp_state_count": 1001,
+                    "dp_max_labels_per_mask_observed": 9,
+                    "dp_nonempty_mask_count": 5,
+                    "dp_top_mask_label_counts": [[1, 9, [2, 3, 4]], [1, 4, [2, 3]]],
+                    "diagnostic_reachable_task_set_samples": [[2, 3, 4], [9]],
+                    "diagnostic_negative_task_set_samples": [[2, 3, 4]],
+                    "diagnostic_selected_task_set_samples": [[2, 3]],
+                    "diagnostic_selected_materialized_task_set_samples": [[2, 3, 4]],
+                    "diagnostic_selected_returned_task_set_samples": [[2, 3, 4]],
+                    "diagnostic_selected_unmaterialized_task_set_samples": [[9]],
+                    "diagnostic_selected_weak_filtered_task_set_samples": [[8]],
+                    "diagnostic_selected_filtered_task_set_samples": [[7]],
+                    "profile_selected_candidate_input_count": 4,
+                    "profile_selected_candidate_scanned_count": 4,
+                    "profile_selected_candidate_materialized_count": 3,
+                    "profile_selected_candidate_returned_count": 1,
+                    "profile_selected_candidate_branch_filtered_count": 0,
+                    "profile_selected_candidate_duplicate_signature_filtered_count": 1,
+                    "profile_selected_candidate_duplicate_task_set_filtered_count": 0,
+                    "profile_selected_candidate_forbidden_signature_filtered_count": 0,
+                    "profile_selected_candidate_dominated_task_set_filtered_count": 1,
+                    "profile_selected_candidate_return_limit_truncated_count": 2,
+                    "time": 0.3,
+                },
+                {
+                    "event": "journey_column_addition",
+                    "cg_iter": 2,
+                    "pricing_kind": "heuristic",
+                    "added_journeys": 1,
+                    "changed_task_set_samples": [[2, 3, 4]],
+                    "new_task_set_count": 1,
+                    "replacement_journeys": 0,
+                    "active_changed_task_set_count": 0,
+                    "addition_productivity_class": "changed_inactive_only",
+                    "time": 0.31,
+                },
+                {
+                    "event": "journey_rmp_dual_diagnostics",
+                    "cg_iter": 3,
+                    "objective_delta": -2.5,
+                    "dual_l1_delta": 2.5,
+                    "time": 0.35,
+                },
+                {
+                    "event": "journey_pool_structure_diagnostics",
+                    "cg_iter": 3,
+                    "pool_duplicate_task_set_count": 2,
+                    "pool_duplicate_task_set_ratio": 0.25,
+                    "pool_avg_journeys_per_task_set": 1.5,
+                    "pool_max_journeys_per_task_set": 3,
+                    "pool_active_duplicate_task_set_count": 0,
+                    "pool_active_duplicate_task_set_ratio": 0.0,
+                    "pool_active_avg_journeys_per_task_set": 1.0,
+                    "pool_active_top_task_set_value_samples": [[1.0, 1, [2, 3, 4]], [1.0, 1, [9]]],
+                    "pool_active_fractional_ratio": 0.0,
+                    "pool_active_fractional_value_sum": 0.0,
+                    "pool_active_fractional_value_max": 0.0,
+                    "pool_active_fractional_value_min": 0.0,
+                    "pool_active_fractional_small_value_count": 0,
+                    "pool_active_total_value": 2.0,
+                    "pool_active_task_set_hash": "after-first-negative",
+                    "time": 0.36,
+                },
+                {
+                    "event": "journey_pricing",
+                    "cg_iter": 3,
+                    "pricing_kind": "exact",
+                    "pricing_state": "INCOMPLETE_LIMIT",
+                    "reason": "profile_dp_incomplete",
+                    "pricing_time_limit": 0.05,
+                    "pricing_max_dp_states": 1000,
+                    "profile_dp_time": 0.01,
+                    "dp_state_count": 1,
+                    "time": 0.4,
+                },
+            ]
+        )
+        self.assertEqual(terminal_after_negative["tail_outcome"], "followup_found_negative")
+        self.assertEqual(terminal_after_negative["first_negative_cg_iter"], 2)
+        self.assertEqual(terminal_after_negative["first_negative_pricing_kind"], "heuristic")
+        self.assertAlmostEqual(terminal_after_negative["first_negative_best_rc"], -2.5)
+        self.assertEqual(terminal_after_negative["first_negative_task_set_hash"], "residual")
+        self.assertEqual(terminal_after_negative["first_negative_task_set"], "2,3,4")
+        self.assertEqual(terminal_after_negative["first_negative_task_count"], 3)
+        self.assertEqual(terminal_after_negative["first_negative_sequence"], "2,3,4")
+        self.assertEqual(
+            terminal_after_negative["first_negative_signature_sample"],
+            "(((2, 3, 4), ('p',), 0.0),)",
+        )
+        self.assertEqual(terminal_after_negative["first_negative_overlap_to_worker"], 2)
+        self.assertAlmostEqual(terminal_after_negative["first_negative_jaccard_to_worker"], 0.5)
+        self.assertEqual(
+            terminal_after_negative["first_negative_relation_to_worker"],
+            "overlapping_task_set",
+        )
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_first_worker_task_set"], "1,2,3")
+        self.assertEqual(
+            terminal_after_negative["worker_vs_ordinary_first_followup_task_set"],
+            "2,3,4",
+        )
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_task_set_overlap"], 2)
+        self.assertAlmostEqual(terminal_after_negative["worker_vs_ordinary_task_set_jaccard"], 0.5)
+        self.assertEqual(
+            terminal_after_negative["worker_vs_ordinary_task_set_relation"],
+            "overlapping_task_set",
+        )
+        self.assertFalse(terminal_after_negative["worker_vs_ordinary_disjoint"])
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_worker_task_count"], 3)
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_followup_task_count"], 3)
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_task_count_delta"], 0)
+        self.assertTrue(terminal_after_negative["worker_vs_ordinary_worker_added_before_followup"])
+        self.assertTrue(terminal_after_negative["worker_vs_ordinary_followup_returned_after_worker"])
+        self.assertEqual(
+            terminal_after_negative["worker_vs_ordinary_contrast_class"],
+            "overlapping_task_set",
+        )
+        self.assertEqual(
+            terminal_after_negative["worker_negative_pool_task_set_samples"],
+            "[[1,2,3],[2,3,4]]",
+        )
+        self.assertEqual(
+            terminal_after_negative["worker_negative_pool_sequence_samples"],
+            "[[[1,2,3]],[[2,3,4]]]",
+        )
+        self.assertEqual(
+            terminal_after_negative["worker_negative_pool_signature_samples"],
+            '["worker","residual"]',
+        )
+        self.assertEqual(terminal_after_negative["worker_harvested_task_set_samples"], "[[1,2,3]]")
+        self.assertEqual(
+            terminal_after_negative["worker_returned_candidate_task_set_samples"],
+            "[[1,2,3]]",
+        )
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_negative_pool_overlap"], 3)
+        self.assertAlmostEqual(
+            terminal_after_negative["worker_vs_ordinary_negative_pool_jaccard"],
+            1.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["worker_vs_ordinary_negative_pool_relation"],
+            "same_task_set",
+        )
+        self.assertTrue(terminal_after_negative["worker_vs_ordinary_negative_pool_exact"])
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_harvested_overlap"], 2)
+        self.assertAlmostEqual(
+            terminal_after_negative["worker_vs_ordinary_harvested_jaccard"],
+            0.5,
+        )
+        self.assertFalse(terminal_after_negative["worker_vs_ordinary_harvested_exact"])
+        self.assertEqual(terminal_after_negative["worker_vs_ordinary_returned_candidate_overlap"], 2)
+        self.assertAlmostEqual(
+            terminal_after_negative["worker_vs_ordinary_returned_candidate_jaccard"],
+            0.5,
+        )
+        self.assertFalse(terminal_after_negative["worker_vs_ordinary_returned_candidate_exact"])
+        self.assertEqual(terminal_after_negative["worker_target_sequence_task_set"], "2,3,4")
+        self.assertEqual(terminal_after_negative["worker_target_negative_pool_overlap"], 3)
+        self.assertAlmostEqual(terminal_after_negative["worker_target_negative_pool_jaccard"], 1.0)
+        self.assertEqual(
+            terminal_after_negative["worker_target_negative_pool_relation"],
+            "same_task_set",
+        )
+        self.assertTrue(terminal_after_negative["worker_target_negative_pool_exact"])
+        self.assertEqual(terminal_after_negative["worker_target_harvested_overlap"], 2)
+        self.assertFalse(terminal_after_negative["worker_target_harvested_exact"])
+        self.assertEqual(terminal_after_negative["worker_target_returned_candidate_overlap"], 2)
+        self.assertFalse(terminal_after_negative["worker_target_returned_candidate_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_dp_top_overlap"], 3)
+        self.assertAlmostEqual(terminal_after_negative["first_negative_profile_dp_top_jaccard"], 1.0)
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_dp_top_relation"],
+            "same_task_set",
+        )
+        self.assertTrue(terminal_after_negative["first_negative_profile_dp_top_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_reachable_overlap"], 3)
+        self.assertAlmostEqual(
+            terminal_after_negative["first_negative_profile_reachable_jaccard"],
+            1.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_reachable_relation"],
+            "same_task_set",
+        )
+        self.assertTrue(terminal_after_negative["first_negative_profile_reachable_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_negative_overlap"], 3)
+        self.assertAlmostEqual(
+            terminal_after_negative["first_negative_profile_negative_jaccard"],
+            1.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_negative_relation"],
+            "same_task_set",
+        )
+        self.assertTrue(terminal_after_negative["first_negative_profile_negative_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_selected_overlap"], 2)
+        self.assertAlmostEqual(
+            terminal_after_negative["first_negative_profile_selected_jaccard"],
+            2.0 / 3.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_selected_relation"],
+            "overlapping_task_set",
+        )
+        self.assertFalse(terminal_after_negative["first_negative_profile_selected_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_materialized_overlap"], 3)
+        self.assertAlmostEqual(
+            terminal_after_negative["first_negative_profile_materialized_jaccard"],
+            1.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_materialized_relation"],
+            "same_task_set",
+        )
+        self.assertTrue(terminal_after_negative["first_negative_profile_materialized_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_returned_overlap"], 3)
+        self.assertAlmostEqual(
+            terminal_after_negative["first_negative_profile_returned_jaccard"],
+            1.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_returned_relation"],
+            "same_task_set",
+        )
+        self.assertTrue(terminal_after_negative["first_negative_profile_returned_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_unmaterialized_overlap"], 0)
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_unmaterialized_relation"],
+            "disjoint_task_set",
+        )
+        self.assertFalse(terminal_after_negative["first_negative_profile_unmaterialized_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_weak_filtered_overlap"], 0)
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_weak_filtered_relation"],
+            "disjoint_task_set",
+        )
+        self.assertFalse(terminal_after_negative["first_negative_profile_weak_filtered_exact"])
+        self.assertEqual(terminal_after_negative["first_negative_profile_filtered_overlap"], 0)
+        self.assertEqual(
+            terminal_after_negative["first_negative_profile_filtered_relation"],
+            "disjoint_task_set",
+        )
+        self.assertFalse(terminal_after_negative["first_negative_profile_filtered_exact"])
+        self.assertEqual(terminal_after_negative["profile_selected_candidate_input_count"], 4)
+        self.assertEqual(terminal_after_negative["profile_selected_candidate_scanned_count"], 4)
+        self.assertEqual(terminal_after_negative["profile_selected_candidate_materialized_count"], 3)
+        self.assertEqual(terminal_after_negative["profile_selected_candidate_returned_count"], 1)
+        self.assertEqual(terminal_after_negative["profile_selected_candidate_filtered_count"], 2)
+        self.assertEqual(terminal_after_negative["profile_selected_candidate_return_limit_truncated_count"], 2)
+        self.assertEqual(
+            terminal_after_negative["proof_tail_bridge_class"],
+            "profile_returned_residual_exact",
+        )
+        self.assertIn("returned", terminal_after_negative["proof_tail_bridge_reason"])
+        self.assertEqual(
+            terminal_after_negative["returned_residual_tail_class"],
+            "returned_residual_then_incomplete_tail",
+        )
+        self.assertEqual(terminal_after_negative["negative_task_set_sequence"], "2,3,4")
+        self.assertEqual(terminal_after_negative["negative_task_set_unique_count"], 1)
+        self.assertEqual(terminal_after_negative["negative_task_set_repeat_count"], 0)
+        self.assertEqual(
+            terminal_after_negative["first_negative_addition_productivity_class"],
+            "changed_inactive_only",
+        )
+        self.assertEqual(terminal_after_negative["first_negative_added_journeys"], 1)
+        self.assertEqual(terminal_after_negative["first_negative_added_new_task_set_count"], 1)
+        self.assertEqual(terminal_after_negative["first_negative_added_support_changing_count"], 0)
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_rmp_objective_delta"],
+            -2.5,
+        )
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_dual_l1_delta"],
+            2.5,
+        )
+        self.assertTrue(terminal_after_negative["first_negative_active_after_addition"])
+        self.assertEqual(
+            terminal_after_negative["first_negative_active_relation_after_addition"],
+            "same_task_set",
+        )
+        self.assertAlmostEqual(
+            terminal_after_negative["first_negative_active_value_after_addition"],
+            1.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["first_negative_active_journey_count_after_addition"],
+            1,
+        )
+        self.assertEqual(
+            terminal_after_negative["active_task_set_hash_after_first_negative"],
+            "after-first-negative",
+        )
+        self.assertEqual(
+            terminal_after_negative["rmp_residual_impact_class"],
+            "became_active_after_rmp_without_addition_active_signal",
+        )
+        self.assertEqual(terminal_after_negative["first_negative_active_persistence_count"], 1)
+        self.assertEqual(
+            terminal_after_negative["first_negative_active_value_sequence"],
+            "[1.0]",
+        )
+        self.assertAlmostEqual(terminal_after_negative["first_negative_active_last_value"], 1.0)
+        self.assertEqual(
+            terminal_after_negative["active_basis_hash_sequence_after_first_negative"],
+            '["after-first-negative"]',
+        )
+        self.assertEqual(terminal_after_negative["active_basis_unique_count_after_first_negative"], 1)
+        self.assertEqual(terminal_after_negative["active_basis_churn_count_after_first_negative"], 0)
+        self.assertEqual(terminal_after_negative["negative_family_after_first_count"], 0)
+        self.assertEqual(terminal_after_negative["negative_family_after_first_relation_sequence"], "")
+        self.assertEqual(
+            terminal_after_negative["residual_family_chain_class"],
+            "active_residual_no_observed_new_family",
+        )
+        self.assertEqual(terminal_after_negative["post_first_negative_pool_duplicate_task_sets"], 2)
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_pool_duplicate_task_set_ratio"],
+            0.25,
+        )
+        self.assertEqual(
+            terminal_after_negative["post_first_negative_pool_active_duplicate_task_sets"],
+            0,
+        )
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_pool_active_duplicate_task_set_ratio"],
+            0.0,
+        )
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_pool_avg_journeys_per_task_set"],
+            1.5,
+        )
+        self.assertEqual(terminal_after_negative["post_first_negative_pool_max_journeys_per_task_set"], 3)
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_pool_active_avg_journeys_per_task_set"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_pool_active_fractional_value_sum"],
+            0.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["rmp_degeneracy_pressure_class"],
+            "pool_duplicate_pressure",
+        )
+        self.assertAlmostEqual(
+            terminal_after_negative["post_first_negative_dual_objective_abs_ratio"],
+            1.0,
+        )
+        self.assertEqual(
+            terminal_after_negative["post_first_negative_dual_move_class"],
+            "proportional_dual_objective_move",
+        )
+        self.assertEqual(
+            terminal_after_negative["pool_compression_candidate_class"],
+            "pool_compression_candidate",
+        )
+        self.assertEqual(
+            terminal_after_negative["rmp_stabilization_candidate_class"],
+            "pool_compression_precheck_candidate",
+        )
+        self.assertEqual(
+            terminal_after_negative["stabilization_diagnostic_design_class"],
+            "pool_compression_precheck_diagnostic",
+        )
+        self.assertEqual(
+            terminal_after_negative["stabilization_diagnostic_recommended_profile"],
+            "diagnostic_pool_compression_audit_only",
+        )
+        self.assertFalse(
+            terminal_after_negative["stabilization_diagnostic_certificate_effect_allowed"]
+        )
+        self.assertTrue(terminal_after_negative["stabilization_probe_enabled"])
+        self.assertEqual(
+            terminal_after_negative["stabilization_probe_status"],
+            "audit_only_probe_planned",
+        )
+        self.assertEqual(
+            terminal_after_negative["stabilization_probe_mode"],
+            "pool_compression_precheck",
+        )
+        self.assertEqual(
+            terminal_after_negative["stabilization_probe_candidate_source"],
+            "pool_compression_precheck_candidate",
+        )
+        self.assertAlmostEqual(terminal_after_negative["stabilization_probe_anchor_weight"], 0.0)
+        self.assertTrue(terminal_after_negative["stabilization_probe_context_hash_required"])
+        self.assertEqual(terminal_after_negative["stabilization_probe_context_hash"], "ctx-terminal")
+        self.assertFalse(terminal_after_negative["stabilization_probe_certificate_effect_allowed"])
+        self.assertFalse(terminal_after_negative["stabilization_probe_official_effect_allowed"])
+        self.assertFalse(terminal_after_negative["stabilization_probe_mutates_rmp"])
+        self.assertEqual(
+            terminal_after_negative["stabilization_probe_design_profile"],
+            "diagnostic_pool_compression_audit_only",
+        )
+        self.assertTrue(terminal_after_negative["terminal_after_negative_incomplete"])
+        self.assertEqual(terminal_after_negative["last_pricing_time_limit"], 0.05)
+        self.assertEqual(terminal_after_negative["last_pricing_dp_state_count"], 1)
+
+        same_iteration_followup = roi._worker_followup_metrics(
+            [
+                {
+                    "event": "journey_column_addition",
+                    "cg_iter": 4,
+                    "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                    "added_journeys": 1,
+                    "changed_task_set_samples": [[5, 8]],
+                    "time": 1.0,
+                },
+                {
+                    "event": "journey_pricing",
+                    "cg_iter": 4,
+                    "pricing_kind": "heuristic",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "reason": "same_iteration_negative",
+                    "best_reduced_cost": -3.0,
+                    "negative_journey_task_set_hash": "same",
+                    "negative_journey_task_set_samples": [[5, 8]],
+                    "negative_journey_sequence_samples": [[[5], [8]]],
+                    "negative_journey_signature_samples": ["(((5,), ('a',), 0.0), ((8,), ('b',), 1.0))"],
+                    "time": 1.1,
+                },
+            ]
+        )
+        self.assertEqual(same_iteration_followup["pricing_calls"], 1)
+        self.assertEqual(same_iteration_followup["first_negative_cg_iter"], 4)
+        self.assertEqual(same_iteration_followup["first_negative_task_set"], "5,8")
+        self.assertEqual(same_iteration_followup["first_negative_sequence"], "5|8")
+        self.assertEqual(
+            same_iteration_followup["first_negative_signature_sample"],
+            "(((5,), ('a',), 0.0), ((8,), ('b',), 1.0))",
+        )
+        self.assertEqual(same_iteration_followup["first_negative_overlap_to_worker"], 2)
+        self.assertAlmostEqual(same_iteration_followup["first_negative_jaccard_to_worker"], 1.0)
+        self.assertEqual(
+            same_iteration_followup["first_negative_relation_to_worker"],
+            "same_task_set",
+        )
+        self.assertEqual(same_iteration_followup["worker_vs_ordinary_first_worker_task_set"], "5,8")
+        self.assertEqual(same_iteration_followup["worker_vs_ordinary_first_followup_task_set"], "5,8")
+        self.assertEqual(same_iteration_followup["worker_vs_ordinary_task_set_relation"], "same_task_set")
+        self.assertFalse(same_iteration_followup["worker_vs_ordinary_disjoint"])
+        self.assertEqual(same_iteration_followup["worker_vs_ordinary_contrast_class"], "same_task_set")
+
+        disjoint_followup = roi._worker_followup_metrics(
+            [
+                {
+                    "event": "journey_pricing",
+                    "cg_iter": 1,
+                    "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                    "pulse_negative_pool_task_set_samples": [[6, 19]],
+                    "pulse_negative_pool_sequence_samples": [[[6, 19]]],
+                    "pulse_negative_pool_signature_samples": ["worker"],
+                    "pulse_harvested_task_set_samples": [[6, 19]],
+                    "pulse_harvested_sequence_samples": [[[6, 19]]],
+                    "pulse_harvested_signature_samples": ["worker"],
+                    "pulse_returned_candidate_task_set_samples": [[6, 19]],
+                    "pulse_returned_candidate_sequence_samples": [[[6, 19]]],
+                    "pulse_returned_candidate_signature_samples": ["worker"],
+                    "time": 0.9,
+                },
+                {
+                    "event": "journey_column_addition",
+                    "cg_iter": 1,
+                    "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                    "added_journeys": 1,
+                    "changed_task_set_samples": [[6, 19]],
+                    "time": 1.0,
+                },
+                {
+                    "event": "journey_pricing",
+                    "cg_iter": 2,
+                    "pricing_kind": "heuristic",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "best_reduced_cost": -1.0,
+                    "negative_journey_task_set_samples": [[5, 8, 15]],
+                    "time": 1.1,
+                },
+            ]
+        )
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_first_worker_task_set"], "6,19")
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_first_followup_task_set"], "5,8,15")
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_task_set_overlap"], 0)
+        self.assertAlmostEqual(disjoint_followup["worker_vs_ordinary_task_set_jaccard"], 0.0)
+        self.assertEqual(
+            disjoint_followup["worker_vs_ordinary_task_set_relation"],
+            "disjoint_task_set",
+        )
+        self.assertTrue(disjoint_followup["worker_vs_ordinary_disjoint"])
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_worker_task_count"], 2)
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_followup_task_count"], 3)
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_task_count_delta"], 1)
+        self.assertEqual(
+            disjoint_followup["worker_vs_ordinary_contrast_class"],
+            "disjoint_residual_after_worker",
+        )
+        self.assertEqual(disjoint_followup["worker_negative_pool_task_set_samples"], "[[6,19]]")
+        self.assertEqual(disjoint_followup["worker_negative_pool_sequence_samples"], "[[[6,19]]]")
+        self.assertEqual(disjoint_followup["worker_negative_pool_signature_samples"], '["worker"]')
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_negative_pool_overlap"], 0)
+        self.assertAlmostEqual(disjoint_followup["worker_vs_ordinary_negative_pool_jaccard"], 0.0)
+        self.assertEqual(
+            disjoint_followup["worker_vs_ordinary_negative_pool_relation"],
+            "disjoint_task_set",
+        )
+        self.assertFalse(disjoint_followup["worker_vs_ordinary_negative_pool_exact"])
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_harvested_overlap"], 0)
+        self.assertFalse(disjoint_followup["worker_vs_ordinary_harvested_exact"])
+        self.assertEqual(disjoint_followup["worker_vs_ordinary_returned_candidate_overlap"], 0)
+        self.assertFalse(disjoint_followup["worker_vs_ordinary_returned_candidate_exact"])
+
+    def test_sharded_pulse_roi_calibration_baseline_comparison_is_conservative(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        baseline = {
+            "official_status": "OPTIMAL",
+            "official_dual_bound": 10.0,
+            "official_primal_bound": 10.0,
+            "official_pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "official_best_rc": None,
+            "wall_time": 10.0,
+            "gap": 0.0,
+            "exact_completion_bound_retry_count": 4,
+        }
+        row = dict(baseline)
+        row.update(
+            {
+                "wall_time": 8.0,
+                "critical_disagreement": False,
+                "critical_disagreement_count": 0,
+                "pulse_worker_added_journeys": 0,
+                "pulse_worker_next_rmp_objective_delta": None,
+                "exact_completion_bound_retry_count": 3,
+            }
+        )
+        roi._apply_baseline_comparison(baseline, row)
+        self.assertFalse(row["official_result_changed_vs_baseline"])
+        self.assertFalse(row["objective_mismatch_vs_baseline"])
+        self.assertEqual(row["improvement_class"], "improved")
+
+        unsafe = dict(row)
+        unsafe["official_dual_bound"] = 9.5
+        roi._apply_baseline_comparison(baseline, unsafe)
+        self.assertTrue(unsafe["official_result_changed_vs_baseline"])
+        self.assertTrue(unsafe["objective_mismatch_vs_baseline"])
+        self.assertEqual(unsafe["improvement_class"], "unsafe")
+
+        time_limited_baseline = {
+            "scale": 20,
+            "official_status": "TIME_LIMIT",
+            "official_dual_bound": None,
+            "official_primal_bound": 100.0,
+            "official_gap": None,
+            "wall_time": 1.0,
+            "primal": 100.0,
+            "gap": None,
+            "exact_completion_bound_retry_count": 0,
+        }
+        quality_row = dict(time_limited_baseline)
+        quality_row.update(
+            {
+                "official_primal_bound": 90.0,
+                "primal": 90.0,
+                "wall_time": 3.0,
+                "critical_disagreement": False,
+                "critical_disagreement_count": 0,
+            }
+        )
+        roi._apply_baseline_comparison(time_limited_baseline, quality_row)
+        self.assertTrue(quality_row["official_result_changed_vs_baseline"])
+        self.assertFalse(quality_row["objective_mismatch_vs_baseline"])
+        self.assertEqual(quality_row["improvement_class"], "improved")
+
+    def test_sharded_pulse_roi_calibration_auto_residual_target_uses_prior_context(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        no_source = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "ten_task_seed",
+                    "scale": 10,
+                    "worker_context_hash": "ctx10",
+                    "followup_first_negative_task_set": "1,2,3",
+                },
+                {
+                    "profile": "missing_context_seed",
+                    "scale": 20,
+                    "worker_context_hash": "",
+                    "followup_first_negative_task_set": "5,8,15",
+                },
+            ],
+            profile="strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_roi_gate",
+        )
+        self.assertEqual(no_source, {})
+
+        target = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "older_seed",
+                    "scale": 20,
+                    "worker_context_hash": "older",
+                    "followup_first_negative_task_set": "4,12,18",
+                },
+                {
+                    "profile": "fresh_seed",
+                    "scale": 20,
+                    "worker_context_hash": "ctx20",
+                    "followup_first_negative_sequence": "8,15,5",
+                    "worker_vs_ordinary_task_set_relation": "disjoint_task_set",
+                },
+            ],
+            profile="strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_roi_gate",
+        )
+        self.assertEqual(target["sequence"], (8, 15, 5))
+        self.assertEqual(target["source_profile"], "fresh_seed")
+        self.assertEqual(target["source_context_hash"], "ctx20")
+        self.assertEqual(target["source_relation"], "disjoint_task_set")
+
+        diagnostic_target = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "fresh_seed",
+                    "scale": 20,
+                    "worker_context_hash": "ctx20",
+                    "followup_first_negative_task_set": "5,8,15",
+                }
+            ],
+            profile="strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_diagnostic",
+        )
+        self.assertEqual(diagnostic_target["sequence"], (5, 8, 15))
+
+        blocked_active_target = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "disjoint_seed",
+                    "scale": 20,
+                    "worker_context_hash": "ctx20",
+                    "followup_first_negative_sequence": "8,15,5",
+                    "worker_added_support_changing_count": 1,
+                    "worker_vs_ordinary_task_set_relation": "disjoint_task_set",
+                }
+            ],
+            profile="strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+        )
+        self.assertNotIn("sequence", blocked_active_target)
+        self.assertEqual(blocked_active_target["blocked_sequence"], (8, 15, 5))
+        self.assertEqual(blocked_active_target["source_gate"], "active_support")
+        self.assertEqual(
+            blocked_active_target["source_gate_reason"],
+            "residual_disjoint_from_worker",
+        )
+        self.assertEqual(blocked_active_target["source_search_candidate_count"], 1)
+        self.assertEqual(blocked_active_target["source_search_passed_count"], 0)
+        self.assertEqual(blocked_active_target["source_search_blocked_disjoint_count"], 1)
+        self.assertEqual(
+            blocked_active_target["source_search_outcome_class"],
+            "disjoint_only_no_passed_source",
+        )
+        self.assertEqual(
+            blocked_active_target["source_search_recommendation"],
+            "do_not_chase_disjoint_residual_target",
+        )
+        self.assertEqual(
+            blocked_active_target["source_search_first_blocked_sequence"],
+            (8, 15, 5),
+        )
+
+        active_target = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "active_seed",
+                    "scale": 20,
+                    "worker_context_hash": "ctx20",
+                    "followup_first_negative_sequence": "4,8,12",
+                    "worker_added_support_changing_count": 1,
+                    "worker_vs_ordinary_task_set_relation": "overlapping_task_set",
+                }
+            ],
+            profile="strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+        )
+        self.assertEqual(active_target["sequence"], (4, 8, 12))
+        self.assertEqual(active_target["source_gate"], "active_support")
+        self.assertEqual(active_target["source_gate_reason"], "passed")
+        self.assertEqual(active_target["source_search_candidate_count"], 1)
+        self.assertEqual(active_target["source_search_passed_count"], 1)
+        self.assertEqual(
+            active_target["source_search_outcome_class"],
+            "passed_source_available",
+        )
+        self.assertEqual(active_target["source_search_first_passed_sequence"], (4, 8, 12))
+        self.assertEqual(
+            active_target["source_search_first_passed_relation"],
+            "overlapping_task_set",
+        )
+
+        mixed_target = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "blocked_old",
+                    "scale": 20,
+                    "worker_context_hash": "ctx-old",
+                    "followup_first_negative_sequence": "8,15,5",
+                    "worker_added_support_changing_count": 1,
+                    "worker_vs_ordinary_task_set_relation": "disjoint_task_set",
+                },
+                {
+                    "profile": "passed_new",
+                    "scale": 20,
+                    "worker_context_hash": "ctx-new",
+                    "followup_first_negative_sequence": "4,8,12",
+                    "worker_added_support_changing_count": 1,
+                    "worker_vs_ordinary_task_set_relation": "overlapping_task_set",
+                },
+            ],
+            profile="strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_roi_gate",
+        )
+        self.assertEqual(mixed_target["sequence"], (4, 8, 12))
+        self.assertEqual(mixed_target["source_profile"], "passed_new")
+        self.assertEqual(mixed_target["source_search_candidate_count"], 2)
+        self.assertEqual(mixed_target["source_search_passed_count"], 1)
+        self.assertEqual(mixed_target["source_search_blocked_disjoint_count"], 1)
+        self.assertEqual(
+            mixed_target["source_search_recommendation"],
+            "test_active_auto_target_on_passed_source",
+        )
+
+        ignored = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "fresh_seed",
+                    "scale": 20,
+                    "worker_context_hash": "ctx20",
+                    "followup_first_negative_sequence": "8,15,5",
+                }
+            ],
+            profile="baseline",
+        )
+        self.assertEqual(ignored, {})
+
+        passed_summary = roi._active_residual_source_row_summary(
+            {
+                "profile": "source",
+                "scale": 20,
+                "worker_context_hash": "ctx20",
+                "followup_first_negative_sequence": "4,8,12",
+                "worker_added_support_changing_count": 1,
+                "worker_vs_ordinary_task_set_relation": "same_task_set",
+            }
+        )
+        self.assertTrue(passed_summary["active_residual_source_candidate"])
+        self.assertTrue(passed_summary["active_residual_source_passed"])
+        self.assertEqual(passed_summary["active_residual_source_gate_reason"], "")
+        blocked_summary = roi._active_residual_source_row_summary(
+            {
+                "profile": "source",
+                "scale": 20,
+                "worker_context_hash": "ctx20",
+                "followup_first_negative_sequence": "8,15,5",
+                "worker_added_support_changing_count": 0,
+                "worker_vs_ordinary_task_set_relation": "overlapping_task_set",
+            }
+        )
+        self.assertTrue(blocked_summary["active_residual_source_candidate"])
+        self.assertFalse(blocked_summary["active_residual_source_passed"])
+        self.assertEqual(
+            blocked_summary["active_residual_source_gate_reason"],
+            "no_active_support_changing_source",
+        )
+        self.assertEqual(
+            roi._classify_active_residual_source_search(
+                candidate_count=0,
+                passed_count=0,
+                blocked_count=0,
+                blocked_disjoint_count=0,
+                blocked_no_active_count=0,
+                blocked_relation_count=0,
+            )["source_search_outcome_class"],
+            "no_source_candidate",
+        )
+        self.assertEqual(
+            roi._classify_active_residual_source_search(
+                candidate_count=2,
+                passed_count=0,
+                blocked_count=2,
+                blocked_disjoint_count=0,
+                blocked_no_active_count=2,
+                blocked_relation_count=0,
+            )["source_search_outcome_class"],
+            "no_active_signal_only",
+        )
+
+    def test_sharded_pulse_worker_expected_context_guard(self):
+        from BPC_future.solver import journey_driver
+
+        allowed, reason = journey_driver._journey_sharded_pulse_expected_context_allows(
+            {},
+            {"context": "current"},
+        )
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "")
+
+        allowed, reason = journey_driver._journey_sharded_pulse_expected_context_allows(
+            {"journey_sharded_pulse_hidden_negative_worker_expected_context_hash": "current"},
+            {"context": "current"},
+        )
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "")
+
+        allowed, reason = journey_driver._journey_sharded_pulse_expected_context_allows(
+            {"journey_sharded_pulse_hidden_negative_worker_expected_context_hash": "old"},
+            {"context": "current"},
+        )
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "residual_target_context_mismatch")
+
+    def test_sharded_pulse_roi_calibration_profile_configs_are_opt_in(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        args = SimpleNamespace(
+            audit_time_limit=0.5,
+            audit_max_recursions=1000,
+            audit_negative_harvest_limit=8,
+            worker_time_limit=0.5,
+            worker_max_recursions=1000,
+            worker_negative_harvest_limit=8,
+            current_probe_time_limit=0.4,
+            current_probe_max_recursions=2000,
+            current_probe_min_tasks=10,
+            current_probe_min_remaining_time=0.0,
+            current_probe_negative_harvest_limit=8,
+            pricing_time_limit=0.2,
+        )
+        base = {}
+        roi._apply_profile(base, "baseline", args)
+        self.assertFalse(base)
+
+        impact = {}
+        roi._apply_profile(impact, "strict_worker_current_probe_support_aware_impact_filter", args)
+        self.assertTrue(impact["journey_sharded_pulse_hidden_negative_worker_enabled"])
+        self.assertTrue(impact["journey_sharded_pulse_worker_current_probe_enabled"])
+        self.assertEqual(
+            impact["journey_sharded_pulse_hidden_negative_worker_impact_filter_mode"],
+            "require_new_or_active_support",
+        )
+
+        low_budget = {}
+        roi._apply_profile(low_budget, "strict_worker_current_probe_support_aware_low_budget", args)
+        self.assertLess(
+            low_budget["journey_sharded_pulse_worker_current_probe_time_limit"],
+            args.current_probe_time_limit,
+        )
+        self.assertEqual(low_budget["journey_sharded_pulse_worker_current_probe_max_columns"], 8)
+        ultra_low_budget = {}
+        roi._apply_profile(
+            ultra_low_budget,
+            "strict_worker_delayed_current_probe_impact_ultra_low_budget",
+            args,
+            task_count=20,
+        )
+        self.assertLess(
+            ultra_low_budget["journey_sharded_pulse_worker_current_probe_time_limit"],
+            low_budget["journey_sharded_pulse_worker_current_probe_time_limit"],
+        )
+        self.assertLess(
+            ultra_low_budget["journey_sharded_pulse_worker_current_probe_max_recursions"],
+            low_budget["journey_sharded_pulse_worker_current_probe_max_recursions"],
+        )
+        self.assertEqual(
+            ultra_low_budget["journey_sharded_pulse_worker_current_probe_max_columns"],
+            4,
+        )
+        cooldown = {}
+        roi._apply_profile(
+            cooldown,
+            "strict_worker_delayed_current_probe_impact_low_budget_cooldown",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            cooldown["journey_sharded_pulse_worker_current_probe_max_columns"],
+            8,
+        )
+        self.assertEqual(
+            cooldown["journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds"],
+            2,
+        )
+        ten_task_20_only = {}
+        roi._apply_profile(
+            ten_task_20_only,
+            "strict_worker_delayed_current_probe_impact_20_only_cooldown",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_20_only, {})
+        twenty_task_20_only = {}
+        roi._apply_profile(
+            twenty_task_20_only,
+            "strict_worker_delayed_current_probe_impact_20_only_cooldown",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(twenty_task_20_only["journey_sharded_pulse_hidden_negative_worker_enabled"])
+        self.assertEqual(
+            twenty_task_20_only["journey_sharded_pulse_worker_current_probe_max_columns"],
+            8,
+        )
+        self.assertEqual(
+            twenty_task_20_only["journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds"],
+            2,
+        )
+        ten_task_pre_heuristic = {}
+        roi._apply_profile(
+            ten_task_pre_heuristic,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_pre_heuristic, {})
+        twenty_task_pre_heuristic = {}
+        roi._apply_profile(
+            twenty_task_pre_heuristic,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_pre_heuristic[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_pre_heuristic[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_hidden_negative_worker_task_ordering",
+            twenty_task_pre_heuristic,
+        )
+        ten_task_followup = {}
+        roi._apply_profile(
+            ten_task_followup,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_followup, {})
+        twenty_task_followup = {}
+        roi._apply_profile(
+            twenty_task_followup,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_followup[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_followup[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds",
+            twenty_task_followup,
+        )
+        self.assertEqual(
+            twenty_task_followup["journey_sharded_pulse_worker_current_probe_max_columns"],
+            8,
+        )
+        ten_task_followup_reserve = {}
+        roi._apply_profile(
+            ten_task_followup_reserve,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_reserve",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_followup_reserve, {})
+        twenty_task_followup_reserve = {}
+        roi._apply_profile(
+            twenty_task_followup_reserve,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_reserve",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_followup_reserve[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_followup_reserve[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds",
+            twenty_task_followup_reserve,
+        )
+        self.assertAlmostEqual(
+            twenty_task_followup_reserve[
+                "journey_sharded_pulse_hidden_negative_worker_post_call_time_reserve"
+            ],
+            0.08,
+        )
+        ten_task_followup_reserve_active_gate = {}
+        roi._apply_profile(
+            ten_task_followup_reserve_active_gate,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_reserve_active_gate",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_followup_reserve_active_gate, {})
+        twenty_task_followup_reserve_active_gate = {}
+        roi._apply_profile(
+            twenty_task_followup_reserve_active_gate,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_reserve_active_gate",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_followup_reserve_active_gate[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_followup_reserve_active_gate[
+                "journey_sharded_pulse_hidden_negative_worker_continue_only_on_active_support"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_followup_reserve_active_gate[
+                "journey_sharded_pulse_hidden_negative_worker_inactive_success_cooldown_rounds"
+            ],
+            2,
+        )
+        self.assertAlmostEqual(
+            twenty_task_followup_reserve_active_gate[
+                "journey_sharded_pulse_hidden_negative_worker_post_call_time_reserve"
+            ],
+            0.08,
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds",
+            twenty_task_followup_reserve_active_gate,
+        )
+        ten_task_ordered = {}
+        roi._apply_profile(
+            ten_task_ordered,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown_ordered",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_ordered, {})
+        twenty_task_ordered = {}
+        roi._apply_profile(
+            twenty_task_ordered,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown_ordered",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_ordered[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_ordered[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_ordered[
+                "journey_sharded_pulse_hidden_negative_worker_task_ordering"
+            ],
+            "reduced_cost_proxy",
+        )
+        ten_task_coverage_scan = {}
+        roi._apply_profile(
+            ten_task_coverage_scan,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_scan",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_coverage_scan, {})
+        twenty_task_coverage_scan = {}
+        roi._apply_profile(
+            twenty_task_coverage_scan,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_scan",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_coverage_scan[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_coverage_scan[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_scan[
+                "journey_sharded_pulse_worker_current_probe_max_columns"
+            ],
+            8,
+        )
+        self.assertEqual(
+            twenty_task_coverage_scan[
+                "journey_sharded_pulse_hidden_negative_worker_max_cg_iter"
+            ],
+            1,
+        )
+        self.assertTrue(
+            twenty_task_coverage_scan[
+                "journey_pulse_residual_replay_diagnostics_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_scan[
+                "journey_pulse_residual_replay_diagnostics_max_journeys"
+            ],
+            1,
+        )
+        self.assertTrue(
+            twenty_task_coverage_scan[
+                "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_scan[
+                "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_sequence"
+            ],
+            "8,15,5",
+        )
+        ten_task_coverage_no_roi = {}
+        roi._apply_profile(
+            ten_task_coverage_no_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_no_roi_gate",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_coverage_no_roi, {})
+        twenty_task_coverage_no_roi = {}
+        roi._apply_profile(
+            twenty_task_coverage_no_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_no_roi_gate",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_coverage_no_roi[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_coverage_no_roi[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_coverage_no_roi[
+                "journey_sharded_pulse_hidden_negative_worker_shard_roi_gate_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_no_roi[
+                "journey_sharded_pulse_hidden_negative_worker_max_cg_iter"
+            ],
+            1,
+        )
+        self.assertTrue(
+            twenty_task_coverage_no_roi[
+                "journey_pulse_residual_replay_diagnostics_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_no_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_no_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_sequence"
+            ],
+            "8,15,5",
+        )
+        ten_task_coverage_target_priority = {}
+        roi._apply_profile(
+            ten_task_coverage_target_priority,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_priority",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_coverage_target_priority, {})
+        twenty_task_coverage_target_priority = {}
+        roi._apply_profile(
+            twenty_task_coverage_target_priority,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_priority",
+            args,
+            task_count=20,
+        )
+        self.assertFalse(
+            twenty_task_coverage_target_priority[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_priority[
+                "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_priority[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_target_priority[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_sequence"
+            ],
+            "8,15,5",
+        )
+        ten_task_coverage_target_transition = {}
+        roi._apply_profile(
+            ten_task_coverage_target_transition,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_transition_priority",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_coverage_target_transition, {})
+        twenty_task_coverage_target_transition = {}
+        roi._apply_profile(
+            twenty_task_coverage_target_transition,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_transition_priority",
+            args,
+            task_count=20,
+        )
+        self.assertFalse(
+            twenty_task_coverage_target_transition[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_transition[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_transition[
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_target_transition[
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_sequence"
+            ],
+            "8,15,5",
+        )
+        ten_task_coverage_target_path = {}
+        roi._apply_profile(
+            ten_task_coverage_target_path,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_path_diagnostic",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_coverage_target_path, {})
+        twenty_task_coverage_target_path = {}
+        roi._apply_profile(
+            twenty_task_coverage_target_path,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_path_diagnostic",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_path[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_path[
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_path[
+                "journey_sharded_pulse_hidden_negative_worker_target_path_diagnostics_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_target_path[
+                "journey_sharded_pulse_hidden_negative_worker_target_path_diagnostics_max_samples"
+            ],
+            12,
+        )
+        ten_task_coverage_target_arc = {}
+        roi._apply_profile(
+            ten_task_coverage_target_arc,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_arc_option_priority",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_coverage_target_arc, {})
+        twenty_task_coverage_target_arc = {}
+        roi._apply_profile(
+            twenty_task_coverage_target_arc,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_arc_option_priority",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_arc[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_arc[
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_arc[
+                "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_coverage_target_arc[
+                "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_sequence"
+            ],
+            "0->8:low_time:0,8->15:low_risk:2,15->5:low_risk:2,5->0:low_time:0",
+        )
+        self.assertTrue(
+            twenty_task_coverage_target_arc[
+                "journey_sharded_pulse_hidden_negative_worker_target_path_diagnostics_enabled"
+            ]
+        )
+        ten_task_residual_target_roi = {}
+        roi._apply_profile(
+            ten_task_residual_target_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_residual_target_priority_roi_gate",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_residual_target_roi, {})
+        twenty_task_residual_target_roi = {}
+        roi._apply_profile(
+            twenty_task_residual_target_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_residual_target_priority_roi_gate",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_sequence"
+            ],
+            "8,15,5",
+        )
+        self.assertTrue(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_continue_only_on_active_support"
+            ]
+        )
+        self.assertAlmostEqual(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc"
+            ],
+            -30.0,
+        )
+        self.assertTrue(
+            twenty_task_residual_target_roi[
+                "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled"
+            ]
+        )
+        ten_task_auto_residual_target_diagnostic = {}
+        roi._apply_profile(
+            ten_task_auto_residual_target_diagnostic,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_diagnostic",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_auto_residual_target_diagnostic, {})
+        twenty_task_auto_residual_target_diagnostic = {}
+        roi._apply_profile(
+            twenty_task_auto_residual_target_diagnostic,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_diagnostic",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_auto_residual_target_diagnostic[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_auto_residual_target_diagnostic[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled",
+            twenty_task_auto_residual_target_diagnostic,
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled",
+            twenty_task_auto_residual_target_diagnostic,
+        )
+        ten_task_auto_residual_target_roi = {}
+        roi._apply_profile(
+            ten_task_auto_residual_target_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_roi_gate",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_auto_residual_target_roi, {})
+        twenty_task_auto_residual_target_roi = {}
+        roi._apply_profile(
+            twenty_task_auto_residual_target_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_roi_gate",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled",
+            twenty_task_auto_residual_target_roi,
+        )
+        self.assertTrue(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_log_skips"
+            ]
+        )
+        self.assertFalse(
+            roi._apply_auto_residual_target_to_config(
+                twenty_task_auto_residual_target_roi,
+                {},
+            )
+        )
+        self.assertTrue(
+            roi._apply_auto_residual_target_to_config(
+                twenty_task_auto_residual_target_roi,
+                {
+                    "sequence": (5, 8, 15),
+                    "source_profile": "seed_profile",
+                    "source_context_hash": "ctx123",
+                },
+            )
+        )
+        self.assertTrue(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_sequence"
+            ],
+            "5,8,15",
+        )
+        self.assertEqual(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_expected_context_hash"
+            ],
+            "ctx123",
+        )
+        ten_task_auto_active_residual_target_diagnostic = {}
+        roi._apply_profile(
+            ten_task_auto_active_residual_target_diagnostic,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_auto_active_residual_target_diagnostic, {})
+        twenty_task_auto_active_residual_target_diagnostic = {}
+        roi._apply_profile(
+            twenty_task_auto_active_residual_target_diagnostic,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_diagnostic",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_auto_active_residual_target_diagnostic[
+                "journey_sharded_pulse_hidden_negative_worker_requires_auto_residual_target"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_auto_active_residual_target_diagnostic[
+                "journey_sharded_pulse_hidden_negative_worker_auto_residual_target_active_gate_enabled"
+            ]
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled",
+            twenty_task_auto_active_residual_target_diagnostic,
+        )
+        twenty_task_auto_active_residual_target_roi = {}
+        roi._apply_profile(
+            twenty_task_auto_active_residual_target_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_roi_gate",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_auto_active_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_requires_auto_residual_target"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_auto_active_residual_target_roi[
+                "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled"
+            ]
+        )
+        ten_task_auto_active_validation = {}
+        roi._apply_profile(
+            ten_task_auto_active_validation,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_diagnostic",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_auto_active_validation, {})
+        twenty_task_auto_active_validation = {}
+        roi._apply_profile(
+            twenty_task_auto_active_validation,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_diagnostic",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_auto_active_validation[
+                "journey_sharded_pulse_hidden_negative_worker_requires_auto_residual_target"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_auto_active_validation[
+                "journey_sharded_pulse_hidden_negative_worker_auto_residual_target_active_gate_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_auto_active_validation[
+                "journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"
+            ]
+        )
+        self.assertNotIn(
+            "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled",
+            twenty_task_auto_active_validation,
+        )
+        twenty_task_auto_active_validation_roi = {}
+        roi._apply_profile(
+            twenty_task_auto_active_validation_roi,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_roi_gate",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_auto_active_validation_roi[
+                "journey_sharded_pulse_hidden_negative_worker_requires_auto_residual_target"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_auto_active_validation_roi[
+                "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_auto_active_validation_roi[
+                "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_pre_heuristic[
+                "journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds"
+            ],
+            2,
+        )
+        ten_task_same_iter_rc_gate = {}
+        roi._apply_profile(
+            ten_task_same_iter_rc_gate,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_same_iter_rc_gate, {})
+        twenty_task_same_iter_rc_gate = {}
+        roi._apply_profile(
+            twenty_task_same_iter_rc_gate,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_gate[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_gate[
+                "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_gate[
+                "journey_sharded_pulse_hidden_negative_worker_continue_only_on_active_support"
+            ]
+        )
+        self.assertAlmostEqual(
+            twenty_task_same_iter_rc_gate[
+                "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc"
+            ],
+            -30.0,
+        )
+        twenty_task_same_iter_rc_reserve = {}
+        roi._apply_profile(
+            twenty_task_same_iter_rc_reserve,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_followup_reserve",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_reserve[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_reserve[
+                "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add"
+            ]
+        )
+        self.assertAlmostEqual(
+            twenty_task_same_iter_rc_reserve[
+                "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc"
+            ],
+            -30.0,
+        )
+        self.assertAlmostEqual(
+            twenty_task_same_iter_rc_reserve[
+                "journey_sharded_pulse_hidden_negative_worker_min_followup_time_after_add"
+            ],
+            0.4,
+        )
+        twenty_task_same_iter_rc_early = {}
+        roi._apply_profile(
+            twenty_task_same_iter_rc_early,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_early_cg",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_early[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_early[
+                "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add"
+            ]
+        )
+        self.assertAlmostEqual(
+            twenty_task_same_iter_rc_early[
+                "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc"
+            ],
+            -30.0,
+        )
+        self.assertAlmostEqual(
+            twenty_task_same_iter_rc_early[
+                "journey_sharded_pulse_hidden_negative_worker_min_followup_time_after_add"
+            ],
+            0.4,
+        )
+        self.assertEqual(
+            twenty_task_same_iter_rc_early[
+                "journey_sharded_pulse_hidden_negative_worker_max_cg_iter"
+            ],
+            1,
+        )
+        twenty_task_same_iter_rc_failure_cooldown = {}
+        roi._apply_profile(
+            twenty_task_same_iter_rc_failure_cooldown,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_failure_cooldown",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_failure_cooldown[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_same_iter_rc_failure_cooldown[
+                "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add"
+            ]
+        )
+        self.assertAlmostEqual(
+            twenty_task_same_iter_rc_failure_cooldown[
+                "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc"
+            ],
+            -30.0,
+        )
+        self.assertAlmostEqual(
+            twenty_task_same_iter_rc_failure_cooldown[
+                "journey_sharded_pulse_hidden_negative_worker_min_followup_time_after_add"
+            ],
+            0.4,
+        )
+        self.assertEqual(
+            twenty_task_same_iter_rc_failure_cooldown[
+                "journey_sharded_pulse_hidden_negative_worker_failure_cooldown_rounds"
+            ],
+            2,
+        )
+        twenty_task_hard_tail_fingerprint = {}
+        roi._apply_profile(
+            twenty_task_hard_tail_fingerprint,
+            "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_same_iter_rc_gate_hard_tail_fingerprint",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(
+            twenty_task_hard_tail_fingerprint[
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"
+            ]
+        )
+        self.assertTrue(
+            twenty_task_hard_tail_fingerprint[
+                "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_hard_tail_fingerprint[
+                "journey_sharded_pulse_worker_current_probe_min_certificate_flat_rounds"
+            ],
+            1,
+        )
+        self.assertEqual(
+            twenty_task_hard_tail_fingerprint[
+                "journey_sharded_pulse_worker_current_probe_min_no_column_rounds"
+            ],
+            1,
+        )
+        self.assertEqual(
+            twenty_task_hard_tail_fingerprint[
+                "journey_sharded_pulse_hidden_negative_worker_failure_cooldown_rounds"
+            ],
+            2,
+        )
+
+        hard_tail = {}
+        roi._apply_profile(hard_tail, "strict_worker_current_probe_hard_tail_only", args)
+        self.assertEqual(
+            hard_tail["journey_sharded_pulse_hidden_negative_worker_trigger"],
+            "hard_tail_only",
+        )
+        self.assertFalse(hard_tail.get("journey_sharded_pulse_worker_current_probe_enabled", False))
+        five_task_dual_stab = {}
+        roi._apply_profile(
+            five_task_dual_stab,
+            "experimental_l1_previous_dual_stabilization_20_only",
+            args,
+            task_count=5,
+        )
+        self.assertEqual(five_task_dual_stab, {})
+        previous_dual_stab = {}
+        roi._apply_profile(
+            previous_dual_stab,
+            "experimental_l1_previous_dual_stabilization_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertTrue(previous_dual_stab["journey_dual_stabilization_enabled"])
+        self.assertFalse(previous_dual_stab["journey_dual_stabilization_tail_only_enabled"])
+        self.assertEqual(
+            previous_dual_stab["journey_dual_stabilization_reference_mode"],
+            "previous",
+        )
+        self.assertFalse(
+            previous_dual_stab["journey_dual_stabilization_certificate_candidate_enabled"]
+        )
+        self.assertTrue(
+            previous_dual_stab["journey_dual_stabilization_disable_on_certificate_candidate"]
+        )
+        self.assertFalse(previous_dual_stab["journey_sharded_pulse_audit_enabled"])
+        self.assertFalse(
+            previous_dual_stab["journey_sharded_pulse_hidden_negative_worker_enabled"]
+        )
+        zero_dual_stab = {}
+        roi._apply_profile(
+            zero_dual_stab,
+            "experimental_l1_zero_dual_stabilization_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            zero_dual_stab["journey_dual_stabilization_reference_mode"],
+            "zero",
+        )
+        self.assertLessEqual(
+            zero_dual_stab["journey_dual_stabilization_time_limit"],
+            args.pricing_time_limit,
+        )
+        ten_task_profile_dp_cap = {}
+        roi._apply_profile(
+            ten_task_profile_dp_cap,
+            "experimental_profile_dp_cap_2000_20_only",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_profile_dp_cap, {})
+        twenty_task_profile_dp_cap_2000 = {}
+        roi._apply_profile(
+            twenty_task_profile_dp_cap_2000,
+            "experimental_profile_dp_cap_2000_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_profile_dp_cap_2000["journey_pricing_max_dp_states"],
+            2000,
+        )
+        self.assertFalse(
+            twenty_task_profile_dp_cap_2000["journey_sharded_pulse_audit_enabled"]
+        )
+        self.assertFalse(
+            twenty_task_profile_dp_cap_2000[
+                "journey_sharded_pulse_hidden_negative_worker_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_profile_dp_cap_2000["journey_dual_stabilization_enabled"]
+        )
+        twenty_task_profile_dp_cap_3000 = {}
+        roi._apply_profile(
+            twenty_task_profile_dp_cap_3000,
+            "experimental_profile_dp_cap_3000_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_profile_dp_cap_3000["journey_pricing_max_dp_states"],
+            3000,
+        )
+        ten_task_mask_hotspot = {}
+        roi._apply_profile(
+            ten_task_mask_hotspot,
+            "experimental_profile_dp_mask_label_cap_16_20_only",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_mask_hotspot, {})
+        twenty_task_mask_hotspot_16 = {}
+        roi._apply_profile(
+            twenty_task_mask_hotspot_16,
+            "experimental_profile_dp_mask_label_cap_16_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_mask_hotspot_16["journey_pricing_profile_dp_max_labels_per_mask"],
+            16,
+        )
+        self.assertFalse(
+            twenty_task_mask_hotspot_16["journey_sharded_pulse_audit_enabled"]
+        )
+        self.assertFalse(
+            twenty_task_mask_hotspot_16[
+                "journey_sharded_pulse_hidden_negative_worker_enabled"
+            ]
+        )
+        self.assertFalse(twenty_task_mask_hotspot_16["journey_dual_stabilization_enabled"])
+        twenty_task_mask_hotspot_32 = {}
+        roi._apply_profile(
+            twenty_task_mask_hotspot_32,
+            "experimental_profile_dp_mask_label_cap_32_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_mask_hotspot_32["journey_pricing_profile_dp_max_labels_per_mask"],
+            32,
+        )
+        ten_task_early_quota = {}
+        roi._apply_profile(
+            ten_task_early_quota,
+            "experimental_early_new_task_set_quota_3_20_only",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_early_quota, {})
+        twenty_task_early_quota = {}
+        roi._apply_profile(
+            twenty_task_early_quota,
+            "experimental_early_new_task_set_quota_3_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_early_quota[
+                "journey_pricing_early_return_new_task_set_min_count"
+            ],
+            3,
+        )
+        self.assertEqual(
+            twenty_task_early_quota[
+                "journey_heuristic_early_return_new_task_set_min_count"
+            ],
+            3,
+        )
+        self.assertEqual(
+            twenty_task_early_quota["journey_pricing_max_returned_journeys"],
+            8,
+        )
+        self.assertEqual(
+            twenty_task_early_quota["journey_heuristic_max_returned_journeys"],
+            8,
+        )
+        self.assertEqual(
+            twenty_task_early_quota["journey_pricing_selection_mode"],
+            "diverse",
+        )
+        self.assertEqual(
+            twenty_task_early_quota["journey_heuristic_selection_mode"],
+            "diverse",
+        )
+        self.assertFalse(twenty_task_early_quota["journey_sharded_pulse_audit_enabled"])
+        self.assertFalse(
+            twenty_task_early_quota[
+                "journey_sharded_pulse_hidden_negative_worker_enabled"
+            ]
+        )
+        self.assertFalse(twenty_task_early_quota["journey_dual_stabilization_enabled"])
+        twenty_task_early_quota_return12 = {}
+        roi._apply_profile(
+            twenty_task_early_quota_return12,
+            "experimental_early_new_task_set_quota_3_return12_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_early_quota_return12["journey_pricing_max_returned_journeys"],
+            12,
+        )
+        self.assertEqual(
+            twenty_task_early_quota_return12[
+                "journey_heuristic_max_returned_journeys"
+            ],
+            12,
+        )
+        ten_task_pricing_time = {}
+        roi._apply_profile(
+            ten_task_pricing_time,
+            "experimental_pricing_time_0_6_20_only",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_pricing_time, {})
+        twenty_task_pricing_time_06 = {}
+        roi._apply_profile(
+            twenty_task_pricing_time_06,
+            "experimental_pricing_time_0_6_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertAlmostEqual(
+            twenty_task_pricing_time_06["journey_pricing_time_limit"],
+            0.6,
+        )
+        self.assertFalse(
+            twenty_task_pricing_time_06["journey_sharded_pulse_audit_enabled"]
+        )
+        self.assertFalse(
+            twenty_task_pricing_time_06[
+                "journey_sharded_pulse_hidden_negative_worker_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_pricing_time_06["journey_dual_stabilization_enabled"]
+        )
+        twenty_task_pricing_time_10 = {}
+        roi._apply_profile(
+            twenty_task_pricing_time_10,
+            "experimental_pricing_time_1_0_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertAlmostEqual(
+            twenty_task_pricing_time_10["journey_pricing_time_limit"],
+            1.0,
+        )
+        ten_task_integer_diverse = {}
+        roi._apply_profile(
+            ten_task_integer_diverse,
+            "experimental_profile_selection_integer_diverse_20_only",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(ten_task_integer_diverse, {})
+        twenty_task_integer_diverse = {}
+        roi._apply_profile(
+            twenty_task_integer_diverse,
+            "experimental_profile_selection_integer_diverse_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_integer_diverse["journey_pricing_selection_mode"],
+            "integer_diverse",
+        )
+        self.assertEqual(
+            twenty_task_integer_diverse["journey_heuristic_selection_mode"],
+            "integer_diverse",
+        )
+        self.assertFalse(
+            twenty_task_integer_diverse["journey_sharded_pulse_audit_enabled"]
+        )
+        self.assertFalse(
+            twenty_task_integer_diverse[
+                "journey_sharded_pulse_hidden_negative_worker_enabled"
+            ]
+        )
+        self.assertFalse(
+            twenty_task_integer_diverse["journey_dual_stabilization_enabled"]
+        )
+        twenty_task_orthogonal = {}
+        roi._apply_profile(
+            twenty_task_orthogonal,
+            "experimental_profile_selection_orthogonal_20_only",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(
+            twenty_task_orthogonal["journey_pricing_selection_mode"],
+            "orthogonal",
+        )
+        self.assertEqual(
+            twenty_task_orthogonal["journey_heuristic_selection_mode"],
+            "orthogonal",
+        )
+
+    def test_sharded_pulse_roi_calibration_delayed_profiles_scale_gate_5_task(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        args = SimpleNamespace(
+            audit_time_limit=0.5,
+            audit_max_recursions=1000,
+            audit_negative_harvest_limit=8,
+            worker_time_limit=0.5,
+            worker_max_recursions=1000,
+            worker_negative_harvest_limit=8,
+            current_probe_time_limit=0.4,
+            current_probe_max_recursions=2000,
+            current_probe_min_tasks=10,
+            current_probe_min_remaining_time=0.0,
+            current_probe_negative_harvest_limit=8,
+        )
+        config = {}
+        roi._apply_profile(
+            config,
+            "strict_worker_delayed_current_probe_impact",
+            args,
+            task_count=5,
+        )
+        self.assertEqual(config, {})
+
+    def test_sharded_pulse_roi_calibration_delayed_profiles_are_certificate_candidate_only(self):
+        from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi
+
+        args = SimpleNamespace(
+            audit_time_limit=0.5,
+            audit_max_recursions=1000,
+            audit_negative_harvest_limit=8,
+            worker_time_limit=0.5,
+            worker_max_recursions=1000,
+            worker_negative_harvest_limit=8,
+            current_probe_time_limit=0.4,
+            current_probe_max_recursions=2000,
+            current_probe_min_tasks=10,
+            current_probe_min_remaining_time=0.0,
+            current_probe_negative_harvest_limit=8,
+        )
+        hard_tail = {}
+        roi._apply_profile(
+            hard_tail,
+            "strict_worker_delayed_hard_tail_only",
+            args,
+            task_count=10,
+        )
+        self.assertEqual(hard_tail["journey_sharded_pulse_audit_trigger"], "on_certificate_candidate")
+        self.assertFalse(hard_tail["journey_sharded_pulse_audit_force_on_root"])
+        self.assertFalse(hard_tail["journey_sharded_pulse_audit_log_skips"])
+        self.assertEqual(
+            hard_tail["journey_sharded_pulse_hidden_negative_worker_trigger"],
+            "hard_tail_only",
+        )
+        self.assertFalse(hard_tail["journey_sharded_pulse_hidden_negative_worker_log_skips"])
+        self.assertFalse(hard_tail.get("journey_sharded_pulse_worker_current_probe_enabled", False))
+
+        current_probe = {}
+        roi._apply_profile(
+            current_probe,
+            "strict_worker_delayed_current_probe_impact",
+            args,
+            task_count=20,
+        )
+        self.assertEqual(current_probe["journey_sharded_pulse_audit_trigger"], "on_certificate_candidate")
+        self.assertEqual(
+            current_probe["journey_sharded_pulse_hidden_negative_worker_trigger"],
+            "audit_signal_or_current_probe",
+        )
+        self.assertTrue(current_probe["journey_sharded_pulse_worker_current_probe_enabled"])
+        self.assertEqual(
+            current_probe["journey_sharded_pulse_hidden_negative_worker_impact_filter_mode"],
+            "require_new_or_active_support",
+        )
+        low_budget = {}
+        roi._apply_profile(
+            low_budget,
+            "strict_worker_delayed_current_probe_impact_low_budget",
+            args,
+            task_count=20,
+        )
+        self.assertLess(
+            low_budget["journey_sharded_pulse_worker_current_probe_time_limit"],
+            current_probe["journey_sharded_pulse_worker_current_probe_time_limit"],
+        )
+        self.assertLess(
+            low_budget["journey_sharded_pulse_worker_current_probe_max_recursions"],
+            current_probe["journey_sharded_pulse_worker_current_probe_max_recursions"],
+        )
+        self.assertEqual(low_budget["journey_sharded_pulse_worker_current_probe_max_columns"], 8)
 
 
 def _single_task_grid_trips(data, *, bucket: float):

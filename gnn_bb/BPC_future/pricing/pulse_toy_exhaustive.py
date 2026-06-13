@@ -72,6 +72,25 @@ class ToyPulseExhaustiveResult:
     shard_first_task: int | None = None
     pulse_capacity_pruned: int = 0
     pulse_energy_pruned: int = 0
+    pulse_target_transition_priority_enabled: bool = False
+    pulse_target_transition_priority_sequence: tuple[int, ...] = tuple()
+    pulse_target_arc_option_priority_enabled: bool = False
+    pulse_target_arc_option_priority_sequence: tuple[str, ...] = tuple()
+    pulse_target_sequence_diagnostics_enabled: bool = False
+    pulse_target_sequence: tuple[int, ...] = tuple()
+    pulse_target_sequence_reached_prefix_len: int = 0
+    pulse_target_sequence_completed: bool = False
+    pulse_target_sequence_materialized: bool = False
+    pulse_target_sequence_negative: bool = False
+    pulse_target_sequence_blocked_reason: str = ""
+    pulse_target_sequence_blocked_prefix: tuple[int, ...] = tuple()
+    pulse_target_sequence_blocked_next_task: int | None = None
+    pulse_target_sequence_transition_attempts: int = 0
+    pulse_target_sequence_transition_accepted: int = 0
+    pulse_target_sequence_prune_reason_counts: tuple[tuple[str, int], ...] = tuple()
+    pulse_target_path_diagnostics_enabled: bool = False
+    pulse_target_path_prefix_samples: tuple[str, ...] = tuple()
+    pulse_target_path_blocked_samples: tuple[str, ...] = tuple()
 
     @property
     def found_negative(self) -> bool:
@@ -559,6 +578,16 @@ def transition_root_only_pulse(
     harvest_after_negative_enabled: bool = False,
     support_aware_harvesting_enabled: bool = False,
     negative_harvest_limit: int = 0,
+    stop_after_first_negative: bool = False,
+    task_ordering: str = "natural",
+    target_transition_priority_enabled: bool = False,
+    target_transition_priority_sequence: tuple[int, ...] = tuple(),
+    target_arc_option_priority_enabled: bool = False,
+    target_arc_option_priority_sequence: tuple[str, ...] = tuple(),
+    target_sequence_diagnostics_enabled: bool = False,
+    target_sequence_diagnostics_sequence: tuple[int, ...] = tuple(),
+    target_path_diagnostics_enabled: bool = False,
+    target_path_diagnostics_max_samples: int = 8,
     active_masks: tuple[object, ...] = tuple(),
     pool_masks: tuple[object, ...] = tuple(),
     forbidden_signatures: tuple[object, ...] = tuple(),
@@ -589,6 +618,9 @@ def transition_root_only_pulse(
     task_to_bit = {int(task): index for index, task in enumerate(task_order)}
     waiting_allowed = bool(data.instance.get("scheduling", {}).get("task_waiting_allowed", True))
     candidate_start_step = max(1.0e-9, float(time_bucket_size if start_time_step is None else start_time_step))
+    normalized_task_ordering = str(task_ordering or "natural").strip().lower()
+    if normalized_task_ordering not in {"natural", "cover_dual_desc", "reduced_cost_proxy"}:
+        normalized_task_ordering = "natural"
     archive = (
         StructuralKeyDominanceArchive(max_records_per_key=int(archive_max_records_per_key))
         if bool(archive_dominance_enabled)
@@ -620,9 +652,268 @@ def transition_root_only_pulse(
     pulse_bound_prune_winner_count = 0
     pulse_bound_prune_time = 0.0
     pulse_bound_dynamic_fail_open_reason = ""
+    early_negative_found = False
+    forbidden_signature_set = {tuple(signature) for signature in forbidden_signatures}
+    existing_task_sets = {
+        frozenset(int(task) for task in task_set)
+        for task_set in pool_masks
+        if isinstance(task_set, (set, frozenset, tuple, list))
+    }
+    target_sequence = tuple(int(task) for task in (target_sequence_diagnostics_sequence or tuple()))
+    target_priority_sequence = tuple(int(task) for task in (target_transition_priority_sequence or tuple()))
+    target_priority_enabled = bool(target_transition_priority_enabled) and bool(target_priority_sequence)
+    target_arc_priority_sequence = tuple(str(item) for item in (target_arc_option_priority_sequence or tuple()))
+    target_arc_priority_enabled = bool(target_arc_option_priority_enabled) and bool(target_arc_priority_sequence)
+    target_requested = bool(target_sequence_diagnostics_enabled) and bool(target_sequence)
+    target_enabled = bool(target_requested) and (
+        shard_task is None or int(shard_task) == int(target_sequence[0])
+    )
+    target_reached_prefix_len = 0
+    target_completed = False
+    target_materialized = False
+    target_negative = False
+    target_blocked_reason = ""
+    target_blocked_prefix: tuple[int, ...] = tuple()
+    target_blocked_next_task: int | None = None
+    target_transition_attempts = 0
+    target_transition_accepted = 0
+    target_prune_reason_counts: dict[str, int] = {}
+    target_path_enabled = bool(target_enabled) and bool(target_path_diagnostics_enabled)
+    target_path_sample_cap = max(0, int(target_path_diagnostics_max_samples))
+    target_path_prefix_samples: list[str] = []
+    target_path_blocked_samples: list[str] = []
+
+    def _option_id(option: ArcOption) -> str:
+        return str(getattr(option, "option_id", ""))
+
+    def _option_ids(options: tuple[ArcOption, ...]) -> str:
+        return "|".join(_option_id(option) for option in options)
+
+    def _append_capped(samples: list[str], sample: str) -> None:
+        if not bool(target_path_enabled):
+            return
+        if int(target_path_sample_cap) <= 0:
+            return
+        if len(samples) >= int(target_path_sample_cap):
+            return
+        samples.append(str(sample))
+
+    def _target_record_prefix_state(state: "_TransitionPulseState") -> None:
+        sequence = tuple(int(task) for task in state.current_sequence)
+        if not _target_prefix_matches(sequence):
+            return
+        _append_capped(
+            target_path_prefix_samples,
+            ";".join(
+                (
+                    f"prefix={','.join(str(task) for task in sequence)}",
+                    f"arc_ids={_option_ids(tuple(state.current_arc_options))}",
+                    f"start_lb={float(state.start_interval_lb):.6f}",
+                    f"start_ub={float(state.start_interval_ub):.6f}",
+                    f"offset={float(state.current_offset):.6f}",
+                    f"current_time={float(state.current_time):.6f}",
+                )
+            ),
+        )
+
+    def _target_record_transition_path_sample(
+        reason: str,
+        state: "_TransitionPulseState",
+        task: int,
+        option: ArcOption,
+        *,
+        detail: str = "",
+    ) -> None:
+        if not _target_transition_matches(tuple(state.current_sequence), int(task)):
+            return
+        parts = [
+            f"reason={str(reason)}",
+            f"prefix={','.join(str(item) for item in state.current_sequence)}",
+            f"next={int(task)}",
+            f"arc_ids={_option_ids(tuple(state.current_arc_options) + (option,))}",
+            f"option={_option_id(option)}",
+            f"start_lb={float(state.start_interval_lb):.6f}",
+            f"start_ub={float(state.start_interval_ub):.6f}",
+            f"offset={float(state.current_offset):.6f}",
+            f"current_time={float(state.current_time):.6f}",
+        ]
+        if detail:
+            parts.append(str(detail))
+        _append_capped(target_path_blocked_samples, ";".join(parts))
+
+    def _prioritize_target_transition(
+        ordered: tuple[int, ...],
+        current_sequence: tuple[int, ...],
+    ) -> tuple[int, ...]:
+        if not bool(target_priority_enabled):
+            return ordered
+        prefix = tuple(int(task) for task in current_sequence)
+        if len(prefix) >= len(target_priority_sequence):
+            return ordered
+        if prefix != target_priority_sequence[: len(prefix)]:
+            return ordered
+        next_task = int(target_priority_sequence[len(prefix)])
+        if next_task not in ordered:
+            return ordered
+        return (next_task,) + tuple(task for task in ordered if int(task) != next_task)
+
+    def _target_preferred_arc_option_id(
+        current_sequence: tuple[int, ...],
+        target: int,
+        *,
+        returning: bool = False,
+    ) -> str | None:
+        if not bool(target_arc_priority_enabled):
+            return None
+        prefix = tuple(int(task) for task in current_sequence)
+        if returning:
+            if prefix != target_sequence:
+                return None
+            edge_index = len(target_sequence)
+        else:
+            if len(prefix) >= len(target_sequence):
+                return None
+            if prefix != target_sequence[: len(prefix)]:
+                return None
+            if int(target) != int(target_sequence[len(prefix)]):
+                return None
+            edge_index = len(prefix)
+        if int(edge_index) >= len(target_arc_priority_sequence):
+            return None
+        return str(target_arc_priority_sequence[int(edge_index)])
+
+    def _prioritize_target_arc_options(
+        options: tuple[ArcOption, ...],
+        current_sequence: tuple[int, ...],
+        target: int,
+        *,
+        returning: bool = False,
+    ) -> tuple[ArcOption, ...]:
+        preferred_id = _target_preferred_arc_option_id(
+            tuple(current_sequence),
+            int(target),
+            returning=bool(returning),
+        )
+        if not preferred_id:
+            return options
+        preferred = tuple(option for option in options if _option_id(option) == preferred_id)
+        if not preferred:
+            return options
+        return preferred + tuple(option for option in options if _option_id(option) != preferred_id)
+
+    def ordered_tasks(
+        source: int,
+        remaining_tasks: tuple[int, ...],
+        *,
+        current_sequence: tuple[int, ...] = tuple(),
+    ) -> tuple[int, ...]:
+        if normalized_task_ordering == "natural":
+            return _prioritize_target_transition(
+                tuple(int(task) for task in remaining_tasks),
+                tuple(current_sequence),
+            )
+
+        def min_transition_cost(target: int) -> float:
+            options = _safe_options(data, int(source), int(target))
+            if not options:
+                return float("inf")
+            return min(float(option.cost) for option in options)
+
+        def min_return_cost(target: int) -> float:
+            options = _safe_options(data, int(target), 0)
+            if not options:
+                return float("inf")
+            return min(float(option.cost) for option in options)
+
+        if normalized_task_ordering == "cover_dual_desc":
+            return _prioritize_target_transition(
+                tuple(
+                sorted(
+                    (int(task) for task in remaining_tasks),
+                    key=lambda task: (
+                        -float(duals.cover.get(int(task), 0.0)),
+                        min_transition_cost(int(task)),
+                        int(task),
+                    ),
+                )
+                ),
+                tuple(current_sequence),
+            )
+        return _prioritize_target_transition(
+            tuple(
+            sorted(
+                (int(task) for task in remaining_tasks),
+                key=lambda task: (
+                    min_transition_cost(int(task))
+                    + float(data.task_value(int(task), "c_srv"))
+                    + min_return_cost(int(task))
+                    - float(duals.cover.get(int(task), 0.0)),
+                    float(data.task_value(int(task), "r")),
+                    int(task),
+                ),
+            )
+            ),
+            tuple(current_sequence),
+        )
+
+    def ordered_options(
+        source: int,
+        target: int,
+        *,
+        current_sequence: tuple[int, ...] = tuple(),
+    ) -> tuple[ArcOption, ...]:
+        options = _safe_options(data, int(source), int(target))
+        if normalized_task_ordering == "natural":
+            return _prioritize_target_arc_options(
+                options,
+                tuple(current_sequence),
+                int(target),
+            )
+        return _prioritize_target_arc_options(
+            tuple(
+            sorted(
+                options,
+                key=lambda option: (
+                    float(option.cost),
+                    float(option.energy),
+                    float(option.tau),
+                    tuple(int(part) for part in getattr(option, "option_ids", tuple())),
+                ),
+            )
+            ),
+            tuple(current_sequence),
+            int(target),
+        )
+
+    def _target_prefix_matches(sequence: tuple[int, ...]) -> bool:
+        return bool(target_enabled) and len(sequence) <= len(target_sequence) and tuple(sequence) == target_sequence[: len(sequence)]
+
+    def _target_transition_matches(prefix: tuple[int, ...], task: int) -> bool:
+        return (
+            _target_prefix_matches(prefix)
+            and len(prefix) < len(target_sequence)
+            and int(task) == int(target_sequence[len(prefix)])
+        )
+
+    def _target_record_reached(sequence: tuple[int, ...]) -> None:
+        nonlocal target_reached_prefix_len
+        if _target_prefix_matches(sequence):
+            target_reached_prefix_len = max(int(target_reached_prefix_len), len(sequence))
+
+    def _target_record_prune(reason: str, prefix: tuple[int, ...], next_task: int | None = None) -> None:
+        nonlocal target_blocked_reason, target_blocked_prefix, target_blocked_next_task
+        if not _target_prefix_matches(prefix):
+            return
+        target_prune_reason_counts[str(reason)] = target_prune_reason_counts.get(str(reason), 0) + 1
+        if not target_blocked_reason:
+            target_blocked_reason = str(reason)
+            target_blocked_prefix = tuple(int(task) for task in prefix)
+            target_blocked_next_task = None if next_task is None else int(next_task)
 
     def stop_requested() -> bool:
         nonlocal stop_status, stop_reason
+        if bool(early_negative_found):
+            return True
         if stop_status is not None:
             return True
         if deadline is not None and time.perf_counter() >= float(deadline):
@@ -656,6 +947,8 @@ def transition_root_only_pulse(
         nonlocal pulse_bound_pruned, pulse_bound_prune_query_count, pulse_bound_prune_winner_count
         nonlocal pulse_bound_prune_time, pulse_bound_dynamic_fail_open_reason
         if not count_recursion():
+            return
+        if stop_requested():
             return
         if int(sorties_used) >= int(sortie_limit):
             return
@@ -709,13 +1002,18 @@ def transition_root_only_pulse(
             if remaining_lb is not None and float(partial_lb_prefix_rc) + float(remaining_lb) >= -float(eps):
                 pulse_bound_pruned += 1
                 pulse_bound_prune_winner_count += 1
+                _target_record_prune("bound", tuple(), None)
                 return
         expanded_states += 1
-        for task in remaining_tasks:
+        for task in ordered_tasks(0, remaining_tasks, current_sequence=tuple()):
+            if stop_requested():
+                return
             task = int(task)
             if shard_task is not None and not traces and task != int(shard_task):
                 continue
-            for option in _safe_options(data, 0, task):
+            for option in ordered_options(0, task, current_sequence=tuple()):
+                if stop_requested():
+                    return
                 state = _TransitionPulseState(
                     phase="open_sortie",
                     traces=traces,
@@ -748,6 +1046,10 @@ def transition_root_only_pulse(
         nonlocal pulse_bound_prune_time, pulse_bound_dynamic_fail_open_reason
         if not count_recursion():
             return
+        if stop_requested():
+            return
+        _target_record_reached(tuple(state.current_sequence))
+        _target_record_prefix_state(state)
         if archive is not None:
             survival_so_far = float(data.survival_energy_rate) * max(
                 0.0,
@@ -787,13 +1089,17 @@ def transition_root_only_pulse(
             )
             if decision.dominated:
                 pulse_archive_pruned += 1
+                _target_record_prune("archive", tuple(state.current_sequence), None)
                 return
         expanded_states += 1
         can_return_now = _second_action_allows_return(state, second_shard)
         if can_return_now:
             complete_sortie_by_return(state)
+            if stop_requested():
+                return
         elif _is_first_sortie_second_action_point(state):
             pulse_branch_pruned += 1
+            _target_record_prune("second_action_return", tuple(state.current_sequence), None)
         remaining_after_current = tuple(
             int(task)
             for task in state.remaining_tasks
@@ -814,15 +1120,32 @@ def transition_root_only_pulse(
             if remaining_lb is not None and float(state.partial_lb_prefix_rc) + float(remaining_lb) >= -float(eps):
                 pulse_bound_pruned += 1
                 pulse_bound_prune_winner_count += 1
+                _target_record_prune("bound", tuple(state.current_sequence), None)
                 return
         if len(state.current_sequence) >= int(max_tasks):
+            if len(state.current_sequence) < len(target_sequence):
+                _target_record_prune("max_tasks_per_sortie", tuple(state.current_sequence), None)
             return
-        for task in remaining_after_current:
+        for task in ordered_tasks(
+            int(state.last_node),
+            remaining_after_current,
+            current_sequence=tuple(state.current_sequence),
+        ):
+            if stop_requested():
+                return
             task = int(task)
             if not _second_action_allows_task(state, task, second_shard):
                 pulse_branch_pruned += 1
+                if _target_transition_matches(tuple(state.current_sequence), task):
+                    _target_record_prune("second_action_task", tuple(state.current_sequence), task)
                 continue
-            for option in _safe_options(data, int(state.last_node), task):
+            for option in ordered_options(
+                int(state.last_node),
+                task,
+                current_sequence=tuple(state.current_sequence),
+            ):
+                if stop_requested():
+                    return
                 next_state = try_extend_task(state, task, option)
                 if next_state is not None:
                     search_open(next_state)
@@ -834,10 +1157,17 @@ def transition_root_only_pulse(
     ) -> _TransitionPulseState | None:
         nonlocal pulse_time_window_pruned, pulse_resource_pruned, pulse_return_pruned, pulse_branch_pruned
         nonlocal pulse_capacity_pruned, pulse_energy_pruned
+        nonlocal target_transition_attempts, target_transition_accepted
         task = int(task)
+        target_transition = _target_transition_matches(tuple(state.current_sequence), task)
+        if target_transition:
+            target_transition_attempts += 1
         bit = 1 << int(task_to_bit[int(task)])
         if int(state.visited_task_mask) & bit:
             pulse_branch_pruned += 1
+            if target_transition:
+                _target_record_prune("branch_duplicate", tuple(state.current_sequence), task)
+                _target_record_transition_path_sample("branch_duplicate", state, task, option)
             return None
         branch_update = _transition_branch_update(
             int(state.visited_task_mask),
@@ -848,16 +1178,33 @@ def transition_root_only_pulse(
         )
         if branch_update is None:
             pulse_branch_pruned += 1
+            if target_transition:
+                _target_record_prune("branch_constraint", tuple(state.current_sequence), task)
+                _target_record_transition_path_sample("branch_constraint", state, task, option)
             return None
         next_visited_mask, next_pending_mask = branch_update
         remaining_after = tuple(int(item) for item in state.remaining_tasks if int(item) != task)
         if next_pending_mask and not _pending_same_possible(next_pending_mask, remaining_after, task_to_bit):
             pulse_branch_pruned += 1
+            if target_transition:
+                _target_record_prune("same_obligation_impossible", tuple(state.current_sequence), task)
+                _target_record_transition_path_sample(
+                    "same_obligation_impossible", state, task, option
+                )
             return None
         next_load = float(state.load_used) + float(data.task_value(task, "d"))
         if next_load > float(data.capacity) + 1.0e-9:
             pulse_resource_pruned += 1
             pulse_capacity_pruned += 1
+            if target_transition:
+                _target_record_prune("capacity", tuple(state.current_sequence), task)
+                _target_record_transition_path_sample(
+                    "capacity",
+                    state,
+                    task,
+                    option,
+                    detail=f"next_load={float(next_load):.6f};capacity={float(data.capacity):.6f}",
+                )
             return None
         ready_time = float(data.task_value(task, "r"))
         service_time = float(data.task_value(task, "sigma"))
@@ -878,6 +1225,24 @@ def transition_root_only_pulse(
             )
             if next_start_lb > next_start_ub + 1.0e-9:
                 pulse_time_window_pruned += 1
+                if target_transition:
+                    _target_record_prune("time_window", tuple(state.current_sequence), task)
+                    _target_record_transition_path_sample(
+                        "time_window",
+                        state,
+                        task,
+                        option,
+                        detail=";".join(
+                            (
+                                f"arrival_offset={float(arrival_offset):.6f}",
+                                f"next_start_lb={float(next_start_lb):.6f}",
+                                f"next_start_ub={float(next_start_ub):.6f}",
+                                f"ready={float(ready_time):.6f}",
+                                f"due={float(data.task_value(task, 'D')):.6f}",
+                                f"service={float(service_time):.6f}",
+                            )
+                        ),
+                    )
                 return None
             service_start = next_start_lb + arrival_offset
             finish_service = service_start + service_time
@@ -885,6 +1250,22 @@ def transition_root_only_pulse(
             next_current_time = next_start_lb + next_offset
         if finish_service > float(data.task_value(task, "D")) + 1.0e-9:
             pulse_time_window_pruned += 1
+            if target_transition:
+                _target_record_prune("time_window", tuple(state.current_sequence), task)
+                _target_record_transition_path_sample(
+                    "time_window",
+                    state,
+                    task,
+                    option,
+                    detail=";".join(
+                        (
+                            f"finish_service={float(finish_service):.6f}",
+                            f"due={float(data.task_value(task, 'D')):.6f}",
+                            f"ready={float(ready_time):.6f}",
+                            f"service={float(service_time):.6f}",
+                        )
+                    ),
+                )
             return None
         next_travel_energy = float(state.travel_energy) + float(option.energy)
         next_service_energy = float(state.service_energy) + float(data.task_value(task, "g"))
@@ -897,6 +1278,22 @@ def transition_root_only_pulse(
         if next_travel_energy + next_service_energy + survival_so_far > float(data.energy_limit) + 1.0e-9:
             pulse_resource_pruned += 1
             pulse_energy_pruned += 1
+            if target_transition:
+                _target_record_prune("energy", tuple(state.current_sequence), task)
+                _target_record_transition_path_sample(
+                    "energy",
+                    state,
+                    task,
+                    option,
+                    detail=";".join(
+                        (
+                            f"travel_energy={float(next_travel_energy):.6f}",
+                            f"service_energy={float(next_service_energy):.6f}",
+                            f"survival_energy={float(survival_so_far):.6f}",
+                            f"energy_limit={float(data.energy_limit):.6f}",
+                        )
+                    ),
+                )
             return None
         if not _future_return_lower_bound_possible(
             data,
@@ -911,6 +1308,9 @@ def transition_root_only_pulse(
             candidate_return_nodes=(task,) + remaining_after,
         ):
             pulse_return_pruned += 1
+            if target_transition:
+                _target_record_prune("return_lower_bound", tuple(state.current_sequence), task)
+                _target_record_transition_path_sample("return_lower_bound", state, task, option)
             return None
         next_sequence = tuple(state.current_sequence) + (task,)
         next_arc_options = tuple(state.current_arc_options) + (option,)
@@ -925,6 +1325,8 @@ def transition_root_only_pulse(
             arc_cost=float(option.cost),
             starts_journey=not state.traces and not state.current_sequence,
         )
+        if target_transition:
+            target_transition_accepted += 1
         return _TransitionPulseState(
             phase="open_sortie",
             traces=state.traces,
@@ -951,13 +1353,25 @@ def transition_root_only_pulse(
     def complete_sortie_by_return(state: _TransitionPulseState) -> None:
         nonlocal generated_sortie_traces, materialized_sorties, materialized_journey_leaves
         nonlocal infeasible_leaves, pulse_return_pruned, pulse_branch_pruned
+        nonlocal early_negative_found
+        nonlocal target_completed, target_materialized, target_negative
         if not state.current_sequence:
             return
-        return_options = _safe_options(data, int(state.last_node), 0)
+        target_return = _target_prefix_matches(tuple(state.current_sequence)) and len(state.current_sequence) == len(target_sequence)
+        return_options = _prioritize_target_arc_options(
+            _safe_options(data, int(state.last_node), 0),
+            tuple(state.current_sequence),
+            0,
+            returning=True,
+        )
         if not return_options:
             pulse_return_pruned += 1
+            if target_return:
+                _target_record_prune("return_missing_options", tuple(state.current_sequence), None)
             return
         for return_option in return_options:
+            if stop_requested():
+                return
             if not _direct_return_option_feasible(
                 data,
                 current_time=float(state.current_time),
@@ -971,6 +1385,8 @@ def transition_root_only_pulse(
                 return_option=return_option,
             ):
                 pulse_return_pruned += 1
+                if target_return:
+                    _target_record_prune("return_infeasible", tuple(state.current_sequence), None)
                 continue
             start_candidates = _pulse_completed_sortie_start_candidates(
                 data,
@@ -984,8 +1400,12 @@ def transition_root_only_pulse(
             )
             if not start_candidates:
                 pulse_return_pruned += 1
+                if target_return:
+                    _target_record_prune("return_start_candidates", tuple(state.current_sequence), None)
                 continue
             for start_time in start_candidates:
+                if stop_requested():
+                    return
                 trace = PulseSortieTrace(
                     sequence=tuple(state.current_sequence),
                     start_time=float(start_time),
@@ -1002,8 +1422,13 @@ def transition_root_only_pulse(
                 )
                 if trip is None:
                     infeasible_leaves += 1
+                    if target_return:
+                        _target_record_prune("sortie_materialization_infeasible", tuple(state.current_sequence), None)
                     continue
                 materialized_sorties += 1
+                if target_return:
+                    target_completed = True
+                    target_materialized = True
                 next_traces = tuple(state.traces) + (trace,)
                 if int(state.pending_same_mask) == 0:
                     candidate = materialize_pulse_leaf_candidate(
@@ -1018,11 +1443,28 @@ def transition_root_only_pulse(
                     if candidate is not None:
                         materialized_journey_leaves += 1
                         candidates_by_signature.setdefault(candidate.journey.signature, candidate)
+                        if target_return and float(candidate.true_reduced_cost) < -float(eps):
+                            target_negative = True
+                        task_set = frozenset(int(task) for task in candidate.journey.task_set)
+                        if (
+                            bool(stop_after_first_negative)
+                            and float(candidate.true_reduced_cost) < -float(eps)
+                            and tuple(candidate.journey.signature) not in forbidden_signature_set
+                            and (not existing_task_sets or task_set not in existing_task_sets)
+                        ):
+                            early_negative_found = True
+                            return
                     else:
                         infeasible_leaves += 1
+                        if target_return:
+                            _target_record_prune("journey_materialization_infeasible", tuple(state.current_sequence), None)
                 elif int(state.sorties_used) + 1 >= int(sortie_limit):
                     pulse_branch_pruned += 1
+                    if target_return:
+                        _target_record_prune("same_obligation_at_sortie_limit", tuple(state.current_sequence), None)
                 if int(state.sorties_used) + 1 < int(sortie_limit) and state.remaining_tasks:
+                    if stop_requested():
+                        return
                     if state.pending_same_mask and not _pending_same_possible(
                         int(state.pending_same_mask),
                         state.remaining_tasks,
@@ -1085,10 +1527,26 @@ def transition_root_only_pulse(
     status = "OPTIMAL" if stop_status is None else str(stop_status)
     reason = "exhausted" if stop_reason is None else str(stop_reason)
     exhausted = stop_status is None
+    if bool(early_negative_found) and negative_leaves:
+        exhausted = False
+        status = "FOUND_NEGATIVE_HARVESTED" if harvested_journeys else "FOUND_NEGATIVE"
+        reason = "stop_after_first_negative"
     if bool(harvest_after_negative_enabled) and negative_leaves:
         exhausted = False
         status = "FOUND_NEGATIVE_HARVESTED" if harvested_journeys else "FOUND_NEGATIVE"
         reason = "harvest_after_negative"
+    if target_enabled:
+        if target_materialized:
+            target_blocked_reason = ""
+            target_blocked_prefix = tuple()
+            target_blocked_next_task = None
+        elif not target_blocked_reason:
+            if stop_reason:
+                target_blocked_reason = str(stop_reason)
+            elif target_reached_prefix_len < len(target_sequence):
+                target_blocked_reason = "not_reached"
+            else:
+                target_blocked_reason = "not_materialized"
     return ToyPulseExhaustiveResult(
         candidates=candidates,
         exhausted=exhausted,
@@ -1141,6 +1599,25 @@ def transition_root_only_pulse(
         shard_first_task=shard_task,
         pulse_capacity_pruned=int(pulse_capacity_pruned),
         pulse_energy_pruned=int(pulse_energy_pruned),
+        pulse_target_transition_priority_enabled=bool(target_priority_enabled),
+        pulse_target_transition_priority_sequence=tuple(target_priority_sequence),
+        pulse_target_arc_option_priority_enabled=bool(target_arc_priority_enabled),
+        pulse_target_arc_option_priority_sequence=tuple(target_arc_priority_sequence),
+        pulse_target_sequence_diagnostics_enabled=bool(target_enabled),
+        pulse_target_sequence=tuple(target_sequence),
+        pulse_target_sequence_reached_prefix_len=int(target_reached_prefix_len),
+        pulse_target_sequence_completed=bool(target_completed),
+        pulse_target_sequence_materialized=bool(target_materialized),
+        pulse_target_sequence_negative=bool(target_negative),
+        pulse_target_sequence_blocked_reason=str(target_blocked_reason),
+        pulse_target_sequence_blocked_prefix=tuple(target_blocked_prefix),
+        pulse_target_sequence_blocked_next_task=target_blocked_next_task,
+        pulse_target_sequence_transition_attempts=int(target_transition_attempts),
+        pulse_target_sequence_transition_accepted=int(target_transition_accepted),
+        pulse_target_sequence_prune_reason_counts=tuple(sorted(target_prune_reason_counts.items())),
+        pulse_target_path_diagnostics_enabled=bool(target_path_enabled),
+        pulse_target_path_prefix_samples=tuple(target_path_prefix_samples),
+        pulse_target_path_blocked_samples=tuple(target_path_blocked_samples),
     )
 
 

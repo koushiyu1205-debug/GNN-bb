@@ -9,7 +9,7 @@ import math
 import itertools
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Iterable
 
 from BPC_future.core.branching import BranchConstraint
 from BPC_future.core.cuts import FutureCut, FleetLowerBoundCut, SubsetRowCut, fleet_lower_bound
@@ -36,6 +36,10 @@ from BPC_future.pricing.journey_pricing import (
     JourneyPricingResult,
     price_journeys,
     seed_sortie_profile_catalog_from_journeys,
+)
+from BPC_future.pricing.pulse_materialization import (
+    PulseSortieTrace,
+    materialize_pulse_leaf_candidate,
 )
 from BPC_future.solver.driver import (
     FutureResult,
@@ -230,12 +234,15 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
     restart_count = 0
     recent_priced_journeys: list[Any] = []
     recent_changed_task_sets: list[frozenset[int]] = []
+    recent_worker_changed_task_sets: list[frozenset[int]] = []
     dynamic_cuts_total = 0
     dynamic_subset_row_cuts_total = 0
     learning_runtime: _JourneyLearningRuntime | None = prewarmed_learning_runtime
     learning_runtime_initialized = prewarmed_learning_runtime is not None
     learning_certificate_gate_logged = False
     sharded_pulse_audit_signal: dict[str, Any] | None = None
+    sharded_pulse_worker_success_cooldown = 0
+    sharded_pulse_worker_cooldown_reason = "success_cooldown"
 
     def _update_sharded_pulse_audit_signal(
         pulse_pricing: Any | None,
@@ -302,6 +309,13 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
         scip_dual_vector = _journey_dual_vector(data, solution.duals, len(cuts))
         support_hash = _journey_support_hash(solution.journey_values)
         active_task_sets = _journey_active_task_sets(solution.journey_values)
+        logger.log(
+            "journey_pool_structure_diagnostics",
+            node_id=0,
+            depth=0,
+            cg_iter=cg_iter,
+            **_journey_pool_structure_diagnostics(journey_pool, solution.journey_values),
+        )
         objective_delta = None if previous_rmp_objective is None else float(solution.objective) - float(previous_rmp_objective)
         scip_dual_l1_delta = None if previous_dual_vector is None else sum(abs(a - b) for a, b in zip(scip_dual_vector, previous_dual_vector))
         certificate_candidate = bool(
@@ -365,6 +379,12 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
         dual_hash = _journey_dual_hash(dual_vector)
         dual_l1_delta = None if previous_dual_vector is None else sum(abs(a - b) for a, b in zip(dual_vector, previous_dual_vector))
         dual_linf_delta = None if previous_dual_vector is None else max(abs(a - b) for a, b in zip(dual_vector, previous_dual_vector))
+        worker_changed_task_sets = {
+            frozenset(int(task) for task in task_set)
+            for task_set in recent_worker_changed_task_sets
+        }
+        worker_active_task_sets = worker_changed_task_sets.intersection(active_task_sets)
+        worker_inactive_task_sets = worker_changed_task_sets.difference(active_task_sets)
         logger.log(
             "journey_rmp_dual_diagnostics",
             node_id=0,
@@ -376,7 +396,23 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             dual_linf_delta=None if dual_linf_delta is None else round(dual_linf_delta, 9),
             active_journeys=len(solution.journey_values),
             active_support_hash=support_hash,
+            worker_followup_changed_task_set_count=len(worker_changed_task_sets),
+            worker_followup_active_changed_task_set_count=len(worker_active_task_sets),
+            worker_followup_inactive_changed_task_set_count=len(worker_inactive_task_sets),
+            worker_followup_changed_task_set_hash=_hash_strings(
+                [
+                    str(sorted(task_set))
+                    for task_set in sorted(worker_changed_task_sets, key=lambda item: tuple(sorted(item)))
+                ]
+            ),
+            worker_followup_active_changed_task_set_hash=_hash_strings(
+                [
+                    str(sorted(task_set))
+                    for task_set in sorted(worker_active_task_sets, key=lambda item: tuple(sorted(item)))
+                ]
+            ),
         )
+        recent_worker_changed_task_sets = []
         logger.log(
             "journey_cg_progress_diagnostics",
             node_id=0,
@@ -454,6 +490,156 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
         )
         learning_heuristic_allowed = active_learning_runtime is not None
         heuristic_allowed = bool(base_heuristic_allowed or learning_heuristic_allowed)
+        sharded_pulse_worker_attempted_before_heuristic = False
+        if bool(config.get("journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled", False)):
+            sharded_pulse_worker_attempted_before_heuristic = True
+            remaining = max(0.0, time_limit - (time.perf_counter() - started))
+            if remaining > min_pricing_time:
+                pre_worker_base_config = _journey_pricing_config(
+                    data,
+                    config,
+                    bucket,
+                    start_step,
+                    eps,
+                    remaining,
+                    heuristic=False,
+                    cg_iter=cg_iter,
+                )
+                if sharded_pulse_worker_success_cooldown > 0:
+                    forbidden_signatures = _journey_forbidden_signatures_for_node(journey_pool, tuple())
+                    context_hashes = _journey_sharded_pulse_audit_context_hashes(
+                        data,
+                        solution.duals,
+                        tuple(),
+                        tuple(cuts),
+                        forbidden_signatures,
+                    )
+                    _log_journey_sharded_pulse_worker_skipped(
+                        logger,
+                        config,
+                        skip_reason=sharded_pulse_worker_cooldown_reason or "success_cooldown",
+                        trigger=str(
+                            config.get(
+                                "journey_sharded_pulse_hidden_negative_worker_trigger",
+                                "before_legacy_final_judge",
+                            )
+                        ),
+                        cg_iter=cg_iter,
+                        node_id=0,
+                        depth=0,
+                        context_hashes=context_hashes,
+                    )
+                    sharded_pulse_worker_success_cooldown -= 1
+                    if sharded_pulse_worker_success_cooldown <= 0:
+                        sharded_pulse_worker_cooldown_reason = "success_cooldown"
+                else:
+                    hidden_worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                        data,
+                        config,
+                        logger,
+                        duals=solution.duals,
+                        branch_constraints=tuple(),
+                        cuts=tuple(cuts),
+                        journey_pool=journey_pool,
+                        base_pricing_config=pre_worker_base_config,
+                        cg_iter=cg_iter,
+                        node_id=0,
+                        depth=0,
+                        active_task_sets=active_task_sets,
+                        certificate_candidate=certificate_candidate,
+                        remaining_time=remaining,
+                        previous_audit_signal=_journey_sharded_pulse_audit_signal_valid_for_worker(
+                            sharded_pulse_audit_signal,
+                            node_id=0,
+                            depth=0,
+                            cg_iter=cg_iter,
+                            max_age=int(
+                                config.get(
+                                    "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age",
+                                    3,
+                                )
+                            ),
+                        ),
+                        previous_audit_context_hashes=None
+                        if sharded_pulse_audit_signal is None
+                        else dict(sharded_pulse_audit_signal.get("context_hashes", {})),
+                        certificate_flat_rounds=certificate_flat_rounds,
+                        certificate_no_column_rounds=certificate_no_column_rounds,
+                    )
+                    if hidden_worker is not None:
+                        worker_pricing, worker_pricing_config = hidden_worker
+                        pricing_calls += 1
+                        exact_pricing_calls += 1
+                        generated_sequences += int(worker_pricing.generated_sequences)
+                        evaluated_timed_trips += int(worker_pricing.evaluated_timed_trips)
+                        _log_journey_pricing(
+                            logger,
+                            worker_pricing,
+                            cg_iter,
+                            pricing_kind="sharded_pulse_hidden_negative_worker",
+                            config=worker_pricing_config,
+                            pricing_dual_source="scip",
+                        )
+                        if worker_pricing.journeys:
+                            added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
+                            _log_journey_addition(
+                                logger,
+                                worker_pricing,
+                                added,
+                                cg_iter,
+                                pricing_kind="sharded_pulse_hidden_negative_worker",
+                                active_task_sets=active_task_sets,
+                            )
+                            if int(added) > 0:
+                                sharded_pulse_worker_success_cooldown = (
+                                    _journey_sharded_pulse_worker_success_cooldown_rounds(
+                                        config,
+                                        added,
+                                        active_task_sets=active_task_sets,
+                                    )
+                                )
+                                sharded_pulse_worker_cooldown_reason = "success_cooldown"
+                                certificate_no_column_rounds = 0
+                                recent_priced_journeys = list(worker_pricing.journeys)
+                                recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                                recent_worker_changed_task_sets = list(
+                                    getattr(added, "changed_task_sets", tuple())
+                                )
+                                if not bool(
+                                    config.get(
+                                        "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add",
+                                        False,
+                                    )
+                                ):
+                                    continue
+                                logger.log(
+                                    "journey_sharded_pulse_worker_continue_same_iteration",
+                                    node_id=0,
+                                    depth=0,
+                                    cg_iter=cg_iter,
+                                    pricing_kind="sharded_pulse_hidden_negative_worker",
+                                    added_journeys=int(added),
+                                    next_stage="heuristic",
+                                )
+                            else:
+                                sharded_pulse_worker_success_cooldown = (
+                                    _journey_sharded_pulse_worker_failure_cooldown_rounds(
+                                        config,
+                                        worker_pricing,
+                                        added=added,
+                                    )
+                                )
+                                if sharded_pulse_worker_success_cooldown > 0:
+                                    sharded_pulse_worker_cooldown_reason = "failure_cooldown"
+                        else:
+                            sharded_pulse_worker_success_cooldown = (
+                                _journey_sharded_pulse_worker_failure_cooldown_rounds(
+                                    config,
+                                    worker_pricing,
+                                )
+                            )
+                            if sharded_pulse_worker_success_cooldown > 0:
+                                sharded_pulse_worker_cooldown_reason = "failure_cooldown"
         if heuristic_allowed:
             remaining = max(0.0, time_limit - (time.perf_counter() - started))
             if remaining <= min_pricing_time:
@@ -518,6 +704,19 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     pricing_kind="heuristic",
                     config=heuristic_pricing_config,
                     pricing_dual_source=heuristic_dual_source,
+                )
+                _log_journey_pulse_residual_replay_diagnostic(
+                    logger,
+                    data,
+                    config,
+                    pricing,
+                    solution.duals,
+                    tuple(cuts),
+                    pricing_config=heuristic_pricing_config,
+                    pricing_kind="heuristic",
+                    cg_iter=cg_iter,
+                    node_id=0,
+                    depth=0,
                 )
                 priced_journeys = pricing.journeys
                 if learning_smoothed and learning_runtime is not None and learning_runtime.filter_true_rc:
@@ -812,37 +1011,70 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 )
                 exact_pricing_config = average_direct_config
                 exact_pricing_kind = "exact_dual_average_direct_patrol"
-        hidden_worker = _run_journey_sharded_pulse_hidden_negative_worker(
-            data,
-            config,
-            logger,
-            duals=solution.duals,
-            branch_constraints=tuple(),
-            cuts=tuple(cuts),
-            journey_pool=journey_pool,
-            base_pricing_config=exact_pricing_config,
-            cg_iter=cg_iter,
-            node_id=0,
-            depth=0,
-            active_task_sets=active_task_sets,
-            certificate_candidate=certificate_candidate,
-            remaining_time=remaining,
-            previous_audit_signal=_journey_sharded_pulse_audit_signal_valid_for_worker(
-                sharded_pulse_audit_signal,
-                node_id=0,
-                depth=0,
-                cg_iter=cg_iter,
-                max_age=int(
+        if sharded_pulse_worker_attempted_before_heuristic:
+            hidden_worker = None
+        elif sharded_pulse_worker_success_cooldown > 0:
+            forbidden_signatures = _journey_forbidden_signatures_for_node(journey_pool, tuple())
+            context_hashes = _journey_sharded_pulse_audit_context_hashes(
+                data,
+                solution.duals,
+                tuple(),
+                tuple(cuts),
+                forbidden_signatures,
+            )
+            _log_journey_sharded_pulse_worker_skipped(
+                logger,
+                config,
+                skip_reason=sharded_pulse_worker_cooldown_reason or "success_cooldown",
+                trigger=str(
                     config.get(
-                        "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age",
-                        3,
+                        "journey_sharded_pulse_hidden_negative_worker_trigger",
+                        "before_legacy_final_judge",
                     )
                 ),
-            ),
-            previous_audit_context_hashes=None
-            if sharded_pulse_audit_signal is None
-            else dict(sharded_pulse_audit_signal.get("context_hashes", {})),
-        )
+                cg_iter=cg_iter,
+                node_id=0,
+                depth=0,
+                context_hashes=context_hashes,
+            )
+            sharded_pulse_worker_success_cooldown -= 1
+            if sharded_pulse_worker_success_cooldown <= 0:
+                sharded_pulse_worker_cooldown_reason = "success_cooldown"
+            hidden_worker = None
+        else:
+            hidden_worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                config,
+                logger,
+                duals=solution.duals,
+                branch_constraints=tuple(),
+                cuts=tuple(cuts),
+                journey_pool=journey_pool,
+                base_pricing_config=exact_pricing_config,
+                cg_iter=cg_iter,
+                node_id=0,
+                depth=0,
+                active_task_sets=active_task_sets,
+                certificate_candidate=certificate_candidate,
+                remaining_time=remaining,
+                previous_audit_signal=_journey_sharded_pulse_audit_signal_valid_for_worker(
+                    sharded_pulse_audit_signal,
+                    node_id=0,
+                    depth=0,
+                    cg_iter=cg_iter,
+                    max_age=int(
+                        config.get(
+                            "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age",
+                            3,
+                        )
+                    ),
+                ),
+                previous_audit_context_hashes=None
+                if sharded_pulse_audit_signal is None
+                else dict(sharded_pulse_audit_signal.get("context_hashes", {})),
+                certificate_flat_rounds=certificate_flat_rounds,
+                certificate_no_column_rounds=certificate_no_column_rounds,
+            )
         if hidden_worker is not None:
             worker_pricing, worker_pricing_config = hidden_worker
             pricing_calls += 1
@@ -868,10 +1100,37 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     active_task_sets=active_task_sets,
                 )
                 if int(added) > 0:
+                    sharded_pulse_worker_success_cooldown = (
+                        _journey_sharded_pulse_worker_success_cooldown_rounds(
+                            config,
+                            added,
+                            active_task_sets=active_task_sets,
+                        )
+                    )
+                    sharded_pulse_worker_cooldown_reason = "success_cooldown"
                     certificate_no_column_rounds = 0
                     recent_priced_journeys = list(worker_pricing.journeys)
                     recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                    recent_worker_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
                     continue
+                sharded_pulse_worker_success_cooldown = (
+                    _journey_sharded_pulse_worker_failure_cooldown_rounds(
+                        config,
+                        worker_pricing,
+                        added=added,
+                    )
+                )
+                if sharded_pulse_worker_success_cooldown > 0:
+                    sharded_pulse_worker_cooldown_reason = "failure_cooldown"
+            else:
+                sharded_pulse_worker_success_cooldown = (
+                    _journey_sharded_pulse_worker_failure_cooldown_rounds(
+                        config,
+                        worker_pricing,
+                    )
+                )
+                if sharded_pulse_worker_success_cooldown > 0:
+                    sharded_pulse_worker_cooldown_reason = "failure_cooldown"
         pricing = price_journeys(
             data,
             exact_duals,
@@ -3172,6 +3431,13 @@ def _process_journey_branch_node(
         scip_dual_vector = _journey_dual_vector(data, solution.duals, len(cuts))
         support_hash = _journey_support_hash(solution.journey_values)
         active_task_sets = _journey_active_task_sets(solution.journey_values)
+        logger.log(
+            "journey_pool_structure_diagnostics",
+            node_id=int(node.id),
+            depth=int(node.depth),
+            cg_iter=cg_iter,
+            **_journey_pool_structure_diagnostics(journey_pool, solution.journey_values),
+        )
         objective_delta = None if previous_rmp_objective is None else float(solution.objective) - float(previous_rmp_objective)
         scip_dual_l1_delta = None if previous_dual_vector is None else sum(abs(a - b) for a, b in zip(scip_dual_vector, previous_dual_vector))
         certificate_candidate = bool(
@@ -3399,6 +3665,19 @@ def _process_journey_branch_node(
                     pricing_kind="heuristic",
                     config=heuristic_config,
                     pricing_dual_source=heuristic_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                _log_journey_pulse_residual_replay_diagnostic(
+                    logger,
+                    data,
+                    config,
+                    pricing,
+                    solution.duals,
+                    tuple(cuts),
+                    pricing_config=heuristic_config,
+                    pricing_kind="heuristic",
+                    cg_iter=cg_iter,
                     node_id=node.id,
                     depth=node.depth,
                 )
@@ -7754,13 +8033,77 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 )
             if int(config.get("journey_sharded_pulse_hidden_negative_worker_min_tasks", 0)) < 0:
                 raise ValueError("journey_sharded_pulse_hidden_negative_worker_min_tasks must be nonnegative")
+            if int(config.get("journey_sharded_pulse_hidden_negative_worker_max_cg_iter", 0)) < 0:
+                raise ValueError("journey_sharded_pulse_hidden_negative_worker_max_cg_iter must be nonnegative")
             if float(config.get("journey_sharded_pulse_hidden_negative_worker_min_remaining_time", 0.0)) < 0.0:
                 raise ValueError(
                     "journey_sharded_pulse_hidden_negative_worker_min_remaining_time must be nonnegative"
                 )
+            if float(config.get("journey_sharded_pulse_hidden_negative_worker_post_call_time_reserve", 0.0)) < 0.0:
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_post_call_time_reserve must be nonnegative"
+                )
+            if (
+                float(
+                    config.get(
+                        "journey_sharded_pulse_hidden_negative_worker_min_followup_time_after_add",
+                        0.0,
+                    )
+                )
+                < 0.0
+            ):
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_min_followup_time_after_add "
+                    "must be nonnegative"
+                )
             if int(config.get("journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age", 3)) <= 0:
                 raise ValueError(
                     "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age must be positive"
+                )
+            if int(config.get("journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds", 0)) < 0:
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds must be nonnegative"
+                )
+            if int(config.get("journey_sharded_pulse_hidden_negative_worker_failure_cooldown_rounds", 0)) < 0:
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_failure_cooldown_rounds must be nonnegative"
+                )
+            if (
+                int(
+                    config.get(
+                        "journey_sharded_pulse_hidden_negative_worker_inactive_success_cooldown_rounds",
+                        0,
+                    )
+                )
+                < 0
+            ):
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_inactive_success_cooldown_rounds "
+                    "must be nonnegative"
+                )
+            impact_filter_mode = str(
+                config.get("journey_sharded_pulse_hidden_negative_worker_impact_filter_mode", "off")
+                or "off"
+            ).strip().lower()
+            if impact_filter_mode not in {
+                "off",
+                "prefer_new_or_active_support",
+                "require_new_or_active_support",
+            }:
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode must be "
+                    "off, prefer_new_or_active_support, or require_new_or_active_support"
+                )
+            if int(config.get("journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns", 0)) < 0:
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns must be nonnegative"
+                )
+            if (
+                float(config.get("journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc", 0.0))
+                > 0.0
+            ):
+                raise ValueError(
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc must be nonpositive"
                 )
             if bool(config.get("journey_sharded_pulse_worker_current_probe_enabled", False)):
                 if (
@@ -7798,6 +8141,15 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 ):
                     raise ValueError(
                         "journey_sharded_pulse_worker_current_probe_min_remaining_time must be nonnegative"
+                    )
+                if int(config.get("journey_sharded_pulse_worker_current_probe_min_certificate_flat_rounds", 0)) < 0:
+                    raise ValueError(
+                        "journey_sharded_pulse_worker_current_probe_min_certificate_flat_rounds "
+                        "must be nonnegative"
+                    )
+                if int(config.get("journey_sharded_pulse_worker_current_probe_min_no_column_rounds", 0)) < 0:
+                    raise ValueError(
+                        "journey_sharded_pulse_worker_current_probe_min_no_column_rounds must be nonnegative"
                     )
         audit_trigger = str(
             config.get("journey_sharded_pulse_audit_trigger", "after_legacy_final_judge") or ""
@@ -12951,6 +13303,41 @@ def _journey_certificate_pricing_config(
                 0,
                 int(config.get("journey_pulse_shard_roi_min_expanded", 0)),
             ),
+            pulse_target_sequence_diagnostics_enabled=bool(
+                config.get("journey_pulse_target_sequence_diagnostics_enabled", False)
+            ),
+            pulse_target_sequence_diagnostics_sequence=_journey_pulse_target_sequence_from_config(
+                config,
+                "journey_pulse_",
+            ),
+            pulse_target_first_task_priority_enabled=bool(
+                config.get("journey_pulse_target_first_task_priority_enabled", False)
+            ),
+            pulse_target_first_task_priority_sequence=_journey_pulse_target_first_task_priority_sequence_from_config(
+                config,
+                "journey_pulse_",
+            ),
+            pulse_target_transition_priority_enabled=bool(
+                config.get("journey_pulse_target_transition_priority_enabled", False)
+            ),
+            pulse_target_transition_priority_sequence=_journey_pulse_target_transition_priority_sequence_from_config(
+                config,
+                "journey_pulse_",
+            ),
+            pulse_target_arc_option_priority_enabled=bool(
+                config.get("journey_pulse_target_arc_option_priority_enabled", False)
+            ),
+            pulse_target_arc_option_priority_sequence=_journey_pulse_target_arc_option_priority_sequence_from_config(
+                config,
+                "journey_pulse_",
+            ),
+            pulse_target_path_diagnostics_enabled=bool(
+                config.get("journey_pulse_target_path_diagnostics_enabled", False)
+            ),
+            pulse_target_path_diagnostics_max_samples=max(
+                0,
+                int(config.get("journey_pulse_target_path_diagnostics_max_samples", 8)),
+            ),
             pulse_resume_enabled=bool(config.get("journey_final_judge_resume_enabled", False)),
             pulse_cache_max_states=max(0, int(config.get("journey_final_judge_cache_max_states", 0))),
             pulse_parallel_enabled=bool(config.get("journey_final_judge_parallel_enabled", False)),
@@ -14412,6 +14799,244 @@ def _journey_pricing_config(
     )
 
 
+_JOURNEY_TASK_SET_SAMPLE_LIMIT = 8
+
+
+def _canonical_task_set(task_set: Any) -> tuple[int, ...]:
+    if task_set is None:
+        return tuple()
+    return tuple(sorted(int(task) for task in task_set))
+
+
+def _task_set_sort_key(task_set: frozenset[int]) -> tuple[int, tuple[int, ...]]:
+    ordered = tuple(sorted(int(task) for task in task_set))
+    return (len(ordered), ordered)
+
+
+def _journey_task_set_samples(
+    task_sets: Iterable[Any],
+    *,
+    limit: int = _JOURNEY_TASK_SET_SAMPLE_LIMIT,
+) -> list[list[int]]:
+    normalized = {
+        frozenset(_canonical_task_set(task_set))
+        for task_set in task_sets
+        if _canonical_task_set(task_set)
+    }
+    ordered = sorted(normalized, key=_task_set_sort_key)
+    return [list(_canonical_task_set(task_set)) for task_set in ordered[: max(0, int(limit))]]
+
+
+def _journey_task_set_summary_payload(prefix: str, task_sets: Iterable[Any]) -> dict[str, Any]:
+    normalized = {
+        frozenset(_canonical_task_set(task_set))
+        for task_set in task_sets
+        if _canonical_task_set(task_set)
+    }
+    ordered = sorted(normalized, key=_task_set_sort_key)
+    samples = [list(_canonical_task_set(task_set)) for task_set in ordered[:_JOURNEY_TASK_SET_SAMPLE_LIMIT]]
+    return {
+        f"{prefix}_task_set_count": len(ordered),
+        f"{prefix}_task_set_hash": _hash_strings(
+            [str(list(_canonical_task_set(task_set))) for task_set in ordered]
+        ),
+        f"{prefix}_task_set_samples": samples,
+        f"{prefix}_task_set_sample_count": len(samples),
+        f"{prefix}_task_set_samples_truncated": len(ordered) > len(samples),
+    }
+
+
+def _journey_sequence_sample(journey: Any) -> list[list[int]]:
+    sample: list[list[int]] = []
+    for trip in getattr(journey, "trips", tuple()) or tuple():
+        tasks = [int(task) for task in getattr(trip, "tasks", tuple()) or tuple()]
+        if tasks:
+            sample.append(tasks)
+    if sample:
+        return sample
+    signature = getattr(journey, "signature", tuple()) or tuple()
+    if not isinstance(signature, (list, tuple)):
+        return []
+    for trip_signature in signature:
+        if not isinstance(trip_signature, (list, tuple)) or not trip_signature:
+            continue
+        tasks_raw = trip_signature[0]
+        if not isinstance(tasks_raw, (list, tuple)):
+            continue
+        tasks = [int(task) for task in tasks_raw]
+        if tasks:
+            sample.append(tasks)
+    return sample
+
+
+def _journey_signature_summary_payload(prefix: str, journeys: Iterable[Any]) -> dict[str, Any]:
+    signatures: list[str] = []
+    sequence_samples: list[list[list[int]]] = []
+    seen: set[str] = set()
+    for journey in journeys:
+        signature = str(getattr(journey, "signature", ""))
+        if not signature or signature in seen:
+            continue
+        seen.add(signature)
+        signatures.append(signature)
+        if len(sequence_samples) < _JOURNEY_TASK_SET_SAMPLE_LIMIT:
+            sequence_samples.append(_journey_sequence_sample(journey))
+    signature_samples = signatures[:_JOURNEY_TASK_SET_SAMPLE_LIMIT]
+    return {
+        f"{prefix}_signature_count": len(signatures),
+        f"{prefix}_signature_hash": _hash_strings(signatures),
+        f"{prefix}_signature_samples": signature_samples,
+        f"{prefix}_signature_sample_count": len(signature_samples),
+        f"{prefix}_signature_samples_truncated": len(signatures) > len(signature_samples),
+        f"{prefix}_sequence_samples": sequence_samples,
+        f"{prefix}_sequence_sample_count": len(sequence_samples),
+        f"{prefix}_sequence_samples_truncated": len(signatures) > len(sequence_samples),
+    }
+
+
+def _journey_arc_options_for_timed_trip(data: FutureData, trip: Any) -> tuple[Any, ...] | None:
+    sequence = tuple(int(task) for task in getattr(trip, "tasks", tuple()) or tuple())
+    option_ids = tuple(str(option_id) for option_id in getattr(trip, "arc_option_ids", tuple()) or tuple())
+    if not sequence or len(option_ids) != len(sequence) + 1:
+        return None
+    arc_options: list[Any] = []
+    current = 0
+    for destination, option_id in zip((*sequence, 0), option_ids):
+        matches = [
+            option
+            for option in data.options(int(current), int(destination))
+            if str(option.option_id) == str(option_id)
+        ]
+        if not matches:
+            return None
+        arc_options.append(matches[0])
+        current = int(destination)
+    return tuple(arc_options)
+
+
+def _journey_sequence_sample_string(journey: Any) -> str:
+    return "|".join(
+        ",".join(str(int(task)) for task in sortie)
+        for sortie in _journey_sequence_sample(journey)
+    )
+
+
+def _log_journey_pulse_residual_replay_diagnostic(
+    logger: FutureLogger,
+    data: FutureData,
+    config: dict[str, Any],
+    pricing: Any,
+    true_duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    *,
+    pricing_config: JourneyPricingConfig,
+    pricing_kind: str,
+    cg_iter: int,
+    node_id: int = 0,
+    depth: int = 0,
+) -> None:
+    if not bool(config.get("journey_pulse_residual_replay_diagnostics_enabled", False)):
+        return
+    journeys = tuple(getattr(pricing, "journeys", tuple()) or tuple())
+    if not journeys:
+        return
+    max_journeys = max(
+        1,
+        int(config.get("journey_pulse_residual_replay_diagnostics_max_journeys", 1)),
+    )
+    checked = 0
+    materialized = 0
+    negative = 0
+    missing_arc_options = 0
+    infeasible_replay = 0
+    signature_mismatch = 0
+    task_set_mismatch = 0
+    rc_mismatch = 0
+    max_abs_rc_delta = 0.0
+    first_payload: dict[str, Any] = {}
+    for journey in journeys[:max_journeys]:
+        checked += 1
+        traces: list[PulseSortieTrace] = []
+        status = "materialized"
+        for trip in tuple(getattr(journey, "trips", tuple()) or tuple()):
+            arc_options = _journey_arc_options_for_timed_trip(data, trip)
+            if arc_options is None:
+                missing_arc_options += 1
+                status = "missing_arc_options"
+                break
+            traces.append(
+                PulseSortieTrace(
+                    sequence=tuple(int(task) for task in getattr(trip, "tasks", tuple()) or tuple()),
+                    start_time=float(getattr(trip, "start_time", 0.0)),
+                    arc_options=arc_options,
+                )
+            )
+        original_true_rc = float(manual_journey_reduced_cost(journey, true_duals, cuts=cuts))
+        replay_true_rc: float | None = None
+        rc_delta: float | None = None
+        signature_equal = False
+        task_set_equal = False
+        if status == "materialized":
+            candidate = materialize_pulse_leaf_candidate(
+                data,
+                tuple(traces),
+                true_duals,
+                cuts=tuple(cuts),
+                time_bucket_size=float(pricing_config.time_bucket_size),
+                eps=float(getattr(pricing_config, "eps", 1.0e-6)),
+                include_physical_paths=False,
+            )
+            if candidate is None:
+                infeasible_replay += 1
+                status = "infeasible_replay"
+            else:
+                materialized += 1
+                replay_true_rc = float(candidate.true_reduced_cost)
+                rc_delta = float(replay_true_rc) - float(original_true_rc)
+                max_abs_rc_delta = max(max_abs_rc_delta, abs(float(rc_delta)))
+                if bool(candidate.is_negative):
+                    negative += 1
+                signature_equal = tuple(candidate.journey.signature) == tuple(getattr(journey, "signature", tuple()))
+                task_set_equal = frozenset(candidate.journey.task_set) == frozenset(
+                    getattr(journey, "task_set", frozenset())
+                )
+                signature_mismatch += int(not signature_equal)
+                task_set_mismatch += int(not task_set_equal)
+                rc_mismatch += int(abs(float(rc_delta)) > 1.0e-6)
+        if not first_payload:
+            first_payload = {
+                "first_status": status,
+                "first_task_set": list(_canonical_task_set(getattr(journey, "task_set", frozenset()))),
+                "first_sequence": _journey_sequence_sample_string(journey),
+                "first_signature_sample": str(getattr(journey, "signature", "")),
+                "first_original_true_rc": round(float(original_true_rc), 9),
+                "first_replay_true_rc": None if replay_true_rc is None else round(float(replay_true_rc), 9),
+                "first_rc_delta": None if rc_delta is None else round(float(rc_delta), 9),
+                "first_signature_equal": bool(signature_equal),
+                "first_task_set_equal": bool(task_set_equal),
+            }
+    logger.log(
+        "journey_pulse_residual_replay_diagnostic",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        pricing_kind=pricing_kind,
+        diagnostic_only=True,
+        certificate_capable=False,
+        official_bound_effect=False,
+        checked_journeys=int(checked),
+        materialized_journeys=int(materialized),
+        negative_journeys=int(negative),
+        missing_arc_options=int(missing_arc_options),
+        infeasible_replay=int(infeasible_replay),
+        signature_mismatch_count=int(signature_mismatch),
+        task_set_mismatch_count=int(task_set_mismatch),
+        rc_mismatch_count=int(rc_mismatch),
+        max_abs_rc_delta=round(float(max_abs_rc_delta), 9),
+        **first_payload,
+    )
+
+
 def _log_journey_pricing(
     logger: FutureLogger,
     pricing: Any,
@@ -14423,6 +15048,15 @@ def _log_journey_pricing(
     node_id: int = 0,
     depth: int = 0,
 ) -> None:
+    negative_journeys = tuple(getattr(pricing, "journeys", []) or [])
+    negative_task_set_payload = _journey_task_set_summary_payload(
+        "negative_journey",
+        (getattr(journey, "task_set", frozenset()) for journey in negative_journeys),
+    )
+    negative_signature_payload = _journey_signature_summary_payload(
+        "negative_journey",
+        negative_journeys,
+    )
     logger.log(
         "journey_pricing",
         node_id=node_id,
@@ -14431,11 +15065,17 @@ def _log_journey_pricing(
         pricing_kind=pricing_kind,
         pricing_dual_source=pricing_dual_source,
         pricing_time_limit=None if config is None else round(float(getattr(config, "time_limit", 0.0)), 6),
+        pricing_max_dp_states=None if config is None else int(getattr(config, "max_dp_states", 0)),
+        pricing_profile_generation_time_fraction=None
+        if config is None
+        else round(float(getattr(config, "profile_generation_time_fraction", 0.0)), 6),
         allow_partial_negative=None if config is None else bool(getattr(config, "allow_partial_negative", False)),
         best_reduced_cost=None if pricing.best_reduced_cost is None else round(float(pricing.best_reduced_cost), 9),
         candidate_trips=pricing.candidate_trips,
         selected_trips=pricing.selected_trips,
         negative_journeys=len(pricing.journeys),
+        **negative_task_set_payload,
+        **negative_signature_payload,
         profile_dominance_pruned=getattr(pricing, "profile_dominance_pruned", 0),
         profile_cut_penalty_pruned=getattr(pricing, "profile_cut_penalty_pruned", 0),
         existing_journeys_filtered=getattr(pricing, "existing_journeys_filtered", 0),
@@ -14778,6 +15418,73 @@ def _log_journey_pricing(
         dp_extension_attempts=getattr(pricing, "dp_extension_attempts", 0),
         dp_label_cap_pruned=getattr(pricing, "dp_label_cap_pruned", 0),
         dp_same_completion_pruned_labels=getattr(pricing, "dp_same_completion_pruned_labels", 0),
+        dp_nonempty_mask_count=int(getattr(pricing, "dp_nonempty_mask_count", 0)),
+        dp_max_labels_per_mask_observed=int(
+            getattr(pricing, "dp_max_labels_per_mask_observed", 0)
+        ),
+        dp_labels_by_sortie_count=list(
+            getattr(pricing, "dp_labels_by_sortie_count", tuple()) or tuple()
+        ),
+        dp_top_mask_label_counts=list(
+            getattr(pricing, "dp_top_mask_label_counts", tuple()) or tuple()
+        ),
+        diagnostic_profile_task_set_samples=list(
+            getattr(pricing, "diagnostic_profile_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_reachable_task_set_samples=list(
+            getattr(pricing, "diagnostic_reachable_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_negative_task_set_samples=list(
+            getattr(pricing, "diagnostic_negative_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_selected_task_set_samples=list(
+            getattr(pricing, "diagnostic_selected_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_selected_materialized_task_set_samples=list(
+            getattr(pricing, "diagnostic_selected_materialized_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_selected_returned_task_set_samples=list(
+            getattr(pricing, "diagnostic_selected_returned_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_selected_unmaterialized_task_set_samples=list(
+            getattr(pricing, "diagnostic_selected_unmaterialized_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_selected_weak_filtered_task_set_samples=list(
+            getattr(pricing, "diagnostic_selected_weak_filtered_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_selected_filtered_task_set_samples=list(
+            getattr(pricing, "diagnostic_selected_filtered_task_set_samples", tuple()) or tuple()
+        ),
+        profile_selected_candidate_input_count=int(
+            getattr(pricing, "profile_selected_candidate_input_count", 0)
+        ),
+        profile_selected_candidate_scanned_count=int(
+            getattr(pricing, "profile_selected_candidate_scanned_count", 0)
+        ),
+        profile_selected_candidate_materialized_count=int(
+            getattr(pricing, "profile_selected_candidate_materialized_count", 0)
+        ),
+        profile_selected_candidate_returned_count=int(
+            getattr(pricing, "profile_selected_candidate_returned_count", 0)
+        ),
+        profile_selected_candidate_branch_filtered_count=int(
+            getattr(pricing, "profile_selected_candidate_branch_filtered_count", 0)
+        ),
+        profile_selected_candidate_duplicate_signature_filtered_count=int(
+            getattr(pricing, "profile_selected_candidate_duplicate_signature_filtered_count", 0)
+        ),
+        profile_selected_candidate_duplicate_task_set_filtered_count=int(
+            getattr(pricing, "profile_selected_candidate_duplicate_task_set_filtered_count", 0)
+        ),
+        profile_selected_candidate_forbidden_signature_filtered_count=int(
+            getattr(pricing, "profile_selected_candidate_forbidden_signature_filtered_count", 0)
+        ),
+        profile_selected_candidate_dominated_task_set_filtered_count=int(
+            getattr(pricing, "profile_selected_candidate_dominated_task_set_filtered_count", 0)
+        ),
+        profile_selected_candidate_return_limit_truncated_count=int(
+            getattr(pricing, "profile_selected_candidate_return_limit_truncated_count", 0)
+        ),
         completion_bound_enabled=getattr(pricing, "completion_bound_enabled", False),
         completion_bound_cache_hit=getattr(pricing, "completion_bound_cache_hit", False),
         completion_bound_cache_stored=getattr(pricing, "completion_bound_cache_stored", False),
@@ -14870,6 +15577,39 @@ def _log_journey_pricing(
         pulse_negative_found=bool(getattr(pricing, "pulse_negative_found", False)),
         pulse_negative_pool_size=int(getattr(pricing, "pulse_negative_pool_size", 0)),
         pulse_harvested_count=int(getattr(pricing, "pulse_harvested_count", 0)),
+        pulse_negative_pool_task_set_samples=[
+            list(sample)
+            for sample in getattr(pricing, "pulse_negative_pool_task_set_samples", tuple()) or tuple()
+        ],
+        pulse_negative_pool_sequence_samples=[
+            [list(sortie) for sortie in sample]
+            for sample in getattr(pricing, "pulse_negative_pool_sequence_samples", tuple()) or tuple()
+        ],
+        pulse_negative_pool_signature_samples=list(
+            getattr(pricing, "pulse_negative_pool_signature_samples", tuple()) or tuple()
+        ),
+        pulse_harvested_task_set_samples=[
+            list(sample)
+            for sample in getattr(pricing, "pulse_harvested_task_set_samples", tuple()) or tuple()
+        ],
+        pulse_harvested_sequence_samples=[
+            [list(sortie) for sortie in sample]
+            for sample in getattr(pricing, "pulse_harvested_sequence_samples", tuple()) or tuple()
+        ],
+        pulse_harvested_signature_samples=list(
+            getattr(pricing, "pulse_harvested_signature_samples", tuple()) or tuple()
+        ),
+        pulse_returned_candidate_task_set_samples=[
+            list(sample)
+            for sample in getattr(pricing, "pulse_returned_candidate_task_set_samples", tuple()) or tuple()
+        ],
+        pulse_returned_candidate_sequence_samples=[
+            [list(sortie) for sortie in sample]
+            for sample in getattr(pricing, "pulse_returned_candidate_sequence_samples", tuple()) or tuple()
+        ],
+        pulse_returned_candidate_signature_samples=list(
+            getattr(pricing, "pulse_returned_candidate_signature_samples", tuple()) or tuple()
+        ),
         pulse_harvested_new_task_set_count=int(
             getattr(pricing, "pulse_harvested_new_task_set_count", 0)
         ),
@@ -14882,6 +15622,68 @@ def _log_journey_pricing(
         pulse_best_true_rc=None
         if getattr(pricing, "pulse_best_true_rc", None) is None
         else round(float(getattr(pricing, "pulse_best_true_rc")), 9),
+        pulse_task_ordering=str(getattr(pricing, "pulse_task_ordering", "natural")),
+        pulse_target_first_task_priority_enabled=bool(
+            getattr(pricing, "pulse_target_first_task_priority_enabled", False)
+        ),
+        pulse_target_first_task_priority_sequence=list(
+            getattr(pricing, "pulse_target_first_task_priority_sequence", tuple()) or tuple()
+        ),
+        pulse_target_transition_priority_enabled=bool(
+            getattr(pricing, "pulse_target_transition_priority_enabled", False)
+        ),
+        pulse_target_transition_priority_sequence=list(
+            getattr(pricing, "pulse_target_transition_priority_sequence", tuple()) or tuple()
+        ),
+        pulse_target_arc_option_priority_enabled=bool(
+            getattr(pricing, "pulse_target_arc_option_priority_enabled", False)
+        ),
+        pulse_target_arc_option_priority_sequence=list(
+            getattr(pricing, "pulse_target_arc_option_priority_sequence", tuple()) or tuple()
+        ),
+        pulse_target_sequence_diagnostics_enabled=bool(
+            getattr(pricing, "pulse_target_sequence_diagnostics_enabled", False)
+        ),
+        pulse_target_sequence=list(getattr(pricing, "pulse_target_sequence", tuple()) or tuple()),
+        pulse_target_sequence_reached_prefix_len=int(
+            getattr(pricing, "pulse_target_sequence_reached_prefix_len", 0)
+        ),
+        pulse_target_sequence_completed=bool(
+            getattr(pricing, "pulse_target_sequence_completed", False)
+        ),
+        pulse_target_sequence_materialized=bool(
+            getattr(pricing, "pulse_target_sequence_materialized", False)
+        ),
+        pulse_target_sequence_negative=bool(
+            getattr(pricing, "pulse_target_sequence_negative", False)
+        ),
+        pulse_target_sequence_blocked_reason=str(
+            getattr(pricing, "pulse_target_sequence_blocked_reason", "")
+        ),
+        pulse_target_sequence_blocked_prefix=list(
+            getattr(pricing, "pulse_target_sequence_blocked_prefix", tuple()) or tuple()
+        ),
+        pulse_target_sequence_blocked_next_task=getattr(
+            pricing, "pulse_target_sequence_blocked_next_task", None
+        ),
+        pulse_target_sequence_transition_attempts=int(
+            getattr(pricing, "pulse_target_sequence_transition_attempts", 0)
+        ),
+        pulse_target_sequence_transition_accepted=int(
+            getattr(pricing, "pulse_target_sequence_transition_accepted", 0)
+        ),
+        pulse_target_sequence_prune_reason_counts=list(
+            getattr(pricing, "pulse_target_sequence_prune_reason_counts", tuple()) or tuple()
+        ),
+        pulse_target_path_diagnostics_enabled=bool(
+            getattr(pricing, "pulse_target_path_diagnostics_enabled", False)
+        ),
+        pulse_target_path_prefix_samples=list(
+            getattr(pricing, "pulse_target_path_prefix_samples", tuple()) or tuple()
+        ),
+        pulse_target_path_blocked_samples=list(
+            getattr(pricing, "pulse_target_path_blocked_samples", tuple()) or tuple()
+        ),
         amcb_enabled=bool(getattr(pricing, "amcb_enabled", False)),
         amcb_build_time=round(float(getattr(pricing, "amcb_build_time", 0.0)), 9),
         amcb_query_count=int(getattr(pricing, "amcb_query_count", 0)),
@@ -15677,6 +16479,89 @@ def _journey_sharded_pulse_audit_signal_valid_for_worker(
     return 0 < int(cg_iter) - signal_iter <= max(1, int(max_age))
 
 
+def _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows(
+    config: dict[str, Any],
+    *,
+    certificate_flat_rounds: int,
+    certificate_no_column_rounds: int,
+) -> bool:
+    if not bool(config.get("journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled", False)):
+        return True
+    min_flat = max(
+        0,
+        int(config.get("journey_sharded_pulse_worker_current_probe_min_certificate_flat_rounds", 1)),
+    )
+    min_no_column = max(
+        0,
+        int(config.get("journey_sharded_pulse_worker_current_probe_min_no_column_rounds", 1)),
+    )
+    flat_ok = min_flat <= 0 or int(certificate_flat_rounds) >= min_flat
+    no_column_ok = min_no_column <= 0 or int(certificate_no_column_rounds) >= min_no_column
+    return bool(flat_ok or no_column_ok)
+
+
+def _journey_sharded_pulse_worker_success_cooldown_rounds(
+    config: dict[str, Any],
+    added: Any,
+    *,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+) -> int:
+    base_cooldown = max(
+        0,
+        int(config.get("journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds", 0)),
+    )
+    if not bool(
+        config.get(
+            "journey_sharded_pulse_hidden_negative_worker_continue_only_on_active_support",
+            False,
+        )
+    ):
+        return base_cooldown
+    inactive_cooldown = max(
+        base_cooldown,
+        max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_inactive_success_cooldown_rounds",
+                    base_cooldown,
+                )
+            ),
+        ),
+    )
+    if int(added) <= 0:
+        return base_cooldown
+    changed = {
+        frozenset(int(task) for task in task_set)
+        for task_set in getattr(added, "changed_task_sets", tuple())
+    }
+    if not changed or active_task_sets is None:
+        return inactive_cooldown
+    active = {frozenset(int(task) for task in task_set) for task_set in active_task_sets}
+    if changed.intersection(active):
+        return base_cooldown
+    return inactive_cooldown
+
+
+def _journey_sharded_pulse_worker_failure_cooldown_rounds(
+    config: dict[str, Any],
+    pricing: Any,
+    *,
+    added: Any | None = None,
+) -> int:
+    cooldown = max(
+        0,
+        int(config.get("journey_sharded_pulse_hidden_negative_worker_failure_cooldown_rounds", 0)),
+    )
+    if cooldown <= 0:
+        return 0
+    if added is not None:
+        return 0 if int(added) > 0 else cooldown
+    if list(getattr(pricing, "journeys", []) or []):
+        return 0
+    return cooldown
+
+
 def _journey_sharded_pulse_audit_config(
     config: dict[str, Any],
     base_pricing_config: JourneyPricingConfig,
@@ -15828,6 +16713,68 @@ def _journey_sharded_pulse_audit_config(
                 config.get(
                     "journey_sharded_pulse_audit_shard_roi_min_expanded",
                     config.get("journey_pulse_shard_roi_min_expanded", 0),
+                )
+            ),
+        ),
+        pulse_task_ordering=str(
+            config.get(
+                "journey_sharded_pulse_audit_task_ordering",
+                config.get("journey_pulse_task_ordering", "natural"),
+            )
+            or "natural"
+        ),
+        pulse_target_sequence_diagnostics_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_target_sequence_diagnostics_enabled",
+                config.get("journey_pulse_target_sequence_diagnostics_enabled", False),
+            )
+        ),
+        pulse_target_sequence_diagnostics_sequence=_journey_pulse_target_sequence_from_config(
+            config,
+            "journey_sharded_pulse_audit_",
+        ),
+        pulse_target_first_task_priority_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_target_first_task_priority_enabled",
+                config.get("journey_pulse_target_first_task_priority_enabled", False),
+            )
+        ),
+        pulse_target_first_task_priority_sequence=_journey_pulse_target_first_task_priority_sequence_from_config(
+            config,
+            "journey_sharded_pulse_audit_",
+        ),
+        pulse_target_transition_priority_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_target_transition_priority_enabled",
+                config.get("journey_pulse_target_transition_priority_enabled", False),
+            )
+        ),
+        pulse_target_transition_priority_sequence=_journey_pulse_target_transition_priority_sequence_from_config(
+            config,
+            "journey_sharded_pulse_audit_",
+        ),
+        pulse_target_arc_option_priority_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_target_arc_option_priority_enabled",
+                config.get("journey_pulse_target_arc_option_priority_enabled", False),
+            )
+        ),
+        pulse_target_arc_option_priority_sequence=_journey_pulse_target_arc_option_priority_sequence_from_config(
+            config,
+            "journey_sharded_pulse_audit_",
+        ),
+        pulse_target_path_diagnostics_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_audit_target_path_diagnostics_enabled",
+                config.get("journey_pulse_target_path_diagnostics_enabled", False),
+            )
+        ),
+        pulse_target_path_diagnostics_max_samples=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_audit_target_path_diagnostics_max_samples",
+                    config.get("journey_pulse_target_path_diagnostics_max_samples", 8),
                 )
             ),
         ),
@@ -16001,6 +16948,71 @@ def _journey_sharded_pulse_hidden_negative_worker_config(
                 )
             ),
         ),
+        pulse_stop_after_first_negative=bool(
+            config.get("journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative", False)
+        ),
+        pulse_task_ordering=str(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_task_ordering",
+                config.get("journey_pulse_task_ordering", "natural"),
+            )
+            or "natural"
+        ),
+        pulse_target_sequence_diagnostics_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_enabled",
+                config.get("journey_pulse_target_sequence_diagnostics_enabled", False),
+            )
+        ),
+        pulse_target_sequence_diagnostics_sequence=_journey_pulse_target_sequence_from_config(
+            config,
+            "journey_sharded_pulse_hidden_negative_worker_",
+        ),
+        pulse_target_first_task_priority_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled",
+                config.get("journey_pulse_target_first_task_priority_enabled", False),
+            )
+        ),
+        pulse_target_first_task_priority_sequence=_journey_pulse_target_first_task_priority_sequence_from_config(
+            config,
+            "journey_sharded_pulse_hidden_negative_worker_",
+        ),
+        pulse_target_transition_priority_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled",
+                config.get("journey_pulse_target_transition_priority_enabled", False),
+            )
+        ),
+        pulse_target_transition_priority_sequence=_journey_pulse_target_transition_priority_sequence_from_config(
+            config,
+            "journey_sharded_pulse_hidden_negative_worker_",
+        ),
+        pulse_target_arc_option_priority_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_enabled",
+                config.get("journey_pulse_target_arc_option_priority_enabled", False),
+            )
+        ),
+        pulse_target_arc_option_priority_sequence=_journey_pulse_target_arc_option_priority_sequence_from_config(
+            config,
+            "journey_sharded_pulse_hidden_negative_worker_",
+        ),
+        pulse_target_path_diagnostics_enabled=bool(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_target_path_diagnostics_enabled",
+                config.get("journey_pulse_target_path_diagnostics_enabled", False),
+            )
+        ),
+        pulse_target_path_diagnostics_max_samples=max(
+            0,
+            int(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_target_path_diagnostics_max_samples",
+                    config.get("journey_pulse_target_path_diagnostics_max_samples", 8),
+                )
+            ),
+        ),
         profile_pricing_enabled=False,
         direct_journey_label_pricing_enabled=False,
         direct_journey_label_global_certificate_enabled=False,
@@ -16072,6 +17084,136 @@ def _journey_sharded_pulse_audit_context_hashes(
     }
 
 
+def _journey_sharded_pulse_expected_context_allows(
+    config: dict[str, Any],
+    context_hashes: dict[str, str] | None,
+) -> tuple[bool, str]:
+    expected_context = str(
+        config.get("journey_sharded_pulse_hidden_negative_worker_expected_context_hash", "")
+        or ""
+    ).strip()
+    if not expected_context:
+        return True, ""
+    current_context = str((context_hashes or {}).get("context", "") or "").strip()
+    if current_context and current_context == expected_context:
+        return True, ""
+    return False, "residual_target_context_mismatch"
+
+
+def _journey_pulse_target_sequence_from_config(
+    config: dict[str, Any],
+    prefix: str,
+) -> tuple[int, ...]:
+    value = config.get(
+        f"{prefix}target_sequence_diagnostics_sequence",
+        config.get("journey_pulse_target_sequence_diagnostics_sequence", tuple()),
+    )
+    if value is None:
+        return tuple()
+    if isinstance(value, str):
+        parts = [
+            part.strip()
+            for chunk in value.replace("|", ",").replace(";", ",").split(",")
+            for part in (chunk.strip(),)
+            if part.strip()
+        ]
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        parts = list(value)
+    else:
+        parts = [value]
+    sequence: list[int] = []
+    for part in parts:
+        try:
+            sequence.append(int(part))
+        except (TypeError, ValueError):
+            return tuple()
+    return tuple(sequence)
+
+
+def _journey_pulse_target_first_task_priority_sequence_from_config(
+    config: dict[str, Any],
+    prefix: str,
+) -> tuple[int, ...]:
+    value = config.get(
+        f"{prefix}target_first_task_priority_sequence",
+        config.get("journey_pulse_target_first_task_priority_sequence", tuple()),
+    )
+    if value is None:
+        return tuple()
+    if isinstance(value, str):
+        parts = [
+            part.strip()
+            for chunk in value.replace("|", ",").replace(";", ",").split(",")
+            for part in (chunk.strip(),)
+            if part.strip()
+        ]
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        parts = list(value)
+    else:
+        parts = [value]
+    sequence: list[int] = []
+    for part in parts:
+        try:
+            sequence.append(int(part))
+        except (TypeError, ValueError):
+            return tuple()
+    return tuple(sequence)
+
+
+def _journey_pulse_target_transition_priority_sequence_from_config(
+    config: dict[str, Any],
+    prefix: str,
+) -> tuple[int, ...]:
+    value = config.get(
+        f"{prefix}target_transition_priority_sequence",
+        config.get("journey_pulse_target_transition_priority_sequence", tuple()),
+    )
+    if value is None:
+        return tuple()
+    if isinstance(value, str):
+        parts = [
+            part.strip()
+            for chunk in value.replace("|", ",").replace(";", ",").split(",")
+            for part in (chunk.strip(),)
+            if part.strip()
+        ]
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        parts = list(value)
+    else:
+        parts = [value]
+    sequence: list[int] = []
+    for part in parts:
+        try:
+            sequence.append(int(part))
+        except (TypeError, ValueError):
+            return tuple()
+    return tuple(sequence)
+
+
+def _journey_pulse_target_arc_option_priority_sequence_from_config(
+    config: dict[str, Any],
+    prefix: str,
+) -> tuple[str, ...]:
+    value = config.get(
+        f"{prefix}target_arc_option_priority_sequence",
+        config.get("journey_pulse_target_arc_option_priority_sequence", tuple()),
+    )
+    if value is None:
+        return tuple()
+    if isinstance(value, str):
+        parts = [
+            part.strip()
+            for chunk in value.replace("|", ",").replace(";", ",").split(",")
+            for part in (chunk.strip(),)
+            if part.strip()
+        ]
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        parts = [str(item).strip() for item in value if str(item).strip()]
+    else:
+        parts = [str(value).strip()]
+    return tuple(part for part in parts if part)
+
+
 def _journey_sharded_pulse_hidden_negative_worker_payload(
     pricing: Any,
     *,
@@ -16106,6 +17248,73 @@ def _journey_sharded_pulse_hidden_negative_worker_payload(
         ),
         "pulse_worker_shards_refined": int(getattr(pricing, "final_judge_shards_refined", 0)),
         "pulse_worker_low_roi_shards": int(getattr(pricing, "pulse_low_roi_shards", 0)),
+        "pulse_worker_stop_after_first_negative": bool(
+            getattr(pricing, "pulse_stop_after_first_negative", False)
+        ),
+        "pulse_worker_task_ordering": str(getattr(pricing, "pulse_task_ordering", "natural")),
+        "pulse_worker_target_first_task_priority_enabled": bool(
+            getattr(pricing, "pulse_target_first_task_priority_enabled", False)
+        ),
+        "pulse_worker_target_first_task_priority_sequence": list(
+            getattr(pricing, "pulse_target_first_task_priority_sequence", tuple()) or tuple()
+        ),
+        "pulse_worker_target_transition_priority_enabled": bool(
+            getattr(pricing, "pulse_target_transition_priority_enabled", False)
+        ),
+        "pulse_worker_target_transition_priority_sequence": list(
+            getattr(pricing, "pulse_target_transition_priority_sequence", tuple()) or tuple()
+        ),
+        "pulse_worker_target_arc_option_priority_enabled": bool(
+            getattr(pricing, "pulse_target_arc_option_priority_enabled", False)
+        ),
+        "pulse_worker_target_arc_option_priority_sequence": list(
+            getattr(pricing, "pulse_target_arc_option_priority_sequence", tuple()) or tuple()
+        ),
+        "pulse_worker_target_sequence_diagnostics_enabled": bool(
+            getattr(pricing, "pulse_target_sequence_diagnostics_enabled", False)
+        ),
+        "pulse_worker_target_sequence": list(
+            getattr(pricing, "pulse_target_sequence", tuple()) or tuple()
+        ),
+        "pulse_worker_target_sequence_reached_prefix_len": int(
+            getattr(pricing, "pulse_target_sequence_reached_prefix_len", 0)
+        ),
+        "pulse_worker_target_sequence_completed": bool(
+            getattr(pricing, "pulse_target_sequence_completed", False)
+        ),
+        "pulse_worker_target_sequence_materialized": bool(
+            getattr(pricing, "pulse_target_sequence_materialized", False)
+        ),
+        "pulse_worker_target_sequence_negative": bool(
+            getattr(pricing, "pulse_target_sequence_negative", False)
+        ),
+        "pulse_worker_target_sequence_blocked_reason": str(
+            getattr(pricing, "pulse_target_sequence_blocked_reason", "")
+        ),
+        "pulse_worker_target_sequence_blocked_prefix": list(
+            getattr(pricing, "pulse_target_sequence_blocked_prefix", tuple()) or tuple()
+        ),
+        "pulse_worker_target_sequence_blocked_next_task": getattr(
+            pricing, "pulse_target_sequence_blocked_next_task", None
+        ),
+        "pulse_worker_target_sequence_transition_attempts": int(
+            getattr(pricing, "pulse_target_sequence_transition_attempts", 0)
+        ),
+        "pulse_worker_target_sequence_transition_accepted": int(
+            getattr(pricing, "pulse_target_sequence_transition_accepted", 0)
+        ),
+        "pulse_worker_target_sequence_prune_reason_counts": list(
+            getattr(pricing, "pulse_target_sequence_prune_reason_counts", tuple()) or tuple()
+        ),
+        "pulse_worker_target_path_diagnostics_enabled": bool(
+            getattr(pricing, "pulse_target_path_diagnostics_enabled", False)
+        ),
+        "pulse_worker_target_path_prefix_samples": list(
+            getattr(pricing, "pulse_target_path_prefix_samples", tuple()) or tuple()
+        ),
+        "pulse_worker_target_path_blocked_samples": list(
+            getattr(pricing, "pulse_target_path_blocked_samples", tuple()) or tuple()
+        ),
         "pulse_worker_bound_pruned": int(getattr(pricing, "pulse_bound_pruned", 0)),
         "pulse_worker_archive_pruned": int(getattr(pricing, "pulse_archive_pruned", 0)),
         "pulse_worker_time_window_pruned": int(
@@ -16115,6 +17324,88 @@ def _journey_sharded_pulse_hidden_negative_worker_payload(
         "pulse_worker_harvested_count": int(getattr(pricing, "pulse_harvested_count", 0)),
         "pulse_worker_harvested_support_changing_count": int(
             getattr(pricing, "pulse_harvested_support_changing_count", 0)
+        ),
+        "pulse_worker_negative_pool_task_set_samples": [
+            list(sample)
+            for sample in getattr(pricing, "pulse_negative_pool_task_set_samples", tuple()) or tuple()
+        ],
+        "pulse_worker_negative_pool_sequence_samples": [
+            [list(sortie) for sortie in sample]
+            for sample in getattr(pricing, "pulse_negative_pool_sequence_samples", tuple()) or tuple()
+        ],
+        "pulse_worker_negative_pool_signature_samples": list(
+            getattr(pricing, "pulse_negative_pool_signature_samples", tuple()) or tuple()
+        ),
+        "pulse_worker_harvested_task_set_samples": [
+            list(sample)
+            for sample in getattr(pricing, "pulse_harvested_task_set_samples", tuple()) or tuple()
+        ],
+        "pulse_worker_harvested_sequence_samples": [
+            [list(sortie) for sortie in sample]
+            for sample in getattr(pricing, "pulse_harvested_sequence_samples", tuple()) or tuple()
+        ],
+        "pulse_worker_harvested_signature_samples": list(
+            getattr(pricing, "pulse_harvested_signature_samples", tuple()) or tuple()
+        ),
+        "pulse_worker_returned_candidate_task_set_samples": [
+            list(sample)
+            for sample in getattr(pricing, "pulse_returned_candidate_task_set_samples", tuple()) or tuple()
+        ],
+        "pulse_worker_returned_candidate_sequence_samples": [
+            [list(sortie) for sortie in sample]
+            for sample in getattr(pricing, "pulse_returned_candidate_sequence_samples", tuple()) or tuple()
+        ],
+        "pulse_worker_returned_candidate_signature_samples": list(
+            getattr(pricing, "pulse_returned_candidate_signature_samples", tuple()) or tuple()
+        ),
+        "pulse_worker_impact_filter_enabled": bool(
+            getattr(pricing, "pulse_worker_impact_filter_enabled", False)
+        ),
+        "pulse_worker_impact_filter_mode": str(
+            getattr(pricing, "pulse_worker_impact_filter_mode", "off")
+        ),
+        "pulse_worker_impact_filter_candidate_count": int(
+            getattr(pricing, "pulse_worker_impact_filter_candidate_count", 0)
+        ),
+        "pulse_worker_impact_filter_selected_count": int(
+            getattr(pricing, "pulse_worker_impact_filter_selected_count", 0)
+        ),
+        "pulse_worker_impact_filter_dropped_count": int(
+            getattr(pricing, "pulse_worker_impact_filter_dropped_count", 0)
+        ),
+        "pulse_worker_impact_filter_selected_new_task_set_count": int(
+            getattr(pricing, "pulse_worker_impact_filter_selected_new_task_set_count", 0)
+        ),
+        "pulse_worker_impact_filter_selected_replacement_task_set_count": int(
+            getattr(pricing, "pulse_worker_impact_filter_selected_replacement_task_set_count", 0)
+        ),
+        "pulse_worker_impact_filter_selected_active_support_changing_count": int(
+            getattr(
+                pricing,
+                "pulse_worker_impact_filter_selected_active_support_changing_count",
+                0,
+            )
+        ),
+        "pulse_worker_impact_filter_selected_weak_replacement_count": int(
+            getattr(pricing, "pulse_worker_impact_filter_selected_weak_replacement_count", 0)
+        ),
+        "pulse_worker_impact_filter_min_true_rc": None
+        if getattr(pricing, "pulse_worker_impact_filter_min_true_rc", None) is None
+        else round(float(getattr(pricing, "pulse_worker_impact_filter_min_true_rc")), 9),
+        "pulse_worker_impact_filter_selected_best_true_rc": None
+        if getattr(pricing, "pulse_worker_impact_filter_selected_best_true_rc", None) is None
+        else round(float(getattr(pricing, "pulse_worker_impact_filter_selected_best_true_rc")), 9),
+        "pulse_worker_impact_filter_rc_threshold_dropped_count": int(
+            getattr(pricing, "pulse_worker_impact_filter_rc_threshold_dropped_count", 0)
+        ),
+        "pulse_worker_followup_reserve_min_time": None
+        if getattr(pricing, "pulse_worker_followup_reserve_min_time", None) is None
+        else round(float(getattr(pricing, "pulse_worker_followup_reserve_min_time")), 9),
+        "pulse_worker_followup_reserve_remaining_time": None
+        if getattr(pricing, "pulse_worker_followup_reserve_remaining_time", None) is None
+        else round(float(getattr(pricing, "pulse_worker_followup_reserve_remaining_time")), 9),
+        "pulse_worker_followup_reserve_dropped_journeys": int(
+            getattr(pricing, "pulse_worker_followup_reserve_dropped_journeys", 0)
         ),
         "pulse_worker_context_hash": str(hashes.get("context", "")),
         "pulse_worker_true_dual_hash": str(hashes.get("true_dual", "")),
@@ -16306,6 +17597,263 @@ def _journey_sharded_pulse_hidden_negative_worker_sanitize(
     )
 
 
+def _journey_sharded_pulse_worker_impact_filtered(
+    pricing: JourneyPricingResult,
+    *,
+    journey_pool: JourneyPool,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    mode: str,
+    max_columns: int = 0,
+    min_true_rc: float = 0.0,
+) -> JourneyPricingResult:
+    normalized_mode = str(mode or "off").strip().lower()
+    journeys = list(getattr(pricing, "journeys", []) or [])
+    threshold = float(min_true_rc)
+    threshold_enabled = bool(threshold < 0.0)
+    if normalized_mode == "off" or not journeys:
+        _journey_sharded_pulse_worker_set_impact_attrs(
+            pricing,
+            enabled=normalized_mode != "off",
+            mode=normalized_mode,
+            candidate_count=len(journeys),
+            selected_count=len(journeys),
+            dropped_count=0,
+            selected_new_task_set_count=0,
+            selected_replacement_task_set_count=0,
+            selected_active_support_changing_count=0,
+            selected_weak_replacement_count=0,
+            min_true_rc=threshold if threshold_enabled else None,
+            selected_best_true_rc=None,
+            rc_threshold_dropped_count=0,
+        )
+        return pricing
+
+    active = (
+        {frozenset(int(task) for task in task_set) for task_set in active_task_sets}
+        if active_task_sets is not None
+        else set()
+    )
+    ranked: list[tuple[tuple[int, float, int], Any, dict[str, Any]]] = []
+    for index, journey in enumerate(journeys):
+        task_key = frozenset(int(task) for task in getattr(journey, "task_set", frozenset()))
+        incumbent = journey_pool.by_task_set.get(task_key)
+        is_new_task_set = incumbent is None
+        is_replacement = bool(
+            incumbent is not None
+            and float(getattr(journey, "cost", 0.0)) < float(getattr(incumbent, "cost", 0.0)) - 1.0e-9
+        )
+        is_active_support_changing = bool((is_new_task_set or is_replacement) and task_key in active)
+        is_weak_replacement = bool((not is_new_task_set) and (not is_replacement))
+        true_rc = float(manual_journey_reduced_cost(journey, duals, cuts=cuts))
+        rank = (
+            0 if is_active_support_changing else 1 if is_new_task_set else 2 if is_replacement else 3,
+            true_rc,
+            int(index),
+        )
+        ranked.append(
+            (
+                rank,
+                journey,
+                {
+                    "new": is_new_task_set,
+                    "replacement": is_replacement,
+                    "active": is_active_support_changing,
+                    "weak": is_weak_replacement,
+                    "true_rc": true_rc,
+                },
+            )
+        )
+    ranked.sort(key=lambda item: item[0])
+    if normalized_mode == "require_new_or_active_support":
+        ranked = [
+            item
+            for item in ranked
+            if bool(item[2]["new"]) or bool(item[2]["active"])
+        ]
+    before_rc_threshold = len(ranked)
+    if threshold_enabled:
+        ranked = [
+            item
+            for item in ranked
+            if float(item[2]["true_rc"]) <= threshold + 1.0e-12
+        ]
+    rc_threshold_dropped_count = max(0, before_rc_threshold - len(ranked))
+    if int(max_columns) > 0:
+        ranked = ranked[: int(max_columns)]
+    selected = [item[1] for item in ranked]
+    stats = {
+        "selected_new_task_set_count": sum(int(item[2]["new"]) for item in ranked),
+        "selected_replacement_task_set_count": sum(int(item[2]["replacement"]) for item in ranked),
+        "selected_active_support_changing_count": sum(int(item[2]["active"]) for item in ranked),
+        "selected_weak_replacement_count": sum(int(item[2]["weak"]) for item in ranked),
+    }
+    selected_best_true_rc = (
+        min(float(item[2]["true_rc"]) for item in ranked)
+        if ranked
+        else None
+    )
+    dropped = max(0, len(journeys) - len(selected))
+    if not selected:
+        filtered = replace(
+            pricing,
+            journeys=[],
+            exhausted=False,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="sharded_pulse_hidden_negative_worker_impact_filtered_empty",
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_incomplete_reason="impact_filtered_empty",
+            pulse_negative_found=False,
+        )
+        _journey_sharded_pulse_worker_set_impact_attrs(
+            filtered,
+            enabled=True,
+            mode=normalized_mode,
+            candidate_count=len(journeys),
+            selected_count=0,
+            dropped_count=dropped,
+            min_true_rc=threshold if threshold_enabled else None,
+            selected_best_true_rc=None,
+            rc_threshold_dropped_count=rc_threshold_dropped_count,
+            **stats,
+        )
+        return filtered
+    filtered = replace(
+        pricing,
+        journeys=selected,
+        selected_trips=len(selected),
+        best_reduced_cost=selected_best_true_rc,
+    )
+    _journey_sharded_pulse_worker_set_impact_attrs(
+        filtered,
+        enabled=True,
+        mode=normalized_mode,
+        candidate_count=len(journeys),
+        selected_count=len(selected),
+        dropped_count=dropped,
+        min_true_rc=threshold if threshold_enabled else None,
+        selected_best_true_rc=selected_best_true_rc,
+        rc_threshold_dropped_count=rc_threshold_dropped_count,
+        **stats,
+    )
+    return filtered
+
+
+def _journey_sharded_pulse_worker_set_impact_attrs(
+    pricing: JourneyPricingResult,
+    *,
+    enabled: bool,
+    mode: str,
+    candidate_count: int,
+    selected_count: int,
+    dropped_count: int,
+    selected_new_task_set_count: int,
+    selected_replacement_task_set_count: int,
+    selected_active_support_changing_count: int,
+    selected_weak_replacement_count: int,
+    min_true_rc: float | None,
+    selected_best_true_rc: float | None,
+    rc_threshold_dropped_count: int,
+) -> None:
+    setattr(pricing, "pulse_worker_impact_filter_enabled", bool(enabled))
+    setattr(pricing, "pulse_worker_impact_filter_mode", str(mode))
+    setattr(pricing, "pulse_worker_impact_filter_candidate_count", int(candidate_count))
+    setattr(pricing, "pulse_worker_impact_filter_selected_count", int(selected_count))
+    setattr(pricing, "pulse_worker_impact_filter_dropped_count", int(dropped_count))
+    setattr(
+        pricing,
+        "pulse_worker_impact_filter_selected_new_task_set_count",
+        int(selected_new_task_set_count),
+    )
+    setattr(
+        pricing,
+        "pulse_worker_impact_filter_selected_replacement_task_set_count",
+        int(selected_replacement_task_set_count),
+    )
+    setattr(
+        pricing,
+        "pulse_worker_impact_filter_selected_active_support_changing_count",
+        int(selected_active_support_changing_count),
+    )
+    setattr(
+        pricing,
+        "pulse_worker_impact_filter_selected_weak_replacement_count",
+        int(selected_weak_replacement_count),
+    )
+    setattr(
+        pricing,
+        "pulse_worker_impact_filter_min_true_rc",
+        None if min_true_rc is None else float(min_true_rc),
+    )
+    setattr(
+        pricing,
+        "pulse_worker_impact_filter_selected_best_true_rc",
+        None if selected_best_true_rc is None else float(selected_best_true_rc),
+    )
+    setattr(
+        pricing,
+        "pulse_worker_impact_filter_rc_threshold_dropped_count",
+        int(rc_threshold_dropped_count),
+    )
+
+
+def _journey_sharded_pulse_worker_followup_reserve_filtered(
+    pricing: JourneyPricingResult,
+    *,
+    min_followup_time: float,
+    remaining_after_worker: float | None,
+) -> JourneyPricingResult:
+    reserve = max(0.0, float(min_followup_time))
+    if reserve <= 0.0:
+        return pricing
+    remaining = None if remaining_after_worker is None else max(0.0, float(remaining_after_worker))
+    setattr(pricing, "pulse_worker_followup_reserve_min_time", float(reserve))
+    setattr(pricing, "pulse_worker_followup_reserve_remaining_time", remaining)
+    setattr(pricing, "pulse_worker_followup_reserve_dropped_journeys", 0)
+    if remaining is None or remaining >= reserve or not list(getattr(pricing, "journeys", []) or []):
+        return pricing
+
+    dropped = len(getattr(pricing, "journeys", []) or [])
+    filtered = replace(
+        pricing,
+        journeys=[],
+        exhausted=False,
+        selected_trips=0,
+        status="INCOMPLETE",
+        reason="sharded_pulse_hidden_negative_worker_followup_reserve",
+        global_certificate_capable=False,
+        final_judge_certificate_capable=False,
+        pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+        final_judge_incomplete_reason="worker_followup_reserve",
+        pulse_negative_found=False,
+    )
+    dynamic_attrs = (
+        "pulse_worker_impact_filter_enabled",
+        "pulse_worker_impact_filter_mode",
+        "pulse_worker_impact_filter_candidate_count",
+        "pulse_worker_impact_filter_selected_count",
+        "pulse_worker_impact_filter_dropped_count",
+        "pulse_worker_impact_filter_selected_new_task_set_count",
+        "pulse_worker_impact_filter_selected_replacement_task_set_count",
+        "pulse_worker_impact_filter_selected_active_support_changing_count",
+        "pulse_worker_impact_filter_selected_weak_replacement_count",
+        "pulse_worker_impact_filter_min_true_rc",
+        "pulse_worker_impact_filter_selected_best_true_rc",
+        "pulse_worker_impact_filter_rc_threshold_dropped_count",
+    )
+    for attr in dynamic_attrs:
+        if hasattr(pricing, attr):
+            setattr(filtered, attr, getattr(pricing, attr))
+    setattr(filtered, "pulse_worker_followup_reserve_min_time", float(reserve))
+    setattr(filtered, "pulse_worker_followup_reserve_remaining_time", float(remaining))
+    setattr(filtered, "pulse_worker_followup_reserve_dropped_journeys", int(dropped))
+    return filtered
+
+
 def _run_journey_sharded_pulse_hidden_negative_worker(
     data: FutureData,
     config: dict[str, Any],
@@ -16324,6 +17872,8 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
     remaining_time: float | None = None,
     previous_audit_signal: bool = False,
     previous_audit_context_hashes: dict[str, str] | None = None,
+    certificate_flat_rounds: int = 0,
+    certificate_no_column_rounds: int = 0,
 ) -> tuple[JourneyPricingResult, JourneyPricingConfig] | None:
     if not bool(config.get("journey_sharded_pulse_hidden_negative_worker_enabled", False)):
         return None
@@ -16360,6 +17910,21 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
             depth=depth,
         )
         return None
+    max_cg_iter = max(
+        0,
+        int(config.get("journey_sharded_pulse_hidden_negative_worker_max_cg_iter", 0)),
+    )
+    if max_cg_iter > 0 and int(cg_iter) > int(max_cg_iter):
+        _log_journey_sharded_pulse_worker_skipped(
+            logger,
+            config,
+            skip_reason="max_cg_iter_exceeded",
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+        )
+        return None
     forbidden_signatures = _journey_forbidden_signatures_for_node(journey_pool, branch_constraints)
     context_hashes = _journey_sharded_pulse_audit_context_hashes(
         data,
@@ -16369,7 +17934,72 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
         forbidden_signatures,
     )
     signal_source = "ungated" if trigger == "before_legacy_final_judge" else "none"
+    expected_context_allowed, expected_context_skip_reason = (
+        _journey_sharded_pulse_expected_context_allows(config, context_hashes)
+    )
+    if not bool(expected_context_allowed):
+        _log_journey_sharded_pulse_worker_skipped(
+            logger,
+            config,
+            skip_reason=expected_context_skip_reason,
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            context_hashes=context_hashes,
+            signal_source=signal_source,
+            previous_audit_signal=previous_audit_signal,
+        )
+        return None
     use_current_probe_config = False
+    post_call_reserve = max(
+        0.0,
+        float(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_post_call_time_reserve",
+                0.0,
+            )
+        ),
+    )
+    worker_available_time = None if remaining_time is None else max(
+        0.0,
+        float(remaining_time) - float(post_call_reserve),
+    )
+    if remaining_time is not None and float(post_call_reserve) > 0.0 and worker_available_time <= 0.0:
+        _log_journey_sharded_pulse_worker_skipped(
+            logger,
+            config,
+            skip_reason="post_call_reserve_too_low",
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            context_hashes=context_hashes,
+            previous_audit_signal=previous_audit_signal,
+        )
+        return None
+    min_followup_after_add = max(
+        0.0,
+        float(
+            config.get(
+                "journey_sharded_pulse_hidden_negative_worker_min_followup_time_after_add",
+                0.0,
+            )
+        ),
+    )
+    if remaining_time is not None and min_followup_after_add > 0.0 and float(remaining_time) <= min_followup_after_add:
+        _log_journey_sharded_pulse_worker_skipped(
+            logger,
+            config,
+            skip_reason="followup_reserve_too_low",
+            trigger=trigger,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            context_hashes=context_hashes,
+            previous_audit_signal=previous_audit_signal,
+        )
+        return None
     if trigger in {"hard_tail_only", "audit_signal_or_current_probe"}:
         if not bool(certificate_candidate):
             _log_journey_sharded_pulse_worker_skipped(
@@ -16481,6 +18111,24 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
                     previous_audit_signal=False,
                 )
                 return None
+            if not _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows(
+                config,
+                certificate_flat_rounds=certificate_flat_rounds,
+                certificate_no_column_rounds=certificate_no_column_rounds,
+            ):
+                _log_journey_sharded_pulse_worker_skipped(
+                    logger,
+                    config,
+                    skip_reason="current_probe_hard_tail_fingerprint_missing",
+                    trigger=trigger,
+                    cg_iter=cg_iter,
+                    node_id=node_id,
+                    depth=depth,
+                    context_hashes=context_hashes,
+                    signal_source="current_context_probe",
+                    previous_audit_signal=False,
+                )
+                return None
             signal_source = "current_context_probe"
             use_current_probe_config = True
         else:
@@ -16503,6 +18151,11 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
             0.0,
             float(config.get("journey_sharded_pulse_worker_current_probe_time_limit", 1.0)),
         )
+        if remaining_time is not None:
+            worker_time_limit = min(
+                worker_time_limit,
+                max(0.0, float(worker_available_time if worker_available_time is not None else remaining_time)),
+            )
         worker_config = _journey_sharded_pulse_current_probe_config(
             config,
             base_pricing_config,
@@ -16513,6 +18166,11 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
             0.0,
             float(config.get("journey_sharded_pulse_hidden_negative_worker_time_limit", 3.0)),
         )
+        if remaining_time is not None:
+            worker_time_limit = min(
+                worker_time_limit,
+                max(0.0, float(worker_available_time if worker_available_time is not None else remaining_time)),
+            )
         worker_config = _journey_sharded_pulse_hidden_negative_worker_config(
             config,
             base_pricing_config,
@@ -16558,6 +18216,32 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
                 cuts,
                 eps=float(config.get("eps", 1.0e-6)),
             )
+            pulse_pricing = _journey_sharded_pulse_worker_impact_filtered(
+                pulse_pricing,
+                journey_pool=journey_pool,
+                active_task_sets=active_task_sets,
+                duals=duals,
+                cuts=cuts,
+                mode=str(
+                    config.get(
+                        "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode",
+                        "off",
+                    )
+                    or "off"
+                ),
+                max_columns=int(
+                    config.get(
+                        "journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns",
+                        0,
+                    )
+                ),
+                min_true_rc=float(
+                    config.get(
+                        "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc",
+                        0.0,
+                    )
+                ),
+            )
         except Exception as exc:  # pragma: no cover - defensive worker shield.
             pulse_pricing = JourneyPricingResult(
                 [],
@@ -16575,6 +18259,14 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
                 final_judge_incomplete_reason="worker_internal_error",
             )
     elapsed = time.perf_counter() - started
+    remaining_after_worker = None
+    if remaining_time is not None:
+        remaining_after_worker = max(0.0, float(remaining_time) - float(elapsed))
+    pulse_pricing = _journey_sharded_pulse_worker_followup_reserve_filtered(
+        pulse_pricing,
+        min_followup_time=min_followup_after_add,
+        remaining_after_worker=remaining_after_worker,
+    )
     logger.log(
         "journey_sharded_pulse_hidden_negative_worker",
         node_id=int(node_id),
@@ -16814,8 +18506,12 @@ def _log_journey_addition(
         frozenset(int(task) for task in task_set)
         for task_set in getattr(added, "replacement_task_sets", tuple())
     }
+    requested_task_set_samples = _journey_task_set_samples(requested_task_sets)
+    changed_task_set_samples = _journey_task_set_samples(changed_task_sets)
+    new_task_set_samples = _journey_task_set_samples(new_task_sets)
+    replacement_task_set_samples = _journey_task_set_samples(replacement_task_sets)
     requested_denominator = max(1, int(requested))
-    support_payload: dict[str, int | None] = {
+    support_payload: dict[str, Any] = {
         "active_changed_task_set_count": None,
         "active_new_task_set_count": None,
         "active_replacement_task_set_count": None,
@@ -16840,6 +18536,8 @@ def _log_journey_addition(
             productivity_class = "active_replacement_task_set"
         else:
             productivity_class = "active_other_changed_task_set"
+        active_changed_task_set_samples = _journey_task_set_samples(active_changed)
+        inactive_changed_task_set_samples = _journey_task_set_samples(inactive_changed)
         support_payload = {
             "active_changed_task_set_count": len(active_changed),
             "active_new_task_set_count": len(new_task_sets.intersection(active)),
@@ -16847,6 +18545,10 @@ def _log_journey_addition(
             "inactive_changed_task_set_count": len(inactive_changed),
             "active_changed_task_set_hash": _hash_strings([str(sorted(task_set)) for task_set in sorted(active_changed, key=lambda item: tuple(sorted(item)))]),
             "inactive_changed_task_set_hash": _hash_strings([str(sorted(task_set)) for task_set in sorted(inactive_changed, key=lambda item: tuple(sorted(item)))]),
+            "active_changed_task_set_samples": active_changed_task_set_samples,
+            "inactive_changed_task_set_samples": inactive_changed_task_set_samples,
+            "active_changed_task_set_samples_truncated": len(active_changed) > len(active_changed_task_set_samples),
+            "inactive_changed_task_set_samples_truncated": len(inactive_changed) > len(inactive_changed_task_set_samples),
             "addition_productivity_class": productivity_class,
         }
     logger.log(
@@ -16869,6 +18571,14 @@ def _log_journey_addition(
         changed_task_set_count=len(changed_task_sets),
         new_task_set_count=len(new_task_sets),
         replacement_task_set_count=len(replacement_task_sets),
+        requested_task_set_samples=requested_task_set_samples,
+        changed_task_set_samples=changed_task_set_samples,
+        new_task_set_samples=new_task_set_samples,
+        replacement_task_set_samples=replacement_task_set_samples,
+        requested_task_set_samples_truncated=len(requested_task_sets) > len(requested_task_set_samples),
+        changed_task_set_samples_truncated=len(changed_task_sets) > len(changed_task_set_samples),
+        new_task_set_samples_truncated=len(new_task_sets) > len(new_task_set_samples),
+        replacement_task_set_samples_truncated=len(replacement_task_sets) > len(replacement_task_set_samples),
         candidate_signature_hash=_hash_strings(signatures),
         requested_task_set_hash=_hash_strings(
             [str(sorted(task_set)) for task_set in sorted(requested_task_sets, key=lambda item: tuple(sorted(item)))]
@@ -17968,6 +19678,16 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "profile_cross_count_materialization_selected_candidate_count",
         "profile_materialization_infeasible_candidates_filtered",
         "profile_selected_unmaterialized_candidate_count",
+        "profile_selected_candidate_input_count",
+        "profile_selected_candidate_scanned_count",
+        "profile_selected_candidate_materialized_count",
+        "profile_selected_candidate_returned_count",
+        "profile_selected_candidate_branch_filtered_count",
+        "profile_selected_candidate_duplicate_signature_filtered_count",
+        "profile_selected_candidate_duplicate_task_set_filtered_count",
+        "profile_selected_candidate_forbidden_signature_filtered_count",
+        "profile_selected_candidate_dominated_task_set_filtered_count",
+        "profile_selected_candidate_return_limit_truncated_count",
         "profile_weak_filtered_materialized_count",
         "profile_weak_filtered_best_rough_rc",
         "profile_weak_filtered_best_true_rc",
@@ -17985,6 +19705,10 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "dp_extension_attempts",
         "dp_label_cap_pruned",
         "dp_same_completion_pruned_labels",
+        "dp_nonempty_mask_count",
+        "dp_max_labels_per_mask_observed",
+        "dp_labels_by_sortie_count",
+        "dp_top_mask_label_counts",
         "direct_label_cross_count_pruned_labels",
         "harvest_candidate_negative_count",
         "harvest_selected_count",
@@ -18074,9 +19798,41 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "pulse_harvested_support_changing_count",
         "pulse_harvested_replacement_count",
         "pulse_best_true_rc",
+        "pulse_negative_pool_task_set_samples",
+        "pulse_negative_pool_sequence_samples",
+        "pulse_negative_pool_signature_samples",
+        "pulse_harvested_task_set_samples",
+        "pulse_harvested_sequence_samples",
+        "pulse_harvested_signature_samples",
+        "pulse_returned_candidate_task_set_samples",
+        "pulse_returned_candidate_sequence_samples",
+        "pulse_returned_candidate_signature_samples",
         "pulse_shard_scheduling_enabled",
         "pulse_shard_roi_gate_enabled",
         "pulse_low_roi_shards",
+        "pulse_stop_after_first_negative",
+        "pulse_task_ordering",
+        "pulse_target_first_task_priority_enabled",
+        "pulse_target_first_task_priority_sequence",
+        "pulse_target_transition_priority_enabled",
+        "pulse_target_transition_priority_sequence",
+        "pulse_target_arc_option_priority_enabled",
+        "pulse_target_arc_option_priority_sequence",
+        "pulse_target_sequence_diagnostics_enabled",
+        "pulse_target_sequence",
+        "pulse_target_sequence_reached_prefix_len",
+        "pulse_target_sequence_completed",
+        "pulse_target_sequence_materialized",
+        "pulse_target_sequence_negative",
+        "pulse_target_sequence_blocked_reason",
+        "pulse_target_sequence_blocked_prefix",
+        "pulse_target_sequence_blocked_next_task",
+        "pulse_target_sequence_transition_attempts",
+        "pulse_target_sequence_transition_accepted",
+        "pulse_target_sequence_prune_reason_counts",
+        "pulse_target_path_diagnostics_enabled",
+        "pulse_target_path_prefix_samples",
+        "pulse_target_path_blocked_samples",
         "amcb_enabled",
         "amcb_build_time",
         "amcb_query_count",
@@ -18117,6 +19873,15 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "ng_certificate_limit_hit",
         "ng_probe_limit_hit",
         "ng_relaxation_superset",
+        "diagnostic_profile_task_set_samples",
+        "diagnostic_reachable_task_set_samples",
+        "diagnostic_negative_task_set_samples",
+        "diagnostic_selected_task_set_samples",
+        "diagnostic_selected_materialized_task_set_samples",
+        "diagnostic_selected_returned_task_set_samples",
+        "diagnostic_selected_unmaterialized_task_set_samples",
+        "diagnostic_selected_weak_filtered_task_set_samples",
+        "diagnostic_selected_filtered_task_set_samples",
     )
     stats: dict[str, Any] = {}
     for field_name in fields:
@@ -18127,6 +19892,18 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
     stats[f"{prefix}_oracle_classification"] = _journey_pricing_oracle_classification(pricing)
     stats[f"{prefix}_pricing_state"] = _journey_pricing_state(pricing)
     stats[f"{prefix}_negative_journeys"] = len(getattr(pricing, "journeys", []) or [])
+    stats.update(
+        {
+            f"{prefix}_{key}": value
+            for key, value in _journey_task_set_summary_payload(
+                "negative_journey",
+                (
+                    getattr(journey, "task_set", frozenset())
+                    for journey in getattr(pricing, "journeys", []) or []
+                ),
+            ).items()
+        }
+    )
     mask_fields = (
         "diagnostic_profile_task_masks",
         "diagnostic_profile_trip_masks",
@@ -18613,6 +20390,136 @@ def _journey_support_hash(values: list[tuple[Any, float]]) -> str:
         )
     ]
     return _hash_strings(parts)
+
+
+def _journey_pool_structure_diagnostics(
+    journey_pool: Any,
+    active_values: list[tuple[Any, float]],
+    *,
+    tol: float = 1.0e-9,
+) -> dict[str, Any]:
+    journeys = list(getattr(journey_pool, "journeys", []) or [])
+    task_set_counts: dict[frozenset[int], int] = {}
+    task_set_size_hist: dict[int, int] = {}
+    for journey in journeys:
+        task_set = frozenset(int(task) for task in getattr(journey, "task_set", frozenset()))
+        task_set_counts[task_set] = int(task_set_counts.get(task_set, 0)) + 1
+        task_set_size_hist[len(task_set)] = int(task_set_size_hist.get(len(task_set), 0)) + 1
+
+    total_journeys = len(journeys)
+    unique_task_sets = len(task_set_counts)
+    duplicate_task_sets = sum(max(0, count - 1) for count in task_set_counts.values())
+    max_journeys_per_task_set = max(task_set_counts.values(), default=0)
+    singleton_task_sets = sum(1 for task_set in task_set_counts if len(task_set) == 1)
+    multi_task_sets = sum(1 for task_set in task_set_counts if len(task_set) > 1)
+    empty_task_sets = sum(1 for task_set in task_set_counts if len(task_set) == 0)
+
+    active_entries = [
+        (journey, float(value))
+        for journey, value in active_values
+        if float(value) > float(tol)
+    ]
+    active_task_sets = [
+        frozenset(int(task) for task in getattr(journey, "task_set", frozenset()))
+        for journey, _value in active_entries
+    ]
+    active_unique_task_sets = set(active_task_sets)
+    active_duplicate_task_sets = max(0, len(active_task_sets) - len(active_unique_task_sets))
+    active_task_set_counts: dict[frozenset[int], int] = {}
+    active_task_set_values: dict[frozenset[int], float] = {}
+    for task_set, (_journey, value) in zip(active_task_sets, active_entries):
+        active_task_set_counts[task_set] = int(active_task_set_counts.get(task_set, 0)) + 1
+        active_task_set_values[task_set] = float(active_task_set_values.get(task_set, 0.0)) + float(value)
+    active_fractional = [
+        value
+        for _journey, value in active_entries
+        if float(tol) < float(value) < 1.0 - float(tol)
+    ]
+    active_fractional_small = [
+        value
+        for value in active_fractional
+        if float(value) <= 0.25 + float(tol)
+    ]
+    active_total_value = sum(value for _journey, value in active_entries)
+    active_task_count_union = len(set().union(*active_unique_task_sets)) if active_unique_task_sets else 0
+    active_top_task_set_value_samples = [
+        [
+            round(float(active_task_set_values[task_set]), 9),
+            int(active_task_set_counts[task_set]),
+            [int(task) for task in sorted(task_set)],
+        ]
+        for task_set in sorted(
+            active_unique_task_sets,
+            key=lambda item: (
+                -float(active_task_set_values.get(item, 0.0)),
+                -int(active_task_set_counts.get(item, 0)),
+                tuple(sorted(item)),
+            ),
+        )[:8]
+    ]
+
+    return {
+        "pool_journey_count": total_journeys,
+        "pool_unique_task_set_count": unique_task_sets,
+        "pool_duplicate_task_set_count": duplicate_task_sets,
+        "pool_duplicate_task_set_ratio": round(
+            float(duplicate_task_sets) / float(max(1, total_journeys)),
+            9,
+        ),
+        "pool_avg_journeys_per_task_set": round(
+            float(total_journeys) / float(max(1, unique_task_sets)),
+            9,
+        ),
+        "pool_max_journeys_per_task_set": max_journeys_per_task_set,
+        "pool_singleton_task_set_count": singleton_task_sets,
+        "pool_multi_task_set_count": multi_task_sets,
+        "pool_empty_task_set_count": empty_task_sets,
+        "pool_task_set_size_hist": {
+            str(size): task_set_size_hist[size]
+            for size in sorted(task_set_size_hist)
+        },
+        "pool_task_set_dominance_enabled": bool(
+            getattr(journey_pool, "task_set_dominance_enabled", False)
+        ),
+        "pool_active_journey_count": len(active_entries),
+        "pool_active_task_set_count": len(active_unique_task_sets),
+        "pool_active_duplicate_task_set_count": active_duplicate_task_sets,
+        "pool_active_duplicate_task_set_ratio": round(
+            float(active_duplicate_task_sets) / float(max(1, len(active_entries))),
+            9,
+        ),
+        "pool_active_avg_journeys_per_task_set": round(
+            float(len(active_entries)) / float(max(1, len(active_unique_task_sets))),
+            9,
+        ),
+        "pool_active_fractional_journey_count": len(active_fractional),
+        "pool_active_fractional_ratio": round(
+            float(len(active_fractional)) / float(max(1, len(active_entries))),
+            9,
+        ),
+        "pool_active_fractional_value_sum": round(sum(active_fractional), 9),
+        "pool_active_fractional_value_max": None
+        if not active_fractional
+        else round(max(active_fractional), 9),
+        "pool_active_fractional_value_min": None
+        if not active_fractional
+        else round(min(active_fractional), 9),
+        "pool_active_fractional_small_value_count": len(active_fractional_small),
+        "pool_active_total_value": round(active_total_value, 9),
+        "pool_active_max_value": None
+        if not active_entries
+        else round(max(value for _journey, value in active_entries), 9),
+        "pool_active_singleton_task_set_count": sum(1 for task_set in active_unique_task_sets if len(task_set) == 1),
+        "pool_active_multi_task_set_count": sum(1 for task_set in active_unique_task_sets if len(task_set) > 1),
+        "pool_active_task_count_union": active_task_count_union,
+        "pool_active_task_set_hash": _hash_strings(
+            [
+                str(sorted(task_set))
+                for task_set in sorted(active_unique_task_sets, key=lambda item: tuple(sorted(item)))
+            ]
+        ),
+        "pool_active_top_task_set_value_samples": active_top_task_set_value_samples,
+    }
 
 
 def _journey_active_task_sets(
