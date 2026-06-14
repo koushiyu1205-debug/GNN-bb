@@ -15,7 +15,7 @@ from BPC_future.core.branching import BranchConstraint
 from BPC_future.core.cuts import FutureCut, FleetLowerBoundCut, SubsetRowCut, fleet_lower_bound
 from BPC_future.core.data import FutureData
 from BPC_future.core.fleet_bound import unavoidable_nonvehicle_cost_lb
-from BPC_future.core.columns import candidate_start_times_for_trip, evaluate_timed_trip
+from BPC_future.core.columns import candidate_start_times_for_trip, evaluate_timed_trip, trip_to_json
 from BPC_future.core.journey import JourneyPool, build_journey_pool, make_journey
 from BPC_future.master.journey_rmp import (
     JourneyDuals,
@@ -580,6 +580,24 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                             config=worker_pricing_config,
                             pricing_dual_source="scip",
                         )
+                        _log_journey_counterfactual_replay_capture(
+                            logger,
+                            data,
+                            config,
+                            worker_pricing,
+                            solution.duals,
+                            tuple(cuts),
+                            tuple(),
+                            journey_pool,
+                            pricing_config=worker_pricing_config,
+                            pricing_kind="sharded_pulse_hidden_negative_worker",
+                            cg_iter=cg_iter,
+                            rmp_objective=float(solution.objective),
+                            active_task_sets=active_task_sets,
+                            active_variable_values=solution.variable_values,
+                            active_reduced_costs=solution.reduced_costs,
+                            pricing_dual_source="scip",
+                        )
                         if worker_pricing.journeys:
                             added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
                             _log_journey_addition(
@@ -703,6 +721,24 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     cg_iter,
                     pricing_kind="heuristic",
                     config=heuristic_pricing_config,
+                    pricing_dual_source=heuristic_dual_source,
+                )
+                _log_journey_counterfactual_replay_capture(
+                    logger,
+                    data,
+                    config,
+                    pricing,
+                    solution.duals,
+                    tuple(cuts),
+                    tuple(),
+                    journey_pool,
+                    pricing_config=heuristic_pricing_config,
+                    pricing_kind="heuristic",
+                    cg_iter=cg_iter,
+                    rmp_objective=float(solution.objective),
+                    active_task_sets=active_task_sets,
+                    active_variable_values=solution.variable_values,
+                    active_reduced_costs=solution.reduced_costs,
                     pricing_dual_source=heuristic_dual_source,
                 )
                 _log_journey_pulse_residual_replay_diagnostic(
@@ -1089,6 +1125,24 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 config=worker_pricing_config,
                 pricing_dual_source="scip",
             )
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                config,
+                worker_pricing,
+                solution.duals,
+                tuple(cuts),
+                tuple(),
+                journey_pool,
+                pricing_config=worker_pricing_config,
+                pricing_kind="sharded_pulse_hidden_negative_worker",
+                cg_iter=cg_iter,
+                rmp_objective=float(solution.objective),
+                active_task_sets=active_task_sets,
+                active_variable_values=solution.variable_values,
+                active_reduced_costs=solution.reduced_costs,
+                pricing_dual_source="scip",
+            )
             if worker_pricing.journeys:
                 added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
                 _log_journey_addition(
@@ -1167,6 +1221,24 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             cg_iter,
             pricing_kind=exact_pricing_kind,
             config=exact_pricing_config,
+            pricing_dual_source=exact_dual_source,
+        )
+        _log_journey_counterfactual_replay_capture(
+            logger,
+            data,
+            config,
+            pricing,
+            solution.duals,
+            tuple(cuts),
+            tuple(),
+            journey_pool,
+            pricing_config=exact_pricing_config,
+            pricing_kind=exact_pricing_kind,
+            cg_iter=cg_iter,
+            rmp_objective=float(solution.objective),
+            active_task_sets=active_task_sets,
+            active_variable_values=solution.variable_values,
+            active_reduced_costs=solution.reduced_costs,
             pricing_dual_source=exact_dual_source,
         )
         audit_ran_for_pricing = False
@@ -7973,6 +8045,16 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
             raise ValueError("static_subset_row_selection must be lexicographic or compact")
         if int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)) < 0:
             raise ValueError("journey_hidden_negative_audit_max_logged_journeys must be nonnegative")
+        if int(config.get("journey_counterfactual_replay_capture_max_journeys", 0)) < 0:
+            raise ValueError("journey_counterfactual_replay_capture_max_journeys must be nonnegative")
+        if int(config.get("journey_counterfactual_replay_capture_pool_max_journeys", 0)) < 0:
+            raise ValueError("journey_counterfactual_replay_capture_pool_max_journeys must be nonnegative")
+        if int(config.get("journey_counterfactual_replay_capture_active_basis_max_rows", 0)) < 0:
+            raise ValueError("journey_counterfactual_replay_capture_active_basis_max_rows must be nonnegative")
+        if int(config.get("journey_counterfactual_replay_capture_forbidden_signature_max_count", 0)) < 0:
+            raise ValueError(
+                "journey_counterfactual_replay_capture_forbidden_signature_max_count must be nonnegative"
+            )
         adaptive_sharding_prefixes = (
             "journey_pulse",
             "journey_sharded_pulse_audit",
@@ -13673,6 +13755,59 @@ def _journey_cut_count(cuts: list[FutureCut] | tuple[FutureCut, ...], kind: str)
     return sum(1 for cut in cuts if getattr(cut, "kind", "") == str(kind))
 
 
+def _journey_profile_priority_task_masks(
+    data: FutureData,
+    raw_task_sets: Any,
+) -> tuple[int, ...]:
+    if raw_task_sets is None or raw_task_sets == "":
+        return tuple()
+    if isinstance(raw_task_sets, (int, float)):
+        task_sets: tuple[Any, ...] = ((int(raw_task_sets),),)
+    elif isinstance(raw_task_sets, str):
+        groups = [
+            group.strip()
+            for group in raw_task_sets.replace(";", "|").split("|")
+            if group.strip()
+        ]
+        task_sets = tuple(groups)
+    elif isinstance(raw_task_sets, (list, tuple, set, frozenset)):
+        values = tuple(raw_task_sets)
+        if all(isinstance(value, (int, float)) for value in values):
+            task_sets = (tuple(int(value) for value in values),)
+        else:
+            task_sets = values
+    else:
+        return tuple()
+    task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
+    masks: list[int] = []
+    for raw_task_set in task_sets:
+        if isinstance(raw_task_set, str):
+            cleaned = (
+                raw_task_set.replace("[", " ")
+                .replace("]", " ")
+                .replace("(", " ")
+                .replace(")", " ")
+                .replace(",", " ")
+            )
+            task_values = tuple(int(token) for token in cleaned.split() if token.strip())
+        elif isinstance(raw_task_set, (int, float)):
+            task_values = (int(raw_task_set),)
+        elif isinstance(raw_task_set, (list, tuple, set, frozenset)):
+            task_values = tuple(int(value) for value in raw_task_set)
+        else:
+            continue
+        mask = 0
+        for task in task_values:
+            bit = task_to_bit.get(int(task))
+            if bit is None:
+                mask = 0
+                break
+            mask |= 1 << int(bit)
+        if mask > 0 and mask not in masks:
+            masks.append(int(mask))
+    return tuple(masks)
+
+
 def _journey_pricing_config(
     data: FutureData,
     config: dict[str, Any],
@@ -14708,6 +14843,22 @@ def _journey_pricing_config(
                 config.get("journey_pricing_profile_materialization_feasibility_filter_enabled", False),
             )
         ),
+        profile_priority_task_masks=_journey_profile_priority_task_masks(
+            data,
+            config.get(
+                f"{prefix}_profile_priority_task_sets",
+                config.get("journey_pricing_profile_priority_task_sets", tuple()),
+            ),
+        ),
+        profile_priority_min_returned=max(
+            0,
+            int(
+                config.get(
+                    f"{prefix}_profile_priority_min_returned",
+                    config.get("journey_pricing_profile_priority_min_returned", 0),
+                )
+            ),
+        ),
         dp_same_completion_pruning_enabled=bool(
             config.get(
                 f"{prefix}_dp_same_completion_pruning_enabled",
@@ -14846,6 +14997,16 @@ def _journey_task_set_summary_payload(prefix: str, task_sets: Iterable[Any]) -> 
     }
 
 
+def _journey_active_task_set_hash(task_sets: Iterable[Any]) -> str:
+    normalized = {
+        frozenset(_canonical_task_set(task_set))
+        for task_set in task_sets
+        if _canonical_task_set(task_set)
+    }
+    ordered = sorted(normalized, key=lambda item: tuple(sorted(item)))
+    return _hash_strings([str(list(_canonical_task_set(task_set))) for task_set in ordered])
+
+
 def _journey_sequence_sample(journey: Any) -> list[list[int]]:
     sample: list[list[int]] = []
     for trip in getattr(journey, "trips", tuple()) or tuple():
@@ -14918,6 +15079,361 @@ def _journey_sequence_sample_string(journey: Any) -> str:
     return "|".join(
         ",".join(str(int(task)) for task in sortie)
         for sortie in _journey_sequence_sample(journey)
+    )
+
+
+def _journey_replay_capture_journey_payload(
+    journey: Any,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+) -> dict[str, Any]:
+    trips = tuple(getattr(journey, "trips", tuple()) or tuple())
+    return {
+        "id": int(getattr(journey, "id", -1)),
+        "task_set": list(_canonical_task_set(getattr(journey, "task_set", frozenset()))),
+        "sequence": _journey_sequence_sample(journey),
+        "signature": getattr(journey, "signature", tuple()),
+        "start_time": round(float(getattr(journey, "start_time", 0.0)), 6),
+        "end_time": round(float(getattr(journey, "end_time", 0.0)), 6),
+        "cost": round(float(getattr(journey, "cost", 0.0)), 6),
+        "travel_cost": round(float(getattr(journey, "travel_cost", 0.0)), 6),
+        "fixed_vehicle_cost": round(float(getattr(journey, "fixed_vehicle_cost", 0.0)), 6),
+        "true_reduced_cost": round(float(manual_journey_reduced_cost(journey, duals, cuts=cuts)), 9),
+        "trips": [
+            {
+                key: value
+                for key, value in trip_to_json(trip).items()
+                if key != "physical_paths"
+            }
+            for trip in trips
+        ],
+    }
+
+
+def _journey_replay_capture_pool_snapshot(
+    journey_pool: JourneyPool,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    *,
+    max_journeys: int = 0,
+) -> dict[str, Any]:
+    journeys = tuple(journey_pool.journeys)
+    signatures = [getattr(journey, "signature", tuple()) for journey in journeys]
+    task_sets = [
+        list(_canonical_task_set(getattr(journey, "task_set", frozenset())))
+        for journey in journeys
+    ]
+    cap = max(0, int(max_journeys))
+    if cap > 0:
+        captured_journeys = journeys[:cap]
+        signature_payload = signatures[:cap]
+        task_set_payload = task_sets[:cap]
+    else:
+        captured_journeys = journeys
+        signature_payload = signatures
+        task_set_payload = task_sets
+    return {
+        "pool_journey_count": len(journeys),
+        "pool_journey_payload_count": len(captured_journeys),
+        "pool_signature_hash": _hash_strings([repr(tuple(signature)) for signature in signatures]),
+        "pool_task_set_hash": _hash_strings([repr(task_set) for task_set in task_sets]),
+        "pool_signatures": signature_payload,
+        "pool_task_sets": task_set_payload,
+        "pool_journeys": [
+            _journey_replay_capture_journey_payload(journey, duals, cuts)
+            for journey in captured_journeys
+        ],
+        "pool_snapshot_truncated": bool(cap > 0 and len(journeys) > cap),
+        "pool_snapshot_limit": cap,
+    }
+
+
+def _journey_replay_capture_forbidden_signature_payload(
+    forbidden_signatures: Iterable[Any],
+    *,
+    enabled: bool = False,
+    max_signatures: int = 0,
+) -> dict[str, Any]:
+    if not bool(enabled):
+        return {
+            "forbidden_signatures_enabled": False,
+            "forbidden_signature_payload_count": 0,
+            "forbidden_signature_payload_complete": False,
+            "forbidden_signature_payload_truncated": False,
+            "forbidden_signature_payload_limit": 0,
+        }
+    ordered = sorted(
+        {tuple(signature) for signature in forbidden_signatures},
+        key=repr,
+    )
+    cap = max(0, int(max_signatures))
+    captured = ordered[:cap] if cap > 0 else ordered
+    return {
+        "forbidden_signatures_enabled": True,
+        "forbidden_signatures": captured,
+        "forbidden_signature_payload_count": len(captured),
+        "forbidden_signature_payload_complete": bool(cap <= 0 or len(ordered) <= cap),
+        "forbidden_signature_payload_truncated": bool(cap > 0 and len(ordered) > cap),
+        "forbidden_signature_payload_limit": cap,
+    }
+
+
+def _journey_replay_capture_active_basis_snapshot(
+    journey_pool: JourneyPool,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    *,
+    variable_values: dict[int, float] | None,
+    reduced_costs: dict[int, float] | None = None,
+    max_rows: int = 0,
+    tol: float = 1.0e-9,
+) -> dict[str, Any]:
+    """Build a full active-basis snapshot from the solved journey RMP state."""
+
+    journeys = tuple(journey_pool.journeys)
+    values = {
+        int(index): float(value)
+        for index, value in (variable_values or {}).items()
+        if 0 <= int(index) < len(journeys) and float(value) > float(tol)
+    }
+    ordered_indices = sorted(
+        values,
+        key=lambda index: (
+            -float(values[index]),
+            tuple(_canonical_task_set(getattr(journeys[index], "task_set", frozenset()))),
+            int(index),
+        ),
+    )
+    cap = max(0, int(max_rows))
+    captured_indices = ordered_indices[:cap] if cap > 0 else list(ordered_indices)
+    snapshot_hash_parts = []
+    active_task_sets: list[list[int]] = []
+    rows: list[dict[str, Any]] = []
+    fractional_count = 0
+    for index in ordered_indices:
+        journey = journeys[index]
+        value = float(values[index])
+        task_set = list(_canonical_task_set(getattr(journey, "task_set", frozenset())))
+        active_task_sets.append(task_set)
+        if value < 1.0 - float(tol):
+            fractional_count += 1
+        snapshot_hash_parts.append(
+            repr(
+                (
+                    int(index),
+                    round(value, 12),
+                    tuple(getattr(journey, "signature", tuple())),
+                    tuple(task_set),
+                )
+            )
+        )
+
+    for index in captured_indices:
+        journey = journeys[index]
+        value = float(values[index])
+        task_set = list(_canonical_task_set(getattr(journey, "task_set", frozenset())))
+        trips = tuple(getattr(journey, "trips", tuple()) or tuple())
+        solver_rc = None
+        if reduced_costs is not None and int(index) in reduced_costs:
+            solver_rc = round(float(reduced_costs[int(index)]), 9)
+        rows.append(
+            {
+                "active_journey_pool_index": int(index),
+                "active_lambda_value": round(value, 12),
+                "active_journey_signature": getattr(journey, "signature", tuple()),
+                "active_journey_task_set": task_set,
+                "active_journey_cost": round(float(getattr(journey, "cost", 0.0)), 9),
+                "active_journey_true_reduced_cost": round(
+                    float(manual_journey_reduced_cost(journey, duals, cuts=cuts)),
+                    9,
+                ),
+                "active_journey_solver_reduced_cost": solver_rc,
+                "active_journey_sequence": _journey_sequence_sample(journey),
+                "active_journey_trip_signatures": [
+                    getattr(trip, "signature", tuple(getattr(trip, "tasks", tuple())))
+                    for trip in trips
+                ],
+                "active_journey_trip_task_sets": [
+                    list(_canonical_task_set(getattr(trip, "task_set", getattr(trip, "tasks", tuple()))))
+                    for trip in trips
+                ],
+            }
+        )
+
+    return {
+        "active_basis_snapshot_enabled": True,
+        "active_basis_snapshot_schema_version": "active_basis_snapshot_v1",
+        "active_basis_journey_count": len(ordered_indices),
+        "active_basis_payload_count": len(rows),
+        "active_basis_snapshot_hash": _hash_strings(snapshot_hash_parts),
+        "active_basis_snapshot_complete": bool(cap <= 0 or len(ordered_indices) <= cap),
+        "active_basis_snapshot_truncated": bool(cap > 0 and len(ordered_indices) > cap),
+        "active_basis_snapshot_limit": cap,
+        "active_basis_lambda_sum": round(sum(values[index] for index in ordered_indices), 12),
+        "active_basis_fractional_journey_count": fractional_count,
+        "active_basis_task_sets": active_task_sets,
+        "active_basis_rows": rows,
+    }
+
+
+def _journey_replay_capture_cut_payload(cuts: tuple[FutureCut, ...]) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for index, cut in enumerate(cuts):
+        cut_payload = getattr(cut, "payload", lambda: {})()
+        payload.append(
+            {
+                "index": int(index),
+                "kind": str(getattr(cut, "kind", "")),
+                "key": getattr(cut, "key", tuple()),
+                "sense": str(getattr(cut, "sense", "")),
+                "rhs": round(float(getattr(cut, "rhs", 0.0)), 9),
+                "payload": cut_payload,
+            }
+        )
+    return payload
+
+
+def _log_journey_counterfactual_replay_capture(
+    logger: FutureLogger,
+    data: FutureData,
+    config: dict[str, Any],
+    pricing: Any,
+    true_duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...],
+    journey_pool: JourneyPool,
+    *,
+    pricing_config: JourneyPricingConfig,
+    pricing_kind: str,
+    cg_iter: int,
+    rmp_objective: float | None,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    active_variable_values: dict[int, float] | None = None,
+    active_reduced_costs: dict[int, float] | None = None,
+    pricing_dual_source: str = "scip",
+    node_id: int = 0,
+    depth: int = 0,
+) -> None:
+    """Log an opt-in exact-context returned-batch payload for offline replay.
+
+    This diagnostic is deliberately side-effect free: it does not add columns,
+    change certificates, or alter pricing.  The event is intended to replace
+    sampled observational descriptors when building controlled replay cases.
+    """
+
+    if not bool(config.get("journey_counterfactual_replay_capture_enabled", False)):
+        return
+    journeys = tuple(getattr(pricing, "journeys", tuple()) or tuple())
+    if not journeys and not bool(config.get("journey_counterfactual_replay_capture_log_empty", False)):
+        return
+    max_journeys = max(0, int(config.get("journey_counterfactual_replay_capture_max_journeys", 0)))
+    if max_journeys > 0:
+        captured_journeys = journeys[:max_journeys]
+    else:
+        captured_journeys = journeys
+    forbidden_signatures = _journey_forbidden_signatures_for_node(journey_pool, branch_constraints)
+    context_hashes = _journey_sharded_pulse_audit_context_hashes(
+        data,
+        true_duals,
+        branch_constraints,
+        cuts,
+        forbidden_signatures,
+    )
+    dual_vector = _journey_dual_vector(data, true_duals, len(cuts))
+    active_sets = {
+        frozenset(int(task) for task in task_set)
+        for task_set in (active_task_sets or set())
+    }
+    active_hash_before = _journey_active_task_set_hash(active_sets)
+    pool_snapshot = _journey_replay_capture_pool_snapshot(
+        journey_pool,
+        true_duals,
+        cuts,
+        max_journeys=max(0, int(config.get("journey_counterfactual_replay_capture_pool_max_journeys", 0))),
+    )
+    forbidden_signature_payload = _journey_replay_capture_forbidden_signature_payload(
+        forbidden_signatures,
+        enabled=bool(
+            config.get(
+                "journey_counterfactual_replay_capture_forbidden_signatures_enabled",
+                False,
+            )
+        ),
+        max_signatures=max(
+            0,
+            int(
+                config.get(
+                    "journey_counterfactual_replay_capture_forbidden_signature_max_count",
+                    0,
+                )
+            ),
+        ),
+    )
+    active_basis_snapshot = {"active_basis_snapshot_enabled": False}
+    if bool(config.get("journey_counterfactual_replay_capture_active_basis_enabled", False)):
+        active_basis_snapshot = _journey_replay_capture_active_basis_snapshot(
+            journey_pool,
+            true_duals,
+            cuts,
+            variable_values=active_variable_values,
+            reduced_costs=active_reduced_costs,
+            max_rows=max(0, int(config.get("journey_counterfactual_replay_capture_active_basis_max_rows", 0))),
+        )
+    logger.log(
+        "journey_counterfactual_replay_capture",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        pricing_kind=str(pricing_kind),
+        pricing_dual_source=str(pricing_dual_source),
+        diagnostic_only=True,
+        replay_no_certificate_effect=True,
+        certificate_capable=False,
+        official_bound_effect=False,
+        schema_version="journey_counterfactual_replay_capture_v1",
+        source_log_path=None if logger.path is None else str(logger.path),
+        instance=str(data.name),
+        instance_path=str(getattr(data, "instance_path", "") or ""),
+        task_count=len(tuple(data.tasks)),
+        vehicle_count=len(tuple(data.vehicles)),
+        rmp_objective_before=None if rmp_objective is None else round(float(rmp_objective), 9),
+        pricing_state=_journey_pricing_state(pricing),
+        pricing_status=str(getattr(pricing, "status", "")),
+        pricing_reason=str(getattr(pricing, "reason", "")),
+        pricing_best_reduced_cost=None
+        if getattr(pricing, "best_reduced_cost", None) is None
+        else round(float(getattr(pricing, "best_reduced_cost")), 9),
+        pricing_time_limit=round(float(getattr(pricing_config, "time_limit", 0.0)), 6),
+        pricing_max_dp_states=int(getattr(pricing_config, "max_dp_states", 0)),
+        pricing_time_bucket_size=round(float(getattr(pricing_config, "time_bucket_size", 5.0)), 6),
+        returned_journey_count=len(journeys),
+        captured_journey_count=len(captured_journeys),
+        returned_batch_complete=bool(max_journeys <= 0 or len(journeys) <= max_journeys),
+        returned_batch_truncated=bool(max_journeys > 0 and len(journeys) > max_journeys),
+        returned_journeys=[
+            _journey_replay_capture_journey_payload(journey, true_duals, cuts)
+            for journey in captured_journeys
+        ],
+        true_dual_hash=str(context_hashes["true_dual"]),
+        cut_hash=str(context_hashes["cuts"]),
+        branch_hash=str(context_hashes["branch"]),
+        forbidden_signature_hash=str(context_hashes["forbidden"]),
+        context_hash=str(context_hashes["context"]),
+        true_dual_vector=list(dual_vector),
+        cuts=_journey_replay_capture_cut_payload(cuts),
+        branch_constraints=[repr(_branch_constraint_key(constraint)) for constraint in branch_constraints],
+        forbidden_signature_count=len(forbidden_signatures),
+        active_task_set_count=len(active_sets),
+        active_hash_before=active_hash_before,
+        pool_active_task_set_hash_before=active_hash_before,
+        active_task_set_hash=active_hash_before,
+        active_task_sets=[
+            list(_canonical_task_set(task_set))
+            for task_set in sorted(active_sets, key=lambda item: tuple(sorted(item)))
+        ],
+        **pool_snapshot,
+        **forbidden_signature_payload,
+        **active_basis_snapshot,
     )
 
 
@@ -15454,6 +15970,18 @@ def _log_journey_pricing(
         ),
         diagnostic_selected_filtered_task_set_samples=list(
             getattr(pricing, "diagnostic_selected_filtered_task_set_samples", tuple()) or tuple()
+        ),
+        diagnostic_returned_boundary_candidate_samples=list(
+            getattr(pricing, "diagnostic_returned_boundary_candidate_samples", tuple()) or tuple()
+        ),
+        diagnostic_truncated_boundary_candidate_samples=list(
+            getattr(pricing, "diagnostic_truncated_boundary_candidate_samples", tuple()) or tuple()
+        ),
+        profile_priority_candidate_count=int(
+            getattr(pricing, "profile_priority_candidate_count", 0)
+        ),
+        profile_priority_selected_candidate_count=int(
+            getattr(pricing, "profile_priority_selected_candidate_count", 0)
         ),
         profile_selected_candidate_input_count=int(
             getattr(pricing, "profile_selected_candidate_input_count", 0)
@@ -19660,6 +20188,8 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "profile_negative_new_mask_count",
         "profile_negative_selected_new_mask_count",
         "profile_negative_selected_replacement_mask_count",
+        "profile_priority_candidate_count",
+        "profile_priority_selected_candidate_count",
         "profile_materialization_candidate_count",
         "profile_materialization_candidate_selected_for_scan_count",
         "profile_materialization_candidate_cap_filtered",
@@ -19882,6 +20412,8 @@ def _journey_pricing_audit_stats(pricing: Any, *, prefix: str) -> dict[str, Any]
         "diagnostic_selected_unmaterialized_task_set_samples",
         "diagnostic_selected_weak_filtered_task_set_samples",
         "diagnostic_selected_filtered_task_set_samples",
+        "diagnostic_returned_boundary_candidate_samples",
+        "diagnostic_truncated_boundary_candidate_samples",
     )
     stats: dict[str, Any] = {}
     for field_name in fields:

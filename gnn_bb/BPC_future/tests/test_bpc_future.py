@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import itertools
 import math
@@ -263,7 +264,9 @@ from BPC_future.solver.journey_driver import (
     _hidden_negative_miss_diagnostics,
     _log_hidden_negative_audit,
     _log_journey_addition,
+    _log_journey_counterfactual_replay_capture,
     _log_journey_pricing,
+    _journey_active_task_set_hash,
     _journey_task_set_dominance_safe,
     _journey_forbidden_signatures_for_node,
     _add_priced_journeys,
@@ -1257,6 +1260,1481 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(payload["negative_journey_signature_sample_count"], 3)
         self.assertFalse(payload["negative_journey_signature_samples_truncated"])
         self.assertTrue(payload["negative_journey_signature_hash"])
+
+    def test_counterfactual_replay_capture_is_disabled_by_default(self):
+        data = load_future_data("very_small")
+        trip = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        pricing = JourneyPricingResult(
+            [journey],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {},
+                pricing,
+                JourneyDuals(cover={1: 100.0}, fleet_limit=0.0),
+                tuple(),
+                tuple(),
+                JourneyPool(),
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="heuristic",
+                cg_iter=1,
+                rmp_objective=123.0,
+                active_task_sets={frozenset({1})},
+            )
+            logger.close()
+            self.assertEqual(log_path.read_text(encoding="utf-8"), "")
+
+    def test_counterfactual_replay_capture_logs_full_returned_batch_context(self):
+        data = load_future_data("very_small")
+        trip = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        pool_trip = evaluate_timed_trip(data, (2,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(pool_trip)
+        assert pool_trip is not None
+        pool_journey = make_journey(data, (pool_trip,))
+        self.assertIsNotNone(pool_journey)
+        assert pool_journey is not None
+        journey_pool = JourneyPool()
+        journey_pool.add(pool_journey)
+        duals = JourneyDuals(cover={1: 200.0, 2: 0.0}, fleet_limit=0.0)
+        pricing = JourneyPricingResult(
+            [journey],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {"journey_counterfactual_replay_capture_enabled": True},
+                pricing,
+                duals,
+                tuple(),
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0, max_dp_states=17, time_limit=2.5),
+                pricing_kind="exact",
+                cg_iter=3,
+                rmp_objective=456.75,
+                active_task_sets={frozenset({2})},
+                pricing_dual_source="scip",
+            )
+            logger.close()
+            records = [
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(len(records), 1)
+        payload = records[0]
+        self.assertEqual(payload["event"], "journey_counterfactual_replay_capture")
+        self.assertEqual(payload["schema_version"], "journey_counterfactual_replay_capture_v1")
+        self.assertTrue(payload["diagnostic_only"])
+        self.assertTrue(payload["replay_no_certificate_effect"])
+        self.assertFalse(payload["certificate_capable"])
+        self.assertFalse(payload["official_bound_effect"])
+        self.assertEqual(payload["pricing_kind"], "exact")
+        self.assertEqual(payload["pricing_time_limit"], 2.5)
+        self.assertEqual(payload["pricing_max_dp_states"], 17)
+        self.assertEqual(payload["rmp_objective_before"], 456.75)
+        self.assertEqual(payload["task_count"], len(data.tasks))
+        self.assertEqual(payload["vehicle_count"], len(data.vehicles))
+        self.assertEqual(payload["returned_journey_count"], 1)
+        self.assertEqual(payload["captured_journey_count"], 1)
+        self.assertTrue(payload["returned_batch_complete"])
+        self.assertFalse(payload["returned_batch_truncated"])
+        self.assertTrue(payload["context_hash"])
+        self.assertTrue(payload["true_dual_hash"])
+        self.assertTrue(payload["cut_hash"])
+        self.assertTrue(payload["branch_hash"])
+        self.assertTrue(payload["forbidden_signature_hash"])
+        self.assertEqual(payload["active_task_sets"], [[2]])
+        self.assertTrue(payload["active_hash_before"])
+        self.assertEqual(payload["active_hash_before"], payload["active_task_set_hash"])
+        self.assertEqual(
+            payload["pool_active_task_set_hash_before"],
+            payload["active_task_set_hash"],
+        )
+        self.assertEqual(payload["pool_journey_count"], 1)
+        self.assertEqual(payload["pool_journey_payload_count"], 1)
+        self.assertFalse(payload["pool_snapshot_truncated"])
+        self.assertEqual(len(payload["pool_signatures"]), 1)
+        self.assertEqual(len(payload["pool_journeys"]), 1)
+        self.assertEqual(payload["pool_journeys"][0]["task_set"], [2])
+        self.assertFalse(payload["active_basis_snapshot_enabled"])
+        returned = payload["returned_journeys"][0]
+        self.assertEqual(returned["task_set"], [1])
+        self.assertEqual(returned["sequence"], [[1]])
+        self.assertEqual(returned["trips"][0]["tasks"], [1])
+        self.assertEqual(returned["trips"][0]["arc_option_ids"], list(trip.arc_option_ids))
+        expected_rc = manual_journey_reduced_cost(journey, duals, cuts=tuple())
+        self.assertAlmostEqual(returned["true_reduced_cost"], round(float(expected_rc), 9))
+
+    def test_counterfactual_replay_capture_forbidden_signatures_are_opt_in(self):
+        data = load_future_data("very_small")
+        trip1 = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        trip2 = evaluate_timed_trip(data, (2,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip1)
+        self.assertIsNotNone(trip2)
+        assert trip1 is not None
+        assert trip2 is not None
+        journey1 = make_journey(data, (trip1,))
+        journey2 = make_journey(data, (trip2,))
+        self.assertIsNotNone(journey1)
+        self.assertIsNotNone(journey2)
+        assert journey1 is not None
+        assert journey2 is not None
+        journey_pool = JourneyPool()
+        journey_pool.add(journey1)
+        journey_pool.add(journey2)
+        pricing = JourneyPricingResult(
+            [journey1],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        def _json_signature(signature: object) -> object:
+            return json.loads(json.dumps(tuple(signature)))
+
+        def _capture(config: dict[str, object]) -> dict[str, object]:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                log_path = Path(tmpdir) / "capture.jsonl"
+                logger = FutureLogger(log_path, console=False)
+                _log_journey_counterfactual_replay_capture(
+                    logger,
+                    data,
+                    config,
+                    pricing,
+                    JourneyDuals(cover={1: 100.0, 2: 100.0}, fleet_limit=0.0),
+                    tuple(),
+                    tuple(),
+                    journey_pool,
+                    pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                    pricing_kind="exact",
+                    cg_iter=1,
+                    rmp_objective=10.0,
+                )
+                logger.close()
+                return json.loads(log_path.read_text(encoding="utf-8"))
+
+        default_payload = _capture({"journey_counterfactual_replay_capture_enabled": True})
+        self.assertEqual(default_payload["forbidden_signature_count"], 2)
+        self.assertFalse(default_payload["forbidden_signatures_enabled"])
+        self.assertEqual(default_payload["forbidden_signature_payload_count"], 0)
+        self.assertNotIn("forbidden_signatures", default_payload)
+
+        enabled_payload = _capture(
+            {
+                "journey_counterfactual_replay_capture_enabled": True,
+                "journey_counterfactual_replay_capture_forbidden_signatures_enabled": True,
+                "journey_counterfactual_replay_capture_forbidden_signature_max_count": 1,
+            }
+        )
+        self.assertEqual(enabled_payload["forbidden_signature_count"], 2)
+        self.assertTrue(enabled_payload["forbidden_signatures_enabled"])
+        self.assertEqual(enabled_payload["forbidden_signature_payload_count"], 1)
+        self.assertEqual(len(enabled_payload["forbidden_signatures"]), 1)
+        self.assertEqual(enabled_payload["forbidden_signature_payload_limit"], 1)
+        self.assertFalse(enabled_payload["forbidden_signature_payload_complete"])
+        self.assertTrue(enabled_payload["forbidden_signature_payload_truncated"])
+        self.assertEqual(
+            enabled_payload["forbidden_signatures"][0],
+            min([_json_signature(journey1.signature), _json_signature(journey2.signature)], key=repr),
+        )
+
+    def test_counterfactual_replay_capture_active_hash_matches_pool_diagnostic_order(self):
+        data = load_future_data("very_small")
+        trip = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        active_task_sets = {frozenset({1, 4}), frozenset({2, 3}), frozenset({1, 2, 3})}
+        pricing = JourneyPricingResult(
+            [journey],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {"journey_counterfactual_replay_capture_enabled": True},
+                pricing,
+                JourneyDuals(cover={1: 200.0}, fleet_limit=0.0),
+                tuple(),
+                tuple(),
+                JourneyPool(),
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="heuristic",
+                cg_iter=1,
+                rmp_objective=123.0,
+                active_task_sets=active_task_sets,
+            )
+            logger.close()
+            payload = json.loads(log_path.read_text(encoding="utf-8"))
+
+        expected_hash = _journey_active_task_set_hash(active_task_sets)
+        self.assertEqual(payload["active_task_sets"], [[1, 2, 3], [1, 4], [2, 3]])
+        self.assertEqual(payload["active_hash_before"], expected_hash)
+        self.assertEqual(payload["pool_active_task_set_hash_before"], expected_hash)
+        self.assertEqual(payload["active_task_set_hash"], expected_hash)
+
+    def test_counterfactual_replay_capture_logs_full_active_basis_snapshot_when_enabled(self):
+        data = load_future_data("very_small")
+        trip1 = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        trip2 = evaluate_timed_trip(data, (2,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip1)
+        self.assertIsNotNone(trip2)
+        assert trip1 is not None
+        assert trip2 is not None
+        journey1 = make_journey(data, (trip1,))
+        journey2 = make_journey(data, (trip2,))
+        self.assertIsNotNone(journey1)
+        self.assertIsNotNone(journey2)
+        assert journey1 is not None
+        assert journey2 is not None
+        journey_pool = JourneyPool()
+        journey_pool.add(journey1)
+        journey_pool.add(journey2)
+        duals = JourneyDuals(cover={1: 200.0, 2: 20.0}, fleet_limit=0.0)
+        pricing = JourneyPricingResult(
+            [journey1],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {
+                    "journey_counterfactual_replay_capture_enabled": True,
+                    "journey_counterfactual_replay_capture_active_basis_enabled": True,
+                    "journey_counterfactual_replay_capture_pool_max_journeys": 10,
+                },
+                pricing,
+                duals,
+                tuple(),
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="heuristic",
+                cg_iter=1,
+                rmp_objective=123.0,
+                active_task_sets={frozenset({1}), frozenset({2})},
+                active_variable_values={0: 0.75, 1: 0.25},
+                active_reduced_costs={0: -0.1, 1: 0.2},
+            )
+            logger.close()
+            payload = json.loads(log_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(payload["active_basis_snapshot_enabled"])
+        self.assertEqual(payload["active_basis_snapshot_schema_version"], "active_basis_snapshot_v1")
+        self.assertTrue(payload["active_basis_snapshot_complete"])
+        self.assertFalse(payload["active_basis_snapshot_truncated"])
+        self.assertEqual(payload["active_basis_journey_count"], 2)
+        self.assertEqual(payload["active_basis_payload_count"], 2)
+        self.assertAlmostEqual(payload["active_basis_lambda_sum"], 1.0)
+        self.assertEqual(payload["active_basis_fractional_journey_count"], 2)
+        self.assertTrue(payload["active_basis_snapshot_hash"])
+        rows = payload["active_basis_rows"]
+        self.assertEqual([row["active_journey_pool_index"] for row in rows], [0, 1])
+        self.assertEqual([row["active_journey_task_set"] for row in rows], [[1], [2]])
+        self.assertEqual([row["active_lambda_value"] for row in rows], [0.75, 0.25])
+        self.assertEqual(rows[0]["active_journey_solver_reduced_cost"], -0.1)
+        self.assertEqual(rows[1]["active_journey_solver_reduced_cost"], 0.2)
+        self.assertEqual(rows[0]["active_journey_sequence"], [[1]])
+        self.assertEqual(rows[1]["active_journey_sequence"], [[2]])
+        self.assertEqual(rows[0]["active_journey_trip_task_sets"], [[1]])
+        self.assertEqual(rows[1]["active_journey_trip_task_sets"], [[2]])
+        self.assertAlmostEqual(
+            rows[0]["active_journey_true_reduced_cost"],
+            manual_journey_reduced_cost(journey1, duals, cuts=tuple()),
+        )
+        self.assertAlmostEqual(
+            rows[1]["active_journey_true_reduced_cost"],
+            manual_journey_reduced_cost(journey2, duals, cuts=tuple()),
+        )
+
+    def test_counterfactual_replay_capture_active_basis_snapshot_limit_truncates_payload_only(self):
+        data = load_future_data("very_small")
+        trip1 = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        trip2 = evaluate_timed_trip(data, (2,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip1)
+        self.assertIsNotNone(trip2)
+        assert trip1 is not None
+        assert trip2 is not None
+        journey1 = make_journey(data, (trip1,))
+        journey2 = make_journey(data, (trip2,))
+        self.assertIsNotNone(journey1)
+        self.assertIsNotNone(journey2)
+        assert journey1 is not None
+        assert journey2 is not None
+        journey_pool = JourneyPool()
+        journey_pool.add(journey1)
+        journey_pool.add(journey2)
+        pricing = JourneyPricingResult(
+            [journey1],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {
+                    "journey_counterfactual_replay_capture_enabled": True,
+                    "journey_counterfactual_replay_capture_active_basis_enabled": True,
+                    "journey_counterfactual_replay_capture_active_basis_max_rows": 1,
+                },
+                pricing,
+                JourneyDuals(cover={1: 0.0, 2: 0.0}, fleet_limit=0.0),
+                tuple(),
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="heuristic",
+                cg_iter=1,
+                rmp_objective=123.0,
+                active_task_sets={frozenset({1}), frozenset({2})},
+                active_variable_values={0: 0.5, 1: 0.5},
+            )
+            logger.close()
+            payload = json.loads(log_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(payload["active_basis_snapshot_enabled"])
+        self.assertFalse(payload["active_basis_snapshot_complete"])
+        self.assertTrue(payload["active_basis_snapshot_truncated"])
+        self.assertEqual(payload["active_basis_snapshot_limit"], 1)
+        self.assertEqual(payload["active_basis_journey_count"], 2)
+        self.assertEqual(payload["active_basis_payload_count"], 1)
+        self.assertEqual(len(payload["active_basis_rows"]), 1)
+        self.assertTrue(payload["active_basis_snapshot_hash"])
+
+    def test_counterfactual_capture_target_coverage_requires_nonempty_returned_batch(self):
+        from BPC_future.scripts.audit_counterfactual_capture_target_coverage import audit_targets
+
+        target_summary = {
+            "targets": [
+                {
+                    "target_id": "capture_target_001",
+                    "candidate_id": "replay_candidate_001",
+                    "context": {
+                        "instance": "very_small",
+                        "cg_iter": 1,
+                        "pricing_kind": "heuristic",
+                        "active_hash_before": "abc123",
+                        "rmp_objective_before": 12.5,
+                    },
+                }
+            ]
+        }
+        empty_capture = {
+            "event": "journey_counterfactual_replay_capture",
+            "schema_version": "journey_counterfactual_replay_capture_v1",
+            "source_log_path": "very_small.jsonl",
+            "instance": "very_small",
+            "task_count": 4,
+            "vehicle_count": 1,
+            "cg_iter": 1,
+            "pricing_kind": "heuristic",
+            "rmp_objective_before": 12.5,
+            "active_hash_before": "abc123",
+            "diagnostic_only": True,
+            "replay_no_certificate_effect": True,
+            "certificate_capable": False,
+            "official_bound_effect": False,
+            "returned_batch_complete": True,
+            "returned_batch_truncated": False,
+            "pool_snapshot_truncated": False,
+            "pool_journey_count": 1,
+            "pool_journey_payload_count": 1,
+            "returned_journey_count": 0,
+            "captured_journey_count": 0,
+            "returned_journeys": [],
+            "pool_journeys": [],
+            "pool_signatures": [],
+            "pool_task_sets": [],
+            "context_hash": "ctx",
+            "true_dual_hash": "dual",
+            "cut_hash": "cut",
+            "branch_hash": "branch",
+            "forbidden_signature_hash": "forbidden",
+            "true_dual_vector": [],
+            "cuts": [],
+            "branch_constraints": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target_path = Path(tmpdir) / "targets.json"
+            log_path = Path(tmpdir) / "capture.jsonl"
+            target_path.write_text(json.dumps(target_summary), encoding="utf-8")
+            log_path.write_text(json.dumps(empty_capture) + "\n", encoding="utf-8")
+            summary = audit_targets(target_path, [log_path])
+
+        self.assertEqual(summary["capture_event_count"], 1)
+        self.assertEqual(summary["target_with_near_match_count"], 1)
+        self.assertEqual(summary["target_with_exact_capture_count"], 0)
+        result = summary["target_results"][0]
+        self.assertFalse(result["covered_by_replay_ready_exact_capture"])
+        self.assertTrue(result["near_matches"][0]["active_hash_match"])
+        self.assertFalse(result["near_matches"][0]["has_captured_returned_batch"])
+
+    def test_counterfactual_capture_target_coverage_accepts_replay_ready_exact_capture(self):
+        from BPC_future.scripts.audit_counterfactual_capture_target_coverage import audit_targets
+
+        target_summary = {
+            "targets": [
+                {
+                    "target_id": "capture_target_001",
+                    "candidate_id": "replay_candidate_001",
+                    "context": {
+                        "instance": "very_small",
+                        "cg_iter": 1,
+                        "pricing_kind": "heuristic",
+                        "active_hash_before": "abc123",
+                        "rmp_objective_before": 12.5,
+                    },
+                }
+            ]
+        }
+        journey_payload = {
+            "id": 1,
+            "task_set": [1],
+            "sequence": [[1]],
+            "signature": ["unit"],
+            "start_time": 0.0,
+            "end_time": 10.0,
+            "cost": 1.0,
+            "travel_cost": 1.0,
+            "fixed_vehicle_cost": 0.0,
+            "true_reduced_cost": -1.0,
+            "trips": [
+                {
+                    "tasks": [1],
+                    "start_time": 0.0,
+                    "end_time": 10.0,
+                    "arc_option_ids": ["0-1", "1-0"],
+                    "occupancy": [],
+                }
+            ],
+        }
+        exact_capture = {
+            "event": "journey_counterfactual_replay_capture",
+            "schema_version": "journey_counterfactual_replay_capture_v1",
+            "source_log_path": "very_small.jsonl",
+            "instance": "very_small",
+            "task_count": 4,
+            "vehicle_count": 1,
+            "cg_iter": 1,
+            "pricing_kind": "heuristic",
+            "pricing_state": "FOUND_NEGATIVE",
+            "rmp_objective_before": 12.5,
+            "active_hash_before": "abc123",
+            "diagnostic_only": True,
+            "replay_no_certificate_effect": True,
+            "certificate_capable": False,
+            "official_bound_effect": False,
+            "returned_batch_complete": True,
+            "returned_batch_truncated": False,
+            "pool_snapshot_truncated": False,
+            "pool_journey_count": 1,
+            "pool_journey_payload_count": 1,
+            "returned_journey_count": 1,
+            "captured_journey_count": 1,
+            "returned_journeys": [journey_payload],
+            "pool_journeys": [journey_payload],
+            "pool_signatures": [["unit"]],
+            "pool_task_sets": [[1]],
+            "context_hash": "ctx",
+            "true_dual_hash": "dual",
+            "cut_hash": "cut",
+            "branch_hash": "branch",
+            "forbidden_signature_hash": "forbidden",
+            "true_dual_vector": [],
+            "cuts": [],
+            "branch_constraints": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target_path = Path(tmpdir) / "targets.json"
+            log_path = Path(tmpdir) / "capture.jsonl"
+            target_path.write_text(json.dumps(target_summary), encoding="utf-8")
+            log_path.write_text(json.dumps(exact_capture) + "\n", encoding="utf-8")
+            summary = audit_targets(target_path, [log_path])
+
+        self.assertTrue(summary["all_checks_pass"])
+        self.assertEqual(summary["target_with_near_match_count"], 1)
+        self.assertEqual(summary["target_with_exact_capture_count"], 1)
+        self.assertEqual(summary["uncovered_target_count"], 0)
+        self.assertTrue(summary["checks"]["has_replay_ready_exact_capture"])
+        result = summary["target_results"][0]
+        self.assertTrue(result["covered_by_replay_ready_exact_capture"])
+        self.assertTrue(result["near_matches"][0]["exact_target_match"])
+
+    def test_counterfactual_replay_manifest_builds_ready_case_from_capture(self):
+        from BPC_future.scripts.build_counterfactual_replay_manifest import build_manifest
+
+        data = load_future_data("very_small")
+        trip = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        pool_trip = evaluate_timed_trip(data, (2,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(pool_trip)
+        assert pool_trip is not None
+        pool_journey = make_journey(data, (pool_trip,))
+        self.assertIsNotNone(pool_journey)
+        assert pool_journey is not None
+        journey_pool = JourneyPool()
+        journey_pool.add(pool_journey)
+        duals = JourneyDuals(cover={1: 200.0, 2: 0.0}, fleet_limit=0.0)
+        pricing = JourneyPricingResult(
+            [journey],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {"journey_counterfactual_replay_capture_enabled": True},
+                pricing,
+                duals,
+                tuple(),
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="exact",
+                cg_iter=3,
+                rmp_objective=456.75,
+                active_task_sets={frozenset({2})},
+                pricing_dual_source="scip",
+            )
+            logger.close()
+            manifest = build_manifest([log_path])
+
+        self.assertTrue(manifest["all_checks_pass"])
+        self.assertEqual(manifest["case_count"], 1)
+        self.assertEqual(manifest["ready_case_count"], 1)
+        self.assertEqual(manifest["candidate_count"], 1)
+        case = manifest["cases"][0]
+        self.assertTrue(case["ready_for_rmp_replay"])
+        self.assertEqual(case["task_count"], len(data.tasks))
+        self.assertEqual(case["vehicle_count"], len(data.vehicles))
+        self.assertTrue(case["active_hash_before"])
+        self.assertEqual(case["active_hash_before"], case["pool_active_task_set_hash_before"])
+        self.assertTrue(case["complete_pool_payload"])
+        self.assertTrue(case["complete_returned_batch"])
+        self.assertEqual(case["candidate_summary"]["new_task_set_count"], 1)
+        self.assertEqual(case["candidate_summary"]["duplicate_signature_count"], 0)
+        self.assertIn("control_no_addition", {item["treatment_id"] for item in case["treatments"]})
+        self.assertIn("full_returned_batch", {item["treatment_id"] for item in case["treatments"]})
+        self.assertIn("new_task_sets_only", {item["treatment_id"] for item in case["treatments"]})
+
+    def test_counterfactual_replay_manifest_preserves_active_basis_snapshot(self):
+        from BPC_future.scripts.build_counterfactual_replay_manifest import build_manifest
+
+        data = load_future_data("very_small")
+        trip1 = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        trip2 = evaluate_timed_trip(data, (2,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip1)
+        self.assertIsNotNone(trip2)
+        assert trip1 is not None
+        assert trip2 is not None
+        journey1 = make_journey(data, (trip1,))
+        journey2 = make_journey(data, (trip2,))
+        self.assertIsNotNone(journey1)
+        self.assertIsNotNone(journey2)
+        assert journey1 is not None
+        assert journey2 is not None
+        journey_pool = JourneyPool()
+        journey_pool.add(journey1)
+        journey_pool.add(journey2)
+        duals = JourneyDuals(cover={1: 200.0, 2: 20.0}, fleet_limit=0.0)
+        pricing = JourneyPricingResult(
+            [journey1],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {
+                    "journey_counterfactual_replay_capture_enabled": True,
+                    "journey_counterfactual_replay_capture_active_basis_enabled": True,
+                    "journey_counterfactual_replay_capture_pool_max_journeys": 10,
+                },
+                pricing,
+                duals,
+                tuple(),
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="exact",
+                cg_iter=3,
+                rmp_objective=456.75,
+                active_task_sets={frozenset({1}), frozenset({2})},
+                active_variable_values={0: 0.75, 1: 0.25},
+                active_reduced_costs={0: -0.1, 1: 0.2},
+            )
+            logger.close()
+            manifest = build_manifest([log_path])
+
+        self.assertTrue(manifest["all_checks_pass"])
+        case = manifest["cases"][0]
+        self.assertTrue(case["active_basis_snapshot_enabled"])
+        self.assertEqual(case["active_basis_snapshot_schema_version"], "active_basis_snapshot_v1")
+        self.assertTrue(case["active_basis_snapshot_complete"])
+        self.assertFalse(case["active_basis_snapshot_truncated"])
+        self.assertEqual(case["active_basis_journey_count"], 2)
+        self.assertEqual(case["active_basis_payload_count"], 2)
+        self.assertAlmostEqual(case["active_basis_lambda_sum"], 1.0)
+        self.assertEqual(case["active_basis_fractional_journey_count"], 2)
+        self.assertTrue(case["active_basis_snapshot_hash"])
+        self.assertEqual(case["active_basis_task_sets"], [[1], [2]])
+        rows = case["active_basis_rows"]
+        self.assertEqual([row["active_journey_pool_index"] for row in rows], [0, 1])
+        self.assertEqual([row["active_lambda_value"] for row in rows], [0.75, 0.25])
+        self.assertEqual([row["active_journey_task_set"] for row in rows], [[1], [2]])
+        self.assertEqual(rows[0]["active_journey_solver_reduced_cost"], -0.1)
+        self.assertEqual(rows[1]["active_journey_solver_reduced_cost"], 0.2)
+
+    def test_counterfactual_replay_manifest_rejects_missing_vehicle_count(self):
+        from BPC_future.scripts.build_counterfactual_replay_manifest import build_manifest
+
+        data = load_future_data("very_small")
+        trip = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        pool_trip = evaluate_timed_trip(data, (2,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(pool_trip)
+        assert pool_trip is not None
+        pool_journey = make_journey(data, (pool_trip,))
+        self.assertIsNotNone(pool_journey)
+        assert pool_journey is not None
+        journey_pool = JourneyPool()
+        journey_pool.add(pool_journey)
+        duals = JourneyDuals(cover={1: 200.0, 2: 0.0}, fleet_limit=0.0)
+        pricing = JourneyPricingResult(
+            [journey],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {"journey_counterfactual_replay_capture_enabled": True},
+                pricing,
+                duals,
+                tuple(),
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="exact",
+                cg_iter=3,
+                rmp_objective=456.75,
+                active_task_sets={frozenset({2})},
+                pricing_dual_source="scip",
+            )
+            logger.close()
+            payload = json.loads(log_path.read_text(encoding="utf-8"))
+            payload.pop("vehicle_count", None)
+            log_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            manifest = build_manifest([log_path])
+
+        self.assertFalse(manifest["all_checks_pass"])
+        self.assertEqual(manifest["case_count"], 1)
+        self.assertEqual(manifest["ready_case_count"], 0)
+        self.assertEqual(manifest["candidate_count"], 1)
+        case = manifest["cases"][0]
+        self.assertFalse(case["ready_for_rmp_replay"])
+        self.assertIn("missing_vehicle_count_for_replay", case["issues"])
+
+    def test_counterfactual_replay_runner_skips_manifest_not_ready_case(self):
+        from BPC_future.scripts.run_counterfactual_replay_from_manifest import run_replay
+
+        manifest = {
+            "schema_version": "counterfactual_replay_manifest_v1",
+            "cases": [
+                {
+                    "case_id": "case_0001",
+                    "ready_for_rmp_replay": False,
+                    "issues": ["missing_vehicle_count_for_replay"],
+                    "instance": "very_small",
+                    "pool_journeys": [],
+                    "returned_journeys": [],
+                    "candidates": [],
+                    "treatments": [],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = Path(tmpdir) / "replay_cases.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            replay = run_replay(manifest_path)
+
+        self.assertFalse(replay["all_checks_pass"])
+        self.assertEqual(replay["case_count"], 1)
+        self.assertEqual(replay["ready_case_count"], 0)
+        case = replay["cases"][0]
+        self.assertFalse(case["ready_for_replay"])
+        self.assertEqual(case["treatments"], [])
+        self.assertIn("missing_vehicle_count_for_replay", case["issues"])
+
+    @unittest.skipUnless(HAS_SCIP, "SCIP is required for journey RMP replay")
+    def test_counterfactual_replay_runner_detects_duplicate_noop_treatment(self):
+        from BPC_future.scripts.build_counterfactual_replay_manifest import build_manifest
+        from BPC_future.scripts.run_counterfactual_replay_from_manifest import run_replay
+
+        data = load_future_data("very_small")
+        journey_pool = JourneyPool()
+        task1_journey = None
+        for sequence in ((1, 2), (3, 4), (1,)):
+            trip = evaluate_timed_trip(data, sequence, 0.0, time_bucket_size=5.0)
+            self.assertIsNotNone(trip)
+            assert trip is not None
+            journey = make_journey(data, (trip,))
+            self.assertIsNotNone(journey)
+            assert journey is not None
+            stored = journey_pool.add(journey)
+            if tuple(sequence) == (1,):
+                task1_journey = stored
+        self.assertIsNotNone(task1_journey)
+        assert task1_journey is not None
+        duals = JourneyDuals(cover={int(task): 200.0 for task in data.tasks}, fleet_limit=0.0)
+        pricing = JourneyPricingResult(
+            [task1_journey],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_duplicate_negative",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {"journey_counterfactual_replay_capture_enabled": True},
+                pricing,
+                duals,
+                tuple(),
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="exact",
+                cg_iter=3,
+                rmp_objective=456.75,
+            )
+            logger.close()
+            manifest = build_manifest([log_path])
+            manifest_path = Path(tmpdir) / "replay_cases.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            replay = run_replay(manifest_path)
+
+        self.assertTrue(replay["all_checks_pass"])
+        self.assertEqual(replay["case_count"], 1)
+        self.assertEqual(replay["ready_case_count"], 1)
+        self.assertEqual(replay["changed_treatment_count"], 0)
+        self.assertEqual(replay["improving_treatment_count"], 0)
+        case = replay["cases"][0]
+        self.assertTrue(case["ready_for_replay"])
+        self.assertEqual(case["control"]["status"], "OPTIMAL")
+        noncontrol = [
+            item
+            for item in case["treatments"]
+            if item["treatment_id"] != "control_no_addition"
+        ]
+        self.assertTrue(noncontrol)
+        self.assertTrue(all(item["no_op_treatment"] for item in noncontrol))
+        self.assertTrue(all(item["objective_delta_vs_control"] == 0.0 for item in noncontrol))
+
+    @unittest.skipUnless(HAS_SCIP, "SCIP is required for journey RMP replay")
+    def test_counterfactual_replay_runner_replays_supported_cut_payloads(self):
+        from BPC_future.scripts.build_counterfactual_replay_manifest import build_manifest
+        from BPC_future.scripts.run_counterfactual_replay_from_manifest import run_replay
+
+        data = load_future_data("very_small")
+        journey_pool = JourneyPool()
+        task1_journey = None
+        for sequence in ((1, 2), (3, 4), (1,)):
+            trip = evaluate_timed_trip(data, sequence, 0.0, time_bucket_size=5.0)
+            self.assertIsNotNone(trip)
+            assert trip is not None
+            journey = make_journey(data, (trip,))
+            self.assertIsNotNone(journey)
+            assert journey is not None
+            stored = journey_pool.add(journey)
+            if tuple(sequence) == (1,):
+                task1_journey = stored
+        self.assertIsNotNone(task1_journey)
+        assert task1_journey is not None
+        cuts = (FleetLowerBoundCut(1),)
+        duals = JourneyDuals(
+            cover={int(task): 200.0 for task in data.tasks},
+            fleet_limit=0.0,
+            cuts={0: 0.0},
+        )
+        pricing = JourneyPricingResult(
+            [task1_journey],
+            False,
+            -1.0,
+            1,
+            1,
+            1,
+            1,
+            "OPTIMAL",
+            "unit_test_duplicate_negative_with_cut",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "capture.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            _log_journey_counterfactual_replay_capture(
+                logger,
+                data,
+                {"journey_counterfactual_replay_capture_enabled": True},
+                pricing,
+                duals,
+                cuts,
+                tuple(),
+                journey_pool,
+                pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+                pricing_kind="exact",
+                cg_iter=3,
+                rmp_objective=456.75,
+            )
+            logger.close()
+            manifest = build_manifest([log_path])
+            manifest_path = Path(tmpdir) / "replay_cases.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            replay = run_replay(manifest_path)
+
+        self.assertTrue(replay["all_checks_pass"])
+        self.assertEqual(replay["ready_case_count"], 1)
+        case = replay["cases"][0]
+        self.assertTrue(case["ready_for_replay"])
+        self.assertEqual(case["issues"], [])
+        self.assertEqual(case["control"]["status"], "OPTIMAL")
+
+    def test_counterfactual_replay_impact_dataset_classifies_candidate_rows(self):
+        from BPC_future.scripts.analyze_counterfactual_replay_impact_dataset import (
+            analyze_replay_impact,
+        )
+
+        manifest = {
+            "schema_version": "counterfactual_replay_manifest_v1",
+            "cases": [
+                {
+                    "case_id": "case_0001",
+                    "instance": "unit_instance",
+                    "task_count": 20,
+                    "vehicle_count": 17,
+                    "cg_iter": 1,
+                    "pricing_kind": "sharded_pulse_hidden_negative_worker",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "context_hash": "ctx",
+                    "active_basis_snapshot_enabled": True,
+                    "active_basis_snapshot_complete": True,
+                    "active_basis_snapshot_hash": "active-basis-hash",
+                    "active_basis_journey_count": 3,
+                    "active_basis_payload_count": 3,
+                    "active_basis_fractional_journey_count": 2,
+                    "active_basis_lambda_sum": 1.0,
+                    "active_basis_rows": [
+                        {
+                            "active_journey_pool_index": 0,
+                            "active_lambda_value": 0.5,
+                            "active_journey_signature": [["sig-a"]],
+                            "active_journey_task_set": [1],
+                            "active_journey_solver_reduced_cost": 0.0,
+                        },
+                        {
+                            "active_journey_pool_index": 1,
+                            "active_lambda_value": 0.5,
+                            "active_journey_signature": [["sig-b"]],
+                            "active_journey_task_set": [1],
+                            "active_journey_solver_reduced_cost": 0.0,
+                        },
+                        {
+                            "active_journey_pool_index": 2,
+                            "active_lambda_value": 1.0,
+                            "active_journey_signature": [["sig-c"]],
+                            "active_journey_task_set": [2],
+                            "active_journey_solver_reduced_cost": 0.25,
+                        },
+                    ],
+                    "candidates": [
+                        {
+                            "candidate_id": "journey_0000",
+                            "task_set": [4, 5, 8],
+                            "sequence": [[8, 5, 4]],
+                            "true_reduced_cost": -137.0,
+                            "cost": 10.0,
+                            "new_task_set": True,
+                            "duplicate_signature": False,
+                            "strict_replacement_by_cost": False,
+                            "active_support_changing": False,
+                            "weak_replacement_or_duplicate": False,
+                        },
+                        {
+                            "candidate_id": "journey_0001",
+                            "task_set": [1],
+                            "sequence": [[1]],
+                            "true_reduced_cost": -1.0,
+                            "cost": 5.0,
+                            "new_task_set": False,
+                            "duplicate_signature": True,
+                            "strict_replacement_by_cost": False,
+                            "active_support_changing": False,
+                            "weak_replacement_or_duplicate": True,
+                        },
+                    ],
+                }
+            ],
+        }
+        replay = {
+            "schema_version": "counterfactual_replay_result_v1",
+            "checks": {"all_replay_is_no_certificate_effect": True},
+            "cases": [
+                {
+                    "case_id": "case_0001",
+                    "control": {"status": "OPTIMAL", "objective": 100.0},
+                    "treatments": [
+                        {
+                            "treatment_id": "control_no_addition",
+                            "candidate_ids": [],
+                            "changed_journey_count": 0,
+                            "objective_delta_vs_control": 0.0,
+                            "dual_l1_delta_vs_control": 0.0,
+                            "no_op_treatment": True,
+                        },
+                        {
+                            "treatment_id": "single_journey_0000",
+                            "candidate_ids": ["journey_0000"],
+                            "changed_journey_count": 1,
+                            "objective_delta_vs_control": -12.5,
+                            "dual_l1_delta_vs_control": 12.5,
+                            "no_op_treatment": False,
+                        },
+                        {
+                            "treatment_id": "single_journey_0001",
+                            "candidate_ids": ["journey_0001"],
+                            "changed_journey_count": 0,
+                            "objective_delta_vs_control": 0.0,
+                            "dual_l1_delta_vs_control": 0.0,
+                            "no_op_treatment": True,
+                        },
+                        {
+                            "treatment_id": "full_returned_batch",
+                            "candidate_ids": ["journey_0000", "journey_0001"],
+                            "changed_journey_count": 1,
+                            "objective_delta_vs_control": -12.5,
+                            "dual_l1_delta_vs_control": 12.5,
+                            "no_op_treatment": False,
+                        },
+                    ],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = Path(tmpdir) / "replay_cases.json"
+            replay_path = Path(tmpdir) / "replay_results.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            replay_path.write_text(json.dumps(replay), encoding="utf-8")
+            impact = analyze_replay_impact(manifest_path, replay_path)
+
+        self.assertTrue(impact["all_checks_pass"])
+        self.assertEqual(impact["candidate_row_count"], 2)
+        self.assertEqual(impact["high_impact_candidate_count"], 1)
+        self.assertEqual(impact["noop_candidate_count"], 1)
+        self.assertEqual(impact["full_batch_improved_count"], 1)
+        self.assertAlmostEqual(impact["best_objective_delta"], -12.5)
+        rows = {row["candidate_id"]: row for row in impact["candidate_rows"]}
+        self.assertEqual(rows["journey_0000"]["single_impact_class"], "improved")
+        self.assertEqual(rows["journey_0000"]["task_set"], "4,5,8")
+        self.assertEqual(rows["journey_0000"]["sequence"], "8-5-4")
+        self.assertTrue(rows["journey_0000"]["active_basis_snapshot_enabled_before"])
+        self.assertTrue(rows["journey_0000"]["active_basis_snapshot_complete_before"])
+        self.assertEqual(
+            rows["journey_0000"]["active_basis_snapshot_hash_before"],
+            "active-basis-hash",
+        )
+        self.assertEqual(rows["journey_0000"]["active_basis_journey_count_before"], 3)
+        self.assertEqual(rows["journey_0000"]["active_basis_payload_count_before"], 3)
+        self.assertEqual(rows["journey_0000"]["active_basis_fractional_journey_count_before"], 2)
+        self.assertAlmostEqual(rows["journey_0000"]["active_basis_lambda_sum_before"], 1.0)
+        self.assertEqual(rows["journey_0000"]["active_basis_churn_count_before"], 0)
+        self.assertEqual(
+            rows["journey_0000"]["active_basis_churn_source_before"],
+            "initial_active_basis_snapshot",
+        )
+        self.assertAlmostEqual(
+            rows["journey_0000"]["rmp_degeneracy_pressure_before"],
+            1.666666667,
+        )
+        self.assertEqual(
+            rows["journey_0000"]["rmp_degeneracy_pressure_source_before"],
+            "active_basis_snapshot_fractional_duplicate_near_zero_rc_sum",
+        )
+        self.assertEqual(rows["journey_0001"]["single_impact_class"], "noop")
+
+    def test_counterfactual_replay_impact_dataset_active_basis_metrics_fail_open_without_snapshot(self):
+        from BPC_future.scripts.analyze_counterfactual_replay_impact_dataset import (
+            analyze_replay_impact,
+        )
+
+        manifest = {
+            "schema_version": "counterfactual_replay_manifest_v1",
+            "cases": [
+                {
+                    "case_id": "case_0001",
+                    "instance": "unit_instance",
+                    "task_count": 20,
+                    "vehicle_count": 17,
+                    "cg_iter": 2,
+                    "pricing_kind": "exact",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "context_hash": "ctx",
+                    "active_basis_snapshot_enabled": False,
+                    "active_basis_snapshot_complete": False,
+                    "candidates": [
+                        {
+                            "candidate_id": "journey_0000",
+                            "task_set": [4, 5, 8],
+                            "sequence": [[8, 5, 4]],
+                            "true_reduced_cost": -137.0,
+                            "new_task_set": True,
+                        },
+                    ],
+                }
+            ],
+        }
+        replay = {
+            "schema_version": "counterfactual_replay_result_v1",
+            "checks": {"all_replay_is_no_certificate_effect": True},
+            "cases": [
+                {
+                    "case_id": "case_0001",
+                    "control": {"status": "OPTIMAL", "objective": 100.0},
+                    "treatments": [
+                        {
+                            "treatment_id": "single_journey_0000",
+                            "candidate_ids": ["journey_0000"],
+                            "changed_journey_count": 1,
+                            "objective_delta_vs_control": -1.0,
+                            "dual_l1_delta_vs_control": 1.0,
+                            "no_op_treatment": False,
+                        },
+                    ],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = Path(tmpdir) / "replay_cases.json"
+            replay_path = Path(tmpdir) / "replay_results.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            replay_path.write_text(json.dumps(replay), encoding="utf-8")
+            impact = analyze_replay_impact(manifest_path, replay_path)
+
+        self.assertTrue(impact["all_checks_pass"])
+        row = impact["candidate_rows"][0]
+        self.assertIsNone(row["active_basis_churn_count_before"])
+        self.assertEqual(
+            row["active_basis_churn_source_before"],
+            "missing_current_active_basis_snapshot",
+        )
+        self.assertIsNone(row["rmp_degeneracy_pressure_before"])
+        self.assertEqual(
+            row["rmp_degeneracy_pressure_source_before"],
+            "missing_current_active_basis_snapshot",
+        )
+
+    def test_counterfactual_replay_impact_dataset_rejects_unsolved_control(self):
+        from BPC_future.scripts.analyze_counterfactual_replay_impact_dataset import (
+            analyze_replay_impact,
+        )
+
+        manifest = {
+            "schema_version": "counterfactual_replay_manifest_v1",
+            "cases": [
+                {
+                    "case_id": "case_0001",
+                    "instance": "unit_instance",
+                    "task_count": 20,
+                    "candidates": [
+                        {
+                            "candidate_id": "journey_0000",
+                            "task_set": [4, 5, 8],
+                            "sequence": [[8, 5, 4]],
+                            "true_reduced_cost": -137.0,
+                            "new_task_set": True,
+                        },
+                    ],
+                }
+            ],
+        }
+        replay = {
+            "schema_version": "counterfactual_replay_result_v1",
+            "checks": {"all_replay_is_no_certificate_effect": True},
+            "cases": [
+                {
+                    "case_id": "case_0001",
+                    "control": {"status": "INFEASIBLE", "objective": None},
+                    "treatments": [
+                        {
+                            "treatment_id": "single_journey_0000",
+                            "candidate_ids": ["journey_0000"],
+                            "changed_journey_count": 0,
+                            "objective_delta_vs_control": None,
+                            "dual_l1_delta_vs_control": None,
+                            "no_op_treatment": False,
+                        },
+                    ],
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = Path(tmpdir) / "replay_cases.json"
+            replay_path = Path(tmpdir) / "replay_results.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            replay_path.write_text(json.dumps(replay), encoding="utf-8")
+            impact = analyze_replay_impact(manifest_path, replay_path)
+
+        self.assertFalse(impact["all_checks_pass"])
+        self.assertFalse(impact["checks"]["all_replay_controls_solved"])
+        self.assertFalse(impact["checks"]["all_single_candidates_have_finite_delta"])
+        self.assertEqual(impact["control_unsolved_case_count"], 1)
+        self.assertEqual(impact["unknown_candidate_count"], 1)
+
+    def test_counterfactual_replay_impact_dataset_summary_combines_examples(self):
+        from BPC_future.scripts.summarize_counterfactual_replay_impact_datasets import (
+            summarize_impact_datasets,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            high = root / "high"
+            noop = root / "noop"
+            for directory, summary, candidate_rows, treatment_rows in (
+                (
+                    high,
+                    {
+                        "all_checks_pass": True,
+                        "case_count": 1,
+                        "candidate_row_count": 1,
+                        "high_impact_candidate_count": 1,
+                        "noop_candidate_count": 0,
+                        "worsened_candidate_count": 0,
+                        "full_batch_improved_count": 1,
+                        "best_objective_delta": -9.0,
+                    },
+                    [
+                        {
+                            "candidate_id": "journey_0000",
+                            "single_impact_class": "improved",
+                            "single_objective_delta": "-9.0",
+                        }
+                    ],
+                    [
+                        {
+                            "treatment_id": "full_returned_batch",
+                            "impact_class": "improved",
+                            "objective_delta": "-9.0",
+                        }
+                    ],
+                ),
+                (
+                    noop,
+                    {
+                        "all_checks_pass": True,
+                        "case_count": 1,
+                        "candidate_row_count": 1,
+                        "high_impact_candidate_count": 0,
+                        "noop_candidate_count": 1,
+                        "worsened_candidate_count": 0,
+                        "full_batch_improved_count": 0,
+                        "best_objective_delta": 0.0,
+                    },
+                    [
+                        {
+                            "candidate_id": "journey_0001",
+                            "single_impact_class": "noop",
+                            "single_objective_delta": "0.0",
+                        }
+                    ],
+                    [
+                        {
+                            "treatment_id": "full_returned_batch",
+                            "impact_class": "noop",
+                            "objective_delta": "0.0",
+                        }
+                    ],
+                ),
+            ):
+                directory.mkdir()
+                (directory / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+                with (directory / "candidate_impact_rows.csv").open("w", newline="", encoding="utf-8") as fh:
+                    writer = csv.DictWriter(fh, fieldnames=sorted(candidate_rows[0]))
+                    writer.writeheader()
+                    writer.writerows(candidate_rows)
+                with (directory / "treatment_impact_rows.csv").open("w", newline="", encoding="utf-8") as fh:
+                    writer = csv.DictWriter(fh, fieldnames=sorted(treatment_rows[0]))
+                    writer.writeheader()
+                    writer.writerows(treatment_rows)
+            summary = summarize_impact_datasets([high, noop])
+
+        self.assertTrue(summary["all_checks_pass"])
+        self.assertEqual(summary["dataset_count"], 2)
+        self.assertEqual(summary["candidate_row_count"], 2)
+        self.assertEqual(summary["high_impact_candidate_count"], 1)
+        self.assertEqual(summary["noop_candidate_count"], 1)
+        self.assertEqual(summary["candidate_impact_class_counts"]["improved"], 1)
+        self.assertEqual(summary["candidate_impact_class_counts"]["noop"], 1)
+        self.assertAlmostEqual(summary["best_objective_delta"], -9.0)
+        self.assertIn("calibration evidence only", summary["interpretation"])
+
+    def test_counterfactual_replay_gap_audit_flags_additions_without_capture(self):
+        from BPC_future.scripts.audit_counterfactual_replay_gap import audit
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "gap.jsonl"
+            rows = [
+                {
+                    "event": "journey_column_addition",
+                    "cg_iter": 1,
+                    "pricing_kind": "heuristic",
+                    "pricing_state": "FOUND_NEGATIVE",
+                    "pricing_reason": "unit_test_negative",
+                    "pricing_best_reduced_cost": -3.5,
+                    "added_journeys": 1,
+                    "new_task_set_count": 1,
+                    "replacement_task_set_count": 0,
+                    "active_changed_task_set_count": 0,
+                    "inactive_changed_task_set_count": 1,
+                    "addition_productivity_class": "changed_inactive_only",
+                    "changed_task_set_samples": [[1, 2]],
+                }
+            ]
+            log_path.write_text(
+                "\n".join(json.dumps(row) for row in rows) + "\n",
+                encoding="utf-8",
+            )
+            summary = audit([log_path])
+
+        self.assertTrue(summary["all_checks_pass"])
+        self.assertEqual(summary["addition_event_count"], 1)
+        self.assertEqual(summary["capture_event_count"], 0)
+        self.assertEqual(summary["replay_candidate_addition_count"], 1)
+        self.assertEqual(summary["missing_capture_replay_candidate_count"], 1)
+        self.assertEqual(summary["replay_candidate_added_journey_total"], 1)
+        self.assertEqual(summary["top_missing_capture_samples"][0]["changed_task_set_samples"], [[1, 2]])
+
+    def test_counterfactual_replay_capture_driver_smoke_records_returned_batch(self):
+        data = replace(load_future_data("very_small"), vehicles=(1, 2))
+        trip = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        fake_rmp = SimpleNamespace(
+            optimal=True,
+            objective=42.0,
+            duals=JourneyDuals(cover={int(task): 200.0 for task in data.tasks}, fleet_limit=0.0),
+            journey_values=[],
+            status="OPTIMAL",
+            variable_count=0,
+        )
+        fake_pricing = JourneyPricingResult(
+            journeys=[journey],
+            exhausted=False,
+            best_reduced_cost=-1.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=1,
+            selected_trips=1,
+            status="OPTIMAL",
+            reason="unit_test_negative",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "journey.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.solve_journey_rmp", return_value=fake_rmp), patch(
+                    "BPC_future.solver.journey_driver.price_journeys",
+                    return_value=fake_pricing,
+                ):
+                    solve_bpc_future_journey(
+                        data,
+                        {
+                            "time_limit": 10.0,
+                            "journey_max_cg_iterations": 1,
+                            "journey_heuristic_pricing_enabled": False,
+                            "initial_composite_seed_enabled": False,
+                            "initial_single_task_starts_per_task": 1,
+                            "journey_initial_pool_integer_heuristic_enabled": False,
+                            "journey_pool_integer_heuristic_enabled": False,
+                            "journey_pool_time_limit": 0.1,
+                            "journey_counterfactual_replay_capture_enabled": True,
+                        },
+                        logger=logger,
+                    )
+            finally:
+                logger.close()
+            records = [
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        captures = [
+            record
+            for record in records
+            if record.get("event") == "journey_counterfactual_replay_capture"
+        ]
+        self.assertEqual(len(captures), 1)
+        payload = captures[0]
+        self.assertEqual(payload["pricing_kind"], "exact")
+        self.assertEqual(payload["returned_journey_count"], 1)
+        self.assertTrue(payload["returned_batch_complete"])
+        self.assertTrue(payload["replay_no_certificate_effect"])
+        self.assertFalse(payload["official_bound_effect"])
+        self.assertTrue(payload["context_hash"])
+        self.assertEqual(payload["returned_journeys"][0]["task_set"], [1])
+
+    def test_roi_calibration_counterfactual_replay_capture_is_opt_in(self):
+        from BPC_future.scripts.run_sharded_pulse_roi_calibration import _base_config
+
+        base_args = SimpleNamespace(
+            time_limit=1.0,
+            max_cg_iterations=1,
+            pricing_time_limit=0.1,
+            pricing_max_dp_states=1,
+            profile_mask_diagnostics=False,
+        )
+        default_config = _base_config(base_args)
+        self.assertFalse(default_config.get("journey_counterfactual_replay_capture_enabled", False))
+
+        capture_args = SimpleNamespace(
+            **base_args.__dict__,
+            counterfactual_replay_capture=True,
+            counterfactual_replay_capture_max_journeys=4,
+            counterfactual_replay_capture_pool_max_journeys=200,
+            counterfactual_replay_capture_active_basis=True,
+            counterfactual_replay_capture_active_basis_max_rows=32,
+            counterfactual_replay_capture_log_empty=True,
+        )
+        capture_config = _base_config(capture_args)
+        self.assertTrue(capture_config["journey_counterfactual_replay_capture_enabled"])
+        self.assertEqual(capture_config["journey_counterfactual_replay_capture_max_journeys"], 4)
+        self.assertEqual(capture_config["journey_counterfactual_replay_capture_pool_max_journeys"], 200)
+        self.assertTrue(capture_config["journey_counterfactual_replay_capture_active_basis_enabled"])
+        self.assertEqual(capture_config["journey_counterfactual_replay_capture_active_basis_max_rows"], 32)
+        self.assertTrue(capture_config["journey_counterfactual_replay_capture_log_empty"])
 
     def test_sharded_pulse_worker_success_cooldown_uses_active_support_gate(self):
         config = {
@@ -7597,6 +9075,61 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(stats.get("profile_selected_candidate_forbidden_signature_filtered_count"), 1)
         self.assertEqual(stats.get("diagnostic_selected_filtered_task_set_samples"), ((task,),))
 
+    def test_journey_profile_instantiation_records_returned_boundary_candidates(self):
+        data = load_future_data("very_small")
+        first_task = int(data.tasks[0])
+        second_task = int(data.tasks[1])
+        first_trip = evaluate_timed_trip(data, (first_task,), 0.0, time_bucket_size=5.0)
+        second_trip = evaluate_timed_trip(data, (second_task,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(first_trip)
+        self.assertIsNotNone(second_trip)
+        assert first_trip is not None and second_trip is not None
+        profiles = [
+            _SortieProfile(
+                sequence=first_trip.tasks,
+                arc_options=tuple(data.options(0, first_task)[0:1] + data.options(first_task, 0)[0:1]),
+                lower_start=first_trip.start_time,
+                upper_start=first_trip.start_time,
+                end_offset=first_trip.end_time - first_trip.start_time,
+                cost=first_trip.cost,
+                mask=1,
+                contribution=-10.0,
+            ),
+            _SortieProfile(
+                sequence=second_trip.tasks,
+                arc_options=tuple(data.options(0, second_task)[0:1] + data.options(second_task, 0)[0:1]),
+                lower_start=second_trip.start_time,
+                upper_start=second_trip.start_time,
+                end_offset=second_trip.end_time - second_trip.start_time,
+                cost=second_trip.cost,
+                mask=2,
+                contribution=-5.0,
+            ),
+        ]
+        stats: dict[str, object] = {}
+        journeys, existing_filtered, weak_filtered = _instantiate_profile_journey_candidates(
+            data,
+            profiles,
+            [
+                (((0, first_trip.start_time),), -10.0),
+                (((1, second_trip.start_time),), -5.0),
+            ],
+            JourneyPricingConfig(time_bucket_size=5.0),
+            eps=1.0e-6,
+            max_journeys=1,
+            dp_stats=stats,
+        )
+        self.assertEqual(len(journeys), 1)
+        self.assertEqual(existing_filtered, 0)
+        self.assertEqual(weak_filtered, 0)
+        self.assertEqual(stats.get("profile_selected_candidate_return_limit_truncated_count"), 1)
+        returned_samples = tuple(str(sample) for sample in stats.get("diagnostic_returned_boundary_candidate_samples", ()))
+        truncated_samples = tuple(str(sample) for sample in stats.get("diagnostic_truncated_boundary_candidate_samples", ()))
+        self.assertTrue(any("rank=0" in sample and "rough=-10.000000" in sample for sample in returned_samples))
+        self.assertTrue(any(f"tasks=({first_task},)" in sample for sample in returned_samples))
+        self.assertTrue(any("rank=1" in sample and "rough=-5.000000" in sample for sample in truncated_samples))
+        self.assertTrue(any(f"tasks=({second_task},)" in sample for sample in truncated_samples))
+
     def test_journey_profile_dp_skips_forbidden_duplicate_candidate(self):
         data = load_future_data("very_small")
         first_task = int(data.tasks[0])
@@ -8923,6 +10456,28 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIn(candidates[2], selected)
         self.assertIn(candidates[3], selected)
         self.assertNotIn(candidates[1], selected)
+
+    def test_negative_journey_priority_selection_is_opt_in(self):
+        candidates = [
+            (-10.0, ((0, 0.0),), 0b001),
+            (-9.0, ((1, 0.0),), 0b010),
+            (-8.0, ((2, 0.0),), 0b100),
+            (-7.0, ((3, 0.0),), 0b1000),
+        ]
+
+        baseline = _select_negative_journey_candidates(candidates, 2, "reduced_cost")
+        prioritized = _select_negative_journey_candidates(
+            candidates,
+            2,
+            "reduced_cost",
+            pricing_config=JourneyPricingConfig(
+                profile_priority_task_masks=(0b100,),
+                profile_priority_min_returned=1,
+            ),
+        )
+
+        self.assertEqual(baseline, [candidates[0], candidates[1]])
+        self.assertEqual(prioritized, [candidates[2], candidates[0]])
 
     def test_profile_candidate_selection_skips_dominated_task_sets_without_forbidden_signatures(self):
         profiles = [
@@ -19171,6 +20726,32 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertTrue(alias_direct.direct_journey_label_pricing_enabled)
 
+    def test_journey_pricing_config_maps_profile_priority_task_sets(self):
+        data = load_future_data("very_small")
+        tasks = tuple(int(task) for task in data.tasks)
+        config = {
+            "journey_pricing_profile_priority_task_sets": (
+                (tasks[0], tasks[1]),
+                str(tasks[2]),
+            ),
+            "journey_pricing_profile_priority_min_returned": 2,
+            "journey_pricing_time_limit": 5.0,
+        }
+
+        pricing_config = _journey_pricing_config(
+            data,
+            config,
+            5.0,
+            5.0,
+            1.0e-6,
+            5.0,
+            heuristic=False,
+            cg_iter=1,
+        )
+
+        self.assertEqual(pricing_config.profile_priority_task_masks, (0b011, 0b100))
+        self.assertEqual(pricing_config.profile_priority_min_returned, 2)
+
     def test_hungarian_min_cost_basic(self):
         value = _hungarian_min_cost(
             [
@@ -19516,6 +21097,7 @@ class BPCFutureTests(unittest.TestCase):
             "experimental_profile_dp_mask_label_cap_32_20_only",
             "experimental_early_new_task_set_quota_3_20_only",
             "experimental_early_new_task_set_quota_3_return12_20_only",
+            "experimental_rcc_tranq20_task1_chain_20_only",
             "experimental_pricing_time_0_6_20_only",
             "experimental_pricing_time_1_0_20_only",
         }
@@ -19626,6 +21208,8 @@ class BPCFutureTests(unittest.TestCase):
             "profile_dp_tail_materialization_candidate_count",
             "profile_dp_tail_materialization_selected_candidate_count",
             "profile_dp_tail_materialization_infeasible_filtered_count",
+            "profile_dp_tail_returned_boundary_candidate_samples",
+            "profile_dp_tail_truncated_boundary_candidate_samples",
             "profile_dp_tail_hotspot_class",
             "profile_dp_tail_hotspot_reason",
             "official_negative_journey_task_set_count",
@@ -20945,6 +22529,8 @@ class BPCFutureTests(unittest.TestCase):
         empty = roi._profile_dp_tail_metrics([])
         self.assertEqual(empty["profile_dp_tail_records"], 0)
         self.assertEqual(empty["profile_dp_tail_class"], "no_profile_dp_tail")
+        self.assertEqual(empty["profile_dp_tail_returned_boundary_candidate_samples"], "")
+        self.assertEqual(empty["profile_dp_tail_truncated_boundary_candidate_samples"], "")
 
         metrics = roi._profile_dp_tail_metrics(
             [
@@ -20971,6 +22557,12 @@ class BPCFutureTests(unittest.TestCase):
                     "profile_materialization_candidate_count": 2,
                     "profile_materialization_selected_candidate_count": 1,
                     "profile_materialization_infeasible_candidates_filtered": 1,
+                    "diagnostic_returned_boundary_candidate_samples": [
+                        "rank=0|rough=-2.000000|true=-2.000000|tasks=(2, 3)|profiles=0@0"
+                    ],
+                    "diagnostic_truncated_boundary_candidate_samples": [
+                        "rank=1|rough=-1.000000|tasks=(4,)|profiles=1@0"
+                    ],
                     "best_reduced_cost": -2.0,
                 },
                 {
@@ -21019,6 +22611,8 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(metrics["profile_dp_tail_materialization_candidate_count"], 2)
         self.assertEqual(metrics["profile_dp_tail_materialization_selected_candidate_count"], 1)
         self.assertEqual(metrics["profile_dp_tail_materialization_infeasible_filtered_count"], 1)
+        self.assertIn("rank=0", metrics["profile_dp_tail_returned_boundary_candidate_samples"])
+        self.assertIn("rank=1", metrics["profile_dp_tail_truncated_boundary_candidate_samples"])
         self.assertEqual(metrics["profile_dp_tail_hotspot_class"], "profile_dp_label_cap_active")
 
     def test_sharded_pulse_roi_calibration_worker_followup_metrics_are_attributed(self):
@@ -23329,6 +24923,52 @@ class BPCFutureTests(unittest.TestCase):
             ],
             12,
         )
+        ten_task_rcc = {}
+        roi._apply_profile(
+            ten_task_rcc,
+            "experimental_rcc_tranq20_task1_chain_20_only",
+            args,
+            task_count=10,
+            instance_name="tranq20_01",
+        )
+        self.assertEqual(ten_task_rcc, {})
+        other_instance_rcc = {}
+        roi._apply_profile(
+            other_instance_rcc,
+            "experimental_rcc_tranq20_task1_chain_20_only",
+            args,
+            task_count=20,
+            instance_name="mt20_greedy_apollo_01",
+        )
+        self.assertEqual(other_instance_rcc, {})
+        tranq20_rcc = {}
+        roi._apply_profile(
+            tranq20_rcc,
+            "experimental_rcc_tranq20_task1_chain_20_only",
+            args,
+            task_count=20,
+            instance_name="tranq20_01",
+        )
+        self.assertEqual(
+            tranq20_rcc["journey_pricing_profile_priority_task_sets"][0],
+            (1, 15, 20),
+        )
+        self.assertEqual(tranq20_rcc["journey_pricing_profile_priority_min_returned"], 3)
+        self.assertEqual(tranq20_rcc["journey_pricing_max_dp_states"], 1000)
+        self.assertEqual(tranq20_rcc["journey_heuristic_max_dp_states"], 1000)
+        self.assertEqual(tranq20_rcc["journey_pricing_max_returned_journeys"], 12)
+        self.assertFalse(tranq20_rcc["journey_sharded_pulse_audit_enabled"])
+        self.assertFalse(tranq20_rcc["journey_sharded_pulse_hidden_negative_worker_enabled"])
+        high_cap_tranq20_rcc = {"journey_pricing_max_dp_states": 3000}
+        roi._apply_profile(
+            high_cap_tranq20_rcc,
+            "experimental_rcc_tranq20_task1_chain_20_only",
+            args,
+            task_count=20,
+            instance_name="tranq20_01",
+        )
+        self.assertEqual(high_cap_tranq20_rcc["journey_pricing_max_dp_states"], 3000)
+        self.assertEqual(high_cap_tranq20_rcc["journey_heuristic_max_dp_states"], 3000)
         ten_task_pricing_time = {}
         roi._apply_profile(
             ten_task_pricing_time,

@@ -23,6 +23,7 @@ from BPC_future.solver.logger import FutureLogger
 
 
 BALANCED_ROOT = Path("BPC_future/data/generated/moon_trek_balanced_60_20260609/logical_graphs")
+REPLAY_CALIBRATED_TRUE_RC_THRESHOLD = -12.430587
 
 INSTANCE_PRESETS: dict[str, str] = {
     "very_small": "very_small",
@@ -157,6 +158,17 @@ INSTANCE_GROUPS["phase10b_profile_dp_state_cap_gate"] = (
 INSTANCE_GROUPS["phase10c_profile_dp_mask_hotspot_gate"] = (
     *INSTANCE_GROUPS["phase10b_profile_dp_state_cap_gate"],
 )
+INSTANCE_GROUPS["root_cause_calibrated_selector_gate"] = (
+    "apollo5",
+    "tranq5",
+    "apollo10",
+    "tranq10_09",
+    "mt20_greedy_apollo_01",
+    "tranq20_01",
+)
+INSTANCE_GROUPS["root_cause_calibrated_selector_hardtail"] = (
+    "mt20_greedy_apollo_01",
+)
 
 ROI_PRESETS: dict[str, dict[str, float | int]] = {
     "low": {
@@ -195,8 +207,10 @@ VALID_PROFILES = (
     "strict_worker_current_probe_support_aware_low_budget",
     "strict_worker_current_probe_support_aware_mid_budget",
     "strict_worker_current_probe_support_aware_impact_filter",
+    "strict_worker_current_probe_calibrated_true_rc_20_only",
     "strict_worker_current_probe_hard_tail_only",
     "strict_worker_delayed_hard_tail_only",
+    "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
     "strict_worker_delayed_current_probe_impact",
     "strict_worker_delayed_current_probe_impact_low_budget",
     "strict_worker_delayed_current_probe_impact_ultra_low_budget",
@@ -235,6 +249,7 @@ VALID_PROFILES = (
     "experimental_profile_dp_mask_label_cap_32_20_only",
     "experimental_early_new_task_set_quota_3_20_only",
     "experimental_early_new_task_set_quota_3_return12_20_only",
+    "experimental_rcc_tranq20_task1_chain_20_only",
     "experimental_pricing_time_0_6_20_only",
     "experimental_pricing_time_1_0_20_only",
     "experimental_profile_selection_integer_diverse_20_only",
@@ -341,6 +356,10 @@ PROFILE_GROUPS: dict[str, tuple[str, ...]] = {
         "experimental_early_new_task_set_quota_3_20_only",
         "experimental_early_new_task_set_quota_3_return12_20_only",
     ),
+    "phase_rcc_context_replay": (
+        "baseline",
+        "experimental_rcc_tranq20_task1_chain_20_only",
+    ),
     "phase11a_profile_pricing_time_sensitivity": (
         "baseline",
         "experimental_pricing_time_0_6_20_only",
@@ -350,6 +369,14 @@ PROFILE_GROUPS: dict[str, tuple[str, ...]] = {
         "baseline",
         "experimental_profile_selection_integer_diverse_20_only",
         "experimental_profile_selection_orthogonal_20_only",
+    ),
+    "root_cause_calibrated_selector_ab": (
+        "baseline",
+        "strict_worker_current_probe_calibrated_true_rc_20_only",
+    ),
+    "root_cause_calibrated_selector_hardtail_ab": (
+        "baseline",
+        "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
     ),
 }
 
@@ -480,6 +507,8 @@ SUMMARY_FIELDS = (
     "profile_dp_tail_class",
     "profile_dp_tail_reason",
     "profile_dp_tail_label_cap_pruned",
+    "profile_dp_tail_priority_candidate_count",
+    "profile_dp_tail_priority_selected_candidate_count",
     "profile_dp_tail_selected_candidate_input_count",
     "profile_dp_tail_selected_candidate_scanned_count",
     "profile_dp_tail_selected_candidate_materialized_count",
@@ -489,6 +518,8 @@ SUMMARY_FIELDS = (
     "profile_dp_tail_materialization_candidate_count",
     "profile_dp_tail_materialization_selected_candidate_count",
     "profile_dp_tail_materialization_infeasible_filtered_count",
+    "profile_dp_tail_returned_boundary_candidate_samples",
+    "profile_dp_tail_truncated_boundary_candidate_samples",
     "profile_dp_tail_hotspot_class",
     "profile_dp_tail_hotspot_reason",
     "hidden_negative_audit_events",
@@ -1110,6 +1141,64 @@ def parse_args() -> argparse.Namespace:
         help="Run each instance/profile pair this many times; baseline comparisons stay within each repeat.",
     )
     parser.add_argument("--profile-mask-diagnostics", action="store_true")
+    parser.add_argument(
+        "--counterfactual-replay-capture",
+        action="store_true",
+        help=(
+            "Enable diagnostic-only exact-context returned-batch capture events. "
+            "The capture only writes JSONL payloads for offline replay and has no "
+            "certificate or lower-bound effect."
+        ),
+    )
+    parser.add_argument(
+        "--counterfactual-replay-capture-max-journeys",
+        type=int,
+        default=0,
+        help="Maximum returned journeys to include per capture event; 0 means full returned batch.",
+    )
+    parser.add_argument(
+        "--counterfactual-replay-capture-pool-max-journeys",
+        type=int,
+        default=0,
+        help="Maximum pool journeys to include per capture event; 0 means full pool snapshot.",
+    )
+    parser.add_argument(
+        "--counterfactual-replay-capture-active-basis",
+        action="store_true",
+        help=(
+            "Include a diagnostic-only full active-basis snapshot in capture events. "
+            "This is opt-in and has no certificate or lower-bound effect."
+        ),
+    )
+    parser.add_argument(
+        "--counterfactual-replay-capture-active-basis-max-rows",
+        type=int,
+        default=0,
+        help="Maximum active-basis rows to include per capture event; 0 means full active basis.",
+    )
+    parser.add_argument(
+        "--counterfactual-replay-capture-forbidden-signatures",
+        action="store_true",
+        help=(
+            "Include diagnostic-only explicit forbidden journey signatures in "
+            "counterfactual replay capture events. This is opt-in and has no "
+            "certificate or lower-bound effect."
+        ),
+    )
+    parser.add_argument(
+        "--counterfactual-replay-capture-forbidden-signature-max-count",
+        type=int,
+        default=0,
+        help=(
+            "Maximum forbidden signatures to include per capture event; "
+            "0 means full forbidden-signature payload."
+        ),
+    )
+    parser.add_argument(
+        "--counterfactual-replay-capture-log-empty",
+        action="store_true",
+        help="Also log capture events for no-returned-journey pricing calls.",
+    )
     parser.add_argument("--quiet", action="store_true")
     return parser.parse_args()
 
@@ -1243,7 +1332,13 @@ def _run_profile(
     data = load_future_data(locator)
     _clear_sequence_resource_precheck_cache()
     config = _base_config(args)
-    _apply_profile(config, profile, args, task_count=len(tuple(data.tasks)))
+    _apply_profile(
+        config,
+        profile,
+        args,
+        task_count=len(tuple(data.tasks)),
+        instance_name=instance_name,
+    )
     auto_residual_target = auto_residual_target or {}
     auto_residual_target_applied = _apply_auto_residual_target_to_config(
         config,
@@ -2954,7 +3049,7 @@ def _run_log_path(
 
 
 def _base_config(args: argparse.Namespace) -> dict[str, Any]:
-    return {
+    config: dict[str, Any] = {
         "time_limit": float(args.time_limit),
         "journey_max_cg_iterations": int(args.max_cg_iterations),
         "journey_initial_pool_integer_enabled": False,
@@ -2998,6 +3093,44 @@ def _base_config(args: argparse.Namespace) -> dict[str, Any]:
         "pricing_eps": 1.0e-6,
         "integer_tol": 1.0e-6,
     }
+    if bool(getattr(args, "counterfactual_replay_capture", False)):
+        config.update(
+            {
+                "journey_counterfactual_replay_capture_enabled": True,
+                "journey_counterfactual_replay_capture_max_journeys": max(
+                    0,
+                    int(getattr(args, "counterfactual_replay_capture_max_journeys", 0)),
+                ),
+                "journey_counterfactual_replay_capture_pool_max_journeys": max(
+                    0,
+                    int(getattr(args, "counterfactual_replay_capture_pool_max_journeys", 0)),
+                ),
+                "journey_counterfactual_replay_capture_log_empty": bool(
+                    getattr(args, "counterfactual_replay_capture_log_empty", False)
+                ),
+                "journey_counterfactual_replay_capture_active_basis_enabled": bool(
+                    getattr(args, "counterfactual_replay_capture_active_basis", False)
+                ),
+                "journey_counterfactual_replay_capture_active_basis_max_rows": max(
+                    0,
+                    int(getattr(args, "counterfactual_replay_capture_active_basis_max_rows", 0)),
+                ),
+                "journey_counterfactual_replay_capture_forbidden_signatures_enabled": bool(
+                    getattr(args, "counterfactual_replay_capture_forbidden_signatures", False)
+                ),
+                "journey_counterfactual_replay_capture_forbidden_signature_max_count": max(
+                    0,
+                    int(
+                        getattr(
+                            args,
+                            "counterfactual_replay_capture_forbidden_signature_max_count",
+                            0,
+                        )
+                    ),
+                ),
+            }
+        )
+    return config
 
 
 def _apply_profile(
@@ -3006,6 +3139,7 @@ def _apply_profile(
     args: argparse.Namespace,
     *,
     task_count: int | None = None,
+    instance_name: str | None = None,
 ) -> None:
     if profile == "baseline":
         return
@@ -3045,6 +3179,14 @@ def _apply_profile(
             return
         _apply_early_new_task_set_quota_experiment_profile(config, profile)
         return
+    rcc_context_profiles = {
+        "experimental_rcc_tranq20_task1_chain_20_only",
+    }
+    if profile in rcc_context_profiles:
+        if task_count is not None and int(task_count) < 20:
+            return
+        _apply_rcc_context_replay_experiment_profile(config, profile, instance_name=instance_name)
+        return
     pricing_time_experiment_profiles = {
         "experimental_pricing_time_0_6_20_only",
         "experimental_pricing_time_1_0_20_only",
@@ -3065,6 +3207,7 @@ def _apply_profile(
         return
     delayed_profiles = {
         "strict_worker_delayed_hard_tail_only",
+        "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
         "strict_worker_delayed_current_probe_impact",
         "strict_worker_delayed_current_probe_impact_low_budget",
         "strict_worker_delayed_current_probe_impact_ultra_low_budget",
@@ -3126,6 +3269,7 @@ def _apply_profile(
                 "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_roi_gate",
                 "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_diagnostic",
                 "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_active_residual_target_validation_roi_gate",
+                "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
             }
             else int(args.current_probe_min_tasks)
         )
@@ -3219,8 +3363,15 @@ def _apply_profile(
         "strict_worker_current_probe_support_aware_low_budget",
         "strict_worker_current_probe_support_aware_mid_budget",
         "strict_worker_current_probe_support_aware_impact_filter",
+        "strict_worker_current_probe_calibrated_true_rc_20_only",
     }
     if profile in current_probe_profiles:
+        if (
+            profile == "strict_worker_current_probe_calibrated_true_rc_20_only"
+            and task_count is not None
+            and int(task_count) < 20
+        ):
+            return
         probe_time_factor = 1.0
         probe_recursion_factor = 1.0
         probe_max_columns = 16
@@ -3232,6 +3383,9 @@ def _apply_profile(
             probe_time_factor = 2.0
             probe_recursion_factor = 2.0
             probe_max_columns = 24
+        profile_min_tasks = int(args.current_probe_min_tasks)
+        if profile == "strict_worker_current_probe_calibrated_true_rc_20_only":
+            profile_min_tasks = max(20, profile_min_tasks)
         config.update(
             {
                 "journey_sharded_pulse_audit_shard_roi_gate_enabled": True,
@@ -3247,7 +3401,7 @@ def _apply_profile(
                 "journey_sharded_pulse_hidden_negative_worker_enabled": True,
                 "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
                 "journey_sharded_pulse_hidden_negative_worker_log_skips": True,
-                "journey_sharded_pulse_hidden_negative_worker_min_tasks": 5,
+                "journey_sharded_pulse_hidden_negative_worker_min_tasks": profile_min_tasks,
                 "journey_sharded_pulse_hidden_negative_worker_min_remaining_time": 0.0,
                 "journey_sharded_pulse_hidden_negative_worker_audit_signal_max_age": 3,
                 "journey_sharded_pulse_hidden_negative_worker_time_limit": float(
@@ -3288,7 +3442,7 @@ def _apply_profile(
                     ),
                 ),
                 "journey_sharded_pulse_worker_current_probe_min_tasks": int(
-                    args.current_probe_min_tasks
+                    profile_min_tasks
                 ),
                 "journey_sharded_pulse_worker_current_probe_min_remaining_time": float(
                     args.current_probe_min_remaining_time
@@ -3310,6 +3464,14 @@ def _apply_profile(
                 {
                     "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode": "require_new_or_active_support",
                     "journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns": 0,
+                }
+            )
+        if profile == "strict_worker_current_probe_calibrated_true_rc_20_only":
+            config.update(
+                {
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode": "prefer_new_or_active_support",
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns": 0,
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc": REPLAY_CALIBRATED_TRUE_RC_THRESHOLD,
                 }
             )
         return
@@ -3470,6 +3632,45 @@ def _apply_early_new_task_set_quota_experiment_profile(
     )
 
 
+def _apply_rcc_context_replay_experiment_profile(
+    config: dict[str, Any],
+    profile: str,
+    *,
+    instance_name: str | None,
+) -> None:
+    if profile != "experimental_rcc_tranq20_task1_chain_20_only":
+        raise ValueError(f"Unsupported RC-C context replay profile: {profile!r}")
+    if str(instance_name or "") != "tranq20_01":
+        return
+    priority_task_sets = (
+        (1, 15, 20),
+        (1, 13, 18),
+        (1, 3, 6),
+        (1, 3, 10),
+        (1, 9, 15),
+    )
+    replay_dp_state_cap = max(1000, int(config.get("journey_pricing_max_dp_states", 0)))
+    config.update(
+        {
+            "journey_pricing_profile_priority_task_sets": priority_task_sets,
+            "journey_heuristic_profile_priority_task_sets": priority_task_sets,
+            "journey_pricing_profile_priority_min_returned": 3,
+            "journey_heuristic_profile_priority_min_returned": 3,
+            "journey_pricing_max_dp_states": replay_dp_state_cap,
+            "journey_heuristic_max_dp_states": replay_dp_state_cap,
+            "journey_pricing_early_return_new_task_set_min_count": 3,
+            "journey_heuristic_early_return_new_task_set_min_count": 3,
+            "journey_pricing_max_returned_journeys": 12,
+            "journey_heuristic_max_returned_journeys": 12,
+            "journey_pricing_selection_mode": "diverse",
+            "journey_heuristic_selection_mode": "diverse",
+            "journey_sharded_pulse_audit_enabled": False,
+            "journey_sharded_pulse_hidden_negative_worker_enabled": False,
+            "journey_dual_stabilization_enabled": False,
+        }
+    )
+
+
 def _apply_pricing_time_experiment_profile(
     config: dict[str, Any],
     profile: str,
@@ -3585,6 +3786,7 @@ def _apply_delayed_worker_profile(
         }
     )
     if profile in {
+        "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
         "strict_worker_delayed_current_probe_impact",
         "strict_worker_delayed_current_probe_impact_low_budget",
         "strict_worker_delayed_current_probe_impact_ultra_low_budget",
@@ -3620,6 +3822,7 @@ def _apply_delayed_worker_profile(
         probe_recursion_factor = 1.0
         probe_max_columns = 16
         if profile in {
+            "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
             "strict_worker_delayed_current_probe_impact_low_budget",
             "strict_worker_delayed_current_probe_impact_low_budget_cooldown",
             "strict_worker_delayed_current_probe_impact_20_only_cooldown",
@@ -3698,6 +3901,7 @@ def _apply_delayed_worker_profile(
         }:
             config["journey_sharded_pulse_hidden_negative_worker_success_cooldown_rounds"] = 2
         if profile in {
+            "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_cooldown",
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup",
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_followup_reserve",
@@ -3727,6 +3931,7 @@ def _apply_delayed_worker_profile(
             config["journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled"] = True
             config["journey_sharded_pulse_hidden_negative_worker_stop_after_first_negative"] = True
         if profile in {
+            "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan",
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_scan",
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_no_roi_gate",
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_target_priority",
@@ -3745,6 +3950,17 @@ def _apply_delayed_worker_profile(
             config["journey_sharded_pulse_hidden_negative_worker_max_cg_iter"] = 1
             config["journey_pulse_residual_replay_diagnostics_enabled"] = True
             config["journey_pulse_residual_replay_diagnostics_max_journeys"] = 1
+        if (
+            profile
+            == "strict_worker_delayed_current_probe_calibrated_true_rc_20_only_pre_heuristic_coverage_scan"
+        ):
+            config["journey_sharded_pulse_hidden_negative_worker_impact_filter_mode"] = (
+                "prefer_new_or_active_support"
+            )
+            config["journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns"] = 0
+            config["journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc"] = (
+                REPLAY_CALIBRATED_TRUE_RC_THRESHOLD
+            )
         if profile in {
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_scan",
             "strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_coverage_no_roi_gate",
@@ -4084,6 +4300,8 @@ def _profile_dp_tail_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
             "profile_dp_tail_class": "no_profile_dp_tail",
             "profile_dp_tail_reason": "no official pricing record reported profile-DP work",
             "profile_dp_tail_label_cap_pruned": 0,
+            "profile_dp_tail_priority_candidate_count": 0,
+            "profile_dp_tail_priority_selected_candidate_count": 0,
             "profile_dp_tail_selected_candidate_input_count": 0,
             "profile_dp_tail_selected_candidate_scanned_count": 0,
             "profile_dp_tail_selected_candidate_materialized_count": 0,
@@ -4093,6 +4311,8 @@ def _profile_dp_tail_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
             "profile_dp_tail_materialization_candidate_count": 0,
             "profile_dp_tail_materialization_selected_candidate_count": 0,
             "profile_dp_tail_materialization_infeasible_filtered_count": 0,
+            "profile_dp_tail_returned_boundary_candidate_samples": "",
+            "profile_dp_tail_truncated_boundary_candidate_samples": "",
             "profile_dp_tail_hotspot_class": "no_profile_dp_tail",
             "profile_dp_tail_hotspot_reason": "no official pricing record reported profile-DP work",
         }
@@ -4170,6 +4390,14 @@ def _profile_dp_tail_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
         for record in profile_records
     )
     label_cap_pruned = sum(_as_int(record.get("dp_label_cap_pruned")) for record in profile_records)
+    priority_candidate_count = sum(
+        _as_int(record.get("profile_priority_candidate_count"))
+        for record in profile_records
+    )
+    priority_selected_candidate_count = sum(
+        _as_int(record.get("profile_priority_selected_candidate_count"))
+        for record in profile_records
+    )
     selected_input_count = sum(
         _as_int(record.get("profile_selected_candidate_input_count"))
         for record in profile_records
@@ -4221,6 +4449,28 @@ def _profile_dp_tail_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
         materialization_candidate_count=materialization_candidate_count,
         materialization_infeasible_filtered_count=materialization_infeasible_filtered_count,
     )
+
+    def collect_string_samples(field: str, *, cap: int = 16) -> list[str]:
+        samples: list[str] = []
+        seen: set[str] = set()
+        for record in profile_records:
+            raw_samples = record.get(field)
+            if isinstance(raw_samples, str):
+                raw_iterable: Any = [raw_samples] if raw_samples else []
+            else:
+                raw_iterable = raw_samples or []
+            if not isinstance(raw_iterable, (list, tuple, set)):
+                continue
+            for raw_sample in raw_iterable:
+                sample = str(raw_sample)
+                if not sample or sample in seen:
+                    continue
+                seen.add(sample)
+                samples.append(sample)
+                if len(samples) >= cap:
+                    return samples
+        return samples
+
     return {
         "profile_dp_tail_records": len(profile_records),
         "profile_dp_tail_incomplete_count": len(incomplete_records),
@@ -4260,6 +4510,8 @@ def _profile_dp_tail_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
         "profile_dp_tail_class": profile_dp_class,
         "profile_dp_tail_reason": profile_dp_reason,
         "profile_dp_tail_label_cap_pruned": int(label_cap_pruned),
+        "profile_dp_tail_priority_candidate_count": int(priority_candidate_count),
+        "profile_dp_tail_priority_selected_candidate_count": int(priority_selected_candidate_count),
         "profile_dp_tail_selected_candidate_input_count": int(selected_input_count),
         "profile_dp_tail_selected_candidate_scanned_count": int(selected_scanned_count),
         "profile_dp_tail_selected_candidate_materialized_count": int(selected_materialized_count),
@@ -4269,6 +4521,12 @@ def _profile_dp_tail_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
         "profile_dp_tail_materialization_candidate_count": int(materialization_candidate_count),
         "profile_dp_tail_materialization_selected_candidate_count": int(materialization_selected_candidate_count),
         "profile_dp_tail_materialization_infeasible_filtered_count": int(materialization_infeasible_filtered_count),
+        "profile_dp_tail_returned_boundary_candidate_samples": _compact_json_string(
+            collect_string_samples("diagnostic_returned_boundary_candidate_samples")
+        ),
+        "profile_dp_tail_truncated_boundary_candidate_samples": _compact_json_string(
+            collect_string_samples("diagnostic_truncated_boundary_candidate_samples")
+        ),
         "profile_dp_tail_hotspot_class": hotspot_class,
         "profile_dp_tail_hotspot_reason": hotspot_reason,
     }

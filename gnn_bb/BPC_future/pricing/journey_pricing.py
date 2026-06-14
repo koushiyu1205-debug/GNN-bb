@@ -243,6 +243,8 @@ class JourneyPricingConfig:
     profile_cross_count_true_rc_materialization_slack: float = 0.0
     profile_cross_count_true_rc_materialization_max_candidates: int = 0
     profile_materialization_feasibility_filter_enabled: bool = False
+    profile_priority_task_masks: tuple[int, ...] = tuple()
+    profile_priority_min_returned: int = 0
     dp_same_completion_pruning_enabled: bool = False
     profile_catalog_enabled: bool = False
     profile_catalog_resume_enabled: bool = False
@@ -633,8 +635,12 @@ class JourneyPricingResult:
     diagnostic_selected_unmaterialized_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
     diagnostic_selected_weak_filtered_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
     diagnostic_selected_filtered_task_set_samples: tuple[tuple[int, ...], ...] = tuple()
+    diagnostic_returned_boundary_candidate_samples: tuple[str, ...] = tuple()
+    diagnostic_truncated_boundary_candidate_samples: tuple[str, ...] = tuple()
     diagnostic_best_objective_by_mask: dict[int, float] = field(default_factory=dict)
     diagnostic_best_profile_contribution_by_mask: dict[int, float] = field(default_factory=dict)
+    profile_priority_candidate_count: int = 0
+    profile_priority_selected_candidate_count: int = 0
     profile_selected_candidate_input_count: int = 0
     profile_selected_candidate_scanned_count: int = 0
     profile_selected_candidate_materialized_count: int = 0
@@ -9367,6 +9373,22 @@ def _dp_profile_stats_kwargs(
             tuple(int(task) for task in sample)
             for sample in dp_stats.get("diagnostic_selected_filtered_task_set_samples", tuple())
         ),
+        "diagnostic_returned_boundary_candidate_samples": tuple(
+            str(sample)
+            for sample in dp_stats.get("diagnostic_returned_boundary_candidate_samples", tuple())
+            if str(sample)
+        ),
+        "diagnostic_truncated_boundary_candidate_samples": tuple(
+            str(sample)
+            for sample in dp_stats.get("diagnostic_truncated_boundary_candidate_samples", tuple())
+            if str(sample)
+        ),
+        "profile_priority_candidate_count": int(
+            dp_stats.get("profile_priority_candidate_count", 0)
+        ),
+        "profile_priority_selected_candidate_count": int(
+            dp_stats.get("profile_priority_selected_candidate_count", 0)
+        ),
         "profile_selected_candidate_input_count": int(
             dp_stats.get("profile_selected_candidate_input_count", 0)
         ),
@@ -12235,7 +12257,12 @@ def _solve_best_journey_profile_dp(
                                 min_count=max(1, int(early_return_min_count)),
                             ):
                                 early_candidates.sort(key=lambda item: (round(item[0], 9), len(item[1]), item[2], item[1]))
-                                limited = _select_negative_journey_candidates(early_candidates, max_returned, selection_mode)
+                                limited = _select_negative_journey_candidates(
+                                    early_candidates,
+                                    max_returned,
+                                    selection_mode,
+                                    pricing_config=pricing_config,
+                                )
                                 if dp_stats is not None:
                                     dp_stats["negative_candidate_count"] = len(early_candidates)
                                     negative_masks = frozenset(
@@ -12248,6 +12275,18 @@ def _solve_best_journey_profile_dp(
                                     )
                                     dp_stats["negative_task_masks"] = negative_masks
                                     dp_stats["negative_selected_candidate_count"] = len(limited)
+                                    dp_stats["profile_priority_candidate_count"] = int(
+                                        _profile_priority_candidate_count(
+                                            early_candidates,
+                                            pricing_config,
+                                        )
+                                    )
+                                    dp_stats["profile_priority_selected_candidate_count"] = int(
+                                        _profile_priority_candidate_count(
+                                            limited,
+                                            pricing_config,
+                                        )
+                                    )
                                     dp_stats["negative_selected_new_mask_count"] = _negative_candidate_new_task_mask_count(
                                         limited,
                                         dominant_task_set_cost_by_mask,
@@ -12731,16 +12770,82 @@ def _early_return_negative_candidates_ready(
     return _negative_candidate_new_task_mask_count(candidates, dominant_task_set_cost_by_mask) >= int(new_min)
 
 
+def _profile_priority_task_masks(
+    pricing_config: JourneyPricingConfig | None,
+) -> tuple[int, ...]:
+    if pricing_config is None:
+        return tuple()
+    masks: list[int] = []
+    for raw_mask in tuple(getattr(pricing_config, "profile_priority_task_masks", tuple()) or tuple()):
+        mask = int(raw_mask)
+        if mask > 0 and mask not in masks:
+            masks.append(mask)
+    return tuple(masks)
+
+
+def _profile_priority_candidate_count(
+    candidates: list[tuple[float, tuple[tuple[int, float], ...], int]],
+    pricing_config: JourneyPricingConfig | None,
+) -> int:
+    priority_masks = frozenset(_profile_priority_task_masks(pricing_config))
+    if not priority_masks:
+        return 0
+    return sum(1 for _objective, _selected, mask in candidates if int(mask) in priority_masks)
+
+
 def _select_negative_journey_candidates(
     candidates: list[tuple[float, tuple[tuple[int, float], ...], int]],
     max_returned: int,
     selection_mode: str,
+    *,
+    pricing_config: JourneyPricingConfig | None = None,
 ) -> list[tuple[float, tuple[tuple[int, float], ...], int]]:
     if not candidates:
         return []
     limit = max(1, int(max_returned))
     ordered = sorted(candidates, key=lambda item: (round(item[0], 9), len(item[1]), item[2], item[1]))
     ordered = _best_negative_candidate_per_task_mask(ordered)
+    priority_masks = _profile_priority_task_masks(pricing_config)
+    priority_min_returned = (
+        0
+        if pricing_config is None
+        else max(0, int(getattr(pricing_config, "profile_priority_min_returned", 0)))
+    )
+    if priority_masks and priority_min_returned > 0:
+        selected: list[tuple[float, tuple[tuple[int, float], ...], int]] = []
+        selected_masks: set[int] = set()
+        priority_quota = min(limit, int(priority_min_returned))
+        for priority_mask in priority_masks:
+            for candidate in ordered:
+                if int(candidate[2]) != int(priority_mask) or int(candidate[2]) in selected_masks:
+                    continue
+                selected.append(candidate)
+                selected_masks.add(int(candidate[2]))
+                break
+            if len(selected) >= priority_quota:
+                break
+        if selected:
+            remaining_ordered = [
+                candidate for candidate in ordered if int(candidate[2]) not in selected_masks
+            ]
+            if len(selected) < limit:
+                selected.extend(
+                    _select_negative_journey_candidates_from_ordered(
+                        remaining_ordered,
+                        limit - len(selected),
+                        selection_mode,
+                    )
+                )
+            return selected[:limit]
+    return _select_negative_journey_candidates_from_ordered(ordered, limit, selection_mode)
+
+
+def _select_negative_journey_candidates_from_ordered(
+    ordered: list[tuple[float, tuple[tuple[int, float], ...], int]],
+    limit: int,
+    selection_mode: str,
+) -> list[tuple[float, tuple[tuple[int, float], ...], int]]:
+    limit = max(1, int(limit))
     mode = str(selection_mode)
     if mode not in {"diverse", "integer_diverse", "orthogonal"} or len(ordered) <= limit:
         return ordered[:limit]
@@ -12963,11 +13068,22 @@ def _select_nonduplicate_negative_journey_candidates(
             dominant_task_set_cost_by_mask,
         )
         dp_stats["negative_task_masks"] = negative_masks
+        dp_stats["profile_priority_candidate_count"] = int(
+            _profile_priority_candidate_count(
+                rough_negative_candidates,
+                pricing_config,
+            )
+        )
     forbidden = forbidden_journey_signatures or set()
     if not forbidden and not dominant_task_set_cost_by_mask:
         selected_without_forbidden = []
         materialization_filtered = 0
-        for candidate in _select_negative_journey_candidates(candidates, len(candidates), selection_mode):
+        for candidate in _select_negative_journey_candidates(
+            candidates,
+            len(candidates),
+            selection_mode,
+            pricing_config=pricing_config,
+        ):
             _objective, selected_profiles, _mask = candidate
             if _profile_materialization_filter_enabled(pricing_config) and not _selected_profiles_materializable(
                 data,
@@ -12988,6 +13104,12 @@ def _select_nonduplicate_negative_journey_candidates(
                 dp_stats.get("profile_materialization_infeasible_candidates_filtered", 0)
             ) + int(materialization_filtered)
             dp_stats["negative_selected_candidate_count"] = len(rough_selected)
+            dp_stats["profile_priority_selected_candidate_count"] = int(
+                _profile_priority_candidate_count(
+                    rough_selected,
+                    pricing_config,
+                )
+            )
             dp_stats["negative_selected_new_mask_count"] = _negative_candidate_new_task_mask_count(
                 rough_selected,
                 dominant_task_set_cost_by_mask,
@@ -13002,7 +13124,12 @@ def _select_nonduplicate_negative_journey_candidates(
             )
         return selected_without_forbidden, status
 
-    ordered = _select_negative_journey_candidates(candidates, len(candidates), selection_mode)
+    ordered = _select_negative_journey_candidates(
+        candidates,
+        len(candidates),
+        selection_mode,
+        pricing_config=pricing_config,
+    )
     scan_limit = int(duplicate_scan_limit)
     if scan_limit <= 0:
         scan_limit = len(ordered)
@@ -13054,6 +13181,12 @@ def _select_nonduplicate_negative_journey_candidates(
         dp_stats["duplicate_candidate_scan_count"] = int(dp_stats.get("duplicate_candidate_scan_count", 0)) + int(scanned)
         dp_stats["duplicate_candidates_filtered"] = int(dp_stats.get("duplicate_candidates_filtered", 0)) + int(filtered)
         dp_stats["negative_selected_candidate_count"] = len(rough_selected)
+        dp_stats["profile_priority_selected_candidate_count"] = int(
+            _profile_priority_candidate_count(
+                rough_selected,
+                pricing_config,
+            )
+        )
         dp_stats["negative_selected_new_mask_count"] = _negative_candidate_new_task_mask_count(
             rough_selected,
             dominant_task_set_cost_by_mask,
@@ -13727,6 +13860,8 @@ def _instantiate_profile_journey_candidates(
     selected_unmaterialized_samples: list[tuple[int, ...]] = []
     selected_weak_filtered_samples: list[tuple[int, ...]] = []
     selected_filtered_samples: list[tuple[int, ...]] = []
+    returned_boundary_candidate_samples: list[str] = []
+    truncated_boundary_candidate_samples: list[str] = []
     add_threshold = max(float(eps), float(config.min_add_reduced_cost))
 
     def selected_mask(selected: tuple[tuple[int, float], ...]) -> int:
@@ -13749,6 +13884,45 @@ def _instantiate_profile_journey_candidates(
             return
         samples.append(sample)
 
+    def profile_start_summary(selected: tuple[tuple[int, float], ...]) -> str:
+        parts: list[str] = []
+        for profile_index, start in selected[:4]:
+            parts.append(f"{int(profile_index)}@{float(start):.6g}")
+        if len(selected) > 4:
+            parts.append("...")
+        return ",".join(parts)
+
+    def candidate_boundary_sample(
+        *,
+        rank: int,
+        selected: tuple[tuple[int, float], ...],
+        rough_objective: float,
+        true_objective: float | None = None,
+    ) -> str:
+        parts = [
+            f"rank={int(rank)}",
+            f"rough={float(rough_objective):.6f}",
+        ]
+        if true_objective is not None:
+            parts.append(f"true={float(true_objective):.6f}")
+        parts.extend(
+            [
+                f"tasks={selected_task_tuple(selected)}",
+                f"profiles={profile_start_summary(selected)}",
+            ]
+        )
+        return "|".join(parts)
+
+    def record_string_sample(samples: list[str], sample: str, *, keep_last: bool = False) -> None:
+        if not sample or sample in samples:
+            return
+        if len(samples) < 8:
+            samples.append(sample)
+            return
+        if keep_last:
+            samples.pop(0)
+            samples.append(sample)
+
     def merge_sample_stat(key: str, samples: list[tuple[int, ...]]) -> None:
         if dp_stats is None:
             return
@@ -13759,6 +13933,19 @@ def _instantiate_profile_journey_candidates(
                 merged.append(sample)
         for sample in samples:
             if sample and sample not in merged and len(merged) < 32:
+                merged.append(sample)
+        dp_stats[key] = tuple(merged)
+
+    def merge_string_sample_stat(key: str, samples: list[str]) -> None:
+        if dp_stats is None:
+            return
+        merged: list[str] = []
+        for raw_sample in tuple(dp_stats.get(key, tuple())):
+            sample = str(raw_sample)
+            if sample and sample not in merged:
+                merged.append(sample)
+        for sample in samples:
+            if sample and sample not in merged and len(merged) < 16:
                 merged.append(sample)
         dp_stats[key] = tuple(merged)
 
@@ -13822,6 +14009,14 @@ def _instantiate_profile_journey_candidates(
         merge_sample_stat("diagnostic_selected_unmaterialized_task_set_samples", selected_unmaterialized_samples)
         merge_sample_stat("diagnostic_selected_weak_filtered_task_set_samples", selected_weak_filtered_samples)
         merge_sample_stat("diagnostic_selected_filtered_task_set_samples", selected_filtered_samples)
+        merge_string_sample_stat(
+            "diagnostic_returned_boundary_candidate_samples",
+            returned_boundary_candidate_samples,
+        )
+        merge_string_sample_stat(
+            "diagnostic_truncated_boundary_candidate_samples",
+            truncated_boundary_candidate_samples,
+        )
         if unmaterialized_candidates > 0:
             dp_stats["profile_selected_unmaterialized_candidate_count"] = int(
                 dp_stats.get("profile_selected_unmaterialized_candidate_count", 0)
@@ -13900,11 +14095,33 @@ def _instantiate_profile_journey_candidates(
         journeys.append(journey)
         selected_returned_count += 1
         record_sample(selected_returned_samples, selected)
+        record_string_sample(
+            returned_boundary_candidate_samples,
+            candidate_boundary_sample(
+                rank=selected_index,
+                selected=selected,
+                rough_objective=float(objective),
+                true_objective=float(true_objective),
+            ),
+            keep_last=True,
+        )
         if max_journeys is not None and len(journeys) >= int(max_journeys):
             selected_return_limit_truncated_count = max(
                 0,
                 int(len(selected_candidates)) - int(selected_index) - 1,
             )
+            for truncated_index, (truncated_selected, truncated_objective) in enumerate(
+                selected_candidates[selected_index + 1 : selected_index + 9],
+                start=selected_index + 1,
+            ):
+                record_string_sample(
+                    truncated_boundary_candidate_samples,
+                    candidate_boundary_sample(
+                        rank=truncated_index,
+                        selected=truncated_selected,
+                        rough_objective=float(truncated_objective),
+                    ),
+                )
             break
     flush_stats()
     return journeys, existing_filtered, weak_negative_filtered
