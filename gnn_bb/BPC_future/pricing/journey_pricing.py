@@ -291,6 +291,7 @@ class JourneyPricingResult:
     reason: str = ""
     profile_dominance_pruned: int = 0
     existing_journeys_filtered: int = 0
+    branch_infeasible_journeys_filtered: int = 0
     profile_cut_penalty_pruned: int = 0
     weak_negative_journeys_filtered: int = 0
     dp_bound_pruned_labels: int = 0
@@ -5770,6 +5771,7 @@ def _price_journeys_by_direct_labels(
     candidates: list[tuple[float, JourneyColumn]] = []
     candidate_signatures: set[tuple] = set()
     duplicate_filtered = 0
+    branch_infeasible_filtered = 0
     weak_filtered = 0
     dominated_task_set_filtered = 0
     forbidden = forbidden_journey_signatures or set()
@@ -6329,7 +6331,7 @@ def _price_journeys_by_direct_labels(
         return now >= float(direct_early_return_grace_deadline)
 
     def _record_negative_label(label: _DirectJourneyLabel, objective: float) -> bool:
-        nonlocal duplicate_filtered, weak_filtered, dominated_task_set_filtered
+        nonlocal duplicate_filtered, branch_infeasible_filtered, weak_filtered, dominated_task_set_filtered
         if not label.trips:
             return False
         if not _repair_final_mask_allowed(int(label.mask)):
@@ -6357,7 +6359,7 @@ def _price_journeys_by_direct_labels(
             duplicate_filtered += 1
             return False
         if not _journey_task_set_branch_allowed(journey.task_set, branch_constraints):
-            duplicate_filtered += 1
+            branch_infeasible_filtered += 1
             return False
         if _journey_task_set_cost_dominated(journey, dominant_task_set_costs):
             dominated_task_set_filtered += 1
@@ -6855,6 +6857,7 @@ def _price_journeys_by_direct_labels(
                 "INCOMPLETE",
                 "direct_label_partial_negative_journey",
                 existing_journeys_filtered=duplicate_filtered,
+                branch_infeasible_journeys_filtered=branch_infeasible_filtered,
                 weak_negative_journeys_filtered=weak_filtered,
                 dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                 profile_generation_time=time.perf_counter() - started,
@@ -6882,6 +6885,7 @@ def _price_journeys_by_direct_labels(
                 "INCOMPLETE",
                 "direct_label_partial_negative_journey",
                 existing_journeys_filtered=duplicate_filtered,
+                branch_infeasible_journeys_filtered=branch_infeasible_filtered,
                 weak_negative_journeys_filtered=weak_filtered,
                 dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                 profile_generation_time=time.perf_counter() - started,
@@ -7032,6 +7036,7 @@ def _price_journeys_by_direct_labels(
                 "INCOMPLETE",
                 "direct_label_partial_negative_journey",
                 existing_journeys_filtered=duplicate_filtered,
+                branch_infeasible_journeys_filtered=branch_infeasible_filtered,
                 weak_negative_journeys_filtered=weak_filtered,
                 dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                 profile_generation_time=time.perf_counter() - started,
@@ -7143,6 +7148,7 @@ def _price_journeys_by_direct_labels(
                     "INCOMPLETE",
                     "direct_label_partial_negative_journey",
                     existing_journeys_filtered=duplicate_filtered,
+                    branch_infeasible_journeys_filtered=branch_infeasible_filtered,
                     weak_negative_journeys_filtered=weak_filtered,
                     dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                     profile_generation_time=time.perf_counter() - started,
@@ -7269,6 +7275,7 @@ def _price_journeys_by_direct_labels(
                 )
             ),
             existing_journeys_filtered=duplicate_filtered,
+            branch_infeasible_journeys_filtered=branch_infeasible_filtered,
             weak_negative_journeys_filtered=weak_filtered,
             dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
             profile_generation_time=time.perf_counter() - started,
@@ -7330,6 +7337,7 @@ def _price_journeys_by_direct_labels(
         status,
         final_reason,
         existing_journeys_filtered=duplicate_filtered,
+        branch_infeasible_journeys_filtered=branch_infeasible_filtered,
         weak_negative_journeys_filtered=weak_filtered,
         dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
         profile_generation_time=time.perf_counter() - started,

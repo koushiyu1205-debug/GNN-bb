@@ -139,8 +139,11 @@ def solve_journey_rmp(
     _try_set_param(model, "separating/maxrounds", 0)
     _try_set_param(model, "parallel/maxnthreads", 1)
 
+    # Cover equalities and x >= 0 already imply x_j <= 1 for every nonempty
+    # journey.  Avoid an explicit LP upper bound: its bound dual is not part of
+    # the row-dual pricing reduced-cost formula.
     x = {
-        index: model.addVar(vtype="C", lb=0.0, ub=1.0, obj=float(journey.cost), name=f"x_journey[{index}]")
+        index: model.addVar(vtype="C", lb=0.0, obj=float(journey.cost), name=f"x_journey[{index}]")
         for index, journey in enumerate(journeys)
     }
     cover_cons = {}
@@ -241,8 +244,10 @@ def solve_journey_gurobi_barrier_dual(
     if float(time_limit) > 0.0:
         model.Params.TimeLimit = float(time_limit)
 
+    # Match the official LP face: the journey upper bound is implied by cover
+    # rows and should not introduce a separate bound dual.
     x = {
-        index: model.addVar(lb=0.0, ub=1.0, obj=float(journey.cost), name=f"x_journey[{index}]")
+        index: model.addVar(lb=0.0, obj=float(journey.cost), name=f"x_journey[{index}]")
         for index, journey in enumerate(journeys)
     }
     model.ModelSense = gp.GRB.MINIMIZE
@@ -485,16 +490,23 @@ def _solve(
     if time_limit > 0:
         _try_set_param(model, "limits/time", float(time_limit))
 
-    x = {
-        index: model.addVar(
-            vtype="B" if integral else "C",
-            lb=0.0,
-            ub=1.0,
-            obj=float(journey.cost),
-            name=f"journey[{index}]",
-        )
-        for index, journey in enumerate(journeys)
-    }
+    x = {}
+    for index, journey in enumerate(journeys):
+        if integral:
+            x[index] = model.addVar(
+                vtype="B",
+                lb=0.0,
+                ub=1.0,
+                obj=float(journey.cost),
+                name=f"journey[{index}]",
+            )
+        else:
+            x[index] = model.addVar(
+                vtype="C",
+                lb=0.0,
+                obj=float(journey.cost),
+                name=f"journey[{index}]",
+            )
     for task in data.tasks:
         terms = [var for index, var in x.items() if int(task) in journeys[index].task_set]
         model.addCons(quicksum(terms) == 1.0, name=f"cover[{task}]")

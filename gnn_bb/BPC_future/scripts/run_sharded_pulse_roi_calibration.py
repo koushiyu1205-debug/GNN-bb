@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 import json
 import math
@@ -7543,6 +7544,88 @@ def _parse_int_sequence_value(value: Any) -> tuple[int, ...]:
     return tuple()
 
 
+def _parse_string_sequence_value(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return tuple()
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return tuple()
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                loaded = json.loads(text)
+            except json.JSONDecodeError:
+                loaded = None
+            if isinstance(loaded, list):
+                return tuple(str(item).strip() for item in loaded if str(item).strip())
+        return tuple(
+            item.strip()
+            for item in text.split(",")
+            if item.strip()
+        )
+    return tuple()
+
+
+def _signature_sample_values(value: Any) -> tuple[str, ...]:
+    if value is None or value == "":
+        return tuple()
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    if not isinstance(value, str):
+        return tuple()
+    text = value.strip()
+    if not text:
+        return tuple()
+    if text.startswith("[") and text.endswith("]"):
+        try:
+            loaded = json.loads(text)
+        except json.JSONDecodeError:
+            loaded = None
+        if isinstance(loaded, list):
+            return tuple(str(item).strip() for item in loaded if str(item).strip())
+    return tuple(item.strip() for item in text.split(";") if item.strip())
+
+
+def _parse_signature_target_value(value: Any) -> dict[str, Any]:
+    for sample in _signature_sample_values(value):
+        try:
+            signature = ast.literal_eval(sample)
+        except (SyntaxError, ValueError):
+            continue
+        if not isinstance(signature, (list, tuple)) or not signature:
+            continue
+        first_sortie = signature[0]
+        if not isinstance(first_sortie, (list, tuple)) or len(first_sortie) < 2:
+            continue
+        sequence = _parse_int_sequence_value(first_sortie[0])
+        if not sequence:
+            continue
+        arc_option_sequence = _parse_string_sequence_value(first_sortie[1])
+        target: dict[str, Any] = {
+            "sequence": tuple(sequence),
+            "transition_sequence": tuple(sequence),
+        }
+        if arc_option_sequence:
+            target["arc_option_sequence"] = tuple(arc_option_sequence)
+        return target
+    return {}
+
+
+def _row_first_negative_signature_target(row: dict[str, Any]) -> dict[str, Any]:
+    for field in (
+        "followup_first_negative_signature_sample",
+        "pulse_worker_followup_first_negative_signature_sample",
+        "worker_negative_journey_signature_samples",
+        "official_negative_journey_signature_samples",
+    ):
+        target = _parse_signature_target_value(row.get(field))
+        if target:
+            return target
+    return {}
+
+
 def _derive_auto_residual_target(
     previous_rows: list[dict[str, Any]],
     *,
@@ -7580,7 +7663,10 @@ def _derive_auto_residual_target(
         )
         if not source_context_hash:
             continue
+        signature_target = _row_first_negative_signature_target(row)
         sequence = _parse_int_sequence_value(row.get("followup_first_negative_sequence"))
+        if not sequence:
+            sequence = _parse_int_sequence_value(signature_target.get("sequence"))
         if not sequence:
             sequence = _parse_int_sequence_value(row.get("followup_first_negative_task_set"))
         if len(sequence) < 2:
@@ -7595,6 +7681,16 @@ def _derive_auto_residual_target(
                 or ""
             ),
         }
+        transition_sequence = _parse_int_sequence_value(
+            signature_target.get("transition_sequence")
+        )
+        if transition_sequence:
+            candidate["transition_sequence"] = tuple(transition_sequence)
+        arc_option_sequence = _parse_string_sequence_value(
+            signature_target.get("arc_option_sequence")
+        )
+        if arc_option_sequence:
+            candidate["arc_option_sequence"] = tuple(arc_option_sequence)
         if profile in active_gate_profiles:
             gate_reason = _auto_residual_target_active_source_gate_reason(row)
             candidate["source_gate"] = "active_support"
@@ -7623,6 +7719,10 @@ def _active_residual_source_signal_count(row: dict[str, Any]) -> int:
 
 def _active_residual_source_candidate_sequence(row: dict[str, Any]) -> tuple[int, ...]:
     sequence = _parse_int_sequence_value(row.get("followup_first_negative_sequence"))
+    if not sequence:
+        sequence = _parse_int_sequence_value(
+            _row_first_negative_signature_target(row).get("sequence")
+        )
     if not sequence:
         sequence = _parse_int_sequence_value(row.get("followup_first_negative_task_set"))
     return sequence
@@ -7798,12 +7898,30 @@ def _apply_auto_residual_target_to_config(
 ) -> bool:
     target = auto_residual_target or {}
     sequence = _parse_int_sequence_value(target.get("sequence", tuple()))
+    transition_sequence = _parse_int_sequence_value(
+        target.get("transition_sequence", tuple()) or sequence
+    )
+    arc_option_sequence = _parse_string_sequence_value(
+        target.get("arc_option_sequence", tuple())
+        or target.get("arc_options", tuple())
+        or target.get("path_option_sequence", tuple())
+    )
     source_context_hash = str(target.get("source_context_hash", ""))
     if not sequence or not source_context_hash:
         return False
     sequence_text = _task_set_string(sequence)
     config["journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled"] = True
     config["journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_sequence"] = sequence_text
+    if transition_sequence:
+        config["journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled"] = True
+        config["journey_sharded_pulse_hidden_negative_worker_target_transition_priority_sequence"] = (
+            _task_set_string(transition_sequence)
+        )
+    if arc_option_sequence:
+        config["journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_enabled"] = True
+        config["journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_sequence"] = (
+            ",".join(arc_option_sequence)
+        )
     config["journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_enabled"] = True
     config["journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_sequence"] = sequence_text
     config["journey_sharded_pulse_hidden_negative_worker_expected_context_hash"] = source_context_hash

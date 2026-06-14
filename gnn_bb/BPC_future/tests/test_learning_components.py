@@ -9,12 +9,30 @@ from types import SimpleNamespace
 try:
     import torch
 
+    from BPC_future.learning.column_selector import (
+        SELECTOR_CLASS_ABSTAIN,
+        SELECTOR_CLASS_ADD,
+        SELECTOR_CLASS_DELAY_QUEUE,
+        SELECTOR_CLASS_HIGH_PRIORITY,
+        SELECTOR_CLASS_REJECT_NONNEGATIVE_ONLY,
+        ContextAwareColumnSelector,
+        column_selector_loss,
+        conservative_add_decisions,
+        exact_safe_negative_scheduler_decisions,
+    )
     from BPC_future.learning.dual_stabilizer import DualStabilizer, DualStabilizerConfig
     from BPC_future.learning.gnn_model import HierarchicalOptionGAT, OptionEncoder, dual_prediction_loss
     from BPC_future.learning.graph_builder import (
         DEFAULT_NODE_FEATURE_SCHEMA,
         DEFAULT_OPTION_FEATURE_SCHEMA,
         FutureGraphBuilder,
+    )
+    from BPC_future.scripts.build_gnn_column_selector_dataset import (
+        CONTEXT_FEATURE_SCHEMA,
+        CANDIDATE_FEATURE_SCHEMA,
+        build_dataset as build_gnn_column_selector_dataset,
+        _parse_task_set as _parse_selector_task_set,
+        _selector_label as _gnn_selector_label,
     )
     from BPC_future.scripts.build_learning_dual_dataset import _average_cover_duals, _collect_traces
     from BPC_future.scripts.summarize_learning_pricing_quality import _summarize_log
@@ -223,6 +241,10 @@ class LearningModelTests(unittest.TestCase):
         output = model(data)
         self.assertEqual(tuple(output["pred_all_nodes"].shape), (data.x.size(0),))
         self.assertEqual(tuple(output["pred_task"].shape), (int(data.task_mask.sum().item()),))
+        encoded = model.encode(data)
+        self.assertEqual(tuple(encoded["node_h"].shape), (data.x.size(0), 16))
+        self.assertEqual(tuple(encoded["task_h"].shape), (int(data.task_mask.sum().item()), 16))
+        self.assertEqual(tuple(encoded["pair_edge_attr"].shape), (data.pair_edge_index.size(1), 16))
         loss = dual_prediction_loss(output["pred_task"], torch.zeros_like(output["pred_task"]), huber_delta=0.1)
         loss.backward()
 
@@ -232,6 +254,156 @@ class LearningModelTests(unittest.TestCase):
             model.out_mlp[-1].bias.fill_(-1.0)
         negative_output = model(data)
         self.assertTrue(bool(torch.all(negative_output["pred_task"] < 0.0)))
+
+
+@unittest.skipUnless(HAS_LEARNING_STACK, "learning stack is not installed")
+class ContextAwareColumnSelectorTests(unittest.TestCase):
+    def test_selector_forward_backward_and_context_broadcast(self):
+        data = FutureGraphBuilder().build_from_logical_graph(_toy_payload())
+        selector = ContextAwareColumnSelector(
+            node_dim=data.x.size(1),
+            option_dim=data.option_feat.size(1),
+            candidate_feature_dim=5,
+            context_feature_dim=4,
+            hidden_dim=16,
+            option_hidden_dim=16,
+            pair_edge_dim=16,
+            num_gnn_layers=1,
+            heads=4,
+            dropout=0.0,
+            selector_hidden_dim=16,
+        )
+        candidate_task_membership = torch.tensor(
+            [
+                [1.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],
+            ]
+        )
+        candidate_features = torch.tensor(
+            [
+                [-20.0, 2.0, 1.0, 0.1, 0.0],
+                [-5.0, 1.0, 0.0, 0.9, 1.0],
+                [-12.0, 2.0, 1.0, 0.4, 0.0],
+            ]
+        )
+        shared_context = torch.tensor([0.3, 0.0, 2.0, 10.0])
+
+        output = selector(data, candidate_task_membership, candidate_features, shared_context)
+
+        self.assertEqual(tuple(output["logits"].shape), (3, 3))
+        self.assertEqual(tuple(output["candidate_embedding"].shape), (3, 16))
+        self.assertEqual(output["task_counts"].tolist(), [2.0, 1.0, 2.0])
+        probability_sums = output["probabilities"].sum(dim=1)
+        self.assertTrue(torch.allclose(probability_sums, torch.ones_like(probability_sums), atol=1e-6))
+        self.assertEqual(tuple(output["add_probability"].shape), (3,))
+        self.assertTrue(
+            torch.allclose(output["high_priority_probability"], output["add_probability"])
+        )
+        self.assertTrue(
+            torch.allclose(output["trajectory_impact_probability"], output["add_probability"])
+        )
+        self.assertTrue(
+            torch.allclose(output["delay_queue_probability"], output["abstain_probability"])
+        )
+
+        labels = torch.tensor([SELECTOR_CLASS_ADD, SELECTOR_CLASS_ABSTAIN, SELECTOR_CLASS_ADD])
+        loss = column_selector_loss(output["logits"], labels)
+        loss.backward()
+        grad_norm = sum(
+            float(param.grad.detach().abs().sum())
+            for param in selector.parameters()
+            if param.grad is not None
+        )
+        self.assertGreater(grad_norm, 0.0)
+
+    def test_selector_accepts_per_candidate_context_and_rejects_empty_candidate(self):
+        data = FutureGraphBuilder().build_from_logical_graph(_toy_payload())
+        selector = ContextAwareColumnSelector(
+            node_dim=data.x.size(1),
+            option_dim=data.option_feat.size(1),
+            candidate_feature_dim=2,
+            context_feature_dim=2,
+            hidden_dim=16,
+            option_hidden_dim=16,
+            pair_edge_dim=16,
+            num_gnn_layers=1,
+            heads=4,
+            dropout=0.0,
+            selector_hidden_dim=16,
+        )
+        membership = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 1.0]])
+        candidate_features = torch.tensor([[-3.0, 1.0], [-9.0, 2.0]])
+        context_features = torch.tensor([[0.0, 1.0], [1.0, 0.0]])
+        output = selector(data, membership, candidate_features, context_features)
+        self.assertEqual(tuple(output["logits"].shape), (2, 3))
+
+        empty_membership = torch.tensor([[0.0, 0.0, 0.0]])
+        with self.assertRaisesRegex(ValueError, "at least one task"):
+            selector(
+                data,
+                empty_membership,
+                torch.tensor([[0.0, 0.0]]),
+                torch.tensor([0.0, 1.0]),
+            )
+
+    def test_conservative_add_decisions_only_add_or_abstain(self):
+        probabilities = torch.tensor(
+            [
+                [0.01, 0.95, 0.04],
+                [0.10, 0.70, 0.20],
+                [0.80, 0.19, 0.01],
+                [0.05, 0.91, 0.04],
+            ]
+        )
+
+        decisions = conservative_add_decisions(
+            probabilities,
+            add_threshold=0.9,
+            add_margin=0.1,
+        )
+
+        self.assertEqual(
+            decisions.tolist(),
+            [
+                SELECTOR_CLASS_ADD,
+                SELECTOR_CLASS_ABSTAIN,
+                SELECTOR_CLASS_ABSTAIN,
+                SELECTOR_CLASS_ADD,
+            ],
+        )
+        self.assertNotIn(0, decisions.tolist())
+
+    def test_exact_safe_negative_scheduler_delays_negative_columns_not_rejects(self):
+        probabilities = torch.tensor(
+            [
+                [0.01, 0.95, 0.04],
+                [0.10, 0.70, 0.20],
+                [0.80, 0.19, 0.01],
+                [0.05, 0.91, 0.04],
+            ]
+        )
+        true_rc_negative = torch.tensor([True, True, False, True])
+
+        decisions = exact_safe_negative_scheduler_decisions(
+            probabilities,
+            true_rc_negative,
+            high_priority_threshold=0.9,
+            high_priority_margin=0.1,
+        )
+
+        self.assertEqual(
+            decisions.tolist(),
+            [
+                SELECTOR_CLASS_HIGH_PRIORITY,
+                SELECTOR_CLASS_DELAY_QUEUE,
+                SELECTOR_CLASS_REJECT_NONNEGATIVE_ONLY,
+                SELECTOR_CLASS_HIGH_PRIORITY,
+            ],
+        )
+        for decision, is_negative in zip(decisions.tolist(), true_rc_negative.tolist()):
+            if is_negative:
+                self.assertNotEqual(decision, SELECTOR_CLASS_REJECT_NONNEGATIVE_ONLY)
 
 
 @unittest.skipUnless(HAS_LEARNING_STACK, "learning stack is not installed")
@@ -418,6 +590,65 @@ class DualStabilizerTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_LEARNING_STACK, "learning stack is not installed")
 class LearningDatasetBuilderTests(unittest.TestCase):
+    def test_gnn_column_selector_dataset_builder_writes_exactness_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logical_root = root / "logical"
+            logical_root.mkdir()
+            instance_name = "toy_selector_instance"
+            (logical_root / f"{instance_name}_logical_graph.json").write_text(
+                __import__("json").dumps(_toy_payload()),
+                encoding="utf-8",
+            )
+            csv_path = root / "candidate_rows.csv"
+            fieldnames = [
+                "instance",
+                "task_set",
+                "single_impact_class",
+                *CANDIDATE_FEATURE_SCHEMA,
+                *CONTEXT_FEATURE_SCHEMA,
+            ]
+            row = {field: "0" for field in fieldnames}
+            row.update(
+                {
+                    "instance": instance_name,
+                    "task_set": "1,3",
+                    "single_impact_class": "improved",
+                    "true_reduced_cost": "-5.0",
+                    "cost": "10.0",
+                    "task_count": "2",
+                    "cg_iter": "1",
+                }
+            )
+            with csv_path.open("w", newline="", encoding="utf-8") as handle:
+                import csv
+
+                writer = csv.DictWriter(handle, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerow(row)
+
+            output_dir = root / "dataset"
+            summary = build_gnn_column_selector_dataset(
+                input_csv=csv_path,
+                logical_root=logical_root,
+                output_dir=output_dir,
+            )
+
+            manifest = __import__("json").loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+            sample = torch.load(output_dir / manifest["samples"][0]["path"], map_location="cpu", weights_only=False)
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertFalse(summary["runs_bpc_or_pricing"])
+            self.assertEqual(summary["label_counts"], {"add": 1})
+            self.assertEqual(tuple(sample.candidate_task_membership.shape), (1, 3))
+            self.assertEqual(sample.candidate_task_membership.tolist(), [[1.0, 0.0, 1.0]])
+            self.assertEqual(sample.y_selector.tolist(), [SELECTOR_CLASS_ADD])
+
+    def test_gnn_column_selector_label_and_task_set_helpers(self):
+        self.assertEqual(_parse_selector_task_set("1, 3,5"), {1, 3, 5})
+        self.assertEqual(_parse_selector_task_set("bad"), set())
+        self.assertEqual(_gnn_selector_label({"single_impact_class": "improved"}), SELECTOR_CLASS_ADD)
+        self.assertNotEqual(_gnn_selector_label({"single_impact_class": "noop"}), SELECTOR_CLASS_ADD)
+
     def test_collect_traces_keeps_repeated_instance_runs_separate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

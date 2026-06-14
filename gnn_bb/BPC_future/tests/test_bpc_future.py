@@ -373,6 +373,33 @@ class BPCFutureTests(unittest.TestCase):
                 _journey_task_set_branch_allowed(journey.task_set, (BranchConstraint("separate_vehicle", 1, 2),))
             )
 
+    def test_direct_label_same_branch_filtered_negative_is_not_duplicate_only(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1),
+            False,
+        )
+        duals = JourneyDuals(cover={1: 200.0, 2: -200.0}, fleet_limit=0.0, cuts={})
+        result = price_journeys(
+            data,
+            duals=duals,
+            branch_constraints=(BranchConstraint("same_vehicle", 1, 2),),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                direct_journey_label_pricing_enabled=True,
+                direct_journey_label_completion_bound_enabled=True,
+                time_bucket_size=5.0,
+                start_time_step=5.0,
+                max_tasks_per_trip=2,
+                max_returned_journeys=10,
+                time_limit=5.0,
+            ),
+        )
+
+        self.assertEqual(result.reason, "direct_label_no_negative_journey")
+        self.assertNotEqual(result.pricing_state, PRICING_STATE_DUPLICATE_ONLY)
+        self.assertEqual(result.existing_journeys_filtered, 0)
+        self.assertGreater(result.branch_infeasible_journeys_filtered, 0)
+
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_rmp_reduced_cost_matches_manual_formula(self):
         data = load_future_data("very_small")
@@ -2648,6 +2675,8 @@ class BPCFutureTests(unittest.TestCase):
             journey_values=[],
             status="OPTIMAL",
             variable_count=0,
+            variable_values={},
+            reduced_costs={},
         )
         fake_pricing = JourneyPricingResult(
             journeys=[journey],
@@ -2701,6 +2730,83 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(payload["pricing_kind"], "exact")
         self.assertEqual(payload["returned_journey_count"], 1)
         self.assertTrue(payload["returned_batch_complete"])
+        self.assertTrue(payload["replay_no_certificate_effect"])
+        self.assertFalse(payload["official_bound_effect"])
+        self.assertTrue(payload["context_hash"])
+        self.assertEqual(payload["returned_journeys"][0]["task_set"], [1])
+
+    def test_counterfactual_replay_capture_branch_driver_smoke_records_returned_batch(self):
+        data = replace(load_future_data("very_small"), vehicles=(1, 2))
+        trip = evaluate_timed_trip(data, (1,), 0.0, time_bucket_size=5.0)
+        self.assertIsNotNone(trip)
+        assert trip is not None
+        journey = make_journey(data, (trip,))
+        self.assertIsNotNone(journey)
+        assert journey is not None
+        fake_rmp = SimpleNamespace(
+            optimal=True,
+            objective=42.0,
+            duals=JourneyDuals(cover={int(task): 200.0 for task in data.tasks}, fleet_limit=0.0),
+            journey_values=[],
+            status="OPTIMAL",
+            variable_count=0,
+            variable_values={},
+            reduced_costs={},
+        )
+        fake_pricing = JourneyPricingResult(
+            journeys=[journey],
+            exhausted=False,
+            best_reduced_cost=-1.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=1,
+            selected_trips=1,
+            status="OPTIMAL",
+            reason="unit_test_negative",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "journey_branch.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.solve_journey_rmp", return_value=fake_rmp), patch(
+                    "BPC_future.solver.journey_driver.price_journeys",
+                    return_value=fake_pricing,
+                ):
+                    solve_bpc_future_journey(
+                        data,
+                        {
+                            "time_limit": 10.0,
+                            "journey_branching_enabled": True,
+                            "journey_max_cg_iterations": 1,
+                            "journey_heuristic_pricing_enabled": False,
+                            "initial_composite_seed_enabled": False,
+                            "initial_single_task_starts_per_task": 1,
+                            "journey_initial_pool_integer_heuristic_enabled": False,
+                            "journey_pool_integer_heuristic_enabled": False,
+                            "journey_pool_time_limit": 0.1,
+                            "journey_counterfactual_replay_capture_enabled": True,
+                        },
+                        logger=logger,
+                    )
+            finally:
+                logger.close()
+            records = [
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        captures = [
+            record
+            for record in records
+            if record.get("event") == "journey_counterfactual_replay_capture"
+        ]
+        self.assertEqual(len(captures), 1)
+        payload = captures[0]
+        self.assertEqual(payload["pricing_kind"], "exact")
+        self.assertEqual(payload["node_id"], 0)
+        self.assertEqual(payload["depth"], 0)
+        self.assertEqual(payload["returned_journey_count"], 1)
         self.assertTrue(payload["replay_no_certificate_effect"])
         self.assertFalse(payload["official_bound_effect"])
         self.assertTrue(payload["context_hash"])
@@ -3246,6 +3352,17 @@ class BPCFutureTests(unittest.TestCase):
         for journey_id, solver_rc in solution.reduced_costs.items():
             manual = manual_journey_reduced_cost(journey_pool.journeys[journey_id], solution.duals)
             self.assertAlmostEqual(solver_rc, manual, places=5)
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_rmp_row_duals_do_not_reprice_current_pool_negative(self):
+        data = replace(load_future_data("very_small"), vehicles=(1, 2, 3, 4))
+        trips = _single_task_grid_trips(data, bucket=20.0)
+        journey_pool = build_journey_pool(data, trips, max_trips_per_journey=2, max_columns=400)
+        solution = solve_journey_rmp(data, journey_pool.journeys, capture_reduced_costs=True)
+        self.assertTrue(solution.optimal)
+        assert solution.duals is not None
+        min_manual_rc = min(manual_journey_reduced_cost(journey, solution.duals) for journey in journey_pool.journeys)
+        self.assertGreaterEqual(min_manual_rc, -1.0e-6)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_journey_rmp_reduced_cost_matches_manual_formula_with_cuts(self):
@@ -18065,6 +18182,68 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertIsNone(worker)
 
+    def test_branch_price_before_heuristic_worker_is_observable_when_opted_in(self):
+        data = load_future_data("very_small")
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_worker_observable.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                result = solve_bpc_future_journey(
+                    data,
+                    {
+                        "master_mode": "journey",
+                        "journey_branching_enabled": True,
+                        "time_limit": 10.0,
+                        "journey_max_nodes": 20,
+                        "journey_max_cg_iterations": 8,
+                        "time_bucket_size": 5.0,
+                        "pricing_start_time_step": 5.0,
+                        "initial_single_task_starts_per_task": 3,
+                        "journey_initial_source_trip_limit": 1200,
+                        "journey_initial_max_columns": 5000,
+                        "journey_pool_max_trips_per_journey": data.sortie_limit,
+                        "journey_pool_max_extensions_per_prefix": 80,
+                        "journey_pool_time_limit": 1.0,
+                        "fleet_bound_mode": "fixed",
+                        "cuts_enabled": True,
+                        "fleet_lower_bound_cut_enabled": True,
+                        "sortie_lower_bound_cut_enabled": False,
+                        "subset_row_cuts_enabled": False,
+                        "journey_heuristic_pricing_enabled": True,
+                        "journey_heuristic_max_rounds": 1,
+                        "journey_pricing_time_limit": 2.0,
+                        "journey_post_pricing_time_reserve": 0.0,
+                        "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                        "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled": True,
+                        "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                        "journey_sharded_pulse_hidden_negative_worker_log_skips": True,
+                        "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                        "journey_sharded_pulse_worker_current_probe_enabled": True,
+                        "journey_sharded_pulse_worker_current_probe_min_tasks": 99,
+                        "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                        "journey_sharded_pulse_worker_current_probe_time_limit": 0.01,
+                    },
+                    logger=logger,
+                )
+            finally:
+                logger.close()
+            records = [
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        worker_events = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ]
+        self.assertTrue(worker_events)
+        self.assertTrue(all(record.get("pulse_worker_skipped") for record in worker_events))
+        self.assertFalse(
+            any(record.get("pulse_worker_global_certificate_capable") for record in worker_events)
+        )
+        self.assertIn(result.status, {"OPTIMAL", "TIME_LIMIT"})
+
     def test_sharded_pulse_hidden_negative_worker_hard_tail_gate_triggers_with_signal(self):
         data = load_future_data("very_small")
         fake_pricing = JourneyPricingResult(
@@ -18372,6 +18551,134 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(event["pulse_worker_previous_audit_signal"])
         self.assertTrue(event["pulse_worker_current_probe_signal"])
         self.assertGreater(event["pulse_worker_returned_journeys"], 0)
+
+    def test_sharded_pulse_expected_context_current_probe_runs_without_certificate_candidate(self):
+        data = load_future_data("very_small")
+        duals = JourneyDuals(cover={}, fleet_limit=0.0, cuts={})
+        context_hash = _journey_sharded_pulse_audit_context_hashes(
+            data,
+            duals,
+            tuple(),
+            tuple(),
+            set(),
+        )["context"]
+        fake_pricing = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "expected_context_probe_incomplete",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            global_certificate_capable=False,
+            final_judge_certificate_capable=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "expected_context_current_probe.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.price_journeys", return_value=fake_pricing) as mock_price:
+                    worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                        data,
+                        {
+                            "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                            "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                            "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                            "journey_sharded_pulse_hidden_negative_worker_log_skips": True,
+                            "journey_sharded_pulse_hidden_negative_worker_expected_context_hash": context_hash,
+                            "journey_sharded_pulse_worker_current_probe_allow_expected_context_without_certificate_candidate": True,
+                            "journey_sharded_pulse_worker_current_probe_enabled": True,
+                            "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                            "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                            "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                        },
+                        logger,
+                        duals=duals,
+                        branch_constraints=tuple(),
+                        cuts=tuple(),
+                        journey_pool=JourneyPool(),
+                        base_pricing_config=JourneyPricingConfig(),
+                        cg_iter=7,
+                        certificate_candidate=False,
+                        remaining_time=10.0,
+                        previous_audit_signal=False,
+                    )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNotNone(worker)
+        mock_price.assert_called_once()
+        pricing, _worker_config = worker
+        self.assertEqual(_journey_pricing_state(pricing), PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+        event = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertFalse(event["pulse_worker_skipped"])
+        self.assertEqual(event["pulse_worker_signal_source"], "expected_context_current_probe")
+        self.assertFalse(event["pulse_worker_previous_audit_signal"])
+        self.assertFalse(event["pulse_worker_current_probe_signal"])
+        self.assertFalse(event["pulse_worker_global_certificate_capable"])
+
+    def test_sharded_pulse_expected_context_current_probe_requires_explicit_allow_flag(self):
+        data = load_future_data("very_small")
+        duals = JourneyDuals(cover={}, fleet_limit=0.0, cuts={})
+        context_hash = _journey_sharded_pulse_audit_context_hashes(
+            data,
+            duals,
+            tuple(),
+            tuple(),
+            set(),
+        )["context"]
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "expected_context_no_allow.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.price_journeys") as mock_price:
+                    worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                        data,
+                        {
+                            "journey_sharded_pulse_hidden_negative_worker_enabled": True,
+                            "journey_sharded_pulse_hidden_negative_worker_trigger": "audit_signal_or_current_probe",
+                            "journey_sharded_pulse_hidden_negative_worker_min_tasks": 0,
+                            "journey_sharded_pulse_hidden_negative_worker_log_skips": True,
+                            "journey_sharded_pulse_hidden_negative_worker_expected_context_hash": context_hash,
+                            "journey_sharded_pulse_worker_current_probe_enabled": True,
+                            "journey_sharded_pulse_worker_current_probe_min_tasks": 0,
+                            "journey_sharded_pulse_worker_current_probe_min_remaining_time": 0.0,
+                            "journey_sharded_pulse_worker_current_probe_time_limit": 1.0,
+                        },
+                        logger,
+                        duals=duals,
+                        branch_constraints=tuple(),
+                        cuts=tuple(),
+                        journey_pool=JourneyPool(),
+                        base_pricing_config=JourneyPricingConfig(),
+                        cg_iter=7,
+                        certificate_candidate=False,
+                        remaining_time=10.0,
+                        previous_audit_signal=False,
+                    )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertIsNone(worker)
+        mock_price.assert_not_called()
+        event = [
+            record
+            for record in records
+            if record.get("event") == "journey_sharded_pulse_hidden_negative_worker"
+        ][-1]
+        self.assertEqual(event["pulse_worker_skip_reason"], "not_certificate_candidate")
 
     def test_sharded_pulse_current_probe_incomplete_not_certificate(self):
         data = load_future_data("very_small")
@@ -23561,6 +23868,34 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(target["source_context_hash"], "ctx20")
         self.assertEqual(target["source_relation"], "disjoint_task_set")
 
+        signature_target = roi._derive_auto_residual_target(
+            [
+                {
+                    "profile": "signature_seed",
+                    "scale": 20,
+                    "worker_context_hash": "ctx-signature",
+                    "followup_first_negative_signature_sample": (
+                        "(((20, 17, 16), "
+                        "('0->20:low_risk:2', '20->17:low_risk:2', "
+                        "'17->16:low_risk:2', '16->0:low_risk:2'), 0.0),)"
+                    ),
+                    "worker_vs_ordinary_task_set_relation": "overlapping_task_set",
+                }
+            ],
+            profile="strict_worker_delayed_current_probe_impact_20_only_pre_heuristic_auto_residual_target_roi_gate",
+        )
+        self.assertEqual(signature_target["sequence"], (20, 17, 16))
+        self.assertEqual(signature_target["transition_sequence"], (20, 17, 16))
+        self.assertEqual(
+            signature_target["arc_option_sequence"],
+            (
+                "0->20:low_risk:2",
+                "20->17:low_risk:2",
+                "17->16:low_risk:2",
+                "16->0:low_risk:2",
+            ),
+        )
+
         diagnostic_target = roi._derive_auto_residual_target(
             [
                 {
@@ -23636,6 +23971,25 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(
             active_target["source_search_first_passed_relation"],
             "overlapping_task_set",
+        )
+        signature_active_summary = roi._active_residual_source_row_summary(
+            {
+                "profile": "signature_active",
+                "scale": 20,
+                "worker_context_hash": "ctx20",
+                "followup_first_negative_signature_sample": (
+                    "(((20, 17, 16), "
+                    "('0->20:low_risk:2', '20->17:low_risk:2', "
+                    "'17->16:low_risk:2', '16->0:low_risk:2'), 0.0),)"
+                ),
+                "worker_added_support_changing_count": 1,
+                "worker_vs_ordinary_task_set_relation": "same_task_set",
+            }
+        )
+        self.assertTrue(signature_active_summary["active_residual_source_candidate"])
+        self.assertEqual(
+            signature_active_summary["active_residual_source_candidate_sequence"],
+            "20,17,16",
         )
 
         mixed_target = roi._derive_auto_residual_target(
@@ -24438,11 +24792,50 @@ class BPCFutureTests(unittest.TestCase):
             ],
             "5,8,15",
         )
+        self.assertTrue(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled"
+            ]
+        )
+        self.assertEqual(
+            twenty_task_auto_residual_target_roi[
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_sequence"
+            ],
+            "5,8,15",
+        )
         self.assertEqual(
             twenty_task_auto_residual_target_roi[
                 "journey_sharded_pulse_hidden_negative_worker_expected_context_hash"
             ],
             "ctx123",
+        )
+        arc_target_config = {}
+        self.assertTrue(
+            roi._apply_auto_residual_target_to_config(
+                arc_target_config,
+                {
+                    "sequence": (20, 17, 16),
+                    "transition_sequence": (20, 17, 16),
+                    "arc_option_sequence": (
+                        "0->20:low_risk:2",
+                        "20->17:low_risk:2",
+                        "17->16:low_risk:2",
+                        "16->0:low_risk:2",
+                    ),
+                    "source_context_hash": "ctx20",
+                },
+            )
+        )
+        self.assertTrue(
+            arc_target_config[
+                "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_enabled"
+            ]
+        )
+        self.assertEqual(
+            arc_target_config[
+                "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_sequence"
+            ],
+            "0->20:low_risk:2,20->17:low_risk:2,17->16:low_risk:2,16->0:low_risk:2",
         )
         ten_task_auto_active_residual_target_diagnostic = {}
         roi._apply_profile(

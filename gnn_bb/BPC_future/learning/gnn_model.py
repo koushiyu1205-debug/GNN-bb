@@ -266,7 +266,9 @@ class HierarchicalOptionGAT(nn.Module):
             nn.Linear(self.hidden_dim, 1),
         )
 
-    def forward(self, data: Any) -> Dict[str, Tensor]:
+    def encode(self, data: Any) -> Dict[str, Tensor]:
+        """Return graph embeddings without applying the dual-anchor output head."""
+
         x = getattr(data, "x")
         pair_edge_index = getattr(data, "pair_edge_index")
         option_feat = getattr(data, "option_feat")
@@ -284,6 +286,25 @@ class HierarchicalOptionGAT(nn.Module):
             h = norm(h + self.dropout(msg))
             _assert_finite(h, "GAT node state")
 
+        return {
+            "node_h": h,
+            "initial_node_h": h0,
+            "task_h": h[task_mask],
+            "initial_task_h": h0[task_mask],
+            "pair_edge_attr": pair_edge_attr,
+            "option_attention": aux["option_attention"],
+            "option_entropy": aux["option_entropy"],
+            "max_pool": aux["max_pool"],
+            "min_pool": aux["min_pool"],
+            "std_pool": aux["std_pool"],
+        }
+
+    def forward(self, data: Any) -> Dict[str, Tensor]:
+        encoded = self.encode(data)
+        h = encoded["node_h"]
+        h0 = encoded["initial_node_h"]
+        task_mask = getattr(data, "task_mask")
+
         pred_all = self.out_mlp(torch.cat([h, h0], dim=-1)).squeeze(-1)
         _assert_finite(pred_all, "dual predictions")
         pred_task = pred_all[task_mask]
@@ -293,12 +314,12 @@ class HierarchicalOptionGAT(nn.Module):
         return {
             "pred_all_nodes": pred_all,
             "pred_task": pred_task,
-            "option_attention": aux["option_attention"],
-            "option_entropy": aux["option_entropy"],
-            "pair_edge_attr": pair_edge_attr,
-            "max_pool": aux["max_pool"],
-            "min_pool": aux["min_pool"],
-            "std_pool": aux["std_pool"],
+            "option_attention": encoded["option_attention"],
+            "option_entropy": encoded["option_entropy"],
+            "pair_edge_attr": encoded["pair_edge_attr"],
+            "max_pool": encoded["max_pool"],
+            "min_pool": encoded["min_pool"],
+            "std_pool": encoded["std_pool"],
         }
 
     def _validate_data_tensors(

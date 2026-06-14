@@ -3667,6 +3667,138 @@ def _process_journey_branch_node(
         )
         learning_heuristic_allowed = active_learning_runtime is not None
         heuristic_allowed = bool(base_heuristic_allowed or learning_heuristic_allowed)
+        if bool(config.get("journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled", False)):
+            remaining = max(0.0, deadline - time.perf_counter())
+            if remaining <= min_pricing_time:
+                return payload("PRICING_INCOMPLETE", reason="time_limit")
+            worker_base_config = _journey_pricing_config(
+                data,
+                config,
+                bucket,
+                start_step,
+                eps,
+                remaining,
+                heuristic=False,
+                cg_iter=cg_iter,
+            )
+            worker_base_config = _journey_node_depth_pricing_config(
+                config,
+                worker_base_config,
+                node.depth,
+            )
+            hidden_worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                data,
+                config,
+                logger,
+                duals=solution.duals,
+                branch_constraints=node.branch_constraints,
+                cuts=tuple(cuts),
+                journey_pool=journey_pool,
+                base_pricing_config=worker_base_config,
+                cg_iter=cg_iter,
+                node_id=node.id,
+                depth=node.depth,
+                active_task_sets=active_task_sets,
+                certificate_candidate=certificate_candidate,
+                remaining_time=remaining,
+                previous_audit_signal=False,
+                previous_audit_context_hashes=None,
+                certificate_flat_rounds=certificate_flat_rounds,
+                certificate_no_column_rounds=certificate_no_column_rounds,
+            )
+            if hidden_worker is not None:
+                worker_pricing, worker_pricing_config = hidden_worker
+                stats.pricing_calls += 1
+                stats.exact_pricing_calls += 1
+                stats.generated_sequences += int(worker_pricing.generated_sequences)
+                stats.evaluated_timed_trips += int(worker_pricing.evaluated_timed_trips)
+                _log_journey_pricing(
+                    logger,
+                    worker_pricing,
+                    cg_iter,
+                    pricing_kind="sharded_pulse_hidden_negative_worker",
+                    config=worker_pricing_config,
+                    pricing_dual_source="scip",
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                _log_journey_counterfactual_replay_capture(
+                    logger,
+                    data,
+                    config,
+                    worker_pricing,
+                    solution.duals,
+                    tuple(cuts),
+                    node.branch_constraints,
+                    journey_pool,
+                    pricing_config=worker_pricing_config,
+                    pricing_kind="sharded_pulse_hidden_negative_worker",
+                    cg_iter=cg_iter,
+                    rmp_objective=float(solution.objective),
+                    active_task_sets=active_task_sets,
+                    active_variable_values=solution.variable_values,
+                    active_reduced_costs=solution.reduced_costs,
+                    pricing_dual_source="scip",
+                    node_id=node.id,
+                    depth=node.depth,
+                )
+                if worker_pricing.journeys:
+                    added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
+                    _log_journey_addition(
+                        logger,
+                        worker_pricing,
+                        added,
+                        cg_iter,
+                        pricing_kind="sharded_pulse_hidden_negative_worker",
+                        node_id=node.id,
+                        depth=node.depth,
+                        active_task_sets=active_task_sets,
+                    )
+                    note_flat_weak_addition(
+                        int(added),
+                        "sharded_pulse_hidden_negative_worker",
+                    )
+                    if int(added) > 0:
+                        certificate_no_column_rounds = 0
+                        retry_negative_after_no_column_rounds = 0
+                        recent_priced_journeys = list(worker_pricing.journeys)
+                        recent_changed_task_sets = list(
+                            getattr(added, "changed_task_sets", tuple())
+                        )
+                        if _should_run_journey_pool_probe(
+                            pool_probe_enabled,
+                            cg_iter,
+                            pool_probe_frequency,
+                        ):
+                            local_incumbent, local_solution = _run_journey_pool_incumbent_probe(
+                                data,
+                                config,
+                                journey_pool,
+                                logger,
+                                cg_iter,
+                                local_incumbent,
+                                local_solution,
+                                fleet_limit=active_fleet_limit,
+                                remaining=max(0.0, deadline - time.perf_counter()),
+                                node_id=node.id,
+                                depth=node.depth,
+                            )
+                        if not bool(
+                            config.get(
+                                "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add",
+                                False,
+                            )
+                        ):
+                            continue
+                        logger.log(
+                            "journey_sharded_pulse_worker_continue_same_iteration",
+                            node_id=node.id,
+                            depth=node.depth,
+                            cg_iter=cg_iter,
+                            pricing_kind="sharded_pulse_hidden_negative_worker",
+                            added_journeys=int(added),
+                            next_stage="heuristic",
+                        )
         heuristic_no_column = False
         if heuristic_allowed:
             remaining = max(0.0, deadline - time.perf_counter())
@@ -4454,6 +4586,26 @@ def _process_journey_branch_node(
             cg_iter,
             pricing_kind=exact_pricing_kind,
             config=exact_config,
+            pricing_dual_source=exact_dual_source,
+            node_id=node.id,
+            depth=node.depth,
+        )
+        _log_journey_counterfactual_replay_capture(
+            logger,
+            data,
+            config,
+            pricing,
+            solution.duals,
+            tuple(cuts),
+            tuple(node.branch_constraints),
+            journey_pool,
+            pricing_config=exact_config,
+            pricing_kind=exact_pricing_kind,
+            cg_iter=cg_iter,
+            rmp_objective=float(solution.objective),
+            active_task_sets=active_task_sets,
+            active_variable_values=getattr(solution, "variable_values", None),
+            active_reduced_costs=getattr(solution, "reduced_costs", None),
             pricing_dual_source=exact_dual_source,
             node_id=node.id,
             depth=node.depth,
@@ -15595,6 +15747,7 @@ def _log_journey_pricing(
         profile_dominance_pruned=getattr(pricing, "profile_dominance_pruned", 0),
         profile_cut_penalty_pruned=getattr(pricing, "profile_cut_penalty_pruned", 0),
         existing_journeys_filtered=getattr(pricing, "existing_journeys_filtered", 0),
+        branch_infeasible_journeys_filtered=getattr(pricing, "branch_infeasible_journeys_filtered", 0),
         weak_negative_journeys_filtered=getattr(pricing, "weak_negative_journeys_filtered", 0),
         dominated_task_set_journeys_filtered=getattr(pricing, "dominated_task_set_journeys_filtered", 0),
         task_set_resource_pruned_sequences=getattr(pricing, "task_set_resource_pruned_sequences", 0),
@@ -17628,6 +17781,18 @@ def _journey_sharded_pulse_expected_context_allows(
     return False, "residual_target_context_mismatch"
 
 
+def _journey_sharded_pulse_expected_context_configured_match(
+    config: dict[str, Any],
+    context_hashes: dict[str, str] | None,
+) -> bool:
+    expected_context = str(
+        config.get("journey_sharded_pulse_hidden_negative_worker_expected_context_hash", "")
+        or ""
+    ).strip()
+    current_context = str((context_hashes or {}).get("context", "") or "").strip()
+    return bool(expected_context and current_context and current_context == expected_context)
+
+
 def _journey_pulse_target_sequence_from_config(
     config: dict[str, Any],
     prefix: str,
@@ -18465,6 +18630,20 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
     expected_context_allowed, expected_context_skip_reason = (
         _journey_sharded_pulse_expected_context_allows(config, context_hashes)
     )
+    expected_context_matched = _journey_sharded_pulse_expected_context_configured_match(
+        config,
+        context_hashes,
+    )
+    expected_context_current_probe_signal = bool(
+        trigger == "audit_signal_or_current_probe"
+        and expected_context_matched
+        and bool(
+            config.get(
+                "journey_sharded_pulse_worker_current_probe_allow_expected_context_without_certificate_candidate",
+                False,
+            )
+        )
+    )
     if not bool(expected_context_allowed):
         _log_journey_sharded_pulse_worker_skipped(
             logger,
@@ -18480,6 +18659,11 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
         )
         return None
     use_current_probe_config = False
+    current_probe_signal_source = (
+        "expected_context_current_probe"
+        if expected_context_current_probe_signal
+        else "current_context_probe"
+    )
     post_call_reserve = max(
         0.0,
         float(
@@ -18529,7 +18713,7 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
         )
         return None
     if trigger in {"hard_tail_only", "audit_signal_or_current_probe"}:
-        if not bool(certificate_candidate):
+        if not bool(certificate_candidate) and not bool(expected_context_current_probe_signal):
             _log_journey_sharded_pulse_worker_skipped(
                 logger,
                 config,
@@ -18618,7 +18802,7 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
                     node_id=node_id,
                     depth=depth,
                     context_hashes=context_hashes,
-                    signal_source="current_context_probe",
+                    signal_source=current_probe_signal_source,
                     previous_audit_signal=False,
                 )
                 return None
@@ -18635,7 +18819,7 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
                     node_id=node_id,
                     depth=depth,
                     context_hashes=context_hashes,
-                    signal_source="current_context_probe",
+                    signal_source=current_probe_signal_source,
                     previous_audit_signal=False,
                 )
                 return None
@@ -18653,11 +18837,11 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
                     node_id=node_id,
                     depth=depth,
                     context_hashes=context_hashes,
-                    signal_source="current_context_probe",
+                    signal_source=current_probe_signal_source,
                     previous_audit_signal=False,
                 )
                 return None
-            signal_source = "current_context_probe"
+            signal_source = current_probe_signal_source
             use_current_probe_config = True
         else:
             _log_journey_sharded_pulse_worker_skipped(
@@ -18806,7 +18990,7 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
         pulse_worker_skip_reason="",
         pulse_worker_previous_audit_signal=bool(previous_audit_signal),
         pulse_worker_current_probe_signal=bool(
-            signal_source == "current_context_probe"
+            signal_source in {"current_context_probe", "expected_context_current_probe"}
             and _journey_pricing_state(pulse_pricing) == PRICING_STATE_FOUND_NEGATIVE
             and bool(getattr(pulse_pricing, "journeys", []) or [])
         ),

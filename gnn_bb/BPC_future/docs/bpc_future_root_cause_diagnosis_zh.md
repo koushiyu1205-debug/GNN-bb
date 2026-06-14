@@ -119,6 +119,48 @@
 `BPC_future/logical_graph/run_reports/20260614_bpc_future_root_cause_optimization_direction_candidate_registry_zh.md`。
 当前优化方向 readiness matrix 见
 `BPC_future/logical_graph/run_reports/20260614_bpc_future_root_cause_direction_readiness_matrix_zh.md`。
+当前 RMP-residual switching system 与 CBF 稳定化方向见
+`BPC_future/docs/rmp_residual_cbf_control_direction_zh.md`。
+当前 CBF mode transition audit 入口见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_audit_zh.md`。
+当前 CBF mode transition capture smoke 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_capture_smoke_zh.md`。
+当前 CBF capture runbook 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_capture_runbook_zh.md`。
+当前 CBF branch-price capture hook 修复与 smoke 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_branch_capture_hook_fix_zh.md`。
+当前 CBF gate dataset 样例构建见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_tranq10_smoke_zh.md`。
+当前 CBF gate dataset readiness 审计见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_readiness_tranq10_smoke_zh.md`。
+当前 CBF task20 random-wave capture / gate dataset 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_random_wave_apollo20_01_zh.md`
+和
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_random_wave_apollo20_01_zh.md`。
+补充 Tranq20 random-wave capture / gate dataset 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_random_wave_tranq20_01_zh.md`
+和
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_random_wave_tranq20_01_zh.md`。
+补充 Apollo20 sector-wave capture / gate dataset 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_sector_wave_apollo20_01_zh.md`
+和
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_sector_wave_apollo20_01_zh.md`。
+补充 Tranq20 sector-wave capture / gate dataset 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_sector_wave_tranq20_01_zh.md`
+和
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_sector_wave_tranq20_01_zh.md`。
+补充 4-instance 20-task capped batch capture / gate dataset 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_batch20_capped_zh.md`
+和
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_batch20_capped_zh.md`。
+当前 CBF combined 10/20 dataset readiness 审计见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_readiness_combined_smoke_zh.md`。
+当前 CBF family capture worklist 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_family_capture_worklist_global_available_zh.md`。
+当前 CBF greedy-anchor family capture 审计与 dataset 见
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_family_capture_greedy_anchor_audit_zh.md`
+和
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_family_capture_greedy_anchor_dataset_zh.md`。
 
 ## 一句话结论
 
@@ -127,6 +169,311 @@
 > 5/10 规模失败的根因是固定开销敏感；20 规模失败的根因不是完全找不到 true-RC negative columns，而是 returned JourneyColumn batch 的 task-set / signature / timing composition 与 RMP active-basis trajectory 强耦合。现有主线还没有一个经过生产 A/B 验证的、低开销、addition-before 的 selector，能够稳定判断哪些负列 batch 会真正改善后续 RMP / dual / pricing trajectory。
 
 因此，“做了很多仍不行”的原因不是某个 Pulse 子模块没调好，也不是简单把 worker 跑久一点、return 多一点、profile-DP cap 调大一点就能解决。
+
+## 2026-06-14 控制论方向收束
+
+当前更高层的方向已经收束为：
+
+> BPC_future 的 20-task hard tail 更像一个 dual-driven residual-family
+> switching system，而不是静态 column selection 问题。唯一直接改变后续
+> RMP / dual trajectory 的控制入口，是向 RMP admission 哪一批已经通过
+> true-RC 验证的 JourneyColumn。GNN 的正确位置不是 pricing oracle 或
+> column usefulness classifier，而是 conservative RMP-impact / CBF
+> barrier-slack predictor。
+
+对应设计文档：
+`BPC_future/docs/rmp_residual_cbf_control_direction_zh.md`。
+
+该方向保留 exactness 边界：
+
+- GNN 不生成 certificate；
+- GNN 不产生 official lower bound；
+- GNN 不替代 true-dual exact pricing；
+- 所有加入 RMP 的列仍必须经过现有 materialization 和
+  `manual_journey_reduced_cost()` 验证；
+- 低置信、缺失 context、OOD context 一律 abstain，交回现有 exact path。
+
+下一步不应继续扩大 snapshot-level worker / Pulse budget，而应先做
+mode-transition / Lyapunov-surrogate / barrier-slack audit，记录
+`state_t, action_t, state_{t+1}`，证明哪些候选 batch 能降低 dual 振荡、
+basis turnover、replacement tail、hidden-negative regeneration 和 final-judge
+retry。只有这个 audit 数据闭合后，才有资格训练 GAT/RMP-impact CBF 模型。
+
+当前 CBF audit 工具已落地：
+
+- 脚本：`BPC_future/scripts/audit_cbf_mode_transition.py`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_audit_zh.md`；
+- 摘要：
+  `BPC_future/results/cbf_mode_transition_audit_20260614/summary.json`。
+
+当前机器状态为：
+
+```text
+status = cbf_mode_transition_audited_no_transition_evidence
+diagnostic_only = true
+runs_bpc_or_pricing = false
+has_transition_evidence = false
+training_ready = false
+production_ready = false
+goal_complete = false
+```
+
+这说明 CBF-1 的离线复算入口已经存在，但当前可扫描输入还没有形成
+相邻 `journey_counterfactual_replay_capture` transition 证据。因此下一步仍是
+no-certificate-effect capture，而不是训练模型或启用 controller。
+
+随后已跑一个 `very_small + master_mode=journey` capture smoke：
+
+```text
+capture_event_count = 6
+transition_count = 4
+mode_switch_count = 4
+bad_mode_transition_count = 1
+cbf_feasible_observed_count = 3
+cbf_infeasible_observed_count = 1
+has_transition_evidence = true
+training_ready = false
+production_ready = false
+goal_complete = false
+```
+
+该 smoke 证明 CBF capture -> audit 链路可用；同配置关闭 capture 的 baseline
+与 capture 组有相同 `status/primal/rmp_solves/pricing_calls/columns`，但 capture
+有 JSONL payload 写入开销。因此它不是 5/10 no-regression 或 20 speedup 证据，
+只能作为 CBF-1 采集机制的最小验证。
+
+随后修复了 `journey_branch_price` 路径缺失
+`journey_counterfactual_replay_capture` 的问题：
+
+- 修改点：branch-price main exact pricing 的 `_log_journey_pricing()` 后补同一个
+  no-certificate-effect capture hook；
+- focused regression：
+  `test_counterfactual_replay_capture_branch_driver_smoke_records_returned_batch`；
+- Apollo05 branch smoke：
+  `capture_event_count=1`，一轮闭合，因此 `transition_count=0`；
+- Tranq10 branch smoke：
+  `capture_event_count=5`，`transition_count=4`，`mode_switch_count=4`，
+  `bad_mode_transition_count=3`，`all_checks_pass=true`。
+
+对应报告：
+`BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_branch_capture_hook_fix_zh.md`。
+
+这一步只修复真实 5/10/20 `journey_branch_price` 路径的数据闭环，不改变 solver
+行为，也不是 production speedup 证据。它让后续 CBF/RMP-impact selector 能从真实
+分支求解日志中拿到相邻 `state_t, action_t, state_{t+1}`。
+
+基于 Tranq10 branch capture smoke，新增 CBF gate dataset 构建入口：
+
+- 脚本：`BPC_future/scripts/build_cbf_gate_dataset.py`；
+- 输出 JSONL：
+  `BPC_future/results/cbf_gate_dataset_tranq10_smoke_20260614/cbf_gate_transitions.jsonl`；
+- 输出 CSV：
+  `BPC_future/results/cbf_gate_dataset_tranq10_smoke_20260614/cbf_gate_transitions.csv`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_tranq10_smoke_zh.md`。
+
+当前样例状态：
+
+```text
+row_count = 4
+cbf_feasible_count = 1
+cbf_infeasible_count = 3
+bad_mode_transition_count = 3
+training_ready = false
+production_ready = false
+```
+
+这说明 CBF gate 的数据格式链路已闭合，但样本量远不足以训练或上线。下一步应扩大
+no-certificate-effect capture 矩阵，再做 holdout/calibration；不能把这 4 行样例
+当成模型有效性证据。
+
+新增 readiness 审计入口：
+
+- 脚本：`BPC_future/scripts/audit_cbf_gate_dataset_readiness.py`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_readiness_tranq10_smoke_zh.md`；
+- 机器摘要：
+  `BPC_future/results/cbf_gate_dataset_readiness_tranq10_smoke_20260614/summary.json`。
+
+当前 readiness 结果：
+
+```text
+all_checks_pass = true
+training_ready = false
+row_count = 4
+unique_instance_count = 1
+task_count_histogram = {"10": 4}
+cbf_feasible_count = 1
+cbf_infeasible_count = 3
+row_count_meets_minimum = false
+instance_count_meets_minimum = false
+task20_coverage = false
+```
+
+解释：当前样例行都保持 no-certificate-effect，标签正负都有，但训练门槛未满足。
+下一步必须补 5/10/20 多实例 capture，尤其要补 20-task transition；否则不能训练
+CBF gate，更不能进入 production no-regression A/B。
+
+随后补做 20-task capture 时，旧 `moon_trek_60` 的
+`apollo15_20km_tasks20_01_seed21000` 仍在实例预检查阶段失败：
+`task 17 has no feasible single-task timed trip on the configured grid`。
+该失败是实例/网格可行性问题，不是 CBF capture 链路问题。`moon_trek_balanced_60_20260609`
+当前没有 `tasks_20` 目录，因此本轮改用已可运行的
+`BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/...seed61000...`
+做 20-task 诊断补采。
+
+随后已修复 CBF capture runbook：20-task targets 不再指向旧
+`moon_trek_60/.../tasks_20/...seed21000...`，而改为当前仓库中存在且已验证可运行的
+`BPC_future/logical_graph/tasks_020/{random-wave,sector-wave}/...`。新增 regression
+要求所有 runbook instance path 存在，且 20-task target 必须包含 `/tasks_020/`
+并且不能包含 `/tasks_20/`。
+
+20-task random-wave Apollo20_01 capture 结果：
+
+```text
+status = TIME_LIMIT
+capture_event_count = 3
+transition_count = 2
+mode_switch_count = 2
+bad_mode_transition_count = 1
+cbf_feasible_observed_count = 1
+cbf_infeasible_observed_count = 1
+training_ready = false
+production_ready = false
+```
+
+对应报告：
+
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_random_wave_apollo20_01_zh.md`
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_random_wave_apollo20_01_zh.md`
+
+补充跑了 `tasks_020/random-wave/tranquillitatis...seed61001` capped capture：
+
+```text
+status = TIME_LIMIT
+solving_time = 57.352573
+columns = 303
+capture_event_count = 5
+transition_count = 4
+mode_switch_count = 4
+bad_mode_transition_count = 2
+cbf_feasible_observed_count = 1
+cbf_infeasible_observed_count = 3
+```
+
+对应报告：
+
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_random_wave_tranq20_01_zh.md`
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_random_wave_tranq20_01_zh.md`
+
+继续补跑 `tasks_020/sector-wave/apollo15...seed61000` capped capture：
+
+```text
+status = TIME_LIMIT
+solving_time = 81.913211
+columns = 154
+capture_event_count = 4
+transition_count = 3
+mode_switch_count = 3
+bad_mode_transition_count = 1
+cbf_feasible_observed_count = 2
+cbf_infeasible_observed_count = 1
+```
+
+对应报告：
+
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_sector_wave_apollo20_01_zh.md`
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_sector_wave_apollo20_01_zh.md`
+
+继续补跑 `tasks_020/sector-wave/tranquillitatis...seed61002` capped capture：
+
+```text
+status = TIME_LIMIT
+solving_time = 52.049559
+columns = 269
+capture_event_count = 4
+transition_count = 3
+mode_switch_count = 3
+bad_mode_transition_count = 1
+cbf_feasible_observed_count = 2
+cbf_infeasible_observed_count = 1
+```
+
+对应报告：
+
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_task20_sector_wave_tranq20_01_zh.md`
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_task20_sector_wave_tranq20_01_zh.md`
+
+把 Tranq10、task20 random-wave Apollo20_01、task20 random-wave Tranq20_01、
+task20 sector-wave Apollo20_01 与 task20 sector-wave Tranq20_01 合并后，
+CBF gate readiness 变为：
+
+```text
+all_checks_pass = true
+training_ready = false
+row_count = 16
+unique_instance_count = 5
+task_count_histogram = {"10": 4, "20": 12}
+cbf_feasible_count = 7
+cbf_infeasible_count = 9
+task20_coverage = true
+row_count_meets_minimum = false
+instance_count_meets_minimum = true
+```
+
+对应报告：
+
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_combined_smoke_zh.md`
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_readiness_combined_smoke_zh.md`
+
+随后用 `run_bpc_future_external_timeout_batch.py` 顺序跑 4 个新的 20-task capped
+capture：
+
+- `random-wave/apollo15_20km/...tasks020_02_seed61102...`；
+- `random-wave/tranquillitatis...tasks020_02_seed61103...`；
+- `greedy-anchor/apollo15_20km/...tasks020_01_seed61000...`；
+- `greedy-anchor/tranquillitatis...tasks020_01_seed61001...`。
+
+其中前两个在 OS 级 `90s` timeout 下结束为 `EXTERNAL_TIME_LIMIT`，但已写入
+可解析的 no-certificate-effect capture events；后两个正常返回 solver
+`TIME_LIMIT`。整批 audit 结果：
+
+```text
+capture_event_count = 19
+transition_count = 15
+mode_switch_count = 15
+bad_mode_transition_count = 7
+cbf_feasible_observed_count = 7
+cbf_infeasible_observed_count = 8
+all_checks_pass = true
+```
+
+对应报告：
+
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_mode_transition_batch20_capped_zh.md`
+- `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_batch20_capped_zh.md`
+
+把该 batch 也并入 combined dataset 后，CBF gate readiness 更新为：
+
+```text
+all_checks_pass = true
+training_ready = false
+row_count = 31
+unique_instance_count = 9
+task_count_histogram = {"10": 4, "20": 27}
+cbf_feasible_count = 14
+cbf_infeasible_count = 17
+task20_coverage = true
+row_count_meets_minimum = false
+instance_count_meets_minimum = true
+```
+
+解释：CBF/Barrier 数据链路已经能覆盖 10-task 与 20-task，并且仍保持
+no-certificate-effect；当前实例数门槛已满足，正负 CBF 标签接近平衡，但仍只有
+31 行 smoke/batch 数据，距离 `min_rows=100` 还差 `69` 行。它只能支持
+“控制论 gate 数据结构可采集”的判断，不能支持训练、上线、production worker、
+official certificate gate 或 20-task speedup 声明。
 
 ## 2026-06-14 Worker 负列 ROI 阻塞审计
 
@@ -1683,3 +2030,1537 @@ worker 或 official certificate gate。
 
 因此根因判断继续保持不变：当前阻塞不是 Pulse 算得还不够多，而是缺少能在加列前泛化判断 returned-batch impact 的 context-aware selector 数据。
 
+## 2026-06-14 CBF/RMP-Impact Gate 当前证据
+
+本轮把 selector 方向进一步收紧为 CBF/RMP-impact gate：
+
+- GNN / 线性 gate 不能作为 pricing oracle；
+- 不能生成列；
+- 不能证明 no-negative；
+- 不能产生 official lower bound 或 certificate；
+- 唯一合法入口是：对已经由现有 machinery 物化并通过 true-RC 验证的候选列批，
+  预测其加入 RMP 后是否可能维持 Lyapunov/CBF surrogate 稳定。
+
+新增全量 no-certificate-effect 数据构建：
+
+- 数据集摘要：
+  `BPC_future/results/cbf_gate_dataset_global_available_20260614/summary.json`
+- readiness 审计：
+  `BPC_future/results/cbf_gate_dataset_readiness_global_available_20260614/summary.json`
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_global_available_zh.md`
+  和
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_dataset_readiness_global_available_zh.md`
+
+关键结果：
+
+- `row_count=181`；
+- `unique_instance_count=14`；
+- `task_count_histogram={'4': 5, '10': 4, '20': 172}`；
+- `cbf_feasible_count=30`；
+- `cbf_infeasible_count=151`；
+- `all_checks_pass=true`；
+- `training_ready=true`；
+- 所有行保持 `diagnostic_only=true`、`certificate_capable=false`、
+  `official_bound_effect=false`。
+
+新增离线 CBF gate 训练：
+
+- 脚本：
+  `BPC_future/scripts/train_cbf_gate.py`
+- 模型：
+  `BPC_future/results/cbf_gate_training_global_available_20260614/cbf_linear_gate_model.json`
+- 摘要：
+  `BPC_future/results/cbf_gate_training_global_available_20260614/summary.json`
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_training_global_available_zh.md`
+
+训练口径：
+
+- 只使用当前状态和候选列批特征：
+  `state_t_*`、`action_*`、`v_t`、`h_t`、`task_count`、`cg_iter` 等；
+- 显式排除未来泄漏：
+  `state_next_*`、`delta_*`、`barrier_slack`、label、
+  `mode_switched`、`active_hash_switched`；
+- 产物仍是 `production_ready=false`。
+
+当前离线训练结果：
+
+- `row_count=181`；
+- `feature_count=30`；
+- `label_counts={'0': 151, '1': 30}`；
+- instance-holdout split：`train_count=170`，`validation_count=11`；
+- 保守阈值：`threshold=0.78`；
+- validation：`precision=1.0`，`false_positive_rate=0.0`，
+  `recall=0.3333333333333333`，`predicted_positive=2`；
+- train：`precision=0.7692307692307693`，
+  `false_positive_rate=0.0410958904109589`，
+  `recall=0.8333333333333334`。
+
+解释：
+
+- 这说明 CBF gate 已经有初步可学习信号；
+- 但验证集太小，且样本主要集中在 20-task greedy-anchor 两个实例上；
+- 因此它还不能作为 production worker gate，更不能用于 certificate；
+- 下一步应做 context/instance holdout 稳健性审计和 5/10 no-regression A/B，
+  而不是直接接入默认求解路径。
+
+## 2026-06-14 CBF Gate Holdout 负结论
+
+新增 holdout 审计：
+
+- 脚本：
+  `BPC_future/scripts/audit_cbf_gate_holdout.py`
+- 摘要：
+  `BPC_future/results/cbf_gate_holdout_audit_global_available_20260614/summary.json`
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_holdout_audit_global_available_zh.md`
+
+审计方法：
+
+- 按 `instance` 做 leave-one-instance；
+- 按 `task_count` 做 leave-one-task-count；
+- 每个 fold 只在训练侧校准阈值；
+- 留出侧只评估是否出现 unsafe false positive；
+- 仍然不运行 BPC / pricing / RMP，不产生 certificate。
+
+关键结果：
+
+- `all_checks_pass=true`；
+- `holdout_safety_pass=false`；
+- `production_gate_ready=false`；
+- instance holdout：`evaluated_count=11`，`false_positive_fold_count=3`，
+  `skipped_count=3`；
+- task-count holdout：`evaluated_count=3`，`false_positive_fold_count=2`。
+
+具体失败 fold：
+
+- `apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000`：
+  `fp=11`，`predicted_positive=19`，`precision=0.42105263157894735`；
+- `tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_01_seed61001`：
+  `fp=1`，`predicted_positive=1`，`precision=0.0`；
+- `tranquillitatis_balmer_like_20km_tasks10_01_seed11000`：
+  `fp=3`，`predicted_positive=4`，`precision=0.25`；
+- task-count holdout `10`：
+  `fp=3`，`predicted_positive=4`，`precision=0.25`；
+- task-count holdout `20`：
+  `fp=82`，`predicted_positive=94`，`precision=0.1276595744680851`。
+
+结论：
+
+- CBF/RMP-impact gate 有离线可学习信号，但当前泛化不稳；
+- 尤其跨 task-count 泛化失败，直接违反“5/10 不退化”和“20 加速”前置要求；
+- 因此当前 gate 必须继续停留在 offline diagnostic / calibration；
+- 不允许接 production worker；
+- 不允许用于 official certificate；
+- 下一步必须补齐 5/10/20 分层样本，并做更强的 context-aware / scale-aware
+  holdout，再谈 5/10 no-regression A/B。
+
+## 2026-06-14 Scale-aware CBF Gate 审计
+
+新增 scale-aware policy 审计：
+
+- 脚本：
+  `BPC_future/scripts/audit_cbf_gate_scale_policy.py`
+- 摘要：
+  `BPC_future/results/cbf_gate_scale_policy_audit_global_available_20260614/summary.json`
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_scale_policy_audit_global_available_zh.md`
+
+审计策略：
+
+- `task_count < 20` 强制 `ABSTAIN`，用于保护 5/10 不退化；
+- `task_count >= 20` 仍需在本 scale 内通过 leave-one-instance safety；
+- 只读离线数据，不运行 BPC / pricing / RMP；
+- 不产生列，不接 worker，不参与 certificate。
+
+关键结果：
+
+- `all_checks_pass=true`；
+- `scale_policy_ready=false`；
+- `ready_task_counts=[]`；
+- `task_count=4`：`status=guarded_abstain_below_min_task_count`；
+- `task_count=10`：`status=guarded_abstain_below_min_task_count`；
+- `task_count=20`：`status=scale_gate_not_ready`；
+- 20-scale 内部：`evaluated_count=9`，`false_positive_fold_count=4`，
+  `skipped_count=3`。
+
+20-scale 具体失败：
+
+- `apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000`：
+  `fp=13`，`predicted_positive=21`，`precision=0.38095238095238093`；
+- `apollo15_20km_random-wave_randomtw_tasks020_02_seed61102`：
+  `fp=2`，`predicted_positive=3`，`precision=0.3333333333333333`；
+- `tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_01_seed61001`：
+  `fp=1`，`predicted_positive=1`，`precision=0.0`；
+- `tranquillitatis_balmer_like_20km_random-wave_randomtw_tasks020_02_seed61103`：
+  `fp=1`，`predicted_positive=2`，`precision=0.5`。
+
+结论：
+
+- scale guard 可以形式上保护 5/10：小 scale 默认 abstain；
+- 但 20-scale 自身仍不满足安全 holdout；
+- 因此当前没有任何 scale 可以进入 production A/B；
+- 下一步不是调低阈值或接 worker，而是补 20-scale 内的 context/family
+  覆盖，尤其是 greedy-anchor 与 random-wave 的 false-positive fold；
+- 只有 20-scale within-scale holdout 先变成 no false positive，才值得做
+  20-task no-regression / speed A/B。
+
+## 2026-06-14 Family-aware CBF Gate 审计
+
+新增 family-aware policy 审计：
+
+- 脚本：
+  `BPC_future/scripts/audit_cbf_gate_family_policy.py`
+- 摘要：
+  `BPC_future/results/cbf_gate_family_policy_audit_global_available_20260614/summary.json`
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_gate_family_policy_audit_global_available_zh.md`
+
+审计策略：
+
+- 分组键为 `(task_count, family)`；
+- 小规模 family 仍强制 `ABSTAIN`；
+- 20-scale 内的每个 family 必须通过 within-family leave-one-instance safety；
+- 只读离线数据，不接 worker，不运行 BPC / pricing / RMP。
+
+关键结果：
+
+- `all_checks_pass=true`；
+- `family_policy_ready=false`；
+- `ready_families=[]`；
+- `4|very_small`：`guarded_abstain_below_min_task_count`；
+- `10|moon_trek_tasks10`：`guarded_abstain_below_min_task_count`；
+- `20|greedy-anchor`：`row_count=150`，`family_gate_not_ready`；
+- `20|random-wave`：`row_count=13`，`insufficient_family_rows`；
+- `20|sector-wave`：`row_count=6`，`insufficient_family_rows`；
+- `20|moon_trek_tasks20`：`row_count=3`，`insufficient_family_rows`。
+
+greedy-anchor 的具体失败：
+
+- within-family evaluated fold 只有 `2` 个，`skipped_count=3`；
+- `tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_01_seed61001`
+  留出时：`fp=3`，`predicted_positive=4`，`precision=0.25`；
+- Apollo greedy 主实例留出没有 false positive，但 recall 低：
+  `tp=2`，`fn=7`。
+
+解释：
+
+- family-aware 比 scale-aware 更接近真实 residual family 模式；
+- 但当前没有任何 family 可进入 production A/B；
+- random-wave / sector-wave 主要是样本不足，不代表规则失败；
+- greedy-anchor 是已有样本下仍泛化失败，尤其是 Apollo/Tranq 之间存在
+  residual mode 差异；
+- 下一步补采应分两类：
+  1. 补 random-wave / sector-wave 到 `min_family_rows` 以上；
+  2. 针对 greedy-anchor Tranq false-positive context 做邻域 capture，
+     重点增加 negative/noop/mixed 标签，而不是继续扩大 worker budget。
+
+## 2026-06-14 CBF Family Capture Worklist
+
+基于 family-aware CBF gate 审计，新增 targeted capture worklist：
+
+- 脚本：
+  `BPC_future/scripts/build_cbf_family_capture_worklist.py`
+- 摘要：
+  `BPC_future/results/cbf_family_capture_worklist_global_available_20260614/summary.json`
+- CSV：
+  `BPC_future/results/cbf_family_capture_worklist_global_available_20260614/worklist.csv`
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_family_capture_worklist_global_available_zh.md`
+
+该 worklist 只把 family-aware 审计缺口转成 no-certificate-effect capture
+命令；它不运行 BPC / pricing / RMP，不接 worker，不产生列，不参与
+certificate，也不改变默认 benchmark 路径。
+
+关键结果：
+
+- `all_checks_pass=true`；
+- `diagnostic_only=true`；
+- `runs_bpc_or_pricing=false`；
+- `production_ready=false`；
+- `work_item_count=4`；
+- `command_count=3`。
+
+当前 work items：
+
+- `20|greedy-anchor`：`family_gate_not_ready`，优先级 `100`；
+  建议采集 2 个 Tranq greedy-anchor 邻域实例，针对当前
+  Tranq false-positive fold 补 negative/noop/mixed context；
+- `20|random-wave`：`insufficient_family_rows`，优先级 `80`；
+  建议采集 4 个 Tranq random-wave 实例；
+- `20|sector-wave`：`insufficient_family_rows`，优先级 `80`；
+  建议采集 4 个 Tranq sector-wave 实例；
+- `20|moon_trek_tasks20`：`insufficient_family_rows`，但 family mapping
+  尚未恢复，当前只标记 `recover_family_mapping_before_capture`，不生成
+  盲采命令。
+
+这一步把下一步从“调阈值 / 接 worker / 开 production gate”收紧为：
+
+1. 先执行这些 no-certificate-effect capture；
+2. 重新 build CBF gate dataset；
+3. 重跑 readiness / holdout / scale-aware / family-aware 审计；
+4. 只有某个 20-task family 在 within-family holdout 中无 false positive，
+   才允许进入该 family 的 experimental worker A/B；
+5. 在此之前仍不允许 CBF gate 影响 5/10 默认路径、official lower bound
+   或 exact certificate。
+
+## 2026-06-14 CBF Greedy-anchor Family Capture 执行结果
+
+已按 worklist 的最高优先级执行 `20|greedy-anchor` 的 Tranq 邻域补采：
+
+- 实例：
+  `tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_03_seed61206`
+  和
+  `tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_04_seed61311`；
+- capture 输出：
+  `BPC_future/results/cbf_family_capture_worklist_global_available_20260614/captures/greedy-anchor/`；
+- audit 输出：
+  `BPC_future/results/cbf_family_capture_worklist_global_available_20260614/audits/greedy-anchor/summary.json`；
+- dataset 输出：
+  `BPC_future/results/cbf_family_capture_worklist_global_available_20260614/datasets/greedy-anchor/summary.json`。
+
+求解侧结果：
+
+- 两个实例均为 solver `TIME_LIMIT`；
+- `return_code=0`；
+- `external_timeout=false`；
+- 第一条 `wall_time=82.232966`，第二条 `wall_time=61.287496`。
+
+mode-transition audit 结果：
+
+```text
+all_checks_pass = true
+capture_event_count = 6
+transition_count = 4
+mode_switch_count = 4
+bad_mode_transition_count = 1
+cbf_feasible_observed_count = 3
+cbf_infeasible_observed_count = 1
+all_capture_events_no_certificate_effect = true
+runs_bpc_or_pricing = false
+production_ready = false
+```
+
+CBF gate dataset 结果：
+
+```text
+all_checks_pass = true
+row_count = 4
+task_count_histogram = {"20": 4}
+cbf_feasible_count = 3
+cbf_infeasible_count = 1
+all_rows_no_certificate_effect = true
+training_ready = false
+production_ready = false
+```
+
+解释：
+
+- 这批补采确实补到了 `20|greedy-anchor|tranquillitatis` 的新 transition
+  context，并包含正负 CBF 标签；
+- 它仍只是 offline calibration 数据，不是 speedup 证据；
+- 它不能改变官方求解路径，不能作为 worker trigger，也不能作为 certificate；
+- 下一步应把这 4 行合入 global CBF dataset 后重跑 family-aware holdout；
+- 若 greedy-anchor Tranq false-positive fold 仍失败，再继续执行同 worklist 的
+  random-wave / sector-wave 补采，而不是调低阈值。
+
+将该 greedy-anchor 补采并入全量 CBF gate dataset 后，新增
+`global_plus_greedy` 复审：
+
+- 数据集：
+  `BPC_future/results/cbf_gate_dataset_global_plus_greedy_20260614/summary.json`
+- readiness：
+  `BPC_future/results/cbf_gate_dataset_readiness_global_plus_greedy_20260614/summary.json`
+- global holdout：
+  `BPC_future/results/cbf_gate_holdout_audit_global_plus_greedy_20260614/summary.json`
+- scale-aware：
+  `BPC_future/results/cbf_gate_scale_policy_audit_global_plus_greedy_20260614/summary.json`
+- family-aware：
+  `BPC_future/results/cbf_gate_family_policy_audit_global_plus_greedy_20260614/summary.json`
+
+全量数据变化：
+
+```text
+row_count = 185
+unique_instance_count = 16
+task_count_histogram = {"4": 5, "10": 4, "20": 176}
+cbf_feasible_count = 33
+cbf_infeasible_count = 152
+training_ready = true
+production_ready = false
+```
+
+复审结论仍为负：
+
+```text
+holdout_safety_pass = false
+production_gate_ready = false
+scale_policy_ready = false
+ready_task_counts = []
+family_policy_ready = false
+ready_families = []
+```
+
+family-aware 关键变化：
+
+- `20|greedy-anchor` 从 `150` 行增至 `154` 行；
+- 标签从 `{"0": 133, "1": 17}` 增至 `{"0": 134, "1": 20}`；
+- evaluated folds 从 `2` 增至 `4`；
+- false-positive folds 从 `1` 增至 `3`。
+
+当前 `20|greedy-anchor` 失败 fold：
+
+- `apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000`：
+  `fp=2`，`predicted_positive=7`，`precision=0.7142857142857143`；
+- `tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_01_seed61001`：
+  `fp=13`，`predicted_positive=21`，`precision=0.38095238095238093`；
+- `tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_04_seed61311`：
+  `fp=1`，`predicted_positive=1`，`precision=0.0`。
+
+这说明补采后并没有让 greedy-anchor gate 变安全，反而暴露出更多
+Tranq / Apollo context 差异。因此当前行动不应是训练上线、降低阈值或接入
+active worker，而应继续按 worklist 补 `random-wave` / `sector-wave` family，
+并针对 greedy-anchor 的 false-positive contexts 继续补 negative/noop
+neighborhood。
+
+## 2026-06-14 CBF Trajectory-level Gate 口径修正
+
+本轮根据控制论口径进一步修正 CBF/RMP-impact gate 的定义：
+
+```text
+旧口径：p -> score(p) -> add / skip
+新口径：(x_t, u_t) -> Delta V_{t->t+H} / barrier_slack_{t->t+H}
+```
+
+其中：
+
+```text
+x_t = (theta_t, B_t, Omega_t_struct / residual family signature)
+u_t = 已经 true-RC 验证过的 column batch
+```
+
+这意味着 gate 不是 column-level classifier。单列 `rc(p)`、路径、能耗、
+时间窗只是局部特征；真正要判断的是：这一批列加入后，后续 RMP dual /
+active-basis / residual-family trajectory 是否更稳定。当前 one-step
+CBF gate 只能说明 immediate impact 有离线可学习信号，但不足以作为
+production worker gate。
+
+为此新增 trajectory-level dataset 构建入口：
+
+- 脚本：`BPC_future/scripts/build_cbf_trajectory_gate_dataset.py`；
+- 全量 H=2 数据集：
+  `BPC_future/results/cbf_trajectory_gate_dataset_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_trajectory_gate_dataset_global_all_h2_zh.md`。
+
+全量 H=2 结果：
+
+```text
+input_file_count = 8886
+capture_event_count = 363
+one_step_transition_count = 203
+row_count = 121
+horizon_steps = 2
+horizon_cbf_feasible_count = 19
+horizon_cbf_infeasible_count = 102
+horizon_bad_mode_transition_count = 90
+task_count_histogram = {"4": 3, "10": 3, "20": 115}
+all_checks_pass = true
+training_ready = true
+production_ready = false
+```
+
+补充 random-wave H=2 结果：
+
+```text
+row_count = 14
+one_step_transition_count = 18
+capture_event_count = 22
+horizon_cbf_feasible_count = 7
+horizon_cbf_infeasible_count = 7
+horizon_bad_mode_transition_count = 6
+all_checks_pass = true
+production_ready = false
+```
+
+解释：
+
+- 这一步把目标从 `p -> immediate RMP improvement` 推到
+  `column batch -> trajectory stability over horizon H`；
+- 数据仍然只来自 no-certificate-effect capture 日志，不运行 BPC / pricing /
+  RMP，不改变 worker，不影响 official lower bound 或 certificate；
+- `training_ready=true` 只表示 H=2 数据格式和正负标签已经可用于离线训练；
+- `production_ready=false` 表示它不能接 worker、不能默认启用、不能作为
+  certificate 或 official bound；
+- 训练必须排除 `state_next_*`、`delta_*`、`horizon_*` 和所有 label 字段，
+  否则会把事后 trajectory 泄漏进在线 selector。
+
+同时补充 exactness guard：trajectory gate 不能决定“永久丢弃负列”，只能决定
+“负列进入 RMP 的顺序与优先级”。因此正确结构是：
+
+```text
+N_t = {p : true_reduced_cost(p) < 0}
+
+if p in N_t and safe(p):
+    decision = HIGH_PRIORITY
+elif p in N_t and not safe(p):
+    decision = DELAY_QUEUE
+else:
+    decision = REJECT_NONNEGATIVE_ONLY
+```
+
+其中 `DELAY_QUEUE` 必须仍然保持 eventually reachable；现有 exact pricing /
+fallback / backlog 不能被 CBF gate 截断。这样 CBF 只作为 ordering /
+scheduling layer，不破坏 column generation 的 completeness proof。如果未来实现成
+`unsafe -> discard`，则会退化为启发式过滤 CG，不能再声称精确最优。
+
+同时，`DELAY_QUEUE` 还必须满足有限延迟引理：
+
+```text
+forall p, true_reduced_cost(p) < 0:
+    exists finite T_p
+    such that p enters RMP or is re-exposed to exact pricing/backlog
+```
+
+这条的目的不是让证明阶段花更多时间，而是防止稳定性 gate 把 proof 变成短板：
+delay queue 不参与 no-negative certificate，不阻塞 exact final judge 的硬截止，
+也不能让任何负列无限期悬挂。
+
+当前结论同步修正为：
+
+```text
+gate_target = trajectory_lyapunov_controller
+state = theta_t + active_basis_B_t + residual_family_signature
+control = true_rc_verified_column_batch
+label = horizon_delta_V / horizon_barrier_slack / bad_mode_switch
+gate_role = stability_scheduler_not_column_filter
+safe_negative_decision = HIGH_PRIORITY
+unsafe_negative_decision = DELAY_QUEUE
+nonnegative_decision = REJECT_NONNEGATIVE_ONLY
+negative_columns_must_remain_eventually_reachable = true
+finite_delay_required = true
+one_step_gate_status = diagnostic_seed_only
+trajectory_gate_status = offline_dataset_ready_not_production_ready
+must_not_open_worker_gate = true
+must_not_open_certificate_gate = true
+```
+
+下一步若继续，应先做 horizon-level holdout / family-aware holdout 和保守
+abstain 策略审计，而不是把 one-step gate 或 H=2 dataset 直接接入
+active worker。
+
+## 2026-06-14 CBF Trajectory Gate Policy 审计
+
+基于 H=2 trajectory dataset，新增 trajectory-level policy 审计：
+
+- 脚本：`BPC_future/scripts/audit_cbf_trajectory_gate_policy.py`；
+- 摘要：
+  `BPC_future/results/cbf_trajectory_gate_policy_audit_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_trajectory_gate_policy_audit_global_all_h2_zh.md`。
+
+该审计同时检查：
+
+1. instance holdout；
+2. task-count holdout；
+3. scale-aware abstain；
+4. `(task_count, family)` family-aware abstain；
+5. 是否误用 one-step label；
+6. 是否把 `horizon_*`、`state_next_*`、`delta_*` 泄漏为在线特征；
+7. 是否明确禁止永久丢弃 true-RC negative columns。
+
+关键结果：
+
+```text
+row_count = 139
+label_counts = {"0": 103, "1": 36}
+task_count_histogram = {"4": 3, "10": 3, "20": 133}
+horizon_steps = ["2"]
+feature_count = 30
+all_checks_pass = true
+holdout_safety_pass = false
+scale_policy_ready = false
+family_policy_ready = false
+ready_task_counts = []
+ready_families = []
+production_ready = false
+gate_can_permanently_discard_negative_columns = false
+negative_columns_must_remain_eventually_reachable = true
+finite_delay_required = true
+```
+
+失败结构：
+
+```text
+instance_holdout:
+  evaluated_count = 20
+  false_positive_fold_count = 8
+  productive_fold_count = 16
+  skipped_count = 4
+
+task_count_holdout:
+  evaluated_count = 3
+  false_positive_fold_count = 2
+  productive_fold_count = 2
+
+scale:
+  task_count=4  -> guarded_abstain_below_min_task_count
+  task_count=10 -> guarded_abstain_below_min_task_count
+  task_count=20 -> scale_gate_not_ready
+
+family:
+  20|greedy-anchor -> family_gate_not_ready
+  20|random-wave   -> family_gate_not_ready
+  20|sector-wave   -> family_gate_not_ready
+```
+
+解释：
+
+- H=2 trajectory label 比 one-step label 更接近真实控制目标，但当前 holdout
+  仍有 false positive；
+- 因此即使 `training_ready=true`，也不能进入 production worker 或 official
+  certificate gate；
+- 5/10 继续由 scale/family guard 强制 abstain，保护 no-regression；
+- 20-scale 和具体 family 仍不安全，下一步若继续应补 trajectory-level
+  family 数据并做更强 abstain 策略，而不是扩大 worker time limit；
+- 任何未来 controller 都必须实现 `unsafe_negative -> DELAY_QUEUE`，不能实现成
+  `unsafe_negative -> DISCARD`。
+
+本轮额外执行了 `20|sector-wave` 补采：
+
+```text
+sector-wave first batch:
+  instances = 4
+  one_step_rows = 14
+  h2_rows = 10
+  h2_feasible = 9
+  h2_infeasible = 1
+
+sector-wave extra batch:
+  instances = 4
+  one_step_rows = 12
+  h2_rows = 8
+  h2_feasible = 8
+  h2_infeasible = 0
+```
+
+补采后 `20|sector-wave` 从样本不足变成可评估，但仍有 holdout false positive：
+
+```text
+20|sector-wave:
+  row_count = 22
+  label_counts = {"0": 3, "1": 19}
+  evaluated_count = 6
+  false_positive_fold_count = 2
+  productive_fold_count = 6
+```
+
+因此当前阻塞已从 `insufficient_family_rows` 变为
+`within_family_trajectory_holdout_not_safe_or_not_productive`。这说明补数据
+是有用的，但当前 H=2 gate 仍不能上线；下一步要么继续补 false-positive
+邻域，要么升级为更保守的 delay-queue scheduler 审计，而不是让它直接接
+worker。
+
+## 2026-06-14 CBF Delay-Queue Scheduler 审计
+
+基于同一份 H=2 trajectory dataset，新增 delay-queue scheduler 审计：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_scheduler.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_scheduler_audit_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_scheduler_audit_global_all_h2_zh.md`。
+
+这个审计把 CBF gate 的 exactness 语义固定为：
+
+```text
+rc < 0 and predicted_safe     -> HIGH_PRIORITY
+rc < 0 and predicted_unsafe   -> DELAY_QUEUE
+rc >= 0                       -> REJECT_NONNEGATIVE_ONLY
+```
+
+核心 guard 是：
+
+```text
+gate_can_permanently_discard_negative_columns = false
+negative_columns_must_remain_eventually_reachable = true
+finite_delay_required = true
+delay_queue_is_proof_blocking = false
+```
+
+也就是说，CBF 只能改变负列进入 RMP 的顺序，不能永久过滤任何 true-RC
+negative column，也不能把 delay queue 解释成 no-negative certificate。
+证明阶段仍由现有 exact pricing / final judge 的完整性承担；delay queue 只
+是 admission 调度层。
+
+当前机器结果：
+
+```text
+row_count = 139
+label_counts = {"0": 103, "1": 36}
+min_high_priority_threshold = 0.8
+all_checks_pass = true
+scheduler_ready = false
+scale_scheduler_ready = false
+family_scheduler_ready = false
+ready_task_counts = []
+ready_families = []
+production_ready = false
+```
+
+20-task scale 仍不安全：
+
+```text
+task_count = 20
+row_count = 133
+evaluated_count = 18
+unsafe_high_priority_fold_count = 2
+total_high_priority_count = 20
+total_delay_queue_count = 109
+status = scale_scheduler_not_ready
+```
+
+family 维度也未 ready：
+
+```text
+20|greedy-anchor:
+  unsafe_high_priority_fold_count = 0
+  total_high_priority_count = 0
+  status = family_scheduler_not_ready
+
+20|random-wave:
+  unsafe_high_priority_fold_count = 1
+  total_high_priority_count = 3
+  status = family_scheduler_not_ready
+
+20|sector-wave:
+  unsafe_high_priority_fold_count = 2
+  total_high_priority_count = 9
+  status = family_scheduler_not_ready
+```
+
+解释：
+
+- delay-queue 的 exactness 结构已经正确；
+- 但当前 H=2 预测器在 20-scale / random-wave / sector-wave 上仍会把一部分
+  unsafe transition 放进 high-priority；
+- greedy-anchor 虽然没有 unsafe high-priority，但也没有产生 high-priority
+  候选，只有延迟价值，没有调度收益；
+- 因此当前结论仍是 audit-only / not production ready，不能接 worker、
+  不能接 certificate、不能影响 official lower bound。
+
+下一步若继续，应优先补 false-positive 邻域数据或提高保守 abstain /
+delay 策略，而不是扩大 worker 时间或让 gate 参与证明。
+
+## 2026-06-14 CBF Delay-Queue False-Positive 目录
+
+为定位 delay scheduler 的 unsafe high-priority 风险，新增误判目录：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_false_positive_catalog.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_false_positive_catalog_global_all_h2_20260614/summary.json`；
+- 记录：
+  `BPC_future/results/cbf_delay_queue_false_positive_catalog_global_all_h2_20260614/false_positive_records.jsonl`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_false_positive_catalog_global_all_h2_zh.md`。
+
+当前结果：
+
+```text
+row_count = 139
+label_counts = {"0": 103, "1": 36}
+min_high_priority_threshold = 0.8
+false_positive_record_count = 6
+false_positive_by_scope = {"family": 4, "scale": 2}
+false_positive_by_family = {
+  "20|greedy-anchor": 1,
+  "20|random-wave": 1,
+  "20|sector-wave": 4
+}
+all_checks_pass = true
+production_ready = false
+```
+
+具体实例分布：
+
+```text
+apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000: 1
+tranquillitatis_balmer_like_20km_random-wave_randomtw_tasks020_02_seed61103: 1
+tranquillitatis_balmer_like_20km_sector-wave_randomtw_tasks020_01_seed61002: 2
+tranquillitatis_balmer_like_20km_sector-wave_randomtw_tasks020_05_seed61410: 2
+```
+
+这些样本的共同含义是：在线特征看起来像安全 high-priority，但 H=2
+trajectory label 是 unsafe。目录中的每条记录都强制标注：
+
+```text
+predicted_decision = HIGH_PRIORITY
+required_safe_decision = DELAY_QUEUE
+exactness_action = force_delay_not_discard
+```
+
+因此下一步不能上线 scheduler；应先针对这些 family / instance 邻域补采，
+或增加能区分 H=2 mode switch 的在线 state 特征。当前最保守可行策略仍是：
+受影响 bucket 全部 delay / abstain，交回现有 exact path。
+
+## 2026-06-14 CBF Delay-Queue Feature Gap 审计
+
+为判断 false positive 是阈值问题还是在线特征缺口，新增 feature-gap 审计：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_feature_gap.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_feature_gap_audit_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_feature_gap_audit_global_all_h2_zh.md`。
+
+当前结果：
+
+```text
+row_count = 139
+label_counts = {"0": 103, "1": 36}
+unique_false_positive_row_count = 5
+safe_like_false_positive_count = 3
+safe_like_false_positive_ratio = 0.6
+single_feature_guard_available = true
+all_checks_pass = true
+production_ready = false
+```
+
+解释：
+
+- 5 个唯一 FP 行里有 3 个在当前在线特征空间中更接近 safe 行，而不是更接近
+  其他 unsafe 行；
+- 这说明当前可在线使用的特征确实不足以稳定区分部分 H=2 risky transition；
+- 当前唯一可见的单特征 guard 线索是
+  `delay if state_t_dual_l1_delta <= 104.269554`，可覆盖 5/5 FP，但只保留
+  20/36 safe 行，safe retention 约 55.6%；
+- 这个 guard 只能作为诊断线索，不能直接上线，因为它是从当前 FP 目录反推
+  出来的，仍需要独立 holdout 验证。
+
+因此当前最强结论是：scheduler 的 exactness 结构已正确，但特征层仍缺少
+能预测 H=2 mode switch / barrier slack 的在线状态信息。下一步应围绕这些
+FP 邻域补采数据或增加在线 state 特征，而不是继续调低阈值或上线 worker。
+
+## 2026-06-14 CBF Trajectory History 特征尝试
+
+为了验证“加入上一轮 RMP/trajectory 历史”是否能修复 false positive，新增
+history-enriched dataset 构建器：
+
+- 脚本：`BPC_future/scripts/build_cbf_trajectory_history_dataset.py`；
+- 摘要：
+  `BPC_future/results/cbf_trajectory_history_dataset_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_trajectory_history_dataset_global_all_h2_zh.md`。
+
+该构建器只加入同一 `source_file / instance / node / depth` 下更早
+transition 的 `history_prev_*` 字段，不加入当前行的 `horizon_*`、
+`state_next_*` 或原始 `delta_*` 未来字段。
+
+构建结果：
+
+```text
+row_count = 139
+feature_count = 59
+history_feature_count = 29
+label_counts = {"0": 103, "1": 36}
+all_checks_pass = true
+production_ready = false
+```
+
+但用该 history dataset 重跑 delay scheduler 后，结果变差：
+
+```text
+baseline H=2:
+  20-scale unsafe_high_priority_fold_count = 2
+  20-scale total_high_priority_count = 20
+  false_positive_record_count = 6
+
+history H=2:
+  20-scale unsafe_high_priority_fold_count = 5
+  20-scale total_high_priority_count = 26
+  false_positive_record_count = 11
+```
+
+history 误判分布：
+
+```text
+20|greedy-anchor = 3
+20|random-wave   = 4
+20|sector-wave   = 4
+```
+
+结论：简单追加上一轮历史不是有效修复，反而会让模型更自信地误放
+unsafe transition。当前不应把 `history_prev_*` 作为 production gate
+输入。下一步应转向更结构化的在线特征，例如 mode-signature 距离、family
+local density、neighbor-risk score、或专门针对 FP 邻域的补采，而不是简单
+堆历史字段。
+
+## 2026-06-14 CBF kNN Neighbor-Risk Scheduler 审计
+
+基于 feature-gap 结论，新增一个更保守的 kNN 邻域风险 scheduler：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_knn_risk_scheduler.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_knn_risk_scheduler_audit_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_knn_risk_scheduler_audit_global_all_h2_zh.md`。
+
+规则是：
+
+```text
+先满足 train zero-FP probability threshold；
+再要求 kNN neighbor unsafe fraction <= 0.0；
+否则 true-RC negative 只能进入 DELAY_QUEUE。
+```
+
+当前结果：
+
+```text
+knn_k = 5
+max_neighbor_unsafe_fraction = 0.0
+row_count = 139
+label_counts = {"0": 103, "1": 36}
+scale_scheduler_ready = true
+family_scheduler_ready = false
+production_candidate_ready = false
+production_ready = false
+```
+
+相对 baseline delay scheduler：
+
+```text
+baseline 20-scale:
+  unsafe_high_priority_fold_count = 2
+  total_high_priority_count = 20
+
+kNN risk 20-scale:
+  unsafe_high_priority_fold_count = 0
+  total_high_priority_count = 4
+```
+
+这是目前第一个有正向价值的调度信号：在 scale-level holdout 下，它用很强
+的邻域风险约束把 unsafe high-priority 压到 0，同时还保留 4 个 high-priority。
+
+但 family-level 仍未通过：
+
+```text
+20|greedy-anchor:
+  unsafe_high_priority_fold_count = 0
+  total_high_priority_count = 0
+
+20|random-wave:
+  unsafe_high_priority_fold_count = 0
+  total_high_priority_count = 0
+
+20|sector-wave:
+  unsafe_high_priority_fold_count = 1
+  total_high_priority_count = 6
+```
+
+因此它还不能接 worker、不能作为 production controller、不能影响
+certificate / official lower bound。下一步更合理的是围绕 sector-wave 的
+remaining family false-positive 补采，或把 kNN risk 扩展为 family-local
+risk memory，而不是直接上线。
+
+随后做了 kNN 参数网格审计：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_knn_risk_grid.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_knn_risk_grid_audit_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_knn_risk_grid_audit_global_all_h2_zh.md`。
+
+网格：
+
+```text
+k = [1, 3, 5, 7, 10]
+max_neighbor_unsafe_fraction = [0.0, 0.2]
+min_high_priority_threshold = [0.8, 0.85, 0.9, 0.95]
+trial_count = 40
+```
+
+结果：
+
+```text
+best_production_candidate_ready = false
+best_scale_ready_count = 27
+production_candidates = []
+family unsafe fold count histogram = {1: 12, 2: 12, 3: 16}
+```
+
+解释：
+
+- kNN risk 参数调节能稳定产生 scale-ready 组合；
+- 但没有任何组合通过 family-level safety + productivity；
+- family-level false positive 不是单纯调 `k / threshold` 能解决的；
+- 因此下一步必须面向 family-local 风险记忆或 sector-wave 邻域补采，而不是
+  继续在同一特征空间里调参。
+
+## 2026-06-14 CBF kNN + OOD Safe-Radius Scheduler 审计
+
+在 kNN neighbor-risk 的基础上，新增 safe-manifold radius guard：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_knn_ood_scheduler.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_knn_ood_scheduler_audit_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_knn_ood_scheduler_audit_global_all_h2_zh.md`。
+
+规则：
+
+```text
+probability threshold 先满足 train zero-FP；
+kNN neighbor unsafe fraction <= 0.0；
+nearest safe distance <= safe radius；
+否则 true-RC negative 进入 DELAY_QUEUE。
+```
+
+当前参数：
+
+```text
+knn_k = 5
+max_neighbor_unsafe_fraction = 0.0
+safe_radius_quantile = 0.9
+safe_radius_multiplier = 1.0
+```
+
+结果：
+
+```text
+row_count = 139
+label_counts = {"0": 103, "1": 36}
+scale_scheduler_ready = true
+family_scheduler_ready = true
+production_candidate_ready = true
+production_ready = false
+ready_task_counts = [20]
+ready_families = [{"task_count": 20, "family": "sector-wave"}]
+```
+
+留出细节：
+
+```text
+20-scale:
+  evaluated_count = 18
+  unsafe_high_priority_fold_count = 0
+  total_high_priority_count = 3
+  productive_high_priority_fold_count = 3
+
+20|sector-wave:
+  evaluated_count = 6
+  unsafe_high_priority_fold_count = 0
+  total_high_priority_count = 3
+  productive_high_priority_fold_count = 3
+```
+
+这是第一组同时满足 scale-level 与 family-level candidate-ready 的离线结果。
+但它仍然不能进入生产路径：
+
+- 它只读 H=2 offline dataset，不运行 BPC / pricing / RMP；
+- 它不生成列；
+- 它不影响 official lower bound；
+- 它不参与 certificate；
+- 它不能作为 pricing oracle；
+- `production_ready=false`。
+
+同时，为避免“证明阶段花掉求解的大把时间”，delay queue 的机器合同已收紧为：
+
+```text
+delay_queue_can_extend_proof_budget = false
+delay_queue_runs_proof_sweep = false
+proof_stage_budget_effect = none_existing_exact_deadlines_unchanged
+proof_stage_policy = delay_queue_never_replaces_or_extends_exact_final_judge
+```
+
+这意味着 CBF gate 只能作为稳定性调度层：它可以把当前不稳定的 true-RC
+negative column 放入 `DELAY_QUEUE`，但不能要求 final judge 为了清空 delay
+queue 额外延长证明时间，也不能把 delay queue 解释为 no-negative。
+
+下一步若继续，应先做 kNN+OOD 参数鲁棒性审计或小实例 opt-in audit-only
+smoke；不能直接接 active worker，更不能接 official certificate gate。
+
+## 2026-06-14 CBF kNN+OOD 参数鲁棒性网格
+
+为确认 kNN+OOD candidate 不是单个参数点偶然通过，新增参数网格审计：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_knn_ood_grid.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_knn_ood_grid_audit_global_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_knn_ood_grid_audit_global_all_h2_zh.md`。
+
+网格：
+
+```text
+k = [3, 5, 7]
+max_neighbor_unsafe_fraction = [0.0]
+min_high_priority_threshold = [0.8, 0.85, 0.9]
+safe_radius_quantile = [0.8, 0.9, 1.0]
+safe_radius_multiplier = [0.75, 1.0, 1.25]
+trial_count = 81
+```
+
+结果：
+
+```text
+all_checks_pass = true
+production_candidate_count = 14
+robust_candidate_ready = true
+production_ready = false
+radius_candidate_histogram = {
+  "q=0.8,m=1.0": 3,
+  "q=0.9,m=0.75": 2,
+  "q=0.9,m=1.0": 3,
+  "q=1.0,m=0.75": 6
+}
+```
+
+这比单点候选更强：它说明当前 H=2 offline dataset 上确实存在一小块
+保守稳定区域，而不是只有一个参数组合能过。典型候选仍集中在 `k=5` 附近，
+并且 `20-scale` / `20|sector-wave` 都保持：
+
+```text
+unsafe_high_priority_fold_count = 0
+total_high_priority_count > 0
+```
+
+但它仍不是 production-ready：
+
+- 这是同一份离线 dataset 内的参数鲁棒性，不是独立数据集验证；
+- 当前 ready family 主要还是 `20|sector-wave`；
+- high-priority 很少，可能太保守；
+- 还没有真实 driver audit-only smoke；
+- 还没有 wall-time / retry / RMP movement ROI 证据；
+- 不能接 active worker；
+- 不能影响 certificate / official lower bound。
+
+当前判断：kNN+OOD delay scheduler 是第一个值得继续验证的 CBF admission
+候选，但下一步必须是 independent validation 或 opt-in audit-only smoke，
+不是生产启用。
+
+## 2026-06-14 CBF kNN+OOD 外部验证
+
+新增独立 train/validation 审计：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_knn_ood_external_validation.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_knn_ood_external_validation_global_h2_to_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_knn_ood_external_validation_global_h2_to_all_h2_zh.md`。
+
+设置：
+
+```text
+train_dataset = cbf_trajectory_gate_dataset_global_h2_20260614
+validation_dataset = cbf_trajectory_gate_dataset_global_all_h2_20260614
+exclude_train_keys = true
+knn_k = 5
+max_neighbor_unsafe_fraction = 0.0
+safe_radius_quantile = 1.0
+safe_radius_multiplier = 0.75
+```
+
+结果：
+
+```text
+train_row_count = 40
+validation_row_count = 99
+validation_candidate_ready = false
+validation false positives = 0
+validation predicted_positive = 0
+validation tp = 0
+validation fn = 18
+validation tn = 81
+```
+
+解释：
+
+- 外部验证没有放出 unsafe high-priority，所以 exactness/safety 仍守住；
+- 但它也没有放出任何 high-priority，所以没有 productivity；
+- 这说明同集 kNN+OOD 参数鲁棒区域还不能外推为生产控制器；
+- 当前 blocker 从“unsafe false positive”转成了“外部验证下过度保守、无 ROI”。
+
+因此下一步不是放开 worker，而是补独立数据或做 audit-only driver smoke：
+只观察它在真实求解轨迹中是否能产生少量安全且有 RMP movement 的
+high-priority admission。
+
+随后新增 capture-log validation 组合脚本：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_knn_ood_capture_validation.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_knn_ood_capture_validation_holdout_config_matched_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_knn_ood_capture_validation_holdout_config_matched_zh.md`。
+
+它把现有 JSONL capture 日志先转成 H=2 trajectory validation dataset，再调用
+kNN+OOD external validation。输入日志为：
+
+```text
+BPC_future/results/root_cause_selector_holdout_collection_capture_config_matched_20260614
+```
+
+结果：
+
+```text
+validation_row_count = 33
+task_count_histogram = {"20": 33}
+family = 20|greedy-anchor
+validation_candidate_ready = false
+fp = 0
+predicted_positive = 0
+negative_count = 33
+positive_count = 0
+```
+
+结论：
+
+- 真实 capture 日志验证仍没有 unsafe high-priority；
+- 但该验证集全是 unsafe label，没有 positive trajectory；
+- scheduler 对这批真实日志全 delay，因此没有 ROI 证据；
+- 当前不应接 worker；
+- 下一步要收集 positive / mixed trajectory 的独立 20-task capture，或做
+  opt-in audit-only smoke 观察真实高优先级 admission 是否出现。
+
+## 2026-06-14 CBF kNN+OOD 外部参数网格
+
+固定 `k=5, q=1.0, m=0.75` 的外部验证过于保守后，新增外部验证参数网格：
+
+- 脚本：`BPC_future/scripts/audit_cbf_delay_queue_knn_ood_external_grid.py`；
+- 摘要：
+  `BPC_future/results/cbf_delay_queue_knn_ood_external_grid_global_h2_to_all_h2_20260614/summary.json`；
+- 报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_delay_queue_knn_ood_external_grid_global_h2_to_all_h2_zh.md`。
+
+设置：
+
+```text
+train = cbf_trajectory_gate_dataset_global_h2_20260614
+validation = cbf_trajectory_gate_dataset_global_all_h2_20260614
+exclude_train_keys = true
+k = [3, 5, 7]
+max_neighbor_unsafe_fraction = [0.0]
+threshold = [0.8, 0.85, 0.9]
+safe_radius_quantile = [0.8, 0.9, 1.0]
+safe_radius_multiplier = [0.75, 1.0, 1.25]
+```
+
+结果：
+
+```text
+trial_count = 81
+external_candidate_count = 36
+external_candidate_ready = true
+false_positive_histogram = {"0": 81}
+predicted_positive_histogram = {"0": 45, "1": 9, "4": 3, "5": 6, "6": 6, "7": 3, "8": 9}
+```
+
+代表性候选：
+
+```text
+knn_k = 3
+threshold = 0.8
+safe_radius_quantile = 1.0
+safe_radius_multiplier = 1.0
+validation fp = 0
+validation predicted_positive = 8
+validation tp = 8
+validation recall = 0.4444444444
+```
+
+这说明上一轮“外部验证全 delay”是固定 `k=5` 参数过保守，不是整个
+kNN+OOD 方向失败。外部网格中存在 zero-FP 且有 high-priority 的候选。
+
+但候选信号主要来自 `20|sector-wave`。用 `k=3` 候选复查已有真实
+greedy-anchor capture：
+
+```text
+summary = BPC_future/results/cbf_delay_queue_knn_ood_capture_validation_holdout_config_matched_k3_20260614/summary.json
+validation_row_count = 33
+fp = 0
+predicted_positive = 0
+negative_count = 33
+positive_count = 0
+```
+
+当前结论：
+
+- `20|sector-wave` 有进入 opt-in audit-only smoke 的价值；
+- greedy-anchor 仍应全 delay；
+- 仍不能接 active worker；
+- 仍不能影响 certificate / official lower bound；
+- 下一步要在真实 solver 上只读记录 `k=3` 候选是否产生 high-priority，
+  以及 high-priority 后是否有 RMP movement / tail retry 改善。
+
+## 2026-06-14 CBF kNN+OOD Sector-Wave Audit-Only Smoke
+
+已按上述结论执行 `20|sector-wave` 的真实 solver audit-only capture smoke：
+
+- Runbook 脚本：
+  `BPC_future/scripts/build_cbf_knn_ood_sector_wave_smoke_runbook.py`；
+- Runbook 摘要：
+  `BPC_future/results/cbf_knn_ood_sector_wave_smoke_runbook_20260614/summary.json`；
+- 结果报告：
+  `BPC_future/logical_graph/run_reports/20260614_bpc_future_cbf_knn_ood_sector_wave_smoke_result_zh.md`；
+- validation 摘要：
+  `BPC_future/results/cbf_knn_ood_sector_wave_smoke_runbook_20260614/sector_wave_knn_ood_capture_validation/summary.json`。
+
+目标实例为 Apollo / Tranquillitatis 的 sector-wave 01 与 05。capture 结果：
+
+```text
+capture_event_count = 16
+trajectory_validation_row_count = 8
+horizon_cbf_feasible_count = 5
+horizon_cbf_infeasible_count = 3
+```
+
+使用外部网格中代表性候选：
+
+```text
+knn_k = 3
+threshold = 0.8
+safe_radius_quantile = 1.0
+safe_radius_multiplier = 1.0
+```
+
+真实 capture validation 结果：
+
+```text
+all_checks_pass = true
+validation_candidate_ready = false
+fp = 0
+predicted_positive = 0
+tp = 0
+fn = 5
+tn = 3
+```
+
+逐行 decision 诊断：
+
+```text
+decision_reason_counts = {
+  delay_probability_below_threshold: 5,
+  delay_neighbor_unsafe_fraction: 3
+}
+positive_delay_reason_counts = {
+  delay_probability_below_threshold: 3,
+  delay_neighbor_unsafe_fraction: 2
+}
+```
+
+这把候选没有继续到 active worker 的原因进一步钉实：它在真实
+`20|sector-wave` smoke 上仍然全 delay，没有产生 high-priority admission，
+因此没有 RMP movement / tail retry ROI 证据。更具体地说，当前表格特征下
+probability threshold 与 kNN unsafe-neighbor 记忆过于保守；safe-radius OOD
+不是主阻塞。当前不能接 worker、不能接 production gate、不能影响 certificate
+或 official lower bound。若继续推进 GAT，应把它放在 residual-family /
+trajectory embedding 层，用来改善 probability / neighbor-risk 的表示，而
+不是直接当 pricing oracle 或 column-level filter。
+
+## 2026-06-14 GAT readiness 审计
+
+已增加 GAT + CBF kNN/OOD readiness audit：
+
+```text
+script = BPC_future/scripts/audit_gat_cbf_knn_ood_readiness.py
+summary = BPC_future/results/gat_cbf_knn_ood_readiness_20260614/summary.json
+report = BPC_future/logical_graph/run_reports/20260614_bpc_future_gat_cbf_knn_ood_readiness_zh.md
+```
+
+当前审计结果：
+
+```text
+all_checks_pass = true
+embedding_candidate_ready = false
+production_ready = false
+```
+
+原因不是 GAT 不可用，而是现有 checkpoint 的训练目标不对：它仍是旧的
+column-level `add/skip/abstain` selector，训练数据只有两个 20-task 实例，
+没有 `label_horizon_cbf_feasible` 轨迹标签。它可以作为后续 encoder 资产或
+结构参考保留，但不能直接接进 CBF/kNN/OOD gate，更不能影响 certificate、
+official lower bound 或 final judge。
+
+因此当前方向应保持为：
+
+- GAT 负责学习 trajectory / residual-family embedding；
+- kNN+OOD 负责 conservative safety shell；
+- unsafe true-RC negative 进入 delay queue，不永久丢弃；
+- 生产化前必须先有独立 sector-wave high-priority productivity、5/10
+  no-regression 和 20-task wall-time ROI 证据。
+
+## 2026-06-14 Trajectory-GAT 数据准备
+
+为避免继续停留在旧 column-level selector，本轮新增并执行了
+trajectory-labeled GAT 数据构造：
+
+```text
+script = BPC_future/scripts/build_gat_trajectory_cbf_dataset.py
+summary = BPC_future/data/gat_trajectory_cbf/v1/summary.json
+report = BPC_future/logical_graph/run_reports/20260614_bpc_future_gat_trajectory_cbf_dataset_zh.md
+```
+
+结果：
+
+```text
+sample_count = 136
+candidate_count = 1599
+instance_count = 23
+label_counts = {add: 34, skip: 102}
+has_mixed_horizon_labels = true
+```
+
+这一步把 H=2 `label_horizon_cbf_feasible` 轨迹标签和 capture 中的
+`returned_journeys` task-set membership 对齐，形成后续训练 GAT trajectory
+embedding / barrier head 的输入。它仍是离线数据，不影响 solver；旧 GAT
+checkpoint 仍不能上线。下一步若继续该线，应训练新的 horizon CBF checkpoint，
+再把 GAT embedding 放进 kNN/OOD safety shell 做独立验证。
+
+## 2026-06-14 Trajectory-CBF GAT checkpoint
+
+已训练第一版 horizon-CBF GAT checkpoint：
+
+```text
+script = BPC_future/scripts/train_gat_trajectory_cbf.py
+checkpoint = BPC_future/data/gat_trajectory_cbf/v1/context_aware_trajectory_cbf_gat.pt
+summary = BPC_future/results/gat_trajectory_cbf_training_20260614/summary.json
+readiness = BPC_future/results/gat_trajectory_cbf_knn_ood_readiness_20260614/summary.json
+```
+
+结果：
+
+```text
+target_label = label_horizon_cbf_feasible
+embedding_candidate_ready = true
+validation_add_precision = 0.6522
+validation_add_recall = 0.9880
+production_ready = false
+```
+
+这说明 GAT 方向没有被放弃，且已经从旧 column selector 推进到
+trajectory-CBF checkpoint。但验证 precision 仍偏低，不能直接作为 add/skip
+gate；它只能作为 embedding / impact predictor 候选，下一步必须接
+kNN/OOD safety shell 做独立验证。未通过 safety shell 的 true-RC negative
+仍只能 delay，不能丢弃。
+
+## 2026-06-14 GAT embedding 外部验证
+
+已完成 GAT embedding + kNN/OOD safety shell 的 sector-wave 外部验证：
+
+```text
+script = BPC_future/scripts/audit_gat_embedding_knn_ood_external_validation.py
+summary = BPC_future/results/gat_embedding_knn_ood_sector_wave_validation_20260614/summary.json
+report = BPC_future/logical_graph/run_reports/20260614_bpc_future_gat_embedding_knn_ood_sector_wave_validation_zh.md
+readiness = BPC_future/results/gat_trajectory_cbf_knn_ood_readiness_20260614/summary.json
+```
+
+结果：
+
+```text
+validation_candidate_ready = true
+predicted_positive = 4
+tp = 4
+fp = 0
+fn = 1
+tn = 3
+precision = 1.0
+recall = 0.8
+```
+
+这说明 GAT 的作用已经从“理论上可作为 embedding”推进到“在真实
+sector-wave validation 上能让 kNN/OOD 放出 high-priority 且没有 false
+positive”。这仍不是生产化：还没有 5/10 no-regression、20-task wall-time ROI
+和 online opt-in 证据。下一步应做 audit-only online smoke，只观察
+high-priority 是否对应实际 RMP movement / tail retry 改善。
+
+## 2026-06-14 GAT embedding capture-validation
+
+已把前面的手动外部验证收紧为端到端只读链路：
+
+```text
+capture logs
+  -> trajectory-CBF validation dataset
+  -> GAT validation dataset
+  -> GAT embedding + kNN/OOD safety shell
+```
+
+新增脚本：
+
+```text
+BPC_future/scripts/audit_gat_embedding_knn_ood_capture_validation.py
+BPC_future/scripts/build_gat_embedding_sector_wave_smoke_runbook.py
+```
+
+真实 sector-wave capture 日志验证结果：
+
+```text
+summary = BPC_future/results/gat_embedding_knn_ood_sector_wave_capture_validation_20260614/summary.json
+validation_row_count = 8
+predicted_positive = 4
+tp = 4
+fp = 0
+fn = 1
+tn = 3
+precision = 1.0
+recall = 0.8
+production_ready = false
+```
+
+readiness 当前使用 `capture_validation` 作为 GAT embedding 证据源：
+
+```text
+embedding_candidate_ready = true
+production_ready = false
+production_blockers = [
+  no_5_10_no_regression_bpc_ab_yet,
+  no_20_task_wall_time_roi_ab_yet,
+  no_online_opt_in_solver_integration_yet
+]
+```
+
+当前判断没有改变：GAT 方向是正确的，但仍不能直接上线。它只能作为
+trajectory-impact embedding；kNN/OOD 是安全壳；未通过安全壳的 true-RC
+negative 进入 delay queue，而不是被丢弃。生产化前必须先证明 5/10 不退化、
+20-task 有 wall-time ROI，并完成 online opt-in smoke。
+
+## 2026-06-14 GAT pre-online A/B 协议
+
+已新增生产化前的 audit-only A/B runbook 和结果分析器：
+
+```text
+runbook = BPC_future/scripts/build_gat_embedding_audit_ab_runbook.py
+analysis = BPC_future/scripts/audit_gat_embedding_audit_ab_results.py
+summary = BPC_future/results/gat_embedding_audit_ab_runbook_20260614/summary.json
+report = BPC_future/logical_graph/run_reports/20260614_bpc_future_gat_embedding_audit_ab_runbook_zh.md
+```
+
+runbook 当前只生成命令，不直接跑长时间 BPC。覆盖：
+
+```text
+5-task baseline vs capture-only
+10-task baseline vs capture-only
+20-task baseline vs capture-only
+20-task GAT embedding capture-validation
+post-run result analysis
+```
+
+关键状态：
+
+```text
+all_checks_pass = true
+production_ready = false
+active_worker_ready = false
+certificate_ready = false
+online_effect_enabled = false
+```
+
+这一步的意义是把下一道门槛具体化：
+
+- 先证明 5/10 在 capture-only 下 official result 不变；
+- 再确认 20 sector-wave capture 日志仍能给出 GAT high-priority 信号；
+- 最后由分析器输出 `pre_online_gate_ready`；
+- 即使通过，也只能说明可以进入 online opt-in 设计，仍不能说明已经有
+  wall-time ROI。
+
+所以当前生产化标准仍未满足。GAT 当前只是“可审计候选”，不是 production
+worker，也不是 certificate source。
