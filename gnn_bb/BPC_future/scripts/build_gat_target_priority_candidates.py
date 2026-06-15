@@ -31,6 +31,17 @@ DEFAULT_REPORT = Path(
     "20260614_bpc_future_gat_target_priority_candidates_zh.md"
 )
 
+REQUIRED_CAPTURE_CONTEXT_FIELDS = [
+    "context_hash",
+    "true_dual_hash",
+    "cut_hash",
+    "branch_hash",
+    "forbidden_signature_hash",
+    "active_hash_before",
+    "pool_signature_hash",
+    "pool_task_set_hash",
+]
+
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -113,6 +124,14 @@ def _best_negative_journey(event: dict[str, Any]) -> dict[str, Any] | None:
     return negatives[0][1]
 
 
+def _missing_capture_context_fields(event: dict[str, Any]) -> list[str]:
+    return [
+        field
+        for field in REQUIRED_CAPTURE_CONTEXT_FIELDS
+        if str(event.get(field) or "").strip() == ""
+    ]
+
+
 def extract_candidates(
     *,
     decision_records_path: Path = DEFAULT_DECISION_RECORDS,
@@ -156,6 +175,10 @@ def extract_candidates(
         if event is None:
             skipped["missing_capture_event"] += 1
             continue
+        missing_context_fields = _missing_capture_context_fields(event)
+        if missing_context_fields:
+            skipped["missing_capture_context_fields"] += 1
+            continue
         journey = _best_negative_journey(event)
         if journey is None:
             skipped["no_negative_journey_with_materialized_signature"] += 1
@@ -179,7 +202,15 @@ def extract_candidates(
             {
                 "name": name,
                 "instance": instance_path,
+                "context_hash": context_hash,
                 "expected_context_hash": context_hash,
+                "true_dual_hash": str(event.get("true_dual_hash") or ""),
+                "cut_hash": str(event.get("cut_hash") or ""),
+                "branch_hash": str(event.get("branch_hash") or ""),
+                "forbidden_signature_hash": str(event.get("forbidden_signature_hash") or ""),
+                "active_hash_before": str(event.get("active_hash_before") or ""),
+                "pool_signature_hash": str(event.get("pool_signature_hash") or ""),
+                "pool_task_set_hash": str(event.get("pool_task_set_hash") or ""),
                 "target_sequence": list(sequence),
                 "target_arc_option_sequence": list(arcs),
                 "best_true_reduced_cost": true_rc,
@@ -190,6 +221,7 @@ def extract_candidates(
                 "manifest_sample_index": index,
                 "manifest_row_index": int(sample.get("row_index", -1)),
                 "capture_cg_iter": int(event.get("cg_iter") or -1),
+                "capture_pricing_kind": str(event.get("pricing_kind") or ""),
                 "capture_returned_journey_count": int(event.get("returned_journey_count") or 0),
                 "gate_role": "gat_embedding_knn_ood_safety_shell",
                 "worker_role": "explicit_opt_in_target_priority_roi_probe",
@@ -214,6 +246,10 @@ def extract_candidates(
         "all_candidates_have_arc_targets": all(
             bool(item["target_arc_option_sequence"]) for item in candidates
         ),
+        "all_candidates_have_full_capture_context": all(
+            all(str(item.get(field) or "").strip() for field in REQUIRED_CAPTURE_CONTEXT_FIELDS)
+            for item in candidates
+        ),
     }
     summary = {
         "schema_version": "gat_target_priority_candidates_v1",
@@ -227,6 +263,7 @@ def extract_candidates(
         "candidate_count": len(candidates),
         "skipped_counts": dict(sorted(skipped.items())),
         "candidates": candidates,
+        "required_capture_context_fields": REQUIRED_CAPTURE_CONTEXT_FIELDS,
         "output_candidates_json": str(output_dir / "candidates.json"),
         "production_ready": False,
         "default_enabled": False,
@@ -268,6 +305,8 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "gat_target_priority_candidates = current",
         f"status = {summary['status']}",
         f"candidate_count = {summary['candidate_count']}",
+        "required_capture_context_field_count = "
+        f"{len(summary['required_capture_context_fields'])}",
         f"production_ready = {str(summary['production_ready']).lower()}",
         f"default_enabled = {str(summary['default_enabled']).lower()}",
         f"certificate_ready = {str(summary['certificate_ready']).lower()}",
@@ -290,6 +329,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "## 边界",
         "",
         "- GAT/kNN/OOD 只决定 target-priority 候选，不是 pricing oracle；",
+        "- 候选必须来自带完整 context hash / dual / cuts / branch / pool payload 的 capture；",
         "- true-RC negative 不允许永久丢弃；",
         "- 这些候选只能喂给显式 opt-in worker A/B；",
         "- 不能用于 no-negative certificate 或 official lower bound。",

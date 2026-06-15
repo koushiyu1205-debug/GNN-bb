@@ -254,6 +254,7 @@ from BPC_future.solver.journey_driver import (
     _journey_sharded_pulse_audit_signal_valid_for_worker,
     _journey_sharded_pulse_current_probe_hard_tail_fingerprint_allows,
     _journey_sharded_pulse_audit_payload,
+    _journey_sharded_pulse_target_materialization_result,
     _journey_sharded_pulse_worker_followup_reserve_filtered,
     _run_journey_sharded_pulse_audit,
     _run_journey_sharded_pulse_hidden_negative_worker,
@@ -14609,6 +14610,93 @@ class BPCFutureTests(unittest.TestCase):
             eps=1.0e-6,
         )
         self.assertIsNone(nonnegative)
+
+    def test_sharded_pulse_target_materialization_worker_returns_negative_without_certificate(self):
+        data = load_future_data("very_small")
+        first_task = int(data.tasks[0])
+        second_task = int(data.tasks[1])
+        first_trace = PulseSortieTrace(
+            sequence=(first_task,),
+            start_time=0.0,
+            arc_options=(data.options(0, first_task)[0], data.options(first_task, 0)[0]),
+        )
+        first_trip = materialize_pulse_sortie(
+            data,
+            first_trace.sequence,
+            first_trace.start_time,
+            arc_options=first_trace.arc_options,
+            time_bucket_size=5.0,
+        )
+        self.assertIsNotNone(first_trip)
+        assert first_trip is not None
+        second_trace = PulseSortieTrace(
+            sequence=(second_task,),
+            start_time=first_trip.end_time,
+            arc_options=(data.options(0, second_task)[0], data.options(second_task, 0)[0]),
+        )
+        second_trip = materialize_pulse_sortie(
+            data,
+            second_trace.sequence,
+            second_trace.start_time,
+            arc_options=second_trace.arc_options,
+            time_bucket_size=5.0,
+        )
+        self.assertIsNotNone(second_trip)
+        assert second_trip is not None
+        expected_journey = make_journey(data, (first_trip, second_trip))
+        self.assertIsNotNone(expected_journey)
+        assert expected_journey is not None
+
+        duals = JourneyDuals(
+            cover={
+                first_task: float(expected_journey.cost) + 10.0,
+                second_task: 0.0,
+            },
+            fleet_limit=0.0,
+            cuts={},
+        )
+        traces_payload = [
+            {
+                "sequence": list(first_trace.sequence),
+                "start_time": first_trace.start_time,
+                "arc_option_sequence": [
+                    str(option.option_id) for option in first_trace.arc_options or tuple()
+                ],
+            },
+            {
+                "sequence": list(second_trace.sequence),
+                "start_time": second_trace.start_time,
+                "arc_option_sequence": [
+                    str(option.option_id) for option in second_trace.arc_options or tuple()
+                ],
+            },
+        ]
+        result = _journey_sharded_pulse_target_materialization_result(
+            data,
+            {
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces": json.dumps(
+                    traces_payload,
+                    separators=(",", ":"),
+                ),
+            },
+            duals=duals,
+            cuts=tuple(),
+            base_pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+            eps=1.0e-6,
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(result.reason, "target_materialized_negative_true_rc")
+        self.assertEqual(len(result.journeys), 1)
+        self.assertFalse(result.global_certificate_capable)
+        self.assertFalse(result.final_judge_certificate_capable)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertEqual(result.pulse_target_sequence, (first_task, second_task))
+        self.assertTrue(result.pulse_target_sequence_materialized)
+        self.assertTrue(result.pulse_target_sequence_negative)
 
     def test_pulse_materialization_rejects_infeasible_leaves(self):
         with tempfile.TemporaryDirectory() as tmp:

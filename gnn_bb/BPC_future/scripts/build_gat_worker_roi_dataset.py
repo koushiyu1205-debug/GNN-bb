@@ -23,6 +23,7 @@ DEFAULT_AUDIT_SUMMARY = Path(
 DEFAULT_CANDIDATE_SUMMARIES = (
     Path("BPC_future/results/gat_target_priority_candidates_20260614/summary.json"),
     Path("BPC_future/results/gat_target_priority_candidates_20roi_smoke_20260614/summary.json"),
+    Path("BPC_future/results/gat_target_priority_candidates_family_20260614/summary.json"),
 )
 DEFAULT_OUTPUT_DIR = Path("BPC_future/results/gat_worker_roi_dataset_20260614")
 DEFAULT_REPORT = Path(
@@ -31,7 +32,19 @@ DEFAULT_REPORT = Path(
 )
 
 
-TRAINABLE_ROI_CLASSES = {"positive_primal_roi", "no_observed_roi", "negative_primal_roi"}
+POSITIVE_ROI_CLASSES = {
+    "positive_primal_roi",
+    "positive_status_roi",
+    "positive_retry_roi",
+    "positive_pricing_roi",
+}
+TRAINING_NEGATIVE_ROI_CLASSES = {
+    "no_observed_roi",
+    "negative_primal_roi",
+    "negative_status_roi",
+    "negative_retry_roi",
+}
+TRAINABLE_ROI_CLASSES = POSITIVE_ROI_CLASSES | TRAINING_NEGATIVE_ROI_CLASSES
 
 
 def _json_dump(path: Path, payload: Any) -> None:
@@ -84,6 +97,63 @@ def _candidate_key(item: dict[str, Any]) -> tuple[str, str, tuple[int, ...], tup
     )
 
 
+def _candidate_key_string(item: dict[str, Any]) -> str:
+    instance, context_hash, sequence, arcs = _candidate_key(item)
+    return "|".join(
+        (
+            instance,
+            context_hash,
+            ",".join(str(task) for task in sequence),
+            ",".join(arcs),
+        )
+    )
+
+
+def _instance_family(instance: str) -> str:
+    parts = Path(str(instance)).parts
+    for idx, part in enumerate(parts):
+        if part.startswith("tasks_") and idx + 1 < len(parts):
+            return str(parts[idx + 1])
+    return "unknown"
+
+
+def _instance_region(instance: str) -> str:
+    parts = Path(str(instance)).parts
+    for idx, part in enumerate(parts):
+        if part.startswith("tasks_") and idx + 2 < len(parts):
+            return str(parts[idx + 2])
+    return "unknown"
+
+
+def _max_group_fraction(rows: list[dict[str, Any]], key: str) -> float:
+    if not rows:
+        return 0.0
+    counts = Counter(str(row.get(key) or "") for row in rows)
+    return max(counts.values()) / float(len(rows))
+
+
+def _threshold_gap(name: str, observed: int | float, required: int | float) -> dict[str, Any] | None:
+    if observed >= required:
+        return None
+    return {
+        "name": name,
+        "observed": observed,
+        "required": required,
+        "missing": required - observed,
+    }
+
+
+def _fraction_gap(name: str, observed: float, required_max: float) -> dict[str, Any] | None:
+    if observed <= required_max:
+        return None
+    return {
+        "name": name,
+        "observed": observed,
+        "required_max": required_max,
+        "excess": observed - required_max,
+    }
+
+
 def _load_candidate_features(paths: Iterable[Path]) -> dict[tuple[str, str, tuple[int, ...], tuple[str, ...]], dict[str, Any]]:
     features: dict[tuple[str, str, tuple[int, ...], tuple[str, ...]], dict[str, Any]] = {}
     for source in paths:
@@ -119,6 +189,160 @@ def _int_or_zero(value: Any) -> int:
         return 0
 
 
+def _sequence_tuple(value: Any) -> tuple[int, ...]:
+    if not isinstance(value, list):
+        return tuple()
+    try:
+        return tuple(int(item) for item in value)
+    except (TypeError, ValueError):
+        return tuple()
+
+
+def _sequence_sample_matches_target(samples: Any, target: tuple[int, ...]) -> bool:
+    if not target or not isinstance(samples, list):
+        return False
+    for sample in samples:
+        if isinstance(sample, list) and sample and all(isinstance(item, list) for item in sample):
+            flattened: list[int] = []
+            for sortie in sample:
+                for task in sortie:
+                    try:
+                        flattened.append(int(task))
+                    except (TypeError, ValueError):
+                        flattened = []
+                        break
+                if not flattened and sortie:
+                    break
+            if tuple(flattened) == target:
+                return True
+        elif _sequence_tuple(sample) == target:
+            return True
+    return False
+
+
+def _worker_target_diagnostics(
+    worker_csv: Any,
+    *,
+    expected_context_hash: Any = "",
+) -> dict[str, Any]:
+    worker_csv_text = str(worker_csv or "").strip()
+    if not worker_csv_text:
+        return {}
+    path = Path(worker_csv_text)
+    log_dir = path.parent / "logs"
+    if not log_dir.exists():
+        return {}
+    events: list[dict[str, Any]] = []
+    for log_path in sorted(log_dir.glob("**/*.jsonl")):
+        with log_path.open(encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                text = line.strip()
+                if not text or "pulse_worker_" not in text:
+                    continue
+                try:
+                    event = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(event, dict) or not event.get("pulse_worker_enabled"):
+                    continue
+                events.append(event)
+    if not events:
+        return {}
+    expected = str(expected_context_hash or "").strip()
+    best = events[-1]
+    if expected:
+        for event in events:
+            if str(event.get("pulse_worker_context_hash") or "").strip() == expected:
+                best = event
+                break
+    keys = [
+        "pulse_worker_target_first_task_priority_enabled",
+        "pulse_worker_enabled",
+        "pulse_worker_skipped",
+        "pulse_worker_skip_reason",
+        "pulse_worker_status",
+        "pulse_worker_signal_source",
+        "pulse_worker_target_first_task_priority_sequence",
+        "pulse_worker_target_transition_priority_enabled",
+        "pulse_worker_target_transition_priority_sequence",
+        "pulse_worker_target_arc_option_priority_enabled",
+        "pulse_worker_target_arc_option_priority_sequence",
+        "pulse_worker_target_sequence_completed",
+        "pulse_worker_target_sequence_materialized",
+        "pulse_worker_target_sequence_negative",
+        "pulse_worker_target_sequence_reached_prefix_len",
+        "pulse_worker_target_sequence_blocked_reason",
+        "pulse_worker_harvested_sequence_samples",
+        "pulse_worker_returned_candidate_sequence_samples",
+        "pulse_worker_harvested_task_set_samples",
+        "pulse_worker_returned_journeys",
+        "pulse_worker_best_rc",
+        "pulse_worker_context_hash",
+    ]
+    return {key: best.get(key) for key in keys if key in best}
+
+
+def _target_causal_match(
+    *,
+    target_sequence: list[Any],
+    worker_diag: dict[str, Any],
+) -> bool:
+    target = _sequence_tuple(target_sequence)
+    if not target or not worker_diag:
+        return False
+    configured_target_match = any(
+        _sequence_tuple(worker_diag.get(key)) == target
+        for key in (
+            "pulse_worker_target_first_task_priority_sequence",
+            "pulse_worker_target_transition_priority_sequence",
+            "pulse_worker_target_arc_option_priority_sequence",
+        )
+    )
+    if configured_target_match and bool(worker_diag.get("pulse_worker_target_sequence_materialized")):
+        return True
+    return bool(
+        _sequence_sample_matches_target(
+            worker_diag.get("pulse_worker_returned_candidate_sequence_samples"),
+            target,
+        )
+        or _sequence_sample_matches_target(
+            worker_diag.get("pulse_worker_harvested_sequence_samples"),
+            target,
+        )
+    )
+
+
+def _worker_target_intervention_observed(worker_diag: dict[str, Any]) -> bool:
+    if not worker_diag:
+        return False
+    if bool(worker_diag.get("pulse_worker_skipped", False)):
+        return False
+    return bool(worker_diag.get("pulse_worker_enabled", True))
+
+
+def _worker_context_match(
+    *,
+    expected_context_hash: Any,
+    worker_diag: dict[str, Any],
+) -> bool:
+    expected = str(expected_context_hash or "").strip()
+    observed = str(worker_diag.get("pulse_worker_context_hash") or "").strip()
+    return bool(expected and observed and expected == observed)
+
+
+def _worker_context_mismatch(
+    *,
+    expected_context_hash: Any,
+    worker_diag: dict[str, Any],
+) -> bool:
+    expected = str(expected_context_hash or "").strip()
+    observed = str(worker_diag.get("pulse_worker_context_hash") or "").strip()
+    skip_reason = str(worker_diag.get("pulse_worker_skip_reason") or "").strip()
+    if skip_reason == "residual_target_context_mismatch":
+        return True
+    return bool(expected and observed and expected != observed)
+
+
 def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict[str, Any]:
     roi_class = str(record.get("roi_class") or "unknown")
     primal_improvement = _float_or_none(record.get("primal_improvement"))
@@ -129,6 +353,7 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
     arcs = list(record.get("target_arc_option_sequence") or [])
     worker_columns_added = bool(columns_delta is not None and columns_delta > 0)
     positive_primal_roi = bool(primal_improvement is not None and primal_improvement > 1.0e-9)
+    positive_trajectory_roi = roi_class in POSITIVE_ROI_CLASSES
     negative_primal_roi = bool(primal_improvement is not None and primal_improvement < -1.0e-9)
     trainable = bool(
         roi_class in TRAINABLE_ROI_CLASSES
@@ -137,9 +362,32 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
         and not record.get("official_bound_effect")
         and not record.get("certificate_effect")
     )
+    worker_diag = _worker_target_diagnostics(
+        record.get("worker_csv"),
+        expected_context_hash=record.get("expected_context_hash"),
+    )
+    worker_context_match = _worker_context_match(
+        expected_context_hash=record.get("expected_context_hash"),
+        worker_diag=worker_diag,
+    )
+    worker_context_mismatch = _worker_context_mismatch(
+        expected_context_hash=record.get("expected_context_hash"),
+        worker_diag=worker_diag,
+    )
+    target_causal_match = _target_causal_match(
+        target_sequence=target_sequence,
+        worker_diag=worker_diag,
+    )
+    target_intervention_observed = _worker_target_intervention_observed(worker_diag)
+    if trainable and not worker_context_match:
+        trainable = False
+    if trainable and not positive_trajectory_roi and not target_intervention_observed:
+        trainable = False
+    if trainable and not target_causal_match:
+        trainable = False
     label = None
     if trainable:
-        label = 1 if positive_primal_roi else 0
+        label = 1 if positive_trajectory_roi else 0
     candidate = candidate or {}
     return {
         "schema_version": "gat_worker_roi_dataset_row_v1",
@@ -148,8 +396,11 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
         "certificate_effect": False,
         "official_bound_effect": False,
         "instance": str(record.get("instance") or ""),
+        "instance_family": _instance_family(str(record.get("instance") or "")),
+        "instance_region": _instance_region(str(record.get("instance") or "")),
         "name": str(record.get("name") or ""),
         "expected_context_hash": str(record.get("expected_context_hash") or ""),
+        "roi_candidate_key": _candidate_key_string(record),
         "target_sequence": target_sequence,
         "target_arc_option_sequence": arcs,
         "target_length": len(target_sequence),
@@ -162,6 +413,30 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
         "capture_returned_journey_count": _int_or_zero(candidate.get("capture_returned_journey_count")),
         "source_file": str(candidate.get("source_file") or ""),
         "candidate_feature_joined": bool(candidate),
+        "worker_target_diag_available": bool(worker_diag),
+        "worker_context_hash": str(worker_diag.get("pulse_worker_context_hash") or ""),
+        "worker_context_match": bool(worker_context_match),
+        "worker_context_mismatch": bool(worker_context_mismatch),
+        "worker_target_intervention_observed": bool(target_intervention_observed),
+        "worker_target_skipped": bool(worker_diag.get("pulse_worker_skipped", False)),
+        "worker_target_skip_reason": str(worker_diag.get("pulse_worker_skip_reason") or ""),
+        "worker_target_status": str(worker_diag.get("pulse_worker_status") or ""),
+        "worker_target_causal_match": bool(target_causal_match),
+        "worker_target_sequence_materialized": bool(
+            worker_diag.get("pulse_worker_target_sequence_materialized", False)
+        ),
+        "worker_target_sequence_negative": bool(
+            worker_diag.get("pulse_worker_target_sequence_negative", False)
+        ),
+        "worker_target_sequence_reached_prefix_len": _int_or_zero(
+            worker_diag.get("pulse_worker_target_sequence_reached_prefix_len")
+        ),
+        "worker_harvested_sequence_samples": worker_diag.get(
+            "pulse_worker_harvested_sequence_samples", []
+        ),
+        "worker_returned_candidate_sequence_samples": worker_diag.get(
+            "pulse_worker_returned_candidate_sequence_samples", []
+        ),
         "baseline_status": str(record.get("baseline_status") or ""),
         "worker_status": str(record.get("worker_status") or ""),
         "baseline_primal": _float_or_none(record.get("baseline_primal")),
@@ -176,19 +451,51 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
         "label_worker_roi_positive": None if label is None else int(label),
         "label_worker_adds_columns": int(worker_columns_added),
         "label_positive_primal_roi": int(positive_primal_roi),
+        "label_positive_trajectory_roi": int(positive_trajectory_roi),
         "label_negative_primal_roi": int(negative_primal_roi),
         "training_eligible": bool(trainable),
-        "training_exclusion_reason": "" if trainable else _exclusion_reason(record, roi_class),
+        "training_exclusion_reason": ""
+        if trainable
+        else _exclusion_reason(
+            record,
+            roi_class,
+            positive_primal_roi=positive_primal_roi,
+            positive_trajectory_roi=positive_trajectory_roi,
+            worker_context_match=worker_context_match,
+            worker_context_mismatch=worker_context_mismatch,
+            target_causal_match=target_causal_match,
+            target_intervention_observed=target_intervention_observed,
+        ),
     }
 
 
-def _exclusion_reason(record: dict[str, Any], roi_class: str) -> str:
+def _exclusion_reason(
+    record: dict[str, Any],
+    roi_class: str,
+    *,
+    positive_primal_roi: bool = False,
+    positive_trajectory_roi: bool = False,
+    worker_context_match: bool = False,
+    worker_context_mismatch: bool = False,
+    target_causal_match: bool = False,
+    target_intervention_observed: bool = False,
+) -> str:
     if record.get("official_bound_effect") or record.get("certificate_effect"):
         return "forbidden_certificate_or_bound_effect"
     if not record.get("baseline_csv_exists") or not record.get("worker_csv_exists"):
         return "missing_ab_result"
     if roi_class not in TRAINABLE_ROI_CLASSES:
         return f"unsupported_roi_class:{roi_class}"
+    if worker_context_mismatch:
+        return "worker_context_mismatch"
+    if not positive_primal_roi and not target_intervention_observed:
+        return "no_worker_target_intervention_observed"
+    if not worker_context_match:
+        return "worker_context_mismatch"
+    if positive_trajectory_roi and not target_causal_match:
+        return "positive_roi_without_target_causal_match"
+    if not target_causal_match:
+        return "roi_without_target_causal_match"
     return "not_training_eligible"
 
 
@@ -200,6 +507,13 @@ def build_roi_dataset(
     report: Path = DEFAULT_REPORT,
     min_positive_for_training: int = 5,
     min_negative_for_training: int = 5,
+    min_positive_instances_for_training: int = 2,
+    min_negative_instances_for_training: int = 2,
+    min_positive_families_for_training: int = 2,
+    min_negative_families_for_training: int = 2,
+    min_positive_regions_for_training: int = 2,
+    min_negative_regions_for_training: int = 2,
+    max_label_instance_fraction: float = 0.75,
 ) -> dict[str, Any]:
     audit_path = Path(audit_summary_path)
     audit = json.loads(audit_path.read_text(encoding="utf-8"))
@@ -212,18 +526,114 @@ def build_roi_dataset(
             continue
         rows.append(_label_row(record, candidate_features.get(_candidate_key(record))))
 
+    duplicate_counts = Counter(row["roi_candidate_key"] for row in rows)
+    for row in rows:
+        row["duplicate_group_size"] = int(duplicate_counts[row["roi_candidate_key"]])
     training_rows = [row for row in rows if row["training_eligible"]]
+    unique_training_rows: dict[str, dict[str, Any]] = {}
+    for row in training_rows:
+        unique_training_rows.setdefault(str(row["roi_candidate_key"]), row)
+    unique_training_values = list(unique_training_rows.values())
     label_counts = Counter(
         str(row["label_worker_roi_positive"]) for row in training_rows if row["label_worker_roi_positive"] is not None
     )
+    unique_label_counts = Counter(
+        str(row["label_worker_roi_positive"])
+        for row in unique_training_values
+        if row["label_worker_roi_positive"] is not None
+    )
     roi_counts = Counter(str(row["roi_class"]) for row in rows)
     joined_count = sum(1 for row in rows if row["candidate_feature_joined"])
-    positive_count = int(label_counts.get("1", 0))
-    negative_count = int(label_counts.get("0", 0))
+    target_diag_available_count = sum(1 for row in rows if row["worker_target_diag_available"])
+    worker_context_match_count = sum(1 for row in rows if row["worker_context_match"])
+    target_causal_match_count = sum(1 for row in rows if row["worker_target_causal_match"])
+    target_intervention_observed_count = sum(
+        1 for row in rows if row["worker_target_intervention_observed"]
+    )
+    positive_roi_without_target_causal_match_count = sum(
+        1
+        for row in rows
+        if row["training_exclusion_reason"] == "positive_roi_without_target_causal_match"
+    )
+    roi_without_target_causal_match_count = sum(
+        1
+        for row in rows
+        if row["training_exclusion_reason"] == "roi_without_target_causal_match"
+    )
+    worker_context_mismatch_count = sum(
+        1
+        for row in rows
+        if row["training_exclusion_reason"] == "worker_context_mismatch"
+    )
+    no_worker_target_intervention_count = sum(
+        1
+        for row in rows
+        if row["training_exclusion_reason"] == "no_worker_target_intervention_observed"
+    )
+    positive_count = int(unique_label_counts.get("1", 0))
+    negative_count = int(unique_label_counts.get("0", 0))
+    unique_positive_rows = [
+        row for row in unique_training_values if row["label_worker_roi_positive"] == 1
+    ]
+    unique_negative_rows = [
+        row for row in unique_training_values if row["label_worker_roi_positive"] == 0
+    ]
+    positive_instance_count = len({str(row["instance"]) for row in unique_positive_rows})
+    negative_instance_count = len({str(row["instance"]) for row in unique_negative_rows})
+    positive_family_count = len({str(row["instance_family"]) for row in unique_positive_rows})
+    negative_family_count = len({str(row["instance_family"]) for row in unique_negative_rows})
+    positive_region_count = len({str(row["instance_region"]) for row in unique_positive_rows})
+    negative_region_count = len({str(row["instance_region"]) for row in unique_negative_rows})
+    positive_max_instance_fraction = _max_group_fraction(unique_positive_rows, "instance")
+    negative_max_instance_fraction = _max_group_fraction(unique_negative_rows, "instance")
+    positive_max_region_fraction = _max_group_fraction(unique_positive_rows, "instance_region")
+    negative_max_region_fraction = _max_group_fraction(unique_negative_rows, "instance_region")
+    training_exclusion_counts = Counter(
+        str(row["training_exclusion_reason"])
+        for row in rows
+        if not row["training_eligible"] and row["training_exclusion_reason"]
+    )
+    label_distribution_ready_details = {
+        "positive_instances_ready": positive_instance_count >= int(min_positive_instances_for_training),
+        "negative_instances_ready": negative_instance_count >= int(min_negative_instances_for_training),
+        "positive_families_ready": positive_family_count >= int(min_positive_families_for_training),
+        "negative_families_ready": negative_family_count >= int(min_negative_families_for_training),
+        "positive_regions_ready": positive_region_count >= int(min_positive_regions_for_training),
+        "negative_regions_ready": negative_region_count >= int(min_negative_regions_for_training),
+        "positive_instance_fraction_ready": positive_max_instance_fraction <= float(max_label_instance_fraction),
+        "negative_instance_fraction_ready": negative_max_instance_fraction <= float(max_label_instance_fraction),
+    }
+    label_distribution_ready = bool(
+        positive_instance_count >= int(min_positive_instances_for_training)
+        and negative_instance_count >= int(min_negative_instances_for_training)
+        and positive_family_count >= int(min_positive_families_for_training)
+        and negative_family_count >= int(min_negative_families_for_training)
+        and positive_region_count >= int(min_positive_regions_for_training)
+        and negative_region_count >= int(min_negative_regions_for_training)
+        and positive_max_instance_fraction <= float(max_label_instance_fraction)
+        and negative_max_instance_fraction <= float(max_label_instance_fraction)
+    )
     training_ready = bool(
         positive_count >= int(min_positive_for_training)
         and negative_count >= int(min_negative_for_training)
+        and label_distribution_ready
     )
+    sample_collection_gaps = [
+        gap
+        for gap in (
+            _threshold_gap("positive_training_label_count", positive_count, int(min_positive_for_training)),
+            _threshold_gap("negative_training_label_count", negative_count, int(min_negative_for_training)),
+            _threshold_gap("positive_instance_count", positive_instance_count, int(min_positive_instances_for_training)),
+            _threshold_gap("negative_instance_count", negative_instance_count, int(min_negative_instances_for_training)),
+            _threshold_gap("positive_family_count", positive_family_count, int(min_positive_families_for_training)),
+            _threshold_gap("negative_family_count", negative_family_count, int(min_negative_families_for_training)),
+            _threshold_gap("positive_region_count", positive_region_count, int(min_positive_regions_for_training)),
+            _threshold_gap("negative_region_count", negative_region_count, int(min_negative_regions_for_training)),
+            _fraction_gap("positive_max_instance_fraction", positive_max_instance_fraction, float(max_label_instance_fraction)),
+            _fraction_gap("negative_max_instance_fraction", negative_max_instance_fraction, float(max_label_instance_fraction)),
+        )
+        if gap is not None
+    ]
     checks = {
         "diagnostic_only": True,
         "runs_bpc_or_pricing_false": True,
@@ -249,13 +659,51 @@ def build_roi_dataset(
         "csv_path": str(csv_path),
         "row_count": len(rows),
         "training_row_count": len(training_rows),
+        "unique_training_row_count": len(unique_training_values),
         "candidate_feature_joined_count": joined_count,
+        "duplicate_candidate_count": sum(1 for count in duplicate_counts.values() if count > 1),
+        "target_diag_available_count": target_diag_available_count,
+        "worker_context_match_count": worker_context_match_count,
+        "target_causal_match_count": target_causal_match_count,
+        "target_intervention_observed_count": target_intervention_observed_count,
+        "positive_roi_without_target_causal_match_count": positive_roi_without_target_causal_match_count,
+        "roi_without_target_causal_match_count": roi_without_target_causal_match_count,
+        "worker_context_mismatch_count": worker_context_mismatch_count,
+        "no_worker_target_intervention_count": no_worker_target_intervention_count,
+        "training_exclusion_reason_counts": dict(sorted(training_exclusion_counts.items())),
         "label_counts": dict(sorted(label_counts.items())),
+        "unique_label_counts": dict(sorted(unique_label_counts.items())),
         "roi_class_counts": dict(sorted(roi_counts.items())),
         "positive_training_label_count": positive_count,
         "negative_training_label_count": negative_count,
         "min_positive_for_training": int(min_positive_for_training),
         "min_negative_for_training": int(min_negative_for_training),
+        "min_positive_instances_for_training": int(min_positive_instances_for_training),
+        "min_negative_instances_for_training": int(min_negative_instances_for_training),
+        "min_positive_families_for_training": int(min_positive_families_for_training),
+        "min_negative_families_for_training": int(min_negative_families_for_training),
+        "min_positive_regions_for_training": int(min_positive_regions_for_training),
+        "min_negative_regions_for_training": int(min_negative_regions_for_training),
+        "max_label_instance_fraction": float(max_label_instance_fraction),
+        "positive_instance_count": positive_instance_count,
+        "negative_instance_count": negative_instance_count,
+        "positive_family_count": positive_family_count,
+        "negative_family_count": negative_family_count,
+        "positive_region_count": positive_region_count,
+        "negative_region_count": negative_region_count,
+        "positive_max_instance_fraction": positive_max_instance_fraction,
+        "negative_max_instance_fraction": negative_max_instance_fraction,
+        "positive_max_region_fraction": positive_max_region_fraction,
+        "negative_max_region_fraction": negative_max_region_fraction,
+        "positive_region_counts": dict(
+            sorted(Counter(str(row["instance_region"]) for row in unique_positive_rows).items())
+        ),
+        "negative_region_counts": dict(
+            sorted(Counter(str(row["instance_region"]) for row in unique_negative_rows).items())
+        ),
+        "label_distribution_ready_details": label_distribution_ready_details,
+        "sample_collection_gaps": sample_collection_gaps,
+        "label_distribution_ready": label_distribution_ready,
         "training_ready": training_ready,
         "production_ready": False,
         "default_enabled": False,
@@ -287,7 +735,7 @@ def _write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]
     lines = [
         "# GAT Worker ROI Dataset 报告",
         "",
-        "日期：2026-06-14",
+        "日期：2026-06-15",
         "",
         "## 目的",
         "",
@@ -302,8 +750,34 @@ def _write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]
         f"status = {summary['status']}",
         f"row_count = {summary['row_count']}",
         f"training_row_count = {summary['training_row_count']}",
+        f"unique_training_row_count = {summary['unique_training_row_count']}",
+        f"target_diag_available_count = {summary['target_diag_available_count']}",
+        f"worker_context_match_count = {summary['worker_context_match_count']}",
+        f"target_causal_match_count = {summary['target_causal_match_count']}",
+        f"target_intervention_observed_count = {summary['target_intervention_observed_count']}",
+        "positive_roi_without_target_causal_match_count = "
+        f"{summary['positive_roi_without_target_causal_match_count']}",
+        "roi_without_target_causal_match_count = "
+        f"{summary['roi_without_target_causal_match_count']}",
+        f"worker_context_mismatch_count = {summary['worker_context_mismatch_count']}",
+        f"no_worker_target_intervention_count = {summary['no_worker_target_intervention_count']}",
+        f"training_exclusion_reason_counts = {summary['training_exclusion_reason_counts']}",
         f"label_counts = {summary['label_counts']}",
+        f"unique_label_counts = {summary['unique_label_counts']}",
         f"roi_class_counts = {summary['roi_class_counts']}",
+        f"positive_training_label_count = {summary['positive_training_label_count']}",
+        f"negative_training_label_count = {summary['negative_training_label_count']}",
+        f"positive_instance_count = {summary['positive_instance_count']}",
+        f"negative_instance_count = {summary['negative_instance_count']}",
+        f"positive_family_count = {summary['positive_family_count']}",
+        f"negative_family_count = {summary['negative_family_count']}",
+        f"positive_region_count = {summary['positive_region_count']}",
+        f"negative_region_count = {summary['negative_region_count']}",
+        f"positive_region_counts = {summary['positive_region_counts']}",
+        f"negative_region_counts = {summary['negative_region_counts']}",
+        f"label_distribution_ready_details = {summary['label_distribution_ready_details']}",
+        f"sample_collection_gaps = {summary['sample_collection_gaps']}",
+        f"label_distribution_ready = {str(summary['label_distribution_ready']).lower()}",
         f"training_ready = {str(summary['training_ready']).lower()}",
         f"production_ready = {str(summary['production_ready']).lower()}",
         f"default_enabled = {str(summary['default_enabled']).lower()}",
@@ -324,13 +798,18 @@ def _write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]
         lines.append("- 当前 positive / negative ROI 标签数量达到训练门槛，可进入 ROI gate 训练。")
     else:
         lines.append(
-            "- 当前 ROI 标签数量仍不足以训练可靠 gate；应继续扩充 20-task A/B 标签。"
+            "- 当前 ROI 标签数量或分布仍不足以训练可靠 gate；应继续扩充 20-task A/B 标签。"
         )
     lines.extend(
         [
-            "- `positive_primal_roi` 作为保守正样本；`no_observed_roi` / `negative_primal_roi` 作为负样本；",
+            "- `positive_primal_roi` / `positive_retry_roi` / `positive_status_roi` 等作为 trajectory 正样本；",
+            "- `no_observed_roi` / `negative_primal_roi` / `negative_retry_roi` 等作为负样本；",
             "- `columns_only_roi` 暂不作为主训练标签，可作为辅助分析；",
             "- missing / certificate-effect / official-bound-effect 样本不进入训练；",
+            "- 所有 ROI 训练标签都必须在同一个 expected context hash 下发生，否则排除训练；",
+            "- 所有 ROI 训练标签都必须能在 worker 日志中因果匹配 target，否则排除训练；",
+            "- no-observed ROI 还必须有实际 worker target intervention 证据，避免把 context mismatch 当负样本；",
+            "- `training_ready` 同时要求 unique 标签数量和实例/family 分布达标，避免小样本或单实例标签把 GAT 带偏；",
             "- 该数据集只能用于离线校准，不能参与证书或官方下界。",
         ]
     )
@@ -345,6 +824,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--min-positive-for-training", type=int, default=5)
     parser.add_argument("--min-negative-for-training", type=int, default=5)
+    parser.add_argument("--min-positive-instances-for-training", type=int, default=2)
+    parser.add_argument("--min-negative-instances-for-training", type=int, default=2)
+    parser.add_argument("--min-positive-families-for-training", type=int, default=2)
+    parser.add_argument("--min-negative-families-for-training", type=int, default=2)
+    parser.add_argument("--min-positive-regions-for-training", type=int, default=2)
+    parser.add_argument("--min-negative-regions-for-training", type=int, default=2)
+    parser.add_argument("--max-label-instance-fraction", type=float, default=0.75)
     return parser.parse_args()
 
 
@@ -357,6 +843,13 @@ def main() -> int:
         report=args.report,
         min_positive_for_training=max(1, int(args.min_positive_for_training)),
         min_negative_for_training=max(1, int(args.min_negative_for_training)),
+        min_positive_instances_for_training=max(1, int(args.min_positive_instances_for_training)),
+        min_negative_instances_for_training=max(1, int(args.min_negative_instances_for_training)),
+        min_positive_families_for_training=max(1, int(args.min_positive_families_for_training)),
+        min_negative_families_for_training=max(1, int(args.min_negative_families_for_training)),
+        min_positive_regions_for_training=max(1, int(args.min_positive_regions_for_training)),
+        min_negative_regions_for_training=max(1, int(args.min_negative_regions_for_training)),
+        max_label_instance_fraction=float(args.max_label_instance_fraction),
     )
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
     return 0 if summary["all_checks_pass"] else 1

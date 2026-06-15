@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 import heapq
 import hashlib
+import json
 import math
 import itertools
 from pathlib import Path
@@ -4504,6 +4505,133 @@ def _process_journey_branch_node(
                                     depth=node.depth,
                                 )
                             continue
+        if bool(config.get("journey_sharded_pulse_hidden_negative_worker_before_exact_enabled", False)):
+            target_worker_remaining = max(0.0, deadline - time.perf_counter())
+            if target_worker_remaining > min_pricing_time:
+                hidden_worker = _run_journey_sharded_pulse_hidden_negative_worker(
+                    data,
+                    config,
+                    logger,
+                    duals=exact_duals,
+                    branch_constraints=node.branch_constraints,
+                    cuts=tuple(cuts),
+                    journey_pool=journey_pool,
+                    base_pricing_config=exact_config,
+                    cg_iter=cg_iter,
+                    node_id=node.id,
+                    depth=node.depth,
+                    active_task_sets=active_task_sets,
+                    certificate_candidate=certificate_candidate,
+                    remaining_time=target_worker_remaining,
+                    previous_audit_signal=False,
+                    previous_audit_context_hashes=None,
+                    certificate_flat_rounds=certificate_flat_rounds,
+                    certificate_no_column_rounds=certificate_no_column_rounds,
+                )
+                if hidden_worker is not None:
+                    worker_pricing, worker_pricing_config = hidden_worker
+                    stats.pricing_calls += 1
+                    stats.exact_pricing_calls += 1
+                    stats.generated_sequences += int(worker_pricing.generated_sequences)
+                    stats.evaluated_timed_trips += int(worker_pricing.evaluated_timed_trips)
+                    _log_journey_pricing(
+                        logger,
+                        worker_pricing,
+                        cg_iter,
+                        pricing_kind="sharded_pulse_hidden_negative_worker",
+                        config=worker_pricing_config,
+                        pricing_dual_source=exact_dual_source,
+                        node_id=node.id,
+                        depth=node.depth,
+                    )
+                    _log_journey_counterfactual_replay_capture(
+                        logger,
+                        data,
+                        config,
+                        worker_pricing,
+                        exact_duals,
+                        tuple(cuts),
+                        tuple(node.branch_constraints),
+                        journey_pool,
+                        pricing_config=worker_pricing_config,
+                        pricing_kind="sharded_pulse_hidden_negative_worker",
+                        cg_iter=cg_iter,
+                        rmp_objective=float(solution.objective),
+                        active_task_sets=active_task_sets,
+                        active_variable_values=getattr(solution, "variable_values", None),
+                        active_reduced_costs=getattr(solution, "reduced_costs", None),
+                        pricing_dual_source=exact_dual_source,
+                        node_id=node.id,
+                        depth=node.depth,
+                    )
+                    if worker_pricing.journeys:
+                        added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
+                        _log_journey_addition(
+                            logger,
+                            worker_pricing,
+                            added,
+                            cg_iter,
+                            pricing_kind="sharded_pulse_hidden_negative_worker",
+                            node_id=node.id,
+                            depth=node.depth,
+                            active_task_sets=active_task_sets,
+                        )
+                        note_flat_weak_addition(
+                            int(added),
+                            "sharded_pulse_hidden_negative_worker",
+                        )
+                        if int(added) > 0:
+                            certificate_no_column_rounds = 0
+                            retry_negative_after_no_column_rounds = 0
+                            recent_priced_journeys = list(worker_pricing.journeys)
+                            recent_changed_task_sets = list(
+                                getattr(added, "changed_task_sets", tuple())
+                            )
+                            if _should_run_journey_pool_probe(
+                                pool_probe_enabled,
+                                cg_iter,
+                                pool_probe_frequency,
+                            ):
+                                local_incumbent, local_solution = _run_journey_pool_incumbent_probe(
+                                    data,
+                                    config,
+                                    journey_pool,
+                                    logger,
+                                    cg_iter,
+                                    local_incumbent,
+                                    local_solution,
+                                    fleet_limit=active_fleet_limit,
+                                    remaining=max(0.0, deadline - time.perf_counter()),
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                )
+                                active_fleet_limit = _update_journey_fleet_limit(
+                                    data,
+                                    logger,
+                                    active_fleet_limit,
+                                    local_incumbent,
+                                    local_solution,
+                                    cg_iter,
+                                    slack=_journey_fleet_limit_slack(config),
+                                    node_id=node.id,
+                                    depth=node.depth,
+                                )
+                            if not bool(
+                                config.get(
+                                    "journey_sharded_pulse_hidden_negative_worker_continue_same_iteration_after_add",
+                                    False,
+                                )
+                            ):
+                                continue
+                            logger.log(
+                                "journey_sharded_pulse_worker_continue_same_iteration",
+                                node_id=node.id,
+                                depth=node.depth,
+                                cg_iter=cg_iter,
+                                pricing_kind="sharded_pulse_hidden_negative_worker",
+                                added_journeys=int(added),
+                                next_stage="exact",
+                            )
         deadline_safety_margin = max(0.0, float(config.get("journey_pricing_deadline_safety_margin", 1.0)))
         remaining_after_pre_exact_worker = max(0.0, deadline - time.perf_counter() - deadline_safety_margin)
         if remaining_after_pre_exact_worker <= float(min_pricing_time):
@@ -17907,6 +18035,215 @@ def _journey_pulse_target_arc_option_priority_sequence_from_config(
     return tuple(part for part in parts if part)
 
 
+def _journey_arc_options_from_option_ids(
+    data: FutureData,
+    sequence: tuple[int, ...],
+    option_ids: tuple[str, ...],
+) -> tuple[Any, ...] | None:
+    if not sequence or len(option_ids) != len(sequence) + 1:
+        return None
+    arc_options: list[Any] = []
+    current = 0
+    for destination, option_id in zip((*sequence, 0), option_ids):
+        matches = [
+            option
+            for option in data.options(int(current), int(destination))
+            if str(option.option_id) == str(option_id)
+        ]
+        if not matches:
+            return None
+        arc_options.append(matches[0])
+        current = int(destination)
+    return tuple(arc_options)
+
+
+def _journey_sharded_pulse_target_materialization_traces_from_config(
+    data: FutureData,
+    config: dict[str, Any],
+) -> tuple[PulseSortieTrace, ...]:
+    value = config.get(
+        "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces",
+        "",
+    )
+    if value is None or value == "":
+        return tuple()
+    payload = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(payload, list):
+        raise ValueError("target materialization traces must be a list")
+    traces: list[PulseSortieTrace] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise ValueError("target materialization trace entries must be objects")
+        sequence = tuple(int(task) for task in (item.get("sequence") or []))
+        start_time = float(item.get("start_time"))
+        option_ids = tuple(str(arc) for arc in (item.get("arc_option_sequence") or []))
+        arc_options = _journey_arc_options_from_option_ids(data, sequence, option_ids)
+        if arc_options is None:
+            raise ValueError("target materialization arc options do not match sequence")
+        traces.append(
+            PulseSortieTrace(
+                sequence=sequence,
+                start_time=start_time,
+                arc_options=arc_options,
+            )
+        )
+    return tuple(traces)
+
+
+def _journey_sharded_pulse_target_materialization_result(
+    data: FutureData,
+    config: dict[str, Any],
+    *,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    base_pricing_config: JourneyPricingConfig,
+    eps: float,
+) -> JourneyPricingResult | None:
+    if not bool(
+        config.get(
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled",
+            False,
+        )
+    ):
+        return None
+    target_sequence = _journey_pulse_target_sequence_from_config(
+        config,
+        "journey_sharded_pulse_hidden_negative_worker_",
+    )
+    try:
+        traces = _journey_sharded_pulse_target_materialization_traces_from_config(
+            data,
+            config,
+        )
+    except Exception as exc:
+        return JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            f"target_materialization_trace_error:{type(exc).__name__}",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            final_judge_incomplete_reason="target_materialization_trace_error",
+            pulse_target_sequence_diagnostics_enabled=True,
+            pulse_target_sequence=target_sequence,
+            pulse_target_sequence_blocked_reason="trace_error",
+        )
+    if traces:
+        target_sequence = tuple(task for trace in traces for task in trace.sequence)
+    if not traces:
+        return JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "target_materialization_missing_traces",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            final_judge_incomplete_reason="target_materialization_missing_traces",
+            pulse_target_sequence_diagnostics_enabled=True,
+            pulse_target_sequence=target_sequence,
+            pulse_target_sequence_blocked_reason="missing_traces",
+        )
+    candidate = materialize_pulse_leaf_candidate(
+        data,
+        traces,
+        duals,
+        cuts=cuts,
+        time_bucket_size=float(base_pricing_config.time_bucket_size),
+        eps=float(eps),
+    )
+    if candidate is None:
+        return JourneyPricingResult(
+            [],
+            False,
+            None,
+            len(traces),
+            len(traces),
+            0,
+            0,
+            "INCOMPLETE",
+            "target_materialization_infeasible",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            final_judge_incomplete_reason="target_materialization_infeasible",
+            pulse_target_sequence_diagnostics_enabled=True,
+            pulse_target_sequence=target_sequence,
+            pulse_target_sequence_blocked_reason="materialization_infeasible",
+        )
+    journey_sample = tuple(tuple(int(task) for task in trip.tasks) for trip in candidate.trips)
+    if not bool(candidate.is_negative):
+        return JourneyPricingResult(
+            [],
+            False,
+            float(candidate.true_reduced_cost),
+            len(traces),
+            len(traces),
+            len(candidate.trips),
+            0,
+            "INCOMPLETE",
+            "target_materialization_nonnegative_true_rc",
+            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+            final_judge_engine="sharded_pulse",
+            final_judge_sharded_enabled=True,
+            final_judge_incomplete_reason="target_materialization_nonnegative_true_rc",
+            pulse_best_true_rc=float(candidate.true_reduced_cost),
+            pulse_target_sequence_diagnostics_enabled=True,
+            pulse_target_sequence=target_sequence,
+            pulse_target_sequence_reached_prefix_len=len(target_sequence),
+            pulse_target_sequence_completed=True,
+            pulse_target_sequence_materialized=True,
+            pulse_target_sequence_negative=False,
+            pulse_target_sequence_blocked_reason="nonnegative_true_rc",
+        )
+    signature_sample = "|".join(
+        f"{','.join(str(task) for task in trip.tasks)}@{trip.start_time}:"
+        f"{','.join(str(arc) for arc in trip.arc_option_ids)}"
+        for trip in candidate.trips
+    )
+    return JourneyPricingResult(
+        [candidate.journey],
+        False,
+        float(candidate.true_reduced_cost),
+        len(traces),
+        len(traces),
+        len(candidate.trips),
+        1,
+        "FOUND_NEGATIVE",
+        "target_materialized_negative_true_rc",
+        pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+        final_judge_engine="sharded_pulse",
+        final_judge_sharded_enabled=True,
+        global_certificate_capable=False,
+        final_judge_certificate_capable=False,
+        pulse_negative_found=True,
+        pulse_negative_pool_size=1,
+        pulse_best_true_rc=float(candidate.true_reduced_cost),
+        pulse_returned_candidate_task_set_samples=(tuple(sorted(candidate.journey.task_set)),),
+        pulse_returned_candidate_sequence_samples=(journey_sample,),
+        pulse_returned_candidate_signature_samples=(signature_sample,),
+        pulse_target_sequence_diagnostics_enabled=True,
+        pulse_target_sequence=target_sequence,
+        pulse_target_sequence_reached_prefix_len=len(target_sequence),
+        pulse_target_sequence_completed=True,
+        pulse_target_sequence_materialized=True,
+        pulse_target_sequence_negative=True,
+        pulse_target_sequence_transition_attempts=len(target_sequence),
+        pulse_target_sequence_transition_accepted=len(target_sequence),
+    )
+
+
 def _journey_sharded_pulse_hidden_negative_worker_payload(
     pricing: Any,
     *,
@@ -18906,70 +19243,81 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
             final_judge_incomplete_reason="worker_time_limit",
         )
     else:
-        try:
-            pulse_pricing = price_journeys(
-                data,
-                duals,
-                branch_constraints,
-                config=worker_config,
-                cuts=cuts,
-                trip_cache={},
-                resource_cache={},
-                forbidden_journey_signatures=forbidden_signatures,
-                dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
-                    journey_pool, cuts, branch_constraints
-                ),
-                priority_task_sets=active_task_sets,
-                active_support_task_sets=active_task_sets,
-            )
-            pulse_pricing, true_rc_filtered = _journey_sharded_pulse_hidden_negative_worker_sanitize(
-                pulse_pricing,
-                duals,
-                cuts,
-                eps=float(config.get("eps", 1.0e-6)),
-            )
-            pulse_pricing = _journey_sharded_pulse_worker_impact_filtered(
-                pulse_pricing,
-                journey_pool=journey_pool,
-                active_task_sets=active_task_sets,
-                duals=duals,
-                cuts=cuts,
-                mode=str(
-                    config.get(
-                        "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode",
-                        "off",
-                    )
-                    or "off"
-                ),
-                max_columns=int(
-                    config.get(
-                        "journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns",
-                        0,
-                    )
-                ),
-                min_true_rc=float(
-                    config.get(
-                        "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc",
-                        0.0,
-                    )
-                ),
-            )
-        except Exception as exc:  # pragma: no cover - defensive worker shield.
-            pulse_pricing = JourneyPricingResult(
-                [],
-                False,
-                None,
-                0,
-                0,
-                0,
-                0,
-                "INCOMPLETE",
-                f"sharded_pulse_hidden_negative_worker_internal_error:{type(exc).__name__}",
-                pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
-                final_judge_engine="sharded_pulse",
-                final_judge_sharded_enabled=True,
-                final_judge_incomplete_reason="worker_internal_error",
-            )
+        target_pricing = _journey_sharded_pulse_target_materialization_result(
+            data,
+            config,
+            duals=duals,
+            cuts=cuts,
+            base_pricing_config=worker_config,
+            eps=float(config.get("eps", 1.0e-6)),
+        )
+        if target_pricing is not None:
+            pulse_pricing = target_pricing
+        else:
+            try:
+                pulse_pricing = price_journeys(
+                    data,
+                    duals,
+                    branch_constraints,
+                    config=worker_config,
+                    cuts=cuts,
+                    trip_cache={},
+                    resource_cache={},
+                    forbidden_journey_signatures=forbidden_signatures,
+                    dominant_task_set_costs=_journey_pricing_dominant_task_set_costs(
+                        journey_pool, cuts, branch_constraints
+                    ),
+                    priority_task_sets=active_task_sets,
+                    active_support_task_sets=active_task_sets,
+                )
+            except Exception as exc:  # pragma: no cover - defensive worker shield.
+                pulse_pricing = JourneyPricingResult(
+                    [],
+                    False,
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    "INCOMPLETE",
+                    f"sharded_pulse_hidden_negative_worker_internal_error:{type(exc).__name__}",
+                    pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+                    final_judge_engine="sharded_pulse",
+                    final_judge_sharded_enabled=True,
+                    final_judge_incomplete_reason="worker_internal_error",
+                )
+        pulse_pricing, true_rc_filtered = _journey_sharded_pulse_hidden_negative_worker_sanitize(
+            pulse_pricing,
+            duals,
+            cuts,
+            eps=float(config.get("eps", 1.0e-6)),
+        )
+        pulse_pricing = _journey_sharded_pulse_worker_impact_filtered(
+            pulse_pricing,
+            journey_pool=journey_pool,
+            active_task_sets=active_task_sets,
+            duals=duals,
+            cuts=cuts,
+            mode=str(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode",
+                    "off",
+                )
+                or "off"
+            ),
+            max_columns=int(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_max_columns",
+                    0,
+                )
+            ),
+            min_true_rc=float(
+                config.get(
+                    "journey_sharded_pulse_hidden_negative_worker_impact_filter_min_true_rc",
+                    0.0,
+                )
+            ),
+        )
     elapsed = time.perf_counter() - started
     remaining_after_worker = None
     if remaining_time is not None:

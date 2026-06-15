@@ -9,7 +9,16 @@ from pathlib import Path
 from BPC_future.scripts.audit_gat_target_priority_worker_ab_results import audit_results
 
 
-def _write_result(path: Path, *, status: str, primal: float, dual: str = "", columns: int = 0) -> None:
+def _write_result(
+    path: Path,
+    *,
+    status: str,
+    primal: float,
+    dual: str = "",
+    columns: int = 0,
+    exact_pricing_calls: int = 6,
+    pricing_calls: int = 8,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(
@@ -21,6 +30,7 @@ def _write_result(path: Path, *, status: str, primal: float, dual: str = "", col
                 "dual_bound",
                 "columns",
                 "exact_pricing_calls",
+                "pricing_calls",
                 "generated_sequences",
             ],
         )
@@ -32,24 +42,25 @@ def _write_result(path: Path, *, status: str, primal: float, dual: str = "", col
                 "primal_bound": f"{primal:.6f}",
                 "dual_bound": dual,
                 "columns": str(columns),
-                "exact_pricing_calls": "6",
+                "exact_pricing_calls": str(exact_pricing_calls),
+                "pricing_calls": str(pricing_calls),
                 "generated_sequences": "100",
             }
         )
 
 
 class GATTargetPriorityWorkerABResultAuditTests(unittest.TestCase):
-    def test_audit_classifies_positive_and_no_roi_without_certificate_effect(self) -> None:
+    def test_audit_classifies_positive_and_negative_roi_without_certificate_effect(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             positive_base = tmp / "pos_base.csv"
             positive_worker = tmp / "pos_worker.csv"
-            flat_base = tmp / "flat_base.csv"
-            flat_worker = tmp / "flat_worker.csv"
+            negative_base = tmp / "negative_base.csv"
+            negative_worker = tmp / "negative_worker.csv"
             _write_result(positive_base, status="TIME_LIMIT", primal=740.0, columns=10)
             _write_result(positive_worker, status="TIME_LIMIT", primal=739.0, columns=12)
-            _write_result(flat_base, status="TIME_LIMIT", primal=752.0, columns=20)
-            _write_result(flat_worker, status="TIME_LIMIT", primal=752.0, columns=20)
+            _write_result(negative_base, status="TIME_LIMIT", primal=752.0, columns=20)
+            _write_result(negative_worker, status="TIME_LIMIT", primal=754.0, columns=18)
             runbook = tmp / "runbook.json"
             runbook.write_text(
                 json.dumps(
@@ -67,13 +78,13 @@ class GATTargetPriorityWorkerABResultAuditTests(unittest.TestCase):
                                 "worker_csv": str(positive_worker),
                             },
                             {
-                                "name": "flat",
+                                "name": "negative",
                                 "instance": "toy.json",
-                                "expected_context_hash": "ctx-flat",
+                                "expected_context_hash": "ctx-negative",
                                 "target_sequence": [3],
                                 "target_arc_option_sequence": ["0->3:a", "3->0:a"],
-                                "baseline_csv": str(flat_base),
-                                "worker_csv": str(flat_worker),
+                                "baseline_csv": str(negative_base),
+                                "worker_csv": str(negative_worker),
                             },
                         ],
                     }
@@ -93,12 +104,82 @@ class GATTargetPriorityWorkerABResultAuditTests(unittest.TestCase):
             self.assertFalse(summary["certificate_ready"])
             self.assertFalse(summary["official_bound_effect"])
             self.assertEqual(summary["roi_class_counts"]["positive_primal_roi"], 1)
-            self.assertEqual(summary["roi_class_counts"]["no_observed_roi"], 1)
+            self.assertEqual(summary["roi_class_counts"]["negative_primal_roi"], 1)
+            self.assertEqual(summary["negative_primal_roi_count"], 1)
+            self.assertEqual(summary["nonpositive_roi_count"], 1)
             self.assertEqual(summary["records"][0]["primal_improvement"], 1.0)
             self.assertEqual(summary["records"][0]["columns_delta"], 2)
             self.assertEqual(summary["next_decision"], "keep_worker_opt_in_and_expand_ab")
             self.assertTrue((tmp / "out" / "summary.json").exists())
             self.assertTrue((tmp / "report.md").exists())
+
+    def test_audit_treats_retry_reduction_as_trajectory_roi(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            retry_base = tmp / "retry_base.csv"
+            retry_worker = tmp / "retry_worker.csv"
+            noop_base = tmp / "noop_base.csv"
+            noop_worker = tmp / "noop_worker.csv"
+            _write_result(
+                retry_base,
+                status="TIME_LIMIT",
+                primal=740.0,
+                columns=10,
+                exact_pricing_calls=8,
+                pricing_calls=12,
+            )
+            _write_result(
+                retry_worker,
+                status="TIME_LIMIT",
+                primal=740.0,
+                columns=10,
+                exact_pricing_calls=5,
+                pricing_calls=9,
+            )
+            _write_result(noop_base, status="TIME_LIMIT", primal=740.0, columns=10)
+            _write_result(noop_worker, status="TIME_LIMIT", primal=740.0, columns=10)
+            runbook = tmp / "runbook.json"
+            runbook.write_text(
+                json.dumps(
+                    {
+                        "certificate_ready": False,
+                        "official_bound_effect": False,
+                        "candidate_runs": [
+                            {
+                                "name": "retry_positive",
+                                "instance": "retry.json",
+                                "expected_context_hash": "ctx-retry",
+                                "target_sequence": [1, 2],
+                                "target_arc_option_sequence": ["0->1:a", "1->2:a", "2->0:a"],
+                                "baseline_csv": str(retry_base),
+                                "worker_csv": str(retry_worker),
+                            },
+                            {
+                                "name": "noop",
+                                "instance": "noop.json",
+                                "expected_context_hash": "ctx-noop",
+                                "target_sequence": [3],
+                                "target_arc_option_sequence": ["0->3:a", "3->0:a"],
+                                "baseline_csv": str(noop_base),
+                                "worker_csv": str(noop_worker),
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = audit_results(
+                runbook_summaries=[runbook],
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["roi_class_counts"]["positive_retry_roi"], 1)
+            self.assertEqual(summary["positive_trajectory_roi_count"], 1)
+            self.assertEqual(summary["records"][0]["exact_pricing_calls_delta"], -3)
+            self.assertEqual(summary["records"][0]["pricing_calls_delta"], -3)
 
     def test_audit_reuses_instance_baseline_for_multiple_candidate_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -20,6 +20,7 @@ DEFAULT_RUNBOOK_SUMMARIES = (
     Path("BPC_future/results/gat_target_priority_worker_ab_20260614/summary.json"),
     Path("BPC_future/results/gat_target_priority_worker_ab_auto_candidates_20260614/summary.json"),
     Path("BPC_future/results/gat_target_priority_worker_ab_20roi_smoke_auto_20260614/summary.json"),
+    Path("BPC_future/results/gat_target_priority_worker_ab_family_20260614/summary.json"),
 )
 DEFAULT_OUTPUT_DIR = Path("BPC_future/results/gat_target_priority_worker_ab_audit_20260614")
 DEFAULT_REPORT = Path(
@@ -63,19 +64,48 @@ def _status(row: dict[str, Any] | None) -> str | None:
     return str(value) if value is not None else None
 
 
+def _status_rank(status: str | None) -> int:
+    value = str(status or "").strip().upper()
+    if value == "OPTIMAL":
+        return 3
+    if value in {"TIME_LIMIT", "INCOMPLETE", "FEASIBLE"}:
+        return 1
+    if value:
+        return 0
+    return 0
+
+
 def _roi_class(record: dict[str, Any]) -> str:
     if not record["baseline_csv_exists"] or not record["worker_csv_exists"]:
         return "missing_result"
     if record["official_bound_effect"]:
         return "invalid_certificate_effect"
+    baseline_status_rank = _status_rank(record.get("baseline_status"))
+    worker_status_rank = _status_rank(record.get("worker_status"))
+    if worker_status_rank > baseline_status_rank:
+        return "positive_status_roi"
+    if worker_status_rank < baseline_status_rank:
+        return "negative_status_roi"
     primal_delta = record.get("primal_improvement")
     columns_delta = record.get("columns_delta")
+    exact_delta = record.get("exact_pricing_calls_delta")
+    pricing_delta = record.get("pricing_calls_delta")
     if primal_delta is not None and primal_delta > 1.0e-9:
         return "positive_primal_roi"
-    if columns_delta is not None and columns_delta > 0:
-        return "columns_only_roi"
     if primal_delta is not None and primal_delta < -1.0e-9:
         return "negative_primal_roi"
+    if exact_delta is not None and exact_delta < 0:
+        return "positive_retry_roi"
+    if (
+        pricing_delta is not None
+        and pricing_delta < 0
+        and (exact_delta is None or exact_delta <= 0)
+    ):
+        return "positive_pricing_roi"
+    if exact_delta is not None and exact_delta > 0:
+        return "negative_retry_roi"
+    if columns_delta is not None and columns_delta > 0:
+        return "columns_only_roi"
     return "no_observed_roi"
 
 
@@ -101,6 +131,12 @@ def _candidate_record(
     worker_columns = _int_value(worker, "columns")
     baseline_exact = _int_value(baseline, "exact_pricing_calls")
     worker_exact = _int_value(worker, "exact_pricing_calls")
+    baseline_pricing = _int_value(baseline, "pricing_calls")
+    worker_pricing = _int_value(worker, "pricing_calls")
+    baseline_rmp = _int_value(baseline, "rmp_solves")
+    worker_rmp = _int_value(worker, "rmp_solves")
+    baseline_time = _float_value(baseline, "solving_time")
+    worker_time = _float_value(worker, "solving_time")
     baseline_sequences = _int_value(baseline, "generated_sequences")
     worker_sequences = _int_value(worker, "generated_sequences")
     record = {
@@ -134,6 +170,21 @@ def _candidate_record(
         "worker_exact_pricing_calls": worker_exact,
         "exact_pricing_calls_delta": (
             None if baseline_exact is None or worker_exact is None else worker_exact - baseline_exact
+        ),
+        "baseline_pricing_calls": baseline_pricing,
+        "worker_pricing_calls": worker_pricing,
+        "pricing_calls_delta": (
+            None if baseline_pricing is None or worker_pricing is None else worker_pricing - baseline_pricing
+        ),
+        "baseline_rmp_solves": baseline_rmp,
+        "worker_rmp_solves": worker_rmp,
+        "rmp_solves_delta": (
+            None if baseline_rmp is None or worker_rmp is None else worker_rmp - baseline_rmp
+        ),
+        "baseline_solving_time": baseline_time,
+        "worker_solving_time": worker_time,
+        "solving_time_delta": (
+            None if baseline_time is None or worker_time is None else worker_time - baseline_time
         ),
         "generated_sequences_delta": (
             None
@@ -184,14 +235,28 @@ def audit_results(
     for record in records:
         roi_counts[record["roi_class"]] = roi_counts.get(record["roi_class"], 0) + 1
     positive = [record for record in records if record["roi_class"] == "positive_primal_roi"]
+    positive_trajectory = [
+        record
+        for record in records
+        if str(record["roi_class"]).startswith("positive_")
+    ]
     no_roi = [record for record in records if record["roi_class"] == "no_observed_roi"]
+    negative_primal = [
+        record for record in records if record["roi_class"] == "negative_primal_roi"
+    ]
+    negative_roi = [
+        record
+        for record in records
+        if str(record["roi_class"]).startswith("negative_")
+    ]
+    nonpositive_roi = [*no_roi, *negative_roi]
     checks = {
         "diagnostic_only": True,
         "runs_bpc_or_pricing_false": True,
         "no_certificate_effect": all(not record["certificate_effect"] for record in records),
         "no_official_bound_effect": all(not record["official_bound_effect"] for record in records),
         "has_records": bool(records),
-        "has_positive_and_nonpositive_evidence": bool(positive) and bool(no_roi),
+        "has_positive_and_nonpositive_evidence": bool(positive_trajectory) and bool(nonpositive_roi),
     }
     summary = {
         "schema_version": "gat_target_priority_worker_ab_audit_v1",
@@ -202,7 +267,11 @@ def audit_results(
         "record_count": len(records),
         "roi_class_counts": dict(sorted(roi_counts.items())),
         "positive_primal_roi_count": len(positive),
+        "positive_trajectory_roi_count": len(positive_trajectory),
         "no_observed_roi_count": len(no_roi),
+        "negative_primal_roi_count": len(negative_primal),
+        "negative_trajectory_roi_count": len(negative_roi),
+        "nonpositive_roi_count": len(nonpositive_roi),
         "records": records,
         "production_ready": False,
         "default_enabled": False,
@@ -212,7 +281,7 @@ def audit_results(
         "all_checks_pass": all(bool(value) for value in checks.values()),
         "next_decision": (
             "keep_worker_opt_in_and_expand_ab"
-            if positive and no_roi
+            if positive_trajectory and nonpositive_roi
             else "collect_more_ab_evidence"
         ),
     }
@@ -259,6 +328,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "## 判断",
         "",
         "- `positive_primal_roi` 表示 worker primal 严格优于同实例 baseline；",
+        "- `positive_retry_roi` / `positive_pricing_roi` 表示 primal 不变差且后续 pricing/retry 负担下降；",
         "- `no_observed_roi` 表示 worker 与 baseline 没有可观测改善；",
         "- 只要正负 ROI 同时存在，GAT HIGH_PRIORITY 就不能直接默认触发 worker；",
         "- 所有结果都不能参与 no-negative certificate 或 official lower bound。",

@@ -4,7 +4,8 @@
 The generated commands keep the current production boundary:
 
 * 5/10 commands are no-regression checks with the mainline learning path kept.
-* 20-task worker commands are explicit opt-in target-priority probes.
+* 20-task worker commands are explicit opt-in target-priority probes on top
+  of the same mainline learning path that produced the captured target context.
 * No command enables certificate effect or official lower-bound shortcuts.
 * Shell commands are emitted with shlex.join so arc option ids such as
   ``0->20:low_risk:2`` cannot be interpreted as redirection.
@@ -44,8 +45,8 @@ NO_LEARNING_OVERRIDES = (
 
 WORKER_BASE_OVERRIDES = (
     "journey_sharded_pulse_hidden_negative_worker_enabled=True",
-    "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled=True",
     "journey_sharded_pulse_hidden_negative_worker_trigger=audit_signal_or_current_probe",
+    "journey_sharded_pulse_hidden_negative_worker_log_skips=True",
     "journey_sharded_pulse_worker_current_probe_enabled=True",
     "journey_sharded_pulse_worker_current_probe_time_limit=1.0",
     "journey_sharded_pulse_worker_current_probe_max_recursions=50000",
@@ -61,22 +62,51 @@ WORKER_BASE_OVERRIDES = (
     "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled=True",
     "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled=True",
     "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_enabled=True",
+    "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_enabled=True",
+    "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled=True",
+)
+
+TASK20_CONTEXT_CAPTURE_OVERRIDES = (
+    "journey_counterfactual_replay_capture_enabled=True",
+    "journey_counterfactual_replay_capture_active_basis_enabled=True",
+    "journey_counterfactual_replay_capture_forbidden_signatures_enabled=True",
+    "journey_counterfactual_replay_capture_log_empty=True",
+    "journey_counterfactual_replay_capture_active_basis_max_rows=96",
+    "journey_counterfactual_replay_capture_max_journeys=32",
+    "journey_counterfactual_replay_capture_pool_max_journeys=256",
+    "journey_counterfactual_replay_capture_forbidden_signature_max_count=256",
+)
+
+REQUIRED_CANDIDATE_CONTEXT_FIELDS = (
+    "expected_context_hash",
+    "true_dual_hash",
+    "cut_hash",
+    "branch_hash",
+    "forbidden_signature_hash",
+    "active_hash_before",
+    "pool_signature_hash",
+    "pool_task_set_hash",
 )
 
 DEFAULT_CANDIDATES = (
     {
-        "name": "apollo20_sector_wave_c488c428_target_20_17_16",
+        "name": "apollo20_sector_wave_7e0afd09753effed_target_19",
         "instance": (
             "BPC_future/logical_graph/tasks_020/sector-wave/apollo15_20km/"
             "apollo15_20km_sector-wave_randomtw_tasks020_01_seed61000_logical_graph.json"
         ),
-        "expected_context_hash": "c488c428ee5822de",
-        "target_sequence": (20, 17, 16),
+        "expected_context_hash": "7e0afd09753effed",
+        "true_dual_hash": "4fb2dc95e30f31c4",
+        "cut_hash": "d653e60106177bb4",
+        "branch_hash": "da39a3ee5e6b4b0d",
+        "forbidden_signature_hash": "4a0466dbb3cb0ca3",
+        "active_hash_before": "f5e56fbba74784b5",
+        "pool_signature_hash": "5b033e33a1d57de2",
+        "pool_task_set_hash": "07344d8ff99d9697",
+        "target_sequence": (19,),
         "target_arc_option_sequence": (
-            "0->20:low_risk:2",
-            "20->17:low_risk:2",
-            "17->16:low_risk:2",
-            "16->0:low_risk:2",
+            "0->19:low_risk:2",
+            "19->0:low_risk:2",
         ),
     },
 )
@@ -212,6 +242,7 @@ def _load_candidates(path: Path | None) -> list[dict[str, Any]]:
 
 def _normalized_candidate(raw: dict[str, Any], index: int) -> dict[str, Any]:
     sequence = _target_sequence(raw.get("target_sequence") or raw.get("target_tasks"))
+    priority_sequence = _target_sequence(raw.get("target_priority_sequence") or sequence)
     arc_options = _target_arc_options(
         raw.get("target_arc_option_sequence") or raw.get("arc_option_sequence")
     )
@@ -221,32 +252,94 @@ def _normalized_candidate(raw: dict[str, Any], index: int) -> dict[str, Any]:
         raise ValueError(f"candidate {index} has no instance")
     if not raw.get("expected_context_hash"):
         raise ValueError(f"candidate {index} has no expected_context_hash")
-    return {
+    normalized = {
         "name": str(raw.get("name") or f"candidate_{index:03d}"),
         "instance": _instance(raw["instance"]),
         "expected_context_hash": str(raw["expected_context_hash"]),
         "target_sequence": sequence,
+        "target_priority_sequence": priority_sequence,
         "target_arc_option_sequence": arc_options,
+        "target_sortie_traces": list(raw.get("target_sortie_traces") or []),
+        "capture_pricing_kind": str(raw.get("capture_pricing_kind") or ""),
     }
+    for field in (
+        "cell",
+        "ordinal_cell",
+        "recommendation_bucket",
+        "reason",
+        "score",
+        "cell_positive_rate",
+        "cell_positive_count",
+        "cell_training_negative_count",
+        "positive_gap",
+        "negative_gap",
+    ):
+        if field in raw:
+            normalized[field] = raw[field]
+    for field in REQUIRED_CANDIDATE_CONTEXT_FIELDS:
+        if field == "expected_context_hash":
+            continue
+        normalized[field] = str(raw.get(field) or "")
+    normalized["candidate_context_complete"] = all(
+        str(normalized.get(field) or "").strip()
+        for field in REQUIRED_CANDIDATE_CONTEXT_FIELDS
+    )
+    return normalized
+
+
+def _worker_before_heuristic_enabled(candidate: dict[str, Any]) -> bool:
+    capture_kind = str(candidate.get("capture_pricing_kind") or "").strip().lower()
+    if capture_kind == "exact":
+        return False
+    if capture_kind == "heuristic":
+        return True
+    return False
+
+
+def _worker_before_exact_enabled(candidate: dict[str, Any]) -> bool:
+    capture_kind = str(candidate.get("capture_pricing_kind") or "").strip().lower()
+    return capture_kind == "exact"
 
 
 def _worker_overrides(candidate: dict[str, Any]) -> tuple[str, ...]:
     target_sequence = ",".join(str(task) for task in candidate["target_sequence"])
+    priority_sequence = ",".join(str(task) for task in candidate["target_priority_sequence"])
     arc_sequence = ",".join(str(option) for option in candidate["target_arc_option_sequence"])
+    target_traces = json.dumps(
+        candidate.get("target_sortie_traces") or [],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
     overrides = [
-        *NO_LEARNING_OVERRIDES,
         *WORKER_BASE_OVERRIDES,
+        (
+            "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled="
+            f"{_worker_before_heuristic_enabled(candidate)}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_before_exact_enabled="
+            f"{_worker_before_exact_enabled(candidate)}"
+        ),
         (
             "journey_sharded_pulse_hidden_negative_worker_expected_context_hash="
             f"{candidate['expected_context_hash']}"
         ),
         (
             "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_sequence="
-            f"{target_sequence}"
+            f"{priority_sequence}"
         ),
         (
             "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_sequence="
+            f"{priority_sequence}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_sequence="
             f"{target_sequence}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces="
+            f"{target_traces}"
         ),
     ]
     if arc_sequence:
@@ -319,7 +412,7 @@ def build_runbook(
 
     candidate_runs: list[dict[str, Any]] = []
     for candidate in candidates:
-        base_profile = f"task020_{candidate['name']}_no_learning_baseline"
+        base_profile = f"task020_{candidate['name']}_mainline_baseline"
         worker_profile = f"task020_{candidate['name']}_target_priority_worker"
         baseline_command = _single_run_command(
             config=SCALE_CONFIG[20],
@@ -327,7 +420,7 @@ def build_runbook(
             output_dir=output_dir,
             profile=base_profile,
             time_limit=float(twenty_time_limit),
-            overrides=NO_LEARNING_OVERRIDES,
+            overrides=TASK20_CONTEXT_CAPTURE_OVERRIDES,
         )
         worker_command = _single_run_command(
             config=SCALE_CONFIG[20],
@@ -335,13 +428,16 @@ def build_runbook(
             output_dir=output_dir,
             profile=worker_profile,
             time_limit=float(twenty_time_limit),
-            overrides=_worker_overrides(candidate),
+            overrides=(*TASK20_CONTEXT_CAPTURE_OVERRIDES, *_worker_overrides(candidate)),
         )
         commands.extend(
             [
                 {
                     "command_type": base_profile,
-                    "description": "Run task-20 no-learning baseline for the same target context.",
+                    "description": (
+                        "Run task-20 mainline baseline for the same target context. "
+                        "Learning/GAT stays enabled so the captured context can be reached."
+                    ),
                     "command": baseline_command,
                 },
                 {
@@ -371,11 +467,19 @@ def build_runbook(
         "all_candidate_instances_exist": all(
             Path(item["instance"]).exists() for item in candidate_runs
         ),
+        "all_candidates_have_full_context": all(
+            bool(item.get("candidate_context_complete")) for item in candidate_runs
+        ),
         "small_commands_keep_mainline_gat": all(
             "journey_learning_enabled=False" not in item["command"]
             and "hidden_negative_worker_enabled=True" not in item["command"]
             for item in commands
             if item["command_type"].startswith(("task005", "task010"))
+        ),
+        "task20_commands_keep_capture_learning_policy": all(
+            "journey_learning_enabled=False" not in item["command"]
+            for item in commands
+            if item["command_type"].startswith("task020_")
         ),
         "worker_commands_have_expected_context": all(
             item["expected_context_hash"] in next(
@@ -384,6 +488,11 @@ def build_runbook(
                 if command["command_type"] == f"task020_{item['name']}_target_priority_worker"
             )
             for item in candidate_runs
+        ),
+        "task20_commands_capture_actual_contexts": all(
+            "journey_counterfactual_replay_capture_enabled=True" in item["command"]
+            for item in commands
+            if item["command_type"].startswith("task020_")
         ),
         "commands_have_no_certificate_effect": not any(
             _has_certificate_effect(item["command"]) for item in commands
@@ -410,6 +519,7 @@ def build_runbook(
         "official_bound_effect": False,
         "online_effect_scope": "explicit_task20_worker_commands_only",
         "mainline_gat_kept_for_5_10": True,
+        "mainline_gat_kept_for_20_context_replay": True,
         "candidate_policy": {
             "gat_role": "embedding_and_trajectory_impact_expression",
             "knn_ood_role": "safety_shell",
@@ -417,7 +527,10 @@ def build_runbook(
             "unsafe_negative_action": "DELAY_QUEUE",
             "negative_discard_allowed": False,
             "certificate_effect": False,
+            "worker_stage_policy": "match_capture_pricing_kind: heuristic_before_heuristic_exact_before_exact",
+            "context_miss_policy": "capture_actual_reached_contexts_for_next_iteration",
         },
+        "required_candidate_context_fields": list(REQUIRED_CANDIDATE_CONTEXT_FIELDS),
         "small_no_regression": small_checks,
         "candidate_runs": candidate_runs,
         "commands": commands,
@@ -455,6 +568,8 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"default_enabled = {str(summary['default_enabled']).lower()}",
         f"certificate_ready = {str(summary['certificate_ready']).lower()}",
         f"official_bound_effect = {str(summary['official_bound_effect']).lower()}",
+        "required_candidate_context_field_count = "
+        f"{len(summary['required_candidate_context_fields'])}",
         f"all_checks_pass = {str(summary['all_checks_pass']).lower()}",
         "```",
         "",
@@ -491,7 +606,10 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
             "## 边界",
             "",
             "- 5/10 命令不关闭主线 GAT/learning，也不启用新 worker；",
+            "- 20 baseline/worker 命令也不关闭主线 GAT/learning，避免候选捕获上下文无法复现；",
+            "- 20 baseline/worker 命令开启 counterfactual replay capture；如果旧 target context 没到，仍保留实际到达的 context 供下一轮候选抽取；",
             "- 20 worker 命令是显式 opt-in，只验证 target-priority ROI；",
+            "- 20 worker 候选必须带完整 context / dual / cuts / branch / pool hash；",
             "- 所有命令都不启用 sharded Pulse certificate 或 official lower-bound effect；",
             "- 含 `->` 的 arc-option 配置通过 `shlex.join` 自动引用，不能手工去掉引号；",
             "- 该 runbook 不是生产开关，跑完后仍需看 5/10 no-regression 和 20-task ROI。",

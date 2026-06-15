@@ -1,0 +1,435 @@
+# GAT Target-Priority Worker A/B Audit 报告
+
+日期：2026-06-14
+
+## 目的
+
+聚合 GAT target-priority worker A/B 的 CSV 结果，判断候选是否有真实 ROI。
+该脚本只读 CSV，不运行 BPC / pricing / RMP，不启用 worker，不产生 certificate。
+
+## 机器字段
+
+```text
+gat_target_priority_worker_ab_audit = current
+status = audited
+record_count = 8
+roi_class_counts = {'columns_only_roi': 1, 'negative_primal_roi': 1, 'negative_retry_roi': 4, 'no_observed_roi': 1, 'positive_primal_roi': 1}
+production_ready = false
+default_enabled = false
+certificate_ready = false
+official_bound_effect = false
+all_checks_pass = true
+```
+
+## Records
+
+```json
+[
+  {
+    "baseline_columns": 594,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_4848230110b93844_8_6_1_4_10_14_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 8,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 39,
+    "baseline_primal": 608.525827,
+    "baseline_rmp_solves": 31,
+    "baseline_solving_time": 75.817,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": 67,
+    "exact_pricing_calls_delta": 3,
+    "expected_context_hash": "4848230110b93844",
+    "generated_sequences_delta": -3423,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_10_seed61921_logical_graph.json",
+    "name": "apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_4848230110b93844_8_6_1_4_10_14",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 2,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": -1,
+    "roi_class": "negative_retry_roi",
+    "solving_time_delta": 8.65841300000001,
+    "target_arc_option_sequence": [
+      "0->8:low_risk:2",
+      "8->6:low_risk:2",
+      "6->1:low_risk:1",
+      "1->4:low_time:0",
+      "4->10:low_risk:2",
+      "10->14:low_risk:1",
+      "14->0:low_risk:2"
+    ],
+    "target_sequence": [
+      8,
+      6,
+      1,
+      4,
+      10,
+      14
+    ],
+    "worker_columns": 661,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_4848230110b93844_8_6_1_4_10_14_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 11,
+    "worker_pricing_calls": 41,
+    "worker_primal": 608.525827,
+    "worker_rmp_solves": 30,
+    "worker_solving_time": 84.475413,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 594,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_94206d715106bf37_13_12_15_6_1_4_10_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 8,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 39,
+    "baseline_primal": 608.525827,
+    "baseline_rmp_solves": 31,
+    "baseline_solving_time": 75.68235,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": -12,
+    "exact_pricing_calls_delta": 2,
+    "expected_context_hash": "94206d715106bf37",
+    "generated_sequences_delta": -194908,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_10_seed61921_logical_graph.json",
+    "name": "apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_94206d715106bf37_13_12_15_6_1_4_10",
+    "official_bound_effect": false,
+    "pricing_calls_delta": -4,
+    "primal_improvement": -1.8813429999999016,
+    "rmp_solves_delta": -6,
+    "roi_class": "negative_primal_roi",
+    "solving_time_delta": -10.539100000000005,
+    "target_arc_option_sequence": [
+      "0->13:low_energy:1",
+      "13->12:low_time:0",
+      "12->0:low_time:0"
+    ],
+    "target_sequence": [
+      13,
+      12,
+      15,
+      6,
+      1,
+      4,
+      10
+    ],
+    "worker_columns": 582,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_94206d715106bf37_13_12_15_6_1_4_10_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 10,
+    "worker_pricing_calls": 35,
+    "worker_primal": 610.40717,
+    "worker_rmp_solves": 25,
+    "worker_solving_time": 65.14325,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 594,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_33788d6b7bdf8387_13_12_15_6_16_9_19_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 8,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 39,
+    "baseline_primal": 608.525827,
+    "baseline_rmp_solves": 31,
+    "baseline_solving_time": 76.610764,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": 0,
+    "exact_pricing_calls_delta": 2,
+    "expected_context_hash": "33788d6b7bdf8387",
+    "generated_sequences_delta": 9020,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_10_seed61921_logical_graph.json",
+    "name": "apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_33788d6b7bdf8387_13_12_15_6_16_9_19",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 3,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 1,
+    "roi_class": "negative_retry_roi",
+    "solving_time_delta": 1.1381069999999909,
+    "target_arc_option_sequence": [
+      "0->13:low_energy:1",
+      "13->12:low_time:0",
+      "12->0:low_time:0"
+    ],
+    "target_sequence": [
+      13,
+      12,
+      15,
+      6,
+      16,
+      9,
+      19
+    ],
+    "worker_columns": 594,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_33788d6b7bdf8387_13_12_15_6_16_9_19_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 10,
+    "worker_pricing_calls": 42,
+    "worker_primal": 608.525827,
+    "worker_rmp_solves": 32,
+    "worker_solving_time": 77.748871,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 594,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_c5025a0583f6ea6c_13_12_15_6_1_9_19_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 8,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 39,
+    "baseline_primal": 608.525827,
+    "baseline_rmp_solves": 31,
+    "baseline_solving_time": 75.655863,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": 34,
+    "exact_pricing_calls_delta": 3,
+    "expected_context_hash": "c5025a0583f6ea6c",
+    "generated_sequences_delta": 68085,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_10_seed61921_logical_graph.json",
+    "name": "apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_c5025a0583f6ea6c_13_12_15_6_1_9_19",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 5,
+    "primal_improvement": 0.38613900000007106,
+    "rmp_solves_delta": 2,
+    "roi_class": "positive_primal_roi",
+    "solving_time_delta": 9.464967000000001,
+    "target_arc_option_sequence": [
+      "0->13:low_energy:1",
+      "13->12:low_time:0",
+      "12->0:low_time:0"
+    ],
+    "target_sequence": [
+      13,
+      12,
+      15,
+      6,
+      1,
+      9,
+      19
+    ],
+    "worker_columns": 628,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_apollo15_20km_greedy_anchor_randomtw_tasks020_10_seed61921_c5025a0583f6ea6c_13_12_15_6_1_9_19_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 11,
+    "worker_pricing_calls": 44,
+    "worker_primal": 608.139688,
+    "worker_rmp_solves": 33,
+    "worker_solving_time": 85.12083,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 660,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_08_seed61744_0f0c5d214add6400_18_2_11_17_3_15_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 3,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 63,
+    "baseline_primal": 502.586268,
+    "baseline_rmp_solves": 60,
+    "baseline_solving_time": 85.037142,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": 19,
+    "exact_pricing_calls_delta": 0,
+    "expected_context_hash": "0f0c5d214add6400",
+    "generated_sequences_delta": -113757,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_08_seed61744_logical_graph.json",
+    "name": "tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_08_seed61744_0f0c5d214add6400_18_2_11_17_3_15",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 3,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 3,
+    "roi_class": "columns_only_roi",
+    "solving_time_delta": -0.5522020000000083,
+    "target_arc_option_sequence": [
+      "0->18:low_risk:2",
+      "18->2:low_risk:2",
+      "2->11:low_time:0",
+      "11->17:low_risk:2",
+      "17->0:low_time:0"
+    ],
+    "target_sequence": [
+      18,
+      2,
+      11,
+      17,
+      3,
+      15
+    ],
+    "worker_columns": 679,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_08_seed61744_0f0c5d214add6400_18_2_11_17_3_15_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 3,
+    "worker_pricing_calls": 66,
+    "worker_primal": 502.586268,
+    "worker_rmp_solves": 63,
+    "worker_solving_time": 84.48494,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 686,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_08_seed61744_1b98b5f990279d7b_2_17_18_1_16_8_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 3,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 65,
+    "baseline_primal": 502.586268,
+    "baseline_rmp_solves": 62,
+    "baseline_solving_time": 84.12974,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": -16,
+    "exact_pricing_calls_delta": 2,
+    "expected_context_hash": "1b98b5f990279d7b",
+    "generated_sequences_delta": 69378,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_08_seed61744_logical_graph.json",
+    "name": "tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_08_seed61744_1b98b5f990279d7b_2_17_18_1_16_8",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 1,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": -1,
+    "roi_class": "negative_retry_roi",
+    "solving_time_delta": 0.9080510000000004,
+    "target_arc_option_sequence": [
+      "0->2:low_time:0",
+      "2->17:low_time:0",
+      "17->18:low_time:0",
+      "18->0:low_time:0"
+    ],
+    "target_sequence": [
+      2,
+      17,
+      18,
+      1,
+      16,
+      8
+    ],
+    "worker_columns": 670,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_08_seed61744_1b98b5f990279d7b_2_17_18_1_16_8_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 5,
+    "worker_pricing_calls": 66,
+    "worker_primal": 502.586268,
+    "worker_rmp_solves": 61,
+    "worker_solving_time": 85.037791,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 397,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_09_seed61846_27b61a4367a5c961_14_2_1_10_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 7,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 28,
+    "baseline_primal": 505.797935,
+    "baseline_rmp_solves": 21,
+    "baseline_solving_time": 65.588892,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": -7,
+    "exact_pricing_calls_delta": 0,
+    "expected_context_hash": "27b61a4367a5c961",
+    "generated_sequences_delta": 147,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json",
+    "name": "tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_09_seed61846_27b61a4367a5c961_14_2_1_10",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 0,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 0,
+    "roi_class": "no_observed_roi",
+    "solving_time_delta": -0.060957000000001926,
+    "target_arc_option_sequence": [
+      "0->14:low_risk:2",
+      "14->2:low_risk:2",
+      "2->0:low_time:0"
+    ],
+    "target_sequence": [
+      14,
+      2,
+      1,
+      10
+    ],
+    "worker_columns": 390,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_09_seed61846_27b61a4367a5c961_14_2_1_10_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 7,
+    "worker_pricing_calls": 28,
+    "worker_primal": 505.797935,
+    "worker_rmp_solves": 21,
+    "worker_solving_time": 65.527935,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 397,
+    "baseline_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_09_seed61846_d8e422fc4def1c51_3_4_18_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 7,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 28,
+    "baseline_primal": 505.797935,
+    "baseline_rmp_solves": 21,
+    "baseline_solving_time": 65.587139,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": 0,
+    "exact_pricing_calls_delta": 1,
+    "expected_context_hash": "d8e422fc4def1c51",
+    "generated_sequences_delta": 2813,
+    "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json",
+    "name": "tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_09_seed61846_d8e422fc4def1c51_3_4_18",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 2,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 1,
+    "roi_class": "negative_retry_roi",
+    "solving_time_delta": 0.3582310000000035,
+    "target_arc_option_sequence": [
+      "0->3:low_time:0",
+      "3->4:low_risk:2",
+      "4->18:low_risk:2",
+      "18->0:low_energy:1"
+    ],
+    "target_sequence": [
+      3,
+      4,
+      18
+    ],
+    "worker_columns": 397,
+    "worker_csv": "BPC_future/results/gat_delay_positive_mining_worker_ab_top8_20260615/task020_tranquillitatis_balmer_like_20km_greedy_anchor_randomtw_tasks020_09_seed61846_d8e422fc4def1c51_3_4_18_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 8,
+    "worker_pricing_calls": 30,
+    "worker_primal": 505.797935,
+    "worker_rmp_solves": 22,
+    "worker_solving_time": 65.94537,
+    "worker_status": "TIME_LIMIT"
+  }
+]
+```
+
+## 判断
+
+- `positive_primal_roi` 表示 worker primal 严格优于同实例 baseline；
+- `positive_retry_roi` / `positive_pricing_roi` 表示 primal 不变差且后续 pricing/retry 负担下降；
+- `no_observed_roi` 表示 worker 与 baseline 没有可观测改善；
+- 只要正负 ROI 同时存在，GAT HIGH_PRIORITY 就不能直接默认触发 worker；
+- 所有结果都不能参与 no-negative certificate 或 official lower bound。

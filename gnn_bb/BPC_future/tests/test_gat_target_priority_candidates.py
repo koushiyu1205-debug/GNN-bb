@@ -15,7 +15,15 @@ def _write_capture(path: Path, *, graph_path: Path) -> None:
         {
             "event": "journey_counterfactual_replay_capture",
             "context_hash": "ctx-safe",
+            "true_dual_hash": "dual-safe",
+            "cut_hash": "cuts-safe",
+            "branch_hash": "branch-safe",
+            "forbidden_signature_hash": "forbidden-safe",
+            "active_hash_before": "active-safe",
+            "pool_signature_hash": "pool-signature-safe",
+            "pool_task_set_hash": "pool-task-set-safe",
             "cg_iter": 8,
+            "pricing_kind": "exact",
             "instance": "apollo20",
             "instance_path": str(graph_path),
             "returned_journey_count": 2,
@@ -48,7 +56,15 @@ def _write_capture(path: Path, *, graph_path: Path) -> None:
         {
             "event": "journey_counterfactual_replay_capture",
             "context_hash": "ctx-delay",
+            "true_dual_hash": "dual-delay",
+            "cut_hash": "cuts-delay",
+            "branch_hash": "branch-delay",
+            "forbidden_signature_hash": "forbidden-delay",
+            "active_hash_before": "active-delay",
+            "pool_signature_hash": "pool-signature-delay",
+            "pool_task_set_hash": "pool-task-set-delay",
             "cg_iter": 9,
+            "pricing_kind": "heuristic",
             "instance": "apollo20",
             "instance_path": str(graph_path),
             "returned_journey_count": 1,
@@ -139,6 +155,13 @@ class GATTargetPriorityCandidateTests(unittest.TestCase):
             self.assertEqual(summary["candidate_count"], 1)
             candidate = summary["candidates"][0]
             self.assertEqual(candidate["expected_context_hash"], "ctx-safe")
+            self.assertEqual(candidate["true_dual_hash"], "dual-safe")
+            self.assertEqual(candidate["cut_hash"], "cuts-safe")
+            self.assertEqual(candidate["branch_hash"], "branch-safe")
+            self.assertEqual(candidate["forbidden_signature_hash"], "forbidden-safe")
+            self.assertEqual(candidate["active_hash_before"], "active-safe")
+            self.assertEqual(candidate["pool_signature_hash"], "pool-signature-safe")
+            self.assertEqual(candidate["pool_task_set_hash"], "pool-task-set-safe")
             self.assertEqual(candidate["target_sequence"], [20, 17, 16])
             self.assertEqual(
                 candidate["target_arc_option_sequence"],
@@ -150,7 +173,11 @@ class GATTargetPriorityCandidateTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(candidate["best_true_reduced_cost"], -4.0)
+            self.assertEqual(candidate["capture_pricing_kind"], "exact")
             self.assertEqual(summary["skipped_counts"]["decision_not_selected"], 1)
+            self.assertTrue(
+                summary["checks"]["all_candidates_have_full_capture_context"]
+            )
             self.assertTrue((tmp / "out" / "candidates.json").exists())
             self.assertTrue((tmp / "report.md").exists())
 
@@ -233,8 +260,84 @@ class GATTargetPriorityCandidateTests(unittest.TestCase):
                 worker,
             )
             self.assertIn("journey_sharded_pulse_hidden_negative_worker_expected_context_hash=ctx-safe", worker)
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled=False",
+                worker,
+            )
             self.assertFalse(runbook["certificate_ready"])
             self.assertFalse(runbook["default_enabled"])
+
+    def test_missing_capture_context_fields_skip_high_priority_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            graph_path = tmp / "tasks_020" / "sector-wave" / "apollo15_20km" / "apollo.json"
+            graph_path.parent.mkdir(parents=True, exist_ok=True)
+            graph_path.write_text("{}", encoding="utf-8")
+            capture = tmp / "capture.jsonl"
+            capture.write_text(
+                json.dumps(
+                    {
+                        "event": "journey_counterfactual_replay_capture",
+                        "context_hash": "ctx-missing",
+                        "cg_iter": 1,
+                        "instance": "apollo20",
+                        "instance_path": str(graph_path),
+                        "returned_journey_count": 1,
+                        "returned_journeys": [
+                            {
+                                "true_reduced_cost": -1.0,
+                                "sequence": [[3]],
+                                "signature": [
+                                    [[3], ["0->3:low_risk:2", "3->0:low_risk:2"], 0.0]
+                                ],
+                            }
+                        ],
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            manifest = tmp / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "samples": [
+                            {
+                                "source_file": str(capture),
+                                "context_hash": "ctx-missing",
+                                "instance": "apollo20",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            decisions = tmp / "decisions.jsonl"
+            decisions.write_text(
+                json.dumps(
+                    {
+                        "decision_name": "HIGH_PRIORITY",
+                        "decision_reason": "high_priority",
+                        "probability": 0.91,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            summary = extract_candidates(
+                decision_records_path=decisions,
+                validation_manifest=manifest,
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+            )
+
+            self.assertFalse(summary["all_checks_pass"])
+            self.assertEqual(summary["candidate_count"], 0)
+            self.assertEqual(summary["skipped_counts"]["missing_capture_context_fields"], 1)
+            self.assertFalse(summary["checks"]["has_candidate"])
 
 
 if __name__ == "__main__":
