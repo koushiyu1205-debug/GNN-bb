@@ -128,6 +128,64 @@ class GATSameRunTargetPriorityCandidatesTests(unittest.TestCase):
             self.assertTrue((tmp / "out" / "candidates.json").exists())
             self.assertTrue((tmp / "report.md").exists())
 
+    def test_extracts_multiple_targets_from_same_context_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            instance = tmp / "toy_logical_graph.json"
+            instance.write_text("{}", encoding="utf-8")
+            event = _capture_event(context_hash="ctx-hit", instance_path=instance, true_rc=-3.5)
+            event["returned_journey_count"] = 2
+            event["returned_journeys"].append(
+                {
+                    "id": "j1",
+                    "task_set": [3],
+                    "sequence": [[3]],
+                    "signature": [
+                        [
+                            [3],
+                            ["0->3:low_risk:0", "3->0:low_risk:0"],
+                            0.0,
+                        ]
+                    ],
+                    "true_reduced_cost": -2.0,
+                }
+            )
+            capture = tmp / "capture.jsonl"
+            _write_jsonl(capture, [event])
+            decisions = tmp / "decisions.jsonl"
+            _write_jsonl(
+                decisions,
+                [
+                    {
+                        "decision": 1,
+                        "decision_reason": "high_priority",
+                        "probability": 0.95,
+                        "context_hash": "ctx-hit",
+                        "source_file": str(capture),
+                        "sample_path": "samples/sample_000000.pt",
+                        "row_index": 0,
+                    }
+                ],
+            )
+
+            summary = extract_candidates(
+                decision_records_path=decisions,
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+                max_targets_per_context=2,
+                max_candidates=4,
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["max_targets_per_context"], 2)
+            self.assertEqual(summary["candidate_count"], 2)
+            self.assertEqual(
+                [candidate["context_target_rank"] for candidate in summary["candidates"]],
+                [1, 2],
+            )
+            self.assertEqual(summary["candidates"][0]["target_sequence"], [1, 2])
+            self.assertEqual(summary["candidates"][1]["target_sequence"], [3])
+
     def test_delay_queue_or_nonnegative_rows_do_not_become_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -377,9 +435,22 @@ class GATSameRunTargetPriorityCandidatesTests(unittest.TestCase):
                 report=tmp / "impact.md",
                 candidate_ranking="impact",
             )
+            active_replacement_summary = extract_candidates(
+                decision_records_path=decisions,
+                output_dir=tmp / "active_replacement",
+                report=tmp / "active_replacement.md",
+                candidate_ranking="active_replacement",
+            )
 
             self.assertEqual(best_rc_summary["candidates"][0]["target_sequence"], [1, 2])
             self.assertEqual(impact_summary["candidates"][0]["target_sequence"], [3, 4])
+            self.assertEqual(
+                active_replacement_summary["candidates"][0]["target_sequence"],
+                [1, 2],
+            )
+            self.assertTrue(
+                active_replacement_summary["candidates"][0]["target_task_set_in_active"]
+            )
             self.assertEqual(
                 impact_summary["candidates"][0]["target_impact_bucket"],
                 "new_support_changing",

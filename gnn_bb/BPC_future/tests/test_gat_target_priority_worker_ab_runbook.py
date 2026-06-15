@@ -9,6 +9,7 @@ from pathlib import Path
 from BPC_future.scripts.build_gat_target_priority_worker_ab_runbook import (
     NO_LEARNING_OVERRIDES,
     REQUIRED_CANDIDATE_CONTEXT_FIELDS,
+    WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
     build_runbook,
 )
 
@@ -65,6 +66,7 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
                                 "name": "apollo20_target",
                                 "instance": str(candidate_instance),
                                 "expected_context_hash": "c488c428ee5822de",
+                                "source_file": "capture/log.jsonl",
                                 **_context_fields("apollo20"),
                                 "capture_pricing_kind": "exact",
                                 "target_sequence": [20, 17, 16],
@@ -109,9 +111,11 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
             self.assertFalse(summary["default_enabled"])
             self.assertFalse(summary["certificate_ready"])
             self.assertFalse(summary["official_bound_effect"])
+            self.assertEqual(summary["worker_method"], WORKER_METHOD_TARGET_MATERIALIZATION_FIXED)
             self.assertTrue(summary["mainline_gat_kept_for_5_10"])
             self.assertTrue(summary["mainline_gat_kept_for_20_context_replay"])
             self.assertTrue(summary["candidate_runs"][0]["candidate_context_complete"])
+            self.assertEqual(summary["candidate_runs"][0]["source_file"], "capture/log.jsonl")
             self.assertTrue((tmp / "out" / "summary.json").exists())
             self.assertTrue((tmp / "report.md").exists())
             self.assertEqual(len(summary["commands"]), 4)
@@ -129,6 +133,54 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
 
             worker = commands["task020_apollo20_target_target_priority_worker"]
             self.assertIn("journey_sharded_pulse_hidden_negative_worker_enabled=True", worker)
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_trigger=audit_signal_or_current_probe",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_worker_current_probe_enabled=True",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_worker_current_probe_allow_expected_context_without_certificate_candidate=True",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_max_recursions=0",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_worker_current_probe_max_recursions=0",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_archive_enabled=False",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled=False",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled=False",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_worker_current_probe_harvesting_enabled=False",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled=False",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled=False",
+                worker,
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_enabled=False",
+                worker,
+            )
             self.assertIn(
                 "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled=True",
                 worker,
@@ -174,6 +226,12 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
                 summary["candidate_policy"]["context_miss_policy"],
                 "capture_actual_reached_contexts_for_next_iteration",
             )
+            self.assertEqual(
+                summary["candidate_policy"]["worker_method"],
+                WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
+            )
+            self.assertTrue(summary["checks"]["worker_method_is_fixed_for_gat_roi"])
+            self.assertTrue(summary["checks"]["fixed_worker_commands_disable_pulse_search"])
 
     def test_arc_option_target_is_shell_quoted_and_certificate_effect_is_absent(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -316,6 +374,97 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
             self.assertFalse(summary["all_checks_pass"])
             self.assertFalse(summary["checks"]["all_candidates_have_full_context"])
             self.assertFalse(summary["candidate_runs"][0]["candidate_context_complete"])
+
+    def test_worker_batch_size_groups_same_context_materialization_journeys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            logical_root = tmp / "logical_graph"
+            for scale in (5, 10):
+                for region in ("apollo15_20km", "tranquillitatis_balmer_like_20km"):
+                    _touch_instance(logical_root, scale=scale, region=region, ordinal=1, seed=scale)
+            candidate_instance = _touch_instance(
+                logical_root,
+                scale=20,
+                region="apollo15_20km",
+                ordinal=1,
+                seed=20,
+            )
+
+            def candidate(name: str, task: int) -> dict:
+                return {
+                    "name": name,
+                    "instance": str(candidate_instance),
+                    "expected_context_hash": "ctx-batch",
+                    **_context_fields("batch"),
+                    "capture_pricing_kind": "exact",
+                    "target_sequence": [task],
+                    "target_arc_option_sequence": [
+                        f"0->{task}:low_risk:2",
+                        f"{task}->0:low_risk:2",
+                    ],
+                    "target_sortie_traces": [
+                        {
+                            "sequence": [task],
+                            "start_time": 0.0,
+                            "arc_option_sequence": [
+                                f"0->{task}:low_risk:2",
+                                f"{task}->0:low_risk:2",
+                            ],
+                        }
+                    ],
+                }
+
+            candidates_file = tmp / "batch_candidates.json"
+            third = candidate("third", 3)
+            third["expected_context_hash"] = "ctx-singleton"
+            candidates_file.write_text(
+                json.dumps(
+                    {"candidates": [candidate("first", 1), candidate("second", 2), third]}
+                ),
+                encoding="utf-8",
+            )
+
+            summary = build_runbook(
+                logical_graph_root=logical_root,
+                candidates_file=candidates_file,
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+                worker_batch_size=2,
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["input_candidate_count"], 3)
+            self.assertEqual(summary["candidate_group_count"], 2)
+            self.assertEqual(summary["candidate_runs"][0]["candidate_batch_count"], 2)
+            commands = {item["command_type"]: item["command"] for item in summary["commands"]}
+            worker = next(
+                command
+                for key, command in commands.items()
+                if key.endswith("_target_priority_worker")
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys=",
+                worker,
+            )
+            self.assertNotIn(
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces=",
+                worker,
+            )
+            singleton_worker = next(
+                command
+                for key, command in commands.items()
+                if key.startswith("task020_third_") and key.endswith("_target_priority_worker")
+            )
+            self.assertIn(
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces=",
+                singleton_worker,
+            )
+            self.assertNotIn(
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys=",
+                singleton_worker,
+            )
+            self.assertTrue(summary["checks"]["batch_worker_commands_have_materialization_journeys"])
+            self.assertTrue(summary["checks"]["fixed_worker_commands_have_materialization_payload"])
 
 
 if __name__ == "__main__":

@@ -10,10 +10,11 @@ candidates must remain reachable through DELAY_QUEUE.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 import json
 import math
 from pathlib import Path
+import re
 import sys
 from typing import Any
 
@@ -59,9 +60,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--safe-radius-quantile", type=float, default=1.0)
     parser.add_argument("--safe-radius-multiplier", type=float, default=1.0)
     parser.add_argument("--min-validation-high-priority", type=int, default=1)
-    parser.add_argument("--min-add-recall", type=float, default=0.25)
-    parser.add_argument("--max-false-high-priority-rate", type=float, default=0.25)
+    parser.add_argument("--min-add-precision", type=float, default=0.95)
+    parser.add_argument("--min-add-recall", type=float, default=0.65)
+    parser.add_argument("--min-add-f0p5", type=float, default=0.90)
+    parser.add_argument("--max-false-high-priority-rate", type=float, default=0.02)
+    parser.add_argument("--max-false-positive-contexts", type=int, default=0)
+    parser.add_argument("--max-validation-false-safe-rate", type=float, default=0.02)
+    parser.add_argument("--min-coverage", type=float, default=0.0)
     parser.add_argument("--decision-scope", choices=("validation", "all"), default="validation")
+    parser.add_argument(
+        "--threshold-selection",
+        choices=("calibrated", "zero_fp"),
+        default="calibrated",
+        help="Use the training calibrated threshold by default; zero_fp is stricter and optional.",
+    )
+    parser.add_argument(
+        "--threshold-grouping",
+        choices=("global", "scale", "family", "scale_family"),
+        default="global",
+        help=(
+            "Calibrate the probability threshold and kNN/OOD shell globally or "
+            "inside scale/family groups. Sparse or single-label groups fall back "
+            "to the global shell."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -79,9 +101,16 @@ def main() -> int:
         safe_radius_quantile=float(args.safe_radius_quantile),
         safe_radius_multiplier=float(args.safe_radius_multiplier),
         min_validation_high_priority=int(args.min_validation_high_priority),
+        min_add_precision=float(args.min_add_precision),
         min_add_recall=float(args.min_add_recall),
+        min_add_f0p5=float(args.min_add_f0p5),
         max_false_high_priority_rate=float(args.max_false_high_priority_rate),
+        max_false_positive_contexts=int(args.max_false_positive_contexts),
+        max_validation_false_safe_rate=float(args.max_validation_false_safe_rate),
+        min_coverage=float(args.min_coverage),
         decision_scope=str(args.decision_scope),
+        threshold_selection=str(args.threshold_selection),
+        threshold_grouping=str(args.threshold_grouping),
     )
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
     return 0 if summary["all_checks_pass"] else 1
@@ -100,9 +129,16 @@ def audit_worker_roi_knn_ood(
     safe_radius_quantile: float = 1.0,
     safe_radius_multiplier: float = 1.0,
     min_validation_high_priority: int = 1,
-    min_add_recall: float = 0.25,
-    max_false_high_priority_rate: float = 0.25,
+    min_add_precision: float = 0.95,
+    min_add_recall: float = 0.65,
+    min_add_f0p5: float = 0.90,
+    max_false_high_priority_rate: float = 0.02,
+    max_false_positive_contexts: int = 0,
+    max_validation_false_safe_rate: float = 0.02,
+    min_coverage: float = 0.0,
     decision_scope: str = "validation",
+    threshold_selection: str = "calibrated",
+    threshold_grouping: str = "global",
 ) -> dict[str, Any]:
     dataset_dir = Path(dataset_dir)
     checkpoint_data = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -127,26 +163,27 @@ def audit_worker_roi_knn_ood(
     if not train_records or not validation_records:
         raise ValueError("training summary split does not match worker ROI dataset")
 
-    threshold = float(
+    fallback_threshold = float(
         training.get("calibrated_add_threshold")
         or checkpoint_data.get("deployment_guard", {}).get("calibrated_add_threshold")
         or 0.5
     )
-    train_x = [record["embedding"] for record in train_records]
-    train_y = [record["label_worker_roi_positive"] for record in train_records]
-    safe_radius = _safe_radius_threshold(
-        train_x,
-        train_y,
-        quantile=float(safe_radius_quantile),
-        multiplier=float(safe_radius_multiplier),
+    guard_model = _build_guard_model(
+        train_records=train_records,
+        threshold_grouping=str(threshold_grouping),
+        safe_radius_quantile=float(safe_radius_quantile),
+        safe_radius_multiplier=float(safe_radius_multiplier),
+        fallback_threshold=fallback_threshold,
+        threshold_selection=str(threshold_selection),
+        knn_k=int(knn_k),
     )
+    global_guard = guard_model["global"]
+    threshold = float(global_guard["threshold"])
+    safe_radius = global_guard["safe_radius"]
     validation_decisions = [
         _classify_record(
             record,
-            threshold=threshold,
-            train_x=train_x,
-            train_y=train_y,
-            safe_radius=safe_radius,
+            guard=_guard_for_record(guard_model, record),
             knn_k=int(knn_k),
             max_neighbor_delay_fraction=float(max_neighbor_delay_fraction),
             split="validation",
@@ -167,10 +204,7 @@ def audit_worker_roi_knn_ood(
         decision_records.append(
             _classify_record(
                 record,
-                threshold=threshold,
-                train_x=train_x,
-                train_y=train_y,
-                safe_radius=safe_radius,
+                guard=_guard_for_record(guard_model, record),
                 knn_k=int(knn_k),
                 max_neighbor_delay_fraction=float(max_neighbor_delay_fraction),
                 split=split_name,
@@ -178,20 +212,52 @@ def audit_worker_roi_knn_ood(
         )
     validation_metrics = _metrics(validation_decisions)
     decision_scope_metrics = _metrics(decision_records)
+    validation_safety_shell_metrics = _safety_shell_metrics(validation_decisions)
+    decision_scope_safety_shell_metrics = _safety_shell_metrics(decision_records)
     false_rate = validation_metrics["false_high_priority_rate"]
+    validation_false_safe_rates = _validation_false_safe_rates(validation_safety_shell_metrics)
+    validation_false_safe_rate = validation_false_safe_rates["max_observed_false_safe_rate"]
+    validation_coverage = validation_safety_shell_metrics["coverage"]
     validation_candidate_ready = bool(
         validation_metrics["predicted_high_priority"] >= int(min_validation_high_priority)
+        and (validation_metrics["add_precision"] is not None)
+        and validation_metrics["add_precision"] >= float(min_add_precision)
         and (validation_metrics["add_recall"] is not None)
         and validation_metrics["add_recall"] >= float(min_add_recall)
+        and (validation_metrics["add_f0p5"] is not None)
+        and validation_metrics["add_f0p5"] >= float(min_add_f0p5)
         and false_rate <= float(max_false_high_priority_rate)
+        and validation_metrics["false_positive_context_count"] <= int(max_false_positive_contexts)
+        and (
+            validation_false_safe_rate is None
+            or validation_false_safe_rate <= float(max_validation_false_safe_rate)
+        )
+        and (validation_coverage is not None)
+        and validation_coverage >= float(min_coverage)
     )
     production_block_reasons: list[str] = []
     if validation_metrics["predicted_high_priority"] < int(min_validation_high_priority):
         production_block_reasons.append("validation_high_priority_below_min")
+    if (
+        validation_metrics["add_precision"] is None
+        or validation_metrics["add_precision"] < float(min_add_precision)
+    ):
+        production_block_reasons.append("validation_add_precision_below_min")
     if validation_metrics["add_recall"] is None or validation_metrics["add_recall"] < float(min_add_recall):
         production_block_reasons.append("validation_add_recall_below_min")
+    if validation_metrics["add_f0p5"] is None or validation_metrics["add_f0p5"] < float(min_add_f0p5):
+        production_block_reasons.append("validation_add_f0p5_below_min")
     if false_rate > float(max_false_high_priority_rate):
         production_block_reasons.append("validation_false_high_priority_rate_above_max")
+    if validation_metrics["false_positive_context_count"] > int(max_false_positive_contexts):
+        production_block_reasons.append("validation_false_positive_contexts_above_max")
+    if (
+        validation_false_safe_rate is not None
+        and validation_false_safe_rate > float(max_validation_false_safe_rate)
+    ):
+        production_block_reasons.append("validation_false_safe_rate_above_max")
+    if validation_coverage is None or validation_coverage < float(min_coverage):
+        production_block_reasons.append("validation_coverage_below_min")
     if not validation_candidate_ready:
         production_block_reasons.append("validation_candidate_not_ready")
 
@@ -209,16 +275,35 @@ def audit_worker_roi_knn_ood(
         "validation_label_counts": _label_counts(validation_records),
         "threshold": threshold,
         "safe_radius": safe_radius,
+        "threshold_selection": str(threshold_selection),
+        "threshold_grouping": str(threshold_grouping),
+        "threshold_group_info": _serializable_guard_model(guard_model),
         "knn_k": int(knn_k),
         "max_neighbor_delay_fraction": float(max_neighbor_delay_fraction),
         "safe_radius_quantile": float(safe_radius_quantile),
         "safe_radius_multiplier": float(safe_radius_multiplier),
+        "min_add_precision": float(min_add_precision),
+        "min_add_recall": float(min_add_recall),
+        "min_add_f0p5": float(min_add_f0p5),
+        "max_false_high_priority_rate": float(max_false_high_priority_rate),
+        "max_false_positive_contexts": int(max_false_positive_contexts),
+        "max_validation_false_safe_rate": float(max_validation_false_safe_rate),
+        "min_coverage": float(min_coverage),
         "decision_scope": str(decision_scope),
         "decision_record_count": len(decision_records),
         "validation_metrics": validation_metrics,
         "decision_scope_metrics": decision_scope_metrics,
+        "validation_safety_shell_metrics": validation_safety_shell_metrics,
+        "decision_scope_safety_shell_metrics": decision_scope_safety_shell_metrics,
+        "validation_false_safe_rates": validation_false_safe_rates,
         "decision_reason_counts": dict(
             sorted(Counter(record["decision_reason"] for record in decision_records).items())
+        ),
+        "decision_threshold_group_counts": dict(
+            sorted(Counter(record["threshold_group"] for record in decision_records).items())
+        ),
+        "decision_threshold_scope_counts": dict(
+            sorted(Counter(record["threshold_scope"] for record in decision_records).items())
         ),
         "decision_split_counts": dict(
             sorted(Counter(record["decision_split"] for record in decision_records).items())
@@ -311,6 +396,13 @@ def _score_dataset(
                         "instance": str(item.get("instance", "")),
                         "instance_family": str(item.get("instance_family", "")),
                         "instance_region": str(item.get("instance_region", "")),
+                        "instance_task_count": _record_task_count(
+                            {
+                                "name": str(item.get("name", "")),
+                                "source_file": str(source_row.get("source_file") or ""),
+                                "instance": str(item.get("instance", "")),
+                            }
+                        ),
                         "roi_class": str(item.get("roi_class", "")),
                         "context_hash": str(item.get("context_hash", "")),
                         "expected_context_hash": str(
@@ -563,14 +655,15 @@ def _str_list(value: Any) -> list[str]:
 def _classify_record(
     record: dict[str, Any],
     *,
-    threshold: float,
-    train_x: list[list[float]],
-    train_y: list[int],
-    safe_radius: float | None,
+    guard: dict[str, Any],
     knn_k: int,
     max_neighbor_delay_fraction: float,
     split: str,
 ) -> dict[str, Any]:
+    train_x = guard["train_x"]
+    train_y = guard["train_y"]
+    threshold = float(guard["threshold"])
+    safe_radius = guard["safe_radius"]
     risk = _neighbor_unsafe_fraction(train_x, train_y, record["embedding"], k=int(knn_k))
     nearest_safe = _nearest_safe_distance(train_x, train_y, record["embedding"])
     in_radius = bool(
@@ -595,12 +688,239 @@ def _classify_record(
         "decision_name": "HIGH_PRIORITY" if decision else "DELAY_QUEUE",
         "decision_reason": reason,
         "threshold": float(threshold),
+        "threshold_group": str(guard["group"]),
+        "threshold_scope": str(guard["scope"]),
         "neighbor_delay_fraction": float(risk),
         "max_neighbor_delay_fraction": float(max_neighbor_delay_fraction),
         "nearest_safe_distance": None if nearest_safe is None else float(nearest_safe),
         "safe_radius": None if safe_radius is None else float(safe_radius),
         "in_safe_radius": in_radius,
+        "is_ood": bool(not in_radius),
+        "is_knn_unsafe": bool(float(risk) > float(max_neighbor_delay_fraction)),
+        "is_label_unsafe": bool(int(record["label_worker_roi_positive"]) == 0),
     }
+
+
+def _build_guard_model(
+    *,
+    train_records: list[dict[str, Any]],
+    threshold_grouping: str,
+    safe_radius_quantile: float,
+    safe_radius_multiplier: float,
+    fallback_threshold: float,
+    threshold_selection: str,
+    knn_k: int,
+) -> dict[str, Any]:
+    global_guard = _guard_from_records(
+        records=train_records,
+        group="global",
+        scope="global",
+        safe_radius_quantile=float(safe_radius_quantile),
+        safe_radius_multiplier=float(safe_radius_multiplier),
+        fallback_threshold=float(fallback_threshold),
+        threshold_selection=str(threshold_selection),
+    )
+    groups: dict[str, dict[str, Any]] = {}
+    skipped: dict[str, dict[str, Any]] = {}
+    if str(threshold_grouping) != "global":
+        by_group: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for record in train_records:
+            by_group[_record_group_key(record, str(threshold_grouping))].append(record)
+        for group, records in sorted(by_group.items()):
+            labels = [int(record["label_worker_roi_positive"]) for record in records]
+            label_set = set(labels)
+            if (
+                len(records) < max(2, int(knn_k))
+                or 0 not in label_set
+                or 1 not in label_set
+            ):
+                skipped[group] = {
+                    "scope": "fallback_global",
+                    "train_count": len(records),
+                    "label_counts": _label_counts(records),
+                    "skip_reason": "sparse_or_single_label_group",
+                }
+                continue
+            groups[group] = _guard_from_records(
+                records=records,
+                group=group,
+                scope=str(threshold_grouping),
+                safe_radius_quantile=float(safe_radius_quantile),
+                safe_radius_multiplier=float(safe_radius_multiplier),
+                fallback_threshold=float(fallback_threshold),
+                threshold_selection=str(threshold_selection),
+            )
+    return {
+        "threshold_grouping": str(threshold_grouping),
+        "global": global_guard,
+        "groups": groups,
+        "skipped_groups": skipped,
+    }
+
+
+def _guard_from_records(
+    *,
+    records: list[dict[str, Any]],
+    group: str,
+    scope: str,
+    safe_radius_quantile: float,
+    safe_radius_multiplier: float,
+    fallback_threshold: float,
+    threshold_selection: str,
+) -> dict[str, Any]:
+    if str(threshold_selection) == "zero_fp":
+        threshold_info = _select_zero_fp_threshold(records, fallback_threshold=float(fallback_threshold))
+    else:
+        threshold_info = _fixed_threshold_info(records, threshold=float(fallback_threshold))
+    train_x = [record["embedding"] for record in records]
+    train_y = [int(record["label_worker_roi_positive"]) for record in records]
+    safe_radius = _safe_radius_threshold(
+        train_x,
+        train_y,
+        quantile=float(safe_radius_quantile),
+        multiplier=float(safe_radius_multiplier),
+    )
+    return {
+        "group": str(group),
+        "scope": str(scope),
+        "threshold": float(threshold_info["threshold"]),
+        "threshold_info": threshold_info,
+        "train_x": train_x,
+        "train_y": train_y,
+        "train_count": len(records),
+        "label_counts": _label_counts(records),
+        "safe_radius": safe_radius,
+    }
+
+
+def _select_zero_fp_threshold(records: list[dict[str, Any]], *, fallback_threshold: float) -> dict[str, Any]:
+    candidates = sorted({float(record["score"]) for record in records}, reverse=True)
+    candidates.extend([float(fallback_threshold), 1.000001])
+    best: dict[str, Any] | None = None
+    for threshold in candidates:
+        scored_records = [
+            {
+                **record,
+                "decision": 1 if float(record["score"]) >= float(threshold) else 0,
+            }
+            for record in records
+        ]
+        metrics = _metrics(scored_records)
+        if metrics["false_positive_high_priority"] == 0:
+            current = {
+                "threshold": float(threshold),
+                "train_predicted_high_priority": int(metrics["predicted_high_priority"]),
+                "train_metrics": metrics,
+            }
+            if best is None or current["train_predicted_high_priority"] > best["train_predicted_high_priority"]:
+                best = current
+    if best is not None:
+        return best
+    metrics = _metrics([{**record, "decision": 0} for record in records])
+    return {
+        "threshold": 1.000001,
+        "train_predicted_high_priority": 0,
+        "train_metrics": metrics,
+    }
+
+
+def _fixed_threshold_info(records: list[dict[str, Any]], *, threshold: float) -> dict[str, Any]:
+    scored_records = [
+        {
+            **record,
+            "decision": 1 if float(record["score"]) >= float(threshold) else 0,
+        }
+        for record in records
+    ]
+    metrics = _metrics(scored_records)
+    return {
+        "threshold": float(threshold),
+        "train_predicted_high_priority": int(metrics["predicted_high_priority"]),
+        "train_metrics": metrics,
+    }
+
+
+def _guard_for_record(guard_model: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    grouping = str(guard_model.get("threshold_grouping", "global"))
+    if grouping == "global":
+        return guard_model["global"]
+    key = _record_group_key(record, grouping)
+    return guard_model.get("groups", {}).get(key) or guard_model["global"]
+
+
+def _serializable_guard_model(guard_model: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "threshold_grouping": guard_model["threshold_grouping"],
+        "global": _serializable_guard(guard_model["global"]),
+        "groups": {
+            key: _serializable_guard(value)
+            for key, value in sorted(guard_model.get("groups", {}).items())
+        },
+        "skipped_groups": guard_model.get("skipped_groups", {}),
+    }
+
+
+def _serializable_guard(guard: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "group": guard["group"],
+        "scope": guard["scope"],
+        "threshold": float(guard["threshold"]),
+        "threshold_info": guard["threshold_info"],
+        "train_count": int(guard["train_count"]),
+        "label_counts": guard["label_counts"],
+        "safe_radius": None if guard["safe_radius"] is None else float(guard["safe_radius"]),
+    }
+
+
+def _record_group_key(record: dict[str, Any], grouping: str) -> str:
+    scale = _record_task_count(record) or "unknown"
+    family = _record_family(record)
+    if grouping == "scale":
+        return str(scale)
+    if grouping == "family":
+        return str(family)
+    if grouping == "scale_family":
+        return f"{scale}|{family}"
+    return "global"
+
+
+def _record_task_count(record: dict[str, Any]) -> str | None:
+    explicit = record.get("instance_task_count")
+    if explicit not in (None, ""):
+        try:
+            return str(int(explicit)).zfill(3)
+        except (TypeError, ValueError):
+            text_explicit = str(explicit)
+            if text_explicit.isdigit():
+                return text_explicit.zfill(3)
+    text = " ".join(
+        str(record.get(key, ""))
+        for key in ("name", "instance", "source_file", "roi_candidate_key")
+    )
+    match = re.search(r"tasks[_-]?(\d+)", text)
+    if match:
+        return match.group(1).zfill(3)
+    return None
+
+
+def _record_family(record: dict[str, Any]) -> str:
+    family = str(record.get("instance_family") or "").strip()
+    if family:
+        return family
+    source_file = str(record.get("source_file", ""))
+    parts = Path(source_file).parts
+    if "logical_graph" in parts:
+        try:
+            idx = parts.index("logical_graph")
+            if idx + 2 < len(parts) and parts[idx + 1].startswith("tasks_"):
+                return str(parts[idx + 2])
+        except ValueError:
+            pass
+    text = " ".join(str(record.get(key, "")) for key in ("name", "instance", "source_file"))
+    match = re.search(r"_20km_([a-zA-Z0-9-]+)_randomtw", text)
+    if match:
+        return match.group(1)
+    return "unknown"
 
 
 def _metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -619,7 +939,16 @@ def _metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
     total = tp + fp + tn + fn
     add_precision = None if tp + fp <= 0 else tp / float(tp + fp)
     add_recall = None if tp + fn <= 0 else tp / float(tp + fn)
+    add_f0p5 = _fbeta(add_precision, add_recall, beta=0.5)
     false_rate = 0.0 if fp + tn <= 0 else fp / float(fp + tn)
+    false_positive_contexts = sorted(
+        {
+            str(record.get("expected_context_hash") or record.get("context_hash") or "")
+            for record in records
+            if int(record["decision"]) == 1
+            and int(record["label_worker_roi_positive"]) == 0
+        }
+    )
     return {
         "total": total,
         "true_positive_high_priority": tp,
@@ -630,8 +959,113 @@ def _metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
         "predicted_delay_queue": tn + fn,
         "add_precision": add_precision,
         "add_recall": add_recall,
+        "add_f0p5": add_f0p5,
         "false_high_priority_rate": false_rate,
+        "false_positive_context_count": len(false_positive_contexts),
+        "false_positive_contexts": false_positive_contexts,
         "accuracy": None if total <= 0 else (tp + tn) / float(total),
+    }
+
+
+def _fbeta(precision: float | None, recall: float | None, *, beta: float) -> float | None:
+    if precision is None or recall is None:
+        return None
+    if precision <= 0.0 and recall <= 0.0:
+        return 0.0
+    beta_sq = float(beta) * float(beta)
+    denominator = beta_sq * precision + recall
+    if denominator <= 0.0:
+        return None
+    return (1.0 + beta_sq) * precision * recall / denominator
+
+
+def _rate(numerator: int, denominator: int) -> float | None:
+    if denominator <= 0:
+        return None
+    return numerator / float(denominator)
+
+
+def _safety_shell_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(records)
+    ood_records = [record for record in records if record.get("is_ood")]
+    knn_unsafe_records = [record for record in records if record.get("is_knn_unsafe")]
+    label_unsafe_records = [record for record in records if record.get("is_label_unsafe")]
+    union_unsafe_records = [
+        record
+        for record in records
+        if record.get("is_ood") or record.get("is_knn_unsafe") or record.get("is_label_unsafe")
+    ]
+    accepted_records = [record for record in records if int(record.get("decision") or 0) == 1]
+    delay_records = [record for record in records if int(record.get("decision") or 0) == 0]
+    accepted_positive = [
+        record for record in accepted_records if int(record.get("label_worker_roi_positive") or 0) == 1
+    ]
+    harmful_delayed = [
+        record for record in label_unsafe_records if int(record.get("decision") or 0) == 0
+    ]
+    false_safe_ood = [record for record in ood_records if int(record.get("decision") or 0) == 1]
+    false_safe_knn = [
+        record for record in knn_unsafe_records if int(record.get("decision") or 0) == 1
+    ]
+    false_safe_label = [
+        record for record in label_unsafe_records if int(record.get("decision") or 0) == 1
+    ]
+    false_safe_union = [
+        record for record in union_unsafe_records if int(record.get("decision") or 0) == 1
+    ]
+    coverage_non_ood_count = total - len(ood_records)
+    return {
+        "total": total,
+        "coverage_non_ood_count": coverage_non_ood_count,
+        "coverage": _rate(coverage_non_ood_count, total),
+        "ood_count": len(ood_records),
+        "ood_rate": _rate(len(ood_records), total),
+        "delay_count": len(delay_records),
+        "delay_rate": _rate(len(delay_records), total),
+        "accepted_batch_count": len(accepted_records),
+        "accepted_batch_rate": _rate(len(accepted_records), total),
+        "accepted_batch_roi_positive_count": len(accepted_positive),
+        "accepted_batch_roi": _rate(len(accepted_positive), len(accepted_records)),
+        "safe_precision": _rate(len(accepted_positive), len(accepted_records)),
+        "unsafe_label_count": len(label_unsafe_records),
+        "harmful_batch_recall": _rate(len(harmful_delayed), len(label_unsafe_records)),
+        "knn_unsafe_count": len(knn_unsafe_records),
+        "unsafe_or_ood_count": len(union_unsafe_records),
+        "false_safe_ood_count": len(false_safe_ood),
+        "false_safe_rate_ood": _rate(len(false_safe_ood), len(ood_records)),
+        "false_safe_knn_unsafe_count": len(false_safe_knn),
+        "false_safe_rate_knn_unsafe": _rate(len(false_safe_knn), len(knn_unsafe_records)),
+        "false_safe_label_unsafe_count": len(false_safe_label),
+        "false_safe_rate_label_unsafe": _rate(len(false_safe_label), len(label_unsafe_records)),
+        "false_safe_union_count": len(false_safe_union),
+        "false_safe_rate_union": _rate(len(false_safe_union), len(union_unsafe_records)),
+        "decision_reason_counts": dict(
+            sorted(Counter(str(record.get("decision_reason") or "") for record in records).items())
+        ),
+        "accepted_reason_counts": dict(
+            sorted(Counter(str(record.get("decision_reason") or "") for record in accepted_records).items())
+        ),
+    }
+
+
+def _validation_false_safe_rates(metrics: dict[str, Any]) -> dict[str, Any]:
+    named_rates = {
+        "ood": metrics.get("false_safe_rate_ood"),
+        "knn_unsafe": metrics.get("false_safe_rate_knn_unsafe"),
+        "label_unsafe": metrics.get("false_safe_rate_label_unsafe"),
+        "union": metrics.get("false_safe_rate_union"),
+    }
+    observed = {
+        key: float(value)
+        for key, value in named_rates.items()
+        if value is not None
+    }
+    return {
+        **named_rates,
+        "max_observed_false_safe_rate": None if not observed else max(observed.values()),
+        "max_observed_false_safe_source": None
+        if not observed
+        else max(observed, key=lambda key: observed[key]),
     }
 
 
@@ -678,7 +1112,12 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
                 "threshold": summary["threshold"],
                 "safe_radius": summary["safe_radius"],
                 "validation_metrics": summary["validation_metrics"],
+                "validation_safety_shell_metrics": summary["validation_safety_shell_metrics"],
+                "validation_false_safe_rates": summary["validation_false_safe_rates"],
                 "decision_reason_counts": summary["decision_reason_counts"],
+                "decision_scope_safety_shell_metrics": summary[
+                    "decision_scope_safety_shell_metrics"
+                ],
                 "production_block_reasons": summary["production_block_reasons"],
             },
             ensure_ascii=False,

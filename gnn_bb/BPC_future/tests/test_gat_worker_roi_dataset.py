@@ -127,7 +127,7 @@ class GATWorkerROIDatasetTests(unittest.TestCase):
             candidate_summary.write_text(
                 json.dumps(
                     {
-                        "candidates": [
+                        "candidate_runs": [
                             {
                                 "name": "positive",
                                 "instance": instance,
@@ -192,6 +192,7 @@ class GATWorkerROIDatasetTests(unittest.TestCase):
             self.assertEqual(by_name["positive"]["label_worker_adds_columns"], 1)
             self.assertEqual(by_name["positive"]["decision_probability"], 0.91)
             self.assertEqual(by_name["positive"]["best_true_reduced_cost"], -8.5)
+            self.assertEqual(by_name["positive"]["source_file"], "capture.jsonl")
             self.assertTrue(by_name["positive"]["candidate_feature_joined"])
             self.assertTrue(by_name["positive"]["worker_target_diag_available"])
             self.assertTrue(by_name["positive"]["worker_context_match"])
@@ -202,6 +203,232 @@ class GATWorkerROIDatasetTests(unittest.TestCase):
             self.assertTrue(by_name["noop"]["worker_target_intervention_observed"])
             self.assertTrue((tmp / "out" / "gat_worker_roi_rows.csv").exists())
             self.assertTrue((tmp / "report.md").exists())
+
+    def test_post_injection_positive_roi_inactive_only_becomes_delay_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            audit = tmp / "audit_summary.json"
+            worker_csv = tmp / "inactive_worker" / "results.csv"
+            _write_worker_stub(
+                worker_csv,
+                target_sequence=[1, 2],
+                context_hash="ctx-inactive",
+                returned_sequence_samples=[[[1, 2]]],
+            )
+            audit.write_text(
+                json.dumps(
+                    {
+                        "certificate_ready": False,
+                        "official_bound_effect": False,
+                        "records": [
+                            {
+                                "name": "inactive_positive_exact",
+                                "instance": "toy_instance.json",
+                                "expected_context_hash": "ctx-inactive",
+                                "target_sequence": [1, 2],
+                                "target_arc_option_sequence": ["0->1:a", "1->2:a", "2->0:a"],
+                                "baseline_csv_exists": True,
+                                "worker_csv_exists": True,
+                                "worker_csv": str(worker_csv),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                                "baseline_status": "TIME_LIMIT",
+                                "worker_status": "TIME_LIMIT",
+                                "baseline_primal": 10.0,
+                                "worker_primal": 10.0,
+                                "primal_improvement": 0.0,
+                                "columns_delta": 4,
+                                "exact_pricing_calls_delta": -1,
+                                "roi_class": "positive_exact_roi",
+                                "target_active_changed_task_set_count": 0,
+                                "target_inactive_changed_task_set_count": 4,
+                                "worker_next_objective_vs_baseline_same_iter_delta": 10.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = build_roi_dataset(
+                audit_summary_path=audit,
+                candidate_summary_paths=[],
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+                min_positive_for_training=1,
+                min_negative_for_training=1,
+                min_positive_instances_for_training=1,
+                min_negative_instances_for_training=1,
+                min_positive_families_for_training=1,
+                min_negative_families_for_training=1,
+                min_positive_regions_for_training=1,
+                min_negative_regions_for_training=1,
+                max_label_instance_fraction=1.0,
+            )
+
+            rows = [
+                json.loads(line)
+                for line in (tmp / "out" / "gat_worker_roi_rows.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(summary["post_injection_guard_present_count"], 1)
+            self.assertEqual(summary["post_injection_positive_downgraded_count"], 1)
+            self.assertEqual(
+                summary["positive_trajectory_roi_guard_reason_counts"],
+                {"target_columns_inactive_only": 1},
+            )
+            self.assertEqual(rows[0]["label_worker_roi_positive"], 0)
+            self.assertEqual(rows[0]["label_positive_trajectory_roi"], 0)
+            self.assertEqual(rows[0]["positive_trajectory_roi_guard_reason"], "target_columns_inactive_only")
+            self.assertTrue(rows[0]["post_injection_guard_present"])
+            self.assertTrue(rows[0]["training_eligible"])
+
+    def test_post_injection_positive_roi_with_active_support_keeps_positive_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            audit = tmp / "audit_summary.json"
+            worker_csv = tmp / "active_worker" / "results.csv"
+            _write_worker_stub(
+                worker_csv,
+                target_sequence=[2, 3],
+                context_hash="ctx-active",
+                returned_sequence_samples=[[[2, 3]]],
+            )
+            audit.write_text(
+                json.dumps(
+                    {
+                        "certificate_ready": False,
+                        "official_bound_effect": False,
+                        "records": [
+                            {
+                                "name": "active_positive_exact",
+                                "instance": "toy_instance.json",
+                                "expected_context_hash": "ctx-active",
+                                "target_sequence": [2, 3],
+                                "target_arc_option_sequence": ["0->2:a", "2->3:a", "3->0:a"],
+                                "baseline_csv_exists": True,
+                                "worker_csv_exists": True,
+                                "worker_csv": str(worker_csv),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                                "baseline_status": "TIME_LIMIT",
+                                "worker_status": "TIME_LIMIT",
+                                "baseline_primal": 10.0,
+                                "worker_primal": 10.0,
+                                "primal_improvement": 0.0,
+                                "columns_delta": 4,
+                                "exact_pricing_calls_delta": -1,
+                                "roi_class": "positive_exact_roi",
+                                "target_active_changed_task_set_count": 1,
+                                "target_inactive_changed_task_set_count": 3,
+                                "worker_next_objective_vs_baseline_same_iter_delta": -2.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = build_roi_dataset(
+                audit_summary_path=audit,
+                candidate_summary_paths=[],
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+                min_positive_for_training=1,
+                min_negative_for_training=1,
+                min_positive_instances_for_training=1,
+                min_negative_instances_for_training=1,
+                min_positive_families_for_training=1,
+                min_negative_families_for_training=1,
+                min_positive_regions_for_training=1,
+                min_negative_regions_for_training=1,
+                max_label_instance_fraction=1.0,
+            )
+
+            rows = [
+                json.loads(line)
+                for line in (tmp / "out" / "gat_worker_roi_rows.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(summary["post_injection_guard_present_count"], 1)
+            self.assertEqual(summary["post_injection_positive_downgraded_count"], 0)
+            self.assertEqual(
+                summary["positive_trajectory_roi_guard_reason_counts"],
+                {"post_injection_guard_positive": 1},
+            )
+            self.assertEqual(rows[0]["label_worker_roi_positive"], 1)
+            self.assertEqual(rows[0]["label_positive_trajectory_roi"], 1)
+            self.assertEqual(rows[0]["positive_trajectory_roi_guard_reason"], "post_injection_guard_positive")
+            self.assertTrue(rows[0]["post_injection_guard_present"])
+
+    def test_post_injection_summary_record_can_feed_roi_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            audit = tmp / "post_injection_summary.json"
+            baseline_csv = tmp / "baseline" / "results.csv"
+            worker_csv = tmp / "batch_worker" / "results.csv"
+            baseline_csv.parent.mkdir(parents=True, exist_ok=True)
+            baseline_csv.write_text("status\nTIME_LIMIT\n", encoding="utf-8")
+            _write_worker_stub(
+                worker_csv,
+                target_sequence=[9, 10, 2, 3],
+                context_hash="ctx-batch",
+                returned_sequence_samples=[[[2, 3]]],
+            )
+            audit.write_text(
+                json.dumps(
+                    {
+                        "certificate_ready": False,
+                        "official_bound_effect": False,
+                        "records": [
+                            {
+                                "name": "post_injection_batch_positive",
+                                "instance": "toy_instance.json",
+                                "expected_context_hash": "ctx-batch",
+                                "target_sequence": [9, 10],
+                                "candidate_batch_target_sequences": [[9, 10], [2, 3]],
+                                "target_arc_option_sequence": ["0->9:a", "9->10:a", "10->0:a"],
+                                "baseline_csv": str(baseline_csv),
+                                "worker_csv": str(worker_csv),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                                "baseline_status": "TIME_LIMIT",
+                                "worker_status": "TIME_LIMIT",
+                                "final_roi_class": "positive_exact_roi",
+                                "exact_pricing_calls_delta": -1,
+                                "target_active_changed_task_set_count": 1,
+                                "worker_next_objective_vs_baseline_same_iter_delta": -1.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = build_roi_dataset(
+                audit_summary_path=audit,
+                candidate_summary_paths=[],
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+                min_positive_for_training=1,
+                min_negative_for_training=0,
+                min_positive_instances_for_training=1,
+                min_negative_instances_for_training=0,
+                min_positive_families_for_training=1,
+                min_negative_families_for_training=0,
+                min_positive_regions_for_training=1,
+                min_negative_regions_for_training=0,
+                max_label_instance_fraction=1.0,
+            )
+
+            rows = [
+                json.loads(line)
+                for line in (tmp / "out" / "gat_worker_roi_rows.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(summary["training_row_count"], 1)
+            self.assertEqual(summary["label_counts"], {"1": 1})
+            self.assertEqual(rows[0]["roi_class"], "positive_exact_roi")
+            self.assertEqual(rows[0]["label_worker_roi_positive"], 1)
+            self.assertTrue(rows[0]["worker_target_causal_match"])
+            self.assertEqual(rows[0]["candidate_batch_target_sequences"], [[9, 10], [2, 3]])
 
     def test_missing_result_is_not_training_eligible(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

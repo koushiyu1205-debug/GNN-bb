@@ -18,6 +18,10 @@ import math
 from pathlib import Path
 from typing import Any
 
+from BPC_future.scripts.audit_gat_target_intervention_reachability import (
+    _classify_candidate as _classify_target_reachability,
+)
+
 
 DEFAULT_RUNBOOK_SUMMARY = Path("BPC_future/results/gat_worker_roi_solver_ab_runbook_v31_20260615/summary.json")
 DEFAULT_OUTPUT_DIR = Path("BPC_future/results/gat_worker_roi_solver_ab_audit_v31_20260615")
@@ -55,7 +59,10 @@ def audit_results(
     if runbook.get("certificate_ready") or runbook.get("official_bound_effect"):
         raise ValueError("runbook has forbidden certificate or official-bound effect")
     small_records = [_small_record(item) for item in runbook.get("small_no_regression") or []]
-    candidate_records = [_candidate_record(item) for item in runbook.get("candidate_runs") or []]
+    commands = list(runbook.get("commands") or [])
+    candidate_records = [
+        _candidate_record(item, commands=commands) for item in runbook.get("candidate_runs") or []
+    ]
     roi_counts: dict[str, int] = {}
     for record in candidate_records:
         roi_counts[record["roi_class"]] = roi_counts.get(record["roi_class"], 0) + 1
@@ -66,6 +73,9 @@ def audit_results(
         record for record in candidate_records if str(record["roi_class"]).startswith("negative_")
     ]
     no_observed = [record for record in candidate_records if record["roi_class"] == "no_observed_roi"]
+    target_not_reached = [
+        record for record in candidate_records if record["roi_class"] == "target_not_reached"
+    ]
     checks = {
         "diagnostic_only": True,
         "runs_bpc_or_pricing_false": True,
@@ -92,6 +102,7 @@ def audit_results(
         "positive_trajectory_roi_count": len(positive_roi),
         "negative_trajectory_roi_count": len(negative_roi),
         "no_observed_roi_count": len(no_observed),
+        "target_not_reached_count": len(target_not_reached),
         "production_ready": False,
         "default_enabled": False,
         "certificate_ready": False,
@@ -135,7 +146,7 @@ def _small_csv_path(item: dict[str, Any]) -> Path:
     return DEFAULT_RUNBOOK_SUMMARY.parent / f"task{task_count:03d}_mainline_no_regression_no_new_worker" / "results.csv"
 
 
-def _candidate_record(candidate: dict[str, Any]) -> dict[str, Any]:
+def _candidate_record(candidate: dict[str, Any], *, commands: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     baseline_csv = Path(str(candidate.get("baseline_csv") or ""))
     worker_csv = Path(str(candidate.get("worker_csv") or ""))
     baseline = _read_first_csv_row(baseline_csv)
@@ -150,6 +161,7 @@ def _candidate_record(candidate: dict[str, Any]) -> dict[str, Any]:
     worker_pricing = _int_value(worker, "pricing_calls")
     baseline_time = _float_value(baseline, "solving_time")
     worker_time = _float_value(worker, "solving_time")
+    reachability = _target_reachability(candidate, commands=commands or [])
     record = {
         "name": str(candidate.get("name") or ""),
         "instance": str(candidate.get("instance") or ""),
@@ -187,9 +199,49 @@ def _candidate_record(candidate: dict[str, Any]) -> dict[str, Any]:
         "certificate_effect": False,
         "source_roi_class": str(candidate.get("roi_class") or ""),
         "worker_roi_score": candidate.get("worker_roi_score"),
+        "target_reachability_class": reachability.get("reachability_class", ""),
+        "target_training_label_allowed": reachability.get("training_label_allowed"),
+        "target_worker_log_count": reachability.get("worker_log_count"),
+        "target_worker_event_count": reachability.get("worker_event_count"),
+        "target_expected_context_worker_event_count": reachability.get(
+            "expected_context_worker_event_count"
+        ),
+        "target_expected_context_executed_event_count": reachability.get(
+            "expected_context_executed_event_count"
+        ),
+        "target_causal_match_count": reachability.get("target_causal_match_count"),
+        "target_stage_compatible": reachability.get("stage_compatible"),
+        "target_learning_policy_kept": reachability.get("learning_policy_kept"),
+        "first_expected_context_skip_reason": reachability.get("first_expected_context_skip_reason"),
     }
-    record["roi_class"] = _roi_class(record)
+    result_roi_class = _roi_class(record)
+    record["result_roi_class"] = result_roi_class
+    if _has_worker_reachability_evidence(record) and not bool(
+        record.get("target_training_label_allowed")
+    ):
+        record["roi_class"] = "target_not_reached"
+    else:
+        record["roi_class"] = result_roi_class
     return record
+
+
+def _target_reachability(
+    candidate: dict[str, Any],
+    *,
+    commands: list[dict[str, Any]],
+) -> dict[str, Any]:
+    try:
+        return _classify_target_reachability(candidate, commands)
+    except Exception:
+        return {}
+
+
+def _has_worker_reachability_evidence(record: dict[str, Any]) -> bool:
+    if int(record.get("target_worker_log_count") or 0) > 0:
+        return True
+    if int(record.get("target_worker_event_count") or 0) > 0:
+        return True
+    return bool(record.get("first_expected_context_skip_reason"))
 
 
 def _roi_class(record: dict[str, Any]) -> str:
@@ -289,6 +341,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"status = {summary['status']}",
         f"record_count = {summary['record_count']}",
         f"roi_class_counts = {summary['roi_class_counts']}",
+        f"target_not_reached_count = {summary['target_not_reached_count']}",
         f"production_ready = {str(summary['production_ready']).lower()}",
         f"certificate_ready = {str(summary['certificate_ready']).lower()}",
         f"official_bound_effect = {str(summary['official_bound_effect']).lower()}",

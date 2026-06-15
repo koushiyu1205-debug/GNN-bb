@@ -18,6 +18,15 @@ def _write_csv(path: Path, row: dict[str, object]) -> None:
         writer.writerow(row)
 
 
+def _write_worker_log(worker_csv: Path, event: dict[str, object]) -> None:
+    log_dir = worker_csv.parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "worker.jsonl").write_text(
+        json.dumps(event, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 class GATWorkerROISolverABRunbookTests(unittest.TestCase):
     def test_runbook_uses_worker_roi_high_priority_without_certificate_effect(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -513,6 +522,79 @@ class GATWorkerROISolverABRunbookTests(unittest.TestCase):
             self.assertEqual(summary["positive_trajectory_roi_count"], 1)
             self.assertFalse(summary["official_bound_effect"])
             self.assertFalse(summary["certificate_ready"])
+
+    def test_solver_ab_audit_marks_unreached_worker_target_not_roi_negative(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            worker_csv = tmp / "worker" / "results.csv"
+            runbook = {
+                "all_checks_pass": True,
+                "certificate_ready": False,
+                "official_bound_effect": False,
+                "small_no_regression": [],
+                "commands": [
+                    {
+                        "command_type": "task020_candidate_a_target_priority_worker",
+                        "command": (
+                            "run --instance instance_a "
+                            "--set journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled=False "
+                            "--set journey_sharded_pulse_hidden_negative_worker_before_exact_enabled=True "
+                            "--set journey_sharded_pulse_hidden_negative_worker_expected_context_hash=ctx-a"
+                        ),
+                    }
+                ],
+                "candidate_runs": [
+                    {
+                        "name": "candidate_a",
+                        "instance": "instance_a",
+                        "expected_context_hash": "ctx-a",
+                        "capture_pricing_kind": "exact",
+                        "target_sequence": [1, 2],
+                        "target_arc_option_sequence": ["0->1:a", "1->2:a", "2->0:a"],
+                        "baseline_csv": str(tmp / "base" / "results.csv"),
+                        "worker_csv": str(worker_csv),
+                    }
+                ],
+            }
+            runbook_path = tmp / "summary.json"
+            runbook_path.write_text(json.dumps(runbook), encoding="utf-8")
+            common = {
+                "status": "TIME_LIMIT",
+                "primal_bound": 100.0,
+                "dual_bound": "",
+                "exact_pricing_calls": 5,
+                "pricing_calls": 20,
+                "solving_time": 30.0,
+            }
+            _write_csv(tmp / "base" / "results.csv", common)
+            _write_csv(worker_csv, common)
+            _write_worker_log(
+                worker_csv,
+                {
+                    "event": "journey_sharded_pulse_hidden_negative_worker",
+                    "pulse_worker_enabled": True,
+                    "pulse_worker_skipped": True,
+                    "pulse_worker_skip_reason": "residual_target_context_mismatch",
+                    "pulse_worker_context_hash": "different-context",
+                    "pulse_worker_target_transition_priority_sequence": [1, 2],
+                    "pulse_worker_returned_journeys": 0,
+                },
+            )
+
+            summary = audit_results(
+                runbook_summary=runbook_path,
+                output_dir=tmp / "audit",
+                report=tmp / "audit.md",
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["roi_class_counts"], {"target_not_reached": 1})
+            self.assertEqual(summary["target_not_reached_count"], 1)
+            record = summary["candidate_records"][0]
+            self.assertEqual(record["result_roi_class"], "no_observed_roi")
+            self.assertEqual(record["roi_class"], "target_not_reached")
+            self.assertEqual(record["target_reachability_class"], "worker_context_not_reached")
+            self.assertFalse(record["target_training_label_allowed"])
 
 
 def _make_graph(

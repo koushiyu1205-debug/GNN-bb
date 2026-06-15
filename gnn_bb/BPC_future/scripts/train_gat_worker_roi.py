@@ -70,6 +70,14 @@ class TrainWorkerROIArgs:
     min_positive: int = 50
     min_negative: int = 50
     positive_loss_multiplier: float = 2.0
+    loss_mode: str = "bce"
+    focal_gamma: float = 2.0
+    hard_positive_score_threshold: float = 0.5
+    hard_negative_score_threshold: float = 0.5
+    hard_positive_loss_multiplier: float = 1.0
+    hard_negative_loss_multiplier: float = 1.0
+    pairwise_loss_multiplier: float = 0.0
+    pairwise_group_key: str = "instance"
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,6 +103,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-positive", type=int, default=50)
     parser.add_argument("--min-negative", type=int, default=50)
     parser.add_argument("--positive-loss-multiplier", type=float, default=2.0)
+    parser.add_argument(
+        "--loss-mode",
+        choices=("bce", "focal", "pairwise", "focal_pairwise"),
+        default="bce",
+    )
+    parser.add_argument("--focal-gamma", type=float, default=2.0)
+    parser.add_argument("--hard-positive-score-threshold", type=float, default=0.5)
+    parser.add_argument("--hard-negative-score-threshold", type=float, default=0.5)
+    parser.add_argument("--hard-positive-loss-multiplier", type=float, default=1.0)
+    parser.add_argument("--hard-negative-loss-multiplier", type=float, default=1.0)
+    parser.add_argument("--pairwise-loss-multiplier", type=float, default=0.0)
+    parser.add_argument("--pairwise-group-key", choices=("instance", "family", "all"), default="instance")
     return parser.parse_args()
 
 
@@ -147,6 +167,7 @@ def train_worker_roi(args: argparse.Namespace | TrainWorkerROIArgs) -> dict[str,
         device=device,
         multiplier=float(getattr(args, "positive_loss_multiplier", 2.0)),
     )
+    loss_options = _worker_roi_loss_options(args)
     best_val_loss = float("inf")
     best_val_f1 = -1.0
     best_state: dict[str, torch.Tensor] | None = None
@@ -154,14 +175,37 @@ def train_worker_roi(args: argparse.Namespace | TrainWorkerROIArgs) -> dict[str,
     best_epoch = 0
     history: list[dict[str, float]] = []
     for epoch in range(1, int(args.epochs) + 1):
-        train_loss = _run_worker_roi_epoch(model, split.train, optimizer, device, pos_weight)
-        validation_loss = _evaluate_worker_roi_loss(model, split.validation, device, pos_weight)
+        train_loss = _run_worker_roi_epoch(
+            model,
+            split.train,
+            optimizer,
+            device,
+            pos_weight,
+            loss_options=loss_options,
+        )
+        pairwise_loss = 0.0
+        if float(loss_options["pairwise_loss_multiplier"]) > 0.0:
+            pairwise_loss = _run_worker_roi_pairwise_step(
+                model,
+                split.train,
+                optimizer,
+                device,
+                loss_options=loss_options,
+            )
+        validation_loss = _evaluate_worker_roi_loss(
+            model,
+            split.validation,
+            device,
+            pos_weight,
+            loss_options=loss_options,
+        )
         validation_probe = _worker_roi_binary_metrics(model, split.validation, device)
         validation_f1 = float(validation_probe.get("best_add_f1") or 0.0)
         history.append(
             {
                 "epoch": float(epoch),
                 "train_loss": float(train_loss),
+                "pairwise_loss": float(pairwise_loss),
                 "validation_loss": float(validation_loss),
                 "validation_best_add_f1": validation_f1,
                 "validation_best_add_precision": float(validation_probe.get("best_add_precision") or 0.0),
@@ -179,7 +223,7 @@ def train_worker_roi(args: argparse.Namespace | TrainWorkerROIArgs) -> dict[str,
         print(
             "epoch="
             f"{epoch} train_loss={train_loss:.6f} validation_loss={validation_loss:.6f} "
-            f"validation_best_add_f1={validation_f1:.6f}",
+            f"pairwise_loss={pairwise_loss:.6f} validation_best_add_f1={validation_f1:.6f}",
             flush=True,
         )
     if best_state is not None:
@@ -221,6 +265,14 @@ def train_worker_roi(args: argparse.Namespace | TrainWorkerROIArgs) -> dict[str,
             "lr": float(args.lr),
             "weight_decay": float(args.weight_decay),
             "positive_loss_multiplier": float(getattr(args, "positive_loss_multiplier", 2.0)),
+            "loss_mode": str(loss_options["loss_mode"]),
+            "focal_gamma": float(loss_options["focal_gamma"]),
+            "hard_positive_score_threshold": float(loss_options["hard_positive_score_threshold"]),
+            "hard_negative_score_threshold": float(loss_options["hard_negative_score_threshold"]),
+            "hard_positive_loss_multiplier": float(loss_options["hard_positive_loss_multiplier"]),
+            "hard_negative_loss_multiplier": float(loss_options["hard_negative_loss_multiplier"]),
+            "pairwise_loss_multiplier": float(loss_options["pairwise_loss_multiplier"]),
+            "pairwise_group_key": str(loss_options["pairwise_group_key"]),
             "binary_pos_weight": float(pos_weight.detach().cpu().item()),
             "checkpoint_selection": "validation_best_add_f1_then_loss",
             "best_epoch": best_epoch,
@@ -269,6 +321,12 @@ def train_worker_roi(args: argparse.Namespace | TrainWorkerROIArgs) -> dict[str,
         "best_epoch": best_epoch,
         "calibrated_add_threshold": best_threshold,
         "checkpoint_selection": "validation_best_add_f1_then_loss",
+        "loss_mode": str(loss_options["loss_mode"]),
+        "focal_gamma": float(loss_options["focal_gamma"]),
+        "hard_positive_loss_multiplier": float(loss_options["hard_positive_loss_multiplier"]),
+        "hard_negative_loss_multiplier": float(loss_options["hard_negative_loss_multiplier"]),
+        "pairwise_loss_multiplier": float(loss_options["pairwise_loss_multiplier"]),
+        "pairwise_group_key": str(loss_options["pairwise_group_key"]),
         "target_label": "paired_worker_ab_trajectory_roi",
         "selector_is_pricing_oracle": False,
         "selector_can_certificate": False,
@@ -373,6 +431,30 @@ def _binary_pos_weight(samples: list[Any], *, device: torch.device, multiplier: 
     return torch.tensor(weight, dtype=torch.float32, device=device)
 
 
+def _worker_roi_loss_options(args: argparse.Namespace | TrainWorkerROIArgs) -> dict[str, Any]:
+    loss_mode = str(getattr(args, "loss_mode", "bce") or "bce")
+    allowed = {"bce", "focal", "pairwise", "focal_pairwise"}
+    if loss_mode not in allowed:
+        raise ValueError(f"unsupported worker ROI loss_mode={loss_mode!r}")
+    pairwise_multiplier = float(getattr(args, "pairwise_loss_multiplier", 0.0))
+    if loss_mode in {"pairwise", "focal_pairwise"} and pairwise_multiplier <= 0.0:
+        pairwise_multiplier = 1.0
+    return {
+        "loss_mode": loss_mode,
+        "focal_gamma": max(0.0, float(getattr(args, "focal_gamma", 2.0))),
+        "hard_positive_score_threshold": float(getattr(args, "hard_positive_score_threshold", 0.5)),
+        "hard_negative_score_threshold": float(getattr(args, "hard_negative_score_threshold", 0.5)),
+        "hard_positive_loss_multiplier": max(
+            1.0, float(getattr(args, "hard_positive_loss_multiplier", 1.0))
+        ),
+        "hard_negative_loss_multiplier": max(
+            1.0, float(getattr(args, "hard_negative_loss_multiplier", 1.0))
+        ),
+        "pairwise_loss_multiplier": max(0.0, pairwise_multiplier),
+        "pairwise_group_key": str(getattr(args, "pairwise_group_key", "instance") or "instance"),
+    }
+
+
 def _worker_roi_logits(model: ContextAwareColumnSelector, sample: Any) -> torch.Tensor:
     output = model(
         sample,
@@ -394,15 +476,38 @@ def _worker_roi_sample_loss(
     sample: Any,
     device: torch.device,
     pos_weight: torch.Tensor,
+    *,
+    loss_options: dict[str, Any] | None = None,
 ) -> torch.Tensor:
+    options = loss_options or _worker_roi_loss_options(TrainWorkerROIArgs())
     sample = sample.to(device)
     logits = _worker_roi_logits(model, sample)
     targets = _worker_roi_targets(sample).to(device)
-    return torch.nn.functional.binary_cross_entropy_with_logits(
+    loss = torch.nn.functional.binary_cross_entropy_with_logits(
         logits,
         targets,
         pos_weight=pos_weight,
+        reduction="none",
     )
+    scores = torch.sigmoid(logits.detach())
+    if str(options["loss_mode"]) in {"focal", "focal_pairwise"}:
+        probs = torch.sigmoid(logits)
+        pt = torch.where(targets > 0.5, probs, 1.0 - probs)
+        loss = loss * torch.pow(torch.clamp(1.0 - pt, min=0.0, max=1.0), float(options["focal_gamma"]))
+    weights = torch.ones_like(loss)
+    hard_positive = (targets > 0.5) & (scores < float(options["hard_positive_score_threshold"]))
+    hard_negative = (targets <= 0.5) & (scores >= float(options["hard_negative_score_threshold"]))
+    weights = torch.where(
+        hard_positive,
+        weights * float(options["hard_positive_loss_multiplier"]),
+        weights,
+    )
+    weights = torch.where(
+        hard_negative,
+        weights * float(options["hard_negative_loss_multiplier"]),
+        weights,
+    )
+    return (loss * weights).mean()
 
 
 def _run_worker_roi_epoch(
@@ -411,6 +516,8 @@ def _run_worker_roi_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     pos_weight: torch.Tensor,
+    *,
+    loss_options: dict[str, Any] | None = None,
 ) -> float:
     model.train()
     shuffled = list(samples)
@@ -419,7 +526,7 @@ def _run_worker_roi_epoch(
     count = 0
     for sample in shuffled:
         optimizer.zero_grad(set_to_none=True)
-        loss = _worker_roi_sample_loss(model, sample, device, pos_weight)
+        loss = _worker_roi_sample_loss(model, sample, device, pos_weight, loss_options=loss_options)
         loss.backward()
         optimizer.step()
         total += float(loss.detach().cpu())
@@ -432,6 +539,8 @@ def _evaluate_worker_roi_loss(
     samples: list[Any],
     device: torch.device,
     pos_weight: torch.Tensor,
+    *,
+    loss_options: dict[str, Any] | None = None,
 ) -> float:
     if not samples:
         return float("inf")
@@ -439,8 +548,60 @@ def _evaluate_worker_roi_loss(
     total = 0.0
     with torch.no_grad():
         for sample in samples:
-            total += float(_worker_roi_sample_loss(model, sample, device, pos_weight).detach().cpu())
+            total += float(
+                _worker_roi_sample_loss(
+                    model,
+                    sample,
+                    device,
+                    pos_weight,
+                    loss_options=loss_options,
+                ).detach().cpu()
+            )
     return total / max(1, len(samples))
+
+
+def _run_worker_roi_pairwise_step(
+    model: ContextAwareColumnSelector,
+    samples: list[Any],
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    *,
+    loss_options: dict[str, Any],
+) -> float:
+    grouped: dict[str, list[tuple[torch.Tensor, torch.Tensor]]] = {}
+    model.train()
+    optimizer.zero_grad(set_to_none=True)
+    for sample in samples:
+        sample = sample.to(device)
+        logits = _worker_roi_logits(model, sample)
+        targets = _worker_roi_targets(sample).to(device)
+        group_key = _pairwise_group_key(sample, str(loss_options["pairwise_group_key"]))
+        grouped.setdefault(group_key, []).append((logits.reshape(-1), targets.reshape(-1)))
+    losses: list[torch.Tensor] = []
+    for items in grouped.values():
+        logits = torch.cat([item[0] for item in items], dim=0)
+        targets = torch.cat([item[1] for item in items], dim=0)
+        positive_logits = logits[targets > 0.5]
+        negative_logits = logits[targets <= 0.5]
+        if positive_logits.numel() <= 0 or negative_logits.numel() <= 0:
+            continue
+        diff = positive_logits[:, None] - negative_logits[None, :]
+        losses.append(torch.nn.functional.softplus(-diff).mean())
+    if not losses:
+        optimizer.zero_grad(set_to_none=True)
+        return 0.0
+    loss = torch.stack(losses).mean() * float(loss_options["pairwise_loss_multiplier"])
+    loss.backward()
+    optimizer.step()
+    return float(loss.detach().cpu())
+
+
+def _pairwise_group_key(sample: Any, mode: str) -> str:
+    if mode == "all":
+        return "all"
+    if mode == "family":
+        return str(getattr(sample, "selector_instance_family", "") or "unknown-family")
+    return str(getattr(sample, "selector_instance_path", "") or getattr(sample, "selector_instance", "") or "unknown")
 
 
 def _worker_roi_binary_metrics(

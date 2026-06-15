@@ -33,12 +33,15 @@ DEFAULT_REPORT = Path(
 
 
 POSITIVE_ROI_CLASSES = {
+    "positive_exact_roi",
     "positive_primal_roi",
     "positive_status_roi",
     "positive_retry_roi",
     "positive_pricing_roi",
 }
 TRAINING_NEGATIVE_ROI_CLASSES = {
+    "negative_exact_roi",
+    "negative_walltime_roi",
     "no_observed_roi",
     "negative_primal_roi",
     "negative_status_roi",
@@ -94,6 +97,14 @@ def _candidate_key(item: dict[str, Any]) -> tuple[str, str, tuple[int, ...], tup
         str(item.get("expected_context_hash") or ""),
         _seq_key(item.get("target_sequence")),
         _arc_key(item.get("target_arc_option_sequence")),
+    )
+
+
+def _candidate_sequence_key(item: dict[str, Any]) -> tuple[str, str, tuple[int, ...]]:
+    return (
+        str(item.get("instance") or ""),
+        str(item.get("expected_context_hash") or ""),
+        _seq_key(item.get("target_sequence")),
     )
 
 
@@ -154,14 +165,17 @@ def _fraction_gap(name: str, observed: float, required_max: float) -> dict[str, 
     }
 
 
-def _load_candidate_features(paths: Iterable[Path]) -> dict[tuple[str, str, tuple[int, ...], tuple[str, ...]], dict[str, Any]]:
+def _load_candidate_features(
+    paths: Iterable[Path],
+) -> dict[str, dict[tuple[Any, ...], dict[str, Any]]]:
     features: dict[tuple[str, str, tuple[int, ...], tuple[str, ...]], dict[str, Any]] = {}
+    sequence_features: dict[tuple[str, str, tuple[int, ...]], dict[str, Any]] = {}
     for source in paths:
         path = Path(source)
         if not path.exists():
             continue
         payload = json.loads(path.read_text(encoding="utf-8"))
-        candidates = payload.get("candidates")
+        candidates = payload.get("candidates") or payload.get("candidate_runs")
         if candidates is None and (path.parent / "candidates.json").exists():
             candidates = json.loads((path.parent / "candidates.json").read_text(encoding="utf-8")).get("candidates")
         for candidate in candidates or []:
@@ -170,7 +184,32 @@ def _load_candidate_features(paths: Iterable[Path]) -> dict[tuple[str, str, tupl
             key = _candidate_key(candidate)
             if key[0] and key[1] and key[2]:
                 features.setdefault(key, dict(candidate))
-    return features
+                sequence_features.setdefault(_candidate_sequence_key(candidate), dict(candidate))
+    return {"exact": features, "sequence": sequence_features}
+
+
+def _candidate_lookup(
+    record: dict[str, Any],
+    candidate_features: dict[str, dict[tuple[Any, ...], dict[str, Any]]],
+) -> dict[str, Any]:
+    exact = candidate_features.get("exact", {})
+    sequence = candidate_features.get("sequence", {})
+    candidate = exact.get(_candidate_key(record))
+    if candidate is not None:
+        return candidate
+    candidate = sequence.get(_candidate_sequence_key(record))
+    if candidate is not None:
+        return candidate
+    for target_sequence in _target_sequence_candidates(record):
+        key = (
+            str(record.get("instance") or ""),
+            str(record.get("expected_context_hash") or ""),
+            _seq_key(target_sequence),
+        )
+        candidate = sequence.get(key)
+        if candidate is not None:
+            return candidate
+    return {}
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -180,6 +219,13 @@ def _float_or_none(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _result_csv_exists(record: dict[str, Any], flag_key: str, path_key: str) -> bool:
+    if bool(record.get(flag_key)):
+        return True
+    path_text = str(record.get(path_key) or "").strip()
+    return bool(path_text and Path(path_text).exists())
 
 
 def _int_or_zero(value: Any) -> int:
@@ -196,6 +242,29 @@ def _sequence_tuple(value: Any) -> tuple[int, ...]:
         return tuple(int(item) for item in value)
     except (TypeError, ValueError):
         return tuple()
+
+
+def _target_sequence_candidates(record: dict[str, Any]) -> list[list[Any]]:
+    candidates: list[list[Any]] = []
+    primary = record.get("target_sequence")
+    if isinstance(primary, list):
+        candidates.append(primary)
+    for key in ("candidate_batch_target_sequences", "target_sequences"):
+        value = record.get(key)
+        if not isinstance(value, list):
+            continue
+        for sequence in value:
+            if isinstance(sequence, list):
+                candidates.append(sequence)
+    unique: list[list[Any]] = []
+    seen: set[tuple[int, ...]] = set()
+    for sequence in candidates:
+        seq_key = _sequence_tuple(sequence)
+        if not seq_key or seq_key in seen:
+            continue
+        seen.add(seq_key)
+        unique.append(sequence)
+    return unique
 
 
 def _sequence_sample_matches_target(samples: Any, target: tuple[int, ...]) -> bool:
@@ -285,31 +354,36 @@ def _worker_target_diagnostics(
 def _target_causal_match(
     *,
     target_sequence: list[Any],
+    target_sequences: list[list[Any]] | None = None,
     worker_diag: dict[str, Any],
 ) -> bool:
-    target = _sequence_tuple(target_sequence)
-    if not target or not worker_diag:
+    targets = [_sequence_tuple(sequence) for sequence in (target_sequences or [target_sequence])]
+    targets = [target for target in targets if target]
+    if not targets or not worker_diag:
         return False
-    configured_target_match = any(
-        _sequence_tuple(worker_diag.get(key)) == target
-        for key in (
-            "pulse_worker_target_first_task_priority_sequence",
-            "pulse_worker_target_transition_priority_sequence",
-            "pulse_worker_target_arc_option_priority_sequence",
+    for target in targets:
+        configured_target_match = any(
+            _sequence_tuple(worker_diag.get(key)) == target
+            for key in (
+                "pulse_worker_target_first_task_priority_sequence",
+                "pulse_worker_target_transition_priority_sequence",
+                "pulse_worker_target_arc_option_priority_sequence",
+            )
         )
-    )
-    if configured_target_match and bool(worker_diag.get("pulse_worker_target_sequence_materialized")):
-        return True
-    return bool(
-        _sequence_sample_matches_target(
-            worker_diag.get("pulse_worker_returned_candidate_sequence_samples"),
-            target,
-        )
-        or _sequence_sample_matches_target(
-            worker_diag.get("pulse_worker_harvested_sequence_samples"),
-            target,
-        )
-    )
+        if configured_target_match and bool(worker_diag.get("pulse_worker_target_sequence_materialized")):
+            return True
+        if (
+            _sequence_sample_matches_target(
+                worker_diag.get("pulse_worker_returned_candidate_sequence_samples"),
+                target,
+            )
+            or _sequence_sample_matches_target(
+                worker_diag.get("pulse_worker_harvested_sequence_samples"),
+                target,
+            )
+        ):
+            return True
+    return False
 
 
 def _worker_target_intervention_observed(worker_diag: dict[str, Any]) -> bool:
@@ -343,22 +417,82 @@ def _worker_context_mismatch(
     return bool(expected and observed and expected != observed)
 
 
+def _post_injection_guard_value(record: dict[str, Any], key: str) -> float | None:
+    return _float_or_none(record.get(key))
+
+
+def _post_injection_guard_present(record: dict[str, Any]) -> bool:
+    return any(
+        key in record
+        for key in (
+            "target_active_changed_task_set_count",
+            "worker_next_objective_vs_baseline_same_iter_delta",
+        )
+    )
+
+
+def _guarded_positive_trajectory_roi(
+    record: dict[str, Any],
+    *,
+    roi_class: str,
+) -> tuple[bool, str]:
+    if roi_class not in POSITIVE_ROI_CLASSES:
+        return False, "not_positive_roi_class"
+    if not _post_injection_guard_present(record):
+        return True, "legacy_roi_class_positive_no_post_injection_guard"
+
+    active_changed = _post_injection_guard_value(
+        record, "target_active_changed_task_set_count"
+    )
+    if active_changed is not None and active_changed <= 0.0:
+        return False, "target_columns_inactive_only"
+
+    same_iter_delta = _post_injection_guard_value(
+        record, "worker_next_objective_vs_baseline_same_iter_delta"
+    )
+    if same_iter_delta is not None and same_iter_delta > 1.0e-9:
+        return False, "worse_than_baseline_same_iter_objective"
+
+    return True, "post_injection_guard_positive"
+
+
 def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict[str, Any]:
-    roi_class = str(record.get("roi_class") or "unknown")
+    roi_class = str(record.get("roi_class") or record.get("final_roi_class") or "unknown")
     primal_improvement = _float_or_none(record.get("primal_improvement"))
     columns_delta = _float_or_none(record.get("columns_delta"))
     exact_delta = _float_or_none(record.get("exact_pricing_calls_delta"))
     generated_delta = _float_or_none(record.get("generated_sequences_delta"))
+    target_active_changed = _float_or_none(record.get("target_active_changed_task_set_count"))
+    target_inactive_changed = _float_or_none(record.get("target_inactive_changed_task_set_count"))
+    worker_next_objective_delta = _float_or_none(record.get("worker_next_objective_delta"))
+    worker_next_dual_l1_delta = _float_or_none(record.get("worker_next_dual_l1_delta"))
+    worker_next_objective_vs_baseline = _float_or_none(
+        record.get("worker_next_objective_vs_baseline_same_iter_delta")
+    )
+    worker_next_dual_l1_vs_baseline = _float_or_none(
+        record.get("worker_next_dual_l1_vs_baseline_same_iter_delta")
+    )
+    followup_pricing_events = _float_or_none(record.get("worker_followup_pricing_events"))
+    followup_exact_events = _float_or_none(record.get("worker_followup_exact_pricing_events"))
+    followup_retry_events = _float_or_none(record.get("worker_followup_completion_retry_events"))
+    context_mismatch_skips = _float_or_none(
+        record.get("worker_context_mismatch_skips_after_injection")
+    )
     target_sequence = list(record.get("target_sequence") or [])
+    target_sequence_candidates = _target_sequence_candidates(record)
     arcs = list(record.get("target_arc_option_sequence") or [])
+    baseline_result_exists = _result_csv_exists(record, "baseline_csv_exists", "baseline_csv")
+    worker_result_exists = _result_csv_exists(record, "worker_csv_exists", "worker_csv")
     worker_columns_added = bool(columns_delta is not None and columns_delta > 0)
     positive_primal_roi = bool(primal_improvement is not None and primal_improvement > 1.0e-9)
-    positive_trajectory_roi = roi_class in POSITIVE_ROI_CLASSES
+    positive_trajectory_roi, positive_trajectory_roi_guard_reason = (
+        _guarded_positive_trajectory_roi(record, roi_class=roi_class)
+    )
     negative_primal_roi = bool(primal_improvement is not None and primal_improvement < -1.0e-9)
     trainable = bool(
         roi_class in TRAINABLE_ROI_CLASSES
-        and record.get("baseline_csv_exists")
-        and record.get("worker_csv_exists")
+        and baseline_result_exists
+        and worker_result_exists
         and not record.get("official_bound_effect")
         and not record.get("certificate_effect")
     )
@@ -376,6 +510,7 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
     )
     target_causal_match = _target_causal_match(
         target_sequence=target_sequence,
+        target_sequences=target_sequence_candidates,
         worker_diag=worker_diag,
     )
     target_intervention_observed = _worker_target_intervention_observed(worker_diag)
@@ -402,6 +537,7 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
         "expected_context_hash": str(record.get("expected_context_hash") or ""),
         "roi_candidate_key": _candidate_key_string(record),
         "target_sequence": target_sequence,
+        "candidate_batch_target_sequences": target_sequence_candidates,
         "target_arc_option_sequence": arcs,
         "target_length": len(target_sequence),
         "target_arc_count": len(arcs),
@@ -447,11 +583,27 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
         "columns_delta": columns_delta,
         "exact_pricing_calls_delta": exact_delta,
         "generated_sequences_delta": generated_delta,
+        "target_active_changed_task_set_count": target_active_changed,
+        "target_inactive_changed_task_set_count": target_inactive_changed,
+        "worker_next_objective_delta": worker_next_objective_delta,
+        "worker_next_dual_l1_delta": worker_next_dual_l1_delta,
+        "worker_next_objective_vs_baseline_same_iter_delta": (
+            worker_next_objective_vs_baseline
+        ),
+        "worker_next_dual_l1_vs_baseline_same_iter_delta": (
+            worker_next_dual_l1_vs_baseline
+        ),
+        "worker_followup_pricing_events": followup_pricing_events,
+        "worker_followup_exact_pricing_events": followup_exact_events,
+        "worker_followup_completion_retry_events": followup_retry_events,
+        "worker_context_mismatch_skips_after_injection": context_mismatch_skips,
         "roi_class": roi_class,
         "label_worker_roi_positive": None if label is None else int(label),
         "label_worker_adds_columns": int(worker_columns_added),
         "label_positive_primal_roi": int(positive_primal_roi),
         "label_positive_trajectory_roi": int(positive_trajectory_roi),
+        "positive_trajectory_roi_guard_reason": positive_trajectory_roi_guard_reason,
+        "post_injection_guard_present": bool(_post_injection_guard_present(record)),
         "label_negative_primal_roi": int(negative_primal_roi),
         "training_eligible": bool(trainable),
         "training_exclusion_reason": ""
@@ -465,6 +617,8 @@ def _label_row(record: dict[str, Any], candidate: dict[str, Any] | None) -> dict
             worker_context_mismatch=worker_context_mismatch,
             target_causal_match=target_causal_match,
             target_intervention_observed=target_intervention_observed,
+            baseline_result_exists=baseline_result_exists,
+            worker_result_exists=worker_result_exists,
         ),
     }
 
@@ -479,10 +633,12 @@ def _exclusion_reason(
     worker_context_mismatch: bool = False,
     target_causal_match: bool = False,
     target_intervention_observed: bool = False,
+    baseline_result_exists: bool = False,
+    worker_result_exists: bool = False,
 ) -> str:
     if record.get("official_bound_effect") or record.get("certificate_effect"):
         return "forbidden_certificate_or_bound_effect"
-    if not record.get("baseline_csv_exists") or not record.get("worker_csv_exists"):
+    if not baseline_result_exists or not worker_result_exists:
         return "missing_ab_result"
     if roi_class not in TRAINABLE_ROI_CLASSES:
         return f"unsupported_roi_class:{roi_class}"
@@ -524,7 +680,7 @@ def build_roi_dataset(
     for record in audit.get("records") or []:
         if not isinstance(record, dict):
             continue
-        rows.append(_label_row(record, candidate_features.get(_candidate_key(record))))
+        rows.append(_label_row(record, _candidate_lookup(record, candidate_features)))
 
     duplicate_counts = Counter(row["roi_candidate_key"] for row in rows)
     for row in rows:
@@ -592,6 +748,19 @@ def build_roi_dataset(
         str(row["training_exclusion_reason"])
         for row in rows
         if not row["training_eligible"] and row["training_exclusion_reason"]
+    )
+    positive_guard_reason_counts = Counter(
+        str(row.get("positive_trajectory_roi_guard_reason") or "") for row in rows
+    )
+    post_injection_guard_present_count = sum(
+        1 for row in rows if row.get("post_injection_guard_present")
+    )
+    post_injection_positive_downgraded_count = sum(
+        1
+        for row in rows
+        if str(row.get("roi_class") or "") in POSITIVE_ROI_CLASSES
+        and row.get("post_injection_guard_present")
+        and row.get("label_positive_trajectory_roi") == 0
     )
     label_distribution_ready_details = {
         "positive_instances_ready": positive_instance_count >= int(min_positive_instances_for_training),
@@ -671,6 +840,13 @@ def build_roi_dataset(
         "worker_context_mismatch_count": worker_context_mismatch_count,
         "no_worker_target_intervention_count": no_worker_target_intervention_count,
         "training_exclusion_reason_counts": dict(sorted(training_exclusion_counts.items())),
+        "positive_trajectory_roi_guard_reason_counts": dict(
+            sorted(positive_guard_reason_counts.items())
+        ),
+        "post_injection_guard_present_count": int(post_injection_guard_present_count),
+        "post_injection_positive_downgraded_count": int(
+            post_injection_positive_downgraded_count
+        ),
         "label_counts": dict(sorted(label_counts.items())),
         "unique_label_counts": dict(sorted(unique_label_counts.items())),
         "roi_class_counts": dict(sorted(roi_counts.items())),
@@ -762,6 +938,12 @@ def _write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]
         f"worker_context_mismatch_count = {summary['worker_context_mismatch_count']}",
         f"no_worker_target_intervention_count = {summary['no_worker_target_intervention_count']}",
         f"training_exclusion_reason_counts = {summary['training_exclusion_reason_counts']}",
+        "positive_trajectory_roi_guard_reason_counts = "
+        f"{summary['positive_trajectory_roi_guard_reason_counts']}",
+        "post_injection_guard_present_count = "
+        f"{summary['post_injection_guard_present_count']}",
+        "post_injection_positive_downgraded_count = "
+        f"{summary['post_injection_positive_downgraded_count']}",
         f"label_counts = {summary['label_counts']}",
         f"unique_label_counts = {summary['unique_label_counts']}",
         f"roi_class_counts = {summary['roi_class_counts']}",
@@ -805,6 +987,7 @@ def _write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]
             "- `positive_primal_roi` / `positive_retry_roi` / `positive_status_roi` 等作为 trajectory 正样本；",
             "- `no_observed_roi` / `negative_primal_roi` / `negative_retry_roi` 等作为负样本；",
             "- `columns_only_roi` 暂不作为主训练标签，可作为辅助分析；",
+            "- 若存在 post-injection 后效字段，positive ROI 必须通过 active-support / baseline-same-iter guard，否则降为 DELAY 标签；",
             "- missing / certificate-effect / official-bound-effect 样本不进入训练；",
             "- 所有 ROI 训练标签都必须在同一个 expected context hash 下发生，否则排除训练；",
             "- 所有 ROI 训练标签都必须能在 worker 日志中因果匹配 target，否则排除训练；",

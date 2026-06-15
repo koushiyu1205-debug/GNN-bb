@@ -61,6 +61,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 7.787651,
+    "source_file": "BPC_future/results/gat_same_run_random_wave_ord5_capture_runbook_20260615/task020_capture/logs/BPC_future/logical_graph/tasks_020/random-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_random-wave_randomtw_tasks020_05_seed61411_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->19:low_time:0",
       "19->5:low_risk:2",
@@ -136,6 +137,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 7.499479,
+    "source_file": "BPC_future/results/gat_same_run_random_wave_ord5_capture_runbook_20260615/task020_capture/logs/BPC_future/logical_graph/tasks_020/random-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_random-wave_randomtw_tasks020_05_seed61411_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->19:low_risk:2",
       "19->5:low_risk:2",
@@ -206,6 +208,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 7.474246,
+    "source_file": "BPC_future/results/gat_bulk_sampling_runbook_v13_20260615/task020_bulk_capture_wave01/logs/BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/apollo15_20km_random-wave_randomtw_tasks020_08_seed61715_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->14:low_risk:2",
       "14->10:low_time:0",
@@ -259,6 +262,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 7.453349,
+    "source_file": "BPC_future/results/gat_same_run_random_wave_ord5_capture_runbook_20260615/task020_capture/logs/BPC_future/logical_graph/tasks_020/random-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_random-wave_randomtw_tasks020_05_seed61411_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->5:low_time:0",
       "5->19:low_time:0",
@@ -334,6 +338,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 7.36698,
+    "source_file": "BPC_future/results/gat_bulk_sampling_runbook_v13_20260615/task020_bulk_capture_wave01/logs/BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/apollo15_20km_random-wave_randomtw_tasks020_08_seed61715_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->19:low_time:0",
       "19->16:low_risk:2",
@@ -387,6 +392,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 7.118997,
+    "source_file": "BPC_future/results/gat_bulk_sampling_runbook_v13_20260615/task020_bulk_capture_wave01/logs/BPC_future/logical_graph/tasks_020/random-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_random-wave_randomtw_tasks020_03_seed61205_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->2:low_time:0",
       "2->17:low_risk:1",
@@ -445,6 +451,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 6.530219,
+    "source_file": "BPC_future/results/gat_bulk_sampling_runbook_v13_20260615/task020_bulk_capture_wave02/logs/BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/apollo15_20km_random-wave_randomtw_tasks020_10_seed61919_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->3:low_risk:2",
       "3->13:low_risk:2",
@@ -503,6 +510,7 @@ all_checks_pass = true
     "reason": "positive_gap_with_negative_support",
     "recommendation_bucket": "positive_gap_explore",
     "score": 5.507723,
+    "source_file": "BPC_future/results/gat_bulk_sampling_runbook_v13_20260615/task020_bulk_capture_wave01/logs/BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/apollo15_20km_random-wave_randomtw_tasks020_08_seed61715_logical_graph.json.jsonl",
     "target_arc_option_sequence": [
       "0->2:low_risk:1",
       "2->1:low_time:0",

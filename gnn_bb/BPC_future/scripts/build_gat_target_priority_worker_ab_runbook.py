@@ -43,7 +43,52 @@ NO_LEARNING_OVERRIDES = (
     "journey_learning_pricing_enabled=False",
 )
 
-WORKER_BASE_OVERRIDES = (
+WORKER_METHOD_TARGET_MATERIALIZATION_FIXED = "target_materialization_fixed"
+WORKER_METHOD_PULSE_SEARCH = "pulse_search"
+WORKER_METHODS = (
+    WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
+    WORKER_METHOD_PULSE_SEARCH,
+)
+
+WORKER_TARGET_MATERIALIZATION_FIXED_OVERRIDES = (
+    "journey_sharded_pulse_hidden_negative_worker_enabled=True",
+    "journey_sharded_pulse_hidden_negative_worker_trigger=audit_signal_or_current_probe",
+    "journey_sharded_pulse_hidden_negative_worker_log_skips=True",
+    # The current-probe signal is used only as a same-context trigger. Target
+    # materialization returns a result before price_journeys() can run.
+    "journey_sharded_pulse_worker_current_probe_enabled=True",
+    "journey_sharded_pulse_worker_current_probe_time_limit=0.250",
+    "journey_sharded_pulse_worker_current_probe_max_recursions=0",
+    "journey_sharded_pulse_worker_current_probe_max_columns=1",
+    "journey_sharded_pulse_worker_current_probe_min_tasks=20",
+    "journey_sharded_pulse_worker_current_probe_min_remaining_time=0.0",
+    "journey_sharded_pulse_worker_current_probe_min_certificate_flat_rounds=0",
+    "journey_sharded_pulse_worker_current_probe_min_no_column_rounds=0",
+    "journey_sharded_pulse_worker_current_probe_hard_tail_fingerprint_enabled=False",
+    "journey_sharded_pulse_worker_current_probe_harvesting_enabled=False",
+    "journey_sharded_pulse_worker_current_probe_negative_harvest_limit=0",
+    "journey_sharded_pulse_worker_current_probe_allow_expected_context_without_certificate_candidate=True",
+    "journey_sharded_pulse_hidden_negative_worker_time_limit=0.250",
+    "journey_sharded_pulse_hidden_negative_worker_max_recursions=0",
+    "journey_sharded_pulse_hidden_negative_worker_archive_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_negative_harvest_limit=0",
+    "journey_sharded_pulse_hidden_negative_worker_adaptive_sharding_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_refine_incomplete_first_task_shards=False",
+    "journey_sharded_pulse_hidden_negative_worker_shard_scheduling_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_shard_roi_gate_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_impact_filter_mode=off",
+    "journey_sharded_pulse_hidden_negative_worker_max_columns=1",
+    "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_enabled=True",
+    "journey_sharded_pulse_hidden_negative_worker_target_path_diagnostics_enabled=False",
+    "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled=True",
+)
+
+WORKER_PULSE_SEARCH_OVERRIDES = (
     "journey_sharded_pulse_hidden_negative_worker_enabled=True",
     "journey_sharded_pulse_hidden_negative_worker_trigger=audit_signal_or_current_probe",
     "journey_sharded_pulse_hidden_negative_worker_log_skips=True",
@@ -132,6 +177,12 @@ def _target_arc_options(value: Any) -> tuple[str, ...]:
 
 def _instance(path: Path | str) -> str:
     return str(Path(path))
+
+
+def _safe_name(text: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in str(text))
+    safe = "_".join(part for part in safe.split("_") if part)
+    return safe[:180] or "candidate"
 
 
 def _small_instance_paths(logical_graph_root: Path, scale: int) -> list[str]:
@@ -261,6 +312,7 @@ def _normalized_candidate(raw: dict[str, Any], index: int) -> dict[str, Any]:
         "target_arc_option_sequence": arc_options,
         "target_sortie_traces": list(raw.get("target_sortie_traces") or []),
         "capture_pricing_kind": str(raw.get("capture_pricing_kind") or ""),
+        "source_file": str(raw.get("source_file") or ""),
     }
     for field in (
         "cell",
@@ -301,7 +353,20 @@ def _worker_before_exact_enabled(candidate: dict[str, Any]) -> bool:
     return capture_kind == "exact"
 
 
-def _worker_overrides(candidate: dict[str, Any]) -> tuple[str, ...]:
+def _worker_base_overrides(worker_method: str) -> tuple[str, ...]:
+    method = str(worker_method or "").strip()
+    if method == WORKER_METHOD_TARGET_MATERIALIZATION_FIXED:
+        return WORKER_TARGET_MATERIALIZATION_FIXED_OVERRIDES
+    if method == WORKER_METHOD_PULSE_SEARCH:
+        return WORKER_PULSE_SEARCH_OVERRIDES
+    raise ValueError(f"unsupported worker_method: {worker_method!r}")
+
+
+def _worker_overrides(
+    candidate: dict[str, Any],
+    *,
+    worker_method: str = WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
+) -> tuple[str, ...]:
     target_sequence = ",".join(str(task) for task in candidate["target_sequence"])
     priority_sequence = ",".join(str(task) for task in candidate["target_priority_sequence"])
     arc_sequence = ",".join(str(option) for option in candidate["target_arc_option_sequence"])
@@ -312,7 +377,7 @@ def _worker_overrides(candidate: dict[str, Any]) -> tuple[str, ...]:
         sort_keys=True,
     )
     overrides = [
-        *WORKER_BASE_OVERRIDES,
+        *_worker_base_overrides(worker_method),
         (
             "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled="
             f"{_worker_before_heuristic_enabled(candidate)}"
@@ -350,6 +415,112 @@ def _worker_overrides(candidate: dict[str, Any]) -> tuple[str, ...]:
     return tuple(overrides)
 
 
+def _worker_overrides_for_candidate_group(
+    candidates: list[dict[str, Any]],
+    *,
+    worker_method: str = WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
+) -> tuple[str, ...]:
+    if not candidates:
+        raise ValueError("candidate group must not be empty")
+    if len(candidates) == 1:
+        return _worker_overrides(candidates[0], worker_method=worker_method)
+    if worker_method != WORKER_METHOD_TARGET_MATERIALIZATION_FIXED:
+        raise ValueError("worker_batch_size > 1 requires target_materialization_fixed")
+    first = candidates[0]
+    target_sequence = ",".join(
+        str(task) for item in candidates for task in item["target_sequence"]
+    )
+    priority_sequence = ",".join(
+        str(task) for task in first["target_priority_sequence"]
+    )
+    arc_sequence = ",".join(str(option) for option in first["target_arc_option_sequence"])
+    target_journeys = json.dumps(
+        [{"traces": item.get("target_sortie_traces") or []} for item in candidates],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    overrides = [
+        *_worker_base_overrides(worker_method),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_before_heuristic_enabled="
+            f"{_worker_before_heuristic_enabled(first)}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_before_exact_enabled="
+            f"{_worker_before_exact_enabled(first)}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_expected_context_hash="
+            f"{first['expected_context_hash']}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_sequence="
+            f"{priority_sequence}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_sequence="
+            f"{priority_sequence}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_sequence="
+            f"{target_sequence}"
+        ),
+        (
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys="
+            f"{target_journeys}"
+        ),
+    ]
+    if arc_sequence:
+        overrides.append(
+            "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_sequence="
+            f"{arc_sequence}"
+        )
+    return tuple(overrides)
+
+
+def _candidate_groups(
+    candidates: list[dict[str, Any]],
+    *,
+    worker_batch_size: int,
+) -> list[list[dict[str, Any]]]:
+    batch_size = max(1, int(worker_batch_size))
+    if batch_size <= 1:
+        return [[candidate] for candidate in candidates]
+    by_context: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    order: list[tuple[str, str]] = []
+    for candidate in candidates:
+        key = (str(candidate["instance"]), str(candidate["expected_context_hash"]))
+        if key not in by_context:
+            by_context[key] = []
+            order.append(key)
+        if len(by_context[key]) < batch_size:
+            by_context[key].append(candidate)
+    return [by_context[key] for key in order if by_context[key]]
+
+
+def _candidate_group_record(group: list[dict[str, Any]]) -> dict[str, Any]:
+    if len(group) == 1:
+        return dict(group[0], candidate_batch_count=1, candidate_names=[group[0]["name"]])
+    first = group[0]
+    name = _safe_name(f"{first['name']}_batch{len(group)}")
+    target_sequence = [int(task) for item in group for task in item["target_sequence"]]
+    return {
+        **first,
+        "name": name,
+        "target_sequence": target_sequence,
+        "target_priority_sequence": list(first["target_priority_sequence"]),
+        "target_arc_option_sequence": list(first["target_arc_option_sequence"]),
+        "target_sortie_traces": list(first.get("target_sortie_traces") or []),
+        "target_materialization_journey_count": len(group),
+        "candidate_batch_count": len(group),
+        "candidate_names": [str(item["name"]) for item in group],
+        "candidate_batch_target_sequences": [
+            [int(task) for task in item["target_sequence"]] for item in group
+        ],
+    }
+
+
 def _has_certificate_effect(command: str) -> bool:
     forbidden = (
         "journey_final_judge_sharding_enabled=True",
@@ -372,12 +543,19 @@ def build_runbook(
     small_time_limit: float = 60.0,
     twenty_time_limit: float = 85.0,
     max_workers: int = 1,
+    worker_method: str = WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
+    worker_batch_size: int = 1,
 ) -> dict[str, Any]:
+    if worker_method not in WORKER_METHODS:
+        raise ValueError(f"worker_method must be one of {WORKER_METHODS}, got {worker_method!r}")
+    if int(worker_batch_size) > 1 and worker_method != WORKER_METHOD_TARGET_MATERIALIZATION_FIXED:
+        raise ValueError("worker_batch_size > 1 requires target_materialization_fixed")
     output_dir.mkdir(parents=True, exist_ok=True)
     candidates = [
         _normalized_candidate(raw, index)
         for index, raw in enumerate(_load_candidates(candidates_file), start=1)
     ]
+    candidate_groups = _candidate_groups(candidates, worker_batch_size=int(worker_batch_size))
 
     commands: list[dict[str, Any]] = []
     small_checks: list[dict[str, Any]] = []
@@ -411,7 +589,8 @@ def build_runbook(
         )
 
     candidate_runs: list[dict[str, Any]] = []
-    for candidate in candidates:
+    for group in candidate_groups:
+        candidate = _candidate_group_record(group)
         base_profile = f"task020_{candidate['name']}_mainline_baseline"
         worker_profile = f"task020_{candidate['name']}_target_priority_worker"
         baseline_command = _single_run_command(
@@ -428,7 +607,10 @@ def build_runbook(
             output_dir=output_dir,
             profile=worker_profile,
             time_limit=float(twenty_time_limit),
-            overrides=(*TASK20_CONTEXT_CAPTURE_OVERRIDES, *_worker_overrides(candidate)),
+            overrides=(
+                *TASK20_CONTEXT_CAPTURE_OVERRIDES,
+                *_worker_overrides_for_candidate_group(group, worker_method=worker_method),
+            ),
         )
         commands.extend(
             [
@@ -443,8 +625,14 @@ def build_runbook(
                 {
                     "command_type": worker_profile,
                     "description": (
-                        "Run explicit opt-in target-priority Pulse worker. This may add "
-                        "true-RC negative columns but cannot certify no-negative."
+                        "Run explicit opt-in same-context target-materialization worker. "
+                        "This may add true-RC negative columns selected by GAT, but cannot "
+                        "certify no-negative or run official lower-bound shortcuts."
+                        if worker_method == WORKER_METHOD_TARGET_MATERIALIZATION_FIXED
+                        else (
+                            "Run explicit opt-in target-priority Pulse worker. This may add "
+                            "true-RC negative columns but cannot certify no-negative."
+                        )
                     ),
                     "command": worker_command,
                 },
@@ -453,6 +641,8 @@ def build_runbook(
         candidate_runs.append(
             {
                 **candidate,
+                "candidate_batch_count": len(group),
+                "candidate_names": [str(item["name"]) for item in group],
                 "baseline_csv": str(output_dir / base_profile / "results.csv"),
                 "worker_csv": str(output_dir / worker_profile / "results.csv"),
             }
@@ -508,6 +698,60 @@ def build_runbook(
             )
             for item in candidate_runs
         ),
+        "worker_method_is_fixed_for_gat_roi": bool(
+            worker_method == WORKER_METHOD_TARGET_MATERIALIZATION_FIXED
+        ),
+        "fixed_worker_commands_disable_pulse_search": (
+            worker_method != WORKER_METHOD_TARGET_MATERIALIZATION_FIXED
+            or all(
+                "journey_sharded_pulse_hidden_negative_worker_max_recursions=0" in item["command"]
+                and "journey_sharded_pulse_worker_current_probe_max_recursions=0" in item["command"]
+                and "journey_sharded_pulse_hidden_negative_worker_archive_enabled=False" in item["command"]
+                and "journey_sharded_pulse_hidden_negative_worker_bound_pruning_enabled=False" in item["command"]
+                and "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled=False" in item["command"]
+                and "journey_sharded_pulse_worker_current_probe_harvesting_enabled=False" in item["command"]
+                for item in commands
+                if item["command_type"].startswith("task020_")
+                and item["command_type"].endswith("_target_priority_worker")
+            )
+        ),
+        "batch_worker_commands_have_materialization_journeys": (
+            int(worker_batch_size) <= 1
+            or all(
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys="
+                in next(
+                    command["command"]
+                    for command in commands
+                    if command["command_type"] == f"task020_{item['name']}_target_priority_worker"
+                )
+                for item in candidate_runs
+                if int(item.get("candidate_batch_count") or 1) > 1
+            )
+        ),
+        "fixed_worker_commands_have_materialization_payload": (
+            worker_method != WORKER_METHOD_TARGET_MATERIALIZATION_FIXED
+            or all(
+                (
+                    "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys="
+                    in next(
+                        command["command"]
+                        for command in commands
+                        if command["command_type"]
+                        == f"task020_{item['name']}_target_priority_worker"
+                    )
+                )
+                or (
+                    "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces="
+                    in next(
+                        command["command"]
+                        for command in commands
+                        if command["command_type"]
+                        == f"task020_{item['name']}_target_priority_worker"
+                    )
+                )
+                for item in candidate_runs
+            )
+        ),
     }
     summary = {
         "schema_version": "gat_target_priority_worker_ab_runbook_v1",
@@ -518,15 +762,27 @@ def build_runbook(
         "certificate_ready": False,
         "official_bound_effect": False,
         "online_effect_scope": "explicit_task20_worker_commands_only",
+        "worker_method": worker_method,
+        "worker_batch_size": int(worker_batch_size),
+        "input_candidate_count": len(candidates),
+        "candidate_group_count": len(candidate_groups),
         "mainline_gat_kept_for_5_10": True,
         "mainline_gat_kept_for_20_context_replay": True,
         "candidate_policy": {
             "gat_role": "embedding_and_trajectory_impact_expression",
             "knn_ood_role": "safety_shell",
+            "worker_method": worker_method,
+            "worker_batch_size": int(worker_batch_size),
             "safe_negative_action": "HIGH_PRIORITY",
             "unsafe_negative_action": "DELAY_QUEUE",
             "negative_discard_allowed": False,
             "certificate_effect": False,
+            "fixed_worker_scope": (
+                "same-context target materialization only; no Pulse search, harvest, "
+                "archive, adaptive sharding, bound pruning, or certificate effect"
+                if worker_method == WORKER_METHOD_TARGET_MATERIALIZATION_FIXED
+                else "target-priority Pulse search; experimental only"
+            ),
             "worker_stage_policy": "match_capture_pricing_kind: heuristic_before_heuristic_exact_before_exact",
             "context_miss_policy": "capture_actual_reached_contexts_for_next_iteration",
         },
@@ -550,7 +806,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
     lines = [
         "# GAT Target-Priority Worker A/B Runbook",
         "",
-        "日期：2026-06-14",
+        "日期：2026-06-15",
         "",
         "## 目的",
         "",
@@ -564,6 +820,10 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "```text",
         "gat_target_priority_worker_ab_runbook = current",
         f"status = {summary['status']}",
+        f"worker_method = {summary['worker_method']}",
+        f"worker_batch_size = {summary['worker_batch_size']}",
+        f"input_candidate_count = {summary['input_candidate_count']}",
+        f"candidate_group_count = {summary['candidate_group_count']}",
         f"production_ready = {str(summary['production_ready']).lower()}",
         f"default_enabled = {str(summary['default_enabled']).lower()}",
         f"certificate_ready = {str(summary['certificate_ready']).lower()}",
@@ -606,11 +866,13 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
             "## 边界",
             "",
             "- 5/10 命令不关闭主线 GAT/learning，也不启用新 worker；",
-            "- 20 baseline/worker 命令也不关闭主线 GAT/learning，避免候选捕获上下文无法复现；",
-            "- 20 baseline/worker 命令开启 counterfactual replay capture；如果旧 target context 没到，仍保留实际到达的 context 供下一轮候选抽取；",
-            "- 20 worker 命令是显式 opt-in，只验证 target-priority ROI；",
-            "- 20 worker 候选必须带完整 context / dual / cuts / branch / pool hash；",
-            "- 所有命令都不启用 sharded Pulse certificate 或 official lower-bound effect；",
+        "- 20 baseline/worker 命令也不关闭主线 GAT/learning，避免候选捕获上下文无法复现；",
+        "- 20 baseline/worker 命令开启 counterfactual replay capture；如果旧 target context 没到，仍保留实际到达的 context 供下一轮候选抽取；",
+        "- 20 worker 命令是显式 opt-in，默认只做 same-context target materialization，不运行 Pulse 搜索 / harvest / archive / bound pruning；",
+        "- 固定 worker 的 current-probe 开关只作为 expected context 触发器；target materialization 会在任何 Pulse 搜索前返回结果；",
+        "- `worker_batch_size > 1` 时，只会合并同一 instance + expected context 的候选，并通过 `target_materialization_journeys` 批量物化；",
+        "- 20 worker 候选必须带完整 context / dual / cuts / branch / pool hash；",
+        "- 所有命令都不启用 sharded Pulse certificate 或 official lower-bound effect；",
             "- 含 `->` 的 arc-option 配置通过 `shlex.join` 自动引用，不能手工去掉引号；",
             "- 该 runbook 不是生产开关，跑完后仍需看 5/10 no-regression 和 20-task ROI。",
         ]
@@ -627,6 +889,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--small-time-limit", type=float, default=60.0)
     parser.add_argument("--twenty-time-limit", type=float, default=85.0)
     parser.add_argument("--max-workers", type=int, default=1)
+    parser.add_argument("--worker-batch-size", type=int, default=1)
+    parser.add_argument(
+        "--worker-method",
+        choices=WORKER_METHODS,
+        default=WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
+        help=(
+            "target_materialization_fixed keeps GAT A/B deterministic; pulse_search "
+            "keeps the older target-priority Pulse search path for explicit experiments."
+        ),
+    )
     args = parser.parse_args(argv)
     summary = build_runbook(
         output_dir=args.output_dir,
@@ -636,6 +908,8 @@ def main(argv: list[str] | None = None) -> int:
         small_time_limit=float(args.small_time_limit),
         twenty_time_limit=float(args.twenty_time_limit),
         max_workers=int(args.max_workers),
+        worker_method=str(args.worker_method),
+        worker_batch_size=int(args.worker_batch_size),
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if summary["all_checks_pass"] else 1

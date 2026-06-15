@@ -9,7 +9,12 @@ from types import SimpleNamespace
 try:
     import torch
 
-    from BPC_future.scripts.audit_gat_worker_roi_knn_ood import audit_worker_roi_knn_ood
+    from BPC_future.scripts.audit_gat_worker_roi_knn_ood import (
+        _build_guard_model,
+        _guard_for_record,
+        _record_group_key,
+        audit_worker_roi_knn_ood,
+    )
     from BPC_future.scripts.build_gat_worker_roi_graph_dataset import build_dataset
     from BPC_future.scripts.train_gat_worker_roi import train_worker_roi
     from BPC_future.tests.test_gat_worker_roi_graph_dataset import _capture_event, _roi_row, _write_jsonl
@@ -122,6 +127,7 @@ class GATWorkerROIKNNOODTests(unittest.TestCase):
                 min_validation_high_priority=0,
                 min_add_recall=0.0,
                 max_false_high_priority_rate=1.0,
+                max_validation_false_safe_rate=1.0,
                 decision_scope="all",
             )
 
@@ -135,6 +141,25 @@ class GATWorkerROIKNNOODTests(unittest.TestCase):
             self.assertFalse(summary["gate_can_permanently_discard_negative_columns"])
             self.assertTrue(summary["negative_columns_must_remain_eventually_reachable"])
             self.assertEqual(summary["target_label"], "paired_worker_ab_trajectory_roi")
+            self.assertIn("validation_safety_shell_metrics", summary)
+            self.assertIn("decision_scope_safety_shell_metrics", summary)
+            self.assertIn("validation_false_safe_rates", summary)
+            self.assertIn("add_f0p5", summary["validation_metrics"])
+            self.assertIn("false_positive_context_count", summary["validation_metrics"])
+            for metrics in (
+                summary["validation_safety_shell_metrics"],
+                summary["decision_scope_safety_shell_metrics"],
+            ):
+                self.assertIn("safe_precision", metrics)
+                self.assertIn("false_safe_rate_ood", metrics)
+                self.assertIn("false_safe_rate_knn_unsafe", metrics)
+                self.assertIn("false_safe_rate_label_unsafe", metrics)
+                self.assertIn("false_safe_rate_union", metrics)
+                self.assertIn("coverage", metrics)
+                self.assertIn("delay_rate", metrics)
+                self.assertIn("accepted_batch_count", metrics)
+                self.assertIn("accepted_batch_roi", metrics)
+                self.assertIn("harmful_batch_recall", metrics)
             self.assertTrue((tmp / "audit" / "decision_records.jsonl").exists())
             decision_records = [
                 json.loads(line)
@@ -142,6 +167,9 @@ class GATWorkerROIKNNOODTests(unittest.TestCase):
                 if line.strip()
             ]
             self.assertTrue(decision_records)
+            self.assertIn("is_ood", decision_records[0])
+            self.assertIn("is_knn_unsafe", decision_records[0])
+            self.assertIn("is_label_unsafe", decision_records[0])
             self.assertIn("target_sequence", decision_records[0])
             self.assertIn("target_arc_option_sequence", decision_records[0])
             self.assertIn("expected_context_hash", decision_records[0])
@@ -208,6 +236,55 @@ class GATWorkerROIKNNOODTests(unittest.TestCase):
                     report=tmp / "audit.md",
                     device="cpu",
                 )
+
+    def test_worker_roi_grouped_guard_uses_sparse_group_fallback(self) -> None:
+        def record(source_file: str, family: str, label: int, score: float, embedding: list[float]) -> dict:
+            return {
+                "name": Path(source_file).stem,
+                "instance": Path(source_file).stem,
+                "source_file": source_file,
+                "instance_family": family,
+                "label_worker_roi_positive": label,
+                "score": score,
+                "embedding": embedding,
+            }
+
+        good_group_pos = record(
+            "BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/a_tasks020_logical_graph.json",
+            "random-wave",
+            1,
+            0.80,
+            [0.0, 0.0],
+        )
+        good_group_neg = record(
+            "BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/b_tasks020_logical_graph.json",
+            "random-wave",
+            0,
+            0.20,
+            [1.0, 1.0],
+        )
+        sparse_group_pos = record(
+            "BPC_future/logical_graph/tasks_050/sector-wave/apollo15_20km/c_tasks050_logical_graph.json",
+            "sector-wave",
+            1,
+            0.90,
+            [2.0, 2.0],
+        )
+        model = _build_guard_model(
+            train_records=[good_group_pos, good_group_neg, sparse_group_pos],
+            threshold_grouping="scale_family",
+            safe_radius_quantile=1.0,
+            safe_radius_multiplier=10.0,
+            fallback_threshold=0.5,
+            threshold_selection="zero_fp",
+            knn_k=1,
+        )
+
+        self.assertEqual(_record_group_key(good_group_pos, "scale_family"), "020|random-wave")
+        self.assertIn("020|random-wave", model["groups"])
+        self.assertIn("050|sector-wave", model["skipped_groups"])
+        self.assertIs(_guard_for_record(model, good_group_pos), model["groups"]["020|random-wave"])
+        self.assertIs(_guard_for_record(model, sparse_group_pos), model["global"])
 
 
 if __name__ == "__main__":

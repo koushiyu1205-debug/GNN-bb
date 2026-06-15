@@ -18090,6 +18090,45 @@ def _journey_sharded_pulse_target_materialization_traces_from_config(
     return tuple(traces)
 
 
+def _journey_sharded_pulse_target_materialization_journey_groups_from_config(
+    data: FutureData,
+    config: dict[str, Any],
+) -> tuple[tuple[PulseSortieTrace, ...], ...]:
+    value = config.get(
+        "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys",
+        "",
+    )
+    if value is None or value == "":
+        traces = _journey_sharded_pulse_target_materialization_traces_from_config(
+            data,
+            config,
+        )
+        return (traces,) if traces else tuple()
+    payload = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(payload, list):
+        raise ValueError("target materialization journeys must be a list")
+    groups: list[tuple[PulseSortieTrace, ...]] = []
+    for item in payload:
+        if isinstance(item, dict) and "traces" in item:
+            trace_payload = item.get("traces")
+        else:
+            trace_payload = item
+        if not isinstance(trace_payload, list):
+            raise ValueError("target materialization journey entries must be trace lists")
+        local_config = dict(config)
+        local_config[
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces"
+        ] = trace_payload
+        traces = _journey_sharded_pulse_target_materialization_traces_from_config(
+            data,
+            local_config,
+        )
+        if not traces:
+            raise ValueError("target materialization journey entries must not be empty")
+        groups.append(traces)
+    return tuple(groups)
+
+
 def _journey_sharded_pulse_target_materialization_result(
     data: FutureData,
     config: dict[str, Any],
@@ -18111,7 +18150,7 @@ def _journey_sharded_pulse_target_materialization_result(
         "journey_sharded_pulse_hidden_negative_worker_",
     )
     try:
-        traces = _journey_sharded_pulse_target_materialization_traces_from_config(
+        trace_groups = _journey_sharded_pulse_target_materialization_journey_groups_from_config(
             data,
             config,
         )
@@ -18134,9 +18173,14 @@ def _journey_sharded_pulse_target_materialization_result(
             pulse_target_sequence=target_sequence,
             pulse_target_sequence_blocked_reason="trace_error",
         )
-    if traces:
-        target_sequence = tuple(task for trace in traces for task in trace.sequence)
-    if not traces:
+    if trace_groups:
+        target_sequence = tuple(
+            task
+            for traces in trace_groups
+            for trace in traces
+            for task in trace.sequence
+        )
+    if not trace_groups:
         return JourneyPricingResult(
             [],
             False,
@@ -18155,71 +18199,94 @@ def _journey_sharded_pulse_target_materialization_result(
             pulse_target_sequence=target_sequence,
             pulse_target_sequence_blocked_reason="missing_traces",
         )
-    candidate = materialize_pulse_leaf_candidate(
-        data,
-        traces,
-        duals,
-        cuts=cuts,
-        time_bucket_size=float(base_pricing_config.time_bucket_size),
-        eps=float(eps),
-    )
-    if candidate is None:
-        return JourneyPricingResult(
-            [],
-            False,
-            None,
-            len(traces),
-            len(traces),
-            0,
-            0,
-            "INCOMPLETE",
-            "target_materialization_infeasible",
-            pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
-            final_judge_engine="sharded_pulse",
-            final_judge_sharded_enabled=True,
-            final_judge_incomplete_reason="target_materialization_infeasible",
-            pulse_target_sequence_diagnostics_enabled=True,
-            pulse_target_sequence=target_sequence,
-            pulse_target_sequence_blocked_reason="materialization_infeasible",
+    candidates = []
+    infeasible_count = 0
+    nonnegative_count = 0
+    best_true_rc: float | None = None
+    materialized_trace_count = 0
+    materialized_trip_count = 0
+    for traces in trace_groups:
+        materialized_trace_count += len(traces)
+        candidate = materialize_pulse_leaf_candidate(
+            data,
+            traces,
+            duals,
+            cuts=cuts,
+            time_bucket_size=float(base_pricing_config.time_bucket_size),
+            eps=float(eps),
         )
-    journey_sample = tuple(tuple(int(task) for task in trip.tasks) for trip in candidate.trips)
-    if not bool(candidate.is_negative):
+        if candidate is None:
+            infeasible_count += 1
+            continue
+        materialized_trip_count += len(candidate.trips)
+        best_true_rc = (
+            float(candidate.true_reduced_cost)
+            if best_true_rc is None
+            else min(float(best_true_rc), float(candidate.true_reduced_cost))
+        )
+        if not bool(candidate.is_negative):
+            nonnegative_count += 1
+            continue
+        candidates.append(candidate)
+    if not candidates:
+        if infeasible_count and not nonnegative_count and best_true_rc is None:
+            reason = "target_materialization_infeasible"
+            incomplete_reason = "target_materialization_infeasible"
+            blocked_reason = "materialization_infeasible"
+        elif nonnegative_count:
+            reason = "target_materialization_nonnegative_true_rc"
+            incomplete_reason = "target_materialization_nonnegative_true_rc"
+            blocked_reason = "nonnegative_true_rc"
+        else:
+            reason = "target_materialization_infeasible"
+            incomplete_reason = "target_materialization_infeasible"
+            blocked_reason = "materialization_infeasible"
         return JourneyPricingResult(
             [],
             False,
-            float(candidate.true_reduced_cost),
-            len(traces),
-            len(traces),
-            len(candidate.trips),
+            best_true_rc,
+            materialized_trace_count,
+            materialized_trace_count,
+            0,
             0,
             "INCOMPLETE",
-            "target_materialization_nonnegative_true_rc",
+            reason,
             pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
             final_judge_engine="sharded_pulse",
             final_judge_sharded_enabled=True,
-            final_judge_incomplete_reason="target_materialization_nonnegative_true_rc",
-            pulse_best_true_rc=float(candidate.true_reduced_cost),
+            final_judge_incomplete_reason=incomplete_reason,
+            pulse_best_true_rc=best_true_rc,
             pulse_target_sequence_diagnostics_enabled=True,
             pulse_target_sequence=target_sequence,
             pulse_target_sequence_reached_prefix_len=len(target_sequence),
             pulse_target_sequence_completed=True,
-            pulse_target_sequence_materialized=True,
+            pulse_target_sequence_materialized=bool(materialized_trip_count),
             pulse_target_sequence_negative=False,
-            pulse_target_sequence_blocked_reason="nonnegative_true_rc",
+            pulse_target_sequence_blocked_reason=blocked_reason,
         )
-    signature_sample = "|".join(
-        f"{','.join(str(task) for task in trip.tasks)}@{trip.start_time}:"
-        f"{','.join(str(arc) for arc in trip.arc_option_ids)}"
-        for trip in candidate.trips
+    journey_samples = tuple(
+        tuple(tuple(int(task) for task in trip.tasks) for trip in candidate.trips)
+        for candidate in candidates
+    )
+    signature_samples = tuple(
+        "|".join(
+            f"{','.join(str(task) for task in trip.tasks)}@{trip.start_time}:"
+            f"{','.join(str(arc) for arc in trip.arc_option_ids)}"
+            for trip in candidate.trips
+        )
+        for candidate in candidates
+    )
+    task_set_samples = tuple(
+        tuple(sorted(candidate.journey.task_set)) for candidate in candidates
     )
     return JourneyPricingResult(
-        [candidate.journey],
+        [candidate.journey for candidate in candidates],
         False,
-        float(candidate.true_reduced_cost),
-        len(traces),
-        len(traces),
-        len(candidate.trips),
-        1,
+        best_true_rc,
+        materialized_trace_count,
+        materialized_trace_count,
+        materialized_trip_count,
+        len(candidates),
         "FOUND_NEGATIVE",
         "target_materialized_negative_true_rc",
         pricing_state=PRICING_STATE_FOUND_NEGATIVE,
@@ -18228,11 +18295,11 @@ def _journey_sharded_pulse_target_materialization_result(
         global_certificate_capable=False,
         final_judge_certificate_capable=False,
         pulse_negative_found=True,
-        pulse_negative_pool_size=1,
-        pulse_best_true_rc=float(candidate.true_reduced_cost),
-        pulse_returned_candidate_task_set_samples=(tuple(sorted(candidate.journey.task_set)),),
-        pulse_returned_candidate_sequence_samples=(journey_sample,),
-        pulse_returned_candidate_signature_samples=(signature_sample,),
+        pulse_negative_pool_size=len(candidates),
+        pulse_best_true_rc=best_true_rc,
+        pulse_returned_candidate_task_set_samples=task_set_samples,
+        pulse_returned_candidate_sequence_samples=journey_samples,
+        pulse_returned_candidate_signature_samples=signature_samples,
         pulse_target_sequence_diagnostics_enabled=True,
         pulse_target_sequence=target_sequence,
         pulse_target_sequence_reached_prefix_len=len(target_sequence),

@@ -14698,6 +14698,149 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(result.pulse_target_sequence_materialized)
         self.assertTrue(result.pulse_target_sequence_negative)
 
+    def test_sharded_pulse_target_materialization_worker_returns_batch_negatives(self):
+        data = load_future_data("very_small")
+        first_task = int(data.tasks[0])
+        second_task = int(data.tasks[1])
+        first_trace = PulseSortieTrace(
+            sequence=(first_task,),
+            start_time=0.0,
+            arc_options=(data.options(0, first_task)[0], data.options(first_task, 0)[0]),
+        )
+        second_trace = PulseSortieTrace(
+            sequence=(second_task,),
+            start_time=0.0,
+            arc_options=(data.options(0, second_task)[0], data.options(second_task, 0)[0]),
+        )
+        first_candidate = materialize_pulse_leaf_candidate(
+            data,
+            (first_trace,),
+            JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+            time_bucket_size=5.0,
+            eps=1.0e-6,
+        )
+        second_candidate = materialize_pulse_leaf_candidate(
+            data,
+            (second_trace,),
+            JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+            time_bucket_size=5.0,
+            eps=1.0e-6,
+        )
+        self.assertIsNotNone(first_candidate)
+        self.assertIsNotNone(second_candidate)
+        assert first_candidate is not None and second_candidate is not None
+        duals = JourneyDuals(
+            cover={
+                first_task: float(first_candidate.journey.cost) + 10.0,
+                second_task: float(second_candidate.journey.cost) + 10.0,
+            },
+            fleet_limit=0.0,
+            cuts={},
+        )
+
+        def trace_payload(trace):
+            return {
+                "sequence": list(trace.sequence),
+                "start_time": trace.start_time,
+                "arc_option_sequence": [
+                    str(option.option_id) for option in trace.arc_options or tuple()
+                ],
+            }
+
+        result = _journey_sharded_pulse_target_materialization_result(
+            data,
+            {
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys": json.dumps(
+                    [
+                        [trace_payload(first_trace)],
+                        {"traces": [trace_payload(second_trace)]},
+                    ],
+                    separators=(",", ":"),
+                ),
+            },
+            duals=duals,
+            cuts=tuple(),
+            base_pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+            eps=1.0e-6,
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(result.reason, "target_materialized_negative_true_rc")
+        self.assertEqual(len(result.journeys), 2)
+        self.assertEqual(result.pulse_negative_pool_size, 2)
+        self.assertEqual(result.selected_trips, 2)
+        self.assertFalse(result.global_certificate_capable)
+        self.assertFalse(result.final_judge_certificate_capable)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+        self.assertTrue(result.pulse_target_sequence_materialized)
+        self.assertTrue(result.pulse_target_sequence_negative)
+
+    def test_sharded_pulse_target_materialization_batch_filters_nonnegative(self):
+        data = load_future_data("very_small")
+        first_task = int(data.tasks[0])
+        second_task = int(data.tasks[1])
+        first_trace = PulseSortieTrace(
+            sequence=(first_task,),
+            start_time=0.0,
+            arc_options=(data.options(0, first_task)[0], data.options(first_task, 0)[0]),
+        )
+        second_trace = PulseSortieTrace(
+            sequence=(second_task,),
+            start_time=0.0,
+            arc_options=(data.options(0, second_task)[0], data.options(second_task, 0)[0]),
+        )
+        first_candidate = materialize_pulse_leaf_candidate(
+            data,
+            (first_trace,),
+            JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+            time_bucket_size=5.0,
+            eps=1.0e-6,
+        )
+        self.assertIsNotNone(first_candidate)
+        assert first_candidate is not None
+        duals = JourneyDuals(
+            cover={first_task: float(first_candidate.journey.cost) + 10.0},
+            fleet_limit=0.0,
+            cuts={},
+        )
+
+        def trace_payload(trace):
+            return {
+                "sequence": list(trace.sequence),
+                "start_time": trace.start_time,
+                "arc_option_sequence": [
+                    str(option.option_id) for option in trace.arc_options or tuple()
+                ],
+            }
+
+        result = _journey_sharded_pulse_target_materialization_result(
+            data,
+            {
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled": True,
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys": json.dumps(
+                    [
+                        [trace_payload(first_trace)],
+                        [trace_payload(second_trace)],
+                    ],
+                    separators=(",", ":"),
+                ),
+            },
+            duals=duals,
+            cuts=tuple(),
+            base_pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+            eps=1.0e-6,
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(len(result.journeys), 1)
+        self.assertEqual(result.pulse_negative_pool_size, 1)
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+
     def test_pulse_materialization_rejects_infeasible_leaves(self):
         with tempfile.TemporaryDirectory() as tmp:
             graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=40.0, inbound_energy=30.0)

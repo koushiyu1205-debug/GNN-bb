@@ -40,7 +40,7 @@ REQUIRED_CAPTURE_CONTEXT_FIELDS = [
     "pool_task_set_hash",
 ]
 
-SUPPORTED_CANDIDATE_RANKINGS = {"best_rc", "impact"}
+SUPPORTED_CANDIDATE_RANKINGS = {"best_rc", "impact", "active_replacement"}
 DEFAULT_SUPPORT_CHANGE_JACCARD_THRESHOLD = 0.6
 
 
@@ -330,12 +330,24 @@ def _impact_bucket_rank(bucket: str) -> int:
     }.get(str(bucket), 4)
 
 
-def _best_negative_journey(
+def _active_replacement_rank(impact: dict[str, Any]) -> int:
+    if bool(impact.get("target_task_set_in_active")):
+        return 0
+    if str(impact.get("target_impact_bucket")) == "replacement_like":
+        return 1
+    if bool(impact.get("target_support_changing_proxy")):
+        return 2
+    if bool(impact.get("target_task_set_new")):
+        return 3
+    return 4
+
+
+def _negative_journey_candidates(
     event: dict[str, Any],
     *,
     candidate_ranking: str = "best_rc",
     support_change_jaccard_threshold: float = DEFAULT_SUPPORT_CHANGE_JACCARD_THRESHOLD,
-) -> tuple[dict[str, Any], dict[str, Any]] | None:
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     negatives: list[tuple[tuple[float, ...], int, dict[str, Any], dict[str, Any]]] = []
     for idx, journey in enumerate(event.get("returned_journeys") or []):
         if not isinstance(journey, dict):
@@ -361,13 +373,33 @@ def _best_negative_journey(
                 -float(len(impact["target_task_set"])),
                 float(true_rc),
             )
+        elif candidate_ranking == "active_replacement":
+            sort_key = (
+                float(_active_replacement_rank(impact)),
+                -float(len(impact["target_task_set"])),
+                float(true_rc),
+            )
         else:
             sort_key = (float(true_rc),)
         negatives.append((sort_key, idx, journey, impact))
     if not negatives:
-        return None
+        return []
     negatives.sort(key=lambda item: (item[0], item[1]))
-    return negatives[0][2], negatives[0][3]
+    return [(item[2], item[3]) for item in negatives]
+
+
+def _best_negative_journey(
+    event: dict[str, Any],
+    *,
+    candidate_ranking: str = "best_rc",
+    support_change_jaccard_threshold: float = DEFAULT_SUPPORT_CHANGE_JACCARD_THRESHOLD,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    candidates = _negative_journey_candidates(
+        event,
+        candidate_ranking=candidate_ranking,
+        support_change_jaccard_threshold=support_change_jaccard_threshold,
+    )
+    return candidates[0] if candidates else None
 
 
 def _missing_capture_context_fields(event: dict[str, Any]) -> list[str]:
@@ -400,6 +432,7 @@ def extract_candidates(
     include_regions: Iterable[str] | None = None,
     include_ordinals: Iterable[int] | None = None,
     include_task_counts: Iterable[int] | None = None,
+    max_targets_per_context: int = 1,
 ) -> dict[str, Any]:
     if candidate_ranking not in SUPPORTED_CANDIDATE_RANKINGS:
         raise ValueError(
@@ -463,18 +496,14 @@ def extract_candidates(
         if missing_context:
             skipped["missing_capture_context_fields"] += 1
             continue
-        selected = _best_negative_journey(
+        selected_items = _negative_journey_candidates(
             event,
             candidate_ranking=candidate_ranking,
             support_change_jaccard_threshold=float(support_change_jaccard_threshold),
         )
-        if selected is None:
+        if not selected_items:
             skipped["no_negative_journey_with_materialized_signature"] += 1
             continue
-        journey, impact_features = selected
-        sequence, arcs = _first_sortie_target(journey)
-        traces = _journey_sortie_traces(journey)
-        flattened_sequence = _flatten_trace_sequence(traces)
         instance_path = str(event.get("instance_path") or decision.get("instance_path") or "")
         if not instance_path or not Path(instance_path).exists():
             skipped["missing_instance_path"] += 1
@@ -495,70 +524,84 @@ def extract_candidates(
         if ordinal_filter and instance_metadata["instance_ordinal"] not in ordinal_filter:
             skipped["ordinal_not_selected"] += 1
             continue
-        key = (
-            instance_path,
-            context_hash,
-            flattened_sequence,
-            tuple(
-                str(arc)
-                for trace in traces
-                for arc in (trace.get("arc_option_sequence") or [])
-            ),
-        )
-        if key in seen_keys:
-            skipped["duplicate_candidate"] += 1
-            continue
-        if (context_hash, flattened_sequence) in existing_roi_targets:
-            skipped["existing_roi_target"] += 1
-            continue
-        seen_keys.add(key)
-        true_rc = _true_reduced_cost(journey)
-        instance_name = str(event.get("instance") or decision.get("instance") or Path(instance_path).stem)
-        name = _safe_name(
-            f"{instance_name}_{context_hash}_{'_'.join(str(task) for task in flattened_sequence)}"
-        )
-        decision_name = "HIGH_PRIORITY" if is_high_priority else "DELAY_QUEUE"
-        candidates.append(
-            {
-                "schema_version": "gat_same_run_target_priority_candidate_v1",
-                "name": name,
-                "instance": instance_path,
-                **instance_metadata,
-                "context_hash": context_hash,
-                "expected_context_hash": context_hash,
-                "true_dual_hash": str(event.get("true_dual_hash") or ""),
-                "cut_hash": str(event.get("cut_hash") or ""),
-                "branch_hash": str(event.get("branch_hash") or ""),
-                "forbidden_signature_hash": str(event.get("forbidden_signature_hash") or ""),
-                "active_hash_before": str(event.get("active_hash_before") or ""),
-                "pool_signature_hash": str(event.get("pool_signature_hash") or ""),
-                "pool_task_set_hash": str(event.get("pool_task_set_hash") or ""),
-                "target_sequence": list(flattened_sequence),
-                "target_priority_sequence": list(sequence),
-                "target_arc_option_sequence": list(arcs),
-                "target_sortie_traces": list(traces),
-                "best_true_reduced_cost": true_rc,
-                "decision_name": decision_name,
-                "decision_probability": float(decision.get("probability") or 0.0),
-                "decision_reason": str(decision.get("decision_reason") or ""),
-                "source_file": str(source_file),
-                "sample_path": str(decision.get("sample_path") or ""),
-                "source_row_index": int(decision.get("row_index") or -1),
-                "decision_record_index": int(index),
-                "capture_cg_iter": int(event.get("cg_iter") or -1),
-                "capture_pricing_kind": str(event.get("pricing_kind") or ""),
-                "capture_returned_journey_count": int(event.get("returned_journey_count") or 0),
-                "candidate_ranking": str(candidate_ranking),
-                "support_change_jaccard_threshold": float(support_change_jaccard_threshold),
-                **impact_features,
-                "gate_role": "same_run_gat_embedding_knn_ood_safety_shell",
-                "worker_role": "explicit_opt_in_same_context_target_intervention_probe",
-                "training_label_allowed_before_worker_reachability": False,
-                "requires_worker_target_causal_match": True,
-                "certificate_effect": False,
-                "official_bound_effect": False,
-            }
-        )
+        accepted_in_context = 0
+        for context_rank, (journey, impact_features) in enumerate(selected_items, start=1):
+            if len(candidates) >= int(max_candidates):
+                break
+            if accepted_in_context >= max(1, int(max_targets_per_context)):
+                break
+            sequence, arcs = _first_sortie_target(journey)
+            traces = _journey_sortie_traces(journey)
+            flattened_sequence = _flatten_trace_sequence(traces)
+            key = (
+                instance_path,
+                context_hash,
+                flattened_sequence,
+                tuple(
+                    str(arc)
+                    for trace in traces
+                    for arc in (trace.get("arc_option_sequence") or [])
+                ),
+            )
+            if key in seen_keys:
+                skipped["duplicate_candidate"] += 1
+                continue
+            if (context_hash, flattened_sequence) in existing_roi_targets:
+                skipped["existing_roi_target"] += 1
+                continue
+            seen_keys.add(key)
+            true_rc = _true_reduced_cost(journey)
+            instance_name = str(
+                event.get("instance") or decision.get("instance") or Path(instance_path).stem
+            )
+            name = _safe_name(
+                f"{instance_name}_{context_hash}_rank{context_rank}_"
+                f"{'_'.join(str(task) for task in flattened_sequence)}"
+            )
+            decision_name = "HIGH_PRIORITY" if is_high_priority else "DELAY_QUEUE"
+            candidates.append(
+                {
+                    "schema_version": "gat_same_run_target_priority_candidate_v1",
+                    "name": name,
+                    "instance": instance_path,
+                    **instance_metadata,
+                    "context_hash": context_hash,
+                    "expected_context_hash": context_hash,
+                    "true_dual_hash": str(event.get("true_dual_hash") or ""),
+                    "cut_hash": str(event.get("cut_hash") or ""),
+                    "branch_hash": str(event.get("branch_hash") or ""),
+                    "forbidden_signature_hash": str(event.get("forbidden_signature_hash") or ""),
+                    "active_hash_before": str(event.get("active_hash_before") or ""),
+                    "pool_signature_hash": str(event.get("pool_signature_hash") or ""),
+                    "pool_task_set_hash": str(event.get("pool_task_set_hash") or ""),
+                    "target_sequence": list(flattened_sequence),
+                    "target_priority_sequence": list(sequence),
+                    "target_arc_option_sequence": list(arcs),
+                    "target_sortie_traces": list(traces),
+                    "best_true_reduced_cost": true_rc,
+                    "decision_name": decision_name,
+                    "decision_probability": float(decision.get("probability") or 0.0),
+                    "decision_reason": str(decision.get("decision_reason") or ""),
+                    "source_file": str(source_file),
+                    "sample_path": str(decision.get("sample_path") or ""),
+                    "source_row_index": int(decision.get("row_index") or -1),
+                    "decision_record_index": int(index),
+                    "context_target_rank": int(context_rank),
+                    "capture_cg_iter": int(event.get("cg_iter") or -1),
+                    "capture_pricing_kind": str(event.get("pricing_kind") or ""),
+                    "capture_returned_journey_count": int(event.get("returned_journey_count") or 0),
+                    "candidate_ranking": str(candidate_ranking),
+                    "support_change_jaccard_threshold": float(support_change_jaccard_threshold),
+                    **impact_features,
+                    "gate_role": "same_run_gat_embedding_knn_ood_safety_shell",
+                    "worker_role": "explicit_opt_in_same_context_target_intervention_probe",
+                    "training_label_allowed_before_worker_reachability": False,
+                    "requires_worker_target_causal_match": True,
+                    "certificate_effect": False,
+                    "official_bound_effect": False,
+                }
+            )
+            accepted_in_context += 1
 
     all_candidates_high_priority = all(
         item["decision_name"] == "HIGH_PRIORITY" for item in candidates
@@ -607,6 +650,7 @@ def extract_candidates(
         "delay_queue_only": bool(delay_queue_only),
         "candidate_ranking": str(candidate_ranking),
         "support_change_jaccard_threshold": float(support_change_jaccard_threshold),
+        "max_targets_per_context": max(1, int(max_targets_per_context)),
         "exclude_existing_roi_jsonl": ""
         if exclude_existing_roi_jsonl is None
         else str(exclude_existing_roi_jsonl),
@@ -723,6 +767,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
                 "include_delay_queue": summary["include_delay_queue"],
                 "delay_queue_only": summary["delay_queue_only"],
                 "candidate_ranking": summary["candidate_ranking"],
+                "max_targets_per_context": summary["max_targets_per_context"],
                 "exclude_existing_roi_jsonl": summary["exclude_existing_roi_jsonl"],
                 "include_families": summary["include_families"],
                 "include_regions": summary["include_regions"],
@@ -769,6 +814,7 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=DEFAULT_SUPPORT_CHANGE_JACCARD_THRESHOLD,
     )
+    parser.add_argument("--max-targets-per-context", type=int, default=1)
     parser.add_argument("--exclude-existing-roi-jsonl", type=Path, default=None)
     parser.add_argument(
         "--include-families",
@@ -808,6 +854,7 @@ def main(argv: list[str] | None = None) -> int:
         delay_queue_only=bool(args.delay_queue_only),
         candidate_ranking=str(args.candidate_ranking),
         support_change_jaccard_threshold=float(args.support_change_jaccard_threshold),
+        max_targets_per_context=max(1, int(args.max_targets_per_context)),
         exclude_existing_roi_jsonl=args.exclude_existing_roi_jsonl,
         include_families=args.include_families,
         include_regions=args.include_regions,

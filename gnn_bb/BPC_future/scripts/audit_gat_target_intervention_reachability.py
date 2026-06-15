@@ -116,9 +116,12 @@ def _worker_events(worker_csv: Any) -> list[dict[str, Any]]:
 
 
 def _command_for_candidate(commands: Iterable[dict[str, Any]], candidate_name: str) -> str:
-    command_type = f"task020_{candidate_name}_target_priority_worker"
+    command_types = {
+        f"task020_{candidate_name}_target_priority_worker",
+        f"task020_{candidate_name}_worker_roi_gat_priority",
+    }
     for item in commands:
-        if item.get("command_type") == command_type:
+        if item.get("command_type") in command_types:
             return str(item.get("command") or "")
     return ""
 
