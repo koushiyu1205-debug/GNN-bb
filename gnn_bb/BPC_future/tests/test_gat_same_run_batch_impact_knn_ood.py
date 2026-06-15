@@ -11,6 +11,7 @@ try:
         _build_guard_model,
         _guard_for_record,
         _record_group_key,
+        _safety_shell_metrics,
         audit_same_run_gat_knn_ood,
     )
     from BPC_future.scripts.build_gat_same_run_batch_impact_graph_dataset import (
@@ -31,6 +32,48 @@ except Exception:
 
 @unittest.skipUnless(HAS_LEARNING_STACK, "learning stack is not installed")
 class GATSameRunBatchImpactKNNOODTests(unittest.TestCase):
+    def test_safety_shell_metrics_are_computed_separately_from_classifier_f1(self) -> None:
+        records = [
+            {
+                "decision": 1,
+                "label_high_priority": 1,
+                "is_ood": False,
+                "is_knn_unsafe": False,
+            },
+            {
+                "decision": 1,
+                "label_high_priority": 0,
+                "is_ood": True,
+                "is_knn_unsafe": False,
+            },
+            {
+                "decision": 0,
+                "label_high_priority": 0,
+                "is_ood": False,
+                "is_knn_unsafe": True,
+            },
+            {
+                "decision": 0,
+                "label_high_priority": 1,
+                "is_ood": True,
+                "is_knn_unsafe": True,
+            },
+        ]
+
+        metrics = _safety_shell_metrics(records)
+
+        self.assertEqual(metrics["accepted_batch_count"], 2)
+        self.assertEqual(metrics["accepted_batch_roi_positive_count"], 1)
+        self.assertEqual(metrics["safe_precision"], 0.5)
+        self.assertEqual(metrics["accepted_batch_roi"], 0.5)
+        self.assertEqual(metrics["coverage_non_ood_count"], 2)
+        self.assertEqual(metrics["coverage"], 0.5)
+        self.assertEqual(metrics["delay_rate"], 0.5)
+        self.assertEqual(metrics["false_safe_rate_ood"], 0.5)
+        self.assertEqual(metrics["false_safe_rate_knn_unsafe"], 0.0)
+        self.assertEqual(metrics["false_safe_rate_label_unsafe"], 0.5)
+        self.assertEqual(metrics["false_safe_rate_union"], 1.0 / 3.0)
+
     def test_knn_ood_audit_keeps_delay_queue_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
