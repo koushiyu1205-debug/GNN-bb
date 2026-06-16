@@ -80,6 +80,7 @@ def _command(
     before_heuristic: bool,
     before_exact: bool = False,
     learning_enabled: bool = True,
+    task_prefix: str = "task020",
 ) -> dict[str, str]:
     tokens = [
         "python",
@@ -96,7 +97,7 @@ def _command(
     if not learning_enabled:
         tokens.append("journey_learning_enabled=False")
     return {
-        "command_type": f"task020_{name}_target_priority_worker",
+        "command_type": f"{task_prefix}_{name}_target_priority_worker",
         "command": " ".join(tokens),
     }
 
@@ -153,6 +154,45 @@ class GATTargetInterventionReachabilityTests(unittest.TestCase):
             self.assertFalse(summary["production_ready"])
             self.assertFalse(summary["certificate_ready"])
             self.assertFalse(summary["official_bound_effect"])
+
+    def test_task50_command_prefix_still_matches_candidate_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            csv = _worker_csv(tmp, "reachable_task50")
+            _write_worker_log(
+                csv,
+                [_worker_event(context_hash="ctx-hit", target_sequence=[35, 7, 13])],
+            )
+            summary_file = _summary_file(
+                tmp,
+                candidates=[
+                    _candidate(
+                        name="reachable_task50",
+                        expected_context="ctx-hit",
+                        worker_csv=csv,
+                        target_sequence=[35, 7, 13],
+                    )
+                ],
+                commands=[
+                    _command(
+                        name="reachable_task50",
+                        before_heuristic=False,
+                        before_exact=True,
+                        task_prefix="task050",
+                    )
+                ],
+            )
+
+            summary = audit_reachability(
+                runbook_summaries=[summary_file],
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+            )
+
+            record = summary["records"][0]
+            self.assertEqual(record["reachability_class"], "target_intervention_reachable")
+            self.assertTrue(record["training_label_allowed"])
+            self.assertEqual(summary["reachable_target_intervention_count"], 1)
 
     def test_worker_log_without_worker_event_is_not_training_label(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

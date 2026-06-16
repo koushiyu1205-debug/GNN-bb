@@ -1,0 +1,318 @@
+# GAT Target-Priority Worker A/B Audit 报告
+
+日期：2026-06-14
+
+## 目的
+
+聚合 GAT target-priority worker A/B 的 CSV 结果，判断候选是否有真实 ROI。
+该脚本只读 CSV，不运行 BPC / pricing / RMP，不启用 worker，不产生 certificate。
+
+## 机器字段
+
+```text
+gat_target_priority_worker_ab_audit = current
+status = audited
+record_count = 4
+roi_class_counts = {'negative_retry_roi': 3, 'no_observed_roi': 1}
+production_ready = false
+default_enabled = false
+certificate_ready = false
+official_bound_effect = false
+all_checks_pass = false
+```
+
+## Records
+
+```json
+[
+  {
+    "baseline_columns": 236,
+    "baseline_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r00_tasks16_20_batch8_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 5,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 14,
+    "baseline_primal": 632.987632,
+    "baseline_rmp_solves": 9,
+    "baseline_solving_time": 52.734607,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": -6,
+    "exact_pricing_calls_delta": 0,
+    "expected_context_hash": "ac056820151e9ad7",
+    "generated_sequences_delta": -65,
+    "instance": "BPC_future/logical_graph/tasks_020/sector-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_sector-wave_randomtw_tasks020_01_seed61002_logical_graph.json",
+    "name": "tranq20_ctxac056820_cg07_r00_tasks16_20_batch8",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 0,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 0,
+    "roi_class": "no_observed_roi",
+    "solving_time_delta": -0.0676339999999982,
+    "target_arc_option_sequence": [
+      "0->20:low_time:0",
+      "20->16:low_time:0",
+      "16->0:low_time:0"
+    ],
+    "target_sequence": [
+      20,
+      16,
+      17,
+      16,
+      5,
+      1,
+      15,
+      17,
+      7,
+      3,
+      15,
+      17,
+      11,
+      3,
+      6,
+      7,
+      3,
+      8,
+      7,
+      3,
+      17,
+      7,
+      3
+    ],
+    "worker_columns": 230,
+    "worker_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r00_tasks16_20_batch8_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 5,
+    "worker_pricing_calls": 14,
+    "worker_primal": 632.987632,
+    "worker_rmp_solves": 9,
+    "worker_solving_time": 52.666973,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 236,
+    "baseline_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r08_tasks3_6_11_batch8_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 5,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 14,
+    "baseline_primal": 632.987632,
+    "baseline_rmp_solves": 9,
+    "baseline_solving_time": 52.650045,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": 6,
+    "exact_pricing_calls_delta": 1,
+    "expected_context_hash": "ac056820151e9ad7",
+    "generated_sequences_delta": 2255,
+    "instance": "BPC_future/logical_graph/tasks_020/sector-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_sector-wave_randomtw_tasks020_01_seed61002_logical_graph.json",
+    "name": "tranq20_ctxac056820_cg07_r08_tasks3_6_11_batch8",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 2,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 1,
+    "roi_class": "negative_retry_roi",
+    "solving_time_delta": 0.2855520000000027,
+    "target_arc_option_sequence": [
+      "0->6:low_risk:2",
+      "6->0:low_risk:2",
+      "0->11:low_time:0",
+      "11->3:low_time:0",
+      "3->0:low_risk:2"
+    ],
+    "target_sequence": [
+      6,
+      11,
+      3,
+      8,
+      11,
+      3,
+      17,
+      11,
+      3,
+      15,
+      17,
+      9,
+      15,
+      17,
+      4,
+      15,
+      5,
+      16,
+      7,
+      3,
+      17,
+      14,
+      7,
+      3,
+      2,
+      5,
+      16
+    ],
+    "worker_columns": 242,
+    "worker_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r08_tasks3_6_11_batch8_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 6,
+    "worker_pricing_calls": 16,
+    "worker_primal": 632.987632,
+    "worker_rmp_solves": 10,
+    "worker_solving_time": 52.935597,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 236,
+    "baseline_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r16_tasks1_15_batch8_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 5,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 14,
+    "baseline_primal": 632.987632,
+    "baseline_rmp_solves": 9,
+    "baseline_solving_time": 52.798314,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": -1,
+    "exact_pricing_calls_delta": 1,
+    "expected_context_hash": "ac056820151e9ad7",
+    "generated_sequences_delta": 4472,
+    "instance": "BPC_future/logical_graph/tasks_020/sector-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_sector-wave_randomtw_tasks020_01_seed61002_logical_graph.json",
+    "name": "tranq20_ctxac056820_cg07_r16_tasks1_15_batch8",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 3,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 2,
+    "roi_class": "negative_retry_roi",
+    "solving_time_delta": 0.5183749999999989,
+    "target_arc_option_sequence": [
+      "0->15:low_energy:1",
+      "15->1:low_energy:1",
+      "1->0:low_risk:2"
+    ],
+    "target_sequence": [
+      15,
+      1,
+      20,
+      14,
+      7,
+      3,
+      15,
+      2,
+      16,
+      7,
+      3,
+      15,
+      2,
+      5,
+      12,
+      13,
+      15,
+      2,
+      5,
+      10,
+      12,
+      17,
+      10,
+      15,
+      17,
+      15,
+      17,
+      3
+    ],
+    "worker_columns": 235,
+    "worker_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r16_tasks1_15_batch8_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 6,
+    "worker_pricing_calls": 17,
+    "worker_primal": 632.987632,
+    "worker_rmp_solves": 11,
+    "worker_solving_time": 53.316689,
+    "worker_status": "TIME_LIMIT"
+  },
+  {
+    "baseline_columns": 236,
+    "baseline_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r24_tasks7_15_17_batch8_mainline_baseline/results.csv",
+    "baseline_csv_exists": true,
+    "baseline_dual_bound": null,
+    "baseline_exact_pricing_calls": 5,
+    "baseline_fallback_used": false,
+    "baseline_pricing_calls": 14,
+    "baseline_primal": 632.987632,
+    "baseline_rmp_solves": 9,
+    "baseline_solving_time": 52.747856,
+    "baseline_status": "TIME_LIMIT",
+    "certificate_effect": false,
+    "columns_delta": 24,
+    "exact_pricing_calls_delta": 1,
+    "expected_context_hash": "ac056820151e9ad7",
+    "generated_sequences_delta": 2251,
+    "instance": "BPC_future/logical_graph/tasks_020/sector-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_sector-wave_randomtw_tasks020_01_seed61002_logical_graph.json",
+    "name": "tranq20_ctxac056820_cg07_r24_tasks7_15_17_batch8",
+    "official_bound_effect": false,
+    "pricing_calls_delta": 2,
+    "primal_improvement": 0.0,
+    "rmp_solves_delta": 1,
+    "roi_class": "negative_retry_roi",
+    "solving_time_delta": 0.17359300000000388,
+    "target_arc_option_sequence": [
+      "0->15:low_risk:2",
+      "15->17:low_time:0",
+      "17->0:low_risk:2",
+      "0->7:low_risk:2",
+      "7->0:low_time:0"
+    ],
+    "target_sequence": [
+      15,
+      17,
+      7,
+      15,
+      17,
+      11,
+      15,
+      17,
+      19,
+      7,
+      3,
+      15,
+      2,
+      16,
+      10,
+      15,
+      5,
+      16,
+      10,
+      15,
+      20,
+      18,
+      16,
+      20,
+      14,
+      3,
+      11
+    ],
+    "worker_columns": 260,
+    "worker_csv": "BPC_future/results/gat_target_priority_worker_ab_v14_exact_safe_hits_batch8_tranq20_01_20260616/task020_tranq20_ctxac056820_cg07_r24_tasks7_15_17_batch8_target_priority_worker/results.csv",
+    "worker_csv_exists": true,
+    "worker_dual_bound": null,
+    "worker_exact_pricing_calls": 6,
+    "worker_pricing_calls": 16,
+    "worker_primal": 632.987632,
+    "worker_rmp_solves": 10,
+    "worker_solving_time": 52.921449,
+    "worker_status": "TIME_LIMIT"
+  }
+]
+```
+
+## 判断
+
+- `positive_primal_roi` 表示 worker primal 严格优于同实例 baseline；
+- `positive_retry_roi` / `positive_pricing_roi` 表示 primal 不变差且后续 pricing/retry 负担下降；
+- `no_observed_roi` 表示 worker 与 baseline 没有可观测改善；
+- 只要正负 ROI 同时存在，GAT HIGH_PRIORITY 就不能直接默认触发 worker；
+- 所有结果都不能参与 no-negative certificate 或 official lower bound。

@@ -125,11 +125,11 @@ class OptionEncoder(nn.Module):
         mean_pool = scatter_mean(phys, option_pair_id, dim=0, dim_size=num_pairs)
 
         # 关键防错：这里用 scatter_mean((x-mean)^2) 的 N 分母偏估计，
-        # 等价于 torch.std(unbiased=False)。随后立即 nan_to_num，保证
-        # 单 option pair 的 std_pool 为 0，不会产生 NaN 或梯度爆炸。
+        # 等价于 torch.std(unbiased=False)。safe sqrt 保持零方差 pair
+        # 的 forward 值为 0，同时避免 sqrt(0) 在 backward 中产生 NaN。
         centered = phys - mean_pool[option_pair_id]
         var_pool = scatter_mean(centered * centered, option_pair_id, dim=0, dim_size=num_pairs)
-        std_pool = torch.sqrt(torch.clamp(var_pool, min=0.0))
+        std_pool = _safe_sqrt_zero_forward(var_pool)
         std_pool = torch.nan_to_num(std_pool, nan=0.0, posinf=0.0, neginf=0.0)
 
         ones = torch.ones((option_feat.size(0), 1), dtype=option_feat.dtype, device=option_feat.device)
@@ -378,3 +378,9 @@ def dual_prediction_loss(
 def _assert_finite(tensor: Tensor, name: str) -> None:
     if not bool(torch.all(torch.isfinite(tensor))):
         raise ValueError(f"{name} contains NaN or Inf")
+
+
+def _safe_sqrt_zero_forward(var: Tensor, *, eps: float = 1.0e-8) -> Tensor:
+    """Return sqrt(var) with finite zero-variance backward behavior."""
+
+    return torch.sqrt(torch.clamp(var, min=0.0) + float(eps)) - float(eps) ** 0.5

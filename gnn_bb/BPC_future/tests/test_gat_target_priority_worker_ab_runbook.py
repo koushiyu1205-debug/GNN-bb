@@ -302,6 +302,8 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
                 worker,
             )
             split = shlex.split(worker)
+            self.assertIn("--instances", split)
+            self.assertNotIn("--instance", split)
             expected_token = (
                 "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_sequence="
                 "0->20:low_risk:2,20->17:low_risk:2,17->16:low_risk:2,16->0:low_risk:2"
@@ -335,6 +337,73 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
                 worker,
             )
             self.assertTrue(summary["checks"]["arc_option_values_are_shell_quoted"])
+
+    def test_candidate_scale_runbook_uses_task_count_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            logical_root = tmp / "logical_graph"
+            for scale in (5, 10):
+                for region in ("apollo15_20km", "tranquillitatis_balmer_like_20km"):
+                    _touch_instance(logical_root, scale=scale, region=region, ordinal=1, seed=scale)
+            candidate_instance = _touch_instance(
+                logical_root,
+                scale=50,
+                region="tranquillitatis_balmer_like_20km",
+                ordinal=4,
+                seed=91307,
+            )
+            candidates_file = tmp / "candidate50.json"
+            candidates_file.write_text(
+                json.dumps(
+                    {
+                        "name": "random50_high_roi",
+                        "instance": str(candidate_instance),
+                        "expected_context_hash": "a67f331bdb819d7d",
+                        **_context_fields("random50"),
+                        "capture_pricing_kind": "exact",
+                        "target_sequence": [50, 41],
+                        "target_arc_option_sequence": [
+                            "0->50:low_risk:2",
+                            "50->41:low_risk:2",
+                            "41->0:low_risk:2",
+                        ],
+                        "target_sortie_traces": [
+                            {
+                                "sequence": [50, 41],
+                                "start_time": 5.0,
+                                "arc_option_sequence": [
+                                    "0->50:low_risk:2",
+                                    "50->41:low_risk:2",
+                                    "41->0:low_risk:2",
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = build_runbook(
+                logical_graph_root=logical_root,
+                candidates_file=candidates_file,
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["candidate_runs"][0]["task_count"], 50)
+            self.assertTrue(summary["candidate_runs"][0]["scale_config_fallback_from_task20"])
+            self.assertTrue(summary["checks"]["candidate_commands_keep_capture_learning_policy"])
+            self.assertTrue(summary["checks"]["candidate_commands_capture_actual_contexts"])
+            commands = {item["command_type"]: item["command"] for item in summary["commands"]}
+            self.assertIn("task050_random50_high_roi_mainline_baseline", commands)
+            self.assertIn("task050_random50_high_roi_target_priority_worker", commands)
+            split = shlex.split(commands["task050_random50_high_roi_target_priority_worker"])
+            self.assertIn("--config", split)
+            self.assertIn("--instances", split)
+            self.assertNotIn("--instance", split)
+            self.assertIn("BPC_future/configs/moon_trek_20_smoke.yaml", split)
+            self.assertIn(str(candidate_instance), split)
 
     def test_missing_full_context_marks_runbook_not_ready(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -465,6 +534,73 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
             )
             self.assertTrue(summary["checks"]["batch_worker_commands_have_materialization_journeys"])
             self.assertTrue(summary["checks"]["fixed_worker_commands_have_materialization_payload"])
+
+    def test_worker_batch_size_chunks_all_same_context_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            logical_root = tmp / "logical_graph"
+            for scale in (5, 10):
+                for region in ("apollo15_20km", "tranquillitatis_balmer_like_20km"):
+                    _touch_instance(logical_root, scale=scale, region=region, ordinal=1, seed=scale)
+            candidate_instance = _touch_instance(
+                logical_root,
+                scale=20,
+                region="apollo15_20km",
+                ordinal=1,
+                seed=20,
+            )
+
+            def candidate(task: int) -> dict:
+                return {
+                    "name": f"task_{task}",
+                    "instance": str(candidate_instance),
+                    "expected_context_hash": "ctx-batch",
+                    **_context_fields("batch"),
+                    "capture_pricing_kind": "exact",
+                    "target_sequence": [task],
+                    "target_arc_option_sequence": [
+                        f"0->{task}:low_risk:2",
+                        f"{task}->0:low_risk:2",
+                    ],
+                    "target_sortie_traces": [
+                        {
+                            "sequence": [task],
+                            "start_time": 0.0,
+                            "arc_option_sequence": [
+                                f"0->{task}:low_risk:2",
+                                f"{task}->0:low_risk:2",
+                            ],
+                        }
+                    ],
+                }
+
+            candidates_file = tmp / "batch_candidates.json"
+            candidates_file.write_text(
+                json.dumps({"candidates": [candidate(task) for task in range(1, 6)]}),
+                encoding="utf-8",
+            )
+
+            summary = build_runbook(
+                logical_graph_root=logical_root,
+                candidates_file=candidates_file,
+                output_dir=tmp / "out",
+                report=tmp / "report.md",
+                worker_batch_size=2,
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["input_candidate_count"], 5)
+            self.assertEqual(summary["candidate_group_count"], 3)
+            self.assertEqual(
+                [run["candidate_batch_count"] for run in summary["candidate_runs"]],
+                [2, 2, 1],
+            )
+            selected_names = [
+                name
+                for run in summary["candidate_runs"]
+                for name in run.get("candidate_names", [])
+            ]
+            self.assertEqual(selected_names, [f"task_{task}" for task in range(1, 6)])
 
 
 if __name__ == "__main__":

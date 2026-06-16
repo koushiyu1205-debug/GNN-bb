@@ -1,0 +1,87 @@
+# GAT Batch Impact Threshold Frontier 报告
+
+日期：2026-06-16
+
+## 结论
+
+本报告展开 Stage 3 checkpoint 的 threshold frontier，用同一套 deployment gate
+检查 precision / ROI / safety / coverage。该流程只做离线审计，不运行 BPC、
+pricing、RMP 或 certificate。
+
+```text
+global_frontier_count = 13837
+family_local_frontier_count = 2578
+family_delay_fallback_frontier_count = 6174
+feasible_threshold_count = 0
+checkpoint_feasible_threshold_count = 0
+primary_blocker = confidence_lower_bound_sample_size_or_acceptance_count_blocker
+best_accepted_batch_count = 55
+best_family_delay_fallback_families = []
+best_safe_precision_ci_low = 0.934712856210572
+best_accepted_batch_roi_ci_low = 1.2047591767668218
+best_local_reject_reasons = ['family_holdout_accepted_roi_below_threshold']
+best_fallback_accepted_batch_count = 28
+best_fallback_safe_precision_ci_low = 0.8793527963418923
+best_fallback_accepted_batch_roi_ci_low = 2.4335289721190927
+best_fallback_delay_families = ['greedy-anchor', 'random-wave']
+best_fallback_reject_reasons = ['safe_precision_ci_low_below_threshold_or_not_measurable']
+production_ready = false
+selector_can_certificate = false
+```
+
+## Reject Reason Counts
+
+```json
+{
+  "checkpoint_reject_reason_counts": {
+    "accepted_batch_count_too_low": 645,
+    "accepted_batch_rate_too_low": 1301,
+    "accepted_batch_roi_below_baseline_margin": 645,
+    "accepted_batch_roi_ci_low_below_baseline_margin_or_not_measurable": 3282,
+    "expected_trajectory_utility_not_positive": 645,
+    "false_high_priority_on_delay_too_high": 2366,
+    "false_safe_rate_union_too_high": 2366,
+    "family_holdout_accepted_batch_missing": 2189,
+    "family_holdout_accepted_roi_below_threshold": 6174,
+    "family_holdout_accepted_roi_not_measurable": 645,
+    "family_holdout_precision_not_measurable": 645,
+    "high_priority_precision_below_threshold_or_no_predictions": 101,
+    "high_priority_precision_ci_low_below_threshold_or_not_measurable": 642,
+    "knn_ood_audit_missing": 22589,
+    "safe_precision_below_threshold_or_no_accepted_batches": 645,
+    "safe_precision_ci_low_below_threshold_or_not_measurable": 19844
+  },
+  "local_reject_reason_counts": {
+    "accepted_batch_count_too_low": 645,
+    "accepted_batch_rate_too_low": 1301,
+    "accepted_batch_roi_below_baseline_margin": 645,
+    "accepted_batch_roi_ci_low_below_baseline_margin_or_not_measurable": 3282,
+    "expected_trajectory_utility_not_positive": 645,
+    "false_high_priority_on_delay_too_high": 2366,
+    "false_safe_rate_union_too_high": 2366,
+    "family_holdout_accepted_batch_missing": 2189,
+    "family_holdout_accepted_roi_below_threshold": 6174,
+    "family_holdout_accepted_roi_not_measurable": 645,
+    "family_holdout_precision_not_measurable": 645,
+    "high_priority_precision_below_threshold_or_no_predictions": 101,
+    "high_priority_precision_ci_low_below_threshold_or_not_measurable": 642,
+    "safe_precision_below_threshold_or_no_accepted_batches": 645,
+    "safe_precision_ci_low_below_threshold_or_not_measurable": 19844
+  },
+  "min_all_success_samples_needed": {
+    "high_priority_all_success_count": 35,
+    "high_priority_precision_ci_low_target": 0.9,
+    "safe_all_success_count": 35,
+    "safe_precision_ci_low_target": 0.9
+  }
+}
+```
+
+## Exactness Boundary
+
+- `diagnostic_only=true`；
+- `runs_bpc_or_pricing=false`；
+- `selector_is_pricing_oracle=false`；
+- `selector_can_certificate=false`；
+- `gate_can_permanently_discard_negative_columns=false`；
+- final certificate 仍只能来自当前 branch/cut/dual 下 exact pricing full closure。

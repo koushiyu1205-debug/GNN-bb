@@ -116,12 +116,13 @@ def _worker_events(worker_csv: Any) -> list[dict[str, Any]]:
 
 
 def _command_for_candidate(commands: Iterable[dict[str, Any]], candidate_name: str) -> str:
-    command_types = {
-        f"task020_{candidate_name}_target_priority_worker",
-        f"task020_{candidate_name}_worker_roi_gat_priority",
-    }
+    command_suffixes = (
+        f"_{candidate_name}_target_priority_worker",
+        f"_{candidate_name}_worker_roi_gat_priority",
+    )
     for item in commands:
-        if item.get("command_type") in command_types:
+        command_type = str(item.get("command_type") or "")
+        if any(command_type.endswith(suffix) for suffix in command_suffixes):
             return str(item.get("command") or "")
     return ""
 

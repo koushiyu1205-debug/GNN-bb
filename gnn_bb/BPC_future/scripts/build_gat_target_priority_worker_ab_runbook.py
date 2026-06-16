@@ -14,6 +14,7 @@ The generated commands keep the current production boundary:
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 from pathlib import Path
 import shlex
@@ -32,6 +33,12 @@ SCALE_CONFIG = {
     5: "BPC_future/configs/moon_trek_5_journey.yaml",
     10: "BPC_future/configs/moon_trek_10_journey.yaml",
     20: "BPC_future/configs/moon_trek_20_smoke.yaml",
+    # Dedicated 30/50/100 target-mode configs do not exist yet.  For guarded
+    # target-materialization probes we reuse the exact-safe journey smoke
+    # profile and pass the explicit logical graph path on the command line.
+    30: "BPC_future/configs/moon_trek_20_smoke.yaml",
+    50: "BPC_future/configs/moon_trek_20_smoke.yaml",
+    100: "BPC_future/configs/moon_trek_20_smoke.yaml",
 }
 
 NO_LEARNING_OVERRIDES = (
@@ -179,6 +186,44 @@ def _instance(path: Path | str) -> str:
     return str(Path(path))
 
 
+def _task_count_from_instance(path: str | Path) -> int:
+    text = str(path)
+    for width in (3, 2):
+        marker = f"tasks_"
+        index = text.find(marker)
+        while index >= 0:
+            start = index + len(marker)
+            chunk = text[start : start + width]
+            if chunk.isdigit():
+                return int(chunk)
+            index = text.find(marker, index + 1)
+    marker = "tasks"
+    index = text.find(marker)
+    while index >= 0:
+        start = index + len(marker)
+        chunk = ""
+        while start + len(chunk) < len(text) and text[start + len(chunk)].isdigit():
+            chunk += text[start + len(chunk)]
+        if chunk:
+            return int(chunk)
+        index = text.find(marker, index + 1)
+    return 20
+
+
+def _candidate_scale(candidate: dict[str, Any]) -> int:
+    try:
+        task_count = int(candidate.get("task_count") or 0)
+    except (TypeError, ValueError):
+        task_count = 0
+    if task_count > 0:
+        return task_count
+    return _task_count_from_instance(candidate.get("instance") or "")
+
+
+def _scale_config(scale: int) -> str:
+    return SCALE_CONFIG.get(int(scale), SCALE_CONFIG[20])
+
+
 def _safe_name(text: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in str(text))
     safe = "_".join(part for part in safe.split("_") if part)
@@ -223,7 +268,7 @@ def _single_run_command(
         "BPC_future/scripts/run_bpc_future.py",
         "--config",
         config,
-        "--instance",
+        "--instances",
         instance,
         "--time-limit",
         f"{float(time_limit):.6f}",
@@ -314,6 +359,7 @@ def _normalized_candidate(raw: dict[str, Any], index: int) -> dict[str, Any]:
         "capture_pricing_kind": str(raw.get("capture_pricing_kind") or ""),
         "source_file": str(raw.get("source_file") or ""),
     }
+    normalized["task_count"] = int(raw.get("task_count") or _task_count_from_instance(normalized["instance"]))
     for field in (
         "cell",
         "ordinal_cell",
@@ -325,6 +371,13 @@ def _normalized_candidate(raw: dict[str, Any], index: int) -> dict[str, Any]:
         "cell_training_negative_count",
         "positive_gap",
         "negative_gap",
+        "family",
+        "instance_family",
+        "region",
+        "instance_region",
+        "accepted_batch_roi_label",
+        "opportunity_score",
+        "opportunity_reason",
     ):
         if field in raw:
             normalized[field] = raw[field]
@@ -494,9 +547,15 @@ def _candidate_groups(
         if key not in by_context:
             by_context[key] = []
             order.append(key)
-        if len(by_context[key]) < batch_size:
-            by_context[key].append(candidate)
-    return [by_context[key] for key in order if by_context[key]]
+        by_context[key].append(candidate)
+    groups: list[list[dict[str, Any]]] = []
+    for key in order:
+        items = by_context[key]
+        for start in range(0, len(items), batch_size):
+            group = items[start : start + batch_size]
+            if group:
+                groups.append(group)
+    return groups
 
 
 def _candidate_group_record(group: list[dict[str, Any]]) -> dict[str, Any]:
@@ -545,6 +604,7 @@ def build_runbook(
     max_workers: int = 1,
     worker_method: str = WORKER_METHOD_TARGET_MATERIALIZATION_FIXED,
     worker_batch_size: int = 1,
+    report_date: str | None = None,
 ) -> dict[str, Any]:
     if worker_method not in WORKER_METHODS:
         raise ValueError(f"worker_method must be one of {WORKER_METHODS}, got {worker_method!r}")
@@ -591,10 +651,13 @@ def build_runbook(
     candidate_runs: list[dict[str, Any]] = []
     for group in candidate_groups:
         candidate = _candidate_group_record(group)
-        base_profile = f"task020_{candidate['name']}_mainline_baseline"
-        worker_profile = f"task020_{candidate['name']}_target_priority_worker"
+        candidate_scale = _candidate_scale(candidate)
+        scale_prefix = f"task{candidate_scale:03d}"
+        base_profile = f"{scale_prefix}_{candidate['name']}_mainline_baseline"
+        worker_profile = f"{scale_prefix}_{candidate['name']}_target_priority_worker"
+        candidate_config = _scale_config(candidate_scale)
         baseline_command = _single_run_command(
-            config=SCALE_CONFIG[20],
+            config=candidate_config,
             instance=candidate["instance"],
             output_dir=output_dir,
             profile=base_profile,
@@ -602,7 +665,7 @@ def build_runbook(
             overrides=TASK20_CONTEXT_CAPTURE_OVERRIDES,
         )
         worker_command = _single_run_command(
-            config=SCALE_CONFIG[20],
+            config=candidate_config,
             instance=candidate["instance"],
             output_dir=output_dir,
             profile=worker_profile,
@@ -617,7 +680,7 @@ def build_runbook(
                 {
                     "command_type": base_profile,
                     "description": (
-                        "Run task-20 mainline baseline for the same target context. "
+                        f"Run task-{candidate_scale} mainline baseline for the same target context. "
                         "Learning/GAT stays enabled so the captured context can be reached."
                     ),
                     "command": baseline_command,
@@ -641,6 +704,14 @@ def build_runbook(
         candidate_runs.append(
             {
                 **candidate,
+                "task_count": candidate_scale,
+                "scale_config": candidate_config,
+                "scale_config_fallback_from_task20": bool(
+                    candidate_scale not in (5, 10, 20)
+                    and candidate_config == SCALE_CONFIG[20]
+                ),
+                "baseline_command_type": base_profile,
+                "worker_command_type": worker_profile,
                 "candidate_batch_count": len(group),
                 "candidate_names": [str(item["name"]) for item in group],
                 "baseline_csv": str(output_dir / base_profile / "results.csv"),
@@ -648,6 +719,7 @@ def build_runbook(
             }
         )
 
+    command_by_type = {str(item["command_type"]): str(item["command"]) for item in commands}
     checks = {
         "all_small_instances_exist": all(
             Path(instance).exists()
@@ -671,18 +743,26 @@ def build_runbook(
             for item in commands
             if item["command_type"].startswith("task020_")
         ),
+        "candidate_commands_keep_capture_learning_policy": all(
+            "journey_learning_enabled=False" not in command_by_type[item["baseline_command_type"]]
+            and "journey_learning_enabled=False" not in command_by_type[item["worker_command_type"]]
+            for item in candidate_runs
+        ),
         "worker_commands_have_expected_context": all(
-            item["expected_context_hash"] in next(
-                command["command"]
-                for command in commands
-                if command["command_type"] == f"task020_{item['name']}_target_priority_worker"
-            )
+            item["expected_context_hash"] in command_by_type[item["worker_command_type"]]
             for item in candidate_runs
         ),
         "task20_commands_capture_actual_contexts": all(
             "journey_counterfactual_replay_capture_enabled=True" in item["command"]
             for item in commands
             if item["command_type"].startswith("task020_")
+        ),
+        "candidate_commands_capture_actual_contexts": all(
+            "journey_counterfactual_replay_capture_enabled=True"
+            in command_by_type[item["baseline_command_type"]]
+            and "journey_counterfactual_replay_capture_enabled=True"
+            in command_by_type[item["worker_command_type"]]
+            for item in candidate_runs
         ),
         "commands_have_no_certificate_effect": not any(
             _has_certificate_effect(item["command"]) for item in commands
@@ -694,7 +774,7 @@ def build_runbook(
                 and "'" in command["command"]
                 and "->" in command["command"]
                 for command in commands
-                if command["command_type"] == f"task020_{item['name']}_target_priority_worker"
+                if command["command_type"] == item["worker_command_type"]
             )
             for item in candidate_runs
         ),
@@ -711,19 +791,17 @@ def build_runbook(
                 and "journey_sharded_pulse_hidden_negative_worker_harvesting_enabled=False" in item["command"]
                 and "journey_sharded_pulse_worker_current_probe_harvesting_enabled=False" in item["command"]
                 for item in commands
-                if item["command_type"].startswith("task020_")
-                and item["command_type"].endswith("_target_priority_worker")
+                if any(
+                    item["command_type"] == candidate_run["worker_command_type"]
+                    for candidate_run in candidate_runs
+                )
             )
         ),
         "batch_worker_commands_have_materialization_journeys": (
             int(worker_batch_size) <= 1
             or all(
                 "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys="
-                in next(
-                    command["command"]
-                    for command in commands
-                    if command["command_type"] == f"task020_{item['name']}_target_priority_worker"
-                )
+                in command_by_type[item["worker_command_type"]]
                 for item in candidate_runs
                 if int(item.get("candidate_batch_count") or 1) > 1
             )
@@ -733,41 +811,36 @@ def build_runbook(
             or all(
                 (
                     "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys="
-                    in next(
-                        command["command"]
-                        for command in commands
-                        if command["command_type"]
-                        == f"task020_{item['name']}_target_priority_worker"
-                    )
+                    in command_by_type[item["worker_command_type"]]
                 )
                 or (
                     "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces="
-                    in next(
-                        command["command"]
-                        for command in commands
-                        if command["command_type"]
-                        == f"task020_{item['name']}_target_priority_worker"
-                    )
+                    in command_by_type[item["worker_command_type"]]
                 )
                 for item in candidate_runs
             )
+        ),
+        "candidate_scale_configs_available": all(
+            bool(item.get("scale_config")) for item in candidate_runs
         ),
     }
     summary = {
         "schema_version": "gat_target_priority_worker_ab_runbook_v1",
         "status": "ready",
+        "report_date": str(report_date or _report_date_from_path(report)),
         "runs_bpc_or_pricing": False,
         "production_ready": False,
         "default_enabled": False,
         "certificate_ready": False,
         "official_bound_effect": False,
-        "online_effect_scope": "explicit_task20_worker_commands_only",
+        "online_effect_scope": "explicit_candidate_worker_commands_only",
         "worker_method": worker_method,
         "worker_batch_size": int(worker_batch_size),
         "input_candidate_count": len(candidates),
         "candidate_group_count": len(candidate_groups),
         "mainline_gat_kept_for_5_10": True,
         "mainline_gat_kept_for_20_context_replay": True,
+        "mainline_gat_kept_for_candidate_context_replay": True,
         "candidate_policy": {
             "gat_role": "embedding_and_trajectory_impact_expression",
             "knn_ood_role": "safety_shell",
@@ -806,11 +879,11 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
     lines = [
         "# GAT Target-Priority Worker A/B Runbook",
         "",
-        "日期：2026-06-15",
+        f"日期：{summary.get('report_date') or date.today().isoformat()}",
         "",
         "## 目的",
         "",
-        "生成下一轮 5/10 no-regression 与 20-task ROI A/B 命令。GAT 仍只负责 "
+        "生成下一轮 5/10 no-regression 与 candidate-scale ROI A/B 命令。GAT 仍只负责 "
         "embedding / trajectory impact 表达，kNN/OOD 只做安全壳；通过安全壳的 "
         "true-RC negative 可优先进入 worker target，不通过的负列进入 DELAY_QUEUE，"
         "不能永久丢弃，也不能参与 certificate。",
@@ -866,18 +939,26 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
             "## 边界",
             "",
             "- 5/10 命令不关闭主线 GAT/learning，也不启用新 worker；",
-        "- 20 baseline/worker 命令也不关闭主线 GAT/learning，避免候选捕获上下文无法复现；",
-        "- 20 baseline/worker 命令开启 counterfactual replay capture；如果旧 target context 没到，仍保留实际到达的 context 供下一轮候选抽取；",
-        "- 20 worker 命令是显式 opt-in，默认只做 same-context target materialization，不运行 Pulse 搜索 / harvest / archive / bound pruning；",
-        "- 固定 worker 的 current-probe 开关只作为 expected context 触发器；target materialization 会在任何 Pulse 搜索前返回结果；",
-        "- `worker_batch_size > 1` 时，只会合并同一 instance + expected context 的候选，并通过 `target_materialization_journeys` 批量物化；",
-        "- 20 worker 候选必须带完整 context / dual / cuts / branch / pool hash；",
-        "- 所有命令都不启用 sharded Pulse certificate 或 official lower-bound effect；",
+            "- candidate baseline/worker 命令也不关闭主线 GAT/learning，避免候选捕获上下文无法复现；",
+            "- candidate baseline/worker 命令开启 counterfactual replay capture；如果旧 target context 没到，仍保留实际到达的 context 供下一轮候选抽取；",
+            "- candidate worker 命令是显式 opt-in，默认只做 same-context target materialization，不运行 Pulse 搜索 / harvest / archive / bound pruning；",
+            "- 30/50/100 尚无专用 config 时，runbook 会显式记录 `scale_config_fallback_from_task20=true`，并通过命令行传入目标 logical graph；",
+            "- 固定 worker 的 current-probe 开关只作为 expected context 触发器；target materialization 会在任何 Pulse 搜索前返回结果；",
+            "- `worker_batch_size > 1` 时，只会合并同一 instance + expected context 的候选，并通过 `target_materialization_journeys` 批量物化；",
+            "- candidate worker 候选必须带完整 context / dual / cuts / branch / pool hash；",
+            "- 所有命令都不启用 sharded Pulse certificate 或 official lower-bound effect；",
             "- 含 `->` 的 arc-option 配置通过 `shlex.join` 自动引用，不能手工去掉引号；",
             "- 该 runbook 不是生产开关，跑完后仍需看 5/10 no-regression 和 20-task ROI。",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _report_date_from_path(path: Path) -> str:
+    stem = Path(path).name[:8]
+    if len(stem) == 8 and stem.isdigit():
+        return f"{stem[:4]}-{stem[4:6]}-{stem[6:8]}"
+    return date.today().isoformat()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -890,6 +971,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--twenty-time-limit", type=float, default=85.0)
     parser.add_argument("--max-workers", type=int, default=1)
     parser.add_argument("--worker-batch-size", type=int, default=1)
+    parser.add_argument("--report-date", type=str, default=None)
     parser.add_argument(
         "--worker-method",
         choices=WORKER_METHODS,
@@ -910,6 +992,7 @@ def main(argv: list[str] | None = None) -> int:
         max_workers=int(args.max_workers),
         worker_method=str(args.worker_method),
         worker_batch_size=int(args.worker_batch_size),
+        report_date=args.report_date,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if summary["all_checks_pass"] else 1

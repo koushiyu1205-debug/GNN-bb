@@ -14778,6 +14778,88 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(result.pulse_target_sequence_materialized)
         self.assertTrue(result.pulse_target_sequence_negative)
 
+    def test_sharded_pulse_target_materialization_multi_context_uses_matched_payload(self):
+        from BPC_future.solver import journey_driver
+
+        data = load_future_data("very_small")
+        first_task = int(data.tasks[0])
+        second_task = int(data.tasks[1])
+        first_trace = PulseSortieTrace(
+            sequence=(first_task,),
+            start_time=0.0,
+            arc_options=(data.options(0, first_task)[0], data.options(first_task, 0)[0]),
+        )
+        second_trace = PulseSortieTrace(
+            sequence=(second_task,),
+            start_time=0.0,
+            arc_options=(data.options(0, second_task)[0], data.options(second_task, 0)[0]),
+        )
+        second_candidate = materialize_pulse_leaf_candidate(
+            data,
+            (second_trace,),
+            JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+            time_bucket_size=5.0,
+            eps=1.0e-6,
+        )
+        self.assertIsNotNone(second_candidate)
+        assert second_candidate is not None
+        duals = JourneyDuals(
+            cover={second_task: float(second_candidate.journey.cost) + 10.0},
+            fleet_limit=0.0,
+            cuts={},
+        )
+
+        def trace_payload(trace):
+            return {
+                "sequence": list(trace.sequence),
+                "start_time": trace.start_time,
+                "arc_option_sequence": [
+                    str(option.option_id) for option in trace.arc_options or tuple()
+                ],
+            }
+
+        config = {
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_enabled": True,
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_contexts": json.dumps(
+                [
+                    {
+                        "expected_context_hash": "ctx_a",
+                        "target_sequence": [first_task],
+                        "target_sortie_traces": [trace_payload(first_trace)],
+                    },
+                    {
+                        "expected_context_hash": "ctx_b",
+                        "target_sequence": [second_task],
+                        "target_sortie_traces": [trace_payload(second_trace)],
+                    },
+                ],
+                separators=(",", ":"),
+            ),
+        }
+        effective = journey_driver._journey_sharded_pulse_target_materialization_config_for_context(
+            config,
+            {"context": "ctx_b"},
+        )
+        result = _journey_sharded_pulse_target_materialization_result(
+            data,
+            effective,
+            duals=duals,
+            cuts=tuple(),
+            base_pricing_config=JourneyPricingConfig(time_bucket_size=5.0),
+            eps=1.0e-6,
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.pricing_state, PRICING_STATE_FOUND_NEGATIVE)
+        self.assertEqual(len(result.journeys), 1)
+        self.assertEqual(result.pulse_target_sequence, (second_task,))
+        self.assertEqual(
+            tuple(sorted(result.journeys[0].task_set)),
+            (second_task,),
+        )
+        self.assertFalse(_journey_pricing_is_global_certificate(result))
+
     def test_sharded_pulse_target_materialization_batch_filters_nonnegative(self):
         data = load_future_data("very_small")
         first_task = int(data.tasks[0])
@@ -24342,6 +24424,85 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertFalse(allowed)
         self.assertEqual(reason, "residual_target_context_mismatch")
+
+    def test_sharded_pulse_worker_multi_context_target_guard_selects_current_context(self):
+        from BPC_future.solver import journey_driver
+
+        contexts = [
+            {
+                "expected_context_hash": "ctx_a",
+                "target_sequence": [1, 2],
+                "target_priority_sequence": [1, 2],
+                "target_arc_option_sequence": ["a", "b", "c"],
+                "target_sortie_traces": [{"sequence": [1], "start_time": 0.0}],
+            },
+            {
+                "expected_context_hash": "ctx_b",
+                "target_sequence": [3, 4],
+                "target_priority_sequence": [3, 4],
+                "target_arc_option_sequence": ["d", "e", "f"],
+                "target_sortie_traces": [{"sequence": [3], "start_time": 5.0}],
+            },
+        ]
+        config = {
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_contexts": json.dumps(
+                contexts,
+                separators=(",", ":"),
+            )
+        }
+
+        allowed, reason = journey_driver._journey_sharded_pulse_expected_context_allows(
+            config,
+            {"context": "ctx_b"},
+        )
+        self.assertTrue(allowed)
+        self.assertEqual(reason, "")
+        self.assertTrue(
+            journey_driver._journey_sharded_pulse_expected_context_configured_match(
+                config,
+                {"context": "ctx_b"},
+            )
+        )
+
+        allowed, reason = journey_driver._journey_sharded_pulse_expected_context_allows(
+            config,
+            {"context": "ctx_c"},
+        )
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "residual_target_context_mismatch")
+        self.assertFalse(
+            journey_driver._journey_sharded_pulse_expected_context_configured_match(
+                config,
+                {"context": "ctx_c"},
+            )
+        )
+
+        effective = journey_driver._journey_sharded_pulse_target_materialization_config_for_context(
+            config,
+            {"context": "ctx_b"},
+        )
+        self.assertEqual(
+            effective["journey_sharded_pulse_hidden_negative_worker_expected_context_hash"],
+            "ctx_b",
+        )
+        self.assertEqual(
+            effective[
+                "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_sequence"
+            ],
+            [3, 4],
+        )
+        self.assertEqual(
+            effective[
+                "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces"
+            ],
+            [{"sequence": [3], "start_time": 5.0}],
+        )
+        self.assertEqual(
+            effective[
+                "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_sequence"
+            ],
+            ["d", "e", "f"],
+        )
 
     def test_sharded_pulse_roi_calibration_profile_configs_are_opt_in(self):
         from BPC_future.scripts import run_sharded_pulse_roi_calibration as roi

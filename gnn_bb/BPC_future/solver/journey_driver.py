@@ -49,6 +49,14 @@ from BPC_future.solver.driver import (
     _seed_initial_savings_trips,
     _seed_initial_trips,
 )
+from BPC_future.solver.gat_admission_queue import (
+    GAT_DELAY_QUEUE,
+    GAT_HIGH_PRIORITY,
+    GAT_REJECT_NONNEGATIVE_ONLY,
+    GATAdmissionCandidate,
+    GATAdmissionQueue,
+)
+from BPC_future.solver.gat_candidate_id import journey_gat_candidate_id
 from BPC_future.solver.logger import FutureLogger
 
 
@@ -122,6 +130,12 @@ class _JourneyDualAveragingRuntime:
     flat_rounds: int = 0
     true_rc_filter_failures: int = 0
     cooldown_until_iter: int = -1
+
+
+@dataclass
+class _JourneyGATAdmissionRuntime:
+    queue: GATAdmissionQueue
+    delayed_journeys: dict[str, Any] = field(default_factory=dict)
 
 
 _JOURNEY_LEARNING_STABILIZER_CACHE: dict[tuple[Any, ...], Any] = {}
@@ -595,11 +609,23 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                             cg_iter=cg_iter,
                             rmp_objective=float(solution.objective),
                             active_task_sets=active_task_sets,
-                            active_variable_values=solution.variable_values,
-                            active_reduced_costs=solution.reduced_costs,
+                            active_variable_values=getattr(solution, "variable_values", None),
+                            active_reduced_costs=getattr(solution, "reduced_costs", None),
                             pricing_dual_source="scip",
                         )
                         if worker_pricing.journeys:
+                            _log_journey_gat_target_mode_shadow(
+                                logger,
+                                worker_pricing.journeys,
+                                solution.duals,
+                                tuple(cuts),
+                                config,
+                                cg_iter=cg_iter,
+                                node_id=0,
+                                depth=0,
+                                pricing_kind="sharded_pulse_hidden_negative_worker",
+                                certificate_candidate=certificate_candidate,
+                            )
                             added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
                             _log_journey_addition(
                                 logger,
@@ -738,8 +764,8 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     cg_iter=cg_iter,
                     rmp_objective=float(solution.objective),
                     active_task_sets=active_task_sets,
-                    active_variable_values=solution.variable_values,
-                    active_reduced_costs=solution.reduced_costs,
+                    active_variable_values=getattr(solution, "variable_values", None),
+                    active_reduced_costs=getattr(solution, "reduced_costs", None),
                     pricing_dual_source=heuristic_dual_source,
                 )
                 _log_journey_pulse_residual_replay_diagnostic(
@@ -786,6 +812,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     )
                 if priced_journeys:
                     pricing_for_add = replace(pricing, journeys=list(priced_journeys))
+                    _log_journey_gat_target_mode_shadow(
+                        logger,
+                        list(priced_journeys),
+                        solution.duals,
+                        tuple(cuts),
+                        config,
+                        cg_iter=cg_iter,
+                        node_id=0,
+                        depth=0,
+                        pricing_kind="heuristic",
+                        certificate_candidate=certificate_candidate,
+                    )
                     if learning_smoothed and learning_runtime is not None and learning_runtime.filter_true_rc:
                         seed_config = _journey_pricing_config(
                             data,
@@ -1140,11 +1178,23 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 cg_iter=cg_iter,
                 rmp_objective=float(solution.objective),
                 active_task_sets=active_task_sets,
-                active_variable_values=solution.variable_values,
-                active_reduced_costs=solution.reduced_costs,
+                active_variable_values=getattr(solution, "variable_values", None),
+                active_reduced_costs=getattr(solution, "reduced_costs", None),
                 pricing_dual_source="scip",
             )
             if worker_pricing.journeys:
+                _log_journey_gat_target_mode_shadow(
+                    logger,
+                    worker_pricing.journeys,
+                    solution.duals,
+                    tuple(cuts),
+                    config,
+                    cg_iter=cg_iter,
+                    node_id=0,
+                    depth=0,
+                    pricing_kind="sharded_pulse_hidden_negative_worker",
+                    certificate_candidate=certificate_candidate,
+                )
                 added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
                 _log_journey_addition(
                     logger,
@@ -1238,8 +1288,8 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             cg_iter=cg_iter,
             rmp_objective=float(solution.objective),
             active_task_sets=active_task_sets,
-            active_variable_values=solution.variable_values,
-            active_reduced_costs=solution.reduced_costs,
+            active_variable_values=getattr(solution, "variable_values", None),
+            active_reduced_costs=getattr(solution, "reduced_costs", None),
             pricing_dual_source=exact_dual_source,
         )
         audit_ran_for_pricing = False
@@ -1273,6 +1323,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
         if pricing.journeys:
             if not audit_ran_for_pricing:
                 audit_final_legacy_pricing(pricing)
+            _log_journey_gat_target_mode_shadow(
+                logger,
+                pricing.journeys,
+                solution.duals,
+                tuple(cuts),
+                config,
+                cg_iter=cg_iter,
+                node_id=0,
+                depth=0,
+                pricing_kind=exact_pricing_kind,
+                certificate_candidate=certificate_candidate,
+            )
             added = _add_priced_journeys(journey_pool, pricing.journeys)
             _log_journey_addition(
                 logger,
@@ -1685,6 +1747,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         node_id=0,
                                         depth=0,
                                     )
+                                    _log_journey_gat_target_mode_shadow(
+                                        logger,
+                                        patrol_pricing.journeys,
+                                        solution.duals,
+                                        tuple(cuts),
+                                        config,
+                                        cg_iter=cg_iter,
+                                        node_id=0,
+                                        depth=0,
+                                        pricing_kind="exact_hidden_negative_patrol_after_retry",
+                                        certificate_candidate=certificate_candidate,
+                                    )
                                     added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
                                     _log_journey_addition(
                                         logger,
@@ -1762,6 +1836,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
                                     ),
                                     trigger="new_task_set_sweep_after_retry",
+                                )
+                                _log_journey_gat_target_mode_shadow(
+                                    logger,
+                                    sweep_pricing.journeys,
+                                    solution.duals,
+                                    tuple(cuts),
+                                    config,
+                                    cg_iter=cg_iter,
+                                    node_id=0,
+                                    depth=0,
+                                    pricing_kind="exact_new_task_set_sweep",
+                                    certificate_candidate=certificate_candidate,
                                 )
                                 added = _add_priced_journeys(journey_pool, sweep_pricing.journeys)
                                 _log_journey_addition(
@@ -1854,6 +1940,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         config.get("journey_hidden_negative_audit_max_logged_journeys", 8)
                                     ),
                                     trigger="fixed_task_set_repair_after_retry",
+                                )
+                                _log_journey_gat_target_mode_shadow(
+                                    logger,
+                                    fixed_pricing.journeys,
+                                    solution.duals,
+                                    tuple(cuts),
+                                    config,
+                                    cg_iter=cg_iter,
+                                    node_id=0,
+                                    depth=0,
+                                    pricing_kind="exact_fixed_task_set_repair",
+                                    certificate_candidate=certificate_candidate,
                                 )
                                 added = _add_priced_journeys(journey_pool, fixed_pricing.journeys)
                                 _log_journey_addition(
@@ -1956,6 +2054,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                     pricing_kind="exact_replacement_repair",
                                     node_id=0,
                                     depth=0,
+                                )
+                                _log_journey_gat_target_mode_shadow(
+                                    logger,
+                                    replacement_pricing.journeys,
+                                    solution.duals,
+                                    tuple(cuts),
+                                    config,
+                                    cg_iter=cg_iter,
+                                    node_id=0,
+                                    depth=0,
+                                    pricing_kind="exact_replacement_repair",
+                                    certificate_candidate=certificate_candidate,
                                 )
                                 added = _add_priced_journeys(journey_pool, replacement_pricing.journeys)
                                 _log_journey_addition(
@@ -2164,6 +2274,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                         node_id=0,
                         depth=0,
                     )
+                    _log_journey_gat_target_mode_shadow(
+                        logger,
+                        pricing.journeys,
+                        solution.duals,
+                        tuple(cuts),
+                        config,
+                        cg_iter=cg_iter,
+                        node_id=0,
+                        depth=0,
+                        pricing_kind=retry_pricing_kind,
+                        certificate_candidate=certificate_candidate,
+                    )
                     added = _add_priced_journeys(journey_pool, pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -2232,6 +2354,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                 pricing_dual_source="scip_post_seed_profile_reharvest",
                             )
                             if reharvest_pricing.journeys:
+                                _log_journey_gat_target_mode_shadow(
+                                    logger,
+                                    reharvest_pricing.journeys,
+                                    solution.duals,
+                                    tuple(cuts),
+                                    config,
+                                    cg_iter=cg_iter,
+                                    node_id=0,
+                                    depth=0,
+                                    pricing_kind="exact_post_seed_profile_reharvest",
+                                    certificate_candidate=certificate_candidate,
+                                )
                                 reharvest_added_count = _add_priced_journeys(
                                     journey_pool,
                                     reharvest_pricing.journeys,
@@ -2529,6 +2663,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                         node_id=0,
                                         depth=0,
                                     )
+                                    _log_journey_gat_target_mode_shadow(
+                                        logger,
+                                        pricing.journeys,
+                                        solution.duals,
+                                        tuple(cuts),
+                                        config,
+                                        cg_iter=cg_iter,
+                                        node_id=0,
+                                        depth=0,
+                                        pricing_kind=retry_pricing_kind,
+                                        certificate_candidate=certificate_candidate,
+                                    )
                                     added = _add_priced_journeys(journey_pool, pricing.journeys)
                                     _log_journey_addition(
                                         logger,
@@ -2600,6 +2746,18 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                                                 pricing_dual_source="scip_post_seed_profile_reharvest",
                                             )
                                             if reharvest_pricing.journeys:
+                                                _log_journey_gat_target_mode_shadow(
+                                                    logger,
+                                                    reharvest_pricing.journeys,
+                                                    solution.duals,
+                                                    tuple(cuts),
+                                                    config,
+                                                    cg_iter=cg_iter,
+                                                    node_id=0,
+                                                    depth=0,
+                                                    pricing_kind="exact_post_seed_profile_reharvest",
+                                                    certificate_candidate=certificate_candidate,
+                                                )
                                                 reharvest_added_count = _add_priced_journeys(
                                                     journey_pool,
                                                     reharvest_pricing.journeys,
@@ -3295,6 +3453,7 @@ def _process_journey_branch_node(
     certificate_no_column_rounds = 0
     retry_negative_after_no_column_rounds = 0
     certificate_flat_weak_column_rounds = 0
+    gat_admission_runtime = _make_journey_gat_admission_runtime(config)
 
     def payload(status: str, **extra: Any) -> dict[str, Any]:
         extra["status"] = status
@@ -3335,6 +3494,94 @@ def _process_journey_branch_node(
                 replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
             )
         return weak
+
+    def log_gat_shadow_for_pricing(pricing_result: Any, pricing_kind: str) -> None:
+        _log_journey_gat_target_mode_shadow(
+            logger,
+            getattr(pricing_result, "journeys", []) or [],
+            solution.duals,
+            tuple(cuts),
+            config,
+            cg_iter=cg_iter,
+            node_id=node.id,
+            depth=node.depth,
+            pricing_kind=pricing_kind,
+            certificate_candidate=certificate_candidate,
+        )
+
+    def schedule_gat_admission_for_pricing(pricing_result: Any, pricing_kind: str) -> list[Any]:
+        return _journey_gat_target_mode_admission_schedule(
+            logger,
+            gat_admission_runtime,
+            getattr(pricing_result, "journeys", []) or [],
+            solution.duals,
+            tuple(cuts),
+            config,
+            cg_iter=cg_iter,
+            node_id=node.id,
+            depth=node.depth,
+            pricing_kind=pricing_kind,
+            certificate_candidate=certificate_candidate,
+        )
+
+    def release_gat_admission_before_certificate(pricing_result: Any, pricing_kind: str) -> int:
+        nonlocal certificate_no_column_rounds
+        nonlocal recent_priced_journeys
+        nonlocal recent_changed_task_sets
+        nonlocal retry_negative_after_no_column_rounds
+
+        if gat_admission_runtime is None or len(gat_admission_runtime.queue) <= 0:
+            return 0
+        released_journeys = _journey_gat_target_mode_admission_schedule(
+            logger,
+            gat_admission_runtime,
+            [],
+            solution.duals,
+            tuple(cuts),
+            config,
+            cg_iter=cg_iter,
+            node_id=node.id,
+            depth=node.depth,
+            pricing_kind=str(pricing_kind),
+            certificate_candidate=True,
+        )
+        if not released_journeys:
+            return 0
+
+        release_pricing = replace(pricing_result, journeys=list(released_journeys))
+        added = _add_priced_journeys(journey_pool, list(released_journeys))
+        _log_journey_addition(
+            logger,
+            release_pricing,
+            added,
+            cg_iter,
+            pricing_kind="gat_admission_release_before_certificate",
+            node_id=node.id,
+            depth=node.depth,
+            active_task_sets=active_task_sets,
+        )
+        if int(added) <= 0:
+            return 0
+
+        note_flat_weak_addition(added, "gat_admission_release_before_certificate")
+        certificate_no_column_rounds = 0
+        recent_priced_journeys = list(released_journeys)
+        recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+        retry_negative_after_no_column_rounds += 1
+        logger.log(
+            "journey_gat_admission_release_before_certificate",
+            node_id=node.id,
+            depth=node.depth,
+            cg_iter=cg_iter,
+            released_journeys=len(released_journeys),
+            added_journeys=int(added),
+            new_journeys=int(getattr(added, "new_journeys", int(added))),
+            replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
+            selector_can_certificate=False,
+            requires_exact_pricing_full_scan=True,
+            exact_path_preserved=True,
+        )
+        return int(added)
 
     def seed_and_reharvest_hidden_negative_pricing(
         pricing_result: Any,
@@ -3422,6 +3669,7 @@ def _process_journey_branch_node(
         )
         if not reharvest_pricing.journeys:
             return 0, [], []
+        log_gat_shadow_for_pricing(reharvest_pricing, "exact_post_seed_profile_reharvest")
         reharvest_added = _add_priced_journeys(journey_pool, reharvest_pricing.journeys)
         _log_journey_addition(
             logger,
@@ -3737,13 +3985,17 @@ def _process_journey_branch_node(
                     cg_iter=cg_iter,
                     rmp_objective=float(solution.objective),
                     active_task_sets=active_task_sets,
-                    active_variable_values=solution.variable_values,
-                    active_reduced_costs=solution.reduced_costs,
+                    active_variable_values=getattr(solution, "variable_values", None),
+                    active_reduced_costs=getattr(solution, "reduced_costs", None),
                     pricing_dual_source="scip",
                     node_id=node.id,
                     depth=node.depth,
                 )
                 if worker_pricing.journeys:
+                    log_gat_shadow_for_pricing(
+                        worker_pricing,
+                        "sharded_pulse_hidden_negative_worker",
+                    )
                     added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -3943,7 +4195,10 @@ def _process_journey_branch_node(
                             node_id=node.id,
                             depth=node.depth,
                         )
-                    added = _add_priced_journeys(journey_pool, list(priced_journeys))
+                    log_gat_shadow_for_pricing(pricing_for_add, "heuristic")
+                    scheduled_journeys = schedule_gat_admission_for_pricing(pricing_for_add, "heuristic")
+                    pricing_for_add = replace(pricing_for_add, journeys=list(scheduled_journeys))
+                    added = _add_priced_journeys(journey_pool, list(scheduled_journeys))
                     flat_weak_addition = _journey_flat_weak_column_pressure_addition(
                         config,
                         added,
@@ -4311,6 +4566,7 @@ def _process_journey_branch_node(
                     depth=node.depth,
                 )
                 if patrol_pricing.journeys:
+                    log_gat_shadow_for_pricing(patrol_pricing, "exact_hidden_negative_patrol_pre")
                     added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
                     flat_weak_addition = _journey_flat_weak_column_pressure_addition(
                         config,
@@ -4461,6 +4717,10 @@ def _process_journey_branch_node(
                         depth=node.depth,
                     )
                     if analytic_pricing.journeys:
+                        log_gat_shadow_for_pricing(
+                            analytic_pricing,
+                            "exact_analytic_center_priority_worker",
+                        )
                         added = _add_priced_journeys(journey_pool, analytic_pricing.journeys)
                         _log_journey_addition(
                             logger,
@@ -4565,6 +4825,10 @@ def _process_journey_branch_node(
                         depth=node.depth,
                     )
                     if worker_pricing.journeys:
+                        log_gat_shadow_for_pricing(
+                            worker_pricing,
+                            "sharded_pulse_hidden_negative_worker",
+                        )
                         added = _add_priced_journeys(journey_pool, worker_pricing.journeys)
                         _log_journey_addition(
                             logger,
@@ -4739,7 +5003,10 @@ def _process_journey_branch_node(
             depth=node.depth,
         )
         if pricing.journeys:
-            added = _add_priced_journeys(journey_pool, pricing.journeys)
+            log_gat_shadow_for_pricing(pricing, exact_pricing_kind)
+            scheduled_journeys = schedule_gat_admission_for_pricing(pricing, exact_pricing_kind)
+            pricing_for_add = replace(pricing, journeys=list(scheduled_journeys))
+            added = _add_priced_journeys(journey_pool, list(scheduled_journeys))
             flat_weak_addition = _journey_flat_weak_column_pressure_addition(
                 config,
                 added,
@@ -4755,7 +5022,7 @@ def _process_journey_branch_node(
                 certificate_flat_weak_column_rounds = 0
             _log_journey_addition(
                 logger,
-                pricing,
+                pricing_for_add,
                 added,
                 cg_iter,
                 pricing_kind=exact_pricing_kind,
@@ -4778,7 +5045,7 @@ def _process_journey_branch_node(
                     new_journeys=int(getattr(added, "new_journeys", int(added))),
                     replacement_journeys=int(getattr(added, "replacement_journeys", 0)),
                 )
-                recent_priced_journeys = list(pricing.journeys)
+                recent_priced_journeys = list(scheduled_journeys)
                 recent_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
                 if _journey_hidden_negative_patrol_after_small_batch_needed(
                     config,
@@ -4854,6 +5121,10 @@ def _process_journey_branch_node(
                             depth=node.depth,
                         )
                         if supplement_pricing.journeys:
+                            log_gat_shadow_for_pricing(
+                                supplement_pricing,
+                                "exact_hidden_negative_patrol_after_small_batch",
+                            )
                             supplement_added = _add_priced_journeys(journey_pool, supplement_pricing.journeys)
                             _log_journey_addition(
                                 logger,
@@ -5118,6 +5389,7 @@ def _process_journey_branch_node(
                             trigger="initial_duplicate_no_new_columns",
                         )
                         if pricing.journeys:
+                            log_gat_shadow_for_pricing(pricing, duplicate_pricing_kind)
                             added = _add_priced_journeys(journey_pool, pricing.journeys)
                             _log_journey_addition(
                                 logger,
@@ -5513,6 +5785,10 @@ def _process_journey_branch_node(
                                         node_id=node.id,
                                         depth=node.depth,
                                     )
+                                    log_gat_shadow_for_pricing(
+                                        patrol_pricing,
+                                        "exact_hidden_negative_patrol_after_retry",
+                                    )
                                     added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
                                     _log_journey_addition(
                                         logger,
@@ -5720,6 +5996,7 @@ def _process_journey_branch_node(
                                     trigger="after_retry_escalation",
                                 )
                 if pricing.journeys:
+                    log_gat_shadow_for_pricing(pricing, retry_pricing_kind)
                     added = _add_priced_journeys(journey_pool, pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -5945,6 +6222,7 @@ def _process_journey_branch_node(
                                     trigger="duplicate_no_new_columns",
                                 )
                                 if pricing.journeys:
+                                    log_gat_shadow_for_pricing(pricing, retry_pricing_kind)
                                     added = _add_priced_journeys(journey_pool, pricing.journeys)
                                     _log_journey_addition(
                                         logger,
@@ -6092,6 +6370,8 @@ def _process_journey_branch_node(
                         )
                         return payload("PRICING_INCOMPLETE", reason="duplicate_negative_journey")
                 if pricing.exhausted:
+                    if release_gat_admission_before_certificate(pricing, retry_pricing_kind) > 0:
+                        continue
                     pricing = _journey_promote_duplicate_only_final_judge_certificate(
                         data,
                         config,
@@ -6213,6 +6493,7 @@ def _process_journey_branch_node(
                                 trigger="no_retry_budget",
                             )
                             if pricing.journeys:
+                                log_gat_shadow_for_pricing(pricing, "exact_completion_bound_retry")
                                 added = _add_priced_journeys(journey_pool, pricing.journeys)
                                 _log_journey_addition(
                                     logger,
@@ -6408,6 +6689,7 @@ def _process_journey_branch_node(
                         ),
                         trigger="profile_repair",
                     )
+                    log_gat_shadow_for_pricing(repair_pricing, "exact_profile_repair")
                     added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -6557,6 +6839,7 @@ def _process_journey_branch_node(
                             node_id=node.id,
                             depth=node.depth,
                         )
+                        log_gat_shadow_for_pricing(patrol_pricing, "exact_hidden_negative_patrol")
                         added = _add_priced_journeys(journey_pool, patrol_pricing.journeys)
                         _log_journey_addition(
                             logger,
@@ -6643,6 +6926,7 @@ def _process_journey_branch_node(
                         max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
                         trigger="new_task_set_sweep",
                     )
+                    log_gat_shadow_for_pricing(sweep_pricing, "exact_new_task_set_sweep")
                     added = _add_priced_journeys(journey_pool, sweep_pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -6742,6 +7026,7 @@ def _process_journey_branch_node(
                         max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
                         trigger="fixed_task_set_repair",
                     )
+                    log_gat_shadow_for_pricing(fixed_pricing, "exact_fixed_task_set_repair")
                     added = _add_priced_journeys(journey_pool, fixed_pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -6838,6 +7123,7 @@ def _process_journey_branch_node(
                 )
                 pricing = replacement_pricing
                 if replacement_pricing.journeys:
+                    log_gat_shadow_for_pricing(replacement_pricing, "exact_replacement_repair")
                     added = _add_priced_journeys(journey_pool, replacement_pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -6930,6 +7216,7 @@ def _process_journey_branch_node(
                         ),
                         trigger="profile_repair_after_patrol",
                     )
+                    log_gat_shadow_for_pricing(repair_pricing, "exact_profile_repair")
                     added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
                     _log_journey_addition(
                         logger,
@@ -7152,6 +7439,7 @@ def _process_journey_branch_node(
                             node_id=node.id,
                             depth=node.depth,
                         )
+                        log_gat_shadow_for_pricing(pricing, final_pricing_kind)
                         added = _add_priced_journeys(journey_pool, pricing.journeys)
                         _log_journey_addition(
                             logger,
@@ -7285,6 +7573,10 @@ def _process_journey_branch_node(
                                     depth=node.depth,
                                 )
                                 if reharvest_pricing.journeys:
+                                    log_gat_shadow_for_pricing(
+                                        reharvest_pricing,
+                                        "exact_post_seed_profile_reharvest",
+                                    )
                                     reharvest_added = _add_priced_journeys(
                                         journey_pool,
                                         reharvest_pricing.journeys,
@@ -7385,6 +7677,11 @@ def _process_journey_branch_node(
             else:
                 return payload("PRICING_INCOMPLETE", reason="completion_bound_final_probe_time_limit")
 
+        pre_certificate_pricing_kind = (
+            "exact_completion_bound_retry" if bool(getattr(pricing, "completion_bound_enabled", False)) else "exact"
+        )
+        if release_gat_admission_before_certificate(pricing, pre_certificate_pricing_kind) > 0:
+            continue
         pricing = _journey_promote_duplicate_only_final_judge_certificate(
             data,
             config,
@@ -9609,6 +9906,434 @@ def _journey_learning_true_rc_filter(
         kept_mean_true_reduced_cost=None if not kept_rcs else round(sum(kept_rcs) / len(kept_rcs), 9),
     )
     return kept
+
+
+def _log_journey_gat_target_mode_shadow(
+    logger: FutureLogger,
+    journeys: Iterable[Any],
+    true_duals: JourneyDuals | None,
+    cuts: tuple[FutureCut, ...],
+    config: dict[str, Any],
+    *,
+    cg_iter: int,
+    node_id: int,
+    depth: int,
+    pricing_kind: str,
+    certificate_candidate: bool,
+) -> None:
+    if not _journey_gat_target_mode_shadow_enabled(config):
+        return
+    journeys_list = list(journeys)
+    if true_duals is None or not journeys_list:
+        logger.log(
+            "journey_gat_target_mode_shadow",
+            node_id=node_id,
+            depth=depth,
+            cg_iter=cg_iter,
+            pricing_kind=pricing_kind,
+            certificate_candidate=bool(certificate_candidate),
+            status="skipped",
+            reason="missing_duals_or_candidates",
+            candidate_journeys=len(journeys_list),
+            production_ready=False,
+            default_enabled=False,
+            selector_is_pricing_oracle=False,
+            selector_can_certificate=False,
+            official_bound_effect=False,
+        )
+        return
+    tol = float(config.get("journey_gat_admission_true_rc_tol", config.get("pricing_eps", 1.0e-6)))
+    sample_limit = max(0, int(config.get("journey_gat_admission_shadow_sample_limit", 5)))
+    max_delay_rounds = int(config.get("journey_gat_admission_max_delay_rounds", 0))
+    max_queue_size = int(config.get("journey_gat_admission_max_delay_queue_size", 0))
+    safe_candidate_ids = {
+        str(item)
+        for item in config.get("journey_gat_shadow_safe_candidate_ids", tuple()) or tuple()
+    }
+    queue = GATAdmissionQueue(
+        reduced_cost_tolerance=abs(float(tol)),
+        max_delay_rounds=max_delay_rounds,
+        max_queue_size=max_queue_size,
+    )
+    decisions = []
+    samples: list[dict[str, Any]] = []
+    for index, journey in enumerate(journeys_list):
+        true_rc = float(manual_journey_reduced_cost(journey, true_duals, cuts=cuts))
+        candidate_id = _journey_gat_shadow_candidate_id(journey)
+        decision = queue.decide(
+            GATAdmissionCandidate(
+                candidate_id=candidate_id,
+                true_reduced_cost=true_rc,
+                safe_and_in_distribution=candidate_id in safe_candidate_ids,
+            ),
+            current_round=int(cg_iter),
+        )
+        decisions.append(decision)
+        if len(samples) < sample_limit:
+            samples.append(
+                {
+                    "candidate_id": candidate_id,
+                    "decision": decision.decision,
+                    "reason": decision.reason,
+                    "true_reduced_cost": round(float(true_rc), 9),
+                    "task_set": list(_canonical_task_set(getattr(journey, "task_set", frozenset()))),
+                    "signature": getattr(journey, "signature", tuple()),
+                    "rank": int(index),
+                }
+            )
+    counts = _journey_gat_shadow_decision_counts(decisions)
+    preflight = queue.certificate_preflight()
+    logger.log(
+        "journey_gat_target_mode_shadow",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        pricing_kind=str(pricing_kind),
+        certificate_candidate=bool(certificate_candidate),
+        status="logged",
+        candidate_journeys=len(journeys_list),
+        true_negative_journeys=int(counts.get("true_negative", 0)),
+        high_priority_journeys=int(counts.get(GAT_HIGH_PRIORITY, 0)),
+        delay_queue_journeys=int(counts.get(GAT_DELAY_QUEUE, 0)),
+        reject_nonnegative_only_journeys=int(counts.get(GAT_REJECT_NONNEGATIVE_ONLY, 0)),
+        delayed_negative_journeys=len(preflight.delayed_negative_ids),
+        delayed_nonnegative_journeys=len(preflight.delayed_nonnegative_ids),
+        certificate_blocked_by_delayed_negative=bool(preflight.certificate_blocked_by_delayed_negative),
+        requires_exact_pricing_full_scan=bool(preflight.requires_exact_pricing_full_scan),
+        selector_is_pricing_oracle=False,
+        selector_can_certificate=False,
+        official_bound_effect=False,
+        production_ready=False,
+        default_enabled=False,
+        hard_filter_enabled=False,
+        decision_samples=samples,
+    )
+
+
+def _journey_gat_target_mode_shadow_enabled(config: dict[str, Any]) -> bool:
+    return bool(config.get("journey_gat_target_mode_shadow_enabled", False)) or bool(
+        config.get("journey_gat_admission_log_shadow_decisions", False)
+    )
+
+
+def _make_journey_gat_admission_runtime(config: dict[str, Any]) -> _JourneyGATAdmissionRuntime | None:
+    if not _journey_gat_admission_scheduler_enabled(config):
+        return None
+    tol = float(config.get("journey_gat_admission_true_rc_tol", config.get("pricing_eps", 1.0e-6)))
+    return _JourneyGATAdmissionRuntime(
+        queue=GATAdmissionQueue(
+            reduced_cost_tolerance=abs(float(tol)),
+            max_delay_rounds=int(config.get("journey_gat_admission_max_delay_rounds", 1)),
+            max_queue_size=int(config.get("journey_gat_admission_max_delay_queue_size", 0)),
+        )
+    )
+
+
+def _journey_gat_admission_scheduler_enabled(config: dict[str, Any]) -> bool:
+    return bool(config.get("journey_gat_admission_scheduler_enabled", False))
+
+
+def _journey_gat_admission_mutating_pricing_kind(config: dict[str, Any], pricing_kind: str) -> bool:
+    allowed = config.get("journey_gat_admission_scheduler_pricing_kinds")
+    if allowed is not None:
+        return str(pricing_kind) in {str(item) for item in allowed}
+    return str(pricing_kind) in {
+        "heuristic",
+        "sharded_pulse_hidden_negative_worker",
+    }
+
+
+def _journey_gat_safe_candidate_ids(config: dict[str, Any]) -> set[str]:
+    values = []
+    values.extend(config.get("journey_gat_safe_candidate_ids", tuple()) or tuple())
+    values.extend(config.get("journey_gat_shadow_safe_candidate_ids", tuple()) or tuple())
+    return {str(item) for item in values}
+
+
+def _journey_gat_admission_safe_source_available(config: dict[str, Any], safe_candidate_ids: set[str]) -> bool:
+    if bool(config.get("journey_gat_admission_allow_unsourced_delay", False)):
+        return True
+    if bool(safe_candidate_ids):
+        return True
+    return bool(config.get("journey_gat_admission_safe_source_ready", False))
+
+
+def _journey_gat_admission_require_online_safe_hit_for_delay(config: dict[str, Any]) -> bool:
+    return bool(config.get("journey_gat_admission_require_online_safe_hit_for_delay", True))
+
+
+def _journey_gat_target_mode_admission_schedule(
+    logger: FutureLogger,
+    runtime: _JourneyGATAdmissionRuntime | None,
+    journeys: Iterable[Any],
+    true_duals: JourneyDuals | None,
+    cuts: tuple[FutureCut, ...],
+    config: dict[str, Any],
+    *,
+    cg_iter: int,
+    node_id: int,
+    depth: int,
+    pricing_kind: str,
+    certificate_candidate: bool,
+) -> list[Any]:
+    journeys_list = list(journeys)
+    if runtime is None:
+        return journeys_list
+    if true_duals is None:
+        _log_journey_gat_admission_event(
+            logger,
+            runtime,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            pricing_kind=pricing_kind,
+            certificate_candidate=certificate_candidate,
+            status="bypassed",
+            reason="missing_true_duals",
+            candidate_journeys=len(journeys_list),
+            admitted_journeys=len(journeys_list),
+        )
+        return journeys_list
+
+    mutating = _journey_gat_admission_mutating_pricing_kind(config, pricing_kind)
+    before_certificate = bool(certificate_candidate)
+    if before_certificate or not mutating:
+        released = _journey_gat_release_due_journeys(
+            runtime,
+            current_round=int(cg_iter),
+            before_certificate=before_certificate,
+        )
+        admitted = _deduplicate_journey_candidates([*released, *journeys_list])
+        _log_journey_gat_admission_event(
+            logger,
+            runtime,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            pricing_kind=pricing_kind,
+            certificate_candidate=certificate_candidate,
+            status="bypassed",
+            reason="certificate_candidate_release" if before_certificate else "pricing_kind_not_mutated",
+            candidate_journeys=len(journeys_list),
+            admitted_journeys=len(admitted),
+            released_journeys=len(released),
+            exact_path_preserved=True,
+        )
+        return admitted
+
+    safe_candidate_ids = _journey_gat_safe_candidate_ids(config)
+    if not _journey_gat_admission_safe_source_available(config, safe_candidate_ids):
+        released = _journey_gat_release_due_journeys(
+            runtime,
+            current_round=int(cg_iter),
+            before_certificate=False,
+        )
+        admitted = _deduplicate_journey_candidates([*released, *journeys_list])
+        _log_journey_gat_admission_event(
+            logger,
+            runtime,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            pricing_kind=pricing_kind,
+            certificate_candidate=certificate_candidate,
+            status="bypassed",
+            reason="missing_safe_source",
+            candidate_journeys=len(journeys_list),
+            admitted_journeys=len(admitted),
+            released_journeys=len(released),
+            safe_source_candidate_count=len(safe_candidate_ids),
+            exact_path_preserved=True,
+        )
+        return admitted
+
+    candidate_ids = [_journey_gat_shadow_candidate_id(journey) for journey in journeys_list]
+    online_safe_hit_count = sum(1 for candidate_id in candidate_ids if candidate_id in safe_candidate_ids)
+    if (
+        _journey_gat_admission_require_online_safe_hit_for_delay(config)
+        and safe_candidate_ids
+        and online_safe_hit_count == 0
+    ):
+        released = _journey_gat_release_due_journeys(
+            runtime,
+            current_round=int(cg_iter),
+            before_certificate=False,
+        )
+        admitted = _deduplicate_journey_candidates([*released, *journeys_list])
+        _log_journey_gat_admission_event(
+            logger,
+            runtime,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            pricing_kind=pricing_kind,
+            certificate_candidate=certificate_candidate,
+            status="bypassed",
+            reason="no_online_safe_hit",
+            candidate_journeys=len(journeys_list),
+            admitted_journeys=len(admitted),
+            released_journeys=len(released),
+            safe_source_candidate_count=len(safe_candidate_ids),
+            online_safe_hit_journeys=0,
+            exact_path_preserved=True,
+        )
+        return admitted
+
+    admitted: list[Any] = []
+    decisions = []
+    for journey, candidate_id in zip(journeys_list, candidate_ids):
+        true_rc = float(manual_journey_reduced_cost(journey, true_duals, cuts=cuts))
+        decision = runtime.queue.decide(
+            GATAdmissionCandidate(
+                candidate_id=candidate_id,
+                true_reduced_cost=true_rc,
+                safe_and_in_distribution=candidate_id in safe_candidate_ids,
+            ),
+            current_round=int(cg_iter),
+        )
+        decisions.append(decision)
+        if decision.decision == GAT_HIGH_PRIORITY:
+            admitted.append(journey)
+            runtime.delayed_journeys.pop(candidate_id, None)
+        elif decision.decision == GAT_DELAY_QUEUE:
+            runtime.delayed_journeys[candidate_id] = journey
+        elif decision.decision == GAT_REJECT_NONNEGATIVE_ONLY:
+            runtime.delayed_journeys.pop(candidate_id, None)
+    released = _journey_gat_release_due_journeys(
+        runtime,
+        current_round=int(cg_iter),
+        before_certificate=False,
+    )
+    admitted = _deduplicate_journey_candidates([*admitted, *released])
+    counts = _journey_gat_shadow_decision_counts(decisions)
+    _log_journey_gat_admission_event(
+        logger,
+        runtime,
+        cg_iter=cg_iter,
+        node_id=node_id,
+        depth=depth,
+        pricing_kind=pricing_kind,
+        certificate_candidate=certificate_candidate,
+        status="scheduled",
+        reason="opt_in_admission_scheduler",
+        candidate_journeys=len(journeys_list),
+        admitted_journeys=len(admitted),
+        released_journeys=len(released),
+        high_priority_journeys=int(counts.get(GAT_HIGH_PRIORITY, 0)),
+        delay_queue_journeys=int(counts.get(GAT_DELAY_QUEUE, 0)),
+        reject_nonnegative_only_journeys=int(counts.get(GAT_REJECT_NONNEGATIVE_ONLY, 0)),
+        true_negative_journeys=int(counts.get("true_negative", 0)),
+        safe_source_candidate_count=len(safe_candidate_ids),
+        online_safe_hit_journeys=online_safe_hit_count,
+        exact_path_preserved=True,
+    )
+    return admitted
+
+
+def _journey_gat_release_due_journeys(
+    runtime: _JourneyGATAdmissionRuntime,
+    *,
+    current_round: int,
+    before_certificate: bool,
+) -> list[Any]:
+    due = runtime.queue.due_for_release(
+        current_round=int(current_round),
+        before_certificate=bool(before_certificate),
+    )
+    released_candidates = runtime.queue.pop_released(due)
+    released: list[Any] = []
+    for candidate in released_candidates:
+        journey = runtime.delayed_journeys.pop(candidate.candidate_id, None)
+        if journey is not None:
+            released.append(journey)
+    return released
+
+
+def _deduplicate_journey_candidates(journeys: Iterable[Any]) -> list[Any]:
+    deduped: list[Any] = []
+    seen: set[str] = set()
+    for journey in journeys:
+        candidate_id = _journey_gat_shadow_candidate_id(journey)
+        if candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        deduped.append(journey)
+    return deduped
+
+
+def _log_journey_gat_admission_event(
+    logger: FutureLogger,
+    runtime: _JourneyGATAdmissionRuntime,
+    *,
+    cg_iter: int,
+    node_id: int,
+    depth: int,
+    pricing_kind: str,
+    certificate_candidate: bool,
+    status: str,
+    reason: str,
+    candidate_journeys: int,
+    admitted_journeys: int,
+    released_journeys: int = 0,
+    high_priority_journeys: int = 0,
+    delay_queue_journeys: int = 0,
+    reject_nonnegative_only_journeys: int = 0,
+    true_negative_journeys: int = 0,
+    safe_source_candidate_count: int = 0,
+    online_safe_hit_journeys: int = 0,
+    exact_path_preserved: bool = True,
+) -> None:
+    preflight = runtime.queue.certificate_preflight()
+    logger.log(
+        "journey_gat_target_mode_admission",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        pricing_kind=str(pricing_kind),
+        certificate_candidate=bool(certificate_candidate),
+        status=str(status),
+        reason=str(reason),
+        candidate_journeys=int(candidate_journeys),
+        admitted_journeys=int(admitted_journeys),
+        released_journeys=int(released_journeys),
+        high_priority_journeys=int(high_priority_journeys),
+        delay_queue_journeys=int(delay_queue_journeys),
+        reject_nonnegative_only_journeys=int(reject_nonnegative_only_journeys),
+        true_negative_journeys=int(true_negative_journeys),
+        safe_source_candidate_count=int(safe_source_candidate_count),
+        online_safe_hit_journeys=int(online_safe_hit_journeys),
+        delay_queue_size=len(runtime.queue),
+        delayed_negative_journeys=len(preflight.delayed_negative_ids),
+        delayed_nonnegative_journeys=len(preflight.delayed_nonnegative_ids),
+        certificate_blocked_by_delayed_negative=bool(preflight.certificate_blocked_by_delayed_negative),
+        requires_exact_pricing_full_scan=bool(preflight.requires_exact_pricing_full_scan),
+        selector_is_pricing_oracle=False,
+        selector_can_certificate=False,
+        official_bound_effect=False,
+        production_ready=False,
+        default_enabled=False,
+        hard_filter_enabled=False,
+        exact_path_preserved=bool(exact_path_preserved),
+    )
+
+
+def _journey_gat_shadow_candidate_id(journey: Any) -> str:
+    return journey_gat_candidate_id(journey)
+
+
+def _journey_gat_shadow_decision_counts(decisions: Iterable[Any]) -> dict[str, int]:
+    counts = {
+        GAT_HIGH_PRIORITY: 0,
+        GAT_DELAY_QUEUE: 0,
+        GAT_REJECT_NONNEGATIVE_ONLY: 0,
+        "true_negative": 0,
+    }
+    for decision in decisions:
+        decision_name = str(getattr(decision, "decision", ""))
+        counts[decision_name] = counts.get(decision_name, 0) + 1
+        if bool(getattr(decision, "is_true_rc_negative", False)):
+            counts["true_negative"] = counts.get("true_negative", 0) + 1
+    return counts
 
 
 def _journey_learning_handle_smoothed_pricing_result(
@@ -17893,6 +18618,132 @@ def _journey_sharded_pulse_audit_context_hashes(
     }
 
 
+_TARGET_MATERIALIZATION_CONTEXTS_KEY = (
+    "journey_sharded_pulse_hidden_negative_worker_target_materialization_contexts"
+)
+
+
+def _journey_sharded_pulse_target_materialization_contexts_configured(
+    config: dict[str, Any],
+) -> bool:
+    value = config.get(_TARGET_MATERIALIZATION_CONTEXTS_KEY, "")
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
+def _journey_sharded_pulse_target_materialization_contexts_from_config(
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], ...]:
+    value = config.get(_TARGET_MATERIALIZATION_CONTEXTS_KEY, "")
+    if value is None or value == "":
+        return tuple()
+    payload = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(payload, list):
+        raise ValueError("target materialization contexts must be a list")
+    contexts: list[dict[str, Any]] = []
+    for index, raw in enumerate(payload):
+        if not isinstance(raw, dict):
+            raise ValueError("target materialization context entries must be objects")
+        expected_context = str(
+            raw.get("expected_context_hash") or raw.get("context_hash") or ""
+        ).strip()
+        if not expected_context:
+            raise ValueError(
+                f"target materialization context entry {index} has no expected_context_hash"
+            )
+        item = dict(raw)
+        item["expected_context_hash"] = expected_context
+        contexts.append(item)
+    return tuple(contexts)
+
+
+def _journey_sharded_pulse_target_materialization_context_item(
+    config: dict[str, Any],
+    context_hashes: dict[str, str] | None,
+) -> dict[str, Any] | None:
+    current_context = str((context_hashes or {}).get("context", "") or "").strip()
+    if not current_context:
+        return None
+    for item in _journey_sharded_pulse_target_materialization_contexts_from_config(config):
+        expected_context = str(item.get("expected_context_hash") or "").strip()
+        if expected_context and expected_context == current_context:
+            return item
+    return None
+
+
+def _journey_sharded_pulse_target_materialization_config_for_context(
+    config: dict[str, Any],
+    context_hashes: dict[str, str] | None,
+) -> dict[str, Any]:
+    if not _journey_sharded_pulse_target_materialization_contexts_configured(config):
+        return config
+    item = _journey_sharded_pulse_target_materialization_context_item(config, context_hashes)
+    if item is None:
+        return config
+    effective = dict(config)
+    effective["journey_sharded_pulse_hidden_negative_worker_expected_context_hash"] = str(
+        item["expected_context_hash"]
+    )
+    if "journeys" in item:
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys"
+        ] = item.get("journeys") or []
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces"
+        ] = ""
+    elif "target_materialization_journeys" in item:
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys"
+        ] = item.get("target_materialization_journeys") or []
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces"
+        ] = ""
+    else:
+        traces = (
+            item.get("traces")
+            or item.get("target_sortie_traces")
+            or item.get("target_materialization_traces")
+            or []
+        )
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_traces"
+        ] = traces
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_materialization_journeys"
+        ] = ""
+    target_sequence = item.get("target_sequence") or item.get("target_tasks")
+    if target_sequence is not None:
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_sequence_diagnostics_sequence"
+        ] = target_sequence
+    priority_sequence = (
+        item.get("target_priority_sequence")
+        or item.get("target_first_task_priority_sequence")
+        or item.get("target_transition_priority_sequence")
+        or target_sequence
+    )
+    if priority_sequence is not None:
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_first_task_priority_sequence"
+        ] = priority_sequence
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_transition_priority_sequence"
+        ] = priority_sequence
+    arc_sequence = (
+        item.get("target_arc_option_sequence")
+        or item.get("target_arc_options")
+        or item.get("arc_option_sequence")
+    )
+    if arc_sequence is not None:
+        effective[
+            "journey_sharded_pulse_hidden_negative_worker_target_arc_option_priority_sequence"
+        ] = arc_sequence
+    return effective
+
+
 def _journey_sharded_pulse_expected_context_allows(
     config: dict[str, Any],
     context_hashes: dict[str, str] | None,
@@ -17902,7 +18753,18 @@ def _journey_sharded_pulse_expected_context_allows(
         or ""
     ).strip()
     if not expected_context:
-        return True, ""
+        if not _journey_sharded_pulse_target_materialization_contexts_configured(config):
+            return True, ""
+        try:
+            item = _journey_sharded_pulse_target_materialization_context_item(
+                config,
+                context_hashes,
+            )
+        except Exception:
+            return False, "residual_target_context_parse_error"
+        if item is not None:
+            return True, ""
+        return False, "residual_target_context_mismatch"
     current_context = str((context_hashes or {}).get("context", "") or "").strip()
     if current_context and current_context == expected_context:
         return True, ""
@@ -17918,7 +18780,17 @@ def _journey_sharded_pulse_expected_context_configured_match(
         or ""
     ).strip()
     current_context = str((context_hashes or {}).get("context", "") or "").strip()
-    return bool(expected_context and current_context and current_context == expected_context)
+    if expected_context:
+        return bool(current_context and current_context == expected_context)
+    if not _journey_sharded_pulse_target_materialization_contexts_configured(config):
+        return False
+    try:
+        return _journey_sharded_pulse_target_materialization_context_item(
+            config,
+            context_hashes,
+        ) is not None
+    except Exception:
+        return False
 
 
 def _journey_pulse_target_sequence_from_config(
@@ -19310,9 +20182,15 @@ def _run_journey_sharded_pulse_hidden_negative_worker(
             final_judge_incomplete_reason="worker_time_limit",
         )
     else:
+        target_materialization_config = (
+            _journey_sharded_pulse_target_materialization_config_for_context(
+                config,
+                context_hashes,
+            )
+        )
         target_pricing = _journey_sharded_pulse_target_materialization_result(
             data,
-            config,
+            target_materialization_config,
             duals=duals,
             cuts=cuts,
             base_pricing_config=worker_config,
@@ -20029,6 +20907,18 @@ def _run_journey_same_dual_supplement(
             node_id=node_id,
             depth=depth,
         )
+        _log_journey_gat_target_mode_shadow(
+            logger,
+            supplement_pricing.journeys,
+            duals,
+            tuple(cuts),
+            config,
+            cg_iter=cg_iter,
+            node_id=node_id,
+            depth=depth,
+            pricing_kind="exact_same_dual_supplement",
+            certificate_candidate=False,
+        )
         added = _add_priced_journeys(journey_pool, supplement_pricing.journeys)
         _log_journey_addition(
             logger,
@@ -20278,8 +21168,20 @@ def _run_journey_final_judge_replacement_repair(
         branch_constraints,
         cg_iter,
         pricing_kind="exact_final_judge_replacement_repair",
+            node_id=node_id,
+            depth=depth,
+        )
+    _log_journey_gat_target_mode_shadow(
+        logger,
+        repair_pricing.journeys,
+        duals,
+        tuple(cuts),
+        config,
+        cg_iter=cg_iter,
         node_id=node_id,
         depth=depth,
+        pricing_kind="exact_final_judge_replacement_repair",
+        certificate_candidate=False,
     )
     added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
     _log_journey_addition(
@@ -20419,6 +21321,18 @@ def _run_journey_replacement_repair_after_flat_weak(
     )
     if not repair_pricing.journeys:
         return result
+    _log_journey_gat_target_mode_shadow(
+        logger,
+        repair_pricing.journeys,
+        duals,
+        tuple(cuts),
+        config,
+        cg_iter=cg_iter,
+        node_id=node_id,
+        depth=depth,
+        pricing_kind="exact_replacement_repair_after_flat_weak",
+        certificate_candidate=False,
+    )
     added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
     _log_journey_addition(
         logger,
