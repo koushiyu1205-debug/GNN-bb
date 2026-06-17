@@ -19,8 +19,39 @@ class GATBatchImpactThresholdFrontierTests(unittest.TestCase):
 
         self.assertGreater(frontier["feasible_threshold_count"], 0)
         self.assertTrue(frontier["best_candidate"]["threshold_local_gate_pass"])
+        self.assertGreater(frontier["best_candidate"]["candidate_threshold"], 0.0)
         self.assertGreaterEqual(frontier["best_candidate"]["safe_precision_ci_low"], 0.85)
         self.assertGreaterEqual(frontier["best_candidate"]["accepted_batch_roi_ci_low"], 0.65)
+
+    def test_frontier_marks_zero_candidate_threshold_as_inactive_filter(self) -> None:
+        records = [_record(idx, score=0.9, roi=1.0) for idx in range(4)]
+        frontier = evaluate_threshold_frontier_records(
+            records,
+            gate_config=_gate_config_without_confidence_bounds(
+                actual_sample_count=len(records),
+                observed_family_count=1,
+                min_major_families=1,
+                min_accepted_batch_count=1,
+                min_family_holdout_accepted_roi=0.0,
+            ),
+            max_dynamic_thresholds=16,
+        )
+
+        zero_threshold_rows = [
+            row
+            for row in frontier["global_rows"]
+            if row["candidate_threshold"] == 0.0
+        ]
+
+        self.assertGreater(len(zero_threshold_rows), 0)
+        self.assertTrue(
+            all(
+                "candidate_threshold_zero_disables_candidate_head_filter"
+                in row["threshold_local_reject_reasons"]
+                for row in zero_threshold_rows
+            )
+        )
+        self.assertGreater(frontier["best_candidate"]["candidate_threshold"], 0.0)
 
     def test_frontier_reports_confidence_blocker_for_tiny_safe_shell(self) -> None:
         records = [_record(idx, score=0.9, roi=1.0) for idx in range(2)]

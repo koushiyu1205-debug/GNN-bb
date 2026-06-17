@@ -119,6 +119,49 @@ class GATTargetPriorityWorkerABRunbookSubsetTests(unittest.TestCase):
             )
             self.assertEqual([candidate["name"] for candidate in payload["candidates"]], ["a1", "a2"])
 
+    def test_context_priority_score_overrides_plain_roi_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidates_file = root / "candidates.json"
+            _write_candidates(
+                candidates_file,
+                [
+                    _candidate("ctx-plain", "plain1", score=100.0, true_rc=-10.0),
+                    _candidate("ctx-plain", "plain2", score=100.0, true_rc=-9.0, rank=2),
+                    _candidate(
+                        "ctx-structural",
+                        "structural1",
+                        score=1.0,
+                        true_rc=-1.0,
+                        context_priority_score=50.0,
+                    ),
+                    _candidate(
+                        "ctx-structural",
+                        "structural2",
+                        score=1.0,
+                        true_rc=-0.5,
+                        rank=2,
+                        context_priority_score=50.0,
+                    ),
+                ],
+            )
+
+            summary = select_runbook_subset(
+                candidates_file=candidates_file,
+                output_dir=root / "subset",
+                report=root / "report.md",
+                max_contexts=1,
+                require_missed_high_roi=True,
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["candidate_context_counts"], {"ctx-structural": 2})
+            self.assertEqual(summary["contexts"][0]["max_context_priority_score"], 50.0)
+            self.assertEqual(
+                summary["contexts"][0]["context_priority_actions"],
+                ["collect_same_context_positive_negative_contrast"],
+            )
+
     def test_can_exclude_already_run_contexts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -168,8 +211,9 @@ def _candidate(
     missed: bool = True,
     task_count: int = 20,
     family: str = "sector-wave",
+    context_priority_score: float | None = None,
 ) -> dict[str, object]:
-    return {
+    candidate: dict[str, object] = {
         "active_hash_before": "active",
         "best_true_reduced_cost": true_rc,
         "branch_hash": "branch",
@@ -200,6 +244,10 @@ def _candidate(
         "training_label_allowed_before_worker_reachability": False,
         "true_dual_hash": "dual",
     }
+    if context_priority_score is not None:
+        candidate["context_priority_action"] = "collect_same_context_positive_negative_contrast"
+        candidate["context_priority_score"] = context_priority_score
+    return candidate
 
 
 if __name__ == "__main__":

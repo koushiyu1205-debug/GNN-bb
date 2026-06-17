@@ -45,6 +45,118 @@ BATCH_IMPACT_HEAD_NAMES: tuple[str, ...] = (
 )
 
 
+class PathTokenEncoder(nn.Module):
+    """Encode ordered arc-option token sequences for each journey candidate."""
+
+    def __init__(
+        self,
+        *,
+        token_vocab_size: int,
+        pair_vocab_size: int,
+        type_vocab_size: int = 3,
+        token_dim: int = 16,
+        hidden_dim: int = 32,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+        if int(token_vocab_size) <= 0:
+            raise ValueError("token_vocab_size must be positive")
+        if int(pair_vocab_size) <= 0:
+            raise ValueError("pair_vocab_size must be positive")
+        if int(type_vocab_size) <= 0:
+            raise ValueError("type_vocab_size must be positive")
+        if int(token_dim) <= 0:
+            raise ValueError("token_dim must be positive")
+        if int(hidden_dim) <= 0:
+            raise ValueError("hidden_dim must be positive")
+        self.token_vocab_size = int(token_vocab_size)
+        self.pair_vocab_size = int(pair_vocab_size)
+        self.type_vocab_size = int(type_vocab_size)
+        self.token_dim = int(token_dim)
+        self.hidden_dim = int(hidden_dim)
+        self.token_embedding = nn.Embedding(self.token_vocab_size + 1, self.token_dim, padding_idx=0)
+        self.pair_embedding = nn.Embedding(self.pair_vocab_size + 1, self.token_dim, padding_idx=0)
+        self.type_embedding = nn.Embedding(self.type_vocab_size + 1, self.token_dim, padding_idx=0)
+        self.token_projector = nn.Sequential(
+            nn.Linear(3 * self.token_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(float(dropout)),
+        )
+        self.sequence_projector = nn.Sequential(
+            nn.Linear(2 * self.hidden_dim + 1, self.hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(float(dropout)),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+        )
+
+    def forward(
+        self,
+        token_ids: Tensor,
+        pair_ids: Tensor,
+        type_ids: Tensor,
+        token_mask: Tensor,
+        *,
+        device: torch.device,
+    ) -> Dict[str, Tensor]:
+        self._validate_inputs(token_ids, pair_ids, type_ids, token_mask)
+        token_ids = token_ids.to(device=device, dtype=torch.long)
+        pair_ids = pair_ids.to(device=device, dtype=torch.long)
+        type_ids = type_ids.to(device=device, dtype=torch.long)
+        token_mask = token_mask.to(device=device, dtype=torch.bool)
+        token_input = torch.cat(
+            [
+                self.token_embedding(token_ids),
+                self.pair_embedding(pair_ids),
+                self.type_embedding(type_ids),
+            ],
+            dim=-1,
+        )
+        token_h = self.token_projector(token_input)
+        mask = token_mask.unsqueeze(-1)
+        mask_float = mask.to(dtype=token_h.dtype)
+        token_count = token_mask.sum(dim=1, keepdim=True).to(dtype=token_h.dtype)
+        denom = token_count.clamp_min(1.0)
+        mean_pool = (token_h * mask_float).sum(dim=1) / denom
+        neg_large = torch.full_like(token_h, -1.0e30)
+        masked_token_h = torch.where(mask, token_h, neg_large)
+        max_pool = masked_token_h.max(dim=1).values
+        max_pool = torch.where(token_count > 0.0, max_pool, torch.zeros_like(max_pool))
+        encoder_input = torch.cat([mean_pool, max_pool, token_count], dim=-1)
+        _assert_finite(encoder_input, "path token encoder input")
+        embedding = self.sequence_projector(encoder_input)
+        _assert_finite(embedding, "candidate path token embedding")
+        return {
+            "candidate_path_embedding": embedding,
+            "path_token_count": token_count.squeeze(-1),
+        }
+
+    def _validate_inputs(
+        self,
+        token_ids: Tensor,
+        pair_ids: Tensor,
+        type_ids: Tensor,
+        token_mask: Tensor,
+    ) -> None:
+        if token_ids.dim() != 2:
+            raise ValueError("candidate_path_token_ids must have shape [num_candidates, max_path_tokens]")
+        if pair_ids.shape != token_ids.shape:
+            raise ValueError("candidate_path_pair_ids must match candidate_path_token_ids shape")
+        if type_ids.shape != token_ids.shape:
+            raise ValueError("candidate_path_type_ids must match candidate_path_token_ids shape")
+        if token_mask.shape != token_ids.shape:
+            raise ValueError("candidate_path_token_mask must match candidate_path_token_ids shape")
+        for name, tensor, max_value in (
+            ("candidate_path_token_ids", token_ids, self.token_vocab_size),
+            ("candidate_path_pair_ids", pair_ids, self.pair_vocab_size),
+            ("candidate_path_type_ids", type_ids, self.type_vocab_size),
+        ):
+            if int(tensor.numel()) == 0:
+                raise ValueError(f"{name} must not be empty")
+            if bool(torch.any(tensor < 0)) or bool(torch.any(tensor > int(max_value))):
+                raise ValueError(f"{name} contains ids outside [0, {int(max_value)}]")
+
+
 class JourneyCandidateEncoder(nn.Module):
     """Encode ordered journey candidates from task embeddings and local features.
 
@@ -59,6 +171,7 @@ class JourneyCandidateEncoder(nn.Module):
         *,
         graph_hidden_dim: int,
         candidate_feature_dim: int,
+        path_feature_dim: int = 0,
         candidate_hidden_dim: int = 128,
         dropout: float = 0.1,
     ) -> None:
@@ -72,10 +185,11 @@ class JourneyCandidateEncoder(nn.Module):
 
         self.graph_hidden_dim = int(graph_hidden_dim)
         self.candidate_feature_dim = int(candidate_feature_dim)
+        self.path_feature_dim = int(path_feature_dim)
         self.candidate_hidden_dim = int(candidate_hidden_dim)
 
         task_context_dim = 2 * self.graph_hidden_dim
-        input_dim = 4 * task_context_dim + self.candidate_feature_dim + 2
+        input_dim = 4 * task_context_dim + self.candidate_feature_dim + self.path_feature_dim + 2
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, self.candidate_hidden_dim),
             nn.ReLU(),
@@ -91,6 +205,7 @@ class JourneyCandidateEncoder(nn.Module):
         candidate_task_membership: Tensor,
         candidate_sequence_positions: Tensor,
         candidate_features: Tensor,
+        candidate_path_embedding: Optional[Tensor] = None,
     ) -> Dict[str, Tensor]:
         self._validate_inputs(
             task_h=task_h,
@@ -98,10 +213,17 @@ class JourneyCandidateEncoder(nn.Module):
             candidate_task_membership=candidate_task_membership,
             candidate_sequence_positions=candidate_sequence_positions,
             candidate_features=candidate_features,
+            candidate_path_embedding=candidate_path_embedding,
         )
         membership = candidate_task_membership.to(device=task_h.device, dtype=task_h.dtype)
         positions = candidate_sequence_positions.to(device=task_h.device, dtype=task_h.dtype)
         candidate_features = candidate_features.to(device=task_h.device, dtype=task_h.dtype)
+        if self.path_feature_dim > 0:
+            if candidate_path_embedding is None:
+                raise ValueError("candidate_path_embedding is required when path_feature_dim > 0")
+            path_embedding = candidate_path_embedding.to(device=task_h.device, dtype=task_h.dtype)
+        else:
+            path_embedding = candidate_features.new_empty((candidate_features.size(0), 0))
 
         present = membership > 0
         task_counts = membership.sum(dim=1, keepdim=True)
@@ -136,6 +258,7 @@ class JourneyCandidateEncoder(nn.Module):
                 first_pool,
                 last_pool,
                 candidate_features,
+                path_embedding,
                 task_counts,
                 order_span,
             ],
@@ -162,6 +285,7 @@ class JourneyCandidateEncoder(nn.Module):
         candidate_task_membership: Tensor,
         candidate_sequence_positions: Tensor,
         candidate_features: Tensor,
+        candidate_path_embedding: Optional[Tensor] = None,
     ) -> None:
         if task_h.dim() != 2 or task_h.size(1) != self.graph_hidden_dim:
             raise ValueError(f"task_h must have shape [num_tasks, {self.graph_hidden_dim}]")
@@ -178,6 +302,16 @@ class JourneyCandidateEncoder(nn.Module):
             )
         if candidate_features.size(0) != candidate_task_membership.size(0):
             raise ValueError("candidate_features and candidate_task_membership must have the same row count")
+        if self.path_feature_dim > 0:
+            if candidate_path_embedding is None:
+                raise ValueError("candidate_path_embedding is required when path_feature_dim > 0")
+            if candidate_path_embedding.dim() != 2 or candidate_path_embedding.size(1) != self.path_feature_dim:
+                raise ValueError(
+                    "candidate_path_embedding must have shape "
+                    f"[num_candidates, {self.path_feature_dim}]"
+                )
+            if candidate_path_embedding.size(0) != candidate_task_membership.size(0):
+                raise ValueError("candidate_path_embedding must have one row per candidate")
         if candidate_task_membership.size(1) != task_h.size(0):
             raise ValueError("candidate_task_membership width must equal the number of task embeddings")
         _assert_finite(task_h, "task_h")
@@ -185,6 +319,8 @@ class JourneyCandidateEncoder(nn.Module):
         _assert_finite(candidate_task_membership, "candidate_task_membership")
         _assert_finite(candidate_sequence_positions, "candidate_sequence_positions")
         _assert_finite(candidate_features, "candidate_features")
+        if candidate_path_embedding is not None:
+            _assert_finite(candidate_path_embedding, "candidate_path_embedding")
 
 
 class RMPContextEncoder(nn.Module):
@@ -336,6 +472,11 @@ class GATBatchImpactModel(nn.Module):
         context_hidden_dim: int = 64,
         batch_hidden_dim: int = 128,
         impact_hidden_dim: int = 128,
+        path_token_vocab_size: int = 0,
+        path_pair_vocab_size: int = 0,
+        path_type_vocab_size: int = 3,
+        path_token_dim: int = 16,
+        path_hidden_dim: int = 32,
         use_layer_norm: bool = True,
     ) -> None:
         super().__init__()
@@ -348,6 +489,11 @@ class GATBatchImpactModel(nn.Module):
         self.context_hidden_dim = int(context_hidden_dim)
         self.batch_hidden_dim = int(batch_hidden_dim)
         self.impact_hidden_dim = int(impact_hidden_dim)
+        self.path_token_vocab_size = int(path_token_vocab_size)
+        self.path_pair_vocab_size = int(path_pair_vocab_size)
+        self.path_type_vocab_size = int(path_type_vocab_size)
+        self.path_token_dim = int(path_token_dim)
+        self.path_hidden_dim = int(path_hidden_dim)
         self.exactness_contract = dict(BATCH_IMPACT_EXACTNESS_CONTRACT)
 
         self.graph_encoder = HierarchicalOptionGAT(
@@ -361,9 +507,25 @@ class GATBatchImpactModel(nn.Module):
             dropout=float(dropout),
             use_layer_norm=bool(use_layer_norm),
         )
+        path_feature_dim = self.path_hidden_dim if self.path_token_vocab_size > 0 else 0
+        if (self.path_token_vocab_size > 0) != (self.path_pair_vocab_size > 0):
+            raise ValueError("path_token_vocab_size and path_pair_vocab_size must be enabled together")
+        self.path_token_encoder = (
+            PathTokenEncoder(
+                token_vocab_size=self.path_token_vocab_size,
+                pair_vocab_size=self.path_pair_vocab_size,
+                type_vocab_size=self.path_type_vocab_size,
+                token_dim=self.path_token_dim,
+                hidden_dim=self.path_hidden_dim,
+                dropout=float(dropout),
+            )
+            if self.path_token_vocab_size > 0
+            else None
+        )
         self.candidate_encoder = JourneyCandidateEncoder(
             graph_hidden_dim=int(hidden_dim),
             candidate_feature_dim=self.candidate_feature_dim,
+            path_feature_dim=path_feature_dim,
             candidate_hidden_dim=self.candidate_hidden_dim,
             dropout=float(dropout),
         )
@@ -402,16 +564,39 @@ class GATBatchImpactModel(nn.Module):
         *,
         candidate_mask: Optional[Tensor] = None,
         batch_features: Optional[Tensor] = None,
+        candidate_path_token_ids: Optional[Tensor] = None,
+        candidate_path_pair_ids: Optional[Tensor] = None,
+        candidate_path_type_ids: Optional[Tensor] = None,
+        candidate_path_token_mask: Optional[Tensor] = None,
     ) -> Dict[str, Tensor]:
         encoded = self.graph_encoder.encode(data)
         task_h = encoded["task_h"]
         initial_task_h = encoded["initial_task_h"]
+        path_output: Dict[str, Tensor] = {}
+        candidate_path_embedding: Optional[Tensor] = None
+        if self.path_token_encoder is not None:
+            if (
+                candidate_path_token_ids is None
+                or candidate_path_pair_ids is None
+                or candidate_path_type_ids is None
+                or candidate_path_token_mask is None
+            ):
+                raise ValueError("candidate path token tensors are required when path token encoder is enabled")
+            path_output = self.path_token_encoder(
+                candidate_path_token_ids,
+                candidate_path_pair_ids,
+                candidate_path_type_ids,
+                candidate_path_token_mask,
+                device=task_h.device,
+            )
+            candidate_path_embedding = path_output["candidate_path_embedding"]
         candidate_output = self.candidate_encoder(
             task_h=task_h,
             initial_task_h=initial_task_h,
             candidate_task_membership=candidate_task_membership,
             candidate_sequence_positions=candidate_sequence_positions,
             candidate_features=candidate_features,
+            candidate_path_embedding=candidate_path_embedding,
         )
         candidate_embedding = candidate_output["candidate_embedding"]
         context_embedding = self.context_encoder(
@@ -470,6 +655,7 @@ class GATBatchImpactModel(nn.Module):
             "predicted_barrier_slack": predicted_barrier_slack,
             "predicted_accepted_batch_roi": predicted_accepted_batch_roi,
         }
+        outputs.update(path_output)
         for name, value in outputs.items():
             _assert_finite(value, name)
         return outputs

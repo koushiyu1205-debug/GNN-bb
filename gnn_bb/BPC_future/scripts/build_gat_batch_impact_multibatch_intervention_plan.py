@@ -55,6 +55,26 @@ DEFAULT_OPPORTUNITY_JSONL = (
     ),
 )
 SUPPORTED_SELECTION_RANKINGS = ("best_rc", "impact", "active_replacement", "diverse")
+CONTEXT_PRIORITY_FIELDS = (
+    "context_priority_score",
+    "context_priority_action",
+    "context_priority_primary_blocker",
+    "context_priority_negative_neighbor_count",
+    "context_priority_deep_gap_count",
+    "context_false_delay_false_high_priority_on_delay_count",
+    "context_false_delay_candidate_signature_count",
+    "context_false_delay_batch_record_count",
+    "context_false_delay_accepted_batch_count",
+    "context_false_delay_max_delay_risk_score",
+    "context_false_delay_median_delay_risk_score",
+    "context_false_delay_median_raw_high_priority_score",
+    "context_repair_candidate_count",
+    "context_repair_delayed_high_roi_count",
+    "context_repair_accepted_high_point_roi_unstable_count",
+    "context_repair_max_roi",
+    "context_repair_median_roi",
+    "context_repair_source_variants",
+)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -108,6 +128,77 @@ def _opportunity_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def _context_priority_rows(paths: Iterable[Path] | None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in paths or []:
+        item_path = Path(path)
+        if not item_path.exists():
+            continue
+        rows.extend(_read_jsonl(item_path))
+    return rows
+
+
+def _priority_row_as_opportunity(row: dict[str, Any]) -> dict[str, Any]:
+    item = dict(row)
+    max_roi = _float_value(
+        item.get("max_missed_roi"),
+        _float_value(
+            item.get("max_accepted_batch_roi_label"),
+            _float_value(item.get("mean_missed_roi"), _float_value(item.get("mean_accepted_batch_roi_label"))),
+        ),
+    )
+    repair_count = _int_value(item.get("repair_candidate_count"))
+    delayed_high_roi_count = _int_value(item.get("delayed_high_roi_count"))
+    accepted_unstable_count = _int_value(item.get("accepted_high_point_roi_unstable_count"))
+    missed_count = _int_value(
+        item.get("missed_high_roi_count_proxy"),
+        max(1, delayed_high_roi_count + accepted_unstable_count, repair_count),
+    )
+    item.setdefault("accepted_batch_roi_label", max_roi)
+    item.setdefault("candidate_count", missed_count)
+    item.setdefault("is_high_roi_opportunity", True)
+    if item.get("schema_version") == "gat_batch_impact_neighbor_roi_context_repair_v1":
+        item.setdefault("is_missed_high_roi_opportunity", bool(delayed_high_roi_count))
+    else:
+        item.setdefault("is_missed_high_roi_opportunity", True)
+    item.setdefault("task_count", item.get("instance_task_count"))
+    item.setdefault("family", item.get("instance_family"))
+    item.setdefault("instance_path", item.get("instance"))
+    item["context_priority_score"] = _float_value(item.get("priority_score"))
+    item["context_priority_action"] = str(item.get("primary_action") or "")
+    item["context_priority_primary_blocker"] = str(item.get("primary_blocker") or "")
+    item["context_priority_negative_neighbor_count"] = _int_value(
+        item.get("nearest_negative_closer_count")
+    )
+    item["context_priority_deep_gap_count"] = _int_value(item.get("deep_candidate_gap_count"))
+    item["context_repair_candidate_count"] = repair_count
+    item["context_repair_delayed_high_roi_count"] = delayed_high_roi_count
+    item["context_repair_accepted_high_point_roi_unstable_count"] = accepted_unstable_count
+    item["context_repair_max_roi"] = _float_value(item.get("max_accepted_batch_roi_label"), max_roi)
+    item["context_repair_median_roi"] = _float_value(
+        item.get("median_accepted_batch_roi_label"), max_roi
+    )
+    item["context_repair_source_variants"] = list(item.get("source_variants") or [])
+    return item
+
+
+def _merge_context_priorities(
+    opportunity_rows: list[dict[str, Any]],
+    priority_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not priority_rows:
+        return list(opportunity_rows)
+    merged = _opportunity_by_context(opportunity_rows)
+    for priority in priority_rows:
+        context_hash = str(priority.get("context_hash") or "")
+        if not context_hash:
+            continue
+        priority_opportunity = _priority_row_as_opportunity(priority)
+        current = merged.get(context_hash, {})
+        merged[context_hash] = {**current, **priority_opportunity}
+    return list(merged.values())
+
+
 def _opportunity_by_context(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     best: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -120,8 +211,12 @@ def _opportunity_by_context(rows: Iterable[dict[str, Any]]) -> dict[str, dict[st
     return best
 
 
-def _context_priority_key(row: dict[str, Any]) -> tuple[float, float, float, float, float]:
+def _context_priority_key(row: dict[str, Any]) -> tuple[float, float, float, float, float, float, float]:
+    explicit_priority = row.get("context_priority_score", row.get("priority_score"))
+    has_explicit_priority = explicit_priority is not None
     return (
+        2.0 if has_explicit_priority else 1.0,
+        _float_value(explicit_priority) if has_explicit_priority else 0.0,
         1.0 if bool(row.get("is_missed_high_roi_opportunity")) else 0.0,
         1.0 if bool(row.get("is_high_roi_opportunity")) else 0.0,
         _float_value(row.get("accepted_batch_roi_label"), _float_value(row.get("accepted_batch_roi"))),
@@ -446,6 +541,11 @@ def _candidate_record(
         "opportunity_is_missed_high_roi": bool(opportunity.get("is_missed_high_roi_opportunity")),
         "opportunity_is_high_roi": bool(opportunity.get("is_high_roi_opportunity")),
         "opportunity_is_accepted_low_roi_or_bad": bool(opportunity.get("is_accepted_low_roi_or_bad")),
+        **{
+            field: opportunity.get(field)
+            for field in CONTEXT_PRIORITY_FIELDS
+            if field in opportunity
+        },
         "support_change_jaccard_threshold": float(support_change_jaccard_threshold),
         **target["impact"],
         "gate_role": "stage3_same_context_multibatch_intervention_sampling",
@@ -484,6 +584,7 @@ def build_intervention_plan(
     *,
     dataset_dir: Path = DEFAULT_DATASET_DIR,
     opportunity_jsonl_paths: Iterable[Path] = DEFAULT_OPPORTUNITY_JSONL,
+    context_priority_jsonl_paths: Iterable[Path] | None = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     report: Path = DEFAULT_REPORT,
     max_contexts: int = 12,
@@ -504,7 +605,9 @@ def build_intervention_plan(
     manifest_path = Path(dataset_dir) / "manifest.json"
     manifest = _read_json(manifest_path)
     catalog = _context_catalog(manifest)
-    opportunities = _opportunity_rows(opportunity_jsonl_paths)
+    raw_opportunities = _opportunity_rows(opportunity_jsonl_paths)
+    context_priorities = _context_priority_rows(context_priority_jsonl_paths)
+    opportunities = _merge_context_priorities(raw_opportunities, context_priorities)
     split_instance_set = _split_instances(split_summary, split_mode)
     selected_contexts = _candidate_contexts(
         catalog=catalog,
@@ -606,6 +709,42 @@ def build_intervention_plan(
                     _float_value(sample.get("accepted_batch_roi")),
                 ),
                 "opportunity_is_missed_high_roi": bool(opportunity.get("is_missed_high_roi_opportunity")),
+                "context_priority_score": opportunity.get("context_priority_score"),
+                "context_priority_action": opportunity.get("context_priority_action"),
+                "context_priority_negative_neighbor_count": opportunity.get(
+                    "context_priority_negative_neighbor_count"
+                ),
+                "context_priority_deep_gap_count": opportunity.get("context_priority_deep_gap_count"),
+                "context_false_delay_false_high_priority_on_delay_count": opportunity.get(
+                    "context_false_delay_false_high_priority_on_delay_count"
+                ),
+                "context_false_delay_candidate_signature_count": opportunity.get(
+                    "context_false_delay_candidate_signature_count"
+                ),
+                "context_false_delay_batch_record_count": opportunity.get(
+                    "context_false_delay_batch_record_count"
+                ),
+                "context_false_delay_accepted_batch_count": opportunity.get(
+                    "context_false_delay_accepted_batch_count"
+                ),
+                "context_false_delay_max_delay_risk_score": opportunity.get(
+                    "context_false_delay_max_delay_risk_score"
+                ),
+                "context_false_delay_median_delay_risk_score": opportunity.get(
+                    "context_false_delay_median_delay_risk_score"
+                ),
+                "context_false_delay_median_raw_high_priority_score": opportunity.get(
+                    "context_false_delay_median_raw_high_priority_score"
+                ),
+                "context_repair_candidate_count": opportunity.get("context_repair_candidate_count"),
+                "context_repair_delayed_high_roi_count": opportunity.get(
+                    "context_repair_delayed_high_roi_count"
+                ),
+                "context_repair_accepted_high_point_roi_unstable_count": opportunity.get(
+                    "context_repair_accepted_high_point_roi_unstable_count"
+                ),
+                "context_repair_max_roi": opportunity.get("context_repair_max_roi"),
+                "context_repair_median_roi": opportunity.get("context_repair_median_roi"),
                 "unique_negative_target_count": len(negative_items),
                 "selected_target_count": len(selected_targets),
                 "selection_rankings": [str(target["selection_ranking"]) for target in selected_targets],
@@ -654,6 +793,11 @@ def build_intervention_plan(
         "dataset_dir": str(dataset_dir),
         "manifest_path": str(manifest_path),
         "opportunity_jsonl_paths": [str(path) for path in opportunity_jsonl_paths],
+        "context_priority_jsonl_paths": [
+            str(path) for path in (context_priority_jsonl_paths or [])
+        ],
+        "raw_opportunity_row_count": len(raw_opportunities),
+        "context_priority_row_count": len(context_priorities),
         "opportunity_row_count": len(opportunities),
         "manifest_sample_count": _int_value(manifest.get("sample_count"), len(catalog)),
         "available_context_count": len(catalog),
@@ -789,6 +933,8 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
                 "require_opportunity_context": summary["require_opportunity_context"],
                 "split_mode": summary["split_mode"],
                 "split_instance_count": summary["split_instance_count"],
+                "context_priority_row_count": summary["context_priority_row_count"],
+                "context_priority_jsonl_paths": summary["context_priority_jsonl_paths"],
                 "checks": summary["checks"],
             },
             ensure_ascii=False,
@@ -796,6 +942,34 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
             sort_keys=True,
         ),
         "```",
+        "",
+        "## Selected Contexts",
+        "",
+        "| context | task | opportunity | false-delay FP | delayed high ROI | accepted high point ROI | targets | unique negatives | action |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for context in summary.get("contexts") or []:
+        if context.get("status") != "selected":
+            continue
+        lines.append(
+            "| {context_hash} | {task_count} | {opportunity_score:.4f} | {false_delay} | {delayed} | {accepted} | {targets} | {negatives} | {action} |".format(
+                context_hash=str(context.get("context_hash") or ""),
+                task_count=int(context.get("task_count") or 0),
+                opportunity_score=_float_value(context.get("opportunity_score")),
+                false_delay=_int_value(
+                    context.get("context_false_delay_false_high_priority_on_delay_count")
+                ),
+                delayed=_int_value(context.get("context_repair_delayed_high_roi_count")),
+                accepted=_int_value(
+                    context.get("context_repair_accepted_high_point_roi_unstable_count")
+                ),
+                targets=_int_value(context.get("selected_target_count")),
+                negatives=_int_value(context.get("unique_negative_target_count")),
+                action=str(context.get("context_priority_action") or ""),
+            )
+        )
+    lines.extend(
+        [
         "",
         "## 下一步命令",
         "",
@@ -812,7 +986,8 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "- worker 跑完前不能把这些候选当训练标签；必须确认 expected context reachability 与 target causal match；",
         "- 失败或低 ROI 的 true-RC negative 只能进入 DELAY_QUEUE/诊断样本，不能永久丢弃；",
         "- 最终 OPTIMAL / no-negative certificate 仍只能来自当前 branch/cut/dual 下的 exact pricing closure。",
-    ]
+        ]
+    )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -837,6 +1012,17 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         default=None,
         help="May be repeated. Defaults to the hard-ROI opportunity mining outputs.",
+    )
+    parser.add_argument(
+        "--context-priority-jsonl",
+        type=Path,
+        action="append",
+        default=None,
+        help=(
+            "Optional context-level priority rows from "
+            "audit_gat_batch_impact_context_contrast_priority.py. "
+            "They only alter offline context ordering/selection."
+        ),
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
@@ -898,6 +1084,7 @@ def main(argv: list[str] | None = None) -> int:
     summary = build_intervention_plan(
         dataset_dir=args.dataset_dir,
         opportunity_jsonl_paths=args.opportunity_jsonl or DEFAULT_OPPORTUNITY_JSONL,
+        context_priority_jsonl_paths=args.context_priority_jsonl,
         output_dir=args.output_dir,
         report=args.report,
         max_contexts=max(0, int(args.max_contexts)),

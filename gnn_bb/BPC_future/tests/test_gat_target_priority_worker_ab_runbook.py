@@ -69,6 +69,21 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
                                 "source_file": "capture/log.jsonl",
                                 **_context_fields("apollo20"),
                                 "capture_pricing_kind": "exact",
+                                "best_true_reduced_cost": -3.25,
+                                "selection_ranking": "best_rc",
+                                "context_target_rank": 1,
+                                "context_target_count": 2,
+                                "context_priority_score": 123.0,
+                                "context_priority_action": (
+                                    "collect_same_context_false_delay_hard_negative_contrast"
+                                ),
+                                "context_priority_primary_blocker": (
+                                    "context_local_false_delay_ranking"
+                                ),
+                                "context_false_delay_false_high_priority_on_delay_count": 5,
+                                "context_false_delay_candidate_signature_count": 4,
+                                "context_false_delay_batch_record_count": 3,
+                                "context_false_delay_accepted_batch_count": 1,
                                 "target_sequence": [20, 17, 16],
                                 "target_arc_option_sequence": [
                                     "0->20:low_risk:2",
@@ -116,6 +131,19 @@ class GATTargetPriorityWorkerABRunbookTests(unittest.TestCase):
             self.assertTrue(summary["mainline_gat_kept_for_20_context_replay"])
             self.assertTrue(summary["candidate_runs"][0]["candidate_context_complete"])
             self.assertEqual(summary["candidate_runs"][0]["source_file"], "capture/log.jsonl")
+            self.assertEqual(summary["candidate_runs"][0]["best_true_reduced_cost"], -3.25)
+            self.assertEqual(summary["candidate_runs"][0]["selection_ranking"], "best_rc")
+            self.assertEqual(summary["candidate_runs"][0]["context_priority_score"], 123.0)
+            self.assertEqual(
+                summary["candidate_runs"][0]["context_priority_action"],
+                "collect_same_context_false_delay_hard_negative_contrast",
+            )
+            self.assertEqual(
+                summary["candidate_runs"][0][
+                    "context_false_delay_false_high_priority_on_delay_count"
+                ],
+                5,
+            )
             self.assertTrue((tmp / "out" / "summary.json").exists())
             self.assertTrue((tmp / "report.md").exists())
             self.assertEqual(len(summary["commands"]), 4)

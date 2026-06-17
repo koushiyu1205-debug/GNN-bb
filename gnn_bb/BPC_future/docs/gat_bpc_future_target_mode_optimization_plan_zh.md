@@ -4751,3 +4751,47 @@ abstain
 return to baseline exact pricing
 
 这比错误 high-priority 更安全。
+
+### 2026-06-17 v107 sector-wave context contrast 状态
+
+本轮在 v105 coverage frontier 和 v106 sector-wave repair audit 之后，新增
+same-context contrast 审计：
+
+```text
+report =
+  BPC_future/logical_graph/run_reports/20260617_bpc_future_gat_target_mode_stage3_v107_sector_wave_context_contrast_zh.md
+summary =
+  BPC_future/results/gat_batch_impact_sector_wave_context_contrast_v107_v106_20260617/summary.json
+diagnostic_only = true
+runs_bpc_or_pricing = false
+runs_rmp = false
+stage3_completed = false
+stage4_candidate_ready = false
+selector_can_certificate = false
+```
+
+核心结论：
+
+```text
+pair_count = 6
+missed_high_roi_pair_count = 4
+missed_raw_rank_failure_rate = 1.0
+missed_safe_rank_failure_rate = 1.0
+recommended_next_step = train_sector_wave_same_context_pairwise_ranking_with_trace_features
+```
+
+v99 仍是 low-ROI / unsafe accept 抑制问题；v102/v103 的
+`3d1bd8618099b573` 和 `45baa40751a0bf77` 则不是单纯阈值近失。
+在这些 same-context pair 中，high-ROI positive 相对 accepted low-ROI/bad
+negative 的 raw candidate score 和 safe/risk-adjusted candidate score 都被反排。
+
+因此下一步不应继续盲扫全局 threshold，也不能只调 risk penalty；应进入
+sector-wave context-local pairwise ranking / representation repair，把训练目标明确写成：
+
+```text
+score(context, high_ROI_batch) > score(context, accepted_low_ROI_or_bad_batch)
+```
+
+并继续保留 Stage 3 hard gate：precision / safe precision、false-safe /
+false-high-priority、accepted ROI、coverage、family/context holdout 任何一项失败，
+都必须保持 `stage4_candidate_ready=false`。

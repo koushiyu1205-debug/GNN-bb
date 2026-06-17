@@ -139,7 +139,22 @@ def audit_opportunity_mining(
                 selected_threshold.get("candidate_admission_score_mode", "high_priority") or "high_priority"
             ),
             candidate_delay_score_penalty=float(selected_threshold.get("candidate_delay_score_penalty", 0.0)),
+            candidate_rescue_raw_score_threshold=float(
+                selected_threshold.get("candidate_rescue_raw_score_threshold", 1.0)
+            ),
+            candidate_rescue_delay_risk_threshold=float(
+                selected_threshold.get("candidate_rescue_delay_risk_threshold", 1.0)
+            ),
+            candidate_rescue_delay_score_penalty=float(
+                selected_threshold.get("candidate_rescue_delay_score_penalty", 0.0)
+            ),
             batch_thresholds_by_family=dict(selected_threshold.get("batch_thresholds_by_family") or {}),
+            family_delay_fallback_families=list(
+                selected_threshold.get("family_delay_fallback_families") or []
+            ),
+            context_delay_fallback_contexts=list(
+                selected_threshold.get("context_delay_fallback_contexts") or []
+            ),
             min_accepted_batch_roi=float(gate_config["min_accepted_batch_roi"]),
         )
         for record in validation_records
@@ -186,9 +201,26 @@ def audit_opportunity_mining(
                 "candidate_admission_score_mode", "high_priority"
             ),
             "candidate_delay_score_penalty": selected_threshold.get("candidate_delay_score_penalty", 0.0),
+            "candidate_rescue_raw_score_threshold": selected_threshold.get(
+                "candidate_rescue_raw_score_threshold", 1.0
+            ),
+            "candidate_rescue_delay_risk_threshold": selected_threshold.get(
+                "candidate_rescue_delay_risk_threshold", 1.0
+            ),
+            "candidate_rescue_delay_score_penalty": selected_threshold.get(
+                "candidate_rescue_delay_score_penalty", 0.0
+            ),
             "candidate_delay_gate_enabled": selected_threshold.get("candidate_delay_gate_enabled", False),
             "candidate_delay_risk_threshold": selected_threshold.get("candidate_delay_risk_threshold", 1.0),
             "batch_thresholds_by_family": selected_threshold.get("batch_thresholds_by_family") or {},
+            "family_delay_fallback_families": selected_threshold.get(
+                "family_delay_fallback_families"
+            )
+            or [],
+            "context_delay_fallback_contexts": selected_threshold.get(
+                "context_delay_fallback_contexts"
+            )
+            or [],
         },
         "gate_config": gate_config,
         "opportunity_summary": _opportunity_summary(decisions),
@@ -221,7 +253,12 @@ def classify_opportunity_record(
     candidate_delay_risk_threshold: float = 1.0,
     candidate_admission_score_mode: str = "high_priority",
     candidate_delay_score_penalty: float = 0.0,
+    candidate_rescue_raw_score_threshold: float = 1.0,
+    candidate_rescue_delay_risk_threshold: float = 1.0,
+    candidate_rescue_delay_score_penalty: float = 0.0,
     batch_thresholds_by_family: dict[str, float] | None = None,
+    family_delay_fallback_families: list[str] | None = None,
+    context_delay_fallback_contexts: list[str] | None = None,
     min_accepted_batch_roi: float = 0.65,
 ) -> dict[str, Any]:
     family = str(record.get("family") or "unknown")
@@ -239,9 +276,33 @@ def classify_opportunity_record(
         candidate_delay_scores,
         candidate_admission_score_mode=candidate_admission_score_mode,
         candidate_delay_score_penalty=candidate_delay_score_penalty,
+        candidate_rescue_raw_score_threshold=candidate_rescue_raw_score_threshold,
+        candidate_rescue_delay_risk_threshold=candidate_rescue_delay_risk_threshold,
+        candidate_rescue_delay_score_penalty=candidate_rescue_delay_score_penalty,
     )
+    base_candidate_scores = _candidate_base_admission_scores(
+        raw_candidate_scores,
+        candidate_delay_scores,
+        candidate_admission_score_mode=candidate_admission_score_mode,
+        candidate_delay_score_penalty=candidate_delay_score_penalty,
+    )
+    rescue_eligible_indices = [
+        idx
+        for idx, raw_score in enumerate(raw_candidate_scores)
+        if _candidate_rescue_window_eligible(
+            raw_score,
+            candidate_delay_scores[idx],
+            candidate_admission_score_mode=candidate_admission_score_mode,
+            candidate_rescue_raw_score_threshold=candidate_rescue_raw_score_threshold,
+            candidate_rescue_delay_risk_threshold=candidate_rescue_delay_risk_threshold,
+        )
+    ]
     candidate_delay_labels = [int(value) for value in record["candidate_delay_labels"]]
     candidate_hp_labels = [int(value) for value in record["candidate_high_priority_labels"]]
+    fallback_families = {str(value) for value in (family_delay_fallback_families or [])}
+    fallback_contexts = {str(value) for value in (context_delay_fallback_contexts or [])}
+    family_delay_fallback = family in fallback_families
+    context_delay_fallback = str(record.get("context_hash") or "") in fallback_contexts
     predicted_indices = [
         idx
         for idx, score in enumerate(candidate_scores)
@@ -249,8 +310,11 @@ def classify_opportunity_record(
         and (
             not bool(candidate_delay_gate_enabled)
             or float(candidate_delay_scores[idx]) <= float(candidate_delay_risk_threshold)
+            or idx in set(rescue_eligible_indices)
         )
     ]
+    if family_delay_fallback or context_delay_fallback:
+        predicted_indices = []
     delay_gate_blocked_indices = [
         idx
         for idx, score in enumerate(raw_candidate_scores)
@@ -263,8 +327,21 @@ def classify_opportunity_record(
         for idx, raw_score in enumerate(raw_candidate_scores)
         if _candidate_admission_score_mode(candidate_admission_score_mode) != "high_priority"
         and raw_score >= float(candidate_threshold)
-        and idx < len(candidate_scores)
-        and candidate_scores[idx] < float(candidate_threshold)
+        and idx < len(base_candidate_scores)
+        and base_candidate_scores[idx] < float(candidate_threshold)
+    ]
+    rescue_promoted_indices = [
+        idx
+        for idx in predicted_indices
+        if idx in set(rescue_eligible_indices)
+        and (
+            idx >= len(base_candidate_scores)
+            or base_candidate_scores[idx] < float(candidate_threshold)
+            or (
+                bool(candidate_delay_gate_enabled)
+                and float(candidate_delay_scores[idx]) > float(candidate_delay_risk_threshold)
+            )
+        )
     ]
     predicted_delay_indices = [
         idx for idx in predicted_indices if idx < len(candidate_delay_labels) and candidate_delay_labels[idx]
@@ -276,7 +353,13 @@ def classify_opportunity_record(
         idx for idx in predicted_indices if idx in set(safe_candidate_indices)
     ]
     batch_pass = batch_score >= family_batch_threshold
-    accepted = bool(batch_pass and predicted_indices and not predicted_delay_indices)
+    accepted = bool(
+        batch_pass
+        and predicted_indices
+        and not predicted_delay_indices
+        and not family_delay_fallback
+        and not context_delay_fallback
+    )
     high_roi_opportunity = bool(
         float(record.get("accepted_batch_roi_label") or 0.0) >= float(min_accepted_batch_roi)
         and not int(record.get("bad_mode_switch") or 0)
@@ -285,7 +368,11 @@ def classify_opportunity_record(
     if high_roi_opportunity and not accepted:
         if not batch_pass:
             missed_reasons.append("batch_score_below_family_threshold")
-        if not predicted_indices:
+        if family_delay_fallback:
+            missed_reasons.append("family_delay_fallback")
+        if context_delay_fallback:
+            missed_reasons.append("context_delay_fallback")
+        if not predicted_indices and not (family_delay_fallback or context_delay_fallback):
             missed_reasons.append("no_candidate_above_threshold")
         if risk_adjusted_suppressed_indices:
             missed_reasons.append("candidate_risk_adjusted_below_threshold")
@@ -332,12 +419,28 @@ def classify_opportunity_record(
         "candidate_threshold": float(candidate_threshold),
         "candidate_admission_score_mode": _candidate_admission_score_mode(candidate_admission_score_mode),
         "candidate_delay_score_penalty": max(0.0, float(candidate_delay_score_penalty)),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(0.0, float(candidate_rescue_raw_score_threshold)),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(0.0, float(candidate_rescue_delay_risk_threshold)),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(candidate_rescue_delay_score_penalty),
+        ),
         "candidate_delay_gate_enabled": bool(candidate_delay_gate_enabled),
         "candidate_delay_risk_threshold": float(candidate_delay_risk_threshold),
+        "family_delay_fallback": bool(family_delay_fallback),
+        "context_delay_fallback": bool(context_delay_fallback),
         "candidate_count": len(candidate_scores),
         "predicted_candidate_count": len(predicted_indices),
         "candidate_delay_gate_blocked_count": len(delay_gate_blocked_indices),
         "candidate_risk_adjusted_suppressed_count": len(risk_adjusted_suppressed_indices),
+        "candidate_rescue_window_eligible_count": len(rescue_eligible_indices),
+        "candidate_rescue_window_promoted_count": len(rescue_promoted_indices),
         "predicted_safe_candidate_count": len(predicted_safe_indices),
         "predicted_delay_candidate_count": len(predicted_delay_indices),
         "max_candidate_score": float(max_candidate_score),
@@ -370,9 +473,53 @@ def _candidate_delay_scores(record: dict[str, Any], *, candidate_delay_gate_enab
 
 def _candidate_admission_score_mode(mode: str) -> str:
     mode = str(mode or "high_priority")
-    if mode not in {"high_priority", "risk_adjusted_product"}:
+    if mode not in {"high_priority", "risk_adjusted_product", "risk_adjusted_rescue_window"}:
         return "high_priority"
     return mode
+
+
+def _risk_adjusted_scores(
+    candidate_scores: list[float],
+    delay_scores: list[float],
+    *,
+    penalty: float,
+) -> list[float]:
+    return [
+        max(0.0, min(1.0, float(candidate_score) * (max(0.0, min(1.0, 1.0 - float(delay_score))) ** max(0.0, float(penalty)))))
+        for candidate_score, delay_score in zip(candidate_scores, delay_scores)
+    ]
+
+
+def _candidate_base_admission_scores(
+    candidate_scores: list[float],
+    delay_scores: list[float],
+    *,
+    candidate_admission_score_mode: str,
+    candidate_delay_score_penalty: float,
+) -> list[float]:
+    if _candidate_admission_score_mode(candidate_admission_score_mode) == "high_priority":
+        return [float(score) for score in candidate_scores]
+    return _risk_adjusted_scores(
+        candidate_scores,
+        delay_scores,
+        penalty=candidate_delay_score_penalty,
+    )
+
+
+def _candidate_rescue_window_eligible(
+    raw_score: float,
+    delay_score: float,
+    *,
+    candidate_admission_score_mode: str,
+    candidate_rescue_raw_score_threshold: float,
+    candidate_rescue_delay_risk_threshold: float,
+) -> bool:
+    if _candidate_admission_score_mode(candidate_admission_score_mode) != "risk_adjusted_rescue_window":
+        return False
+    return (
+        float(raw_score) >= min(1.0, max(0.0, float(candidate_rescue_raw_score_threshold)))
+        and float(delay_score) <= min(1.0, max(0.0, float(candidate_rescue_delay_risk_threshold)))
+    )
 
 
 def _candidate_admission_scores(
@@ -381,13 +528,36 @@ def _candidate_admission_scores(
     *,
     candidate_admission_score_mode: str,
     candidate_delay_score_penalty: float,
+    candidate_rescue_raw_score_threshold: float = 1.0,
+    candidate_rescue_delay_risk_threshold: float = 1.0,
+    candidate_rescue_delay_score_penalty: float = 0.0,
 ) -> list[float]:
-    if _candidate_admission_score_mode(candidate_admission_score_mode) != "risk_adjusted_product":
-        return [float(score) for score in candidate_scores]
-    penalty = max(0.0, float(candidate_delay_score_penalty))
+    mode = _candidate_admission_score_mode(candidate_admission_score_mode)
+    base_scores = _candidate_base_admission_scores(
+        candidate_scores,
+        delay_scores,
+        candidate_admission_score_mode=mode,
+        candidate_delay_score_penalty=candidate_delay_score_penalty,
+    )
+    if mode != "risk_adjusted_rescue_window":
+        return base_scores
+    rescue_scores = _risk_adjusted_scores(
+        candidate_scores,
+        delay_scores,
+        penalty=candidate_rescue_delay_score_penalty,
+    )
     return [
-        max(0.0, min(1.0, float(candidate_score) * (max(0.0, min(1.0, 1.0 - float(delay_score))) ** penalty)))
-        for candidate_score, delay_score in zip(candidate_scores, delay_scores)
+        max(float(base_score), float(rescue_scores[idx]))
+        if idx < len(rescue_scores)
+        and _candidate_rescue_window_eligible(
+            candidate_scores[idx],
+            delay_scores[idx],
+            candidate_admission_score_mode=mode,
+            candidate_rescue_raw_score_threshold=candidate_rescue_raw_score_threshold,
+            candidate_rescue_delay_risk_threshold=candidate_rescue_delay_risk_threshold,
+        )
+        else float(base_score)
+        for idx, base_score in enumerate(base_scores)
     ]
 
 
@@ -443,6 +613,14 @@ def _opportunity_summary(decisions: list[dict[str, Any]]) -> dict[str, Any]:
         "accepted_high_roi_opportunities": len(accepted_high_roi),
         "missed_high_roi_opportunities": len(missed_high_roi),
         "accepted_low_roi_or_bad": sum(int(item["is_accepted_low_roi_or_bad"]) for item in decisions),
+        "candidate_rescue_window_eligible_count": sum(
+            int(item.get("candidate_rescue_window_eligible_count") or 0)
+            for item in decisions
+        ),
+        "candidate_rescue_window_promoted_count": sum(
+            int(item.get("candidate_rescue_window_promoted_count") or 0)
+            for item in decisions
+        ),
         "accepted_high_roi_capture_rate": (
             len(accepted_high_roi) / float(len(high_roi)) if high_roi else 0.0
         ),
@@ -458,7 +636,9 @@ def _recommended_next_step(decisions: list[dict[str, Any]]) -> dict[str, Any]:
         return {"primary": "no_missed_high_roi_opportunities_under_selected_threshold"}
     reason_counts = Counter(reason for item in missed for reason in item.get("missed_reasons") or [])
     family_counts = Counter(str(item["family"]) for item in missed)
-    if reason_counts.get("batch_score_below_family_threshold", 0) >= reason_counts.get(
+    if any(int(item.get("candidate_rescue_window_promoted_count") or 0) > 0 for item in missed):
+        primary = "calibrate_rescue_window_against_remaining_missed_high_roi_candidates"
+    elif reason_counts.get("batch_score_below_family_threshold", 0) >= reason_counts.get(
         "no_candidate_above_threshold", 0
     ):
         primary = "improve_batch_roi_ranking_or_collect_more_high_roi_batch_examples"
@@ -532,8 +712,13 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"candidate_threshold = {threshold.get('candidate_threshold')}",
         f"candidate_admission_score_mode = {threshold.get('candidate_admission_score_mode')}",
         f"candidate_delay_score_penalty = {threshold.get('candidate_delay_score_penalty')}",
+        f"candidate_rescue_raw_score_threshold = {threshold.get('candidate_rescue_raw_score_threshold')}",
+        f"candidate_rescue_delay_risk_threshold = {threshold.get('candidate_rescue_delay_risk_threshold')}",
+        f"candidate_rescue_delay_score_penalty = {threshold.get('candidate_rescue_delay_score_penalty')}",
         f"candidate_delay_gate_enabled = {threshold.get('candidate_delay_gate_enabled')}",
         f"candidate_delay_risk_threshold = {threshold.get('candidate_delay_risk_threshold')}",
+        f"family_delay_fallback_families = {threshold.get('family_delay_fallback_families')}",
+        f"context_delay_fallback_contexts = {threshold.get('context_delay_fallback_contexts')}",
         f"accepted = {opportunity['accepted']}",
         f"high_roi_opportunities = {opportunity['high_roi_opportunities']}",
         f"accepted_high_roi_opportunities = {opportunity['accepted_high_roi_opportunities']}",

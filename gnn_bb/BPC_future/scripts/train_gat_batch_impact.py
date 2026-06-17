@@ -68,6 +68,8 @@ class TrainBatchImpactArgs:
     context_hidden_dim: int = 24
     batch_hidden_dim: int = 32
     impact_hidden_dim: int = 32
+    path_token_dim: int = 16
+    path_hidden_dim: int = 32
     num_gnn_layers: int = 1
     heads: int = 4
     dropout: float = 0.05
@@ -116,10 +118,28 @@ class TrainBatchImpactArgs:
     candidate_delay_score_penalty: float = 0.0
     candidate_delay_gate_enabled: bool = False
     candidate_delay_risk_threshold: float = 0.5
+    candidate_rescue_raw_score_threshold: float = 1.0
+    candidate_rescue_delay_risk_threshold: float = 1.0
+    candidate_rescue_delay_score_penalty: float = 0.0
     pairwise_ranking_loss_multiplier: float = 1.0
     pairwise_candidate_ranking_loss_multiplier: float = 0.75
+    pairwise_false_delay_contrast_loss_multiplier: float = 0.5
+    pairwise_delay_risk_contrast_loss_multiplier: float = 0.0
+    focused_pair_loss_multiplier: float = 0.0
+    focused_pair_candidate_loss_multiplier: float = 0.0
+    focused_pair_admission_loss_multiplier: float = 0.0
+    focused_pair_delay_risk_loss_multiplier: float = 0.0
+    focused_pair_batch_loss_multiplier: float = 0.0
     pairwise_roi_margin: float = 0.05
     min_pairwise_roi_delta: float = 1.0e-6
+    focused_pair_gate_row_index_min: int | None = None
+    focused_pair_row_indices_file: Path | None = None
+    min_focused_pair_count: int = 1
+    min_focused_raw_pair_pass_rate: float = 1.0
+    min_focused_admission_pair_pass_rate: float = 1.0
+    min_focused_delay_risk_pair_pass_rate: float = 1.0
+    min_focused_strict_pair_pass_rate: float = 1.0
+    require_positive_candidate_threshold: bool = True
     max_grad_norm: float = 5.0
     max_nonfinite_skipped_update_rate: float = 0.02
 
@@ -141,6 +161,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--context-hidden-dim", type=int, default=24)
     parser.add_argument("--batch-hidden-dim", type=int, default=32)
     parser.add_argument("--impact-hidden-dim", type=int, default=32)
+    parser.add_argument("--path-token-dim", type=int, default=16)
+    parser.add_argument("--path-hidden-dim", type=int, default=32)
     parser.add_argument("--num-gnn-layers", type=int, default=1)
     parser.add_argument("--heads", type=int, default=4)
     parser.add_argument("--dropout", type=float, default=0.05)
@@ -299,12 +321,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--candidate-admission-score-mode",
-        choices=("high_priority", "risk_adjusted_product"),
+        choices=("high_priority", "risk_adjusted_product", "risk_adjusted_rescue_window"),
         default="high_priority",
         help=(
             "Score used by candidate threshold search. high_priority uses the "
             "candidate HIGH_PRIORITY probability. risk_adjusted_product uses "
-            "HIGH_PRIORITY * (1 - delay_risk) ** candidate_delay_score_penalty."
+            "HIGH_PRIORITY * (1 - delay_risk) ** candidate_delay_score_penalty. "
+            "risk_adjusted_rescue_window uses the risk-adjusted score, but can "
+            "rescue high-raw-score candidates inside a configured delay-risk window."
         ),
     )
     parser.add_argument(
@@ -332,6 +356,33 @@ def parse_args() -> argparse.Namespace:
         help="Maximum predicted delay-risk probability allowed for HIGH_PRIORITY when the delay gate is enabled.",
     )
     parser.add_argument(
+        "--candidate-rescue-raw-score-threshold",
+        type=float,
+        default=1.0,
+        help=(
+            "Minimum raw HIGH_PRIORITY probability required for "
+            "risk_adjusted_rescue_window eligibility."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-rescue-delay-risk-threshold",
+        type=float,
+        default=1.0,
+        help=(
+            "Maximum predicted delay-risk probability allowed for "
+            "risk_adjusted_rescue_window eligibility."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-rescue-delay-score-penalty",
+        type=float,
+        default=0.0,
+        help=(
+            "Delay-risk penalty exponent used for rescued admission scores in "
+            "risk_adjusted_rescue_window."
+        ),
+    )
+    parser.add_argument(
         "--pairwise-ranking-loss-multiplier",
         type=float,
         default=1.0,
@@ -357,10 +408,139 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--pairwise-false-delay-contrast-loss-multiplier",
+        type=float,
+        default=0.5,
+        help=(
+            "Same-context hard-negative weight that separates high-ROI safe "
+            "candidates from lower-ROI delay candidates in both the "
+            "candidate-head and delay-risk heads."
+        ),
+    )
+    parser.add_argument(
+        "--pairwise-delay-risk-contrast-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Additional same-context delay-risk head ranking weight. This "
+            "separately trains positive high-ROI safe candidates to have lower "
+            "delay-risk logits than lower-ROI delay / hard-negative candidates."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Extra training weight for the fixed focused same-context "
+            "positive-vs-hard-negative regression tranche selected by "
+            "--focused-pair-gate-row-index-min. Default 0 preserves legacy "
+            "training behavior."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-candidate-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche raw HIGH_PRIORITY head ranking weight. It trains "
+            "labeled positive candidates above labeled delay/hard-negative "
+            "candidates. Default 0 preserves legacy behavior."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-admission-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche admission-score ranking weight using the same "
+            "candidate_admission_score_mode as threshold search. Default 0 "
+            "preserves legacy behavior."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-delay-risk-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche delay-risk head ranking weight. It trains labeled "
+            "delay/hard-negative candidates to have higher delay-risk logits "
+            "than labeled positive candidates. Default 0 preserves legacy behavior."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-batch-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche batch ROI head ranking weight. Default 0 preserves "
+            "legacy behavior."
+        ),
+    )
+    parser.add_argument(
         "--min-pairwise-roi-delta",
         type=float,
         default=1.0e-6,
         help="Minimum accepted ROI difference required to form a same-context ranking pair.",
+    )
+    parser.add_argument(
+        "--focused-pair-gate-row-index-min",
+        type=int,
+        default=None,
+        help=(
+            "Optional fixed regression tranche for same-context positive-vs-hard-negative "
+            "focused pair gate. Use 383 for the current v77/v80/v82 focused rows."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-row-indices-file",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON file containing explicit focused row indices. This "
+            "is preferred when a mined tranche is non-contiguous and row_index_min "
+            "would include unrelated rows."
+        ),
+    )
+    parser.add_argument(
+        "--min-focused-pair-count",
+        type=int,
+        default=1,
+        help="Minimum focused same-context positive-vs-negative pair count.",
+    )
+    parser.add_argument(
+        "--min-focused-raw-pair-pass-rate",
+        type=float,
+        default=1.0,
+        help="Minimum raw candidate-head focused pair pass rate.",
+    )
+    parser.add_argument(
+        "--min-focused-admission-pair-pass-rate",
+        type=float,
+        default=1.0,
+        help="Minimum admission-score focused pair pass rate.",
+    )
+    parser.add_argument(
+        "--min-focused-delay-risk-pair-pass-rate",
+        type=float,
+        default=1.0,
+        help="Minimum delay-risk focused pair pass rate.",
+    )
+    parser.add_argument(
+        "--min-focused-strict-pair-pass-rate",
+        type=float,
+        default=1.0,
+        help="Minimum all-head focused strict pair pass rate.",
+    )
+    parser.add_argument(
+        "--allow-zero-candidate-threshold",
+        dest="require_positive_candidate_threshold",
+        action="store_false",
+        default=True,
+        help=(
+            "Audit/debug escape hatch. By default Stage 3 rejects candidate_threshold=0 "
+            "because it disables the candidate-head admission filter."
+        ),
     )
     parser.add_argument("--max-grad-norm", type=float, default=5.0)
     parser.add_argument("--max-nonfinite-skipped-update-rate", type=float, default=0.02)
@@ -397,6 +577,7 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         "candidate_feature_dim": len(manifest["candidate_feature_schema"]),
         "context_feature_dim": len(manifest["context_feature_schema"]),
         "batch_feature_dim": len(manifest["batch_feature_schema"]),
+        **_path_token_model_config(manifest, args),
         "hidden_dim": int(args.hidden_dim),
         "option_hidden_dim": int(args.option_hidden_dim),
         "pair_edge_dim": int(args.pair_edge_dim),
@@ -551,6 +732,21 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         context_delay_fallback_contexts=selected_context_delay_fallback_contexts,
         min_accepted_batch_roi=float(gate_config["min_family_holdout_accepted_roi"]),
     )
+    focused_pair_gate_metrics = _focused_pair_gate_metrics(
+        manifest_items=list(manifest.get("samples", [])),
+        prediction_records=_prediction_records(model, samples, device),
+        gate_config=gate_config,
+        args=args,
+    )
+    focused_pair_gate_reject_reasons = _focused_pair_gate_reject_reasons(
+        focused_pair_gate_metrics
+    )
+    training_run_config = _training_run_config(
+        args,
+        model_config=model_config,
+        gate_config=gate_config,
+        loss_options=loss_options,
+    )
     nonfinite_skipped_update_rate = (
         float(nonfinite_skipped_update_count) / float(attempted_update_count)
         if attempted_update_count > 0
@@ -560,12 +756,26 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         nonfinite_skipped_update_rate=nonfinite_skipped_update_rate,
         max_nonfinite_skipped_update_rate=float(getattr(args, "max_nonfinite_skipped_update_rate", 0.02)),
     )
+    checkpoint_extra_reject_reasons = (
+        list(training_stability_reject_reasons) + list(focused_pair_gate_reject_reasons)
+    )
     checkpoint_gate_pass = bool(
-        validation_deployment_metrics["checkpoint_gate_pass"] and not training_stability_reject_reasons
+        validation_deployment_metrics["checkpoint_gate_pass"] and not checkpoint_extra_reject_reasons
     )
     stage4_candidate_ready = bool(
         checkpoint_gate_pass
         and False  # kNN/OOD audit is mandatory and not run by this trainer.
+    )
+    stage4_blockers = sorted(
+        set(
+            _stage4_blockers(
+                validation_deployment_metrics,
+                family_holdout_metrics,
+                manifest=manifest,
+                training_stability_reject_reasons=training_stability_reject_reasons,
+            )
+            + focused_pair_gate_reject_reasons
+        )
     )
 
     checkpoint = {
@@ -574,6 +784,7 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         "candidate_feature_schema": manifest["candidate_feature_schema"],
         "context_feature_schema": manifest["context_feature_schema"],
         "batch_feature_schema": manifest["batch_feature_schema"],
+        "candidate_path_token_schema": manifest.get("candidate_path_token_schema", {}),
         "candidate_feature_mean": manifest["candidate_feature_mean"],
         "candidate_feature_std": manifest["candidate_feature_std"],
         "context_feature_mean": manifest["context_feature_mean"],
@@ -626,12 +837,49 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
             "candidate_delay_risk_threshold": float(
                 getattr(args, "candidate_delay_risk_threshold", 0.5)
             ),
+            "candidate_rescue_raw_score_threshold": loss_options[
+                "candidate_rescue_raw_score_threshold"
+            ],
+            "candidate_rescue_delay_risk_threshold": loss_options[
+                "candidate_rescue_delay_risk_threshold"
+            ],
+            "candidate_rescue_delay_score_penalty": loss_options[
+                "candidate_rescue_delay_score_penalty"
+            ],
             "pairwise_ranking_loss_active": pairwise_ranking_loss_active,
             "pairwise_candidate_ranking_loss_multiplier": loss_options[
                 "pairwise_candidate_ranking_loss_multiplier"
             ],
+            "pairwise_false_delay_contrast_loss_multiplier": loss_options[
+                "pairwise_false_delay_contrast_loss_multiplier"
+            ],
+            "pairwise_delay_risk_contrast_loss_multiplier": loss_options[
+                "pairwise_delay_risk_contrast_loss_multiplier"
+            ],
+            "focused_pair_loss_multiplier": loss_options["focused_pair_loss_multiplier"],
+            "focused_pair_candidate_loss_multiplier": loss_options[
+                "focused_pair_candidate_loss_multiplier"
+            ],
+            "focused_pair_admission_loss_multiplier": loss_options[
+                "focused_pair_admission_loss_multiplier"
+            ],
+            "focused_pair_delay_risk_loss_multiplier": loss_options[
+                "focused_pair_delay_risk_loss_multiplier"
+            ],
+            "focused_pair_batch_loss_multiplier": loss_options[
+                "focused_pair_batch_loss_multiplier"
+            ],
+            "focused_pair_row_index_min": loss_options["focused_pair_row_index_min"],
+            "focused_pair_row_indices_file": loss_options[
+                "focused_pair_row_indices_file"
+            ],
+            "focused_pair_row_indices_count": len(
+                loss_options.get("focused_pair_row_indices") or []
+            ),
             "pairwise_ranking_status": pairwise_ranking_status,
             "context_pair_stats": context_pair_stats,
+            "focused_pair_gate": focused_pair_gate_metrics,
+            "training_run_config": training_run_config,
             "requires_knn_ood_shell_before_stage4": True,
             "requires_5_10_no_regression_before_stage4": True,
             "requires_20_wall_time_roi_before_stage4": True,
@@ -647,14 +895,10 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
                 _rejected_checkpoint_reasons(
                     validation_deployment_metrics,
                     training_stability_reject_reasons=training_stability_reject_reasons,
+                    focused_pair_gate_reject_reasons=focused_pair_gate_reject_reasons,
                 )
             ),
-            "stage4_blockers": _stage4_blockers(
-                validation_deployment_metrics,
-                family_holdout_metrics,
-                manifest=manifest,
-                training_stability_reject_reasons=training_stability_reject_reasons,
-            ),
+            "stage4_blockers": stage4_blockers,
         },
         "training": {
             "epochs": int(args.epochs),
@@ -677,17 +921,21 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
             "rejected_checkpoint_reasons": _rejected_checkpoint_reasons(
                 validation_deployment_metrics,
                 training_stability_reject_reasons=training_stability_reject_reasons,
+                focused_pair_gate_reject_reasons=focused_pair_gate_reject_reasons,
             ),
             "rejected_checkpoint_reason_categories": _hard_reject_reason_categories(
                 _rejected_checkpoint_reasons(
                     validation_deployment_metrics,
                     training_stability_reject_reasons=training_stability_reject_reasons,
+                    focused_pair_gate_reject_reasons=focused_pair_gate_reject_reasons,
                 )
             ),
             "history": history,
             "train_deployment_metrics": train_deployment_metrics,
             "validation_deployment_metrics": validation_deployment_metrics,
             "family_holdout_metrics": family_holdout_metrics,
+            "focused_pair_gate": focused_pair_gate_metrics,
+            "training_run_config": training_run_config,
         },
     }
     Path(args.checkpoint_out).parent.mkdir(parents=True, exist_ok=True)
@@ -728,11 +976,13 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         "rejected_checkpoint_reasons": _rejected_checkpoint_reasons(
             validation_deployment_metrics,
             training_stability_reject_reasons=training_stability_reject_reasons,
+            focused_pair_gate_reject_reasons=focused_pair_gate_reject_reasons,
         ),
         "rejected_checkpoint_reason_categories": _hard_reject_reason_categories(
             _rejected_checkpoint_reasons(
                 validation_deployment_metrics,
                 training_stability_reject_reasons=training_stability_reject_reasons,
+                focused_pair_gate_reject_reasons=focused_pair_gate_reject_reasons,
             )
         ),
         "attempted_update_count": int(attempted_update_count),
@@ -740,13 +990,17 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         "nonfinite_skipped_update_rate": float(nonfinite_skipped_update_rate),
         "training_stability_reject_reasons": training_stability_reject_reasons,
         "checkpoint_selection": CHECKPOINT_SELECTION_POLICY,
+        "history": history,
         "train_deployment_metrics": train_deployment_metrics,
         "validation_deployment_metrics": validation_deployment_metrics,
         "threshold_search": validation_threshold_search,
         "family_holdout_metrics": family_holdout_metrics,
+        "focused_pair_gate": focused_pair_gate_metrics,
+        "focused_pair_gate_reject_reasons": focused_pair_gate_reject_reasons,
+        "training_run_config": training_run_config,
         "checkpoint_gate_pass": checkpoint_gate_pass,
         "stage4_candidate_ready": stage4_candidate_ready,
-        "stage4_blockers": checkpoint["deployment_gate"]["stage4_blockers"],
+        "stage4_blockers": stage4_blockers,
         "selector_is_pricing_oracle": False,
         "selector_can_certificate": False,
         "gate_can_permanently_discard_negative_columns": False,
@@ -820,6 +1074,32 @@ def _normalize_sample(sample: Any, manifest: dict[str, Any]) -> Any:
         manifest["batch_feature_std"],
     )
     return graph
+
+
+def _path_token_model_config(
+    manifest: dict[str, Any],
+    args: argparse.Namespace | TrainBatchImpactArgs,
+) -> dict[str, Any]:
+    schema = dict(manifest.get("candidate_path_token_schema") or {})
+    token_bucket_count = int(schema.get("token_hash_bucket_count") or 0)
+    pair_bucket_count = int(schema.get("pair_hash_bucket_count") or 0)
+    if token_bucket_count <= 0 or pair_bucket_count <= 0:
+        return {
+            "path_token_vocab_size": 0,
+            "path_pair_vocab_size": 0,
+            "path_type_vocab_size": 3,
+            "path_token_dim": int(getattr(args, "path_token_dim", 16)),
+            "path_hidden_dim": int(getattr(args, "path_hidden_dim", 32)),
+        }
+    type_ids = dict(schema.get("type_ids") or {})
+    type_vocab_size = max([int(value) for value in type_ids.values()] + [3])
+    return {
+        "path_token_vocab_size": token_bucket_count,
+        "path_pair_vocab_size": pair_bucket_count,
+        "path_type_vocab_size": int(type_vocab_size),
+        "path_token_dim": int(getattr(args, "path_token_dim", 16)),
+        "path_hidden_dim": int(getattr(args, "path_hidden_dim", 32)),
+    }
 
 
 def _normalize_tensor(tensor: torch.Tensor, mean: list[float], std: list[float]) -> torch.Tensor:
@@ -906,6 +1186,20 @@ def _sample_float_attr(sample: Any, name: str) -> float | None:
         return None
 
 
+def _sample_int_attr(sample: Any, name: str) -> int | None:
+    value = getattr(sample, name, None)
+    if value is None:
+        return None
+    if torch.is_tensor(value):
+        if int(value.numel()) <= 0:
+            return None
+        return int(value.detach().cpu().reshape(-1)[0].item())
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _same_context_roi_pairs(
     samples: list[Any],
     *,
@@ -934,6 +1228,79 @@ def _same_context_roi_pairs(
                 else:
                     pairs.append((right, left, float(-delta)))
     return pairs
+
+
+def _focused_training_pairs(
+    samples: list[Any],
+    *,
+    focus_row_index_min: int | None,
+    focus_row_indices: list[int] | None = None,
+) -> list[tuple[Any, Any, float]]:
+    focused_index_set = {int(value) for value in (focus_row_indices or [])}
+    if focus_row_index_min is None and not focused_index_set:
+        return []
+    rows: list[Any] = []
+    for sample in samples:
+        row_index = _sample_int_attr(sample, "batch_impact_source_row_index")
+        if row_index is None:
+            continue
+        if focused_index_set:
+            if int(row_index) in focused_index_set:
+                rows.append(sample)
+        elif row_index >= int(focus_row_index_min):
+            rows.append(sample)
+    by_context: dict[str, list[Any]] = {}
+    for sample in rows:
+        by_context.setdefault(_sample_context_hash(sample), []).append(sample)
+    pairs: list[tuple[Any, Any, float]] = []
+    for group in by_context.values():
+        positives = [
+            sample
+            for sample in group
+            if _sample_focused_label_class(sample) == "positive_high_priority"
+        ]
+        negatives = [
+            sample
+            for sample in group
+            if _sample_focused_label_class(sample) == "delay_or_hard_negative"
+        ]
+        for positive in positives:
+            positive_roi = _sample_float_attr(positive, "y_accepted_batch_roi")
+            for negative in negatives:
+                negative_roi = _sample_float_attr(negative, "y_accepted_batch_roi")
+                if positive_roi is None or negative_roi is None:
+                    roi_delta = 1.0
+                else:
+                    roi_delta = max(
+                        float(abs(float(positive_roi) - float(negative_roi))),
+                        1.0e-6,
+                    )
+                pairs.append((positive, negative, roi_delta))
+    return pairs
+
+
+def _sample_focused_label_class(sample: Any) -> str:
+    high_priority = _sample_tensor_any(sample, "y_candidate_high_priority")
+    delay = _sample_tensor_any(sample, "y_candidate_delay_risk")
+    roi_positive = (_sample_float_attr(sample, "y_batch_roi_positive") or 0.0) > 0.5
+    bad_mode = (_sample_float_attr(sample, "y_bad_mode_switch") or 0.0) > 0.5
+    if high_priority and roi_positive and not bad_mode:
+        return "positive_high_priority"
+    if delay or bad_mode or not roi_positive:
+        return "delay_or_hard_negative"
+    return "ambiguous"
+
+
+def _sample_tensor_any(sample: Any, name: str) -> bool:
+    value = getattr(sample, name, None)
+    if value is None:
+        return False
+    if torch.is_tensor(value):
+        return bool(torch.any(value.detach().cpu().reshape(-1) > 0.5))
+    try:
+        return bool(value)
+    except (TypeError, ValueError):
+        return False
 
 
 def _preserve_train_pairwise_context(
@@ -1071,7 +1438,87 @@ def _pairwise_loss_enabled(loss_options: dict[str, Any]) -> bool:
     return (
         float(loss_options.get("pairwise_ranking_loss_multiplier", 0.0)) > 0.0
         or float(loss_options.get("pairwise_candidate_ranking_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("pairwise_false_delay_contrast_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("pairwise_delay_risk_contrast_loss_multiplier", 0.0)) > 0.0
     )
+
+
+def _focused_pair_loss_enabled(loss_options: dict[str, Any]) -> bool:
+    return (
+        float(loss_options.get("focused_pair_loss_multiplier", 0.0)) > 0.0
+        and (
+            loss_options.get("focused_pair_row_index_min") is not None
+            or bool(loss_options.get("focused_pair_row_indices") or [])
+        )
+    )
+
+
+def _focused_pair_head_loss_enabled(loss_options: dict[str, Any]) -> bool:
+    return (
+        (
+            loss_options.get("focused_pair_row_index_min") is not None
+            or bool(loss_options.get("focused_pair_row_indices") or [])
+        )
+        and (
+            float(loss_options.get("focused_pair_candidate_loss_multiplier", 0.0)) > 0.0
+            or (
+                float(loss_options.get("focused_pair_admission_loss_multiplier", 0.0))
+                > 0.0
+            )
+            or (
+                float(loss_options.get("focused_pair_delay_risk_loss_multiplier", 0.0))
+                > 0.0
+            )
+            or float(loss_options.get("focused_pair_batch_loss_multiplier", 0.0)) > 0.0
+        )
+    )
+
+
+def _focused_pair_row_indices(args: argparse.Namespace | TrainBatchImpactArgs) -> list[int]:
+    path = getattr(args, "focused_pair_row_indices_file", None)
+    if path is None:
+        return []
+    return _read_focused_pair_row_indices_file(Path(path))
+
+
+def _read_focused_pair_row_indices_file(path: Path) -> list[int]:
+    def append_index(value: Any, indices: list[int]) -> None:
+        if value is None:
+            return
+        indices.append(int(value))
+
+    indices: list[int] = []
+    if path.suffix.lower() == ".jsonl":
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                payload = json.loads(stripped)
+                if isinstance(payload, dict):
+                    append_index(payload.get("row_index"), indices)
+                else:
+                    append_index(payload, indices)
+    else:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if isinstance(payload, dict):
+            for key in ("focused_row_indices", "row_indices", "indices"):
+                if key in payload:
+                    payload = payload[key]
+                    break
+            else:
+                append_index(payload.get("row_index"), indices)
+                payload = []
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, dict):
+                    append_index(item.get("row_index"), indices)
+                else:
+                    append_index(item, indices)
+        elif payload:
+            append_index(payload, indices)
+    return sorted(set(indices))
 
 
 def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, Any]:
@@ -1130,6 +1577,24 @@ def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, 
             0.0,
             float(getattr(args, "candidate_delay_score_penalty", 0.0)),
         ),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(
+                0.0,
+                float(getattr(args, "candidate_rescue_raw_score_threshold", 1.0)),
+            ),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(
+                0.0,
+                float(getattr(args, "candidate_rescue_delay_risk_threshold", 1.0)),
+            ),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(getattr(args, "candidate_rescue_delay_score_penalty", 0.0)),
+        ),
         "hard_roi_threshold": float(default_hard_roi if explicit_hard_roi is None else explicit_hard_roi),
         "pairwise_ranking_loss_multiplier": max(
             0.0,
@@ -1139,12 +1604,106 @@ def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, 
             0.0,
             float(getattr(args, "pairwise_candidate_ranking_loss_multiplier", 0.75)),
         ),
+        "pairwise_false_delay_contrast_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "pairwise_false_delay_contrast_loss_multiplier", 0.5)),
+        ),
+        "pairwise_delay_risk_contrast_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "pairwise_delay_risk_contrast_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_candidate_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_candidate_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_admission_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_admission_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_delay_risk_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_delay_risk_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_batch_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_batch_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_row_index_min": getattr(args, "focused_pair_gate_row_index_min", None),
+        "focused_pair_row_indices_file": (
+            None
+            if getattr(args, "focused_pair_row_indices_file", None) is None
+            else str(getattr(args, "focused_pair_row_indices_file"))
+        ),
+        "focused_pair_row_indices": _focused_pair_row_indices(args),
         "pairwise_roi_margin": max(0.0, float(getattr(args, "pairwise_roi_margin", 0.05))),
         "min_pairwise_roi_delta": max(
             0.0,
             float(getattr(args, "min_pairwise_roi_delta", 1.0e-6)),
         ),
         "max_grad_norm": max(0.0, float(getattr(args, "max_grad_norm", 5.0))),
+    }
+
+
+def _training_run_config(
+    args: argparse.Namespace | TrainBatchImpactArgs,
+    *,
+    model_config: dict[str, Any],
+    gate_config: dict[str, Any],
+    loss_options: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "seed": int(getattr(args, "seed", 41)),
+        "validation_fraction": float(getattr(args, "validation_fraction", 0.25)),
+        "epochs": int(getattr(args, "epochs", 8)),
+        "device": str(getattr(args, "device", "cpu")),
+        "lr": float(getattr(args, "lr", 1.0e-3)),
+        "weight_decay": float(getattr(args, "weight_decay", 1.0e-5)),
+        "max_grad_norm": float(loss_options.get("max_grad_norm", 5.0)),
+        "model_config": dict(model_config),
+        "loss_options": dict(loss_options),
+        "gate_config": dict(gate_config),
+        "focused_pair_gate_config": {
+            "focused_pair_gate_row_index_min": getattr(
+                args,
+                "focused_pair_gate_row_index_min",
+                None,
+            ),
+            "focused_pair_row_indices_file": (
+                None
+                if getattr(args, "focused_pair_row_indices_file", None) is None
+                else str(getattr(args, "focused_pair_row_indices_file"))
+            ),
+            "focused_pair_row_indices_count": len(
+                loss_options.get("focused_pair_row_indices") or []
+            ),
+            "focused_pair_selector": (
+                "explicit_row_indices"
+                if loss_options.get("focused_pair_row_indices")
+                else (
+                    "row_index_min"
+                    if getattr(args, "focused_pair_gate_row_index_min", None) is not None
+                    else None
+                )
+            ),
+            "min_focused_pair_count": int(getattr(args, "min_focused_pair_count", 1)),
+            "min_focused_raw_pair_pass_rate": _clamped_rate(
+                getattr(args, "min_focused_raw_pair_pass_rate", 1.0)
+            ),
+            "min_focused_admission_pair_pass_rate": _clamped_rate(
+                getattr(args, "min_focused_admission_pair_pass_rate", 1.0)
+            ),
+            "min_focused_delay_risk_pair_pass_rate": _clamped_rate(
+                getattr(args, "min_focused_delay_risk_pair_pass_rate", 1.0)
+            ),
+            "min_focused_strict_pair_pass_rate": _clamped_rate(
+                getattr(args, "min_focused_strict_pair_pass_rate", 1.0)
+            ),
+        },
+        "checkpoint_selection": CHECKPOINT_SELECTION_POLICY,
     }
 
 
@@ -1287,10 +1846,89 @@ def _run_epoch(
                 raise ValueError("batch-impact model parameter became NaN or Inf after optimizer step")
         total += float(loss.detach().cpu())
         count += 1
+    focused_pairs = _focused_training_pairs(
+        shuffled,
+        focus_row_index_min=loss_options.get("focused_pair_row_index_min"),
+        focus_row_indices=loss_options.get("focused_pair_row_indices"),
+    )
+    if not _focused_pair_loss_enabled(loss_options):
+        focused_pairs = []
+    focused_multiplier = float(loss_options.get("focused_pair_loss_multiplier", 0.0))
+    for better, worse, roi_delta in focused_pairs:
+        optimizer.zero_grad(set_to_none=True)
+        loss = focused_multiplier * _pairwise_ranking_loss(
+            model,
+            better,
+            worse,
+            device,
+            roi_delta=roi_delta,
+            loss_options=loss_options,
+        )
+        if not bool(torch.isfinite(loss)):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        if float(loss_options["max_grad_norm"]) > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), float(loss_options["max_grad_norm"]))
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        optimizer.step()
+        for param in model.parameters():
+            if param.grad is not None and not bool(torch.isfinite(param).all()):
+                raise ValueError("batch-impact model parameter became NaN or Inf after optimizer step")
+        total += float(loss.detach().cpu())
+        count += 1
+    focused_head_pairs = _focused_training_pairs(
+        shuffled,
+        focus_row_index_min=loss_options.get("focused_pair_row_index_min"),
+        focus_row_indices=loss_options.get("focused_pair_row_indices"),
+    )
+    if not _focused_pair_head_loss_enabled(loss_options):
+        focused_head_pairs = []
+    for better, worse, roi_delta in focused_head_pairs:
+        optimizer.zero_grad(set_to_none=True)
+        loss = _focused_pair_head_loss(
+            model,
+            better,
+            worse,
+            device,
+            roi_delta=roi_delta,
+            loss_options=loss_options,
+        )
+        if not bool(torch.isfinite(loss)):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        if float(loss_options["max_grad_norm"]) > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), float(loss_options["max_grad_norm"]))
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        optimizer.step()
+        for param in model.parameters():
+            if param.grad is not None and not bool(torch.isfinite(param).all()):
+                raise ValueError("batch-impact model parameter became NaN or Inf after optimizer step")
+        total += float(loss.detach().cpu())
+        count += 1
     return {
         "loss": total / max(1, count),
         "skipped_update_count": skipped,
-        "attempted_update_count": len(shuffled) + len(pairwise_pairs),
+        "attempted_update_count": (
+            len(shuffled) + len(pairwise_pairs) + len(focused_pairs) + len(focused_head_pairs)
+        ),
     }
 
 
@@ -1337,6 +1975,52 @@ def _evaluate_loss(
                 .cpu()
             )
             count += 1
+        focused_pairs = _focused_training_pairs(
+            samples,
+            focus_row_index_min=loss_options.get("focused_pair_row_index_min"),
+            focus_row_indices=loss_options.get("focused_pair_row_indices"),
+        )
+        if not _focused_pair_loss_enabled(loss_options):
+            focused_pairs = []
+        focused_multiplier = float(loss_options.get("focused_pair_loss_multiplier", 0.0))
+        for better, worse, roi_delta in focused_pairs:
+            total += float(
+                (
+                    focused_multiplier
+                    * _pairwise_ranking_loss(
+                        model,
+                        better,
+                        worse,
+                        device,
+                        roi_delta=roi_delta,
+                        loss_options=loss_options,
+                    )
+                )
+                .detach()
+                .cpu()
+            )
+            count += 1
+        focused_head_pairs = _focused_training_pairs(
+            samples,
+            focus_row_index_min=loss_options.get("focused_pair_row_index_min"),
+            focus_row_indices=loss_options.get("focused_pair_row_indices"),
+        )
+        if not _focused_pair_head_loss_enabled(loss_options):
+            focused_head_pairs = []
+        for better, worse, roi_delta in focused_head_pairs:
+            total += float(
+                _focused_pair_head_loss(
+                    model,
+                    better,
+                    worse,
+                    device,
+                    roi_delta=roi_delta,
+                    loss_options=loss_options,
+                )
+                .detach()
+                .cpu()
+            )
+            count += 1
     return total / max(1, count)
 
 
@@ -1347,15 +2031,7 @@ def _sample_loss(
     *,
     loss_options: dict[str, Any],
 ) -> torch.Tensor:
-    sample = sample.to(device)
-    output = model(
-        sample,
-        sample.candidate_task_membership,
-        sample.candidate_sequence_positions,
-        sample.candidate_features,
-        sample.context_features,
-        batch_features=sample.batch_features,
-    )
+    sample, output = _sample_model_output(model, sample, device)
     hp_target = sample.y_candidate_high_priority.to(dtype=torch.float32)
     delay_target = sample.y_candidate_delay_risk.to(dtype=torch.float32)
     false_hp_weights = torch.ones_like(hp_target)
@@ -1501,15 +2177,7 @@ def _batch_score_logit(
     sample: Any,
     device: torch.device,
 ) -> torch.Tensor:
-    sample = sample.to(device)
-    output = model(
-        sample,
-        sample.candidate_task_membership,
-        sample.candidate_sequence_positions,
-        sample.candidate_features,
-        sample.context_features,
-        batch_features=sample.batch_features,
-    )
+    _, output = _sample_model_output(model, sample, device)
     return output["batch_roi_positive_logit"].reshape(1)
 
 
@@ -1519,19 +2187,62 @@ def _candidate_acceptance_logit(
     device: torch.device,
     *,
     labeled_safe_only: bool,
-    loss_options: dict[str, Any],
+    loss_options: dict[str, Any] | None = None,
 ) -> torch.Tensor:
+    sample, output = _sample_model_output(model, sample, device)
+    return _candidate_acceptance_logit_from_output(
+        sample,
+        output,
+        labeled_safe_only=labeled_safe_only,
+        loss_options=loss_options,
+    )
+
+
+def _sample_model_output(
+    model: GATBatchImpactModel,
+    sample: Any,
+    device: torch.device,
+) -> tuple[Any, dict[str, torch.Tensor]]:
     sample = sample.to(device)
+    kwargs = _sample_model_kwargs(model, sample)
     output = model(
         sample,
         sample.candidate_task_membership,
         sample.candidate_sequence_positions,
         sample.candidate_features,
         sample.context_features,
-        batch_features=sample.batch_features,
+        **kwargs,
     )
+    return sample, output
+
+
+def _sample_model_kwargs(model: GATBatchImpactModel, sample: Any) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"batch_features": sample.batch_features}
+    if getattr(model, "path_token_encoder", None) is not None:
+        kwargs.update(
+            {
+                "candidate_path_token_ids": sample.candidate_path_token_ids,
+                "candidate_path_pair_ids": sample.candidate_path_pair_ids,
+                "candidate_path_type_ids": sample.candidate_path_type_ids,
+                "candidate_path_token_mask": sample.candidate_path_token_mask,
+            }
+        )
+    return kwargs
+
+
+def _candidate_acceptance_logit_from_output(
+    sample: Any,
+    output: dict[str, torch.Tensor],
+    *,
+    labeled_safe_only: bool,
+    loss_options: dict[str, Any] | None = None,
+) -> torch.Tensor:
     logits = output["high_priority_logit"].reshape(-1)
-    if str(loss_options.get("candidate_admission_score_mode", "high_priority")) == "risk_adjusted_product":
+    loss_options = dict(loss_options or {})
+    if str(loss_options.get("candidate_admission_score_mode", "high_priority")) in {
+        "risk_adjusted_product",
+        "risk_adjusted_rescue_window",
+    }:
         delay_logits = output["delay_risk_logit"].reshape(-1)
         if delay_logits.numel() != logits.numel():
             raise ValueError("candidate delay-risk logits must match high-priority logits")
@@ -1556,8 +2267,10 @@ def _pairwise_ranking_loss(
     roi_delta: float,
     loss_options: dict[str, Any],
 ) -> torch.Tensor:
-    better_score = _batch_score_logit(model, better, device)
-    worse_score = _batch_score_logit(model, worse, device)
+    better, better_output = _sample_model_output(model, better, device)
+    worse, worse_output = _sample_model_output(model, worse, device)
+    better_score = better_output["batch_roi_positive_logit"].reshape(1)
+    worse_score = worse_output["batch_roi_positive_logit"].reshape(1)
     target = torch.ones_like(better_score)
     margin = float(loss_options["pairwise_roi_margin"])
     ranking_loss = F.margin_ranking_loss(
@@ -1568,26 +2281,42 @@ def _pairwise_ranking_loss(
     )
     candidate_ranking_loss = better_score.new_tensor(0.0)
     if float(loss_options["pairwise_candidate_ranking_loss_multiplier"]) > 0.0:
-        better_candidate_score = _candidate_acceptance_logit(
-            model,
-        better,
-        device,
-        labeled_safe_only=True,
-        loss_options=loss_options,
-    )
-    worse_candidate_score = _candidate_acceptance_logit(
-        model,
-        worse,
-        device,
-        labeled_safe_only=False,
-        loss_options=loss_options,
-    )
+        better_candidate_score = _candidate_acceptance_logit_from_output(
+            better,
+            better_output,
+            labeled_safe_only=True,
+            loss_options=loss_options,
+        )
+        worse_candidate_score = _candidate_acceptance_logit_from_output(
+            worse,
+            worse_output,
+            labeled_safe_only=False,
+            loss_options=loss_options,
+        )
         candidate_ranking_loss = F.margin_ranking_loss(
             better_candidate_score,
             worse_candidate_score,
             torch.ones_like(better_candidate_score),
             margin=margin,
         )
+    false_delay_contrast_loss = _pairwise_false_delay_contrast_loss(
+        better,
+        better_output,
+        worse,
+        worse_output,
+        margin=margin,
+        base_tensor=better_score,
+        loss_options=loss_options,
+    )
+    delay_risk_contrast_loss = _pairwise_delay_risk_contrast_loss(
+        better,
+        better_output,
+        worse,
+        worse_output,
+        margin=margin,
+        base_tensor=better_score,
+        loss_options=loss_options,
+    )
     roi_weight = min(5.0, max(1.0, float(abs(roi_delta))))
     return (
         roi_weight
@@ -1595,8 +2324,193 @@ def _pairwise_ranking_loss(
             float(loss_options["pairwise_ranking_loss_multiplier"]) * ranking_loss
             + float(loss_options["pairwise_candidate_ranking_loss_multiplier"])
             * candidate_ranking_loss
+            + float(loss_options.get("pairwise_false_delay_contrast_loss_multiplier", 0.0))
+            * false_delay_contrast_loss
+            + float(loss_options.get("pairwise_delay_risk_contrast_loss_multiplier", 0.0))
+            * delay_risk_contrast_loss
         )
     )
+
+
+def _focused_pair_head_loss(
+    model: GATBatchImpactModel,
+    better: Any,
+    worse: Any,
+    device: torch.device,
+    *,
+    roi_delta: float,
+    loss_options: dict[str, Any],
+) -> torch.Tensor:
+    better, better_output = _sample_model_output(model, better, device)
+    worse, worse_output = _sample_model_output(model, worse, device)
+    better_batch_score = better_output["batch_roi_positive_logit"].reshape(1)
+    worse_batch_score = worse_output["batch_roi_positive_logit"].reshape(1)
+    margin = float(loss_options["pairwise_roi_margin"])
+    total = better_batch_score.sum() * 0.0
+    better_safe = _candidate_labeled_head_and_delay_logits(
+        better,
+        better_output,
+        label_attr="y_candidate_high_priority",
+    )
+    worse_delay = _candidate_labeled_head_and_delay_logits(
+        worse,
+        worse_output,
+        label_attr="y_candidate_delay_risk",
+    )
+    if (
+        float(loss_options.get("focused_pair_candidate_loss_multiplier", 0.0)) > 0.0
+        and better_safe is not None
+        and worse_delay is not None
+    ):
+        better_hp, _ = better_safe
+        worse_hp, _ = worse_delay
+        total = total + float(
+            loss_options["focused_pair_candidate_loss_multiplier"]
+        ) * F.margin_ranking_loss(
+            better_hp,
+            worse_hp,
+            torch.ones_like(better_hp),
+            margin=margin,
+        )
+    if float(loss_options.get("focused_pair_admission_loss_multiplier", 0.0)) > 0.0:
+        better_admission_score = _candidate_acceptance_logit_from_output(
+            better,
+            better_output,
+            labeled_safe_only=True,
+            loss_options=loss_options,
+        )
+        worse_admission_score = _candidate_acceptance_logit_from_output(
+            worse,
+            worse_output,
+            labeled_safe_only=False,
+            loss_options=loss_options,
+        )
+        total = total + float(
+            loss_options["focused_pair_admission_loss_multiplier"]
+        ) * F.margin_ranking_loss(
+            better_admission_score,
+            worse_admission_score,
+            torch.ones_like(better_admission_score),
+            margin=margin,
+        )
+    if (
+        float(loss_options.get("focused_pair_delay_risk_loss_multiplier", 0.0)) > 0.0
+        and better_safe is not None
+        and worse_delay is not None
+    ):
+        _, better_delay = better_safe
+        _, worse_delay_logit = worse_delay
+        total = total + float(
+            loss_options["focused_pair_delay_risk_loss_multiplier"]
+        ) * F.margin_ranking_loss(
+            worse_delay_logit,
+            better_delay,
+            torch.ones_like(worse_delay_logit),
+            margin=margin,
+        )
+    if float(loss_options.get("focused_pair_batch_loss_multiplier", 0.0)) > 0.0:
+        total = total + float(
+            loss_options["focused_pair_batch_loss_multiplier"]
+        ) * F.margin_ranking_loss(
+            better_batch_score,
+            worse_batch_score,
+            torch.ones_like(better_batch_score),
+            margin=margin,
+        )
+    roi_weight = min(5.0, max(1.0, float(abs(roi_delta))))
+    return roi_weight * total
+
+
+def _pairwise_false_delay_contrast_loss(
+    better: Any,
+    better_output: dict[str, torch.Tensor],
+    worse: Any,
+    worse_output: dict[str, torch.Tensor],
+    *,
+    margin: float,
+    base_tensor: torch.Tensor,
+    loss_options: dict[str, Any],
+) -> torch.Tensor:
+    if float(loss_options.get("pairwise_false_delay_contrast_loss_multiplier", 0.0)) <= 0.0:
+        return base_tensor.new_tensor(0.0)
+    better_safe = _candidate_labeled_head_and_delay_logits(
+        better,
+        better_output,
+        label_attr="y_candidate_high_priority",
+    )
+    worse_delay = _candidate_labeled_head_and_delay_logits(
+        worse,
+        worse_output,
+        label_attr="y_candidate_delay_risk",
+    )
+    if better_safe is None or worse_delay is None:
+        return base_tensor.new_tensor(0.0)
+    better_hp, better_delay = better_safe
+    worse_hp, worse_delay_logit = worse_delay
+    target = torch.ones_like(better_hp)
+    candidate_head_loss = F.margin_ranking_loss(
+        better_hp,
+        worse_hp,
+        target,
+        margin=margin,
+    )
+    delay_head_loss = F.margin_ranking_loss(
+        worse_delay_logit,
+        better_delay,
+        torch.ones_like(worse_delay_logit),
+        margin=margin,
+    )
+    return 0.5 * (candidate_head_loss + delay_head_loss)
+
+
+def _pairwise_delay_risk_contrast_loss(
+    better: Any,
+    better_output: dict[str, torch.Tensor],
+    worse: Any,
+    worse_output: dict[str, torch.Tensor],
+    *,
+    margin: float,
+    base_tensor: torch.Tensor,
+    loss_options: dict[str, Any],
+) -> torch.Tensor:
+    if float(loss_options.get("pairwise_delay_risk_contrast_loss_multiplier", 0.0)) <= 0.0:
+        return base_tensor.new_tensor(0.0)
+    better_safe = _candidate_labeled_head_and_delay_logits(
+        better,
+        better_output,
+        label_attr="y_candidate_high_priority",
+    )
+    worse_delay = _candidate_labeled_head_and_delay_logits(
+        worse,
+        worse_output,
+        label_attr="y_candidate_delay_risk",
+    )
+    if better_safe is None or worse_delay is None:
+        return base_tensor.new_tensor(0.0)
+    _, better_delay = better_safe
+    _, worse_delay_logit = worse_delay
+    return F.margin_ranking_loss(
+        worse_delay_logit,
+        better_delay,
+        torch.ones_like(worse_delay_logit),
+        margin=margin,
+    )
+
+
+def _candidate_labeled_head_and_delay_logits(
+    sample: Any,
+    output: dict[str, torch.Tensor],
+    *,
+    label_attr: str,
+) -> tuple[torch.Tensor, torch.Tensor] | None:
+    head_logits = output["high_priority_logit"].reshape(-1)
+    delay_logits = output["delay_risk_logit"].reshape(-1)
+    labels = getattr(sample, label_attr).to(device=head_logits.device).reshape(-1) > 0.5
+    if labels.numel() != head_logits.numel() or labels.numel() != delay_logits.numel():
+        raise ValueError(f"{label_attr} labels must match candidate logits")
+    if not bool(torch.any(labels)):
+        return None
+    return head_logits[labels].max().reshape(1), delay_logits[labels].max().reshape(1)
 
 
 def _prediction_records(
@@ -1615,7 +2529,7 @@ def _prediction_records(
                 sample.candidate_sequence_positions,
                 sample.candidate_features,
                 sample.context_features,
-                batch_features=sample.batch_features,
+                **_sample_model_kwargs(model, sample),
             )
             records.append(
                 {
@@ -1732,6 +2646,24 @@ def _gate_config(
             0.0,
             float(getattr(args, "candidate_delay_score_penalty", 0.0)),
         ),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(
+                0.0,
+                float(getattr(args, "candidate_rescue_raw_score_threshold", 1.0)),
+            ),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(
+                0.0,
+                float(getattr(args, "candidate_rescue_delay_risk_threshold", 1.0)),
+            ),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(getattr(args, "candidate_rescue_delay_score_penalty", 0.0)),
+        ),
         "min_major_families": int(args.min_major_families),
         "observed_family_count": len(dict(manifest.get("family_counts") or {})),
         "stage3_min_samples": int(getattr(args, "stage3_min_samples", 200)),
@@ -1743,6 +2675,9 @@ def _gate_config(
         "candidate_delay_risk_threshold": min(
             1.0,
             max(0.0, float(getattr(args, "candidate_delay_risk_threshold", 0.5))),
+        ),
+        "require_positive_candidate_threshold": bool(
+            getattr(args, "require_positive_candidate_threshold", True)
         ),
     }
 
@@ -1889,8 +2824,8 @@ def _threshold_feasible_selection_key(metrics: dict[str, Any]) -> tuple[float, .
         float(int(metrics.get("accepted_batch_count") or 0)),
         -float(len(metrics.get("family_delay_fallback_families") or [])),
         -float(len(metrics.get("context_delay_fallback_contexts") or [])),
-        -_metric_float(metrics.get("batch_threshold"), default=0.0),
-        -_metric_float(metrics.get("candidate_threshold"), default=0.0),
+        _metric_float(metrics.get("batch_threshold"), default=0.0),
+        _metric_float(metrics.get("candidate_threshold"), default=0.0),
     )
 
 
@@ -1912,8 +2847,8 @@ def _threshold_diagnostic_selection_key(metrics: dict[str, Any]) -> tuple[float,
         -float(len(metrics.get("family_delay_fallback_families") or [])),
         -float(len(metrics.get("context_delay_fallback_contexts") or [])),
         -_metric_float(metrics.get("false_safe_rate_union"), default=1.0),
-        -_metric_float(metrics.get("batch_threshold"), default=0.0),
-        -_metric_float(metrics.get("candidate_threshold"), default=0.0),
+        _metric_float(metrics.get("batch_threshold"), default=0.0),
+        _metric_float(metrics.get("candidate_threshold"), default=0.0),
     )
 
 
@@ -2004,7 +2939,10 @@ def _deployment_metrics(
     )
 
     pred_hp = true_hp = false_hp_delay = delay_label_count = delay_gate_blocked = 0
+    candidate_count = score_threshold_blocked = 0
     risk_adjusted_suppressed = 0
+    rescue_window_eligible = 0
+    rescue_window_promoted = 0
     for record in records:
         if _record_is_delay_fallback(
             record,
@@ -2012,13 +2950,24 @@ def _deployment_metrics(
             fallback_contexts=fallback_contexts,
         ):
             continue
-        candidate_prediction_indices, blocked_count, suppressed_count = _record_candidate_prediction_indices(
+        (
+            candidate_prediction_indices,
+            blocked_count,
+            score_blocked_count,
+            suppressed_count,
+            rescue_eligible_count,
+            rescue_promoted_count,
+        ) = _record_candidate_prediction_indices(
             record,
             candidate_threshold=candidate_threshold,
             gate_config=gate_config,
         )
+        candidate_count += len(record.get("candidate_scores", []))
         delay_gate_blocked += int(blocked_count)
+        score_threshold_blocked += int(score_blocked_count)
         risk_adjusted_suppressed += int(suppressed_count)
+        rescue_window_eligible += int(rescue_eligible_count)
+        rescue_window_promoted += int(rescue_promoted_count)
         predicted_set = set(candidate_prediction_indices)
         for idx, (hp_label, delay_label) in enumerate(
             zip(
@@ -2072,6 +3021,9 @@ def _deployment_metrics(
             "accepted_batch_roi": accepted_batch_roi,
             "accepted_batch_roi_ci_low": accepted_batch_roi_ci_low,
             "expected_trajectory_utility": expected_trajectory_utility,
+            "candidate_threshold": candidate_threshold,
+            "evaluated_candidate_count": candidate_count,
+            "candidate_score_threshold_blocked_count": score_threshold_blocked,
             "false_high_priority_on_delay": false_high_priority_on_delay,
             "false_safe_rate_union": false_safe_rate_union,
             "family_holdout_min_precision": family_metrics["family_holdout_min_precision"],
@@ -2103,6 +3055,9 @@ def _deployment_metrics(
         "candidate_threshold": float(candidate_threshold),
         "candidate_admission_score_mode": _candidate_admission_score_mode(gate_config),
         "candidate_delay_score_penalty": _candidate_delay_score_penalty(gate_config),
+        "candidate_rescue_raw_score_threshold": _candidate_rescue_raw_score_threshold(gate_config),
+        "candidate_rescue_delay_risk_threshold": _candidate_rescue_delay_risk_threshold(gate_config),
+        "candidate_rescue_delay_score_penalty": _candidate_rescue_delay_score_penalty(gate_config),
         "candidate_delay_gate_enabled": bool(
             gate_config.get("candidate_delay_gate_enabled", False)
         ),
@@ -2196,8 +3151,12 @@ def _deployment_metrics(
         "high_priority_true_positive_count": int(true_hp),
         "high_priority_precision": high_priority_precision,
         "high_priority_precision_ci_low": high_priority_precision_ci_low,
+        "evaluated_candidate_count": int(candidate_count),
+        "candidate_score_threshold_blocked_count": int(score_threshold_blocked),
         "candidate_delay_gate_blocked_count": int(delay_gate_blocked),
         "candidate_risk_adjusted_suppressed_count": int(risk_adjusted_suppressed),
+        "candidate_rescue_window_eligible_count": int(rescue_window_eligible),
+        "candidate_rescue_window_promoted_count": int(rescue_window_promoted),
         "false_high_priority_on_delay_count": int(false_hp_delay),
         "delay_label_count": int(delay_label_count),
         "false_high_priority_on_delay": float(false_high_priority_on_delay),
@@ -2260,13 +3219,31 @@ def _candidate_delay_risk_threshold(gate_config: dict[str, Any] | None) -> float
 
 def _candidate_admission_score_mode(gate_config: dict[str, Any] | None) -> str:
     mode = str((gate_config or {}).get("candidate_admission_score_mode", "high_priority") or "high_priority")
-    if mode not in {"high_priority", "risk_adjusted_product"}:
+    if mode not in {"high_priority", "risk_adjusted_product", "risk_adjusted_rescue_window"}:
         return "high_priority"
     return mode
 
 
 def _candidate_delay_score_penalty(gate_config: dict[str, Any] | None) -> float:
     return max(0.0, float((gate_config or {}).get("candidate_delay_score_penalty", 0.0)))
+
+
+def _candidate_rescue_raw_score_threshold(gate_config: dict[str, Any] | None) -> float:
+    return min(
+        1.0,
+        max(0.0, float((gate_config or {}).get("candidate_rescue_raw_score_threshold", 1.0))),
+    )
+
+
+def _candidate_rescue_delay_risk_threshold(gate_config: dict[str, Any] | None) -> float:
+    return min(
+        1.0,
+        max(0.0, float((gate_config or {}).get("candidate_rescue_delay_risk_threshold", 1.0))),
+    )
+
+
+def _candidate_rescue_delay_score_penalty(gate_config: dict[str, Any] | None) -> float:
+    return max(0.0, float((gate_config or {}).get("candidate_rescue_delay_score_penalty", 0.0)))
 
 
 def _candidate_delay_scores(record: dict[str, Any], *, gate_config: dict[str, Any] | None) -> list[float]:
@@ -2278,17 +3255,453 @@ def _candidate_delay_scores(record: dict[str, Any], *, gate_config: dict[str, An
     return [float(default_score) for _ in candidate_scores]
 
 
-def _candidate_admission_scores(record: dict[str, Any], *, gate_config: dict[str, Any] | None) -> list[float]:
-    candidate_scores = [float(score) for score in record.get("candidate_scores", [])]
-    if _candidate_admission_score_mode(gate_config) != "risk_adjusted_product":
-        return candidate_scores
-    penalty = _candidate_delay_score_penalty(gate_config)
-    delay_scores = _candidate_delay_scores(record, gate_config=gate_config)
+def _candidate_risk_adjusted_scores(
+    candidate_scores: list[float],
+    delay_scores: list[float],
+    *,
+    penalty: float,
+) -> list[float]:
     adjusted: list[float] = []
     for candidate_score, delay_score in zip(candidate_scores, delay_scores):
         risk_factor = max(0.0, min(1.0, 1.0 - float(delay_score)))
-        adjusted.append(max(0.0, min(1.0, float(candidate_score) * (risk_factor ** penalty))))
+        adjusted.append(max(0.0, min(1.0, float(candidate_score) * (risk_factor ** max(0.0, float(penalty))))))
     return adjusted
+
+
+def _candidate_rescue_window_eligible(
+    raw_score: float,
+    delay_score: float,
+    *,
+    gate_config: dict[str, Any] | None,
+) -> bool:
+    if _candidate_admission_score_mode(gate_config) != "risk_adjusted_rescue_window":
+        return False
+    return (
+        float(raw_score) >= _candidate_rescue_raw_score_threshold(gate_config)
+        and float(delay_score) <= _candidate_rescue_delay_risk_threshold(gate_config)
+    )
+
+
+def _candidate_admission_scores(record: dict[str, Any], *, gate_config: dict[str, Any] | None) -> list[float]:
+    candidate_scores = [float(score) for score in record.get("candidate_scores", [])]
+    mode = _candidate_admission_score_mode(gate_config)
+    if mode == "high_priority":
+        return candidate_scores
+    delay_scores = _candidate_delay_scores(record, gate_config=gate_config)
+    base_scores = _candidate_risk_adjusted_scores(
+        candidate_scores,
+        delay_scores,
+        penalty=_candidate_delay_score_penalty(gate_config),
+    )
+    if mode != "risk_adjusted_rescue_window":
+        return base_scores
+    rescue_scores = _candidate_risk_adjusted_scores(
+        candidate_scores,
+        delay_scores,
+        penalty=_candidate_rescue_delay_score_penalty(gate_config),
+    )
+    adjusted: list[float] = []
+    for idx, base_score in enumerate(base_scores):
+        if idx < len(rescue_scores) and _candidate_rescue_window_eligible(
+            candidate_scores[idx],
+            delay_scores[idx],
+            gate_config=gate_config,
+        ):
+            adjusted.append(max(float(base_score), float(rescue_scores[idx])))
+        else:
+            adjusted.append(float(base_score))
+    return adjusted
+
+
+def _focused_pair_gate_metrics(
+    *,
+    manifest_items: list[dict[str, Any]],
+    prediction_records: list[dict[str, Any]],
+    gate_config: dict[str, Any],
+    args: argparse.Namespace | TrainBatchImpactArgs,
+) -> dict[str, Any]:
+    focus_row_index_min = getattr(args, "focused_pair_gate_row_index_min", None)
+    focus_row_indices = _focused_pair_row_indices(args)
+    focus_row_index_set = set(focus_row_indices)
+    active = focus_row_index_min is not None or bool(focus_row_index_set)
+    focus_selector = "explicit_row_indices" if focus_row_index_set else "row_index_min"
+    thresholds = {
+        "min_focused_pair_count": max(0, int(getattr(args, "min_focused_pair_count", 1))),
+        "min_raw_pair_pass_rate": _clamped_rate(
+            getattr(args, "min_focused_raw_pair_pass_rate", 1.0)
+        ),
+        "min_admission_pair_pass_rate": _clamped_rate(
+            getattr(args, "min_focused_admission_pair_pass_rate", 1.0)
+        ),
+        "min_delay_risk_pair_pass_rate": _clamped_rate(
+            getattr(args, "min_focused_delay_risk_pair_pass_rate", 1.0)
+        ),
+        "min_strict_pair_pass_rate": _clamped_rate(
+            getattr(args, "min_focused_strict_pair_pass_rate", 1.0)
+        ),
+    }
+    if not active:
+        return {
+            "active": False,
+            "focus_row_index_min": None,
+            "focus_row_indices_file": (
+                None
+                if getattr(args, "focused_pair_row_indices_file", None) is None
+                else str(getattr(args, "focused_pair_row_indices_file"))
+            ),
+            "focus_row_indices_count": 0,
+            "focus_selector": None,
+            "thresholds": thresholds,
+            "summary": {
+                "focused_row_count": 0,
+                "context_count": 0,
+                "contexts_with_positive_and_negative": 0,
+                "pair_count": 0,
+                "raw_pair_pass_rate": None,
+                "admission_pair_pass_rate": None,
+                "delay_risk_pair_pass_rate": None,
+                "strict_pair_pass_rate": None,
+                "primary": "focused_pair_gate_not_run",
+            },
+            "gate": {
+                "gate_name": "focused_same_context_positive_negative_pair_gate",
+                "gate_pass": False,
+                "reject_reasons": ["focused_pair_gate_not_run"],
+                "thresholds": thresholds,
+                "observed": {},
+                "blocking_primary": "focused_pair_gate_not_run",
+                "diagnostic_only": True,
+                "production_ready": False,
+                "selector_can_certificate": False,
+            },
+            "diagnostic_only": True,
+            "runs_bpc_or_pricing": False,
+            "production_ready": False,
+        }
+
+    rows = [
+        _focused_pair_row(item, record, gate_config=gate_config)
+        for item, record in zip(manifest_items, prediction_records)
+        if (
+            _int_or_default(item.get("row_index"), -1) in focus_row_index_set
+            if focus_row_index_set
+            else _int_or_default(item.get("row_index"), -1) >= int(focus_row_index_min)
+        )
+    ]
+    context_rows, pair_rows = _focused_context_and_pair_rows(rows)
+    summary = _focused_pair_summary(rows, context_rows, pair_rows)
+    gate = _focused_pair_gate(summary, thresholds=thresholds)
+    return {
+        "active": True,
+        "focus_row_index_min": (
+            None if focus_row_index_min is None else int(focus_row_index_min)
+        ),
+        "focus_row_indices_file": (
+            None
+            if getattr(args, "focused_pair_row_indices_file", None) is None
+            else str(getattr(args, "focused_pair_row_indices_file"))
+        ),
+        "focus_row_indices_count": len(focus_row_indices),
+        "focus_selector": focus_selector,
+        "thresholds": thresholds,
+        "summary": summary,
+        "context_rows": context_rows,
+        "pair_rows": pair_rows,
+        "gate": gate,
+        "diagnostic_only": True,
+        "runs_bpc_or_pricing": False,
+        "production_ready": False,
+    }
+
+
+def _focused_pair_gate_reject_reasons(metrics: dict[str, Any]) -> list[str]:
+    gate = dict(metrics.get("gate") or {})
+    return [str(reason) for reason in gate.get("reject_reasons", [])]
+
+
+def _focused_pair_row(
+    manifest_item: dict[str, Any],
+    prediction: dict[str, Any],
+    *,
+    gate_config: dict[str, Any],
+) -> dict[str, Any]:
+    candidate_scores = [float(value) for value in prediction.get("candidate_scores", [])]
+    delay_scores = _candidate_delay_scores(prediction, gate_config=gate_config)
+    admission_scores = _candidate_admission_scores(prediction, gate_config=gate_config)
+    high_priority_labels = [int(value) for value in prediction.get("candidate_high_priority_labels", [])]
+    delay_labels = [int(value) for value in prediction.get("candidate_delay_labels", [])]
+    label_class = _focused_label_class(prediction)
+    return {
+        "row_index": _int_or_default(manifest_item.get("row_index"), -1),
+        "context_key": _focused_context_key(manifest_item, prediction),
+        "context_hash": str(manifest_item.get("context_hash") or prediction.get("context_hash") or ""),
+        "family": str(manifest_item.get("instance_family") or prediction.get("family") or "unknown"),
+        "candidate_signature_ids": list(manifest_item.get("candidate_signature_ids") or []),
+        "label_class": label_class,
+        "accepted_batch_roi_label": float(
+            manifest_item.get("accepted_batch_roi")
+            if manifest_item.get("accepted_batch_roi") is not None
+            else prediction.get("accepted_batch_roi_label") or 0.0
+        ),
+        "bad_mode_switch": int(prediction.get("bad_mode_switch") or 0),
+        "batch_score": float(prediction.get("batch_score") or 0.0),
+        "max_raw_candidate_score": max(candidate_scores) if candidate_scores else 0.0,
+        "max_admission_score": max(admission_scores) if admission_scores else 0.0,
+        "max_delay_risk_score": max(delay_scores) if delay_scores else 0.0,
+        "high_priority_label_count": int(sum(high_priority_labels)),
+        "delay_label_count": int(sum(delay_labels)),
+    }
+
+
+def _focused_label_class(record: dict[str, Any]) -> str:
+    high_priority = any(int(value) for value in record.get("candidate_high_priority_labels", []))
+    delay = any(int(value) for value in record.get("candidate_delay_labels", []))
+    roi_positive = bool(int(record.get("batch_roi_positive") or 0))
+    bad_mode = bool(int(record.get("bad_mode_switch") or 0))
+    if high_priority and roi_positive and not bad_mode:
+        return "positive_high_priority"
+    if delay or bad_mode or not roi_positive:
+        return "delay_or_hard_negative"
+    return "ambiguous"
+
+
+def _focused_context_key(manifest_item: dict[str, Any], prediction: dict[str, Any]) -> str:
+    instance = str(
+        manifest_item.get("instance_path")
+        or manifest_item.get("instance")
+        or prediction.get("instance")
+        or ""
+    )
+    context_hash = str(manifest_item.get("context_hash") or prediction.get("context_hash") or "")
+    return "|".join([instance, context_hash])
+
+
+def _focused_context_and_pair_rows(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    by_context: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        key = str(row["context_key"])
+        by_context.setdefault(key, []).append(row)
+    context_rows: list[dict[str, Any]] = []
+    pair_rows: list[dict[str, Any]] = []
+    for key, group in sorted(by_context.items()):
+        positives = [row for row in group if row["label_class"] == "positive_high_priority"]
+        negatives = [row for row in group if row["label_class"] == "delay_or_hard_negative"]
+        pairs = [
+            _focused_pair_compare(positive, negative)
+            for positive in positives
+            for negative in negatives
+        ]
+        pair_rows.extend(pairs)
+        context_rows.append(
+            {
+                "context_key": key,
+                "context_hash": str(group[0].get("context_hash") or ""),
+                "family": str(group[0].get("family") or "unknown"),
+                "row_count": len(group),
+                "positive_count": len(positives),
+                "negative_count": len(negatives),
+                "pair_count": len(pairs),
+                "raw_pair_pass_rate": _focused_rate(pairs, "raw_positive_above_negative"),
+                "admission_pair_pass_rate": _focused_rate(
+                    pairs,
+                    "admission_positive_above_negative",
+                ),
+                "delay_risk_pair_pass_rate": _focused_rate(
+                    pairs,
+                    "positive_lower_delay_risk",
+                ),
+                "strict_pair_pass_rate": _focused_rate(pairs, "pair_pass"),
+            }
+        )
+    return context_rows, pair_rows
+
+
+def _focused_pair_compare(
+    positive: dict[str, Any],
+    negative: dict[str, Any],
+) -> dict[str, Any]:
+    raw_margin = float(positive["max_raw_candidate_score"]) - float(
+        negative["max_raw_candidate_score"]
+    )
+    admission_margin = float(positive["max_admission_score"]) - float(
+        negative["max_admission_score"]
+    )
+    delay_margin = float(negative["max_delay_risk_score"]) - float(
+        positive["max_delay_risk_score"]
+    )
+    return {
+        "context_key": str(positive["context_key"]),
+        "context_hash": str(positive["context_hash"]),
+        "family": str(positive["family"]),
+        "positive_row_index": int(positive["row_index"]),
+        "negative_row_index": int(negative["row_index"]),
+        "positive_roi": float(positive["accepted_batch_roi_label"]),
+        "negative_roi": float(negative["accepted_batch_roi_label"]),
+        "positive_signature_ids": list(positive.get("candidate_signature_ids") or []),
+        "negative_signature_ids": list(negative.get("candidate_signature_ids") or []),
+        "raw_margin": raw_margin,
+        "admission_margin": admission_margin,
+        "delay_risk_margin": delay_margin,
+        "raw_positive_above_negative": raw_margin > 0.0,
+        "admission_positive_above_negative": admission_margin > 0.0,
+        "positive_lower_delay_risk": delay_margin > 0.0,
+        "pair_pass": raw_margin > 0.0 and admission_margin > 0.0 and delay_margin > 0.0,
+    }
+
+
+def _focused_pair_summary(
+    rows: list[dict[str, Any]],
+    context_rows: list[dict[str, Any]],
+    pair_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    label_counts: dict[str, int] = {}
+    family_counts: dict[str, int] = {}
+    for row in rows:
+        label = str(row.get("label_class") or "unknown")
+        family = str(row.get("family") or "unknown")
+        label_counts[label] = label_counts.get(label, 0) + 1
+        family_counts[family] = family_counts.get(family, 0) + 1
+    return {
+        "focused_row_count": len(rows),
+        "context_count": len(context_rows),
+        "contexts_with_positive_and_negative": sum(
+            int(row["positive_count"] > 0 and row["negative_count"] > 0)
+            for row in context_rows
+        ),
+        "positive_row_count": int(label_counts.get("positive_high_priority", 0)),
+        "negative_row_count": int(label_counts.get("delay_or_hard_negative", 0)),
+        "ambiguous_row_count": int(label_counts.get("ambiguous", 0)),
+        "pair_count": len(pair_rows),
+        "raw_pair_pass_count": _focused_count_true(pair_rows, "raw_positive_above_negative"),
+        "admission_pair_pass_count": _focused_count_true(
+            pair_rows,
+            "admission_positive_above_negative",
+        ),
+        "delay_risk_pair_pass_count": _focused_count_true(
+            pair_rows,
+            "positive_lower_delay_risk",
+        ),
+        "strict_pair_pass_count": _focused_count_true(pair_rows, "pair_pass"),
+        "raw_pair_pass_rate": _focused_rate(pair_rows, "raw_positive_above_negative"),
+        "admission_pair_pass_rate": _focused_rate(
+            pair_rows,
+            "admission_positive_above_negative",
+        ),
+        "delay_risk_pair_pass_rate": _focused_rate(pair_rows, "positive_lower_delay_risk"),
+        "strict_pair_pass_rate": _focused_rate(pair_rows, "pair_pass"),
+        "label_counts": dict(sorted(label_counts.items())),
+        "family_counts": dict(sorted(family_counts.items())),
+        "primary": _focused_primary_diagnosis(pair_rows, context_rows),
+    }
+
+
+def _focused_pair_gate(
+    summary: dict[str, Any],
+    *,
+    thresholds: dict[str, Any],
+) -> dict[str, Any]:
+    reject_reasons: list[str] = []
+    pair_count = int(summary.get("pair_count") or 0)
+    if pair_count < int(thresholds["min_focused_pair_count"]):
+        reject_reasons.append("not_enough_focused_positive_negative_pairs")
+    _append_focused_rate_reject(
+        reject_reasons,
+        summary.get("raw_pair_pass_rate"),
+        float(thresholds["min_raw_pair_pass_rate"]),
+        "raw_pair_pass_rate_below_threshold",
+    )
+    _append_focused_rate_reject(
+        reject_reasons,
+        summary.get("admission_pair_pass_rate"),
+        float(thresholds["min_admission_pair_pass_rate"]),
+        "admission_pair_pass_rate_below_threshold",
+    )
+    _append_focused_rate_reject(
+        reject_reasons,
+        summary.get("delay_risk_pair_pass_rate"),
+        float(thresholds["min_delay_risk_pair_pass_rate"]),
+        "delay_risk_pair_pass_rate_below_threshold",
+    )
+    _append_focused_rate_reject(
+        reject_reasons,
+        summary.get("strict_pair_pass_rate"),
+        float(thresholds["min_strict_pair_pass_rate"]),
+        "strict_pair_pass_rate_below_threshold",
+    )
+    gate_pass = not reject_reasons
+    return {
+        "gate_name": "focused_same_context_positive_negative_pair_gate",
+        "gate_pass": gate_pass,
+        "reject_reasons": reject_reasons,
+        "thresholds": thresholds,
+        "observed": {
+            "pair_count": pair_count,
+            "raw_pair_pass_rate": summary.get("raw_pair_pass_rate"),
+            "admission_pair_pass_rate": summary.get("admission_pair_pass_rate"),
+            "delay_risk_pair_pass_rate": summary.get("delay_risk_pair_pass_rate"),
+            "strict_pair_pass_rate": summary.get("strict_pair_pass_rate"),
+        },
+        "blocking_primary": (
+            "focused_context_pair_gate_passed"
+            if gate_pass
+            else str(summary.get("primary") or "focused_pair_gate_failed")
+        ),
+        "diagnostic_only": True,
+        "production_ready": False,
+        "selector_can_certificate": False,
+    }
+
+
+def _focused_primary_diagnosis(
+    pair_rows: list[dict[str, Any]],
+    context_rows: list[dict[str, Any]],
+) -> str:
+    if not pair_rows:
+        if any(int(row.get("positive_count") or 0) == 0 for row in context_rows):
+            return "positive_counterpart_missing_in_some_contexts"
+        return "no_pairwise_contrast_available"
+    if any(not pair["raw_positive_above_negative"] for pair in pair_rows):
+        return "candidate_head_context_ranking_failure"
+    if any(not pair["positive_lower_delay_risk"] for pair in pair_rows):
+        return "delay_risk_head_context_ranking_failure"
+    if any(not pair["admission_positive_above_negative"] for pair in pair_rows):
+        return "risk_adjusted_admission_ranking_failure"
+    return "focused_context_ranking_passes"
+
+
+def _append_focused_rate_reject(
+    reject_reasons: list[str],
+    observed: Any,
+    threshold: float,
+    reason: str,
+) -> None:
+    if observed is None or float(observed) < float(threshold):
+        reject_reasons.append(reason)
+
+
+def _focused_rate(rows: list[dict[str, Any]], field: str) -> float | None:
+    if not rows:
+        return None
+    return float(_focused_count_true(rows, field)) / float(len(rows))
+
+
+def _focused_count_true(rows: list[dict[str, Any]], field: str) -> int:
+    return sum(int(bool(row.get(field))) for row in rows)
+
+
+def _clamped_rate(value: Any) -> float:
+    return min(1.0, max(0.0, float(value)))
+
+
+def _int_or_default(value: Any, default: int) -> int:
+    try:
+        if value is None or value == "":
+            return int(default)
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
 
 
 def _record_candidate_prediction_indices(
@@ -2296,30 +3709,59 @@ def _record_candidate_prediction_indices(
     *,
     candidate_threshold: float,
     gate_config: dict[str, Any] | None = None,
-) -> tuple[list[int], int, int]:
+) -> tuple[list[int], int, int, int, int, int]:
     delay_gate_enabled = _candidate_delay_gate_enabled(gate_config)
     delay_threshold = _candidate_delay_risk_threshold(gate_config)
     raw_scores = [float(score) for score in record.get("candidate_scores", [])]
     admission_scores = _candidate_admission_scores(record, gate_config=gate_config)
     delay_scores = _candidate_delay_scores(record, gate_config=gate_config)
+    mode = _candidate_admission_score_mode(gate_config)
+    base_scores = (
+        raw_scores
+        if mode == "high_priority"
+        else _candidate_risk_adjusted_scores(
+            raw_scores,
+            delay_scores,
+            penalty=_candidate_delay_score_penalty(gate_config),
+        )
+    )
     predicted: list[int] = []
     blocked = 0
+    score_blocked = 0
     suppressed = 0
+    rescue_eligible = 0
+    rescue_promoted = 0
     for idx, score in enumerate(admission_scores):
+        if idx >= len(raw_scores) or idx >= len(delay_scores):
+            continue
+        eligible = _candidate_rescue_window_eligible(
+            raw_scores[idx],
+            delay_scores[idx],
+            gate_config=gate_config,
+        )
+        if eligible:
+            rescue_eligible += 1
+        base_score = float(base_scores[idx]) if idx < len(base_scores) else float(score)
         if (
-            _candidate_admission_score_mode(gate_config) != "high_priority"
-            and idx < len(raw_scores)
+            mode != "high_priority"
             and float(raw_scores[idx]) >= float(candidate_threshold)
-            and float(score) < float(candidate_threshold)
+            and base_score < float(candidate_threshold)
         ):
             suppressed += 1
         if float(score) < float(candidate_threshold):
+            score_blocked += 1
             continue
-        if delay_gate_enabled and float(delay_scores[idx]) > float(delay_threshold):
+        bypass_delay_gate = bool(eligible and mode == "risk_adjusted_rescue_window")
+        if delay_gate_enabled and float(delay_scores[idx]) > float(delay_threshold) and not bypass_delay_gate:
             blocked += 1
             continue
+        if mode == "risk_adjusted_rescue_window" and eligible and (
+            base_score < float(candidate_threshold)
+            or (delay_gate_enabled and float(delay_scores[idx]) > float(delay_threshold))
+        ):
+            rescue_promoted += 1
         predicted.append(int(idx))
-    return predicted, blocked, suppressed
+    return predicted, blocked, score_blocked, suppressed, rescue_eligible, rescue_promoted
 
 
 def _record_candidate_decision_counts(
@@ -2327,8 +3769,15 @@ def _record_candidate_decision_counts(
     *,
     candidate_threshold: float,
     gate_config: dict[str, Any] | None = None,
-) -> tuple[int, int, int, int]:
-    predicted_indices, blocked, suppressed = _record_candidate_prediction_indices(
+) -> tuple[int, int, int, int, int, int, int]:
+    (
+        predicted_indices,
+        blocked,
+        score_blocked,
+        suppressed,
+        rescue_eligible,
+        rescue_promoted,
+    ) = _record_candidate_prediction_indices(
         record,
         candidate_threshold=candidate_threshold,
         gate_config=gate_config,
@@ -2338,7 +3787,15 @@ def _record_candidate_decision_counts(
         for idx in predicted_indices
         if idx < len(record["candidate_delay_labels"])
     )
-    return len(predicted_indices), int(false_delay), int(blocked), int(suppressed)
+    return (
+        len(predicted_indices),
+        int(false_delay),
+        int(blocked),
+        int(score_blocked),
+        int(suppressed),
+        int(rescue_eligible),
+        int(rescue_promoted),
+    )
 
 
 def _record_is_batch_accepted(
@@ -2355,7 +3812,7 @@ def _record_is_batch_accepted(
         batch_thresholds_by_family=batch_thresholds_by_family,
     ):
         return False
-    predicted, false_delay, _, _ = _record_candidate_decision_counts(
+    predicted, false_delay, _, _, _, _, _ = _record_candidate_decision_counts(
         record,
         candidate_threshold=candidate_threshold,
         gate_config=gate_config,
@@ -2687,6 +4144,11 @@ def _checkpoint_gate_reject_reasons(metrics: dict[str, Any], *, gate_config: dic
             reasons.append("accepted_batch_roi_ci_low_below_baseline_margin_or_not_measurable")
     if float(metrics["expected_trajectory_utility"]) <= 0.0:
         reasons.append("expected_trajectory_utility_not_positive")
+    if bool(gate_config.get("require_positive_candidate_threshold", True)):
+        candidate_threshold = float(metrics.get("candidate_threshold", 0.0) or 0.0)
+        evaluated_candidates = int(metrics.get("evaluated_candidate_count", 0) or 0)
+        if candidate_threshold <= 0.0 and evaluated_candidates > 0:
+            reasons.append("candidate_threshold_zero_disables_candidate_head_filter")
     if float(metrics["false_high_priority_on_delay"]) > float(gate_config["max_false_high_priority_on_delay"]):
         reasons.append("false_high_priority_on_delay_too_high")
     if float(metrics["false_safe_rate_union"]) > float(gate_config["max_false_safe_union_rate"]):
@@ -2754,12 +4216,20 @@ def _hard_reject_reason_categories(reject_reasons: list[str]) -> list[str]:
             categories.add("holdout_family_collapse")
         if reason_text == "expected_trajectory_utility_not_positive":
             categories.add("trajectory_utility_not_positive")
+        if reason_text == "candidate_threshold_zero_disables_candidate_head_filter":
+            categories.add("candidate_head_filter_inactive")
         if reason_text == "stage3_effective_sample_count_below_200":
             categories.add("sample_count_below_gate")
         if reason_text == "knn_ood_audit_missing":
             categories.add("knn_ood_audit_missing")
         if reason_text == "nonfinite_training_update_rate_too_high":
             categories.add("training_stability_failed")
+        if (
+            reason_text == "focused_pair_gate_not_run"
+            or reason_text == "not_enough_focused_positive_negative_pairs"
+            or reason_text.endswith("_pair_pass_rate_below_threshold")
+        ):
+            categories.add("focused_pair_gate_failed")
     return sorted(categories)
 
 
@@ -3014,9 +4484,11 @@ def _rejected_checkpoint_reasons(
     validation_metrics: dict[str, Any],
     *,
     training_stability_reject_reasons: list[str],
+    focused_pair_gate_reject_reasons: list[str] | None = None,
 ) -> list[str]:
     reasons = list(validation_metrics.get("checkpoint_gate_reject_reasons", []))
     reasons.extend(training_stability_reject_reasons)
+    reasons.extend(list(focused_pair_gate_reject_reasons or []))
     return sorted(set(str(reason) for reason in reasons))
 
 
@@ -3045,6 +4517,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"family_counts = {summary['family_counts']}",
         f"task_count_counts = {summary['task_count_counts']}",
         f"training_objective = {summary['training_objective']}",
+        f"training_run_config = {summary['training_run_config']}",
         f"hard_roi_threshold = {summary['hard_roi_threshold']}",
         "candidate_delay_gate_enabled = "
         f"{str(summary['validation_deployment_metrics'].get('candidate_delay_gate_enabled', False)).lower()}",
@@ -3054,12 +4527,44 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"{summary['validation_deployment_metrics'].get('candidate_admission_score_mode')}",
         "candidate_delay_score_penalty = "
         f"{summary['validation_deployment_metrics'].get('candidate_delay_score_penalty')}",
+        "candidate_rescue_raw_score_threshold = "
+        f"{summary['validation_deployment_metrics'].get('candidate_rescue_raw_score_threshold')}",
+        "candidate_rescue_delay_risk_threshold = "
+        f"{summary['validation_deployment_metrics'].get('candidate_rescue_delay_risk_threshold')}",
+        "candidate_rescue_delay_score_penalty = "
+        f"{summary['validation_deployment_metrics'].get('candidate_rescue_delay_score_penalty')}",
         f"loss_options = {summary['loss_options']}",
         f"pairwise_ranking_loss_active = {str(summary['pairwise_ranking_loss_active']).lower()}",
         "pairwise_candidate_ranking_loss_multiplier = "
         f"{summary['loss_options']['pairwise_candidate_ranking_loss_multiplier']}",
+        "pairwise_false_delay_contrast_loss_multiplier = "
+        f"{summary['loss_options']['pairwise_false_delay_contrast_loss_multiplier']}",
+        "pairwise_delay_risk_contrast_loss_multiplier = "
+        f"{summary['loss_options']['pairwise_delay_risk_contrast_loss_multiplier']}",
+        "focused_pair_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_loss_multiplier']}",
+        "focused_pair_candidate_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_candidate_loss_multiplier']}",
+        "focused_pair_admission_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_admission_loss_multiplier']}",
+        "focused_pair_delay_risk_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_delay_risk_loss_multiplier']}",
+        "focused_pair_batch_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_batch_loss_multiplier']}",
+        "focused_pair_row_index_min = "
+        f"{summary['loss_options'].get('focused_pair_row_index_min')}",
+        "focused_pair_row_indices_file = "
+        f"{summary['loss_options'].get('focused_pair_row_indices_file')}",
+        "focused_pair_row_indices_count = "
+        f"{len(summary['loss_options'].get('focused_pair_row_indices') or [])}",
         f"pairwise_ranking_status = {summary['pairwise_ranking_status']}",
         f"context_pair_stats = {summary['context_pair_stats']}",
+        "focused_pair_gate_active = "
+        f"{str(summary['focused_pair_gate'].get('active', False)).lower()}",
+        "focused_pair_gate_summary = "
+        f"{summary['focused_pair_gate'].get('summary')}",
+        "focused_pair_gate_reject_reasons = "
+        f"{summary['focused_pair_gate_reject_reasons']}",
         f"checkpoint_selection = {summary['checkpoint_selection']}",
         f"selected_checkpoint_reason = {summary['selected_checkpoint_reason']}",
         f"rejected_checkpoint_reasons = {summary['rejected_checkpoint_reasons']}",
@@ -3089,6 +4594,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
                 "validation_deployment_metrics": summary["validation_deployment_metrics"],
                 "train_deployment_metrics": summary["train_deployment_metrics"],
                 "family_holdout_metrics": summary["family_holdout_metrics"],
+                "focused_pair_gate": summary["focused_pair_gate"],
                 "threshold_search": summary["threshold_search"],
                 "split": summary["split"],
             },

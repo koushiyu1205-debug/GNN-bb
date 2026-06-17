@@ -140,6 +140,23 @@ REQUIRED_CANDIDATE_CONTEXT_FIELDS = (
     "pool_task_set_hash",
 )
 
+RUNBOOK_CANDIDATE_AUDIT_FIELDS = (
+    "best_true_reduced_cost",
+    "selection_ranking",
+    "context_target_rank",
+    "context_target_count",
+    "context_priority_score",
+    "context_priority_action",
+    "context_priority_primary_blocker",
+    "context_false_delay_false_high_priority_on_delay_count",
+    "context_false_delay_candidate_signature_count",
+    "context_false_delay_batch_record_count",
+    "context_false_delay_accepted_batch_count",
+    "context_false_delay_max_delay_risk_score",
+    "context_false_delay_median_delay_risk_score",
+    "context_false_delay_median_raw_high_priority_score",
+)
+
 DEFAULT_CANDIDATES = (
     {
         "name": "apollo20_sector_wave_7e0afd09753effed_target_19",
@@ -379,6 +396,9 @@ def _normalized_candidate(raw: dict[str, Any], index: int) -> dict[str, Any]:
         "opportunity_score",
         "opportunity_reason",
     ):
+        if field in raw:
+            normalized[field] = raw[field]
+    for field in RUNBOOK_CANDIDATE_AUDIT_FIELDS:
         if field in raw:
             normalized[field] = raw[field]
     for field in REQUIRED_CANDIDATE_CONTEXT_FIELDS:

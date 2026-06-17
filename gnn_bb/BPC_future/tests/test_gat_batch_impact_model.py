@@ -10,6 +10,7 @@ try:
         BATCH_IMPACT_HEAD_NAMES,
         GATBatchImpactModel,
         JourneyCandidateEncoder,
+        PathTokenEncoder,
         batch_impact_exactness_contract,
     )
     from BPC_future.learning.graph_builder import FutureGraphBuilder
@@ -227,6 +228,66 @@ class GATBatchImpactModelTests(unittest.TestCase):
         )
         self.assertFalse(
             torch.allclose(baseline["high_priority_logit"], batch_shifted["high_priority_logit"])
+        )
+
+    def test_path_token_encoder_distinguishes_arc_option_sequences(self):
+        torch.manual_seed(13)
+        data = FutureGraphBuilder().build_from_logical_graph(_toy_payload())
+        model = GATBatchImpactModel(
+            node_dim=data.x.size(1),
+            option_dim=data.option_feat.size(1),
+            candidate_feature_dim=4,
+            context_feature_dim=3,
+            batch_feature_dim=2,
+            hidden_dim=16,
+            option_hidden_dim=16,
+            pair_edge_dim=16,
+            num_gnn_layers=1,
+            heads=4,
+            dropout=0.0,
+            candidate_hidden_dim=12,
+            context_hidden_dim=8,
+            batch_hidden_dim=12,
+            impact_hidden_dim=10,
+            path_token_vocab_size=64,
+            path_pair_vocab_size=64,
+            path_type_vocab_size=3,
+            path_token_dim=6,
+            path_hidden_dim=8,
+        )
+        model.eval()
+        membership = torch.tensor([[1.0, 1.0, 0.0], [1.0, 1.0, 0.0]])
+        sequence_positions = torch.tensor([[1.0, 2.0, 0.0], [1.0, 2.0, 0.0]])
+        candidate_features = torch.tensor([[0.1, 0.2, 0.3, 0.4], [0.1, 0.2, 0.3, 0.4]])
+        context_features = torch.tensor([0.2, 1.0, 4.0])
+        batch_features = torch.tensor([2.0, 0.5])
+        token_ids = torch.tensor([[1, 2, 3], [1, 5, 3]])
+        pair_ids = torch.tensor([[7, 8, 9], [7, 10, 9]])
+        type_ids = torch.tensor([[1, 2, 3], [1, 1, 3]])
+        token_mask = torch.tensor([[True, True, True], [True, True, True]])
+
+        with torch.no_grad():
+            output = model(
+                data,
+                membership,
+                sequence_positions,
+                candidate_features,
+                context_features,
+                batch_features=batch_features,
+                candidate_path_token_ids=token_ids,
+                candidate_path_pair_ids=pair_ids,
+                candidate_path_type_ids=type_ids,
+                candidate_path_token_mask=token_mask,
+            )
+
+        self.assertIsInstance(model.path_token_encoder, PathTokenEncoder)
+        self.assertEqual(tuple(output["candidate_path_embedding"].shape), (2, 8))
+        self.assertEqual(output["path_token_count"].tolist(), [3.0, 3.0])
+        self.assertFalse(
+            torch.allclose(output["candidate_path_embedding"][0], output["candidate_path_embedding"][1])
+        )
+        self.assertFalse(
+            torch.allclose(output["candidate_embedding"][0], output["candidate_embedding"][1])
         )
 
     def test_single_candidate_and_single_option_std_backward_is_finite(self):

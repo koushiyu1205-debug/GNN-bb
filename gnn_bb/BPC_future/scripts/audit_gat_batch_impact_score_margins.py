@@ -175,6 +175,10 @@ def summarize_score_margins(
         float(record.get("max_safe_candidate_score_margin") or 0.0)
         for record in missed_records
     ]
+    raw_candidate_margins = [
+        _raw_candidate_margin(record)
+        for record in missed_records
+    ]
     batch_margins = [
         float(record.get("batch_score_margin") or 0.0)
         for record in missed_records
@@ -184,11 +188,23 @@ def summarize_score_margins(
     severity_counts = Counter(
         str(record.get("candidate_margin_bucket") or "unknown") for record in missed_records
     )
+    raw_severity_counts = Counter(
+        str(record.get("raw_candidate_margin_bucket") or "unknown") for record in missed_records
+    )
     reason_counts = Counter(
         str(reason)
         for record in missed_records
         for reason in record.get("missed_reasons") or []
     )
+    risk_adjusted_suppression = [
+        record for record in missed_records if _is_risk_adjusted_suppressed_miss(record)
+    ]
+    raw_score_gap = [
+        record for record in missed_records if _raw_candidate_margin(record) < 0.0
+    ]
+    batch_score_gap = [
+        record for record in missed_records if float(record.get("batch_score_margin") or 0.0) < 0.0
+    ]
     return {
         "records": len(records),
         "high_roi_opportunities": len(high_roi),
@@ -203,12 +219,20 @@ def summarize_score_margins(
         "missed_candidate_score_margin_median": _median_or_none(candidate_margins),
         "missed_candidate_score_margin_mean": _mean_or_none(candidate_margins),
         "missed_candidate_score_margin_max": _max_or_none(candidate_margins),
+        "missed_raw_candidate_score_margin_min": _min_or_none(raw_candidate_margins),
+        "missed_raw_candidate_score_margin_median": _median_or_none(raw_candidate_margins),
+        "missed_raw_candidate_score_margin_mean": _mean_or_none(raw_candidate_margins),
+        "missed_raw_candidate_score_margin_max": _max_or_none(raw_candidate_margins),
         "missed_batch_score_margin_min": _min_or_none(batch_margins),
         "missed_batch_score_margin_median": _median_or_none(batch_margins),
         "missed_batch_score_margin_mean": _mean_or_none(batch_margins),
         "missed_batch_score_margin_max": _max_or_none(batch_margins),
         "missed_reason_counts": dict(sorted(reason_counts.items())),
         "candidate_margin_bucket_counts": dict(sorted(severity_counts.items())),
+        "raw_candidate_margin_bucket_counts": dict(sorted(raw_severity_counts.items())),
+        "risk_adjusted_suppressed_miss_count": len(risk_adjusted_suppression),
+        "raw_candidate_score_gap_miss_count": len(raw_score_gap),
+        "batch_score_gap_miss_count": len(batch_score_gap),
         "task_count_counts": dict(sorted(task_counts.items())),
         "missed_without_same_context_contrast_count": sum(
             int(bool(record.get("needs_same_context_contrast"))) for record in missed_records
@@ -233,6 +257,7 @@ def _enrich_missed_record(
 ) -> dict[str, Any]:
     enriched = dict(record)
     max_safe_margin = float(record.get("max_safe_candidate_score_margin") or 0.0)
+    raw_margin = _raw_candidate_margin(record)
     batch_margin = float(record.get("batch_score_margin") or 0.0)
     low_roi_or_delay_records = [
         item for item in context_records if _is_low_roi_or_delay_contrast(item)
@@ -240,16 +265,23 @@ def _enrich_missed_record(
     high_roi_context_records = [
         item for item in context_records if bool(item.get("is_high_roi_opportunity"))
     ]
-    if max_safe_margin >= -float(near_miss_window):
-        bucket = "near_candidate_threshold"
-    elif max_safe_margin <= float(deep_miss_margin):
-        bucket = "deep_candidate_score_gap"
-    else:
-        bucket = "moderate_candidate_score_gap"
+    bucket = _margin_bucket(
+        max_safe_margin,
+        near_miss_window=near_miss_window,
+        deep_miss_margin=deep_miss_margin,
+    )
+    raw_bucket = _margin_bucket(
+        raw_margin,
+        near_miss_window=near_miss_window,
+        deep_miss_margin=deep_miss_margin,
+    )
     enriched.update(
         {
             "candidate_margin_bucket": bucket,
+            "raw_candidate_margin_bucket": raw_bucket,
             "candidate_score_gap_to_threshold": max(0.0, -max_safe_margin),
+            "raw_candidate_score_gap_to_threshold": max(0.0, -raw_margin),
+            "risk_adjusted_suppressed_miss": _is_risk_adjusted_suppressed_miss(record),
             "batch_score_gap_to_threshold": max(0.0, -batch_margin),
             "same_context_record_count": len(context_records),
             "same_context_high_roi_count": len(high_roi_context_records),
@@ -294,6 +326,7 @@ def _context_margin_rows(
         missed_safe_margins = [
             float(item.get("max_safe_candidate_score_margin") or 0.0) for item in missed
         ]
+        missed_raw_margins = [_raw_candidate_margin(item) for item in missed]
         rows.append(
             {
                 "family": family,
@@ -310,6 +343,12 @@ def _context_margin_rows(
                 "missed_safe_candidate_score_margin_min": _min_or_none(missed_safe_margins),
                 "missed_safe_candidate_score_margin_median": _median_or_none(missed_safe_margins),
                 "missed_safe_candidate_score_margin_max": _max_or_none(missed_safe_margins),
+                "missed_raw_candidate_score_margin_min": _min_or_none(missed_raw_margins),
+                "missed_raw_candidate_score_margin_median": _median_or_none(missed_raw_margins),
+                "missed_raw_candidate_score_margin_max": _max_or_none(missed_raw_margins),
+                "risk_adjusted_suppressed_miss_count": sum(
+                    int(_is_risk_adjusted_suppressed_miss(item)) for item in missed
+                ),
                 "max_accepted_batch_roi_label": _max_or_none(
                     [float(item.get("accepted_batch_roi_label") or 0.0) for item in group]
                 ),
@@ -329,6 +368,7 @@ def _family_summary(missed_records: list[dict[str, Any]]) -> dict[str, Any]:
     summary: dict[str, Any] = {}
     for family, items in families.items():
         margins = [float(item.get("max_safe_candidate_score_margin") or 0.0) for item in items]
+        raw_margins = [_raw_candidate_margin(item) for item in items]
         summary[family] = {
             "missed_high_roi_opportunities": len(items),
             "task_count_counts": dict(
@@ -339,8 +379,18 @@ def _family_summary(missed_records: list[dict[str, Any]]) -> dict[str, Any]:
                     Counter(str(item.get("candidate_margin_bucket") or "unknown") for item in items).items()
                 )
             ),
+            "raw_candidate_margin_bucket_counts": dict(
+                sorted(
+                    Counter(str(item.get("raw_candidate_margin_bucket") or "unknown") for item in items).items()
+                )
+            ),
             "missed_candidate_score_margin_mean": _mean_or_none(margins),
             "missed_candidate_score_margin_min": _min_or_none(margins),
+            "missed_raw_candidate_score_margin_mean": _mean_or_none(raw_margins),
+            "missed_raw_candidate_score_margin_min": _min_or_none(raw_margins),
+            "risk_adjusted_suppressed_miss_count": sum(
+                int(_is_risk_adjusted_suppressed_miss(item)) for item in items
+            ),
             "missed_without_same_context_contrast_count": sum(
                 int(bool(item.get("needs_same_context_contrast"))) for item in items
             ),
@@ -359,8 +409,12 @@ def _recommended_next_step(
         item for item in missed_records if bool(item.get("needs_same_context_contrast"))
     ]
     bucket_counts = Counter(str(item.get("candidate_margin_bucket") or "unknown") for item in missed_records)
+    raw_bucket_counts = Counter(str(item.get("raw_candidate_margin_bucket") or "unknown") for item in missed_records)
+    risk_suppressed_count = sum(int(_is_risk_adjusted_suppressed_miss(item)) for item in missed_records)
     family_counts = Counter(str(item.get("family") or "unknown") for item in missed_records)
-    if missed_without_contrast:
+    if risk_suppressed_count > len(missed_records) / 2.0:
+        primary = "calibrate_delay_risk_penalty_or_two_stage_rescue_window"
+    elif missed_without_contrast:
         primary = "collect_same_context_positive_negative_pairs_for_missed_high_roi_contexts"
     elif bucket_counts.get("deep_candidate_score_gap", 0):
         primary = "collect_high_roi_candidate_margin_pairs_for_deep_score_gap_contexts"
@@ -372,6 +426,8 @@ def _recommended_next_step(
         "primary": primary,
         "missed_family_counts": dict(sorted(family_counts.items())),
         "candidate_margin_bucket_counts": dict(sorted(bucket_counts.items())),
+        "raw_candidate_margin_bucket_counts": dict(sorted(raw_bucket_counts.items())),
+        "risk_adjusted_suppressed_miss_count": int(risk_suppressed_count),
         "missed_without_same_context_contrast": len(missed_without_contrast),
         "contexts_needing_contrast": [
             {
@@ -403,6 +459,36 @@ def _is_low_roi_or_delay_contrast(record: dict[str, Any]) -> bool:
         or int(record.get("delay_candidate_label_count") or 0) > 0
         or bool(record.get("bad_mode_switch"))
     )
+
+
+def _raw_candidate_margin(record: dict[str, Any]) -> float:
+    if "max_raw_candidate_score_margin" in record:
+        return float(record.get("max_raw_candidate_score_margin") or 0.0)
+    return float(record.get("max_candidate_score_margin") or record.get("max_safe_candidate_score_margin") or 0.0)
+
+
+def _is_risk_adjusted_suppressed_miss(record: dict[str, Any]) -> bool:
+    return (
+        _raw_candidate_margin(record) >= 0.0
+        and float(record.get("max_safe_candidate_score_margin") or 0.0) < 0.0
+        and (
+            "candidate_risk_adjusted_below_threshold" in set(record.get("missed_reasons") or [])
+            or int(record.get("candidate_risk_adjusted_suppressed_count") or 0) > 0
+        )
+    )
+
+
+def _margin_bucket(
+    margin: float,
+    *,
+    near_miss_window: float,
+    deep_miss_margin: float,
+) -> str:
+    if float(margin) >= -float(near_miss_window):
+        return "near_candidate_threshold"
+    if float(margin) <= float(deep_miss_margin):
+        return "deep_candidate_score_gap"
+    return "moderate_candidate_score_gap"
 
 
 def _missed_sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
@@ -482,6 +568,9 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"missed_high_roi_opportunities = {margin['missed_high_roi_opportunities']}",
         f"missed_candidate_score_margin_mean = {margin['missed_candidate_score_margin_mean']}",
         f"missed_candidate_score_margin_min = {margin['missed_candidate_score_margin_min']}",
+        f"missed_raw_candidate_score_margin_mean = {margin['missed_raw_candidate_score_margin_mean']}",
+        f"missed_raw_candidate_score_margin_min = {margin['missed_raw_candidate_score_margin_min']}",
+        f"risk_adjusted_suppressed_miss_count = {margin['risk_adjusted_suppressed_miss_count']}",
         f"missed_without_same_context_contrast_count = {margin['missed_without_same_context_contrast_count']}",
         f"recommended_primary = {recommended.get('primary')}",
         "production_ready = false",
@@ -493,6 +582,17 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "```json",
         json.dumps(
             margin["candidate_margin_bucket_counts"],
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        "```",
+        "",
+        "## Raw Candidate Margin Buckets",
+        "",
+        "```json",
+        json.dumps(
+            margin["raw_candidate_margin_bucket_counts"],
             ensure_ascii=False,
             indent=2,
             sort_keys=True,

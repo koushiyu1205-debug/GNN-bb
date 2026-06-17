@@ -69,6 +69,7 @@ def audit_gate_shortfall(
     top_rows = ranked_rows[: int(top_k)]
     best = dict(top_rows[0]) if top_rows else {}
     family_summary = _family_shortfall_summary(top_rows)
+    delay_safe_summary = _delay_safe_frontier_summary(enriched_rows, gate_config=gate_config)
     summary = {
         "schema_version": "gat_batch_impact_gate_shortfall_v1",
         "status": "gat_batch_impact_gate_shortfall_audited",
@@ -76,6 +77,9 @@ def audit_gate_shortfall(
         "output_dir": str(output_dir),
         "source_frontier_global_path": source_summary.get("frontier_global_path"),
         "source_frontier_family_local_path": source_summary.get("frontier_family_local_path"),
+        "source_frontier_family_delay_fallback_path": source_summary.get(
+            "frontier_family_delay_fallback_path"
+        ),
         "total_frontier_rows": len(enriched_rows),
         "feasible_threshold_count": int(source_summary.get("feasible_threshold_count") or 0),
         "checkpoint_feasible_threshold_count": int(
@@ -87,7 +91,8 @@ def audit_gate_shortfall(
         "best_near_miss": best,
         "top_near_misses": top_rows,
         "family_shortfall_summary": family_summary,
-        "recommended_next_step": _recommended_next_step(best, family_summary),
+        "delay_safe_frontier_summary": delay_safe_summary,
+        "recommended_next_step": _recommended_next_step(best, family_summary, delay_safe_summary),
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "production_ready": False,
@@ -246,18 +251,109 @@ def _family_shortfall_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _recommended_next_step(best: dict[str, Any], family_summary: dict[str, Any]) -> dict[str, Any]:
+def _delay_safe_frontier_summary(
+    rows: list[dict[str, Any]],
+    *,
+    gate_config: dict[str, Any],
+) -> dict[str, Any]:
+    max_false_delay = float(gate_config.get("max_false_high_priority_on_delay", 0.0))
+    max_false_safe = float(gate_config.get("max_false_safe_union_rate", max_false_delay))
+    delay_safe_rows = [
+        row
+        for row in rows
+        if float(row.get("false_high_priority_on_delay") or 0.0) <= max_false_delay
+        and float(row.get("false_safe_rate_union") or 0.0) <= max_false_safe
+    ]
+    delay_safe_with_accepts = [
+        row for row in delay_safe_rows if int(row.get("accepted_batch_count") or 0) > 0
+    ]
+    best_coverage = (
+        max(delay_safe_with_accepts, key=_delay_safe_coverage_key)
+        if delay_safe_with_accepts
+        else {}
+    )
+    best_roi_ci = (
+        max(delay_safe_with_accepts, key=_delay_safe_roi_ci_key)
+        if delay_safe_with_accepts
+        else {}
+    )
+    reject_counts = Counter(
+        str(reason)
+        for row in delay_safe_with_accepts
+        for reason in row.get("threshold_local_reject_reasons") or []
+    )
+    candidate_thresholds = [
+        float(row.get("candidate_threshold") or 0.0)
+        for row in delay_safe_with_accepts
+    ]
+    accepted_counts = [
+        int(row.get("accepted_batch_count") or 0)
+        for row in delay_safe_with_accepts
+    ]
+    return {
+        "max_false_high_priority_on_delay": max_false_delay,
+        "max_false_safe_union_rate": max_false_safe,
+        "delay_safe_threshold_count": len(delay_safe_rows),
+        "delay_safe_with_accepted_batch_count": len(delay_safe_with_accepts),
+        "delay_safe_local_gate_pass_count": sum(
+            int(bool(row.get("threshold_local_gate_pass"))) for row in delay_safe_rows
+        ),
+        "delay_safe_candidate_threshold_min": min(candidate_thresholds) if candidate_thresholds else None,
+        "delay_safe_candidate_threshold_max": max(candidate_thresholds) if candidate_thresholds else None,
+        "delay_safe_accepted_batch_count_max": max(accepted_counts) if accepted_counts else 0,
+        "best_delay_safe_by_coverage": best_coverage,
+        "best_delay_safe_by_roi_ci": best_roi_ci,
+        "delay_safe_reject_reason_counts": dict(sorted(reject_counts.items())),
+    }
+
+
+def _delay_safe_coverage_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        int(row.get("accepted_batch_count") or 0),
+        _none_to_negative(row.get("safe_precision_ci_low")),
+        _none_to_negative(row.get("accepted_batch_roi_ci_low")),
+        _none_to_negative(row.get("high_priority_precision_ci_low")),
+        -int(row.get("local_blocker_count") or 0),
+    )
+
+
+def _delay_safe_roi_ci_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        _none_to_negative(row.get("accepted_batch_roi_ci_low")),
+        int(row.get("accepted_batch_count") or 0),
+        _none_to_negative(row.get("safe_precision_ci_low")),
+        -int(row.get("local_blocker_count") or 0),
+    )
+
+
+def _none_to_negative(value: Any) -> float:
+    if value is None:
+        return -1.0e18
+    return float(value)
+
+
+def _recommended_next_step(
+    best: dict[str, Any],
+    family_summary: dict[str, Any],
+    delay_safe_summary: dict[str, Any],
+) -> dict[str, Any]:
     if not best:
         return {"primary": "no_frontier_rows"}
     safe_extra = best.get("safe_precision_additional_all_success_needed")
     roi_gap = best.get("accepted_batch_roi_ci_low_gap")
+    best_delay_safe = dict(delay_safe_summary.get("best_delay_safe_by_coverage") or {})
     family_missing = list(
         (family_summary.get("top_missing_accepted_opportunity_families") or {}).keys()
     )
     fallback = list(
         (family_summary.get("top_family_specific_delay_fallback_families") or {}).keys()
     )
-    if roi_gap is not None and float(roi_gap) > 0.0:
+    if (
+        int(delay_safe_summary.get("delay_safe_with_accepted_batch_count") or 0) > 0
+        and int(best_delay_safe.get("accepted_batch_count") or 0) < int(best.get("accepted_batch_count") or 0)
+    ):
+        primary = "delay_safe_shell_exists_but_coverage_too_small"
+    elif roi_gap is not None and float(roi_gap) > 0.0:
         primary = "collect_more_high_roi_validation_accepts_or_improve_ranking"
     elif safe_extra is not None and int(safe_extra) > 0:
         primary = "collect_more_safe_validation_accepts"
@@ -269,6 +365,16 @@ def _recommended_next_step(best: dict[str, Any], family_summary: dict[str, Any])
         "primary": primary,
         "safe_precision_additional_all_success_needed": safe_extra,
         "accepted_batch_roi_ci_low_gap": roi_gap,
+        "delay_safe_threshold_count": int(delay_safe_summary.get("delay_safe_threshold_count") or 0),
+        "delay_safe_accepted_batch_count_max": int(
+            delay_safe_summary.get("delay_safe_accepted_batch_count_max") or 0
+        ),
+        "delay_safe_candidate_threshold_min": delay_safe_summary.get(
+            "delay_safe_candidate_threshold_min"
+        ),
+        "delay_safe_candidate_threshold_max": delay_safe_summary.get(
+            "delay_safe_candidate_threshold_max"
+        ),
         "families_with_missed_opportunity": family_missing,
         "families_recommended_for_delay_fallback": fallback,
     }
@@ -276,7 +382,11 @@ def _recommended_next_step(best: dict[str, Any], family_summary: dict[str, Any])
 
 def _load_frontier_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for key in ("frontier_global_path", "frontier_family_local_path"):
+    for key in (
+        "frontier_global_path",
+        "frontier_family_local_path",
+        "frontier_family_delay_fallback_path",
+    ):
         path_value = summary.get(key)
         if not path_value:
             continue
@@ -312,6 +422,8 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     best = dict(summary.get("best_near_miss") or {})
     recommended = dict(summary.get("recommended_next_step") or {})
+    delay_safe = dict(summary.get("delay_safe_frontier_summary") or {})
+    best_delay_safe = dict(delay_safe.get("best_delay_safe_by_coverage") or {})
     lines = [
         "# GAT Batch Impact Gate Shortfall 报告",
         "",
@@ -334,6 +446,14 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"best_accepted_batch_roi = {best.get('accepted_batch_roi')}",
         f"best_accepted_batch_roi_ci_low = {best.get('accepted_batch_roi_ci_low')}",
         f"best_accepted_batch_roi_ci_low_gap = {best.get('accepted_batch_roi_ci_low_gap')}",
+        f"delay_safe_threshold_count = {delay_safe.get('delay_safe_threshold_count')}",
+        f"delay_safe_with_accepted_batch_count = {delay_safe.get('delay_safe_with_accepted_batch_count')}",
+        f"delay_safe_accepted_batch_count_max = {delay_safe.get('delay_safe_accepted_batch_count_max')}",
+        f"delay_safe_candidate_threshold_min = {delay_safe.get('delay_safe_candidate_threshold_min')}",
+        f"delay_safe_candidate_threshold_max = {delay_safe.get('delay_safe_candidate_threshold_max')}",
+        f"best_delay_safe_accepted_batch_count = {best_delay_safe.get('accepted_batch_count')}",
+        f"best_delay_safe_accepted_batch_roi_ci_low = {best_delay_safe.get('accepted_batch_roi_ci_low')}",
+        f"best_delay_safe_reject_reasons = {best_delay_safe.get('threshold_local_reject_reasons')}",
         f"recommended_primary = {recommended.get('primary')}",
         "production_ready = false",
         "selector_can_certificate = false",
@@ -343,6 +463,28 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "",
         "```json",
         json.dumps(summary["family_shortfall_summary"], ensure_ascii=False, indent=2, sort_keys=True),
+        "```",
+        "",
+        "## Delay-Safe Frontier",
+        "",
+        "```json",
+        json.dumps(
+            {
+                "delay_safe_threshold_count": delay_safe.get("delay_safe_threshold_count"),
+                "delay_safe_with_accepted_batch_count": delay_safe.get(
+                    "delay_safe_with_accepted_batch_count"
+                ),
+                "delay_safe_local_gate_pass_count": delay_safe.get(
+                    "delay_safe_local_gate_pass_count"
+                ),
+                "delay_safe_reject_reason_counts": delay_safe.get(
+                    "delay_safe_reject_reason_counts"
+                ),
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
         "```",
         "",
         "## Recommended Next Step",

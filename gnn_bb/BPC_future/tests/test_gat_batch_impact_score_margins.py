@@ -42,8 +42,10 @@ class GATBatchImpactScoreMarginAuditTests(unittest.TestCase):
                         context="ctx-near",
                         roi=2.0,
                         max_safe_margin=-0.02,
+                        max_raw_margin=0.08,
                         missed=True,
                         high_roi=True,
+                        risk_suppressed=True,
                     ),
                     _record(
                         family="sector-wave",
@@ -94,14 +96,28 @@ class GATBatchImpactScoreMarginAuditTests(unittest.TestCase):
             margin["candidate_margin_bucket_counts"],
             {"deep_candidate_score_gap": 1, "near_candidate_threshold": 1},
         )
+        self.assertEqual(
+            margin["raw_candidate_margin_bucket_counts"],
+            {"deep_candidate_score_gap": 1, "near_candidate_threshold": 1},
+        )
+        self.assertEqual(margin["risk_adjusted_suppressed_miss_count"], 1)
+        self.assertEqual(margin["raw_candidate_score_gap_miss_count"], 1)
         self.assertEqual(margin["missed_without_same_context_contrast_count"], 1)
         self.assertEqual(
             margin["family"]["random-wave"]["missed_without_same_context_contrast_count"],
             1,
         )
         self.assertEqual(
+            margin["family"]["random-wave"]["risk_adjusted_suppressed_miss_count"],
+            1,
+        )
+        self.assertEqual(
             summary["recommended_next_step"]["primary"],
             "collect_same_context_positive_negative_pairs_for_missed_high_roi_contexts",
+        )
+        self.assertEqual(
+            summary["recommended_next_step"]["risk_adjusted_suppressed_miss_count"],
+            1,
         )
         self.assertFalse(summary["runs_bpc_or_pricing"])
         self.assertFalse(summary["selector_can_certificate"])
@@ -113,10 +129,13 @@ def _record(
     context: str,
     roi: float,
     max_safe_margin: float,
+    max_raw_margin: float | None = None,
     missed: bool,
     high_roi: bool,
     accepted: bool = False,
+    risk_suppressed: bool = False,
 ) -> dict[str, object]:
+    raw_margin = max_safe_margin if max_raw_margin is None else max_raw_margin
     return {
         "family": family,
         "context_hash": context,
@@ -140,6 +159,9 @@ def _record(
         "max_safe_candidate_score_margin": max_safe_margin,
         "max_candidate_score": 0.60 + max_safe_margin,
         "max_candidate_score_margin": max_safe_margin,
+        "max_raw_candidate_score": 0.60 + raw_margin,
+        "max_raw_candidate_score_margin": raw_margin,
+        "candidate_risk_adjusted_suppressed_count": int(risk_suppressed),
         "missed_reasons": ["no_candidate_above_threshold"] if missed else [],
     }
 

@@ -60,6 +60,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--max-dynamic-thresholds", type=int, default=128)
     parser.add_argument("--top-k", type=int, default=20)
+    parser.add_argument(
+        "--candidate-admission-score-mode",
+        choices=("high_priority", "risk_adjusted_product", "risk_adjusted_rescue_window"),
+        default=None,
+        help="Override the checkpoint deployment gate candidate admission score mode for audit-only sweeps.",
+    )
+    parser.add_argument("--candidate-delay-score-penalty", type=float, default=None)
+    parser.add_argument(
+        "--candidate-delay-gate-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override whether the candidate delay gate is enabled for audit-only sweeps.",
+    )
+    parser.add_argument("--candidate-delay-risk-threshold", type=float, default=None)
+    parser.add_argument("--candidate-rescue-raw-score-threshold", type=float, default=None)
+    parser.add_argument("--candidate-rescue-delay-risk-threshold", type=float, default=None)
+    parser.add_argument("--candidate-rescue-delay-score-penalty", type=float, default=None)
     return parser.parse_args()
 
 
@@ -74,6 +91,7 @@ def main() -> int:
         device=str(args.device),
         max_dynamic_thresholds=max(1, int(args.max_dynamic_thresholds)),
         top_k=max(1, int(args.top_k)),
+        gate_config_overrides=_gate_config_overrides_from_args(args),
     )
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
     return 0 if summary["all_checks_pass"] else 1
@@ -89,6 +107,7 @@ def audit_threshold_frontier(
     device: str = "cpu",
     max_dynamic_thresholds: int = 128,
     top_k: int = 20,
+    gate_config_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     dataset_dir = Path(dataset_dir)
     checkpoint_data = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -126,6 +145,7 @@ def audit_threshold_frontier(
     gate_config = dict(checkpoint_data.get("deployment_gate", {}).get("gate_config") or {})
     if not gate_config:
         raise ValueError("checkpoint is missing deployment_gate.gate_config")
+    gate_config = _apply_gate_config_overrides(gate_config, gate_config_overrides or {})
     frontier = evaluate_threshold_frontier_records(
         validation_records,
         gate_config=gate_config,
@@ -339,16 +359,25 @@ def _compact_metric_row(metrics: dict[str, Any]) -> dict[str, Any]:
         "candidate_threshold",
         "candidate_admission_score_mode",
         "candidate_delay_score_penalty",
+        "candidate_rescue_raw_score_threshold",
+        "candidate_rescue_delay_risk_threshold",
+        "candidate_rescue_delay_score_penalty",
         "candidate_delay_gate_enabled",
         "candidate_delay_risk_threshold",
+        "evaluated_candidate_count",
+        "candidate_score_threshold_blocked_count",
         "candidate_delay_gate_blocked_count",
         "candidate_risk_adjusted_suppressed_count",
+        "candidate_rescue_window_eligible_count",
+        "candidate_rescue_window_promoted_count",
         "batch_thresholds_by_family",
         "family_delay_fallback_families",
         "context_delay_fallback_contexts",
         "total_batches",
         "accepted_batch_count",
         "accepted_batch_rate",
+        "accepted_bad_mode_count",
+        "max_accepted_bad_mode_count",
         "accepted_batch_roi",
         "accepted_batch_roi_ci_low",
         "accepted_batch_roi_over_baseline",
@@ -369,10 +398,15 @@ def _compact_metric_row(metrics: dict[str, Any]) -> dict[str, Any]:
         "expected_trajectory_utility",
         "family_holdout_min_precision",
         "family_holdout_min_accepted_roi",
+        "family_holdout_per_family",
         "family_holdout_missing_accepted_families",
         "family_holdout_missing_accepted_opportunity_families",
         "family_specific_delay_fallback_families",
         "family_holdout_oracle_high_roi_families",
+        "family_holdout_min_accepted_high_roi_count",
+        "family_holdout_min_high_roi_capture_rate",
+        "min_family_accepted_high_roi_count",
+        "min_family_high_roi_capture_rate",
         "checkpoint_gate_pass",
         "checkpoint_gate_reject_reasons",
         "threshold_local_gate_pass",
@@ -400,8 +434,8 @@ def _frontier_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
         -len(row.get("family_delay_fallback_families", [])),
         -len(row.get("context_delay_fallback_contexts", [])),
         -float(row.get("false_high_priority_on_delay") or 0.0),
-        -float(row.get("batch_threshold") or 0.0),
-        -float(row.get("candidate_threshold") or 0.0),
+        float(row.get("batch_threshold") or 0.0),
+        float(row.get("candidate_threshold") or 0.0),
     )
 
 
@@ -427,6 +461,51 @@ def _min_all_success_samples_needed(gate_config: dict[str, Any]) -> dict[str, An
     }
 
 
+def _gate_config_overrides_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    override_keys = (
+        "candidate_admission_score_mode",
+        "candidate_delay_score_penalty",
+        "candidate_delay_gate_enabled",
+        "candidate_delay_risk_threshold",
+        "candidate_rescue_raw_score_threshold",
+        "candidate_rescue_delay_risk_threshold",
+        "candidate_rescue_delay_score_penalty",
+    )
+    return {
+        key: getattr(args, key)
+        for key in override_keys
+        if getattr(args, key, None) is not None
+    }
+
+
+def _apply_gate_config_overrides(
+    gate_config: dict[str, Any],
+    overrides: dict[str, Any],
+) -> dict[str, Any]:
+    if not overrides:
+        return dict(gate_config)
+    updated = dict(gate_config)
+    for key, value in overrides.items():
+        if key in {
+            "candidate_delay_score_penalty",
+            "candidate_rescue_delay_score_penalty",
+        }:
+            updated[key] = max(0.0, float(value))
+        elif key in {
+            "candidate_delay_risk_threshold",
+            "candidate_rescue_raw_score_threshold",
+            "candidate_rescue_delay_risk_threshold",
+        }:
+            updated[key] = min(1.0, max(0.0, float(value)))
+        elif key == "candidate_delay_gate_enabled":
+            updated[key] = bool(value)
+        elif key == "candidate_admission_score_mode":
+            updated[key] = str(value or "high_priority")
+        else:
+            updated[key] = value
+    return updated
+
+
 def _min_all_successes_for_wilson(target: Any, *, z: float) -> int | None:
     if target is None:
         return None
@@ -440,9 +519,22 @@ def _min_all_successes_for_wilson(target: Any, *, z: float) -> int | None:
 
 def _diagnosis(frontier: dict[str, Any]) -> dict[str, Any]:
     best = dict(frontier.get("best_candidate") or {})
+    best_reasons = set(str(reason) for reason in best.get("threshold_local_reject_reasons", []))
     local_counts = dict(frontier.get("local_reject_reason_counts") or {})
     if int(frontier.get("feasible_threshold_count") or 0) > 0:
         primary = "has_local_feasible_threshold"
+    elif "false_high_priority_on_delay_too_high" in best_reasons:
+        primary = "model_ranking_false_delay_blocker"
+    elif "false_safe_rate_union_too_high" in best_reasons:
+        primary = "model_ranking_false_safe_blocker"
+    elif "candidate_threshold_zero_disables_candidate_head_filter" in best_reasons:
+        primary = "candidate_head_threshold_inactive_blocker"
+    elif "safe_precision_ci_low_below_threshold_or_not_measurable" in best_reasons:
+        primary = "confidence_lower_bound_sample_size_or_acceptance_count_blocker"
+    elif "accepted_batch_roi_ci_low_below_baseline_margin_or_not_measurable" in best_reasons:
+        primary = "accepted_roi_confidence_blocker"
+    elif "candidate_threshold_zero_disables_candidate_head_filter" in local_counts:
+        primary = "candidate_head_threshold_inactive_frontier_rows"
     elif "safe_precision_ci_low_below_threshold_or_not_measurable" in local_counts:
         primary = "confidence_lower_bound_sample_size_or_acceptance_count_blocker"
     elif "accepted_batch_roi_ci_low_below_baseline_margin_or_not_measurable" in local_counts:
@@ -510,10 +602,17 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"best_accepted_batch_count = {best.get('accepted_batch_count')}",
         f"candidate_admission_score_mode = {best.get('candidate_admission_score_mode')}",
         f"candidate_delay_score_penalty = {best.get('candidate_delay_score_penalty')}",
+        f"candidate_rescue_raw_score_threshold = {best.get('candidate_rescue_raw_score_threshold')}",
+        f"candidate_rescue_delay_risk_threshold = {best.get('candidate_rescue_delay_risk_threshold')}",
+        f"candidate_rescue_delay_score_penalty = {best.get('candidate_rescue_delay_score_penalty')}",
         f"candidate_delay_gate_enabled = {best.get('candidate_delay_gate_enabled')}",
         f"candidate_delay_risk_threshold = {best.get('candidate_delay_risk_threshold')}",
+        f"evaluated_candidate_count = {best.get('evaluated_candidate_count')}",
+        f"candidate_score_threshold_blocked_count = {best.get('candidate_score_threshold_blocked_count')}",
         f"candidate_delay_gate_blocked_count = {best.get('candidate_delay_gate_blocked_count')}",
         f"candidate_risk_adjusted_suppressed_count = {best.get('candidate_risk_adjusted_suppressed_count')}",
+        f"candidate_rescue_window_eligible_count = {best.get('candidate_rescue_window_eligible_count')}",
+        f"candidate_rescue_window_promoted_count = {best.get('candidate_rescue_window_promoted_count')}",
         f"best_family_delay_fallback_families = {best.get('family_delay_fallback_families')}",
         f"best_context_delay_fallback_contexts = {best.get('context_delay_fallback_contexts')}",
         f"best_safe_precision_ci_low = {best.get('safe_precision_ci_low')}",

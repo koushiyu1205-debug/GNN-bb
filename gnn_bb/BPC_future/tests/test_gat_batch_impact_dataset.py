@@ -135,6 +135,8 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
             self.assertEqual(manifest["candidate_feature_schema"], list(BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA))
             self.assertEqual(manifest["context_feature_schema"], list(BATCH_IMPACT_CONTEXT_FEATURE_SCHEMA))
             self.assertEqual(manifest["batch_feature_schema"], list(BATCH_IMPACT_BATCH_FEATURE_SCHEMA))
+            self.assertEqual(manifest["candidate_path_token_schema"]["token_hash_bucket_count"], 4096)
+            self.assertEqual(manifest["candidate_path_token_schema"]["pair_hash_bucket_count"], 4096)
             self.assertEqual(manifest["candidate_signature_source_coverage"], 1.0)
             self.assertEqual(
                 manifest["samples"][0]["candidate_signature_ids"][0],
@@ -146,6 +148,52 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
             self.assertEqual(tuple(sample.candidate_sequence_positions.shape), (2, 3))
             self.assertEqual(sample.candidate_sequence_positions[0].tolist(), [1.0, 0.0, 2.0])
             self.assertEqual(tuple(sample.candidate_features.shape), (2, len(BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA)))
+            schema = list(BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA)
+            self.assertIn("trace_arc_option_count", schema)
+            self.assertIn("trace_total_energy", schema)
+            self.assertIn("trace_service_start_span", schema)
+            self.assertIn("trace_occupancy_bucket_count", schema)
+            self.assertIn("slack_min_late_time", schema)
+            self.assertIn("slack_min_early_time", schema)
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("trace_arc_option_count")].item(),
+                3.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("trace_low_time_arc_count")].item(),
+                2.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("trace_low_energy_arc_count")].item(),
+                1.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("trace_total_energy")].item(),
+                7.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("trace_service_start_span")].item(),
+                8.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("trace_occupancy_bucket_count")].item(),
+                1.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("slack_min_late_time")].item(),
+                190.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("slack_min_early_time")].item(),
+                -2.0,
+            )
+            self.assertEqual(tuple(sample.candidate_path_token_ids.shape), (2, 3))
+            self.assertEqual(tuple(sample.candidate_path_pair_ids.shape), (2, 3))
+            self.assertEqual(tuple(sample.candidate_path_type_ids.shape), (2, 3))
+            self.assertEqual(tuple(sample.candidate_path_token_mask.shape), (2, 3))
+            self.assertTrue(bool(torch.all(sample.candidate_path_token_ids[0] > 0)))
+            self.assertEqual(sample.candidate_path_type_ids[0].tolist(), [1, 2, 1])
+            self.assertEqual(sample.candidate_path_token_mask[0].tolist(), [True, True, True])
             self.assertEqual(tuple(sample.context_features.shape), (len(BATCH_IMPACT_CONTEXT_FEATURE_SCHEMA),))
             self.assertEqual(tuple(sample.batch_features.shape), (len(BATCH_IMPACT_BATCH_FEATURE_SCHEMA),))
             self.assertEqual(sample.y_candidate_high_priority.tolist(), [1.0, 0.0])
@@ -176,6 +224,11 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
                 context_hidden_dim=8,
                 batch_hidden_dim=12,
                 impact_hidden_dim=10,
+                path_token_vocab_size=manifest["candidate_path_token_schema"]["token_hash_bucket_count"],
+                path_pair_vocab_size=manifest["candidate_path_token_schema"]["pair_hash_bucket_count"],
+                path_type_vocab_size=3,
+                path_token_dim=8,
+                path_hidden_dim=12,
             )
             output = model(
                 sample,
@@ -184,8 +237,13 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
                 sample.candidate_features,
                 sample.context_features,
                 batch_features=sample.batch_features,
+                candidate_path_token_ids=sample.candidate_path_token_ids,
+                candidate_path_pair_ids=sample.candidate_path_pair_ids,
+                candidate_path_type_ids=sample.candidate_path_type_ids,
+                candidate_path_token_mask=sample.candidate_path_token_mask,
             )
             self.assertEqual(tuple(output["candidate_embedding"].shape), (2, 16))
+            self.assertEqual(tuple(output["candidate_path_embedding"].shape), (2, 12))
             self.assertEqual(tuple(output["high_priority_probability"].shape), (2,))
             self.assertEqual(tuple(output["predicted_accepted_batch_roi"].shape), (1,))
 
@@ -553,13 +611,40 @@ def _journey(
     true_rc: float,
     sequence: list[list[int]],
 ) -> dict[str, object]:
+    first_sequence = sequence[0]
+    arc_option_ids = ["0->start:low_time:0"]
+    for left, right in zip(first_sequence, first_sequence[1:]):
+        arc_option_ids.append(f"{left}->{right}:low_energy:0")
+    arc_option_ids.append("end->0:low_time:0")
+    service_start = {
+        str(task_id): 10.0 + float(index) * 8.0
+        for index, task_id in enumerate(first_sequence)
+    }
     return {
         "id": journey_id,
         "task_set": task_set,
         "sequence": sequence,
         "true_reduced_cost": true_rc,
         "cost": 20.0,
-        "trips": [{"task_sequence": sequence[0]}],
+        "start_time": 5.0,
+        "end_time": 25.0,
+        "trips": [
+            {
+                "task_sequence": first_sequence,
+                "arc_option_ids": arc_option_ids,
+                "start_time": 5.0,
+                "end_time": 25.0,
+                "distance": 3.0,
+                "energy": 7.0,
+                "risk": 0.5,
+                "travel_time": 12.0,
+                "load": 2.0,
+                "survival_energy": 4.0,
+                "recharge_time": 1.5,
+                "service_start": service_start,
+                "occupancy": {"5": 1.0},
+            }
+        ],
         "signature": [journey_id],
     }
 

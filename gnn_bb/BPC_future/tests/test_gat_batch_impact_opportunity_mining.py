@@ -71,6 +71,102 @@ class GATBatchImpactOpportunityMiningTests(unittest.TestCase):
         )
         self.assertEqual(decision["candidate_delay_gate_blocked_count"], 1)
 
+    def test_classifies_high_roi_missed_by_risk_adjusted_candidate_score(self) -> None:
+        decision = classify_opportunity_record(
+            _record(
+                batch_score=0.9,
+                candidate_scores=[0.9],
+                candidate_delay_scores=[0.8],
+                delay_labels=[0],
+                roi=1.1,
+            ),
+            batch_threshold=0.8,
+            candidate_threshold=0.7,
+            candidate_admission_score_mode="risk_adjusted_product",
+            candidate_delay_score_penalty=1.0,
+            min_accepted_batch_roi=0.65,
+        )
+
+        self.assertFalse(decision["accepted"])
+        self.assertTrue(decision["is_missed_high_roi_opportunity"])
+        self.assertEqual(
+            decision["missed_reasons"],
+            ["no_candidate_above_threshold", "candidate_risk_adjusted_below_threshold"],
+        )
+        self.assertEqual(decision["candidate_risk_adjusted_suppressed_count"], 1)
+        self.assertGreater(decision["max_raw_candidate_score_margin"], 0.0)
+        self.assertLess(decision["max_candidate_score_margin"], 0.0)
+
+    def test_rescue_window_accepts_raw_safe_candidate_inside_delay_window(self) -> None:
+        decision = classify_opportunity_record(
+            _record(
+                batch_score=0.9,
+                candidate_scores=[0.95],
+                candidate_delay_scores=[0.60],
+                delay_labels=[0],
+                roi=1.1,
+            ),
+            batch_threshold=0.8,
+            candidate_threshold=0.5,
+            candidate_delay_gate_enabled=True,
+            candidate_delay_risk_threshold=0.5,
+            candidate_admission_score_mode="risk_adjusted_rescue_window",
+            candidate_delay_score_penalty=2.0,
+            candidate_rescue_raw_score_threshold=0.9,
+            candidate_rescue_delay_risk_threshold=0.75,
+            candidate_rescue_delay_score_penalty=0.25,
+            min_accepted_batch_roi=0.65,
+        )
+
+        self.assertTrue(decision["accepted"])
+        self.assertTrue(decision["is_accepted_high_roi_opportunity"])
+        self.assertEqual(decision["candidate_risk_adjusted_suppressed_count"], 1)
+        self.assertEqual(decision["candidate_rescue_window_eligible_count"], 1)
+        self.assertEqual(decision["candidate_rescue_window_promoted_count"], 1)
+        self.assertGreater(decision["max_candidate_score_margin"], 0.0)
+
+    def test_rescue_window_rejects_candidate_outside_delay_window(self) -> None:
+        decision = classify_opportunity_record(
+            _record(
+                batch_score=0.9,
+                candidate_scores=[0.95],
+                candidate_delay_scores=[0.90],
+                delay_labels=[0],
+                roi=1.1,
+            ),
+            batch_threshold=0.8,
+            candidate_threshold=0.5,
+            candidate_delay_gate_enabled=True,
+            candidate_delay_risk_threshold=0.5,
+            candidate_admission_score_mode="risk_adjusted_rescue_window",
+            candidate_delay_score_penalty=2.0,
+            candidate_rescue_raw_score_threshold=0.9,
+            candidate_rescue_delay_risk_threshold=0.75,
+            candidate_rescue_delay_score_penalty=0.25,
+            min_accepted_batch_roi=0.65,
+        )
+
+        self.assertFalse(decision["accepted"])
+        self.assertTrue(decision["is_missed_high_roi_opportunity"])
+        self.assertEqual(decision["candidate_rescue_window_eligible_count"], 0)
+        self.assertEqual(decision["candidate_rescue_window_promoted_count"], 0)
+        self.assertEqual(decision["candidate_risk_adjusted_suppressed_count"], 1)
+
+    def test_context_delay_fallback_overrides_candidate_acceptance(self) -> None:
+        decision = classify_opportunity_record(
+            _record(batch_score=0.9, candidate_scores=[0.95], delay_labels=[0], roi=1.1),
+            batch_threshold=0.8,
+            candidate_threshold=0.5,
+            context_delay_fallback_contexts=["ctx"],
+            min_accepted_batch_roi=0.65,
+        )
+
+        self.assertFalse(decision["accepted"])
+        self.assertTrue(decision["context_delay_fallback"])
+        self.assertTrue(decision["is_missed_high_roi_opportunity"])
+        self.assertEqual(decision["predicted_candidate_count"], 0)
+        self.assertEqual(decision["missed_reasons"], ["context_delay_fallback"])
+
 
 def _record(
     *,

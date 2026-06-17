@@ -433,6 +433,226 @@ class GATBatchImpactMultiBatchInterventionPlanTests(unittest.TestCase):
                 {sector_context},
             )
 
+    def test_context_priority_rows_override_plain_roi_context_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            graph_path = _graph_path(root)
+            source_log = root / "capture.jsonl"
+            dataset_dir = root / "dataset"
+            opportunity_jsonl = root / "opportunities.jsonl"
+            context_priority_jsonl = root / "context_priority.jsonl"
+            high_priority_context = "ctx-structural-gap"
+            high_roi_context = "ctx-high-roi"
+
+            _write_jsonl(
+                source_log,
+                [
+                    _capture_event(
+                        graph_path=graph_path,
+                        context_hash=high_priority_context,
+                        returned=[
+                            _journey([1], -4.0, "low_risk"),
+                            _journey([2], -3.0, "low_time"),
+                        ],
+                    ),
+                    _capture_event(
+                        graph_path=graph_path,
+                        context_hash=high_roi_context,
+                        returned=[
+                            _journey([3], -9.0, "low_risk"),
+                            _journey([4], -8.0, "low_time"),
+                        ],
+                    ),
+                ],
+            )
+            _write_manifest(
+                dataset_dir,
+                source_log=source_log,
+                graph_path=graph_path,
+                context_hash=high_priority_context,
+                candidate_count=2,
+                accepted_batch_roi=1.0,
+            )
+            _append_manifest_sample(
+                dataset_dir,
+                source_log=source_log,
+                graph_path=graph_path,
+                context_hash=high_roi_context,
+                candidate_count=2,
+                accepted_batch_roi=9.0,
+            )
+            _write_jsonl(
+                opportunity_jsonl,
+                [
+                    {
+                        "context_hash": high_priority_context,
+                        "instance_path": str(graph_path),
+                        "candidate_count": 2,
+                        "accepted_batch_roi_label": 1.0,
+                        "is_high_roi_opportunity": True,
+                        "is_missed_high_roi_opportunity": True,
+                        "task_count": 20,
+                    },
+                    {
+                        "context_hash": high_roi_context,
+                        "instance_path": str(graph_path),
+                        "candidate_count": 2,
+                        "accepted_batch_roi_label": 9.0,
+                        "is_high_roi_opportunity": True,
+                        "is_missed_high_roi_opportunity": True,
+                        "task_count": 20,
+                    },
+                ],
+            )
+            _write_jsonl(
+                context_priority_jsonl,
+                [
+                    {
+                        "context_hash": high_priority_context,
+                        "family": "sector-wave",
+                        "task_count": 20,
+                        "priority_score": 100.0,
+                        "primary_action": "collect_same_context_positive_negative_contrast",
+                        "max_missed_roi": 1.0,
+                        "missed_high_roi_count_proxy": 1,
+                        "nearest_negative_closer_count": 1,
+                        "deep_candidate_gap_count": 1,
+                    }
+                ],
+            )
+
+            summary = build_intervention_plan(
+                dataset_dir=dataset_dir,
+                opportunity_jsonl_paths=[opportunity_jsonl],
+                context_priority_jsonl_paths=[context_priority_jsonl],
+                output_dir=root / "plan",
+                report=root / "report.md",
+                max_contexts=1,
+                targets_per_context=2,
+                min_negative_targets_per_context=2,
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["context_priority_row_count"], 1)
+            self.assertEqual(summary["selected_context_count"], 1)
+            self.assertEqual(
+                {candidate["expected_context_hash"] for candidate in summary["candidates"]},
+                {high_priority_context},
+            )
+            self.assertTrue(
+                all(
+                    candidate["context_priority_action"]
+                    == "collect_same_context_positive_negative_contrast"
+                    for candidate in summary["candidates"]
+                )
+            )
+            self.assertTrue(
+                all(
+                    candidate["training_label_allowed_before_worker_reachability"] is False
+                    for candidate in summary["candidates"]
+                )
+            )
+
+    def test_v36_neighbor_repair_priority_fields_are_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            graph_path = _graph_path(root)
+            source_log = root / "capture.jsonl"
+            dataset_dir = root / "dataset"
+            repair_priority_jsonl = root / "context_repair_priority.jsonl"
+            repair_context = "ctx-v36-repair"
+            plain_context = "ctx-plain"
+
+            _write_jsonl(
+                source_log,
+                [
+                    _capture_event(
+                        graph_path=graph_path,
+                        context_hash=repair_context,
+                        returned=[
+                            _journey([1], -3.0, "low_risk"),
+                            _journey([2], -2.0, "low_time"),
+                        ],
+                    ),
+                    _capture_event(
+                        graph_path=graph_path,
+                        context_hash=plain_context,
+                        returned=[
+                            _journey([3], -9.0, "low_risk"),
+                            _journey([4], -8.0, "low_time"),
+                        ],
+                    ),
+                ],
+            )
+            _write_manifest(
+                dataset_dir,
+                source_log=source_log,
+                graph_path=graph_path,
+                context_hash=repair_context,
+                candidate_count=2,
+                accepted_batch_roi=1.0,
+            )
+            _append_manifest_sample(
+                dataset_dir,
+                source_log=source_log,
+                graph_path=graph_path,
+                context_hash=plain_context,
+                candidate_count=2,
+                accepted_batch_roi=99.0,
+            )
+            _write_jsonl(
+                repair_priority_jsonl,
+                [
+                    {
+                        "context_hash": repair_context,
+                        "instance": str(graph_path),
+                        "instance_family": "sector-wave",
+                        "instance_task_count": 20,
+                        "priority_score": 100.0,
+                        "primary_action": "collect_same_context_contrast_and_audit_accepted_outliers",
+                        "repair_candidate_count": 5,
+                        "delayed_high_roi_count": 1,
+                        "accepted_high_point_roi_unstable_count": 4,
+                        "max_accepted_batch_roi_label": 27.0,
+                        "median_accepted_batch_roi_label": 11.0,
+                        "source_variants": ["v35-a", "v35-b"],
+                    }
+                ],
+            )
+
+            summary = build_intervention_plan(
+                dataset_dir=dataset_dir,
+                opportunity_jsonl_paths=[repair_priority_jsonl],
+                context_priority_jsonl_paths=[repair_priority_jsonl],
+                output_dir=root / "plan",
+                report=root / "report.md",
+                max_contexts=1,
+                targets_per_context=2,
+                min_negative_targets_per_context=2,
+                require_opportunity_context=True,
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["selected_context_count"], 1)
+            self.assertEqual(
+                {candidate["expected_context_hash"] for candidate in summary["candidates"]},
+                {repair_context},
+            )
+            self.assertTrue(
+                all(
+                    candidate["context_repair_delayed_high_roi_count"] == 1
+                    for candidate in summary["candidates"]
+                )
+            )
+            self.assertTrue(
+                all(
+                    candidate["context_repair_accepted_high_point_roi_unstable_count"] == 4
+                    for candidate in summary["candidates"]
+                )
+            )
+            self.assertEqual(summary["contexts"][0]["context_repair_max_roi"], 27.0)
+            self.assertEqual(summary["contexts"][0]["context_repair_median_roi"], 11.0)
+
 
 def _graph_path(root: Path) -> Path:
     graph_path = (

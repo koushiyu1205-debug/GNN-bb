@@ -14,6 +14,10 @@ try:
     from BPC_future.scripts.train_gat_batch_impact import (
         _candidate_acceptance_logit,
         _context_pair_stats,
+        _focused_pair_gate_metrics,
+        _focused_pair_gate_reject_reasons,
+        _focused_pair_head_loss,
+        _focused_training_pairs,
         _gate_config,
         _hard_roi_positive_candidate_boost_loss,
         _loss_options,
@@ -76,6 +80,14 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
             hard_roi_threshold=None,
             pairwise_ranking_loss_multiplier=2.5,
             pairwise_candidate_ranking_loss_multiplier=1.25,
+            pairwise_false_delay_contrast_loss_multiplier=1.75,
+            pairwise_delay_risk_contrast_loss_multiplier=2.25,
+            focused_pair_loss_multiplier=3.5,
+            focused_pair_candidate_loss_multiplier=4.5,
+            focused_pair_admission_loss_multiplier=5.5,
+            focused_pair_delay_risk_loss_multiplier=6.5,
+            focused_pair_batch_loss_multiplier=7.5,
+            focused_pair_gate_row_index_min=383,
             pairwise_roi_margin=0.15,
             min_pairwise_roi_delta=0.01,
             max_grad_norm=5.0,
@@ -89,6 +101,14 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
         self.assertEqual(loss_options["hard_roi_positive_candidate_loss_multiplier"], 1.5)
         self.assertEqual(loss_options["pairwise_ranking_loss_multiplier"], 2.5)
         self.assertEqual(loss_options["pairwise_candidate_ranking_loss_multiplier"], 1.25)
+        self.assertEqual(loss_options["pairwise_false_delay_contrast_loss_multiplier"], 1.75)
+        self.assertEqual(loss_options["pairwise_delay_risk_contrast_loss_multiplier"], 2.25)
+        self.assertEqual(loss_options["focused_pair_loss_multiplier"], 3.5)
+        self.assertEqual(loss_options["focused_pair_candidate_loss_multiplier"], 4.5)
+        self.assertEqual(loss_options["focused_pair_admission_loss_multiplier"], 5.5)
+        self.assertEqual(loss_options["focused_pair_delay_risk_loss_multiplier"], 6.5)
+        self.assertEqual(loss_options["focused_pair_batch_loss_multiplier"], 7.5)
+        self.assertEqual(loss_options["focused_pair_row_index_min"], 383)
         self.assertEqual(loss_options["pairwise_roi_margin"], 0.15)
         self.assertEqual(loss_options["min_pairwise_roi_delta"], 0.01)
 
@@ -240,6 +260,225 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
 
         self.assertGreater(float(loss), 2.49)
 
+    def test_pairwise_false_delay_contrast_separates_delay_hard_negative(self):
+        class FakeSample(SimpleNamespace):
+            def to(self, device):
+                return self
+
+        class FakeModel:
+            def __call__(self, sample, *args, **kwargs):
+                return {
+                    "batch_roi_positive_logit": sample.batch_logit,
+                    "high_priority_logit": sample.candidate_logits,
+                    "delay_risk_logit": sample.delay_logits,
+                }
+
+        better = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([0.0, 0.1]),
+            delay_logits=torch.tensor([0.8, 0.7]),
+            y_candidate_high_priority=torch.tensor([0.0, 1.0]),
+            y_candidate_delay_risk=torch.tensor([0.0, 0.0]),
+        )
+        worse = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([2.0, 0.0]),
+            delay_logits=torch.tensor([-0.5, 0.0]),
+            y_candidate_high_priority=torch.tensor([0.0, 0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0, 0.0]),
+        )
+
+        loss = _pairwise_ranking_loss(
+            FakeModel(),
+            better,
+            worse,
+            torch.device("cpu"),
+            roi_delta=1.0,
+            loss_options={
+                "pairwise_ranking_loss_multiplier": 0.0,
+                "pairwise_candidate_ranking_loss_multiplier": 0.0,
+                "pairwise_false_delay_contrast_loss_multiplier": 1.0,
+                "pairwise_roi_margin": 0.5,
+            },
+        )
+
+        self.assertGreater(float(loss), 1.0)
+
+    def test_pairwise_delay_risk_contrast_separates_after_candidate_head_passes(self):
+        class FakeSample(SimpleNamespace):
+            def to(self, device):
+                return self
+
+        class FakeModel:
+            def __call__(self, sample, *args, **kwargs):
+                return {
+                    "batch_roi_positive_logit": sample.batch_logit,
+                    "high_priority_logit": sample.candidate_logits,
+                    "delay_risk_logit": sample.delay_logits,
+                }
+
+        better = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([3.0]),
+            delay_logits=torch.tensor([1.5]),
+            y_candidate_high_priority=torch.tensor([1.0]),
+            y_candidate_delay_risk=torch.tensor([0.0]),
+        )
+        worse = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([0.5]),
+            delay_logits=torch.tensor([-0.5]),
+            y_candidate_high_priority=torch.tensor([0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0]),
+        )
+
+        loss = _pairwise_ranking_loss(
+            FakeModel(),
+            better,
+            worse,
+            torch.device("cpu"),
+            roi_delta=1.0,
+            loss_options={
+                "pairwise_ranking_loss_multiplier": 0.0,
+                "pairwise_candidate_ranking_loss_multiplier": 0.0,
+                "pairwise_false_delay_contrast_loss_multiplier": 0.0,
+                "pairwise_delay_risk_contrast_loss_multiplier": 1.0,
+                "pairwise_roi_margin": 0.5,
+            },
+        )
+
+        self.assertGreater(float(loss), 2.49)
+
+    def test_focused_pair_head_loss_can_train_raw_candidate_head_only(self):
+        class FakeSample(SimpleNamespace):
+            def to(self, device):
+                return self
+
+        class FakeModel:
+            def __call__(self, sample, *args, **kwargs):
+                return {
+                    "batch_roi_positive_logit": sample.batch_logit,
+                    "high_priority_logit": sample.candidate_logits,
+                    "delay_risk_logit": sample.delay_logits,
+                }
+
+        better = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([0.1, 0.0]),
+            delay_logits=torch.tensor([0.0, 0.0]),
+            y_candidate_high_priority=torch.tensor([1.0, 0.0]),
+            y_candidate_delay_risk=torch.tensor([0.0, 0.0]),
+        )
+        worse = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([2.0, 0.0]),
+            delay_logits=torch.tensor([0.0, 0.0]),
+            y_candidate_high_priority=torch.tensor([0.0, 0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0, 0.0]),
+        )
+
+        loss = _focused_pair_head_loss(
+            FakeModel(),
+            better,
+            worse,
+            torch.device("cpu"),
+            roi_delta=1.0,
+            loss_options={
+                "pairwise_roi_margin": 0.5,
+                "focused_pair_candidate_loss_multiplier": 1.0,
+                "focused_pair_admission_loss_multiplier": 0.0,
+                "focused_pair_delay_risk_loss_multiplier": 0.0,
+                "focused_pair_batch_loss_multiplier": 0.0,
+            },
+        )
+
+        self.assertGreater(float(loss), 2.39)
+
+    def test_focused_pair_head_loss_can_train_delay_risk_head_only(self):
+        class FakeSample(SimpleNamespace):
+            def to(self, device):
+                return self
+
+        class FakeModel:
+            def __call__(self, sample, *args, **kwargs):
+                return {
+                    "batch_roi_positive_logit": sample.batch_logit,
+                    "high_priority_logit": sample.candidate_logits,
+                    "delay_risk_logit": sample.delay_logits,
+                }
+
+        better = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([3.0]),
+            delay_logits=torch.tensor([1.5]),
+            y_candidate_high_priority=torch.tensor([1.0]),
+            y_candidate_delay_risk=torch.tensor([0.0]),
+        )
+        worse = FakeSample(
+            candidate_task_membership=torch.empty(0),
+            candidate_sequence_positions=torch.empty(0),
+            candidate_features=torch.empty(0),
+            context_features=torch.empty(0),
+            batch_features=torch.empty(0),
+            batch_logit=torch.tensor([0.0]),
+            candidate_logits=torch.tensor([0.0]),
+            delay_logits=torch.tensor([-0.5]),
+            y_candidate_high_priority=torch.tensor([0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0]),
+        )
+
+        loss = _focused_pair_head_loss(
+            FakeModel(),
+            better,
+            worse,
+            torch.device("cpu"),
+            roi_delta=1.0,
+            loss_options={
+                "pairwise_roi_margin": 0.5,
+                "focused_pair_candidate_loss_multiplier": 0.0,
+                "focused_pair_admission_loss_multiplier": 0.0,
+                "focused_pair_delay_risk_loss_multiplier": 1.0,
+                "focused_pair_batch_loss_multiplier": 0.0,
+            },
+        )
+
+        self.assertGreater(float(loss), 2.49)
+
     def test_context_pair_stats_reports_same_context_training_capacity(self):
         samples = [
             SimpleNamespace(
@@ -295,6 +534,113 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
         self.assertIs(pairs[0][0], high)
         self.assertIs(pairs[0][1], low)
         self.assertAlmostEqual(pairs[0][2], 1.2)
+
+    def test_focused_training_pairs_use_fixed_positive_negative_tranche(self):
+        positive = SimpleNamespace(
+            batch_impact_source_row_index=torch.tensor(390),
+            batch_impact_context_hash="ctx-a",
+            y_candidate_high_priority=torch.tensor([1.0]),
+            y_candidate_delay_risk=torch.tensor([0.0]),
+            y_batch_roi_positive=torch.tensor(1.0),
+            y_bad_mode_switch=torch.tensor(0.0),
+            y_accepted_batch_roi=torch.tensor(1.2),
+        )
+        negative = SimpleNamespace(
+            batch_impact_source_row_index=torch.tensor(391),
+            batch_impact_context_hash="ctx-a",
+            y_candidate_high_priority=torch.tensor([0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0]),
+            y_batch_roi_positive=torch.tensor(0.0),
+            y_bad_mode_switch=torch.tensor(0.0),
+            y_accepted_batch_roi=torch.tensor(-2.0),
+        )
+        outside = SimpleNamespace(
+            batch_impact_source_row_index=torch.tensor(100),
+            batch_impact_context_hash="ctx-a",
+            y_candidate_high_priority=torch.tensor([0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0]),
+            y_batch_roi_positive=torch.tensor(0.0),
+            y_bad_mode_switch=torch.tensor(0.0),
+            y_accepted_batch_roi=torch.tensor(-3.0),
+        )
+        other_context = SimpleNamespace(
+            batch_impact_source_row_index=torch.tensor(392),
+            batch_impact_context_hash="ctx-b",
+            y_candidate_high_priority=torch.tensor([0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0]),
+            y_batch_roi_positive=torch.tensor(0.0),
+            y_bad_mode_switch=torch.tensor(0.0),
+            y_accepted_batch_roi=torch.tensor(-4.0),
+        )
+
+        pairs = _focused_training_pairs(
+            [negative, outside, positive, other_context],
+            focus_row_index_min=383,
+        )
+
+        self.assertEqual(len(pairs), 1)
+        self.assertIs(pairs[0][0], positive)
+        self.assertIs(pairs[0][1], negative)
+        self.assertAlmostEqual(pairs[0][2], 3.2, places=6)
+
+    def test_focused_training_pairs_can_use_explicit_row_indices(self):
+        positive = SimpleNamespace(
+            batch_impact_source_row_index=torch.tensor(100),
+            batch_impact_context_hash="ctx-explicit",
+            y_candidate_high_priority=torch.tensor([1.0]),
+            y_candidate_delay_risk=torch.tensor([0.0]),
+            y_batch_roi_positive=torch.tensor(1.0),
+            y_bad_mode_switch=torch.tensor(0.0),
+            y_accepted_batch_roi=torch.tensor(2.0),
+        )
+        negative = SimpleNamespace(
+            batch_impact_source_row_index=torch.tensor(101),
+            batch_impact_context_hash="ctx-explicit",
+            y_candidate_high_priority=torch.tensor([0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0]),
+            y_batch_roi_positive=torch.tensor(0.0),
+            y_bad_mode_switch=torch.tensor(0.0),
+            y_accepted_batch_roi=torch.tensor(-1.0),
+        )
+        extra = SimpleNamespace(
+            batch_impact_source_row_index=torch.tensor(102),
+            batch_impact_context_hash="ctx-explicit",
+            y_candidate_high_priority=torch.tensor([0.0]),
+            y_candidate_delay_risk=torch.tensor([1.0]),
+            y_batch_roi_positive=torch.tensor(0.0),
+            y_bad_mode_switch=torch.tensor(0.0),
+            y_accepted_batch_roi=torch.tensor(-5.0),
+        )
+
+        pairs = _focused_training_pairs(
+            [extra, negative, positive],
+            focus_row_index_min=None,
+            focus_row_indices=[101, 100],
+        )
+
+        self.assertEqual(len(pairs), 1)
+        self.assertIs(pairs[0][0], positive)
+        self.assertIs(pairs[0][1], negative)
+        self.assertAlmostEqual(pairs[0][2], 3.0, places=6)
+
+    def test_loss_options_reads_explicit_focused_row_indices_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            row_indices_path = Path(tmp) / "focused_row_indices.json"
+            row_indices_path.write_text(json.dumps([101, 100, 101]), encoding="utf-8")
+            args = SimpleNamespace(
+                min_accepted_batch_roi=0.65,
+                baseline_accepted_batch_roi=0.55,
+                min_roi_margin_over_baseline=0.20,
+                hard_roi_threshold=None,
+                focused_pair_gate_row_index_min=None,
+                focused_pair_row_indices_file=row_indices_path,
+            )
+
+            loss_options = _loss_options(args)
+
+        self.assertIsNone(loss_options["focused_pair_row_index_min"])
+        self.assertEqual(loss_options["focused_pair_row_indices_file"], str(row_indices_path))
+        self.assertEqual(loss_options["focused_pair_row_indices"], [100, 101])
 
     def test_threshold_search_rejects_small_sample_point_precision_without_confidence(self):
         def record(idx: int) -> dict[str, object]:
@@ -476,6 +822,226 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
         self.assertEqual(selected["false_high_priority_on_delay_count"], 0)
         self.assertTrue(selected["candidate_delay_gate_enabled"])
         self.assertEqual(selected["candidate_delay_risk_threshold"], 0.5)
+
+    def test_threshold_search_risk_adjusted_candidate_score_suppresses_high_delay_risk_candidate(self):
+        records = [
+            {
+                "family": "random-wave",
+                "context_hash": "ctx-risk-adjusted",
+                "batch_score": 0.95,
+                "candidate_scores": [0.95, 0.60],
+                "candidate_delay_scores": [0.90, 0.10],
+                "candidate_high_priority_labels": [0, 1],
+                "candidate_delay_labels": [1, 0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "tail_improved": 0,
+                "support_changed_good": 0,
+                "accepted_batch_roi_label": 1.0,
+            }
+        ]
+        gate_config = {
+            "min_high_priority_precision": 0.0,
+            "min_high_priority_precision_ci_low": None,
+            "min_safe_precision": 0.0,
+            "min_safe_precision_ci_low": None,
+            "confidence_z": 1.96,
+            "max_false_high_priority_on_delay": 0.0,
+            "max_false_safe_union_rate": 0.02,
+            "min_accepted_batch_count": 1,
+            "min_accepted_batch_rate": 0.0,
+            "min_accepted_batch_roi": 0.65,
+            "min_accepted_batch_roi_ci_low": None,
+            "baseline_accepted_batch_roi": 0.0,
+            "baseline_selection_roi": 0.0,
+            "baseline_roi_ci_high": 0.0,
+            "baseline_roi_ci_high_source": "test",
+            "random_baseline_accepted_batch_roi": 0.0,
+            "best_rc_baseline_accepted_batch_roi": 0.0,
+            "old_gat_baseline_accepted_batch_roi": 0.0,
+            "min_roi_margin_over_baseline": 0.0,
+            "min_family_holdout_precision": 0.0,
+            "min_family_holdout_accepted_roi": 0.0,
+            "min_major_families": 1,
+            "observed_family_count": 1,
+            "stage3_min_samples": 1,
+            "actual_sample_count": 1,
+            "knn_ood_audit_completed": True,
+            "candidate_admission_score_mode": "risk_adjusted_product",
+            "candidate_delay_score_penalty": 1.0,
+            "candidate_delay_gate_enabled": False,
+            "candidate_delay_risk_threshold": 1.0,
+        }
+
+        selected = _threshold_search(
+            records,
+            gate_config=gate_config,
+            fixed_batch_threshold=0.5,
+            fixed_candidate_threshold=0.5,
+        )["selected_metrics"]
+
+        self.assertEqual(selected["accepted_batch_count"], 1)
+        self.assertEqual(selected["high_priority_prediction_count"], 1)
+        self.assertEqual(selected["high_priority_true_positive_count"], 1)
+        self.assertEqual(selected["false_high_priority_on_delay_count"], 0)
+        self.assertEqual(selected["candidate_delay_gate_blocked_count"], 0)
+        self.assertEqual(selected["candidate_risk_adjusted_suppressed_count"], 1)
+        self.assertEqual(selected["candidate_admission_score_mode"], "risk_adjusted_product")
+        self.assertEqual(selected["candidate_delay_score_penalty"], 1.0)
+
+    def test_threshold_search_rescue_window_promotes_raw_safe_candidate(self):
+        records = [
+            {
+                "family": "random-wave",
+                "context_hash": "ctx-rescue-window",
+                "batch_score": 0.95,
+                "candidate_scores": [0.95],
+                "candidate_delay_scores": [0.60],
+                "candidate_high_priority_labels": [1],
+                "candidate_delay_labels": [0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "tail_improved": 1,
+                "support_changed_good": 1,
+                "accepted_batch_roi_label": 1.0,
+            }
+        ]
+        gate_config = _threshold_test_gate_config()
+        gate_config.update(
+            {
+                "candidate_admission_score_mode": "risk_adjusted_rescue_window",
+                "candidate_delay_score_penalty": 2.0,
+                "candidate_delay_gate_enabled": True,
+                "candidate_delay_risk_threshold": 0.5,
+                "candidate_rescue_raw_score_threshold": 0.9,
+                "candidate_rescue_delay_risk_threshold": 0.75,
+                "candidate_rescue_delay_score_penalty": 0.25,
+            }
+        )
+
+        selected = _threshold_search(
+            records,
+            gate_config=gate_config,
+            fixed_batch_threshold=0.5,
+            fixed_candidate_threshold=0.5,
+        )["selected_metrics"]
+
+        self.assertEqual(selected["accepted_batch_count"], 1)
+        self.assertEqual(selected["high_priority_prediction_count"], 1)
+        self.assertEqual(selected["candidate_risk_adjusted_suppressed_count"], 1)
+        self.assertEqual(selected["candidate_delay_gate_blocked_count"], 0)
+        self.assertEqual(selected["candidate_rescue_window_eligible_count"], 1)
+        self.assertEqual(selected["candidate_rescue_window_promoted_count"], 1)
+
+    def test_threshold_search_rescue_window_does_not_promote_high_delay_candidate(self):
+        records = [
+            {
+                "family": "random-wave",
+                "context_hash": "ctx-rescue-window-high-delay",
+                "batch_score": 0.95,
+                "candidate_scores": [0.95],
+                "candidate_delay_scores": [0.90],
+                "candidate_high_priority_labels": [1],
+                "candidate_delay_labels": [0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "tail_improved": 1,
+                "support_changed_good": 1,
+                "accepted_batch_roi_label": 1.0,
+            }
+        ]
+        gate_config = _threshold_test_gate_config()
+        gate_config.update(
+            {
+                "candidate_admission_score_mode": "risk_adjusted_rescue_window",
+                "candidate_delay_score_penalty": 2.0,
+                "candidate_delay_gate_enabled": True,
+                "candidate_delay_risk_threshold": 0.5,
+                "candidate_rescue_raw_score_threshold": 0.9,
+                "candidate_rescue_delay_risk_threshold": 0.75,
+                "candidate_rescue_delay_score_penalty": 0.25,
+            }
+        )
+
+        selected = _threshold_search(
+            records,
+            gate_config=gate_config,
+            fixed_batch_threshold=0.5,
+            fixed_candidate_threshold=0.5,
+        )["selected_metrics"]
+
+        self.assertEqual(selected["accepted_batch_count"], 0)
+        self.assertEqual(selected["high_priority_prediction_count"], 0)
+        self.assertEqual(selected["candidate_risk_adjusted_suppressed_count"], 1)
+        self.assertEqual(selected["candidate_rescue_window_eligible_count"], 0)
+        self.assertEqual(selected["candidate_rescue_window_promoted_count"], 0)
+
+    def test_threshold_search_rejects_zero_candidate_threshold_as_inactive_filter(self):
+        records = [
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-zero-candidate-threshold",
+                "batch_score": 0.95,
+                "candidate_scores": [0.95],
+                "candidate_high_priority_labels": [1],
+                "candidate_delay_labels": [0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "tail_improved": 1,
+                "support_changed_good": 1,
+                "accepted_batch_roi_label": 1.0,
+            }
+        ]
+        gate_config = _threshold_test_gate_config()
+
+        selected = _threshold_search(
+            records,
+            gate_config=gate_config,
+            fixed_batch_threshold=0.5,
+            fixed_candidate_threshold=0.0,
+        )["selected_metrics"]
+
+        self.assertEqual(selected["evaluated_candidate_count"], 1)
+        self.assertEqual(selected["candidate_score_threshold_blocked_count"], 0)
+        self.assertEqual(selected["high_priority_prediction_count"], 1)
+        self.assertFalse(selected["threshold_local_gate_pass"])
+        self.assertIn(
+            "candidate_threshold_zero_disables_candidate_head_filter",
+            selected["threshold_local_reject_reasons"],
+        )
+        self.assertIn(
+            "candidate_head_filter_inactive",
+            selected["threshold_local_hard_reject_reason_categories"],
+        )
+
+    def test_threshold_search_counts_candidate_score_threshold_blocks(self):
+        records = [
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-score-threshold-blocks",
+                "batch_score": 0.95,
+                "candidate_scores": [0.25, 0.95],
+                "candidate_high_priority_labels": [1, 1],
+                "candidate_delay_labels": [0, 0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "tail_improved": 1,
+                "support_changed_good": 1,
+                "accepted_batch_roi_label": 1.0,
+            }
+        ]
+        gate_config = _threshold_test_gate_config()
+
+        selected = _threshold_search(
+            records,
+            gate_config=gate_config,
+            fixed_batch_threshold=0.5,
+            fixed_candidate_threshold=0.5,
+        )["selected_metrics"]
+
+        self.assertEqual(selected["evaluated_candidate_count"], 2)
+        self.assertEqual(selected["candidate_score_threshold_blocked_count"], 1)
+        self.assertEqual(selected["high_priority_prediction_count"], 1)
 
     def test_threshold_search_rejects_any_accepted_bad_mode_by_default(self):
         def record(idx: int, *, score: float) -> dict[str, object]:
@@ -732,6 +1298,241 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
             selected["threshold_local_reject_reasons"],
         )
 
+    def test_focused_pair_gate_passes_same_context_safe_vs_delay_order(self):
+        gate_config = _threshold_test_gate_config()
+        args = SimpleNamespace(
+            focused_pair_gate_row_index_min=383,
+            min_focused_pair_count=1,
+            min_focused_raw_pair_pass_rate=1.0,
+            min_focused_admission_pair_pass_rate=1.0,
+            min_focused_delay_risk_pair_pass_rate=1.0,
+            min_focused_strict_pair_pass_rate=1.0,
+        )
+        manifest_items = [
+            {
+                "row_index": 383,
+                "instance_path": "inst-a",
+                "context_hash": "ctx-a",
+                "instance_family": "sector-wave",
+                "candidate_signature_ids": ["safe"],
+                "accepted_batch_roi": 1.0,
+            },
+            {
+                "row_index": 384,
+                "instance_path": "inst-a",
+                "context_hash": "ctx-a",
+                "instance_family": "sector-wave",
+                "candidate_signature_ids": ["delay"],
+                "accepted_batch_roi": 0.0,
+            },
+        ]
+        prediction_records = [
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-a",
+                "batch_score": 0.9,
+                "candidate_scores": [0.9],
+                "candidate_delay_scores": [0.1],
+                "candidate_high_priority_labels": [1],
+                "candidate_delay_labels": [0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "accepted_batch_roi_label": 1.0,
+            },
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-a",
+                "batch_score": 0.8,
+                "candidate_scores": [0.6],
+                "candidate_delay_scores": [0.8],
+                "candidate_high_priority_labels": [0],
+                "candidate_delay_labels": [1],
+                "batch_roi_positive": 0,
+                "bad_mode_switch": 1,
+                "accepted_batch_roi_label": 0.0,
+            },
+        ]
+
+        metrics = _focused_pair_gate_metrics(
+            manifest_items=manifest_items,
+            prediction_records=prediction_records,
+            gate_config=gate_config,
+            args=args,
+        )
+
+        self.assertTrue(metrics["active"])
+        self.assertTrue(metrics["gate"]["gate_pass"])
+        self.assertEqual(metrics["summary"]["pair_count"], 1)
+        self.assertEqual(metrics["summary"]["strict_pair_pass_rate"], 1.0)
+        self.assertEqual(_focused_pair_gate_reject_reasons(metrics), [])
+
+    def test_focused_pair_gate_can_use_explicit_row_indices_file(self):
+        gate_config = _threshold_test_gate_config()
+        manifest_items = [
+            {
+                "row_index": 10,
+                "instance_path": "inst-a",
+                "context_hash": "ctx-a",
+                "instance_family": "sector-wave",
+                "candidate_signature_ids": ["outside"],
+                "accepted_batch_roi": -5.0,
+            },
+            {
+                "row_index": 100,
+                "instance_path": "inst-a",
+                "context_hash": "ctx-a",
+                "instance_family": "sector-wave",
+                "candidate_signature_ids": ["safe"],
+                "accepted_batch_roi": 1.0,
+            },
+            {
+                "row_index": 101,
+                "instance_path": "inst-a",
+                "context_hash": "ctx-a",
+                "instance_family": "sector-wave",
+                "candidate_signature_ids": ["delay"],
+                "accepted_batch_roi": 0.0,
+            },
+        ]
+        prediction_records = [
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-a",
+                "batch_score": 0.2,
+                "candidate_scores": [0.1],
+                "candidate_delay_scores": [0.9],
+                "candidate_high_priority_labels": [0],
+                "candidate_delay_labels": [1],
+                "batch_roi_positive": 0,
+                "bad_mode_switch": 1,
+                "accepted_batch_roi_label": -5.0,
+            },
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-a",
+                "batch_score": 0.9,
+                "candidate_scores": [0.9],
+                "candidate_delay_scores": [0.1],
+                "candidate_high_priority_labels": [1],
+                "candidate_delay_labels": [0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "accepted_batch_roi_label": 1.0,
+            },
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-a",
+                "batch_score": 0.8,
+                "candidate_scores": [0.6],
+                "candidate_delay_scores": [0.8],
+                "candidate_high_priority_labels": [0],
+                "candidate_delay_labels": [1],
+                "batch_roi_positive": 0,
+                "bad_mode_switch": 1,
+                "accepted_batch_roi_label": 0.0,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            row_indices_path = Path(tmp) / "focused_row_indices.json"
+            row_indices_path.write_text(json.dumps([101, 100]), encoding="utf-8")
+            args = SimpleNamespace(
+                focused_pair_gate_row_index_min=None,
+                focused_pair_row_indices_file=row_indices_path,
+                min_focused_pair_count=1,
+                min_focused_raw_pair_pass_rate=1.0,
+                min_focused_admission_pair_pass_rate=1.0,
+                min_focused_delay_risk_pair_pass_rate=1.0,
+                min_focused_strict_pair_pass_rate=1.0,
+            )
+
+            metrics = _focused_pair_gate_metrics(
+                manifest_items=manifest_items,
+                prediction_records=prediction_records,
+                gate_config=gate_config,
+                args=args,
+            )
+
+        self.assertTrue(metrics["active"])
+        self.assertEqual(metrics["focus_selector"], "explicit_row_indices")
+        self.assertEqual(metrics["focus_row_indices_count"], 2)
+        self.assertEqual(metrics["summary"]["focused_row_count"], 2)
+        self.assertEqual(metrics["summary"]["pair_count"], 1)
+        self.assertTrue(metrics["gate"]["gate_pass"])
+
+    def test_focused_pair_gate_rejects_context_pair_ranking_failure(self):
+        gate_config = _threshold_test_gate_config()
+        args = SimpleNamespace(
+            focused_pair_gate_row_index_min=383,
+            min_focused_pair_count=1,
+            min_focused_raw_pair_pass_rate=1.0,
+            min_focused_admission_pair_pass_rate=1.0,
+            min_focused_delay_risk_pair_pass_rate=1.0,
+            min_focused_strict_pair_pass_rate=1.0,
+        )
+        manifest_items = [
+            {
+                "row_index": 383,
+                "instance_path": "inst-a",
+                "context_hash": "ctx-a",
+                "instance_family": "sector-wave",
+                "candidate_signature_ids": ["safe"],
+                "accepted_batch_roi": 1.0,
+            },
+            {
+                "row_index": 384,
+                "instance_path": "inst-a",
+                "context_hash": "ctx-a",
+                "instance_family": "sector-wave",
+                "candidate_signature_ids": ["delay"],
+                "accepted_batch_roi": 0.0,
+            },
+        ]
+        prediction_records = [
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-a",
+                "batch_score": 0.9,
+                "candidate_scores": [0.55],
+                "candidate_delay_scores": [0.8],
+                "candidate_high_priority_labels": [1],
+                "candidate_delay_labels": [0],
+                "batch_roi_positive": 1,
+                "bad_mode_switch": 0,
+                "accepted_batch_roi_label": 1.0,
+            },
+            {
+                "family": "sector-wave",
+                "context_hash": "ctx-a",
+                "batch_score": 0.8,
+                "candidate_scores": [0.85],
+                "candidate_delay_scores": [0.2],
+                "candidate_high_priority_labels": [0],
+                "candidate_delay_labels": [1],
+                "batch_roi_positive": 0,
+                "bad_mode_switch": 1,
+                "accepted_batch_roi_label": 0.0,
+            },
+        ]
+
+        metrics = _focused_pair_gate_metrics(
+            manifest_items=manifest_items,
+            prediction_records=prediction_records,
+            gate_config=gate_config,
+            args=args,
+        )
+
+        self.assertFalse(metrics["gate"]["gate_pass"])
+        self.assertEqual(metrics["summary"]["raw_pair_pass_rate"], 0.0)
+        self.assertEqual(metrics["summary"]["delay_risk_pair_pass_rate"], 0.0)
+        self.assertEqual(
+            metrics["gate"]["blocking_primary"],
+            "candidate_head_context_ranking_failure",
+        )
+        self.assertIn(
+            "strict_pair_pass_rate_below_threshold",
+            _focused_pair_gate_reject_reasons(metrics),
+        )
+
     def test_threshold_search_can_evaluate_family_local_batch_thresholds(self):
         def record(
             family: str,
@@ -894,6 +1695,8 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
                 context_hidden_dim=8,
                 batch_hidden_dim=12,
                 impact_hidden_dim=10,
+                path_token_dim=8,
+                path_hidden_dim=12,
                 num_gnn_layers=1,
                 heads=4,
                 dropout=0.0,
@@ -939,6 +1742,18 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
             self.assertEqual(summary["training_objective"], "precision_constrained_roi_maximization")
             self.assertIn("hard_roi_threshold", summary)
             self.assertIn("loss_options", summary)
+            self.assertIn(
+                "pairwise_delay_risk_contrast_loss_multiplier",
+                summary["loss_options"],
+            )
+            self.assertIn(
+                "focused_pair_candidate_loss_multiplier",
+                summary["loss_options"],
+            )
+            self.assertIn(
+                "focused_pair_delay_risk_loss_multiplier",
+                summary["loss_options"],
+            )
             self.assertIn("context_pair_stats", summary)
             self.assertFalse(summary["pairwise_ranking_loss_active"])
             for key in (
@@ -957,6 +1772,8 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
                 "baseline_roi_ci_high",
                 "batch_threshold",
                 "candidate_threshold",
+                "evaluated_candidate_count",
+                "candidate_score_threshold_blocked_count",
                 "false_high_priority_on_delay",
                 "false_safe_rate_union",
                 "expected_trajectory_utility",
@@ -969,21 +1786,86 @@ class GATBatchImpactTrainingTests(unittest.TestCase):
             self.assertIn("rejected_checkpoint_reason_categories", summary)
             self.assertIn("attempted_update_count", summary)
             self.assertIn("nonfinite_skipped_update_rate", summary)
+            self.assertIn("history", summary)
+            self.assertIn("focused_pair_gate", summary)
+            self.assertIn("focused_pair_gate_not_run", summary["focused_pair_gate_reject_reasons"])
+            self.assertIn("training_run_config", summary)
+            self.assertEqual(summary["training_run_config"]["seed"], 13)
+            self.assertEqual(summary["training_run_config"]["validation_fraction"], 0.5)
+            self.assertIsNone(
+                summary["training_run_config"]["focused_pair_gate_config"][
+                    "focused_pair_gate_row_index_min"
+                ]
+            )
+            self.assertEqual(len(summary["history"]), 1)
+            self.assertEqual(summary["history"][0]["epoch"], 1)
             self.assertEqual(summary["training_stability_reject_reasons"], [])
             self.assertEqual(checkpoint["target_label"], "same_context_batch_trajectory_roi")
             self.assertEqual(checkpoint["exactness_contract"], BATCH_IMPACT_EXACTNESS_CONTRACT)
+            self.assertEqual(checkpoint["model_config"]["path_token_vocab_size"], 4096)
+            self.assertEqual(checkpoint["model_config"]["path_pair_vocab_size"], 4096)
+            self.assertEqual(checkpoint["model_config"]["path_hidden_dim"], 12)
+            self.assertIn("candidate_path_token_schema", checkpoint)
             self.assertEqual(
                 checkpoint["training_contract"]["training_objective"],
                 "precision_constrained_roi_maximization",
             )
             self.assertIn("hard_roi_threshold", checkpoint["training_contract"])
+            self.assertIn(
+                "pairwise_delay_risk_contrast_loss_multiplier",
+                checkpoint["training_contract"],
+            )
+            self.assertIn(
+                "focused_pair_candidate_loss_multiplier",
+                checkpoint["training_contract"],
+            )
+            self.assertIn(
+                "focused_pair_delay_risk_loss_multiplier",
+                checkpoint["training_contract"],
+            )
             self.assertIn("context_pair_stats", checkpoint["training_contract"])
+            self.assertIn("focused_pair_gate", checkpoint["training_contract"])
+            self.assertIn("training_run_config", checkpoint["training_contract"])
+            self.assertEqual(checkpoint["training_contract"]["training_run_config"]["seed"], 13)
             self.assertFalse(checkpoint["training_contract"]["pairwise_ranking_loss_active"])
             self.assertFalse(checkpoint["training_contract"]["uses_random_row_split"])
             self.assertFalse(checkpoint["training_contract"]["production_ready"])
             self.assertTrue(checkpoint["training_contract"]["requires_knn_ood_shell_before_stage4"])
+            self.assertEqual(checkpoint["training"]["training_run_config"]["epochs"], 1)
+            self.assertEqual(len(checkpoint["training"]["history"]), 1)
             self.assertTrue(args.metrics_out.exists())
             self.assertTrue(args.report.exists())
+
+
+def _threshold_test_gate_config() -> dict[str, object]:
+    return {
+        "min_high_priority_precision": 0.0,
+        "min_high_priority_precision_ci_low": None,
+        "min_safe_precision": 0.0,
+        "min_safe_precision_ci_low": None,
+        "confidence_z": 1.96,
+        "max_false_high_priority_on_delay": 0.0,
+        "max_false_safe_union_rate": 0.02,
+        "min_accepted_batch_count": 0,
+        "min_accepted_batch_rate": 0.0,
+        "min_accepted_batch_roi": 0.65,
+        "min_accepted_batch_roi_ci_low": None,
+        "baseline_accepted_batch_roi": 0.0,
+        "baseline_selection_roi": 0.0,
+        "baseline_roi_ci_high": 0.0,
+        "baseline_roi_ci_high_source": "test",
+        "random_baseline_accepted_batch_roi": 0.0,
+        "best_rc_baseline_accepted_batch_roi": 0.0,
+        "old_gat_baseline_accepted_batch_roi": 0.0,
+        "min_roi_margin_over_baseline": 0.0,
+        "min_family_holdout_precision": 0.0,
+        "min_family_holdout_accepted_roi": 0.0,
+        "min_major_families": 1,
+        "observed_family_count": 1,
+        "stage3_min_samples": 1,
+        "actual_sample_count": 1,
+        "knn_ood_audit_completed": True,
+    }
 
 
 if __name__ == "__main__":

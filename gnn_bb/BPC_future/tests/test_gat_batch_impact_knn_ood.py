@@ -8,8 +8,10 @@ from types import SimpleNamespace
 
 try:
     from BPC_future.scripts.audit_gat_batch_impact_knn_ood import (
+        _apply_threshold_overrides,
         _decision_metrics,
         _family_metrics,
+        _neighbor_roi_stats,
         audit_batch_impact_knn_ood,
     )
     from BPC_future.scripts.build_gat_batch_impact_dataset import build_dataset
@@ -29,6 +31,54 @@ except Exception:
 
 @unittest.skipUnless(HAS_LEARNING_STACK, "learning stack is not installed")
 class GATBatchImpactKNNOODTests(unittest.TestCase):
+    def test_threshold_overrides_support_rescue_window_audit(self) -> None:
+        thresholds = {
+            "batch_threshold": 0.8,
+            "candidate_threshold": 0.7,
+            "candidate_admission_score_mode": "risk_adjusted_product",
+            "candidate_delay_score_penalty": 1.0,
+            "candidate_delay_gate_enabled": False,
+            "candidate_delay_risk_threshold": 1.0,
+            "candidate_rescue_raw_score_threshold": 1.0,
+            "candidate_rescue_delay_risk_threshold": 1.0,
+            "candidate_rescue_delay_score_penalty": 0.0,
+        }
+
+        overridden = _apply_threshold_overrides(
+            thresholds,
+            {
+                "candidate_admission_score_mode": "risk_adjusted_rescue_window",
+                "candidate_delay_score_penalty": 0.75,
+                "candidate_delay_gate_enabled": True,
+                "candidate_delay_risk_threshold": 0.4,
+                "candidate_rescue_raw_score_threshold": 0.3,
+                "candidate_rescue_delay_risk_threshold": 1.5,
+                "candidate_rescue_delay_score_penalty": -2.0,
+            },
+        )
+
+        self.assertEqual(overridden["batch_threshold"], 0.8)
+        self.assertEqual(overridden["candidate_threshold"], 0.7)
+        self.assertEqual(overridden["candidate_admission_score_mode"], "risk_adjusted_rescue_window")
+        self.assertEqual(overridden["candidate_delay_score_penalty"], 0.75)
+        self.assertTrue(overridden["candidate_delay_gate_enabled"])
+        self.assertEqual(overridden["candidate_delay_risk_threshold"], 0.4)
+        self.assertEqual(overridden["candidate_rescue_raw_score_threshold"], 0.3)
+        self.assertEqual(overridden["candidate_rescue_delay_risk_threshold"], 1.0)
+        self.assertEqual(overridden["candidate_rescue_delay_score_penalty"], 0.0)
+
+    def test_neighbor_roi_stats_uses_nearest_training_records(self) -> None:
+        stats = _neighbor_roi_stats(
+            [[0.0], [10.0], [0.2]],
+            [4.0, -10.0, 2.0],
+            [0.1],
+            k=2,
+        )
+
+        self.assertEqual(stats["neighbor_accepted_batch_roi_count"], 2)
+        self.assertEqual(stats["neighbor_accepted_batch_roi_mean"], 3.0)
+        self.assertLess(stats["neighbor_accepted_batch_roi_ci_low"], 3.0)
+
     def test_decision_metrics_track_safety_shell_separately_from_roi(self) -> None:
         records = [
             {
@@ -237,12 +287,16 @@ class GATBatchImpactKNNOODTests(unittest.TestCase):
             self.assertIn("validation_false_safe_rates", summary)
             self.assertIn("validation_family_metrics", summary)
             self.assertIn("validation_safety_checks", summary)
+            self.assertIsNone(summary["min_neighbor_accepted_batch_roi"])
+            self.assertIsNone(summary["min_neighbor_accepted_batch_roi_ci_low"])
             decision_path = tmp / "audit" / "decision_records.jsonl"
             self.assertTrue(decision_path.exists())
             first_decision = json.loads(decision_path.read_text().splitlines()[0])
             self.assertIn("decision_name", first_decision)
             self.assertIn("is_ood", first_decision)
             self.assertIn("is_knn_unsafe", first_decision)
+            self.assertIn("is_knn_roi_unsafe", first_decision)
+            self.assertIn("neighbor_accepted_batch_roi_ci_low", first_decision)
             self.assertIn("candidate_false_high_priority_on_delay_count", first_decision)
             self.assertIn("candidate_signature_ids", first_decision)
             self.assertIn("high_priority_candidate_signature_ids", first_decision)

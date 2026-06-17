@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from datetime import date
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -50,6 +51,13 @@ DEFAULT_REPORT = Path(
     "BPC_future/logical_graph/run_reports/"
     "20260615_bpc_future_gat_batch_impact_dataset_zh.md"
 )
+PATH_TOKEN_HASH_BUCKET_COUNT = 4096
+PATH_PAIR_HASH_BUCKET_COUNT = 4096
+PATH_TYPE_TO_ID: dict[str, int] = {
+    "low_time": 1,
+    "low_energy": 2,
+    "low_risk": 3,
+}
 
 BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA: tuple[str, ...] = (
     *BASE_CANDIDATE_FEATURE_SCHEMA,
@@ -57,6 +65,32 @@ BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA: tuple[str, ...] = (
     "sortie_count",
     "order_observed",
     "best_position",
+    "trace_trip_count",
+    "trace_arc_option_count",
+    "trace_unique_arc_option_count",
+    "trace_low_time_arc_count",
+    "trace_low_energy_arc_count",
+    "trace_low_risk_arc_count",
+    "trace_journey_start_time",
+    "trace_journey_end_time",
+    "trace_journey_duration",
+    "trace_total_distance",
+    "trace_total_energy",
+    "trace_total_risk",
+    "trace_total_travel_time",
+    "trace_total_recharge_time",
+    "trace_max_load",
+    "trace_min_survival_energy",
+    "trace_service_start_min",
+    "trace_service_start_max",
+    "trace_service_start_span",
+    "trace_inter_sortie_gap_sum",
+    "trace_inter_sortie_gap_max",
+    "trace_idle_time_proxy",
+    "trace_occupancy_bucket_count",
+    "slack_min_late_time",
+    "slack_mean_late_time",
+    "slack_min_early_time",
 )
 
 BATCH_IMPACT_CONTEXT_FEATURE_SCHEMA: tuple[str, ...] = (
@@ -263,11 +297,15 @@ def build_dataset(
                 skipped["invalid_logical_graph"] += 1
                 continue
             graph_cache[str(graph_path)] = graph
+        task_time_windows = _graph_task_time_windows(graph)
 
         task_ids = [int(value) for value in graph.task_ids.tolist()]
         candidate_membership: list[list[float]] = []
         candidate_positions: list[list[float]] = []
         candidate_features: list[list[float]] = []
+        candidate_path_token_ids: list[list[int]] = []
+        candidate_path_pair_ids: list[list[int]] = []
+        candidate_path_type_ids: list[list[int]] = []
         candidate_high_priority: list[float] = []
         candidate_delay_risk: list[float] = []
         candidate_true_rc_negative: list[float] = []
@@ -356,8 +394,22 @@ def build_dataset(
             candidate_membership.append(membership)
             candidate_positions.append(positions)
             candidate_features.append(
-                [_candidate_feature(event, journey, field, sequence=sequence, task_ids=task_ids) for field in BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA]
+                [
+                    _candidate_feature(
+                        event,
+                        journey,
+                        field,
+                        sequence=sequence,
+                        task_ids=task_ids,
+                        task_time_windows=task_time_windows,
+                    )
+                    for field in BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA
+                ]
             )
+            token_ids, pair_ids, type_ids = _candidate_path_token_rows(journey)
+            candidate_path_token_ids.append(token_ids)
+            candidate_path_pair_ids.append(pair_ids)
+            candidate_path_type_ids.append(type_ids)
             candidate_true_rc_negative.append(1.0 if is_negative else 0.0)
             high_priority = bool(is_negative and batch_roi_positive and not bad_mode_switch)
             candidate_high_priority.append(1.0 if high_priority else 0.0)
@@ -381,6 +433,10 @@ def build_dataset(
         sample.candidate_task_membership = torch.tensor(candidate_membership, dtype=torch.float32)
         sample.candidate_sequence_positions = torch.tensor(candidate_positions, dtype=torch.float32)
         sample.candidate_features = torch.tensor(candidate_features, dtype=torch.float32)
+        sample.candidate_path_token_ids = _padded_long_tensor(candidate_path_token_ids)
+        sample.candidate_path_pair_ids = _padded_long_tensor(candidate_path_pair_ids)
+        sample.candidate_path_type_ids = _padded_long_tensor(candidate_path_type_ids)
+        sample.candidate_path_token_mask = _padded_bool_mask(candidate_path_token_ids)
         sample.context_features = torch.tensor(
             [_context_feature(event, row, field) for field in BATCH_IMPACT_CONTEXT_FEATURE_SCHEMA],
             dtype=torch.float32,
@@ -509,6 +565,14 @@ def build_dataset(
         "candidate_feature_schema": list(BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA),
         "context_feature_schema": list(BATCH_IMPACT_CONTEXT_FEATURE_SCHEMA),
         "batch_feature_schema": list(BATCH_IMPACT_BATCH_FEATURE_SCHEMA),
+        "candidate_path_token_schema": {
+            "token_ids": "stable_sha1_hash_bucket_of_full_arc_option_id",
+            "pair_ids": "stable_sha1_hash_bucket_of_directed_arc_pair",
+            "type_ids": dict(PATH_TYPE_TO_ID),
+            "padding_id": 0,
+            "token_hash_bucket_count": int(PATH_TOKEN_HASH_BUCKET_COUNT),
+            "pair_hash_bucket_count": int(PATH_PAIR_HASH_BUCKET_COUNT),
+        },
         "label_schema": list(LABEL_SCHEMA),
         "candidate_feature_mean": candidate_feature_mean,
         "candidate_feature_std": candidate_feature_std,
@@ -555,6 +619,12 @@ def build_dataset(
         "batch_label_counts": dict(sorted(batch_label_counts.items())),
         "candidate_label_counts": dict(sorted(candidate_label_counts.items())),
         "batch_type_counts": dict(sorted(batch_type_counts.items())),
+        "candidate_path_token_schema": {
+            "token_hash_bucket_count": int(PATH_TOKEN_HASH_BUCKET_COUNT),
+            "pair_hash_bucket_count": int(PATH_PAIR_HASH_BUCKET_COUNT),
+            "type_ids": dict(PATH_TYPE_TO_ID),
+            "padding_id": 0,
+        },
         "pairwise_context_stats": pairwise_context_stats,
         "ranking_blockers": ranking_blockers,
         "ranking_ready": not ranking_blockers,
@@ -893,6 +963,7 @@ def _candidate_feature(
     *,
     sequence: list[int],
     task_ids: list[int],
+    task_time_windows: dict[int, tuple[float, float]],
 ) -> float:
     task_set = _task_set(journey.get("task_set")) or set(sequence)
     if field == "true_reduced_cost":
@@ -931,7 +1002,279 @@ def _candidate_feature(
         positions = _sequence_positions(sequence, task_ids)
         nonzero = [value for value in positions if value > 0.0]
         return min(nonzero) if nonzero else 0.0
+    if field.startswith("slack_"):
+        return _slack_candidate_feature(journey, field, task_time_windows=task_time_windows)
+    if field.startswith("trace_"):
+        return _trace_candidate_feature(journey, field)
     return 0.0
+
+
+def _trace_candidate_feature(journey: dict[str, Any], field: str) -> float:
+    trips = _journey_trip_dicts(journey)
+    arc_ids = _journey_arc_option_ids(journey)
+    service_starts = _journey_service_start_times(journey)
+    trip_starts = [
+        _finite_float(trip.get("start_time"))
+        for trip in trips
+        if _has_finite_number(trip.get("start_time"))
+    ]
+    trip_ends = [
+        _finite_float(trip.get("end_time"))
+        for trip in trips
+        if _has_finite_number(trip.get("end_time"))
+    ]
+    sorted_trip_bounds = sorted(zip(trip_starts, trip_ends))
+    gaps = [
+        max(0.0, sorted_trip_bounds[idx + 1][0] - sorted_trip_bounds[idx][1])
+        for idx in range(len(sorted_trip_bounds) - 1)
+    ]
+    start_time = _finite_float(journey.get("start_time"))
+    end_time = _finite_float(journey.get("end_time"))
+    duration = max(0.0, end_time - start_time)
+    total_travel_time = _sum_trip_numeric_field(trips, "travel_time")
+    if field == "trace_trip_count":
+        return float(len(trips))
+    if field == "trace_arc_option_count":
+        return float(len(arc_ids))
+    if field == "trace_unique_arc_option_count":
+        return float(len(set(arc_ids)))
+    if field == "trace_low_time_arc_count":
+        return float(sum(_arc_option_has_type(arc, "low_time") for arc in arc_ids))
+    if field == "trace_low_energy_arc_count":
+        return float(sum(_arc_option_has_type(arc, "low_energy") for arc in arc_ids))
+    if field == "trace_low_risk_arc_count":
+        return float(sum(_arc_option_has_type(arc, "low_risk") for arc in arc_ids))
+    if field == "trace_journey_start_time":
+        return start_time
+    if field == "trace_journey_end_time":
+        return end_time
+    if field == "trace_journey_duration":
+        return duration
+    if field == "trace_total_distance":
+        return _sum_trip_numeric_field(trips, "distance")
+    if field == "trace_total_energy":
+        return _sum_trip_numeric_field(trips, "energy")
+    if field == "trace_total_risk":
+        return _sum_trip_numeric_field(trips, "risk")
+    if field == "trace_total_travel_time":
+        return total_travel_time
+    if field == "trace_total_recharge_time":
+        return _sum_trip_numeric_field(trips, "recharge_time")
+    if field == "trace_max_load":
+        return _max_or_zero(_finite_float(trip.get("load")) for trip in trips)
+    if field == "trace_min_survival_energy":
+        return _min_or_zero(
+            _finite_float(trip.get("survival_energy"))
+            for trip in trips
+            if _has_finite_number(trip.get("survival_energy"))
+        )
+    if field == "trace_service_start_min":
+        return _min_or_zero(service_starts)
+    if field == "trace_service_start_max":
+        return _max_or_zero(service_starts)
+    if field == "trace_service_start_span":
+        return _max_or_zero(service_starts) - _min_or_zero(service_starts) if service_starts else 0.0
+    if field == "trace_inter_sortie_gap_sum":
+        return float(sum(gaps))
+    if field == "trace_inter_sortie_gap_max":
+        return _max_or_zero(gaps)
+    if field == "trace_idle_time_proxy":
+        return max(0.0, duration - total_travel_time)
+    if field == "trace_occupancy_bucket_count":
+        return float(
+            sum(
+                len(trip.get("occupancy") or {})
+                for trip in trips
+                if isinstance(trip.get("occupancy"), dict)
+            )
+        )
+    return 0.0
+
+
+def _slack_candidate_feature(
+    journey: dict[str, Any],
+    field: str,
+    *,
+    task_time_windows: dict[int, tuple[float, float]],
+) -> float:
+    slacks = _journey_task_time_window_slacks(journey, task_time_windows=task_time_windows)
+    if not slacks:
+        return 0.0
+    late_slacks = [late for _early, late in slacks]
+    early_slacks = [early for early, _late in slacks]
+    if field == "slack_min_late_time":
+        return _min_or_zero(late_slacks)
+    if field == "slack_mean_late_time":
+        return float(sum(late_slacks)) / float(len(late_slacks))
+    if field == "slack_min_early_time":
+        return _min_or_zero(early_slacks)
+    return 0.0
+
+
+def _journey_task_time_window_slacks(
+    journey: dict[str, Any],
+    *,
+    task_time_windows: dict[int, tuple[float, float]],
+) -> list[tuple[float, float]]:
+    service_start_by_task = _journey_service_start_by_task(journey)
+    values: list[tuple[float, float]] = []
+    for task_id, start_time in sorted(service_start_by_task.items()):
+        if task_id not in task_time_windows:
+            continue
+        ready, due = task_time_windows[task_id]
+        values.append((float(start_time - ready), float(due - start_time)))
+    return values
+
+
+def _journey_trip_dicts(journey: dict[str, Any]) -> list[dict[str, Any]]:
+    trips = journey.get("trips")
+    if not isinstance(trips, list):
+        return []
+    return [trip for trip in trips if isinstance(trip, dict)]
+
+
+def _journey_arc_option_ids(journey: dict[str, Any]) -> list[str]:
+    arc_ids: list[str] = []
+    for trip in _journey_trip_dicts(journey):
+        arc_ids.extend(str(value) for value in (trip.get("arc_option_ids") or []))
+    return arc_ids
+
+
+def _journey_service_start_times(journey: dict[str, Any]) -> list[float]:
+    values: list[float] = []
+    for trip in _journey_trip_dicts(journey):
+        service_start = trip.get("service_start")
+        if isinstance(service_start, dict):
+            values.extend(
+                _finite_float(value)
+                for value in service_start.values()
+                if _has_finite_number(value)
+            )
+    return values
+
+
+def _journey_service_start_by_task(journey: dict[str, Any]) -> dict[int, float]:
+    values: dict[int, float] = {}
+    for trip in _journey_trip_dicts(journey):
+        service_start = trip.get("service_start")
+        if not isinstance(service_start, dict):
+            continue
+        for task_id, value in service_start.items():
+            if _has_finite_number(value):
+                values[int(task_id)] = _finite_float(value)
+    return values
+
+
+def _candidate_arc_option_ids(journey: dict[str, Any]) -> list[str]:
+    arc_ids = _journey_arc_option_ids(journey)
+    if arc_ids:
+        return arc_ids
+    signature = journey.get("signature")
+    if not isinstance(signature, list):
+        return []
+    result: list[str] = []
+    for item in signature:
+        if isinstance(item, (list, tuple)) and len(item) >= 2 and isinstance(item[1], list):
+            result.extend(str(arc) for arc in item[1])
+    return result
+
+
+def _candidate_path_token_rows(journey: dict[str, Any]) -> tuple[list[int], list[int], list[int]]:
+    token_ids: list[int] = []
+    pair_ids: list[int] = []
+    type_ids: list[int] = []
+    for arc_id in _candidate_arc_option_ids(journey):
+        parsed = _parse_arc_option_id(arc_id)
+        token_ids.append(_hash_bucket(str(arc_id), PATH_TOKEN_HASH_BUCKET_COUNT))
+        pair_ids.append(
+            _hash_bucket(
+                f"{parsed.get('src', '')}->{parsed.get('dst', '')}",
+                PATH_PAIR_HASH_BUCKET_COUNT,
+            )
+        )
+        type_ids.append(int(PATH_TYPE_TO_ID.get(str(parsed.get("path_type", "")), 0)))
+    return token_ids, pair_ids, type_ids
+
+
+def _parse_arc_option_id(arc_id: str) -> dict[str, str]:
+    text = str(arc_id)
+    if "->" not in text:
+        return {"src": "", "dst": "", "path_type": "", "rank": ""}
+    src, tail = text.split("->", 1)
+    parts = tail.split(":")
+    return {
+        "src": src,
+        "dst": parts[0] if parts else "",
+        "path_type": parts[1] if len(parts) >= 2 else "",
+        "rank": parts[2] if len(parts) >= 3 else "",
+    }
+
+
+def _hash_bucket(value: str, bucket_count: int) -> int:
+    if int(bucket_count) <= 0:
+        raise ValueError("bucket_count must be positive")
+    digest = hashlib.sha1(str(value).encode("utf-8")).hexdigest()
+    return 1 + (int(digest[:16], 16) % int(bucket_count))
+
+
+def _padded_long_tensor(rows: list[list[int]]) -> torch.Tensor:
+    width = max(1, max((len(row) for row in rows), default=0))
+    padded = [row + [0] * (width - len(row)) for row in rows]
+    return torch.tensor(padded, dtype=torch.long)
+
+
+def _padded_bool_mask(rows: list[list[int]]) -> torch.Tensor:
+    width = max(1, max((len(row) for row in rows), default=0))
+    mask = [[idx < len(row) for idx in range(width)] for row in rows]
+    return torch.tensor(mask, dtype=torch.bool)
+
+
+def _graph_task_time_windows(graph: Any) -> dict[int, tuple[float, float]]:
+    schema = list(getattr(graph, "node_feature_schema", []) or [])
+    if "time_window_start" not in schema or "time_window_end" not in schema:
+        return {}
+    start_idx = schema.index("time_window_start")
+    end_idx = schema.index("time_window_end")
+    task_ids = {int(value) for value in graph.task_ids.tolist()}
+    windows: dict[int, tuple[float, float]] = {}
+    for node_idx, node_id in enumerate(graph.node_ids.tolist()):
+        task_id = int(node_id)
+        if task_id not in task_ids:
+            continue
+        windows[task_id] = (
+            float(graph.x[node_idx, start_idx].item()),
+            float(graph.x[node_idx, end_idx].item()),
+        )
+    return windows
+
+
+def _sum_trip_numeric_field(trips: list[dict[str, Any]], field: str) -> float:
+    return float(
+        sum(
+            _finite_float(trip.get(field))
+            for trip in trips
+            if _has_finite_number(trip.get(field))
+        )
+    )
+
+
+def _arc_option_has_type(arc_id: str, path_type: str) -> bool:
+    text = str(arc_id)
+    return f":{path_type}:" in text or text.endswith(f":{path_type}")
+
+
+def _has_finite_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and math.isfinite(float(value))
+
+
+def _max_or_zero(values: Iterable[float]) -> float:
+    values = list(values)
+    return max(values) if values else 0.0
+
+
+def _min_or_zero(values: Iterable[float]) -> float:
+    values = list(values)
+    return min(values) if values else 0.0
 
 
 def _context_feature(event: dict[str, Any], row: dict[str, Any], field: str) -> float:

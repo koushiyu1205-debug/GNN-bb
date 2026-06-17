@@ -100,12 +100,22 @@ def _candidate_priority_key(candidate: dict[str, Any]) -> tuple[float, ...]:
     )
 
 
+def _candidate_context_priority_score(candidate: dict[str, Any]) -> float:
+    return max(0.0, _float_value(candidate.get("context_priority_score"), 0.0))
+
+
 def _context_priority_key(candidates: list[dict[str, Any]]) -> tuple[float, ...]:
     best = max((_candidate_priority_key(candidate) for candidate in candidates), default=(0.0,))
+    context_priority_score = max(
+        (_candidate_context_priority_score(candidate) for candidate in candidates),
+        default=0.0,
+    )
     true_rc_values = [
         _float_value(candidate.get("best_true_reduced_cost"), 0.0) for candidate in candidates
     ]
     return (
+        1.0 if context_priority_score > 0.0 else 0.0,
+        context_priority_score,
         best[0],
         best[1],
         best[2],
@@ -232,6 +242,16 @@ def select_runbook_subset(
                 "missed_high_roi": missed,
                 "max_opportunity_score": max(
                     _float_value(candidate.get("opportunity_score")) for candidate in selected
+                ),
+                "max_context_priority_score": max(
+                    _candidate_context_priority_score(candidate) for candidate in selected
+                ),
+                "context_priority_actions": sorted(
+                    {
+                        str(candidate.get("context_priority_action") or "")
+                        for candidate in selected
+                        if str(candidate.get("context_priority_action") or "").strip()
+                    }
                 ),
                 "best_true_reduced_cost": min(
                     _float_value(candidate.get("best_true_reduced_cost")) for candidate in selected

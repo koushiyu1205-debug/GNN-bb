@@ -73,6 +73,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-accepted-batch-rate", type=float, default=0.02)
     parser.add_argument("--min-accepted-batch-roi", type=float, default=0.65)
     parser.add_argument("--min-accepted-batch-roi-ci-low", type=float, default=None)
+    parser.add_argument(
+        "--min-neighbor-accepted-batch-roi",
+        type=float,
+        default=None,
+        help=(
+            "Optional ROI-aware kNN shell: delay accepted candidates whose "
+            "nearest training neighbors have mean accepted_batch_roi below this value."
+        ),
+    )
+    parser.add_argument(
+        "--min-neighbor-accepted-batch-roi-ci-low",
+        type=float,
+        default=None,
+        help=(
+            "Optional ROI-aware kNN shell: delay accepted candidates whose "
+            "nearest training neighbors have ROI confidence lower bound below this value."
+        ),
+    )
     parser.add_argument("--max-false-high-priority-on-delay", type=float, default=0.01)
     parser.add_argument("--max-validation-false-safe-rate", type=float, default=0.02)
     parser.add_argument("--min-coverage", type=float, default=0.0)
@@ -82,6 +100,23 @@ def parse_args() -> argparse.Namespace:
         choices=("global", "scale", "family", "scale_family"),
         default="global",
     )
+    parser.add_argument(
+        "--candidate-admission-score-mode",
+        choices=("high_priority", "risk_adjusted_product", "risk_adjusted_rescue_window"),
+        default=None,
+        help="Audit-only override for the checkpoint candidate admission score mode.",
+    )
+    parser.add_argument("--candidate-delay-score-penalty", type=float, default=None)
+    parser.add_argument(
+        "--candidate-delay-gate-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Audit-only override for the candidate delay gate.",
+    )
+    parser.add_argument("--candidate-delay-risk-threshold", type=float, default=None)
+    parser.add_argument("--candidate-rescue-raw-score-threshold", type=float, default=None)
+    parser.add_argument("--candidate-rescue-delay-risk-threshold", type=float, default=None)
+    parser.add_argument("--candidate-rescue-delay-score-penalty", type=float, default=None)
     return parser.parse_args()
 
 
@@ -106,11 +141,14 @@ def main() -> int:
         min_accepted_batch_rate=float(args.min_accepted_batch_rate),
         min_accepted_batch_roi=float(args.min_accepted_batch_roi),
         min_accepted_batch_roi_ci_low=args.min_accepted_batch_roi_ci_low,
+        min_neighbor_accepted_batch_roi=args.min_neighbor_accepted_batch_roi,
+        min_neighbor_accepted_batch_roi_ci_low=args.min_neighbor_accepted_batch_roi_ci_low,
         max_false_high_priority_on_delay=float(args.max_false_high_priority_on_delay),
         max_validation_false_safe_rate=float(args.max_validation_false_safe_rate),
         min_coverage=float(args.min_coverage),
         decision_scope=str(args.decision_scope),
         threshold_grouping=str(args.threshold_grouping),
+        gate_config_overrides=_gate_config_overrides_from_args(args),
     )
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
     return 0 if summary["all_checks_pass"] else 1
@@ -136,11 +174,14 @@ def audit_batch_impact_knn_ood(
     min_accepted_batch_rate: float = 0.02,
     min_accepted_batch_roi: float = 0.65,
     min_accepted_batch_roi_ci_low: float | None = None,
+    min_neighbor_accepted_batch_roi: float | None = None,
+    min_neighbor_accepted_batch_roi_ci_low: float | None = None,
     max_false_high_priority_on_delay: float = 0.01,
     max_validation_false_safe_rate: float = 0.02,
     min_coverage: float = 0.0,
     decision_scope: str = "validation",
     threshold_grouping: str = "global",
+    gate_config_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     dataset_dir = Path(dataset_dir)
     checkpoint_data = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -166,7 +207,10 @@ def audit_batch_impact_knn_ood(
     if not train_records or not validation_records:
         raise ValueError("training summary split does not match batch-impact dataset")
 
-    thresholds = _selected_thresholds(training, checkpoint_data)
+    thresholds = _apply_threshold_overrides(
+        _selected_thresholds(training, checkpoint_data),
+        gate_config_overrides or {},
+    )
     guard_model = _build_guard_model(
         train_records=train_records,
         threshold_grouping=str(threshold_grouping),
@@ -181,6 +225,17 @@ def audit_batch_impact_knn_ood(
         candidate_delay_score_penalty=float(thresholds.get("candidate_delay_score_penalty", 0.0)),
         candidate_delay_gate_enabled=bool(thresholds.get("candidate_delay_gate_enabled", False)),
         candidate_delay_risk_threshold=float(thresholds.get("candidate_delay_risk_threshold", 1.0)),
+        candidate_rescue_raw_score_threshold=float(
+            thresholds.get("candidate_rescue_raw_score_threshold", 1.0)
+        ),
+        candidate_rescue_delay_risk_threshold=float(
+            thresholds.get("candidate_rescue_delay_risk_threshold", 1.0)
+        ),
+        candidate_rescue_delay_score_penalty=float(
+            thresholds.get("candidate_rescue_delay_score_penalty", 0.0)
+        ),
+        min_neighbor_accepted_batch_roi=min_neighbor_accepted_batch_roi,
+        min_neighbor_accepted_batch_roi_ci_low=min_neighbor_accepted_batch_roi_ci_low,
         knn_k=int(knn_k),
     )
 
@@ -301,12 +356,25 @@ def audit_batch_impact_knn_ood(
         ),
         "candidate_delay_gate_enabled": bool(thresholds.get("candidate_delay_gate_enabled", False)),
         "candidate_delay_risk_threshold": float(thresholds.get("candidate_delay_risk_threshold", 1.0)),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(0.0, float(thresholds.get("candidate_rescue_raw_score_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(0.0, float(thresholds.get("candidate_rescue_delay_risk_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(thresholds.get("candidate_rescue_delay_score_penalty", 0.0)),
+        ),
         "threshold_mode": (
             "family_local_batch_candidate"
             if thresholds.get("batch_thresholds_by_family")
             else "separate_batch_candidate"
         ),
         "threshold_grouping": str(threshold_grouping),
+        "gate_config_overrides": dict(sorted((gate_config_overrides or {}).items())),
         "threshold_group_info": _serializable_guard_model(guard_model),
         "knn_k": int(knn_k),
         "max_neighbor_delay_fraction": float(max_neighbor_delay_fraction),
@@ -319,6 +387,12 @@ def audit_batch_impact_knn_ood(
         "min_accepted_batch_rate": float(min_accepted_batch_rate),
         "min_accepted_batch_roi": float(min_accepted_batch_roi),
         "min_accepted_batch_roi_ci_low": float(min_accepted_batch_roi_ci_low_value),
+        "min_neighbor_accepted_batch_roi": None
+        if min_neighbor_accepted_batch_roi is None
+        else float(min_neighbor_accepted_batch_roi),
+        "min_neighbor_accepted_batch_roi_ci_low": None
+        if min_neighbor_accepted_batch_roi_ci_low is None
+        else float(min_neighbor_accepted_batch_roi_ci_low),
         "max_false_high_priority_on_delay": float(max_false_high_priority_on_delay),
         "max_validation_false_safe_rate": float(max_validation_false_safe_rate),
         "min_coverage": float(min_coverage),
@@ -421,7 +495,66 @@ def _selected_thresholds(training: dict[str, Any], checkpoint_data: dict[str, An
             1.0,
             max(0.0, float(metrics.get("candidate_delay_risk_threshold", 1.0))),
         ),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(0.0, float(metrics.get("candidate_rescue_raw_score_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(0.0, float(metrics.get("candidate_rescue_delay_risk_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(metrics.get("candidate_rescue_delay_score_penalty", 0.0)),
+        ),
     }
+
+
+def _gate_config_overrides_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    overrides: dict[str, Any] = {}
+    for key in (
+        "candidate_admission_score_mode",
+        "candidate_delay_score_penalty",
+        "candidate_delay_gate_enabled",
+        "candidate_delay_risk_threshold",
+        "candidate_rescue_raw_score_threshold",
+        "candidate_rescue_delay_risk_threshold",
+        "candidate_rescue_delay_score_penalty",
+    ):
+        value = getattr(args, key, None)
+        if value is not None:
+            overrides[key] = value
+    return overrides
+
+
+def _apply_threshold_overrides(
+    thresholds: dict[str, Any],
+    overrides: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(thresholds)
+    if not overrides:
+        return merged
+    if "candidate_admission_score_mode" in overrides:
+        mode = str(overrides["candidate_admission_score_mode"] or "high_priority")
+        if mode not in {"high_priority", "risk_adjusted_product", "risk_adjusted_rescue_window"}:
+            raise ValueError(f"invalid candidate_admission_score_mode override: {mode}")
+        merged["candidate_admission_score_mode"] = mode
+    for key in (
+        "candidate_delay_score_penalty",
+        "candidate_rescue_delay_score_penalty",
+    ):
+        if key in overrides:
+            merged[key] = max(0.0, float(overrides[key]))
+    for key in (
+        "candidate_delay_risk_threshold",
+        "candidate_rescue_raw_score_threshold",
+        "candidate_rescue_delay_risk_threshold",
+    ):
+        if key in overrides:
+            merged[key] = min(1.0, max(0.0, float(overrides[key])))
+    if "candidate_delay_gate_enabled" in overrides:
+        merged["candidate_delay_gate_enabled"] = bool(overrides["candidate_delay_gate_enabled"])
+    return merged
 
 
 def _score_dataset(
@@ -580,6 +713,11 @@ def _build_guard_model(
     candidate_delay_score_penalty: float,
     candidate_delay_gate_enabled: bool,
     candidate_delay_risk_threshold: float,
+    candidate_rescue_raw_score_threshold: float,
+    candidate_rescue_delay_risk_threshold: float,
+    candidate_rescue_delay_score_penalty: float,
+    min_neighbor_accepted_batch_roi: float | None,
+    min_neighbor_accepted_batch_roi_ci_low: float | None,
     knn_k: int,
 ) -> dict[str, Any]:
     global_guard = _guard_from_records(
@@ -597,6 +735,11 @@ def _build_guard_model(
         candidate_delay_score_penalty=float(candidate_delay_score_penalty),
         candidate_delay_gate_enabled=bool(candidate_delay_gate_enabled),
         candidate_delay_risk_threshold=float(candidate_delay_risk_threshold),
+        candidate_rescue_raw_score_threshold=float(candidate_rescue_raw_score_threshold),
+        candidate_rescue_delay_risk_threshold=float(candidate_rescue_delay_risk_threshold),
+        candidate_rescue_delay_score_penalty=float(candidate_rescue_delay_score_penalty),
+        min_neighbor_accepted_batch_roi=min_neighbor_accepted_batch_roi,
+        min_neighbor_accepted_batch_roi_ci_low=min_neighbor_accepted_batch_roi_ci_low,
     )
     groups: dict[str, dict[str, Any]] = {}
     skipped: dict[str, dict[str, Any]] = {}
@@ -629,6 +772,11 @@ def _build_guard_model(
                 candidate_delay_score_penalty=float(candidate_delay_score_penalty),
                 candidate_delay_gate_enabled=bool(candidate_delay_gate_enabled),
                 candidate_delay_risk_threshold=float(candidate_delay_risk_threshold),
+                candidate_rescue_raw_score_threshold=float(candidate_rescue_raw_score_threshold),
+                candidate_rescue_delay_risk_threshold=float(candidate_rescue_delay_risk_threshold),
+                candidate_rescue_delay_score_penalty=float(candidate_rescue_delay_score_penalty),
+                min_neighbor_accepted_batch_roi=min_neighbor_accepted_batch_roi,
+                min_neighbor_accepted_batch_roi_ci_low=min_neighbor_accepted_batch_roi_ci_low,
             )
     return {
         "threshold_grouping": str(threshold_grouping),
@@ -654,9 +802,15 @@ def _guard_from_records(
     candidate_delay_score_penalty: float,
     candidate_delay_gate_enabled: bool,
     candidate_delay_risk_threshold: float,
+    candidate_rescue_raw_score_threshold: float,
+    candidate_rescue_delay_risk_threshold: float,
+    candidate_rescue_delay_score_penalty: float,
+    min_neighbor_accepted_batch_roi: float | None,
+    min_neighbor_accepted_batch_roi_ci_low: float | None,
 ) -> dict[str, Any]:
     train_x = [record["embedding"] for record in records]
     train_y = [int(record["label_high_priority"]) for record in records]
+    train_roi = [float(record.get("accepted_batch_roi_label", 0.0)) for record in records]
     return {
         "group": str(group),
         "scope": str(scope),
@@ -675,8 +829,27 @@ def _guard_from_records(
         "candidate_delay_score_penalty": max(0.0, float(candidate_delay_score_penalty)),
         "candidate_delay_gate_enabled": bool(candidate_delay_gate_enabled),
         "candidate_delay_risk_threshold": min(1.0, max(0.0, float(candidate_delay_risk_threshold))),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(0.0, float(candidate_rescue_raw_score_threshold)),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(0.0, float(candidate_rescue_delay_risk_threshold)),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(candidate_rescue_delay_score_penalty),
+        ),
+        "min_neighbor_accepted_batch_roi": None
+        if min_neighbor_accepted_batch_roi is None
+        else float(min_neighbor_accepted_batch_roi),
+        "min_neighbor_accepted_batch_roi_ci_low": None
+        if min_neighbor_accepted_batch_roi_ci_low is None
+        else float(min_neighbor_accepted_batch_roi_ci_low),
         "train_x": train_x,
         "train_y": train_y,
+        "train_roi": train_roi,
         "train_count": len(records),
         "label_counts": _label_counts(records),
         "safe_radius": _safe_radius_threshold(
@@ -710,16 +883,53 @@ def _classify_record(
         record["embedding"],
         k=int(knn_k),
     )
+    neighbor_roi = _neighbor_roi_stats(
+        guard.get("train_x", []),
+        guard.get("train_roi", []),
+        record["embedding"],
+        k=int(knn_k),
+    )
     nearest_safe = _nearest_safe_distance(guard["train_x"], guard["train_y"], record["embedding"])
     safe_radius = guard["safe_radius"]
     in_radius = bool(safe_radius is not None and nearest_safe is not None and nearest_safe <= safe_radius)
-    predicted_indices, candidate_delay_gate_blocked, candidate_risk_adjusted_suppressed = _candidate_prediction_indices(
+    min_neighbor_roi = guard.get("min_neighbor_accepted_batch_roi")
+    min_neighbor_roi_ci_low = guard.get("min_neighbor_accepted_batch_roi_ci_low")
+    neighbor_roi_mean_pass = (
+        min_neighbor_roi is None
+        or (
+            neighbor_roi["neighbor_accepted_batch_roi_mean"] is not None
+            and float(neighbor_roi["neighbor_accepted_batch_roi_mean"]) >= float(min_neighbor_roi)
+        )
+    )
+    neighbor_roi_ci_pass = (
+        min_neighbor_roi_ci_low is None
+        or (
+            neighbor_roi["neighbor_accepted_batch_roi_ci_low"] is not None
+            and float(neighbor_roi["neighbor_accepted_batch_roi_ci_low"]) >= float(min_neighbor_roi_ci_low)
+        )
+    )
+    (
+        predicted_indices,
+        candidate_delay_gate_blocked,
+        candidate_risk_adjusted_suppressed,
+        candidate_rescue_window_eligible,
+        candidate_rescue_window_promoted,
+    ) = _candidate_prediction_indices(
         record,
         candidate_threshold=float(guard["candidate_threshold"]),
         candidate_admission_score_mode=str(guard.get("candidate_admission_score_mode", "high_priority")),
         candidate_delay_score_penalty=float(guard.get("candidate_delay_score_penalty", 0.0)),
         candidate_delay_gate_enabled=bool(guard.get("candidate_delay_gate_enabled", False)),
         candidate_delay_risk_threshold=float(guard.get("candidate_delay_risk_threshold", 1.0)),
+        candidate_rescue_raw_score_threshold=float(
+            guard.get("candidate_rescue_raw_score_threshold", 1.0)
+        ),
+        candidate_rescue_delay_risk_threshold=float(
+            guard.get("candidate_rescue_delay_risk_threshold", 1.0)
+        ),
+        candidate_rescue_delay_score_penalty=float(
+            guard.get("candidate_rescue_delay_score_penalty", 0.0)
+        ),
     )
     candidate_fp = _candidate_false_high_priority_on_delay(record, predicted_indices)
     candidate_predicted = len(predicted_indices)
@@ -759,6 +969,8 @@ def _classify_record(
         and not context_delay_fallback
         and neighbor_delay_fraction <= float(max_neighbor_delay_fraction)
         and in_radius
+        and neighbor_roi_mean_pass
+        and neighbor_roi_ci_pass
     )
     reason = "high_priority"
     if family_delay_fallback:
@@ -775,6 +987,10 @@ def _classify_record(
         reason = "knn_delay_fraction_delay_queue"
     elif not in_radius:
         reason = "ood_radius_delay_queue"
+    elif not neighbor_roi_ci_pass:
+        reason = "knn_roi_ci_low_delay_queue"
+    elif not neighbor_roi_mean_pass:
+        reason = "knn_roi_mean_delay_queue"
     return {
         **{key: record[key] for key in (
             "instance",
@@ -799,6 +1015,18 @@ def _classify_record(
         "candidate_delay_score_penalty": max(0.0, float(guard.get("candidate_delay_score_penalty", 0.0))),
         "candidate_delay_gate_enabled": bool(guard.get("candidate_delay_gate_enabled", False)),
         "candidate_delay_risk_threshold": float(guard.get("candidate_delay_risk_threshold", 1.0)),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(0.0, float(guard.get("candidate_rescue_raw_score_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(0.0, float(guard.get("candidate_rescue_delay_risk_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(guard.get("candidate_rescue_delay_score_penalty", 0.0)),
+        ),
         "batch_threshold": float(actual_batch_threshold),
         "global_batch_threshold": float(guard["batch_threshold"]),
         "candidate_ids": candidate_ids,
@@ -814,13 +1042,21 @@ def _classify_record(
         "candidate_predicted_high_priority_count": int(candidate_predicted),
         "candidate_delay_gate_blocked_count": int(candidate_delay_gate_blocked),
         "candidate_risk_adjusted_suppressed_count": int(candidate_risk_adjusted_suppressed),
+        "candidate_rescue_window_eligible_count": int(candidate_rescue_window_eligible),
+        "candidate_rescue_window_promoted_count": int(candidate_rescue_window_promoted),
         "candidate_false_high_priority_on_delay_count": int(candidate_fp),
         "candidate_delay_label_count": int(sum(int(value) for value in record["candidate_delay_labels"])),
         "neighbor_delay_fraction": float(neighbor_delay_fraction),
+        "neighbor_accepted_batch_roi_mean": neighbor_roi["neighbor_accepted_batch_roi_mean"],
+        "neighbor_accepted_batch_roi_ci_low": neighbor_roi["neighbor_accepted_batch_roi_ci_low"],
+        "neighbor_accepted_batch_roi_count": neighbor_roi["neighbor_accepted_batch_roi_count"],
+        "min_neighbor_accepted_batch_roi": min_neighbor_roi,
+        "min_neighbor_accepted_batch_roi_ci_low": min_neighbor_roi_ci_low,
         "nearest_safe_distance": None if nearest_safe is None else float(nearest_safe),
         "safe_radius": None if safe_radius is None else float(safe_radius),
         "is_ood": bool(not in_radius),
         "is_knn_unsafe": bool(neighbor_delay_fraction > float(max_neighbor_delay_fraction)),
+        "is_knn_roi_unsafe": bool(not neighbor_roi_mean_pass or not neighbor_roi_ci_pass),
         "is_label_unsafe": bool(int(record["label_high_priority"]) == 0 or candidate_fp > 0),
         "decision": int(decision),
         "decision_name": "HIGH_PRIORITY" if decision else "DELAY_QUEUE",
@@ -836,6 +1072,36 @@ def _batch_threshold_for_record(record: dict[str, Any], guard: dict[str, Any]) -
     return float(thresholds.get(family, guard["batch_threshold"]))
 
 
+def _neighbor_roi_stats(
+    train_x: list[list[float]],
+    train_roi: list[float],
+    query: list[float],
+    *,
+    k: int,
+) -> dict[str, Any]:
+    pairs: list[tuple[float, float]] = []
+    for vector, roi in zip(train_x, train_roi):
+        pairs.append((_squared_distance(vector, query), float(roi)))
+    neighbors = [roi for _, roi in sorted(pairs, key=lambda item: item[0])[: max(1, int(k))]]
+    mean = None if not neighbors else sum(neighbors) / float(len(neighbors))
+    return {
+        "neighbor_accepted_batch_roi_count": len(neighbors),
+        "neighbor_accepted_batch_roi_mean": None if mean is None else float(mean),
+        "neighbor_accepted_batch_roi_ci_low": _mean_ci_low(neighbors),
+    }
+
+
+def _squared_distance(left: list[float], right: list[float]) -> float:
+    total = 0.0
+    width = min(len(left), len(right))
+    for index in range(width):
+        delta = float(left[index]) - float(right[index])
+        total += delta * delta
+    if len(left) != len(right):
+        total += float(abs(len(left) - len(right))) * 1.0e9
+    return total
+
+
 def _candidate_prediction_indices(
     record: dict[str, Any],
     *,
@@ -844,7 +1110,10 @@ def _candidate_prediction_indices(
     candidate_delay_score_penalty: float,
     candidate_delay_gate_enabled: bool,
     candidate_delay_risk_threshold: float,
-) -> tuple[list[int], int, int]:
+    candidate_rescue_raw_score_threshold: float = 1.0,
+    candidate_rescue_delay_risk_threshold: float = 1.0,
+    candidate_rescue_delay_score_penalty: float = 0.0,
+) -> tuple[list[int], int, int, int, int]:
     candidate_scores = [float(score) for score in record.get("candidate_scores", [])]
     delay_scores = [float(score) for score in record.get("candidate_delay_scores", [])]
     if len(delay_scores) != len(candidate_scores):
@@ -855,32 +1124,110 @@ def _candidate_prediction_indices(
         delay_scores,
         candidate_admission_score_mode=candidate_admission_score_mode,
         candidate_delay_score_penalty=candidate_delay_score_penalty,
+        candidate_rescue_raw_score_threshold=candidate_rescue_raw_score_threshold,
+        candidate_rescue_delay_risk_threshold=candidate_rescue_delay_risk_threshold,
+        candidate_rescue_delay_score_penalty=candidate_rescue_delay_score_penalty,
+    )
+    base_scores = _candidate_base_admission_scores(
+        candidate_scores,
+        delay_scores,
+        candidate_admission_score_mode=candidate_admission_score_mode,
+        candidate_delay_score_penalty=candidate_delay_score_penalty,
     )
     predicted: list[int] = []
     blocked = 0
     suppressed = 0
+    rescue_eligible = 0
+    rescue_promoted = 0
     delay_threshold = min(1.0, max(0.0, float(candidate_delay_risk_threshold)))
+    mode = _candidate_admission_score_mode(candidate_admission_score_mode)
     for idx, score in enumerate(admission_scores):
+        eligible = _candidate_rescue_window_eligible(
+            candidate_scores[idx],
+            delay_scores[idx],
+            candidate_admission_score_mode=mode,
+            candidate_rescue_raw_score_threshold=candidate_rescue_raw_score_threshold,
+            candidate_rescue_delay_risk_threshold=candidate_rescue_delay_risk_threshold,
+        )
+        if eligible:
+            rescue_eligible += 1
+        base_score = float(base_scores[idx]) if idx < len(base_scores) else float(score)
         if (
-            _candidate_admission_score_mode(candidate_admission_score_mode) != "high_priority"
+            mode != "high_priority"
             and float(candidate_scores[idx]) >= float(candidate_threshold)
-            and float(score) < float(candidate_threshold)
+            and base_score < float(candidate_threshold)
         ):
             suppressed += 1
         if float(score) < float(candidate_threshold):
             continue
-        if bool(candidate_delay_gate_enabled) and float(delay_scores[idx]) > delay_threshold:
+        bypass_delay_gate = bool(eligible and mode == "risk_adjusted_rescue_window")
+        if bool(candidate_delay_gate_enabled) and float(delay_scores[idx]) > delay_threshold and not bypass_delay_gate:
             blocked += 1
             continue
+        if mode == "risk_adjusted_rescue_window" and eligible and (
+            base_score < float(candidate_threshold)
+            or (bool(candidate_delay_gate_enabled) and float(delay_scores[idx]) > delay_threshold)
+        ):
+            rescue_promoted += 1
         predicted.append(int(idx))
-    return predicted, int(blocked), int(suppressed)
+    return (
+        predicted,
+        int(blocked),
+        int(suppressed),
+        int(rescue_eligible),
+        int(rescue_promoted),
+    )
 
 
 def _candidate_admission_score_mode(mode: str) -> str:
     mode = str(mode or "high_priority")
-    if mode not in {"high_priority", "risk_adjusted_product"}:
+    if mode not in {"high_priority", "risk_adjusted_product", "risk_adjusted_rescue_window"}:
         return "high_priority"
     return mode
+
+
+def _risk_adjusted_scores(
+    candidate_scores: list[float],
+    delay_scores: list[float],
+    *,
+    penalty: float,
+) -> list[float]:
+    return [
+        max(0.0, min(1.0, float(candidate_score) * (max(0.0, min(1.0, 1.0 - float(delay_score))) ** max(0.0, float(penalty)))))
+        for candidate_score, delay_score in zip(candidate_scores, delay_scores)
+    ]
+
+
+def _candidate_base_admission_scores(
+    candidate_scores: list[float],
+    delay_scores: list[float],
+    *,
+    candidate_admission_score_mode: str,
+    candidate_delay_score_penalty: float,
+) -> list[float]:
+    if _candidate_admission_score_mode(candidate_admission_score_mode) == "high_priority":
+        return [float(score) for score in candidate_scores]
+    return _risk_adjusted_scores(
+        candidate_scores,
+        delay_scores,
+        penalty=candidate_delay_score_penalty,
+    )
+
+
+def _candidate_rescue_window_eligible(
+    raw_score: float,
+    delay_score: float,
+    *,
+    candidate_admission_score_mode: str,
+    candidate_rescue_raw_score_threshold: float,
+    candidate_rescue_delay_risk_threshold: float,
+) -> bool:
+    if _candidate_admission_score_mode(candidate_admission_score_mode) != "risk_adjusted_rescue_window":
+        return False
+    return (
+        float(raw_score) >= min(1.0, max(0.0, float(candidate_rescue_raw_score_threshold)))
+        and float(delay_score) <= min(1.0, max(0.0, float(candidate_rescue_delay_risk_threshold)))
+    )
 
 
 def _candidate_admission_scores(
@@ -889,13 +1236,36 @@ def _candidate_admission_scores(
     *,
     candidate_admission_score_mode: str,
     candidate_delay_score_penalty: float,
+    candidate_rescue_raw_score_threshold: float = 1.0,
+    candidate_rescue_delay_risk_threshold: float = 1.0,
+    candidate_rescue_delay_score_penalty: float = 0.0,
 ) -> list[float]:
-    if _candidate_admission_score_mode(candidate_admission_score_mode) != "risk_adjusted_product":
-        return [float(score) for score in candidate_scores]
-    penalty = max(0.0, float(candidate_delay_score_penalty))
+    mode = _candidate_admission_score_mode(candidate_admission_score_mode)
+    base_scores = _candidate_base_admission_scores(
+        candidate_scores,
+        delay_scores,
+        candidate_admission_score_mode=mode,
+        candidate_delay_score_penalty=candidate_delay_score_penalty,
+    )
+    if mode != "risk_adjusted_rescue_window":
+        return base_scores
+    rescue_scores = _risk_adjusted_scores(
+        candidate_scores,
+        delay_scores,
+        penalty=candidate_rescue_delay_score_penalty,
+    )
     return [
-        max(0.0, min(1.0, float(candidate_score) * (max(0.0, min(1.0, 1.0 - float(delay_score))) ** penalty)))
-        for candidate_score, delay_score in zip(candidate_scores, delay_scores)
+        max(float(base_score), float(rescue_scores[idx]))
+        if idx < len(rescue_scores)
+        and _candidate_rescue_window_eligible(
+            candidate_scores[idx],
+            delay_scores[idx],
+            candidate_admission_score_mode=mode,
+            candidate_rescue_raw_score_threshold=candidate_rescue_raw_score_threshold,
+            candidate_rescue_delay_risk_threshold=candidate_rescue_delay_risk_threshold,
+        )
+        else float(base_score)
+        for idx, base_score in enumerate(base_scores)
     ]
 
 
@@ -914,6 +1284,7 @@ def _decision_metrics(records: list[dict[str, Any]], *, confidence_z: float = 1.
     ood = [record for record in records if bool(record.get("is_ood", False))]
     non_ood = [record for record in records if not bool(record.get("is_ood", False))]
     knn_unsafe = [record for record in records if bool(record.get("is_knn_unsafe", False))]
+    knn_roi_unsafe = [record for record in records if bool(record.get("is_knn_roi_unsafe", False))]
     label_unsafe = [record for record in records if bool(record.get("is_label_unsafe", False))]
     unsafe_union = [
         record
@@ -924,6 +1295,9 @@ def _decision_metrics(records: list[dict[str, Any]], *, confidence_z: float = 1.
     ]
     accepted_ood = [record for record in accepted if bool(record.get("is_ood", False))]
     accepted_knn_unsafe = [record for record in accepted if bool(record.get("is_knn_unsafe", False))]
+    accepted_knn_roi_unsafe = [
+        record for record in accepted if bool(record.get("is_knn_roi_unsafe", False))
+    ]
     accepted_label_unsafe = [record for record in accepted if bool(record.get("is_label_unsafe", False))]
     accepted_unsafe_union = [
         record
@@ -966,6 +1340,7 @@ def _decision_metrics(records: list[dict[str, Any]], *, confidence_z: float = 1.
         "safe_precision_ci_low": safe_precision_ci_low,
         "unsafe_label_count": int(len(label_unsafe)),
         "knn_unsafe_count": int(len(knn_unsafe)),
+        "knn_roi_unsafe_count": int(len(knn_roi_unsafe)),
         "unsafe_or_ood_count": int(len(unsafe_union)),
         "false_high_priority_on_delay_count": int(false_hp_count),
         "delay_label_count": int(delay_label_count),
@@ -974,6 +1349,11 @@ def _decision_metrics(records: list[dict[str, Any]], *, confidence_z: float = 1.
         "false_safe_rate_ood": _safe_divide(len(accepted_ood), len(ood)),
         "false_safe_knn_unsafe_count": int(len(accepted_knn_unsafe)),
         "false_safe_rate_knn_unsafe": _safe_divide(len(accepted_knn_unsafe), len(knn_unsafe)),
+        "accepted_knn_roi_unsafe_count": int(len(accepted_knn_roi_unsafe)),
+        "accepted_knn_roi_unsafe_rate": _safe_divide(
+            len(accepted_knn_roi_unsafe),
+            len(knn_roi_unsafe),
+        ),
         "false_safe_label_unsafe_count": int(len(accepted_label_unsafe)),
         "false_safe_rate_label_unsafe": _safe_divide(len(accepted_label_unsafe), len(label_unsafe)),
         "false_positive_context_count": int(len(false_positive_contexts)),
@@ -1105,6 +1485,28 @@ def _serializable_guard(guard: dict[str, Any]) -> dict[str, Any]:
             str(value) for value in guard.get("context_delay_fallback_contexts", [])
         ],
         "candidate_threshold": float(guard["candidate_threshold"]),
+        "candidate_admission_score_mode": str(guard.get("candidate_admission_score_mode", "high_priority")),
+        "candidate_delay_score_penalty": max(0.0, float(guard.get("candidate_delay_score_penalty", 0.0))),
+        "candidate_delay_gate_enabled": bool(guard.get("candidate_delay_gate_enabled", False)),
+        "candidate_delay_risk_threshold": float(guard.get("candidate_delay_risk_threshold", 1.0)),
+        "candidate_rescue_raw_score_threshold": min(
+            1.0,
+            max(0.0, float(guard.get("candidate_rescue_raw_score_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_risk_threshold": min(
+            1.0,
+            max(0.0, float(guard.get("candidate_rescue_delay_risk_threshold", 1.0))),
+        ),
+        "candidate_rescue_delay_score_penalty": max(
+            0.0,
+            float(guard.get("candidate_rescue_delay_score_penalty", 0.0)),
+        ),
+        "min_neighbor_accepted_batch_roi": None
+        if guard.get("min_neighbor_accepted_batch_roi") is None
+        else float(guard["min_neighbor_accepted_batch_roi"]),
+        "min_neighbor_accepted_batch_roi_ci_low": None
+        if guard.get("min_neighbor_accepted_batch_roi_ci_low") is None
+        else float(guard["min_neighbor_accepted_batch_roi_ci_low"]),
         "train_count": int(guard["train_count"]),
         "label_counts": guard["label_counts"],
         "safe_radius": None if guard["safe_radius"] is None else float(guard["safe_radius"]),
@@ -1166,8 +1568,15 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"validation_label_counts = {summary['validation_label_counts']}",
         f"batch_threshold = {summary['batch_threshold']}",
         f"candidate_threshold = {summary['candidate_threshold']}",
+        f"candidate_admission_score_mode = {summary['candidate_admission_score_mode']}",
+        f"candidate_delay_score_penalty = {summary['candidate_delay_score_penalty']}",
         f"candidate_delay_gate_enabled = {str(summary['candidate_delay_gate_enabled']).lower()}",
         f"candidate_delay_risk_threshold = {summary['candidate_delay_risk_threshold']}",
+        f"candidate_rescue_raw_score_threshold = {summary['candidate_rescue_raw_score_threshold']}",
+        f"candidate_rescue_delay_risk_threshold = {summary['candidate_rescue_delay_risk_threshold']}",
+        f"candidate_rescue_delay_score_penalty = {summary['candidate_rescue_delay_score_penalty']}",
+        f"min_neighbor_accepted_batch_roi = {summary['min_neighbor_accepted_batch_roi']}",
+        f"min_neighbor_accepted_batch_roi_ci_low = {summary['min_neighbor_accepted_batch_roi_ci_low']}",
         f"threshold_grouping = {summary['threshold_grouping']}",
         f"decision_scope = {summary['decision_scope']}",
         f"decision_record_count = {summary['decision_record_count']}",
