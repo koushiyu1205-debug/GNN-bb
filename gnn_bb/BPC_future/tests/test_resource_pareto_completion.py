@@ -262,6 +262,7 @@ class ResourceParetoCompletionTests(unittest.TestCase):
             completion_bound_phase="after_retry",
         )
         self.assertFalse(disabled.direct_journey_label_available_mask_completion_bound_enabled)
+        self.assertTrue(disabled.direct_journey_label_available_mask_completion_bound_skip_with_unique_route)
         self.assertFalse(disabled_mode["available_mask_completion_bound"])
 
         enabled, enabled_mode = _journey_certificate_pricing_config(
@@ -281,9 +282,27 @@ class ResourceParetoCompletionTests(unittest.TestCase):
         self.assertTrue(enabled.direct_journey_label_available_mask_completion_bound_enabled)
         self.assertEqual(enabled.direct_journey_label_available_mask_completion_bound_max_subset_size, 4)
         self.assertEqual(enabled.direct_journey_label_available_mask_completion_bound_max_states, 77)
+        self.assertTrue(enabled.direct_journey_label_available_mask_completion_bound_skip_with_unique_route)
         self.assertTrue(enabled_mode["available_mask_completion_bound"])
         self.assertEqual(enabled_mode["available_mask_completion_bound_max_subset_size"], 4)
         self.assertEqual(enabled_mode["available_mask_completion_bound_max_states"], 77)
+        self.assertTrue(enabled_mode["available_mask_completion_bound_skip_with_unique_route"])
+
+        combined, combined_mode = _journey_certificate_pricing_config(
+            {
+                "journey_certificate_completion_bound_enabled": True,
+                "journey_certificate_completion_bound_after_retry_enabled": True,
+                "journey_available_mask_completion_bound_enabled": True,
+                "journey_available_mask_completion_bound_skip_with_unique_route": False,
+            },
+            base,
+            certificate_candidate=True,
+            certificate_flat_rounds=1,
+            certificate_no_column_rounds=1,
+            completion_bound_phase="after_retry",
+        )
+        self.assertFalse(combined.direct_journey_label_available_mask_completion_bound_skip_with_unique_route)
+        self.assertFalse(combined_mode["available_mask_completion_bound_skip_with_unique_route"])
 
         with self.assertRaisesRegex(ValueError, "available_mask_completion_bound_max_subset_size"):
             _validate_journey_required_components(

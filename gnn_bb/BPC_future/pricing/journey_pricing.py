@@ -171,6 +171,7 @@ class JourneyPricingConfig:
     direct_journey_label_available_mask_completion_bound_enabled: bool = False
     direct_journey_label_available_mask_completion_bound_max_subset_size: int = 6
     direct_journey_label_available_mask_completion_bound_max_states: int = 200000
+    direct_journey_label_available_mask_completion_bound_skip_with_unique_route: bool = True
     direct_journey_label_completion_bound_unique_task_helper_enabled: bool = False
     direct_journey_label_completion_bound_unique_route_helper_enabled: bool = False
     direct_journey_label_completion_bound_unique_route_exact_first_step_enabled: bool = False
@@ -208,6 +209,7 @@ class JourneyPricingConfig:
     profile_labeling_task_set_superset_pruning_enabled: bool = False
     profile_labeling_priority_future_dual_weight: float = 0.0
     profile_labeling_priority_cut_dual_weight: float = 0.0
+    task_count: int = 0
     profile_cross_dominance_enabled: bool = True
     max_returned_journeys: int = 1
     duplicate_retry_factor: int = 4
@@ -427,6 +429,13 @@ class JourneyPricingResult:
     direct_label_profile_pre_dominance_time: float = 0.0
     direct_label_profile_dominance_time: float = 0.0
     direct_label_profile_completion_time: float = 0.0
+    direct_label_profile_task_filter_time: float = 0.0
+    direct_label_profile_option_lookup_time: float = 0.0
+    direct_label_profile_label_create_time: float = 0.0
+    direct_label_profile_priority_queue_time: float = 0.0
+    direct_label_profile_completed_process_time: float = 0.0
+    direct_label_profile_completed_dedup_time: float = 0.0
+    direct_label_profile_stream_callback_time: float = 0.0
     direct_label_profile_partial_bound_dual_sum_time: float = 0.0
     direct_label_profile_partial_bound_unique_task_time: float = 0.0
     direct_label_profile_partial_bound_unique_route_time: float = 0.0
@@ -5844,6 +5853,13 @@ def _price_journeys_by_direct_labels(
         "pre_dominance_ns": 0,
         "dominance_ns": 0,
         "completion_ns": 0,
+        "task_filter_ns": 0,
+        "option_lookup_ns": 0,
+        "label_create_ns": 0,
+        "priority_queue_ns": 0,
+        "completed_process_ns": 0,
+        "completed_dedup_ns": 0,
+        "stream_callback_ns": 0,
         "partial_bound_dual_sum_ns": 0,
         "partial_bound_unique_task_ns": 0,
         "partial_bound_unique_route_ns": 0,
@@ -6604,6 +6620,34 @@ def _price_journeys_by_direct_labels(
                 float(direct_label_profile_stats.get("completion_ns", 0)) / 1.0e9,
                 9,
             ),
+            "direct_label_profile_task_filter_time": round(
+                float(direct_label_profile_stats.get("task_filter_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_option_lookup_time": round(
+                float(direct_label_profile_stats.get("option_lookup_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_label_create_time": round(
+                float(direct_label_profile_stats.get("label_create_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_priority_queue_time": round(
+                float(direct_label_profile_stats.get("priority_queue_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_completed_process_time": round(
+                float(direct_label_profile_stats.get("completed_process_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_completed_dedup_time": round(
+                float(direct_label_profile_stats.get("completed_dedup_ns", 0)) / 1.0e9,
+                9,
+            ),
+            "direct_label_profile_stream_callback_time": round(
+                float(direct_label_profile_stats.get("stream_callback_ns", 0)) / 1.0e9,
+                9,
+            ),
             "direct_label_profile_partial_bound_dual_sum_time": round(
                 float(direct_label_profile_stats.get("partial_bound_dual_sum_ns", 0)) / 1.0e9,
                 9,
@@ -7127,6 +7171,9 @@ def _price_journeys_by_direct_labels(
                     unique_route_bound=unique_route_bound,
                     positive_cut_reward_bound=positive_cut_reward_bound,
                     max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                    available_mask_completion_bound_skip_with_unique_route=bool(
+                        config.direct_journey_label_available_mask_completion_bound_skip_with_unique_route
+                    ),
                     cut_duals=cut_duals,
                     cuts=cuts,
                     cut_masks=cut_masks,
@@ -7216,6 +7263,9 @@ def _price_journeys_by_direct_labels(
                     unique_route_bound=unique_route_bound,
                     positive_cut_reward_bound=positive_cut_reward_bound,
                     max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                    available_mask_completion_bound_skip_with_unique_route=bool(
+                        config.direct_journey_label_available_mask_completion_bound_skip_with_unique_route
+                    ),
                     cut_duals=cut_duals,
                     cuts=cuts,
                     cut_masks=cut_masks,
@@ -7559,9 +7609,11 @@ def _direct_next_sortie_trips(
             continue
         for task in task_order:
             _profile_inc("extension_attempts")
+            _task_filter_started_ns = time.perf_counter_ns() if profile_enabled else 0
             task = int(task)
             global_bit = 1 << task_to_bit[task]
             if int(used_mask) & global_bit or label.mask & global_bit:
+                _profile_add("task_filter_ns", _task_filter_started_ns)
                 continue
             sequence = (*label.sequence, task)
             local_mask = label.mask | global_bit
@@ -7571,17 +7623,22 @@ def _direct_next_sortie_trips(
                 task_to_bit,
                 final=False,
             ):
+                _profile_add("task_filter_ns", _task_filter_started_ns)
                 continue
             if superset_bound_cache is not None:
                 superset_lb = superset_bound_cache.value(local_mask, available_mask)
                 if superset_lb is not None and superset_lb >= threshold:
+                    _profile_add("task_filter_ns", _task_filter_started_ns)
                     continue
+            _profile_add("task_filter_ns", _task_filter_started_ns)
             _resource_precheck_started_ns = time.perf_counter_ns() if profile_enabled else 0
             if not _sequence_resource_precheck(data, sequence):
                 _profile_add("resource_precheck_ns", _resource_precheck_started_ns)
                 continue
             _profile_add("resource_precheck_ns", _resource_precheck_started_ns)
+            _option_lookup_started_ns = time.perf_counter_ns() if profile_enabled else 0
             options = data.options(int(label.last), task)
+            _profile_add("option_lookup_ns", _option_lookup_started_ns)
             if not options:
                 continue
             for option in options:
@@ -7611,7 +7668,9 @@ def _direct_next_sortie_trips(
                         bound_checked,
                         bound_pruned,
                     )
+                _label_create_started_ns = time.perf_counter_ns() if profile_enabled else 0
                 new_label = _SortiePartialLabel(sequence=sequence, mask=local_mask, last=task, partial=extended)
+                _profile_add("label_create_ns", _label_create_started_ns)
                 label_key = (local_mask, task)
                 labels_for_key = labels_by_key.get(label_key)
                 if labels_for_key is None:
@@ -7673,6 +7732,9 @@ def _direct_next_sortie_trips(
                         unique_route_bound=unique_route_bound,
                         positive_cut_reward_bound=positive_cut_reward_bound,
                         max_tasks_per_sortie=max_tasks,
+                        available_mask_completion_bound_skip_with_unique_route=bool(
+                            config.direct_journey_label_available_mask_completion_bound_skip_with_unique_route
+                        ),
                         cut_duals=cut_duals,
                         cuts=cuts,
                         cut_masks=cut_masks,
@@ -7716,6 +7778,7 @@ def _direct_next_sortie_trips(
                         bound_checked,
                         bound_pruned,
                     )
+                _priority_queue_started_ns = time.perf_counter_ns() if profile_enabled else 0
                 priority = (
                     _sortie_partial_label_priority(new_label, duals)
                     if completion_bound_priority is None
@@ -7733,6 +7796,7 @@ def _direct_next_sortie_trips(
                         new_label,
                     ),
                 )
+                _profile_add("priority_queue_ns", _priority_queue_started_ns)
                 _profile_inc("completion_calls")
                 _completion_started_ns = time.perf_counter_ns() if profile_enabled else 0
                 (
@@ -7783,15 +7847,24 @@ def _direct_next_sortie_trips(
                         bound_checked,
                         bound_pruned,
                     )
+                _completed_process_started_ns = time.perf_counter_ns() if profile_enabled else 0
                 for trip, contribution, trip_mask in completed:
+                    _completed_dedup_started_ns = time.perf_counter_ns() if profile_enabled else 0
                     old = trips_by_signature.get(trip.signature)
                     if old is None or contribution < old[1] - 1.0e-9:
                         trips_by_signature[trip.signature] = (trip, contribution, trip_mask)
-                        if completed_trip_callback is not None and completed_trip_callback(
-                            trip,
-                            float(contribution),
-                            int(trip_mask),
-                        ):
+                        _profile_add("completed_dedup_ns", _completed_dedup_started_ns)
+                        callback_ready = False
+                        if completed_trip_callback is not None:
+                            _stream_callback_started_ns = time.perf_counter_ns() if profile_enabled else 0
+                            callback_ready = completed_trip_callback(
+                                trip,
+                                float(contribution),
+                                int(trip_mask),
+                            )
+                            _profile_add("stream_callback_ns", _stream_callback_started_ns)
+                        if callback_ready:
+                            _profile_add("completed_process_ns", _completed_process_started_ns)
                             return _return(
                                 list(trips_by_signature.values()),
                                 generated,
@@ -7800,6 +7873,9 @@ def _direct_next_sortie_trips(
                                 bound_checked,
                                 bound_pruned,
                         )
+                    else:
+                        _profile_add("completed_dedup_ns", _completed_dedup_started_ns)
+                _profile_add("completed_process_ns", _completed_process_started_ns)
                 if soft_return_limit > 0 and len(trips_by_signature) >= soft_return_limit:
                     return _return(
                         list(trips_by_signature.values()),
@@ -7865,6 +7941,7 @@ def _direct_sortie_partial_completion_bound_check(
     cuts: tuple[FutureCut, ...],
     cut_masks: tuple[int, ...],
     eps: float,
+    available_mask_completion_bound_skip_with_unique_route: bool = True,
     completion_bound_stats: dict[str, int] | None = None,
     optimistic_cut_value_cache: dict[int, float] | None = None,
     partial_cover_dual_sum_cache: dict[int, float] | None = None,
@@ -8001,6 +8078,7 @@ def _direct_sortie_partial_completion_bound_check(
     unique_route_amcb_skip = (
         unique_route_bound is not None
         and bool(getattr(unique_route_bound, "enabled", True))
+        and bool(available_mask_completion_bound_skip_with_unique_route)
     )
     if (
         amcb_bound is not None
@@ -8094,6 +8172,7 @@ def _direct_completed_journey_suffix_optimistic_objective(
     cut_duals: dict[int, float],
     cuts: tuple[FutureCut, ...],
     cut_masks: tuple[int, ...],
+    available_mask_completion_bound_skip_with_unique_route: bool = True,
 ) -> tuple[float, str, float]:
     suffix_lb = 0.0
     suffix_lb_winner = "none"
@@ -8116,6 +8195,7 @@ def _direct_completed_journey_suffix_optimistic_objective(
     unique_route_amcb_skip = (
         unique_route_bound is not None
         and bool(getattr(unique_route_bound, "enabled", True))
+        and bool(available_mask_completion_bound_skip_with_unique_route)
     )
     if (
         amcb_bound is not None
@@ -8177,6 +8257,7 @@ def _direct_completed_journey_suffix_bound_prunes(
     cuts: tuple[FutureCut, ...],
     cut_masks: tuple[int, ...],
     eps: float,
+    available_mask_completion_bound_skip_with_unique_route: bool = True,
     completion_bound_stats: dict[str, int] | None = None,
 ) -> bool:
     optimistic_objective, suffix_lb_winner, future_cut_reward = _direct_completed_journey_suffix_optimistic_objective(
@@ -8192,6 +8273,9 @@ def _direct_completed_journey_suffix_bound_prunes(
         unique_route_bound=unique_route_bound,
         positive_cut_reward_bound=positive_cut_reward_bound,
         max_tasks_per_sortie=int(max_tasks_per_sortie),
+        available_mask_completion_bound_skip_with_unique_route=bool(
+            available_mask_completion_bound_skip_with_unique_route
+        ),
         cut_duals=cut_duals,
         cuts=cuts,
         cut_masks=cut_masks,
@@ -8522,6 +8606,9 @@ def _complete_direct_sortie_label_trips(
                 unique_route_bound=unique_route_bound,
                 positive_cut_reward_bound=positive_cut_reward_bound,
                 max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                available_mask_completion_bound_skip_with_unique_route=bool(
+                    config.direct_journey_label_available_mask_completion_bound_skip_with_unique_route
+                ),
                 cut_duals=cut_duals,
                 cuts=cuts,
                 cut_masks=cut_masks,

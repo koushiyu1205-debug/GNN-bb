@@ -20,6 +20,47 @@ DEFAULT_REPORT = Path(
     "20260623_bpc_future_journey_completion_tail_profile_zh.md"
 )
 
+PROFILE_TIME_FIELDS = (
+    "direct_label_profile_next_sortie_total_time",
+    "direct_label_profile_resource_precheck_time",
+    "direct_label_profile_extend_time",
+    "direct_label_profile_bound_check_time",
+    "direct_label_profile_pre_dominance_time",
+    "direct_label_profile_dominance_time",
+    "direct_label_profile_completion_time",
+    "direct_label_profile_task_filter_time",
+    "direct_label_profile_option_lookup_time",
+    "direct_label_profile_label_create_time",
+    "direct_label_profile_priority_queue_time",
+    "direct_label_profile_completed_process_time",
+    "direct_label_profile_completed_dedup_time",
+    "direct_label_profile_stream_callback_time",
+    "direct_label_profile_partial_bound_dual_sum_time",
+    "direct_label_profile_partial_bound_unique_task_time",
+    "direct_label_profile_partial_bound_unique_route_time",
+    "direct_label_profile_partial_bound_completion_route_time",
+    "direct_label_profile_partial_bound_resource_pareto_time",
+    "direct_label_profile_partial_bound_cut_time",
+)
+
+PROFILE_COUNT_FIELDS = (
+    "direct_label_profile_next_sortie_calls",
+    "direct_label_profile_partial_heap_pops",
+    "direct_label_profile_extension_attempts",
+    "direct_label_profile_option_attempts",
+    "direct_label_profile_bound_checks",
+    "direct_label_profile_dominance_checks",
+    "direct_label_profile_completion_calls",
+    "direct_label_profile_pre_dominance_checks",
+    "direct_label_profile_pre_dominance_pruned",
+    "direct_label_profile_partial_bucket_count",
+    "direct_label_profile_partial_bucket_label_count",
+)
+
+PROFILE_MAX_FIELDS = (
+    "direct_label_profile_partial_bucket_max_size",
+)
+
 
 def _iter_jsonl(paths: Iterable[Path]) -> Iterable[Path]:
     for path in paths:
@@ -96,6 +137,39 @@ def _sum(records: Iterable[dict[str, Any]], key: str) -> float:
     return sum(_float(record, key) for record in records)
 
 
+def _sum_float_fields(records: Iterable[dict[str, Any]], fields: Iterable[str]) -> dict[str, float]:
+    materialized = list(records)
+    return {
+        field: round(sum(_float(record, field) for record in materialized), 6)
+        for field in fields
+    }
+
+
+def _sum_int_fields(records: Iterable[dict[str, Any]], fields: Iterable[str]) -> dict[str, int]:
+    materialized = list(records)
+    return {
+        field: int(sum(_int(record, field) for record in materialized))
+        for field in fields
+    }
+
+
+def _max_int_fields(records: Iterable[dict[str, Any]], fields: Iterable[str]) -> dict[str, int]:
+    materialized = list(records)
+    return {
+        field: int(max((_int(record, field) for record in materialized), default=0))
+        for field in fields
+    }
+
+
+def _top_float_fields(totals: dict[str, float], limit: int = 8) -> dict[str, float]:
+    return dict(
+        sorted(
+            ((field, value) for field, value in totals.items() if abs(float(value)) > 0.0),
+            key=lambda item: (-float(item[1]), item[0]),
+        )[:limit]
+    )
+
+
 def _summarize_log(path: Path) -> dict[str, Any]:
     events = _read_events(path)
     pricing_events = [record for record in events if record.get("event") == "journey_pricing"]
@@ -113,6 +187,9 @@ def _summarize_log(path: Path) -> dict[str, Any]:
         f"{record.get('pricing_kind')}:{record.get('pricing_state')}:{record.get('reason')}"
         for record in pricing_events
     )
+    profile_time_totals = _sum_float_fields(completion_retries, PROFILE_TIME_FIELDS)
+    profile_count_totals = _sum_int_fields(completion_retries, PROFILE_COUNT_FIELDS)
+    profile_count_totals.update(_max_int_fields(completion_retries, PROFILE_MAX_FIELDS))
     return {
         "log_file": str(path),
         "instance": None if finish is None else finish.get("instance"),
@@ -165,6 +242,12 @@ def _summarize_log(path: Path) -> dict[str, Any]:
             _sum(completion_retries, "bound_build_time"),
             6,
         ),
+        "completion_retry_profile_timing_enabled_count": int(
+            sum(1 for record in completion_retries if bool(record.get("direct_label_profile_timing_enabled")))
+        ),
+        "completion_retry_profile_time_totals": profile_time_totals,
+        "completion_retry_profile_time_top": _top_float_fields(profile_time_totals),
+        "completion_retry_profile_count_totals": profile_count_totals,
         "completion_retry_last": _compact_completion_retry(last_retry),
         "addition_event_count": len(addition_events),
         "added_journeys": int(sum(_int(record, "added_journeys") for record in addition_events)),
@@ -221,6 +304,15 @@ def _compact_completion_retry(record: dict[str, Any] | None) -> dict[str, Any] |
         "global_certificate_capable",
         "exhausted",
     ]
+    keys.extend(PROFILE_TIME_FIELDS)
+    keys.extend(PROFILE_COUNT_FIELDS)
+    keys.extend(PROFILE_MAX_FIELDS)
+    keys.extend(
+        [
+            "direct_label_profile_timing_enabled",
+            "direct_label_profile_partial_bucket_mean_size",
+        ]
+    )
     return {key: record.get(key) for key in keys if key in record}
 
 
@@ -231,10 +323,49 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for row in rows
         if row.get("completion_retry_class") == "completion_bound_time_limit_no_column_uncertified"
     ]
+    profile_time_totals = {
+        field: round(
+            sum(
+                float((row.get("completion_retry_profile_time_totals") or {}).get(field) or 0.0)
+                for row in rows
+            ),
+            6,
+        )
+        for field in PROFILE_TIME_FIELDS
+    }
+    profile_count_totals = {
+        field: int(
+            sum(
+                int((row.get("completion_retry_profile_count_totals") or {}).get(field) or 0)
+                for row in rows
+            )
+        )
+        for field in PROFILE_COUNT_FIELDS
+    }
+    profile_count_totals.update(
+        {
+            field: int(
+                max(
+                    (
+                        int((row.get("completion_retry_profile_count_totals") or {}).get(field) or 0)
+                        for row in rows
+                    ),
+                    default=0,
+                )
+            )
+            for field in PROFILE_MAX_FIELDS
+        }
+    )
     return {
         "log_count": len(rows),
         "completion_retry_class_counts": dict(sorted(class_counts.items())),
         "incomplete_tail_count": len(incomplete_tail_rows),
+        "completion_retry_profile_timing_enabled_count": int(
+            sum(int(row.get("completion_retry_profile_timing_enabled_count") or 0) for row in rows)
+        ),
+        "completion_retry_profile_time_totals": profile_time_totals,
+        "completion_retry_profile_time_top": _top_float_fields(profile_time_totals),
+        "completion_retry_profile_count_totals": profile_count_totals,
         "completion_retry_total_profile_generation_time": round(
             sum(float(row.get("completion_retry_total_profile_generation_time") or 0.0) for row in rows),
             6,
@@ -321,6 +452,10 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"incomplete_tail_count = {aggregate['incomplete_tail_count']}",
         "completion_retry_total_profile_generation_time = "
         f"{aggregate['completion_retry_total_profile_generation_time']}",
+        "completion_retry_profile_timing_enabled_count = "
+        f"{aggregate['completion_retry_profile_timing_enabled_count']}",
+        "completion_retry_profile_time_top = "
+        f"{aggregate['completion_retry_profile_time_top']}",
         "completion_retry_total_generated_sequences = "
         f"{aggregate['completion_retry_total_generated_sequences']}",
         "completion_retry_total_evaluated_timed_trips = "

@@ -9,6 +9,7 @@ import json
 import math
 import itertools
 from pathlib import Path
+import re
 import time
 from typing import Any, Iterable
 
@@ -250,6 +251,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
     recent_priced_journeys: list[Any] = []
     recent_changed_task_sets: list[frozenset[int]] = []
     recent_worker_changed_task_sets: list[frozenset[int]] = []
+    active_support_repair_after_inactive_addition_calls = 0
     dynamic_cuts_total = 0
     dynamic_subset_row_cuts_total = 0
     learning_runtime: _JourneyLearningRuntime | None = prewarmed_learning_runtime
@@ -884,6 +886,59 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                             depth=0,
                             pricing_kind="heuristic",
                         )
+                    active_repair_max_calls = int(
+                        config.get("journey_active_support_repair_after_inactive_addition_max_calls", 0)
+                    )
+                    base_added_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                    if int(added) > 0 and (
+                        active_repair_max_calls <= 0
+                        or active_support_repair_after_inactive_addition_calls < active_repair_max_calls
+                    ):
+                        repair_base_config = _journey_pricing_config(
+                            data,
+                            config,
+                            bucket,
+                            start_step,
+                            eps,
+                            max(0.0, time_limit - (time.perf_counter() - started)),
+                            heuristic=False,
+                            cg_iter=cg_iter,
+                        )
+                        active_repair = _run_journey_active_support_replacement_repair_after_inactive_addition(
+                            data,
+                            config,
+                            journey_pool,
+                            repair_base_config,
+                            solution.duals,
+                            tuple(cuts),
+                            tuple(),
+                            logger,
+                            cg_iter,
+                            node_id=0,
+                            depth=0,
+                            deadline=started + time_limit,
+                            min_pricing_time=min_pricing_time,
+                            trip_cache=trip_cache,
+                            resource_cache=resource_cache,
+                            active_task_sets=active_task_sets,
+                            recent_changed_task_sets=base_added_changed_task_sets,
+                            previous_pricing=pricing_for_add,
+                            previous_pricing_kind="heuristic",
+                            previous_added=added,
+                        )
+                        if int(active_repair.pricing_calls) > 0:
+                            active_support_repair_after_inactive_addition_calls += int(active_repair.pricing_calls)
+                        pricing_calls += int(active_repair.pricing_calls)
+                        exact_pricing_calls += int(active_repair.exact_pricing_calls)
+                        generated_sequences += int(active_repair.generated_sequences)
+                        evaluated_timed_trips += int(active_repair.evaluated_timed_trips)
+                        if int(active_repair.added) > 0:
+                            added += int(active_repair.added)
+                            recent_priced_journeys = [*list(priced_journeys), *active_repair.priced_journeys]
+                            recent_changed_task_sets = list(
+                                dict.fromkeys((*base_added_changed_task_sets, *active_repair.changed_task_sets))
+                            )
+                            recent_worker_changed_task_sets.extend(active_repair.changed_task_sets)
                     if added > 0 and _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
                         incumbent, final_solution = _run_journey_pool_incumbent_probe(
                             data,
@@ -1033,6 +1088,104 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 remaining=round(float(remaining), 6),
             )
 
+        final_probe_preview, _final_probe_preview_mode = _journey_certificate_pricing_config(
+            config,
+            exact_pricing_config,
+            certificate_candidate=certificate_candidate,
+            certificate_flat_rounds=certificate_flat_rounds,
+            certificate_no_column_rounds=certificate_no_column_rounds + 1,
+            depth=0,
+            completion_bound_phase="after_retry",
+        )
+        pre_retry_reserve = _journey_pre_retry_completion_reserve_time(
+            config,
+            remaining=remaining,
+            exact_time_limit=float(exact_pricing_config.time_limit),
+            min_pricing_time=min_pricing_time,
+            certificate_candidate=certificate_candidate,
+            final_completion_bound_eligible=bool(
+                final_probe_preview.direct_journey_label_completion_bound_enabled
+            ),
+            exact_completion_bound_enabled=bool(
+                exact_pricing_config.direct_journey_label_completion_bound_enabled
+            ),
+        )
+        if pre_retry_reserve > 0.0:
+            old_time_limit = float(exact_pricing_config.time_limit)
+            exact_pricing_config = replace(
+                exact_pricing_config,
+                time_limit=max(float(min_pricing_time), old_time_limit - pre_retry_reserve),
+            )
+            logger.log(
+                "journey_exact_pricing_completion_bound_pre_reserve",
+                node_id=0,
+                depth=0,
+                cg_iter=cg_iter,
+                old_time_limit=round(float(old_time_limit), 6),
+                new_time_limit=round(float(exact_pricing_config.time_limit), 6),
+                reserved_time=round(float(old_time_limit) - float(exact_pricing_config.time_limit), 6),
+                remaining=round(float(remaining), 6),
+                remaining_threshold=round(
+                    float(
+                        config.get(
+                            "journey_certificate_completion_bound_pre_retry_reserve_remaining_threshold",
+                            0.0,
+                        )
+                    ),
+                    6,
+                ),
+            )
+        exact_pricing_kind = "exact"
+        if _journey_pre_exact_completion_bound_handoff_needed(
+            config,
+            remaining=max(0.0, time_limit - (time.perf_counter() - started)),
+            final_min_time=float(
+                config.get("journey_certificate_completion_bound_after_retry_min_time", min_pricing_time)
+            ),
+            min_pricing_time=min_pricing_time,
+            certificate_candidate=certificate_candidate,
+            certificate_flat_rounds=certificate_flat_rounds,
+            depth=0,
+            final_completion_bound_eligible=bool(
+                final_probe_preview.direct_journey_label_completion_bound_enabled
+            ),
+            exact_completion_bound_enabled=bool(
+                exact_pricing_config.direct_journey_label_completion_bound_enabled
+            ),
+        ):
+            handoff_remaining = max(0.0, time_limit - (time.perf_counter() - started))
+            handoff_config, handoff_mode = _journey_certificate_pricing_config(
+                config,
+                exact_pricing_config,
+                certificate_candidate=certificate_candidate,
+                certificate_flat_rounds=certificate_flat_rounds,
+                certificate_no_column_rounds=max(1, certificate_no_column_rounds + 1),
+                depth=0,
+                completion_bound_phase="after_retry",
+            )
+            handoff_config = _journey_config_with_call_deadline(
+                handoff_config,
+                time_limit=_journey_completion_bound_probe_budget(config, handoff_remaining),
+                profile_generation_time_fraction=float(
+                    config.get("journey_retry_incomplete_no_column_generation_fraction", 1.0)
+                ),
+            )
+            if bool(handoff_config.direct_journey_label_completion_bound_enabled):
+                logger.log(
+                    "journey_exact_pricing_completion_bound_pre_exact_handoff",
+                    node_id=0,
+                    depth=0,
+                    cg_iter=cg_iter,
+                    remaining=round(float(handoff_remaining), 6),
+                    old_time_limit=round(float(exact_pricing_config.time_limit), 6),
+                    new_time_limit=round(float(handoff_config.time_limit), 6),
+                    certificate_flat_rounds=int(certificate_flat_rounds),
+                    certificate_no_column_rounds=int(certificate_no_column_rounds),
+                    retry_mode=handoff_mode,
+                )
+                exact_pricing_config = handoff_config
+                exact_pricing_kind = "exact_completion_bound_pre_exact_handoff"
+
         def audit_final_legacy_pricing(current_pricing: Any) -> None:
             audit_pricing = _run_journey_sharded_pulse_audit(
                 data,
@@ -1065,7 +1218,6 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             certificate_candidate=certificate_candidate,
             completion_bound_enabled=exact_pricing_config.direct_journey_label_completion_bound_enabled,
         )
-        exact_pricing_kind = "exact"
         if exact_dual_source == "dual_average":
             average_direct_config, average_direct_mode = _journey_dual_average_direct_patrol_config(
                 config,
@@ -1384,6 +1536,46 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                         added += int(supplement.added)
                         recent_priced_journeys.extend(supplement.priced_journeys)
                         recent_changed_task_sets.extend(supplement.changed_task_sets)
+                active_repair_max_calls = int(
+                    config.get("journey_active_support_repair_after_inactive_addition_max_calls", 0)
+                )
+                if (
+                    active_repair_max_calls <= 0
+                    or active_support_repair_after_inactive_addition_calls < active_repair_max_calls
+                ):
+                    active_repair = _run_journey_active_support_replacement_repair_after_inactive_addition(
+                        data,
+                        config,
+                        journey_pool,
+                        exact_pricing_config,
+                        exact_duals,
+                        tuple(cuts),
+                        tuple(),
+                        logger,
+                        cg_iter,
+                        node_id=0,
+                        depth=0,
+                        deadline=started + time_limit,
+                        min_pricing_time=min_pricing_time,
+                        trip_cache=trip_cache,
+                        resource_cache=resource_cache,
+                        active_task_sets=active_task_sets,
+                        recent_changed_task_sets=recent_changed_task_sets,
+                        previous_pricing=pricing,
+                        previous_pricing_kind=exact_pricing_kind,
+                        previous_added=added,
+                    )
+                    if int(active_repair.pricing_calls) > 0:
+                        active_support_repair_after_inactive_addition_calls += int(active_repair.pricing_calls)
+                    pricing_calls += int(active_repair.pricing_calls)
+                    exact_pricing_calls += int(active_repair.exact_pricing_calls)
+                    generated_sequences += int(active_repair.generated_sequences)
+                    evaluated_timed_trips += int(active_repair.evaluated_timed_trips)
+                    if int(active_repair.added) > 0:
+                        added += int(active_repair.added)
+                        recent_priced_journeys.extend(active_repair.priced_journeys)
+                        recent_changed_task_sets.extend(active_repair.changed_task_sets)
+                        recent_worker_changed_task_sets.extend(active_repair.changed_task_sets)
             if added > 0 and _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
                 incumbent, final_solution = _run_journey_pool_incumbent_probe(
                     data,
@@ -1478,6 +1670,16 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 if bool(final_completion_bound_eligible) and bool(final_probe_viable):
                     skip_ordinary_retry_for_final_probe = True
                     skip_reason = "weak_negative_filtered_goes_to_final_probe"
+            if (
+                not bool(skip_ordinary_retry_for_final_probe)
+                and bool(config.get("journey_certificate_completion_bound_skip_retry_after_pre_reserve_enabled", True))
+                and float(pre_retry_reserve) > 0.0
+                and bool(certificate_candidate)
+                and bool(final_probe_preview.direct_journey_label_completion_bound_enabled)
+                and _journey_completion_bound_final_probe_needed(config, pricing)
+            ):
+                skip_ordinary_retry_for_final_probe = True
+                skip_reason = "pre_reserved_completion_bound_goes_to_final_probe"
             if bool(skip_ordinary_retry_for_final_probe):
                 retry_enabled = False
                 logger.log(
@@ -1489,6 +1691,7 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                     previous_reason=pricing.reason,
                     reason=skip_reason or "ordinary_retry_skipped_for_final_probe",
                     certificate_no_column_rounds=certificate_no_column_rounds,
+                    pre_retry_reserve=round(float(pre_retry_reserve), 6),
                 )
             if retry_enabled and retry_remaining > max(min_pricing_time, retry_min_time):
                 final_probe_config, _final_probe_mode = _journey_certificate_pricing_config(
@@ -3165,6 +3368,7 @@ def _solve_bpc_future_journey_branch_price(
                 integer_tol,
                 tie_tolerance=float(config.get("journey_branch_fractionality_tie_tolerance", 0.0)),
                 priority_mode=str(config.get("journey_branch_candidate_priority", "fractionality")),
+                branch_depth=node.depth,
                 incumbent_solution=final_solution,
                 journey_pool=journey_pool,
             )
@@ -3274,6 +3478,7 @@ def _solve_bpc_future_journey_branch_price(
             integer_tol,
             tie_tolerance=float(config.get("journey_branch_fractionality_tie_tolerance", 0.0)),
             priority_mode=str(config.get("journey_branch_candidate_priority", "fractionality")),
+            branch_depth=node.depth,
             incumbent_solution=final_solution,
             journey_pool=journey_pool,
         )
@@ -3428,6 +3633,7 @@ def _process_journey_branch_node(
     restart_count = 0
     recent_priced_journeys: list[Any] = []
     recent_changed_task_sets: list[frozenset[int]] = []
+    active_support_repair_after_inactive_addition_calls = 0
     cache_enabled = bool(config.get("journey_pricing_trip_cache_enabled", True))
     if int(node.depth) > 0 and "journey_branch_pricing_trip_cache_enabled" in config:
         cache_enabled = bool(config.get("journey_branch_pricing_trip_cache_enabled", cache_enabled))
@@ -4255,6 +4461,63 @@ def _process_journey_branch_node(
                             depth=node.depth,
                             pricing_kind="heuristic",
                         )
+                    active_repair_max_calls = int(
+                        config.get("journey_active_support_repair_after_inactive_addition_max_calls", 0)
+                    )
+                    base_added_changed_task_sets = list(getattr(added, "changed_task_sets", tuple()))
+                    if int(added) > 0 and (
+                        active_repair_max_calls <= 0
+                        or active_support_repair_after_inactive_addition_calls < active_repair_max_calls
+                    ):
+                        repair_base_config = _journey_pricing_config(
+                            data,
+                            config,
+                            bucket,
+                            start_step,
+                            eps,
+                            max(0.0, deadline - time.perf_counter()),
+                            heuristic=False,
+                            cg_iter=cg_iter,
+                        )
+                        repair_base_config = _journey_node_depth_pricing_config(
+                            config,
+                            repair_base_config,
+                            node.depth,
+                        )
+                        active_repair = _run_journey_active_support_replacement_repair_after_inactive_addition(
+                            data,
+                            config,
+                            journey_pool,
+                            repair_base_config,
+                            solution.duals,
+                            tuple(cuts),
+                            tuple(node.branch_constraints),
+                            logger,
+                            cg_iter,
+                            node_id=node.id,
+                            depth=node.depth,
+                            deadline=deadline,
+                            min_pricing_time=min_pricing_time,
+                            trip_cache=pricing_trip_cache if pricing_trip_cache is not None else {},
+                            resource_cache=pricing_resource_cache,
+                            active_task_sets=active_task_sets,
+                            recent_changed_task_sets=base_added_changed_task_sets,
+                            previous_pricing=pricing_for_add,
+                            previous_pricing_kind="heuristic",
+                            previous_added=added,
+                        )
+                        if int(active_repair.pricing_calls) > 0:
+                            active_support_repair_after_inactive_addition_calls += int(active_repair.pricing_calls)
+                        stats.pricing_calls += int(active_repair.pricing_calls)
+                        stats.exact_pricing_calls += int(active_repair.exact_pricing_calls)
+                        stats.generated_sequences += int(active_repair.generated_sequences)
+                        stats.evaluated_timed_trips += int(active_repair.evaluated_timed_trips)
+                        if int(active_repair.added) > 0:
+                            added += int(active_repair.added)
+                            recent_priced_journeys = [*list(scheduled_journeys), *active_repair.priced_journeys]
+                            recent_changed_task_sets = list(
+                                dict.fromkeys((*base_added_changed_task_sets, *active_repair.changed_task_sets))
+                            )
                     if added > 0 and _should_run_journey_pool_probe(pool_probe_enabled, cg_iter, pool_probe_frequency):
                         local_incumbent, local_solution = _run_journey_pool_incumbent_probe(
                             data,
@@ -5483,6 +5746,36 @@ def _process_journey_branch_node(
             )
             retry_min_time = float(config.get("journey_retry_incomplete_no_column_min_time", 1.0))
             retry_remaining = max(0.0, deadline - time.perf_counter())
+            if _journey_should_early_branch_after_incomplete_no_column(
+                config,
+                node,
+                cg_iter,
+                solution,
+                integer_tol,
+                pricing,
+                remaining=retry_remaining,
+                certificate_candidate=certificate_candidate,
+            ):
+                logger.log(
+                    "journey_early_branch_trigger",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    reason="incomplete_no_column_tailing",
+                    inherited_lower_bound=round(float(node.lower_bound), 6),
+                    rmp_objective=round(float(solution.objective), 6),
+                    exact_bound_available=False,
+                    child_lower_bound_exact=False,
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    previous_best_reduced_cost=None
+                    if pricing.best_reduced_cost is None
+                    else round(float(pricing.best_reduced_cost), 9),
+                    remaining=round(float(retry_remaining), 6),
+                    certificate_candidate=bool(certificate_candidate),
+                    certificate_no_column_rounds=int(certificate_no_column_rounds),
+                )
+                return payload("BRANCH", solution=solution, bound=float(node.lower_bound), exact_bound=False)
             if not bool(skip_ordinary_retry_for_final_probe) and _journey_skip_ordinary_retry_after_weak_negative_filtered(
                 config,
                 pricing,
@@ -7962,6 +8255,7 @@ def _choose_journey_branch(
     *,
     tie_tolerance: float = 0.0,
     priority_mode: str = "fractionality",
+    branch_depth: int | None = None,
     incumbent_solution: dict[int, list[Any]] | None = None,
     journey_pool: JourneyPool | None = None,
 ) -> tuple[BranchConstraint, BranchConstraint] | None:
@@ -7975,18 +8269,71 @@ def _choose_journey_branch(
     )
     if not candidates:
         return None
+    chosen = _select_journey_branch_candidate(
+        candidates,
+        tie_tolerance=tie_tolerance,
+        priority_mode=priority_mode,
+        branch_depth=branch_depth,
+    )
+    i = int(chosen["task_i"])
+    j = int(chosen["task_j"])
+    return (
+        BranchConstraint("same_vehicle", i, j),
+        BranchConstraint("separate_vehicle", i, j),
+    )
+
+
+def _eligible_journey_branch_candidates(
+    candidates: list[dict[str, Any]],
+    *,
+    tie_tolerance: float,
+) -> list[dict[str, Any]]:
+    if not candidates:
+        return []
     max_frac = max(float(candidate["fractionality"]) for candidate in candidates)
     tolerance = max(0.0, float(tie_tolerance))
-    eligible = [
+    return [
         candidate
         for candidate in candidates
         if float(candidate["fractionality"]) >= float(max_frac) - float(tolerance) - 1.0e-12
     ]
+
+
+def _ordered_journey_branch_candidates_for_priority(
+    candidates: list[dict[str, Any]],
+    *,
+    tie_tolerance: float,
+    priority_mode: str,
+    branch_depth: int | None = None,
+) -> list[dict[str, Any]]:
+    if not candidates:
+        return []
+    forced_pair = _journey_forced_branch_pair(priority_mode, depth=branch_depth)
+    if forced_pair is not None:
+        forced = [
+            candidate
+            for candidate in candidates
+            if tuple(sorted((int(candidate["task_i"]), int(candidate["task_j"])))) == forced_pair
+        ]
+        if forced:
+            remaining = [
+                candidate
+                for candidate in candidates
+                if tuple(sorted((int(candidate["task_i"]), int(candidate["task_j"])))) != forced_pair
+            ]
+            fallback = _ordered_journey_branch_candidates_for_priority(
+                remaining,
+                tie_tolerance=tie_tolerance,
+                priority_mode="fractionality",
+                branch_depth=branch_depth,
+            )
+            return [forced[0], *fallback]
+    eligible = _eligible_journey_branch_candidates(candidates, tie_tolerance=tie_tolerance)
     mode = str(priority_mode)
     if mode == "pool_split":
         with_width = [candidate for candidate in eligible if candidate.get("pool_same_allowed") is not None]
         pool = with_width or eligible
-        chosen = min(
+        return sorted(
             pool,
             key=lambda candidate: (
                 int(candidate.get("pool_max_child_width", 10**12)),
@@ -7997,10 +8344,10 @@ def _choose_journey_branch(
                 int(candidate["task_j"]),
             ),
         )
-    elif mode == "incumbent_disagreement":
+    if mode == "incumbent_disagreement":
         with_relation = [candidate for candidate in eligible if candidate.get("incumbent_relation") is not None]
         pool = with_relation or eligible
-        chosen = min(
+        return sorted(
             pool,
             key=lambda candidate: (
                 -float(candidate.get("incumbent_disagreement", 0.0)),
@@ -8010,8 +8357,8 @@ def _choose_journey_branch(
                 int(candidate["task_j"]),
             ),
         )
-    elif mode == "low_task_index":
-        chosen = min(
+    if mode == "low_task_index":
+        return sorted(
             eligible,
             key=lambda candidate: (
                 int(candidate["task_i"]),
@@ -8020,22 +8367,80 @@ def _choose_journey_branch(
                 round(float(candidate["same_mass"]), 9),
             ),
         )
-    else:
-        chosen = min(
-            candidates,
-            key=lambda candidate: (
-                -float(candidate["fractionality"]),
-                int(candidate["task_i"]),
-                int(candidate["task_j"]),
-                round(float(candidate["same_mass"]), 9),
-            ),
-        )
-    i = int(chosen["task_i"])
-    j = int(chosen["task_j"])
-    return (
-        BranchConstraint("same_vehicle", i, j),
-        BranchConstraint("separate_vehicle", i, j),
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            -float(candidate["fractionality"]),
+            int(candidate["task_i"]),
+            int(candidate["task_j"]),
+            round(float(candidate["same_mass"]), 9),
+        ),
     )
+
+
+def _select_journey_branch_candidate(
+    candidates: list[dict[str, Any]],
+    *,
+    tie_tolerance: float,
+    priority_mode: str,
+    branch_depth: int | None = None,
+) -> dict[str, Any]:
+    ordered = _ordered_journey_branch_candidates_for_priority(
+        candidates,
+        tie_tolerance=tie_tolerance,
+        priority_mode=priority_mode,
+        branch_depth=branch_depth,
+    )
+    if not ordered:
+        raise ValueError("cannot choose journey branch from empty candidates")
+    return ordered[0]
+
+
+def _parse_journey_forced_pair_payload(payload: str) -> tuple[int, int] | None:
+    payload = payload.replace("(", "").replace(")", "").replace(";", ",")
+    pieces = [piece.strip() for piece in payload.split(",") if piece.strip()]
+    if len(pieces) != 2:
+        return None
+    try:
+        i, j = int(pieces[0]), int(pieces[1])
+    except ValueError:
+        return None
+    if i == j:
+        return None
+    return tuple(sorted((i, j)))
+
+
+def _journey_forced_branch_pair(priority_mode: Any, *, depth: int | None = None) -> tuple[int, int] | None:
+    text = str(priority_mode or "").strip()
+    for prefix in ("force_pair_depth:", "forced_pair_depth:"):
+        if text.startswith(prefix):
+            payload = text[len(prefix) :].strip()
+            for rule in re.split(r"[|;]", payload):
+                rule = rule.strip()
+                if not rule:
+                    continue
+                if ":" in rule:
+                    depth_text, pair_text = rule.split(":", 1)
+                elif "=" in rule:
+                    depth_text, pair_text = rule.split("=", 1)
+                else:
+                    continue
+                depth_text = depth_text.strip().removeprefix("d").removeprefix("D")
+                try:
+                    rule_depth = int(depth_text)
+                except ValueError:
+                    continue
+                if depth is None or int(depth) != int(rule_depth):
+                    continue
+                return _parse_journey_forced_pair_payload(pair_text)
+            return None
+    for prefix in ("force_pair:", "forced_pair:", "force_pair=", "forced_pair="):
+        if text.startswith(prefix):
+            payload = text[len(prefix) :].strip()
+            break
+    else:
+        return None
+    return _parse_journey_forced_pair_payload(payload)
 
 
 def _journey_branch_candidates(
@@ -8146,31 +8551,52 @@ def _log_journey_branch_candidates(
         incumbent_solution=incumbent_solution,
         journey_pool=journey_pool,
     )
+    tie_tolerance = float(config.get("journey_branch_fractionality_tie_tolerance", 0.0))
+    priority_mode = str(config.get("journey_branch_candidate_priority", "fractionality"))
+    priority_order = _ordered_journey_branch_candidates_for_priority(
+        candidates,
+        tie_tolerance=tie_tolerance,
+        priority_mode=priority_mode,
+        branch_depth=depth,
+    )
+    selected = priority_order[0] if priority_order else None
+    forced_pair = _journey_forced_branch_pair(priority_mode, depth=depth)
     max_frac = None if not candidates else max(float(candidate["fractionality"]) for candidate in candidates)
+
+    def candidate_payload(candidate: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "task_i": int(candidate["task_i"]),
+            "task_j": int(candidate["task_j"]),
+            "same_mass": round(float(candidate["same_mass"]), 9),
+            "fractionality": round(float(candidate["fractionality"]), 9),
+            "support_count": int(candidate["support_count"]),
+            "incumbent_relation": candidate.get("incumbent_relation"),
+            "incumbent_disagreement": round(float(candidate.get("incumbent_disagreement", 0.0)), 9),
+            "pool_same_allowed": candidate.get("pool_same_allowed"),
+            "pool_separate_allowed": candidate.get("pool_separate_allowed"),
+            "pool_max_child_width": candidate.get("pool_max_child_width"),
+            "pool_total_child_width": candidate.get("pool_total_child_width"),
+            "pool_balance_gap": candidate.get("pool_balance_gap"),
+        }
+
     logger.log(
         "journey_branch_candidates",
         node_id=node_id,
         depth=depth,
         candidate_count=len(candidates),
         max_fractionality=None if max_frac is None else round(float(max_frac), 9),
-        tie_tolerance=round(float(config.get("journey_branch_fractionality_tie_tolerance", 0.0)), 9),
-        priority_mode=str(config.get("journey_branch_candidate_priority", "fractionality")),
-        top=[
-            {
-                "task_i": int(candidate["task_i"]),
-                "task_j": int(candidate["task_j"]),
-                "same_mass": round(float(candidate["same_mass"]), 9),
-                "fractionality": round(float(candidate["fractionality"]), 9),
-                "support_count": int(candidate["support_count"]),
-                "incumbent_relation": candidate.get("incumbent_relation"),
-                "incumbent_disagreement": round(float(candidate.get("incumbent_disagreement", 0.0)), 9),
-                "pool_same_allowed": candidate.get("pool_same_allowed"),
-                "pool_separate_allowed": candidate.get("pool_separate_allowed"),
-                "pool_max_child_width": candidate.get("pool_max_child_width"),
-                "pool_balance_gap": candidate.get("pool_balance_gap"),
-            }
-            for candidate in candidates[: max(0, top_n)]
-        ],
+        tie_tolerance=round(float(tie_tolerance), 9),
+        priority_mode=priority_mode,
+        forced_pair=None if forced_pair is None else list(forced_pair),
+        forced_pair_matched=bool(
+            forced_pair is not None
+            and selected is not None
+            and tuple(sorted((int(selected["task_i"]), int(selected["task_j"])))) == forced_pair
+        ),
+        eligible_count=len(_eligible_journey_branch_candidates(candidates, tie_tolerance=tie_tolerance)),
+        selected=None if selected is None else candidate_payload(selected),
+        top=[candidate_payload(candidate) for candidate in candidates[: max(0, top_n)]],
+        priority_top=[candidate_payload(candidate) for candidate in priority_order[: max(0, top_n)]],
     )
 
 
@@ -8205,6 +8631,41 @@ def _journey_should_early_branch(
     if _journey_lp_integral(getattr(solution, "journey_values", []) or [], float(integer_tol)):
         return False
     if _choose_journey_branch_placeholder(solution, node.branch_constraints, float(integer_tol)) is None:
+        return False
+    return True
+
+
+def _journey_should_early_branch_after_incomplete_no_column(
+    config: dict[str, Any],
+    node: JourneyNode,
+    cg_iter: int,
+    solution: Any,
+    integer_tol: float,
+    pricing: Any,
+    *,
+    remaining: float,
+    certificate_candidate: bool,
+) -> bool:
+    """Return whether an incomplete no-column tail may branch before retry/CB.
+
+    This is exact-safe only because it does not certify the current node and
+    the caller must propagate a non-exact inherited lower bound to children.
+    """
+
+    if not bool(config.get("journey_early_branching_after_incomplete_no_column_enabled", False)):
+        return False
+    if bool(certificate_candidate) and bool(
+        config.get("journey_early_branching_after_incomplete_no_column_disable_on_certificate_candidate", False)
+    ):
+        return False
+    min_remaining = float(config.get("journey_early_branching_after_incomplete_no_column_min_remaining", 0.0))
+    if float(remaining) < max(0.0, min_remaining):
+        return False
+    if bool(getattr(pricing, "exhausted", False)):
+        return False
+    if getattr(pricing, "journeys", None):
+        return False
+    if not _journey_should_early_branch(config, node, cg_iter, solution, integer_tol):
         return False
     return True
 
@@ -8567,6 +9028,13 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                 raise ValueError(
                     "journey_certificate_completion_bound_pre_exact_handoff_slack_time must be nonnegative"
                 )
+        if (
+            float(config.get("journey_early_branching_after_incomplete_no_column_min_remaining", 0.0))
+            < 0.0
+        ):
+            raise ValueError(
+                "journey_early_branching_after_incomplete_no_column_min_remaining must be nonnegative"
+            )
         if float(config.get("journey_pricing_deadline_safety_margin", 0.0)) < 0.0:
             raise ValueError("journey_pricing_deadline_safety_margin must be nonnegative")
         if float(config.get("journey_pricing_profile_labeling_priority_future_dual_weight", 0.0)) < 0.0:
@@ -11830,7 +12298,10 @@ def _journey_same_dual_supplement_needed(
         return False
     if int(depth) > int(config.get("journey_same_dual_supplement_disable_on_branch_depth_gt", 0)):
         return False
-    if not bool(certificate_candidate):
+    if (
+        bool(config.get("journey_same_dual_supplement_require_certificate_candidate", True))
+        and not bool(certificate_candidate)
+    ):
         return False
     min_flat = max(0, int(config.get("journey_same_dual_supplement_min_flat_rounds", 1)))
     if int(certificate_flat_rounds) < min_flat:
@@ -13615,6 +14086,23 @@ def _journey_certificate_pricing_config(
             )
         )
         amcb_enabled = bool(config.get("journey_available_mask_completion_bound_enabled", False))
+        certificate_superset_pruning = bool(
+            config.get(
+                "journey_certificate_completion_bound_profile_labeling_task_set_superset_pruning_enabled",
+                updated.profile_labeling_task_set_superset_pruning_enabled,
+            )
+        )
+        superset_disable_min_tasks = int(
+            config.get(
+                "journey_certificate_completion_bound_profile_labeling_task_set_superset_pruning_disable_min_tasks",
+                0,
+            )
+        )
+        if (
+            int(superset_disable_min_tasks) > 0
+            and int(updated.task_count) >= int(superset_disable_min_tasks)
+        ):
+            certificate_superset_pruning = False
         updated = replace(
             updated,
             direct_journey_label_pricing_enabled=True,
@@ -13687,6 +14175,9 @@ def _journey_certificate_pricing_config(
                 0,
                 int(config.get("journey_available_mask_completion_bound_max_states", 200000)),
             ),
+            direct_journey_label_available_mask_completion_bound_skip_with_unique_route=bool(
+                config.get("journey_available_mask_completion_bound_skip_with_unique_route", True)
+            ),
             direct_journey_label_completion_bound_unique_task_helper_enabled=bool(
                 config.get(
                     "journey_certificate_completion_bound_unique_task_helper_enabled",
@@ -13756,6 +14247,9 @@ def _journey_certificate_pricing_config(
                     "journey_certificate_completion_bound_next_sortie_cache_enabled",
                     False,
                 )
+            ),
+            profile_labeling_task_set_superset_pruning_enabled=bool(
+                certificate_superset_pruning
             ),
             direct_journey_label_profile_timing_enabled=bool(
                 config.get(
@@ -14060,8 +14554,14 @@ def _journey_certificate_pricing_config(
             mode["available_mask_completion_bound_max_states"] = int(
                 updated.direct_journey_label_available_mask_completion_bound_max_states
             )
+            mode["available_mask_completion_bound_skip_with_unique_route"] = bool(
+                updated.direct_journey_label_available_mask_completion_bound_skip_with_unique_route
+            )
         mode["completion_bound_final_probe_only"] = bool(completion_bound_final_probe_only)
         mode["completion_bound_profile_timing"] = bool(updated.direct_journey_label_profile_timing_enabled)
+        mode["completion_bound_profile_labeling_task_set_superset_pruning"] = bool(
+            updated.profile_labeling_task_set_superset_pruning_enabled
+        )
         mode["completion_bound_generalized_partial_dominance"] = bool(
             updated.generalized_partial_dominance_enabled
         )
@@ -15253,6 +15753,7 @@ def _journey_pricing_config(
             dp_cross_count_dominance_enabled = bool(late_dp_cross_value)
     return JourneyPricingConfig(
         time_bucket_size=bucket,
+        task_count=len(data.tasks),
         max_tasks_per_trip=int(config.get("max_tasks_per_trip", 6)),
         max_sequences=int(config.get(f"{prefix}_max_sequences", config.get("exact_max_sequences", 0))),
         max_timed_evaluations=int(config.get(f"{prefix}_max_timed_evaluations", config.get("exact_max_timed_evaluations", 0))),
@@ -15492,6 +15993,15 @@ def _journey_pricing_config(
                 config.get(
                     "journey_pricing_direct_journey_label_available_mask_completion_bound_max_states",
                     200000,
+                ),
+            )
+        ),
+        direct_journey_label_available_mask_completion_bound_skip_with_unique_route=bool(
+            config.get(
+                f"{prefix}_direct_journey_label_available_mask_completion_bound_skip_with_unique_route",
+                config.get(
+                    "journey_pricing_direct_journey_label_available_mask_completion_bound_skip_with_unique_route",
+                    True,
                 ),
             )
         ),
@@ -16911,6 +17421,34 @@ def _log_journey_pricing(
         ),
         direct_label_profile_completion_time=round(
             float(getattr(pricing, "direct_label_profile_completion_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_task_filter_time=round(
+            float(getattr(pricing, "direct_label_profile_task_filter_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_option_lookup_time=round(
+            float(getattr(pricing, "direct_label_profile_option_lookup_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_label_create_time=round(
+            float(getattr(pricing, "direct_label_profile_label_create_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_priority_queue_time=round(
+            float(getattr(pricing, "direct_label_profile_priority_queue_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_completed_process_time=round(
+            float(getattr(pricing, "direct_label_profile_completed_process_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_completed_dedup_time=round(
+            float(getattr(pricing, "direct_label_profile_completed_dedup_time", 0.0)),
+            9,
+        ),
+        direct_label_profile_stream_callback_time=round(
+            float(getattr(pricing, "direct_label_profile_stream_callback_time", 0.0)),
             9,
         ),
         direct_label_profile_partial_bound_dual_sum_time=round(
@@ -20776,6 +21314,66 @@ def _journey_continue_exact_after_flat_weak_heuristic(
     return int(flat_weak_column_rounds) >= min_rounds
 
 
+def _journey_active_support_repair_after_inactive_addition_needed(
+    config: dict[str, Any],
+    added: int,
+    *,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None = None,
+    cg_iter: int,
+    depth: int,
+) -> bool:
+    """Return whether an active-support repair worker should follow this batch.
+
+    The worker is only an opt-in search accelerator.  It reacts to the hard-tail
+    pattern where exact pricing keeps adding true-RC negative columns, but those
+    columns only touch inactive task sets and therefore do not move the current
+    LP support.  A miss is ignored and never becomes proof.
+    """
+
+    if not bool(config.get("journey_active_support_repair_after_inactive_addition_enabled", False)):
+        return False
+    if not bool(config.get("journey_replacement_repair_enabled", False)):
+        return False
+    if int(depth) > int(
+        config.get(
+            "journey_active_support_repair_after_inactive_addition_disable_on_branch_depth_gt",
+            0,
+        )
+    ):
+        return False
+    if int(cg_iter) < int(
+        config.get("journey_active_support_repair_after_inactive_addition_min_cg_iter", 0)
+    ):
+        return False
+    added_count = int(added)
+    if added_count <= 0:
+        return False
+    max_added = int(
+        config.get("journey_active_support_repair_after_inactive_addition_max_added_journeys", 0)
+    )
+    if max_added > 0 and added_count > max_added:
+        return False
+    if active_task_sets is None:
+        return False
+    active = {frozenset(int(task) for task in task_set) for task_set in active_task_sets if task_set}
+    if not active:
+        return False
+    changed = {
+        frozenset(int(task) for task in task_set)
+        for task_set in getattr(added, "changed_task_sets", tuple())
+        if task_set
+    }
+    min_inactive_changed = int(
+        config.get(
+            "journey_active_support_repair_after_inactive_addition_min_inactive_changed_task_sets",
+            1,
+        )
+    )
+    if len(changed.difference(active)) < max(1, min_inactive_changed):
+        return False
+    return not bool(changed.intersection(active))
+
+
 def _add_priced_journeys(journey_pool: JourneyPool, journeys: list[Any]) -> int:
     new_journeys = 0
     replacement_journeys = 0
@@ -21210,6 +21808,240 @@ def _run_journey_final_judge_replacement_repair(
         added,
         cg_iter,
         pricing_kind="exact_final_judge_replacement_repair",
+        node_id=node_id,
+        depth=depth,
+        active_task_sets=active_task_sets,
+    )
+    if int(added) <= 0:
+        return result
+    result.added += int(added)
+    result.priced_journeys.extend(repair_pricing.journeys)
+    result.changed_task_sets.extend(getattr(added, "changed_task_sets", tuple()))
+    return result
+
+
+def _run_journey_active_support_replacement_repair_after_inactive_addition(
+    data: FutureData,
+    config: dict[str, Any],
+    journey_pool: JourneyPool,
+    base_pricing_config: JourneyPricingConfig,
+    duals: JourneyDuals,
+    cuts: tuple[FutureCut, ...],
+    branch_constraints: tuple[BranchConstraint, ...],
+    logger: FutureLogger,
+    cg_iter: int,
+    *,
+    node_id: int,
+    depth: int,
+    deadline: float,
+    min_pricing_time: float,
+    trip_cache: dict[tuple, Any] | None,
+    resource_cache: dict[tuple, Any] | None,
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None,
+    recent_changed_task_sets: tuple[frozenset[int], ...] | list[frozenset[int]],
+    previous_pricing: Any,
+    previous_pricing_kind: str,
+    previous_added: int,
+) -> _JourneySameDualSupplementResult:
+    """Run an opt-in true-dual repair worker for current active task sets.
+
+    This targets root-CG rounds where the last exact batch was valid but
+    inactive-only.  It searches for better physical representatives of the
+    current active task sets under the same true duals, then adds only true-RC
+    negative journeys returned by normal pricing.  It is never certificate
+    capable.
+    """
+
+    result = _JourneySameDualSupplementResult()
+    if not _journey_active_support_repair_after_inactive_addition_needed(
+        config,
+        previous_added,
+        active_task_sets=active_task_sets,
+        cg_iter=cg_iter,
+        depth=depth,
+    ):
+        if bool(config.get("journey_active_support_repair_after_inactive_addition_enabled", False)):
+            active = {
+                frozenset(int(task) for task in task_set)
+                for task_set in (active_task_sets or set())
+                if task_set
+            }
+            changed = {
+                frozenset(int(task) for task in task_set)
+                for task_set in getattr(previous_added, "changed_task_sets", tuple())
+                if task_set
+            }
+            reason = "not_inactive_only_candidate"
+            if not bool(config.get("journey_replacement_repair_enabled", False)):
+                reason = "replacement_repair_disabled"
+            elif int(depth) > int(
+                config.get(
+                    "journey_active_support_repair_after_inactive_addition_disable_on_branch_depth_gt",
+                    0,
+                )
+            ):
+                reason = "branch_depth_gt_limit"
+            elif int(cg_iter) < int(
+                config.get("journey_active_support_repair_after_inactive_addition_min_cg_iter", 0)
+            ):
+                reason = "cg_iter_below_min"
+            elif int(previous_added) <= 0:
+                reason = "no_added_columns"
+            elif active_task_sets is None:
+                reason = "active_task_sets_unavailable"
+            elif not active:
+                reason = "active_task_sets_empty"
+            elif not changed:
+                reason = "changed_task_sets_empty"
+            elif bool(changed.intersection(active)):
+                reason = "changed_task_sets_hit_active_support"
+            logger.log(
+                "journey_active_support_replacement_repair_after_inactive_addition_skipped",
+                node_id=node_id,
+                depth=depth,
+                cg_iter=cg_iter,
+                reason=reason,
+                previous_pricing_kind=str(previous_pricing_kind),
+                previous_added_journeys=int(previous_added),
+                active_task_sets=len(active),
+                changed_task_sets=len(changed),
+                inactive_changed_task_sets=len(changed.difference(active)),
+                replacement_repair_enabled=bool(config.get("journey_replacement_repair_enabled", False)),
+                exact_safe=True,
+                certificate_capable=False,
+            )
+        return result
+    remaining = max(0.0, float(deadline) - time.perf_counter())
+    active_targets = tuple(
+        dict.fromkeys(
+            frozenset(int(task) for task in task_set)
+            for task_set in (active_task_sets or set())
+            if task_set
+        )
+    )
+    if bool(config.get("journey_active_support_repair_after_inactive_addition_include_recent_changed_task_sets", False)):
+        active_targets = tuple(
+            dict.fromkeys(
+                (
+                    *active_targets,
+                    *(
+                        frozenset(int(task) for task in task_set)
+                        for task_set in (recent_changed_task_sets or tuple())
+                        if task_set
+                    ),
+                )
+            )
+        )
+    replacement_config, replacement_mode = _journey_replacement_repair_config(
+        config,
+        base_pricing_config,
+        remaining=remaining,
+        min_pricing_time=min_pricing_time,
+        depth=depth,
+        target_task_sets=active_targets,
+    )
+    dominant_task_set_costs = _journey_pricing_dominant_task_set_costs(
+        journey_pool,
+        cuts,
+        branch_constraints,
+    )
+    if not replacement_mode or not dominant_task_set_costs:
+        return result
+    changed = {
+        frozenset(int(task) for task in task_set)
+        for task_set in getattr(previous_added, "changed_task_sets", tuple())
+        if task_set
+    }
+    active = {frozenset(int(task) for task in task_set) for task_set in (active_task_sets or set()) if task_set}
+    logger.log(
+        "journey_active_support_replacement_repair_after_inactive_addition",
+        node_id=node_id,
+        depth=depth,
+        cg_iter=cg_iter,
+        remaining=round(float(remaining), 6),
+        previous_pricing_kind=str(previous_pricing_kind),
+        previous_status=str(getattr(previous_pricing, "status", "")),
+        previous_reason=str(getattr(previous_pricing, "reason", "")),
+        previous_added_journeys=int(previous_added),
+        previous_changed_task_sets=len(changed),
+        previous_inactive_changed_task_sets=len(changed.difference(active)),
+        replacement_mode=replacement_mode,
+        known_task_sets=len(dominant_task_set_costs),
+        target_task_sets=len(active_targets),
+        active_task_sets=len(active),
+        direct_journey_label_pricing_enabled=True,
+        existing_task_set_repair_only=True,
+        certificate_capable=False,
+        exact_safe=True,
+    )
+    repair_pricing = price_journeys(
+        data,
+        duals,
+        branch_constraints,
+        config=replacement_config,
+        cuts=tuple(cuts),
+        trip_cache=trip_cache if trip_cache is not None else {},
+        resource_cache=resource_cache,
+        forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+            journey_pool,
+            branch_constraints,
+        ),
+        dominant_task_set_costs=dominant_task_set_costs,
+        priority_task_sets=active,
+        active_support_task_sets=active,
+    )
+    result.pricing_calls += 1
+    result.exact_pricing_calls += 1
+    result.generated_sequences += int(repair_pricing.generated_sequences)
+    result.evaluated_timed_trips += int(repair_pricing.evaluated_timed_trips)
+    _log_journey_pricing(
+        logger,
+        repair_pricing,
+        cg_iter,
+        pricing_kind="exact_active_support_replacement_repair",
+        config=replacement_config,
+        pricing_dual_source="scip_active_support_replacement_repair",
+        node_id=node_id,
+        depth=depth,
+    )
+    _log_hidden_negative_audit(
+        logger,
+        data,
+        journey_pool,
+        previous_pricing,
+        repair_pricing,
+        duals,
+        tuple(cuts),
+        branch_constraints,
+        cg_iter,
+        node_id=node_id,
+        depth=depth,
+        hidden_pricing_kind="exact_active_support_replacement_repair",
+        hidden_dual_source="scip_active_support_replacement_repair",
+        max_logged_journeys=int(config.get("journey_hidden_negative_audit_max_logged_journeys", 8)),
+        trigger="active_support_replacement_repair_after_inactive_addition",
+    )
+    if not repair_pricing.journeys:
+        return result
+    _log_journey_gat_target_mode_shadow(
+        logger,
+        repair_pricing.journeys,
+        duals,
+        tuple(cuts),
+        config,
+        cg_iter=cg_iter,
+        node_id=node_id,
+        depth=depth,
+        pricing_kind="exact_active_support_replacement_repair",
+        certificate_candidate=False,
+    )
+    added = _add_priced_journeys(journey_pool, repair_pricing.journeys)
+    _log_journey_addition(
+        logger,
+        repair_pricing,
+        added,
+        cg_iter,
+        pricing_kind="exact_active_support_replacement_repair",
         node_id=node_id,
         depth=depth,
         active_task_sets=active_task_sets,

@@ -206,6 +206,7 @@ from BPC_future.solver.journey_driver import (
     _journey_cut_hash,
     _journey_exact_pricing_budget,
     _journey_flat_weak_column_pressure_addition,
+    _journey_forced_branch_pair,
     _journey_continue_exact_after_flat_weak_heuristic,
     _journey_analytic_center_priority_task_sets,
     _journey_dual_current_pool_validation,
@@ -265,6 +266,7 @@ from BPC_future.solver.journey_driver import (
     _hidden_negative_miss_diagnostics,
     _log_hidden_negative_audit,
     _log_journey_addition,
+    _log_journey_branch_candidates,
     _log_journey_counterfactual_replay_capture,
     _log_journey_pricing,
     _journey_active_task_set_hash,
@@ -276,6 +278,7 @@ from BPC_future.solver.journey_driver import (
     _journey_progress_classification,
     _journey_node_depth_pricing_config,
     _journey_pricing_config,
+    _journey_should_early_branch_after_incomplete_no_column,
     _journey_should_early_branch,
     _journey_should_skip_short_exact_pricing,
     _ordered_journey_child_constraints,
@@ -10899,6 +10902,244 @@ class BPCFutureTests(unittest.TestCase):
         assert split_branch is not None
         self.assertEqual((split_branch[0].task_i, split_branch[0].task_j), (1, 2))
 
+    def test_journey_branch_can_force_pair_for_controlled_ab(self):
+        self.assertEqual(_journey_forced_branch_pair("force_pair:3,1"), (1, 3))
+        self.assertEqual(_journey_forced_branch_pair("forced_pair=2;3"), (2, 3))
+        self.assertEqual(_journey_forced_branch_pair("force_pair_depth:1:3,1", depth=1), (1, 3))
+        self.assertEqual(_journey_forced_branch_pair("force_pair_depth:0:2,3;1:1,3", depth=1), (1, 3))
+        self.assertIsNone(_journey_forced_branch_pair("force_pair_depth:1:1,3", depth=0))
+        self.assertIsNone(_journey_forced_branch_pair("force_pair_depth:1:1,3"))
+        self.assertIsNone(_journey_forced_branch_pair("force_pair:2,2"))
+        self.assertIsNone(_journey_forced_branch_pair("pool_split"))
+
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("branch-force-pair", jid, tasks),
+            )
+
+        values = [
+            (journey(1, (1, 2)), 0.49),
+            (journey(2, (2, 3)), 0.5),
+            (journey(3, (1, 3)), 0.25),
+        ]
+
+        default_branch = _choose_journey_branch(data, values, tuple(), 1.0e-6)
+        self.assertIsNotNone(default_branch)
+        assert default_branch is not None
+        self.assertEqual((default_branch[0].task_i, default_branch[0].task_j), (2, 3))
+
+        forced_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            priority_mode="force_pair:1,3",
+        )
+        self.assertIsNotNone(forced_branch)
+        assert forced_branch is not None
+        self.assertEqual((forced_branch[0].task_i, forced_branch[0].task_j), (1, 3))
+
+        missing_forced_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            priority_mode="force_pair:4,5",
+        )
+        self.assertIsNotNone(missing_forced_branch)
+        assert missing_forced_branch is not None
+        self.assertEqual((missing_forced_branch[0].task_i, missing_forced_branch[0].task_j), (2, 3))
+
+        depth_zero_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            priority_mode="force_pair_depth:1:1,3",
+            branch_depth=0,
+        )
+        self.assertIsNotNone(depth_zero_branch)
+        assert depth_zero_branch is not None
+        self.assertEqual((depth_zero_branch[0].task_i, depth_zero_branch[0].task_j), (2, 3))
+
+        depth_one_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            priority_mode="force_pair_depth:1:1,3",
+            branch_depth=1,
+        )
+        self.assertIsNotNone(depth_one_branch)
+        assert depth_one_branch is not None
+        self.assertEqual((depth_one_branch[0].task_i, depth_one_branch[0].task_j), (1, 3))
+
+    def test_journey_branch_candidate_log_records_priority_selection(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("branch-pool-split-log", jid, tasks),
+            )
+
+        values = [(journey(1, (1, 2)), 0.49), (journey(2, (2, 3)), 0.5)]
+        pool = JourneyPool()
+        for col in (journey(10, (1, 2)), journey(11, (3,)), journey(12, (1,))):
+            pool.add(col)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    {
+                        "journey_branch_candidate_log_top_n": 4,
+                        "journey_branch_fractionality_tie_tolerance": 0.02,
+                        "journey_branch_candidate_priority": "pool_split",
+                    },
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                    journey_pool=pool,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertEqual(record["event"], "journey_branch_candidates")
+        self.assertEqual((record["top"][0]["task_i"], record["top"][0]["task_j"]), (2, 3))
+        self.assertEqual((record["selected"]["task_i"], record["selected"]["task_j"]), (1, 2))
+        self.assertEqual((record["priority_top"][0]["task_i"], record["priority_top"][0]["task_j"]), (1, 2))
+        self.assertEqual(record["selected"]["pool_max_child_width"], 2)
+        self.assertGreaterEqual(record["eligible_count"], 2)
+
+    def test_journey_branch_candidate_log_records_forced_pair_binding(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("branch-force-pair-log", jid, tasks),
+            )
+
+        values = [
+            (journey(1, (1, 2)), 0.49),
+            (journey(2, (2, 3)), 0.5),
+            (journey(3, (1, 3)), 0.25),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    {
+                        "journey_branch_candidate_log_top_n": 4,
+                        "journey_branch_candidate_priority": "force_pair:1,3",
+                    },
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertEqual(record["forced_pair"], [1, 3])
+        self.assertTrue(record["forced_pair_matched"])
+        self.assertEqual((record["selected"]["task_i"], record["selected"]["task_j"]), (1, 3))
+        self.assertEqual((record["priority_top"][0]["task_i"], record["priority_top"][0]["task_j"]), (1, 3))
+
+    def test_journey_branch_candidate_log_records_depth_forced_pair_binding(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("branch-force-depth-log", jid, tasks),
+            )
+
+        values = [
+            (journey(1, (1, 2)), 0.49),
+            (journey(2, (2, 3)), 0.5),
+            (journey(3, (1, 3)), 0.25),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    {
+                        "journey_branch_candidate_log_top_n": 4,
+                        "journey_branch_candidate_priority": "force_pair_depth:1:1,3",
+                    },
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=7,
+                    depth=1,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertEqual(record["depth"], 1)
+        self.assertEqual(record["forced_pair"], [1, 3])
+        self.assertTrue(record["forced_pair_matched"])
+        self.assertEqual((record["selected"]["task_i"], record["selected"]["task_j"]), (1, 3))
+
     def test_sortie_profile_branch_mask_pruning_only_applies_separate(self):
         task_to_bit = {1: 0, 2: 1, 3: 2}
         both_12 = (1 << task_to_bit[1]) | (1 << task_to_bit[2])
@@ -11782,6 +12023,97 @@ class BPCFutureTests(unittest.TestCase):
         }
         self.assertFalse(_journey_should_early_branch(config, node, 3, fractional_solution, 1.0e-6))
         self.assertTrue(_journey_should_early_branch(config, node, 4, fractional_solution, 1.0e-6))
+
+    def test_journey_early_branch_after_incomplete_no_column_gate(self):
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=1.0,
+                fixed_vehicle_cost=0.0,
+                cost=1.0,
+                signature=("incomplete-no-column-branch", jid, tasks),
+            )
+
+        fractional_solution = SimpleNamespace(
+            journey_values=[(journey(1, (1, 2)), 0.5), (journey(2, (1,)), 0.5)],
+        )
+        node = JourneyNode(3.0, 7, 0, tuple())
+        no_column_pricing = SimpleNamespace(exhausted=False, journeys=[])
+        base_config = {
+            "journey_early_branching_enabled": True,
+            "journey_early_branching_min_cg_iter": 2,
+            "journey_early_branching_max_depth": 0,
+        }
+        self.assertFalse(
+            _journey_should_early_branch_after_incomplete_no_column(
+                base_config,
+                node,
+                2,
+                fractional_solution,
+                1.0e-6,
+                no_column_pricing,
+                remaining=10.0,
+                certificate_candidate=False,
+            )
+        )
+
+        enabled_config = dict(
+            base_config,
+            journey_early_branching_after_incomplete_no_column_enabled=True,
+            journey_early_branching_after_incomplete_no_column_min_remaining=5.0,
+        )
+        self.assertTrue(
+            _journey_should_early_branch_after_incomplete_no_column(
+                enabled_config,
+                node,
+                2,
+                fractional_solution,
+                1.0e-6,
+                no_column_pricing,
+                remaining=10.0,
+                certificate_candidate=False,
+            )
+        )
+        self.assertFalse(
+            _journey_should_early_branch_after_incomplete_no_column(
+                enabled_config,
+                node,
+                2,
+                fractional_solution,
+                1.0e-6,
+                no_column_pricing,
+                remaining=4.99,
+                certificate_candidate=False,
+            )
+        )
+        self.assertFalse(
+            _journey_should_early_branch_after_incomplete_no_column(
+                enabled_config,
+                node,
+                2,
+                fractional_solution,
+                1.0e-6,
+                SimpleNamespace(exhausted=False, journeys=[journey(3, (2,))]),
+                remaining=10.0,
+                certificate_candidate=False,
+            )
+        )
+        self.assertFalse(
+            _journey_should_early_branch_after_incomplete_no_column(
+                enabled_config,
+                node,
+                2,
+                fractional_solution,
+                1.0e-6,
+                SimpleNamespace(exhausted=True, journeys=[]),
+                remaining=10.0,
+                certificate_candidate=False,
+            )
+        )
 
     def test_certificate_pricing_fast_return_is_certificate_only(self):
         base = JourneyPricingConfig(
