@@ -1,8 +1,9 @@
 """Journey-column restricted master problem.
 
-One column is a feasible multi-sortie schedule for one rover.  A node lower
-bound is official only after the matching journey-pricing oracle proves that no
-negative reduced-cost journey remains.
+One column is a feasible multi-sortie schedule for one rover.  Official node
+bounds come from exact-safe pricing proof artifacts: either a full no-negative
+certificate, or an audited corrected-dual bound backed by a global remaining
+reduced-cost lower bound.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ class JourneyRMPSolution:
     constraint_count: int
     reduced_costs: dict[int, float]
     variable_values: dict[int, float] = field(default_factory=dict)
+    active_fleet_limit: int | None = None
 
     @property
     def optimal(self) -> bool:
@@ -182,7 +184,16 @@ def solve_journey_rmp(
     model.optimize()
     status = _status_name(model.getStatus())
     if status != "OPTIMAL":
-        return JourneyRMPSolution(status, None, None, [], len(x), model.getNConss(), {})
+        return JourneyRMPSolution(
+            status,
+            None,
+            None,
+            [],
+            len(x),
+            model.getNConss(),
+            {},
+            active_fleet_limit=int(active_fleet_limit),
+        )
     if dual_capture.duals is None:
         raise RuntimeError("SCIP did not call BPC_future journey dual capture pricer")
     variable_values = {index: float(model.getVal(var)) for index, var in x.items()}
@@ -203,6 +214,7 @@ def solve_journey_rmp(
         constraint_count=model.getNConss(),
         reduced_costs=reduced_costs,
         variable_values=variable_values,
+        active_fleet_limit=int(active_fleet_limit),
     )
 
 

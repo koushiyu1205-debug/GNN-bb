@@ -47,6 +47,21 @@ PRICING_STATE_CERTIFIED_NO_NEGATIVE = "CERTIFIED_NO_NEGATIVE"
 PRICING_STATE_INCOMPLETE_LIMIT = "INCOMPLETE_LIMIT"
 PRICING_STATE_DUPLICATE_ONLY = "DUPLICATE_ONLY"
 
+PRICING_PROOF_KIND_NONE = "NONE"
+PRICING_PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE = "EXHAUSTIVE_NO_NEGATIVE"
+PRICING_PROOF_KIND_FRONTIER_BOUND_NO_NEGATIVE = "FRONTIER_BOUND_NO_NEGATIVE"
+PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE = "FRONTIER_BOUND_INCOMPLETE"
+
+
+def _iter_bits(mask: int) -> tuple[int, ...]:
+    bits: list[int] = []
+    value = int(mask)
+    while value:
+        bit = value & -value
+        bits.append(int(bit))
+        value ^= bit
+    return tuple(bits)
+
 
 def _prioritize_target_first_task_shard(
     scheduled_tasks: tuple[int, ...],
@@ -180,6 +195,18 @@ class JourneyPricingConfig:
     direct_journey_label_completion_bound_two_cycle_enabled: bool = False
     direct_journey_label_completion_bound_two_cycle_max_states: int = 0
     direct_journey_label_completion_bound_elapsed_soft_return_enabled: bool = True
+    direct_journey_label_frontier_bound_ledger_enabled: bool = False
+    direct_journey_label_frontier_refinement_enabled: bool = False
+    direct_journey_label_frontier_refinement_time_limit: float = 0.0
+    direct_journey_label_frontier_refinement_reserve_time: float = 0.0
+    direct_journey_label_frontier_refinement_max_tokens: int = 1
+    direct_journey_label_frontier_refinement_max_critical_tokens: int = 8
+    direct_journey_label_frontier_refinement_floor_eps: float = 1.0e-6
+    direct_journey_label_frontier_refinement_fathom_rc_target: float | None = None
+    direct_journey_label_frontier_micro_expansion_enabled: bool = True
+    direct_journey_label_frontier_micro_expansion_max_children_per_token: int = 64
+    direct_journey_label_frontier_refinement_unique_route_max_tasks: int = 16
+    direct_journey_label_frontier_refinement_cache_max_states: int = 100000
     direct_journey_label_profile_timing_enabled: bool = False
     direct_journey_label_partial_max_states: int = 0
     direct_journey_label_ng_dssr_enabled: bool = False
@@ -554,6 +581,47 @@ class JourneyPricingResult:
     ng_probe_limit_hit: bool = False
     ng_relaxation_superset: bool | None = None
     ng_best_relaxed_reduced_cost: float | None = None
+    global_remaining_rc_lb: float | None = None
+    global_remaining_rc_lb_valid: bool = False
+    global_remaining_rc_lb_coverage_complete: bool = False
+    frontier_region_count: int = 0
+    frontier_unsupported_region_count: int = 0
+    pending_complete_min_rc: float | None = None
+    frontier_min_active_lb: float | None = None
+    frontier_min_active_label_objective: float | None = None
+    frontier_min_active_suffix_lb: float | None = None
+    frontier_min_active_future_cut_reward: float | None = None
+    frontier_min_active_suffix_winner: str = ""
+    frontier_refinement_enabled: bool = False
+    frontier_refinement_attempted: int = 0
+    frontier_refinement_improved: int = 0
+    frontier_refinement_time: float = 0.0
+    frontier_refinement_old_lb: float | None = None
+    frontier_refinement_new_lb: float | None = None
+    frontier_refinement_old_suffix_lb: float | None = None
+    frontier_refinement_new_suffix_lb: float | None = None
+    frontier_refinement_reason: str = ""
+    frontier_refinement_winner: str = ""
+    frontier_micro_expansion_enabled: bool = False
+    frontier_micro_expansion_attempted: int = 0
+    frontier_micro_expansion_expanded: int = 0
+    frontier_micro_expansion_children: int = 0
+    frontier_micro_expansion_reason: str = ""
+    frontier_fathom_rc_target: float | None = None
+    frontier_required_rc_lift: float | None = None
+    frontier_critical_token_count: int = 0
+    frontier_floor_multiplicity: int = 0
+    frontier_floor_band_count_0_1: int = 0
+    frontier_floor_band_count_1: int = 0
+    frontier_floor_band_count_5: int = 0
+    frontier_floor_band_count_10: int = 0
+    frontier_target_band_count: int = 0
+    frontier_second_active_lb: float | None = None
+    frontier_active_lb_p05: float | None = None
+    frontier_active_lb_p10: float | None = None
+    frontier_active_lb_median: float | None = None
+    frontier_refined_global_rc_lb: float | None = None
+    pricing_proof_kind: str = PRICING_PROOF_KIND_NONE
     global_certificate_capable: bool = False
     final_judge_engine: str = ""
     final_judge_certificate_capable: bool = False
@@ -672,15 +740,115 @@ class JourneyPricingResult:
         if not str(self.pricing_state or ""):
             self.pricing_state = _infer_journey_pricing_state(self)
         elif str(self.pricing_state) == PRICING_STATE_CERTIFIED_NO_NEGATIVE and not (
-            bool(self.global_certificate_capable)
-            and str(self.status) == "OPTIMAL"
-            and not bool(self.journeys)
-            and _pricing_certificate_reason_allowed(self)
+            _pricing_result_is_valid_no_negative_certificate(self)
         ):
             if bool(self.exhausted) and str(self.status) == "OPTIMAL":
                 self.pricing_state = PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED
             else:
                 self.pricing_state = PRICING_STATE_INCOMPLETE_LIMIT
+
+
+@dataclass
+class FrontierBoundToken:
+    token_id: int
+    lower_bound: float
+    region_kind: str
+    active: bool = True
+
+
+class FrontierBoundLedger:
+    """Fail-closed ledger for future frontier reduced-cost certificates."""
+
+    def __init__(self) -> None:
+        self._next_token_id = 0
+        self._tokens: dict[int, FrontierBoundToken] = {}
+        self._heap: list[tuple[float, int]] = []
+        self.unsupported_region_count = 0
+        self.pending_complete_min_rc: float | None = None
+
+    def register_region(self, lower_bound: float, region_kind: str) -> FrontierBoundToken:
+        token = FrontierBoundToken(
+            token_id=int(self._next_token_id),
+            lower_bound=float(lower_bound),
+            region_kind=str(region_kind),
+        )
+        self._next_token_id += 1
+        self._tokens[int(token.token_id)] = token
+        heapq.heappush(self._heap, (float(token.lower_bound), int(token.token_id)))
+        return token
+
+    def deactivate(self, token: FrontierBoundToken | int) -> None:
+        token_id = int(token if isinstance(token, int) else token.token_id)
+        stored = self._tokens.get(token_id)
+        if stored is not None:
+            stored.active = False
+
+    def update_lower_bound(self, token: FrontierBoundToken | int, lower_bound: float) -> None:
+        token_id = int(token if isinstance(token, int) else token.token_id)
+        stored = self._tokens.get(token_id)
+        if stored is None or not bool(stored.active):
+            return
+        stored.lower_bound = float(lower_bound)
+        heapq.heappush(self._heap, (float(stored.lower_bound), int(token_id)))
+
+    def replace_region(
+        self,
+        parent: FrontierBoundToken | int,
+        children: tuple[tuple[float, str], ...] | list[tuple[float, str]],
+    ) -> tuple[FrontierBoundToken, ...]:
+        child_tokens = tuple(self.register_region(lb, kind) for lb, kind in children)
+        self.deactivate(parent)
+        return child_tokens
+
+    def record_unsupported_region(self, count: int = 1) -> None:
+        self.unsupported_region_count += max(0, int(count))
+
+    def record_pending_complete_rc(self, reduced_cost: float) -> None:
+        value = float(reduced_cost)
+        self.pending_complete_min_rc = (
+            value
+            if self.pending_complete_min_rc is None
+            else min(float(self.pending_complete_min_rc), value)
+        )
+
+    def active_region_count(self) -> int:
+        return sum(1 for token in self._tokens.values() if bool(token.active))
+
+    def active_tokens_sorted(self) -> tuple[FrontierBoundToken, ...]:
+        return tuple(
+            sorted(
+                (token for token in self._tokens.values() if bool(token.active)),
+                key=lambda token: (float(token.lower_bound), int(token.token_id)),
+            )
+        )
+
+    def min_active_lower_bound(self) -> float | None:
+        token = self.min_active_token()
+        return None if token is None else float(token.lower_bound)
+
+    def min_active_token(self) -> FrontierBoundToken | None:
+        while self._heap:
+            lower_bound, token_id = self._heap[0]
+            token = self._tokens.get(int(token_id))
+            if (
+                token is not None
+                and bool(token.active)
+                and math.isclose(float(lower_bound), float(token.lower_bound), rel_tol=0.0, abs_tol=1.0e-12)
+            ):
+                return token
+            heapq.heappop(self._heap)
+        return None
+
+    def global_remaining_rc_lb(self) -> float | None:
+        values: list[float] = []
+        active_lb = self.min_active_lower_bound()
+        if active_lb is not None:
+            values.append(float(active_lb))
+        if self.pending_complete_min_rc is not None:
+            values.append(float(self.pending_complete_min_rc))
+        if not values:
+            return None
+        return min(values)
 
 
 def _pricing_certificate_reason_allowed(result: JourneyPricingResult) -> bool:
@@ -704,16 +872,44 @@ def _pricing_certificate_reason_allowed(result: JourneyPricingResult) -> bool:
     return False
 
 
+def _pricing_frontier_bound_no_negative_certificate(result: JourneyPricingResult) -> bool:
+    proof_kind = str(getattr(result, "pricing_proof_kind", "") or "")
+    global_lb = getattr(result, "global_remaining_rc_lb", None)
+    if proof_kind != PRICING_PROOF_KIND_FRONTIER_BOUND_NO_NEGATIVE:
+        return False
+    if global_lb is None:
+        return False
+    try:
+        lb_value = float(global_lb)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(lb_value):
+        return False
+    return (
+        bool(getattr(result, "global_remaining_rc_lb_valid", False))
+        and bool(getattr(result, "global_remaining_rc_lb_coverage_complete", False))
+        and int(getattr(result, "frontier_unsupported_region_count", 0)) <= 0
+        and lb_value >= -1.0e-9
+    )
+
+
+def _pricing_result_is_valid_no_negative_certificate(result: JourneyPricingResult) -> bool:
+    if not (
+        bool(result.global_certificate_capable)
+        and str(result.status) == "OPTIMAL"
+        and not bool(result.journeys)
+    ):
+        return False
+    if _pricing_certificate_reason_allowed(result):
+        return bool(result.exhausted)
+    return _pricing_frontier_bound_no_negative_certificate(result)
+
+
 def _infer_journey_pricing_state(result: JourneyPricingResult) -> str:
     if result.journeys:
         return PRICING_STATE_FOUND_NEGATIVE
     reason = str(result.reason or "")
-    if (
-        bool(result.exhausted)
-        and bool(result.global_certificate_capable)
-        and str(result.status) == "OPTIMAL"
-        and _pricing_certificate_reason_allowed(result)
-    ):
+    if _pricing_result_is_valid_no_negative_certificate(result):
         return PRICING_STATE_CERTIFIED_NO_NEGATIVE
     if not bool(result.exhausted) or str(result.status) != "OPTIMAL":
         return PRICING_STATE_INCOMPLETE_LIMIT
@@ -2733,6 +2929,8 @@ class _UniqueTaskVisitLowerBound:
 
     def __init__(self, data: FutureData, duals: FutureDuals, task_to_bit: dict[int, int]) -> None:
         self.full_mask = (1 << len(task_to_bit)) - 1
+        self.task_to_bit = {int(task): int(bit) for task, bit in task_to_bit.items()}
+        self.bit_to_task = {1 << int(bit): int(task) for task, bit in self.task_to_bit.items()}
         self.incoming_entries: tuple[tuple[int, float], ...] = tuple(
             (1 << int(task_to_bit[int(task)]), self._task_visit_lower_bound(data, duals, int(task), direction="incoming"))
             for task in data.tasks
@@ -2746,6 +2944,9 @@ class _UniqueTaskVisitLowerBound:
         self._incoming_cache: dict[tuple[int, int], float] = {}
         self._outgoing_cache: dict[tuple[int, int], float] = {}
         self._value_cache: dict[tuple[int, int], float] = {}
+        self._incoming_by_bit = {int(bit): float(value) for bit, value in self.incoming_entries}
+        self._outgoing_by_bit = {int(bit): float(value) for bit, value in self.outgoing_entries}
+        self._branch_cache: dict[tuple[str, int, int, int, tuple], float] = {}
 
     def value(self, available_mask: int, max_visits: int) -> float:
         if int(max_visits) <= 0 or int(available_mask) <= 0:
@@ -2782,6 +2983,202 @@ class _UniqueTaskVisitLowerBound:
         result = self._value_from_entries(self.outgoing_entries, int(available_mask), int(max_visits))
         self._outgoing_cache[key] = float(result)
         return float(result)
+
+    def branch_value(
+        self,
+        available_mask: int,
+        max_visits: int,
+        *,
+        current_mask: int,
+        constraints: tuple[BranchConstraint, ...],
+    ) -> float:
+        if not constraints:
+            return self.value(int(available_mask), int(max_visits))
+        return max(
+            self.branch_incoming_value(
+                int(available_mask),
+                int(max_visits),
+                current_mask=int(current_mask),
+                constraints=constraints,
+            ),
+            self.branch_outgoing_value(
+                int(available_mask),
+                int(max_visits),
+                current_mask=int(current_mask),
+                constraints=constraints,
+            ),
+        )
+
+    def branch_incoming_value(
+        self,
+        available_mask: int,
+        max_visits: int,
+        *,
+        current_mask: int,
+        constraints: tuple[BranchConstraint, ...],
+    ) -> float:
+        if not constraints:
+            return self.incoming_value(int(available_mask), int(max_visits))
+        return self._branch_value_from_entries(
+            "incoming",
+            self._incoming_by_bit,
+            int(available_mask),
+            int(max_visits),
+            current_mask=int(current_mask),
+            constraints=constraints,
+        )
+
+    def branch_outgoing_value(
+        self,
+        available_mask: int,
+        max_visits: int,
+        *,
+        current_mask: int,
+        constraints: tuple[BranchConstraint, ...],
+    ) -> float:
+        if not constraints:
+            return self.outgoing_value(int(available_mask), int(max_visits))
+        return self._branch_value_from_entries(
+            "outgoing",
+            self._outgoing_by_bit,
+            int(available_mask),
+            int(max_visits),
+            current_mask=int(current_mask),
+            constraints=constraints,
+        )
+
+    def _branch_value_from_entries(
+        self,
+        direction: str,
+        entries_by_bit: dict[int, float],
+        available_mask: int,
+        max_visits: int,
+        *,
+        current_mask: int,
+        constraints: tuple[BranchConstraint, ...],
+    ) -> float:
+        key = (
+            str(direction),
+            int(available_mask) & int(self.full_mask),
+            int(max_visits),
+            int(current_mask) & int(self.full_mask),
+            _branch_constraints_cache_key(tuple(constraints)),
+        )
+        cached = self._branch_cache.get(key)
+        if cached is not None:
+            return float(cached)
+        result = self._compute_branch_value_from_entries(
+            entries_by_bit,
+            int(available_mask),
+            int(max_visits),
+            current_mask=int(current_mask),
+            constraints=tuple(constraints),
+        )
+        self._branch_cache[key] = float(result)
+        return float(result)
+
+    def _compute_branch_value_from_entries(
+        self,
+        entries_by_bit: dict[int, float],
+        available_mask: int,
+        max_visits: int,
+        *,
+        current_mask: int,
+        constraints: tuple[BranchConstraint, ...],
+    ) -> float:
+        slots = int(max_visits)
+        if slots <= 0:
+            return 0.0
+        available = int(available_mask) & int(self.full_mask)
+        current = int(current_mask) & int(self.full_mask)
+        parent: dict[int, int] = {int(bit): int(bit) for bit in self.bit_to_task}
+
+        def find(bit: int) -> int:
+            root = int(bit)
+            while parent[root] != root:
+                root = parent[root]
+            while parent[int(bit)] != int(bit):
+                next_bit = parent[int(bit)]
+                parent[int(bit)] = root
+                bit = next_bit
+            return root
+
+        def union(left: int, right: int) -> None:
+            left_root = find(int(left))
+            right_root = find(int(right))
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        for constraint in constraints:
+            if constraint.kind not in {"same_vehicle", "separate_vehicle"} or constraint.task_j is None:
+                return self._value_from_entries(tuple(entries_by_bit.items()), int(available_mask), int(max_visits))
+            left_bit_index = self.task_to_bit.get(int(constraint.task_i))
+            right_bit_index = self.task_to_bit.get(int(constraint.task_j))
+            if left_bit_index is None or right_bit_index is None:
+                continue
+            left_bit = 1 << int(left_bit_index)
+            right_bit = 1 << int(right_bit_index)
+            if constraint.kind == "same_vehicle":
+                union(left_bit, right_bit)
+            elif constraint.kind == "separate_vehicle":
+                if current & left_bit:
+                    available &= ~right_bit
+                if current & right_bit:
+                    available &= ~left_bit
+                if (current & left_bit) and (current & right_bit):
+                    return float("inf")
+
+        components: dict[int, int] = {}
+        for bit in self.bit_to_task:
+            root = find(int(bit))
+            components[root] = int(components.get(root, 0)) | int(bit)
+
+        forced_value = 0.0
+        forced_size = 0
+        optional_groups: list[tuple[int, float]] = []
+        for component_mask in components.values():
+            selected = int(component_mask) & int(current)
+            available_part = int(component_mask) & int(available)
+            missing = int(component_mask) & ~int(current)
+            if selected and missing:
+                if (int(missing) & int(available_part)) != int(missing):
+                    return float("inf")
+                group_size = int(missing).bit_count()
+                forced_size += int(group_size)
+                forced_value += sum(
+                    float(entries_by_bit.get(int(bit), 0.0))
+                    for bit in _iter_bits(int(missing))
+                )
+                continue
+            if selected:
+                continue
+            optional_mask = int(component_mask) & int(available)
+            if optional_mask != int(component_mask):
+                continue
+            group_size = int(component_mask).bit_count()
+            group_value = sum(
+                float(entries_by_bit.get(int(bit), 0.0))
+                for bit in _iter_bits(int(component_mask))
+            )
+            if group_size > 0 and float(group_value) < 0.0:
+                optional_groups.append((int(group_size), float(group_value)))
+
+        if forced_size > slots:
+            return float("inf")
+        remaining_slots = max(0, int(slots) - int(forced_size))
+        dp = [0.0] + [math.inf] * int(remaining_slots)
+        for group_size, group_value in optional_groups:
+            if group_size > remaining_slots:
+                continue
+            for used in range(remaining_slots - group_size, -1, -1):
+                if math.isinf(float(dp[used])):
+                    continue
+                candidate = float(dp[used]) + float(group_value)
+                target = int(used) + int(group_size)
+                if candidate < float(dp[target]):
+                    dp[target] = float(candidate)
+        optional_value = min(float(value) for value in dp if math.isfinite(float(value)))
+        return float(forced_value) + float(optional_value)
 
     @staticmethod
     def _value_from_entries(entries: tuple[tuple[int, float], ...], available_mask: int, max_visits: int) -> float:
@@ -5773,6 +6170,26 @@ def _price_journeys_by_direct_labels(
     labels_by_count[0][0] = [initial]
     heap: list[tuple[float, int, float, int, _DirectJourneyLabel]] = [(0.0, 0, 0.0, 0, initial)]
     serial = 0
+    frontier_coverage_dirty = False
+    frontier_unsupported_reasons: set[str] = set()
+    frontier_ledger: FrontierBoundLedger | None = None
+    frontier_label_tokens: dict[int, FrontierBoundToken] = {}
+    frontier_token_labels: dict[int, tuple[_DirectJourneyLabel, int]] = {}
+    frontier_token_diagnostics: dict[int, dict[str, float | str]] = {}
+    frontier_refinement_attempted = 0
+    frontier_refinement_improved = 0
+    frontier_refinement_time = 0.0
+    frontier_refinement_old_lb: float | None = None
+    frontier_refinement_new_lb: float | None = None
+    frontier_refinement_old_suffix_lb: float | None = None
+    frontier_refinement_new_suffix_lb: float | None = None
+    frontier_refinement_reason = ""
+    frontier_refinement_winner = ""
+    frontier_micro_expansion_attempted = 0
+    frontier_micro_expansion_expanded = 0
+    frontier_micro_expansion_children = 0
+    frontier_micro_expansion_reason = ""
+    frontier_refined_global_rc_lb: float | None = None
     generated = 0
     evaluated = 0
     state_count = 1
@@ -5870,6 +6287,11 @@ def _price_journeys_by_direct_labels(
         "partial_bucket_label_count": 0,
         "partial_bucket_max_size": 0,
     }
+
+    def _mark_frontier_unsupported(reason: str) -> None:
+        nonlocal frontier_coverage_dirty
+        frontier_coverage_dirty = True
+        frontier_unsupported_reasons.add(str(reason))
     selected_candidate_cache_len = -1
     selected_candidate_cache: tuple[JourneyColumn, ...] | None = None
     task_set_continuation_bound = None
@@ -6018,6 +6440,7 @@ def _price_journeys_by_direct_labels(
             cut_duals=cut_duals,
             cuts=cuts,
             cut_masks=cut_masks,
+            branch_constraints=branch_constraints,
         )
         if bool(config.direct_journey_label_completion_bound_unique_route_helper_enabled):
             unique_route_bound = _UniqueRouteCompletionLowerBound(
@@ -6530,6 +6953,23 @@ def _price_journeys_by_direct_labels(
             "direct_label_completion_bound_unique_route_enabled": bool(
                 unique_route_bound is not None and unique_route_bound.enabled
             ),
+            "frontier_refinement_enabled": bool(config.direct_journey_label_frontier_refinement_enabled),
+            "frontier_refinement_attempted": int(frontier_refinement_attempted),
+            "frontier_refinement_improved": int(frontier_refinement_improved),
+            "frontier_refinement_time": float(frontier_refinement_time),
+            "frontier_refinement_old_lb": frontier_refinement_old_lb,
+            "frontier_refinement_new_lb": frontier_refinement_new_lb,
+            "frontier_refinement_old_suffix_lb": frontier_refinement_old_suffix_lb,
+            "frontier_refinement_new_suffix_lb": frontier_refinement_new_suffix_lb,
+            "frontier_refinement_reason": str(frontier_refinement_reason),
+            "frontier_refinement_winner": str(frontier_refinement_winner),
+            "frontier_micro_expansion_enabled": bool(
+                config.direct_journey_label_frontier_micro_expansion_enabled
+            ),
+            "frontier_micro_expansion_attempted": int(frontier_micro_expansion_attempted),
+            "frontier_micro_expansion_expanded": int(frontier_micro_expansion_expanded),
+            "frontier_micro_expansion_children": int(frontier_micro_expansion_children),
+            "frontier_micro_expansion_reason": str(frontier_micro_expansion_reason),
             "direct_label_unique_route_cache_budget_exceeded_count": 0
             if unique_route_bound is None
             else int(unique_route_bound.cache_budget_exceeded_count),
@@ -6848,6 +7288,738 @@ def _price_journeys_by_direct_labels(
             "two_cycle_build_time": 0.0 if completion_bound is None else float(completion_bound.two_cycle_build_time),
         }
 
+    def _frontier_active_rpce_bound() -> ResourceParetoCompletionEnvelope | None:
+        return (
+            rpce_bound
+            if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True))
+            else None
+        )
+
+    def _frontier_active_amcb_bound() -> AvailableMaskCompletionBound | None:
+        return (
+            amcb_bound
+            if amcb_bound is not None and not bool(getattr(amcb_bound, "disabled", False))
+            else None
+        )
+
+    def _frontier_label_bound_components(
+        label: _DirectJourneyLabel,
+        count: int,
+    ) -> tuple[float, float, float, float, str] | None:
+        if completion_bound is None:
+            return None
+        label_objective = _direct_journey_objective(
+            float(base),
+            label,
+            cut_duals,
+            cuts,
+            cut_masks,
+            cut_value_cache,
+        )
+        lower_bound, winner, future_cut_reward = _direct_completed_journey_suffix_optimistic_objective(
+            data,
+            new_mask=int(label.mask),
+            new_end_time=float(label.end_time),
+            new_objective=float(label_objective),
+            remaining_sorties=max(0, int(data.sortie_limit) - int(count)),
+            completion_bound=completion_bound,
+            rpce_bound=_frontier_active_rpce_bound(),
+            amcb_bound=_frontier_active_amcb_bound(),
+            unique_task_bound=unique_task_bound,
+            unique_route_bound=unique_route_bound,
+            positive_cut_reward_bound=positive_cut_reward_bound,
+            max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+            available_mask_completion_bound_skip_with_unique_route=bool(
+                config.direct_journey_label_available_mask_completion_bound_skip_with_unique_route
+            ),
+            cut_duals=cut_duals,
+            cuts=cuts,
+            cut_masks=cut_masks,
+            branch_constraints=branch_constraints,
+        )
+        if not math.isfinite(float(lower_bound)):
+            return None
+        suffix_lb = float(lower_bound) - float(label_objective) + float(future_cut_reward)
+        return (
+            float(lower_bound),
+            float(label_objective),
+            float(suffix_lb),
+            float(future_cut_reward),
+            str(winner),
+        )
+
+    def _frontier_refinement_budget_deadline(now: float) -> float | None:
+        local_deadline: float | None = None
+        time_limit = max(0.0, float(config.direct_journey_label_frontier_refinement_time_limit))
+        if time_limit > 0.0:
+            local_deadline = float(now) + float(time_limit)
+        if deadline is not None:
+            local_deadline = float(deadline) if local_deadline is None else min(float(local_deadline), float(deadline))
+        return local_deadline
+
+    def _frontier_fathom_rc_target() -> float | None:
+        raw_target = getattr(config, "direct_journey_label_frontier_refinement_fathom_rc_target", None)
+        if raw_target is None:
+            return None
+        try:
+            target = float(raw_target)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(float(target)):
+            return None
+        return float(target)
+
+    def _frontier_lb_quantile(values: list[float], fraction: float) -> float | None:
+        if not values:
+            return None
+        index = int(math.floor(max(0.0, min(1.0, float(fraction))) * float(len(values) - 1)))
+        return float(values[max(0, min(len(values) - 1, index))])
+
+    def _frontier_waterline_stats() -> dict[str, Any]:
+        if frontier_ledger is None:
+            return {
+                "frontier_fathom_rc_target": _frontier_fathom_rc_target(),
+                "frontier_required_rc_lift": None,
+                "frontier_critical_token_count": 0,
+                "frontier_floor_multiplicity": 0,
+                "frontier_floor_band_count_0_1": 0,
+                "frontier_floor_band_count_1": 0,
+                "frontier_floor_band_count_5": 0,
+                "frontier_floor_band_count_10": 0,
+                "frontier_target_band_count": 0,
+                "frontier_second_active_lb": None,
+                "frontier_active_lb_p05": None,
+                "frontier_active_lb_p10": None,
+                "frontier_active_lb_median": None,
+                "frontier_refined_global_rc_lb": frontier_refined_global_rc_lb,
+            }
+        tokens = frontier_ledger.active_tokens_sorted()
+        values = [float(token.lower_bound) for token in tokens if math.isfinite(float(token.lower_bound))]
+        target = _frontier_fathom_rc_target()
+        floor_eps = max(0.0, float(config.direct_journey_label_frontier_refinement_floor_eps))
+        floor = values[0] if values else None
+        critical_count = (
+            0
+            if target is None
+            else sum(1 for value in values if float(value) < float(target) - float(floor_eps))
+        )
+        required_lift = (
+            None
+            if target is None or floor is None or float(floor) >= float(target)
+            else float(target) - float(floor)
+        )
+        floor_multiplicity = (
+            0
+            if floor is None
+            else sum(1 for value in values if float(value) <= float(floor) + float(floor_eps))
+        )
+        def _floor_band_count(delta: float) -> int:
+            if floor is None:
+                return 0
+            return sum(1 for value in values if float(value) <= float(floor) + float(delta) + float(floor_eps))
+
+        target_band_count = (
+            0
+            if target is None
+            else sum(1 for value in values if float(value) <= float(target) + float(floor_eps))
+        )
+        return {
+            "frontier_fathom_rc_target": None if target is None else float(target),
+            "frontier_required_rc_lift": required_lift,
+            "frontier_critical_token_count": int(critical_count),
+            "frontier_floor_multiplicity": int(floor_multiplicity),
+            "frontier_floor_band_count_0_1": int(_floor_band_count(0.1)),
+            "frontier_floor_band_count_1": int(_floor_band_count(1.0)),
+            "frontier_floor_band_count_5": int(_floor_band_count(5.0)),
+            "frontier_floor_band_count_10": int(_floor_band_count(10.0)),
+            "frontier_target_band_count": int(target_band_count),
+            "frontier_second_active_lb": None if len(values) < 2 else float(values[1]),
+            "frontier_active_lb_p05": _frontier_lb_quantile(values, 0.05),
+            "frontier_active_lb_p10": _frontier_lb_quantile(values, 0.10),
+            "frontier_active_lb_median": _frontier_lb_quantile(values, 0.50),
+            "frontier_refined_global_rc_lb": frontier_refined_global_rc_lb,
+        }
+
+    def _frontier_refinement_ready_for_reserve(now: float) -> bool:
+        if not bool(config.direct_journey_label_frontier_refinement_enabled):
+            return False
+        if frontier_ledger is None or completion_bound is None:
+            return False
+        if bool(frontier_coverage_dirty) or frontier_unsupported_reasons:
+            return False
+        if int(frontier_refinement_attempted) >= max(1, int(config.direct_journey_label_frontier_refinement_max_tokens)):
+            return False
+        if deadline is None:
+            return False
+        reserve = max(0.0, float(config.direct_journey_label_frontier_refinement_reserve_time))
+        if reserve <= 0.0:
+            return False
+        return float(now) >= float(deadline) - float(reserve)
+
+    def _frontier_component_with_parent_floor(
+        parent_lb: float,
+        components: tuple[float, float, float, float, str],
+    ) -> tuple[float, float, float, float, str]:
+        refined_lb = max(float(parent_lb), float(components[0]))
+        if refined_lb > float(components[0]) + 1.0e-9:
+            return (
+                float(refined_lb),
+                float(components[1]),
+                float(components[2]),
+                float(components[3]),
+                "micro_parent_floor",
+            )
+        return (
+            float(components[0]),
+            float(components[1]),
+            float(components[2]),
+            float(components[3]),
+            str(components[4]),
+        )
+
+    def _frontier_replace_token_regions(
+        parent_label: _DirectJourneyLabel,
+        parent_token: FrontierBoundToken,
+        regions: list[
+            tuple[
+                _DirectJourneyLabel | None,
+                int,
+                str,
+                tuple[float, float, float, float, str],
+            ]
+        ],
+    ) -> bool:
+        if frontier_ledger is None:
+            return False
+        current = frontier_label_tokens.get(id(parent_label))
+        if current is None or int(current.token_id) != int(parent_token.token_id):
+            return False
+        if not regions:
+            return False
+        frontier_label_tokens.pop(id(parent_label), None)
+        frontier_token_diagnostics.pop(int(parent_token.token_id), None)
+        frontier_token_labels.pop(int(parent_token.token_id), None)
+        child_tokens = frontier_ledger.replace_region(
+            parent_token,
+            tuple((float(components[0]), str(kind)) for _child, _count, kind, components in regions),
+        )
+        for (child, count, _kind, components), token in zip(regions, child_tokens):
+            if child is not None:
+                frontier_label_tokens[id(child)] = token
+                frontier_token_labels[int(token.token_id)] = (child, int(count))
+            frontier_token_diagnostics[int(token.token_id)] = {
+                "lower_bound": float(components[0]),
+                "label_objective": float(components[1]),
+                "suffix_lb": float(components[2]),
+                "future_cut_reward": float(components[3]),
+                "suffix_winner": str(components[4]),
+            }
+        return True
+
+    def _frontier_micro_expand_token(
+        token: FrontierBoundToken,
+        *,
+        budget_deadline: float | None,
+    ) -> tuple[bool, float | None]:
+        nonlocal frontier_micro_expansion_attempted
+        nonlocal frontier_micro_expansion_expanded
+        nonlocal frontier_micro_expansion_children
+        nonlocal frontier_micro_expansion_reason
+
+        if not bool(config.direct_journey_label_frontier_micro_expansion_enabled):
+            frontier_micro_expansion_reason = "micro_disabled"
+            return False, None
+        if frontier_ledger is None:
+            frontier_micro_expansion_reason = "missing_frontier_ledger"
+            return False, None
+        if not bool(token.active):
+            frontier_micro_expansion_reason = "inactive_token"
+            return False, None
+        payload = frontier_token_labels.get(int(token.token_id))
+        if payload is None:
+            frontier_micro_expansion_reason = "missing_token_label"
+            return False, None
+        label, count = payload
+        if int(count) >= int(data.sortie_limit):
+            frontier_micro_expansion_reason = "sortie_limit"
+            return False, None
+        if budget_deadline is not None and time.perf_counter() >= float(budget_deadline):
+            frontier_micro_expansion_reason = "deadline"
+            return False, None
+
+        frontier_micro_expansion_attempted += 1
+        parent_lb = float(token.lower_bound)
+        label_objective = _direct_journey_objective(
+            float(base),
+            label,
+            cut_duals,
+            cuts,
+            cut_masks,
+            cut_value_cache,
+        )
+        stop_components = _frontier_component_with_parent_floor(
+            parent_lb,
+            (float(label_objective), float(label_objective), 0.0, 0.0, "micro_stop"),
+        )
+        regions: list[
+            tuple[
+                _DirectJourneyLabel | None,
+                int,
+                str,
+                tuple[float, float, float, float, str],
+            ]
+        ] = [(None, int(count), "direct_label_stop", stop_components)]
+
+        micro_config = replace(config, direct_journey_label_next_sortie_trip_return_limit=0)
+        next_trips, _gen_inc, _eval_inc, incomplete_reason, _bound_checked, _bound_pruned = _direct_next_sortie_trips(
+            data,
+            trip_duals,
+            task_order,
+            task_to_bit,
+            used_mask=int(label.mask),
+            earliest_start=float(label.end_time),
+            threshold=float("inf"),
+            base_reduced_cost=float(base),
+            journey_label_value=float(label.value),
+            journey_label_mask=int(label.mask),
+            journey_label_count=int(count),
+            completion_bound=None,
+            rpce_bound=None,
+            amcb_bound=None,
+            unique_task_bound=None,
+            unique_route_bound=None,
+            positive_cut_reward_bound=None,
+            cut_duals=cut_duals,
+            cuts=cuts,
+            cut_masks=cut_masks,
+            cut_pruning_safe=cut_pruning_safe,
+            branch_constraints=branch_constraints,
+            config=micro_config,
+            deadline=budget_deadline,
+            completion_bound_stats=None,
+            cut_value_cache=cut_value_cache,
+            optimistic_cut_value_cache=optimistic_cut_value_cache,
+            profile_cut_penalty_cache=profile_cut_penalty_cache,
+            profile_stats=None,
+            completed_trip_callback=None,
+        )
+        if incomplete_reason:
+            frontier_micro_expansion_reason = str(incomplete_reason)
+            return False, None
+
+        max_children = max(1, int(config.direct_journey_label_frontier_micro_expansion_max_children_per_token))
+        if len(next_trips) + 1 > int(max_children):
+            frontier_micro_expansion_reason = "micro_child_cap"
+            return False, None
+
+        for trip, contribution, trip_mask in next_trips:
+            if budget_deadline is not None and time.perf_counter() >= float(budget_deadline):
+                frontier_micro_expansion_reason = "deadline"
+                return False, None
+            if int(label.mask) & int(trip_mask):
+                frontier_micro_expansion_reason = "micro_overlap"
+                return False, None
+            child = _DirectJourneyLabel(
+                end_time=float(trip.end_time),
+                value=round(float(label.value) + float(contribution), 9),
+                mask=int(label.mask) | int(trip_mask),
+                trips=(*label.trips, trip),
+            )
+            if not _journey_mask_branch_allowed(int(child.mask), branch_constraints, task_to_bit, final=False):
+                frontier_micro_expansion_reason = "micro_branch_filtered"
+                return False, None
+            if not _repair_prefix_allowed(int(child.mask)):
+                frontier_micro_expansion_reason = "micro_repair_prefix_filtered"
+                return False, None
+            components = _frontier_label_bound_components(child, int(count) + 1)
+            if components is None:
+                frontier_micro_expansion_reason = "micro_child_bound_unavailable"
+                return False, None
+            regions.append(
+                (
+                    child,
+                    int(count) + 1,
+                    "direct_label_open",
+                    _frontier_component_with_parent_floor(parent_lb, components),
+                )
+            )
+
+        if not _frontier_replace_token_regions(label, token, regions):
+            frontier_micro_expansion_reason = "micro_replace_failed"
+            return False, None
+        new_floor = min(float(components[0]) for _child, _count, _kind, components in regions)
+        frontier_micro_expansion_expanded += 1
+        frontier_micro_expansion_children += len(regions)
+        frontier_micro_expansion_reason = "expanded"
+        return True, float(new_floor)
+
+    def _frontier_refine_min_active_tokens(reason: str) -> None:
+        nonlocal frontier_refinement_attempted
+        nonlocal frontier_refinement_improved
+        nonlocal frontier_refinement_time
+        nonlocal frontier_refinement_old_lb
+        nonlocal frontier_refinement_new_lb
+        nonlocal frontier_refinement_old_suffix_lb
+        nonlocal frontier_refinement_new_suffix_lb
+        nonlocal frontier_refinement_reason
+        nonlocal frontier_refinement_winner
+        nonlocal frontier_refined_global_rc_lb
+
+        if not bool(config.direct_journey_label_frontier_refinement_enabled):
+            return
+        if frontier_ledger is None or completion_bound is None:
+            return
+        if bool(frontier_coverage_dirty) or frontier_unsupported_reasons:
+            frontier_refinement_reason = "coverage_incomplete"
+            return
+        max_tokens = max(1, int(config.direct_journey_label_frontier_refinement_max_tokens))
+        if int(frontier_refinement_attempted) >= int(max_tokens):
+            return
+        target = _frontier_fathom_rc_target()
+        if target is None:
+            frontier_refinement_reason = "missing_fathom_rc_target"
+            return
+        floor_eps = max(0.0, float(config.direct_journey_label_frontier_refinement_floor_eps))
+        active_tokens = frontier_ledger.active_tokens_sorted()
+        critical_tokens = tuple(
+            token for token in active_tokens if float(token.lower_bound) < float(target) - float(floor_eps)
+        )
+        if not critical_tokens:
+            frontier_refinement_reason = "already_at_fathom_waterline"
+            frontier_refined_global_rc_lb = frontier_ledger.global_remaining_rc_lb()
+            return
+        max_critical = max(1, int(config.direct_journey_label_frontier_refinement_max_critical_tokens))
+        remaining_token_budget = max(0, int(max_tokens) - int(frontier_refinement_attempted))
+        floor = float(active_tokens[0].lower_bound) if active_tokens else None
+        floor_multiplicity = (
+            0
+            if floor is None
+            else sum(1 for token in active_tokens if float(token.lower_bound) <= float(floor) + float(floor_eps))
+        )
+        if len(critical_tokens) > int(max_critical):
+            frontier_refinement_reason = "broad_plateau_critical_token_count"
+            frontier_refined_global_rc_lb = frontier_ledger.global_remaining_rc_lb()
+            return
+        if int(floor_multiplicity) > int(max_critical):
+            frontier_refinement_reason = "broad_plateau_floor_multiplicity"
+            frontier_refined_global_rc_lb = frontier_ledger.global_remaining_rc_lb()
+            return
+        if len(critical_tokens) > int(remaining_token_budget):
+            frontier_refinement_reason = "refinement_token_budget_exceeded"
+            frontier_refined_global_rc_lb = frontier_ledger.global_remaining_rc_lb()
+            return
+        started_refinement = time.perf_counter()
+        budget_deadline = _frontier_refinement_budget_deadline(started_refinement)
+        if budget_deadline is not None and started_refinement >= float(budget_deadline):
+            frontier_refinement_reason = "deadline"
+            return
+
+        if bool(config.direct_journey_label_frontier_micro_expansion_enabled):
+            for token in critical_tokens:
+                if int(frontier_refinement_attempted) >= int(max_tokens):
+                    break
+                if budget_deadline is not None and time.perf_counter() >= float(budget_deadline):
+                    frontier_refinement_reason = "deadline"
+                    break
+                if not bool(token.active):
+                    continue
+                token_diag = frontier_token_diagnostics.get(int(token.token_id), {})
+                old_lb = float(token.lower_bound)
+                raw_old_suffix_lb = token_diag.get("suffix_lb")
+                frontier_refinement_attempted += 1
+                frontier_refinement_old_lb = float(old_lb)
+                frontier_refinement_old_suffix_lb = None if raw_old_suffix_lb is None else float(raw_old_suffix_lb)
+                expanded, new_floor = _frontier_micro_expand_token(token, budget_deadline=budget_deadline)
+                if expanded and new_floor is not None:
+                    frontier_refinement_new_lb = float(new_floor)
+                    frontier_refinement_new_suffix_lb = None
+                    frontier_refinement_winner = "frontier_micro_expansion"
+                    frontier_refinement_reason = str(reason)
+                    if float(new_floor) > float(old_lb) + 1.0e-9:
+                        frontier_refinement_improved += 1
+                else:
+                    frontier_refinement_reason = str(frontier_micro_expansion_reason or "micro_no_improvement")
+                frontier_refined_global_rc_lb = frontier_ledger.global_remaining_rc_lb()
+                if (
+                    frontier_refined_global_rc_lb is not None
+                    and float(frontier_refined_global_rc_lb) >= float(target) - float(floor_eps)
+                ):
+                    frontier_refinement_time += time.perf_counter() - started_refinement
+                    return
+            active_tokens = frontier_ledger.active_tokens_sorted()
+            critical_tokens = tuple(
+                token for token in active_tokens if float(token.lower_bound) < float(target) - float(floor_eps)
+            )
+            if not critical_tokens:
+                frontier_refinement_reason = "already_at_fathom_waterline"
+                frontier_refined_global_rc_lb = frontier_ledger.global_remaining_rc_lb()
+                frontier_refinement_time += time.perf_counter() - started_refinement
+                return
+            remaining_token_budget = max(0, int(max_tokens) - int(frontier_refinement_attempted))
+            if remaining_token_budget <= 0:
+                frontier_refinement_time += time.perf_counter() - started_refinement
+                return
+
+        unique_route_task_limit = max(0, int(config.direct_journey_label_frontier_refinement_unique_route_max_tasks))
+        if unique_route_task_limit <= 0:
+            frontier_refinement_reason = "unique_route_disabled"
+            frontier_refinement_time += time.perf_counter() - started_refinement
+            return
+        local_unique_route = _UniqueRouteCompletionLowerBound(
+            data,
+            trip_duals,
+            task_to_bit,
+            max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+            sortie_limit=int(data.sortie_limit),
+            time_buckets=int(config.direct_journey_label_completion_bound_time_buckets),
+            energy_buckets=int(config.direct_journey_label_completion_bound_energy_buckets),
+            exact_mask_limit=len(task_to_bit),
+            cache_state_limit=int(config.direct_journey_label_frontier_refinement_cache_max_states),
+            deadline=budget_deadline,
+        )
+        if not bool(local_unique_route.enabled):
+            frontier_refinement_reason = "unique_route_disabled"
+            frontier_refinement_time += time.perf_counter() - started_refinement
+            return
+
+        for token in critical_tokens:
+            if int(frontier_refinement_attempted) >= int(max_tokens):
+                break
+            if budget_deadline is not None and time.perf_counter() >= float(budget_deadline):
+                frontier_refinement_reason = "deadline"
+                break
+            if not bool(token.active):
+                continue
+            token_payload = frontier_token_labels.get(int(token.token_id))
+            if token_payload is None:
+                token_diag = frontier_token_diagnostics.get(int(token.token_id), {})
+                if str(token_diag.get("suffix_winner", "")) == "micro_stop":
+                    frontier_refinement_reason = "micro_stop_token_critical"
+                    continue
+                frontier_refinement_reason = "missing_token_label"
+                break
+            label, count = token_payload
+            token_diag = frontier_token_diagnostics.get(int(token.token_id), {})
+            old_lb = float(token.lower_bound)
+            raw_label_objective = token_diag.get("label_objective")
+            raw_future_cut_reward = token_diag.get("future_cut_reward")
+            raw_old_suffix_lb = token_diag.get("suffix_lb")
+            if raw_label_objective is None:
+                frontier_refinement_reason = "missing_label_objective"
+                break
+            label_objective = float(raw_label_objective)
+            future_cut_reward = 0.0 if raw_future_cut_reward is None else float(raw_future_cut_reward)
+            old_suffix_lb = None if raw_old_suffix_lb is None else float(raw_old_suffix_lb)
+            available_mask = int(local_unique_route.full_mask) ^ int(label.mask)
+            if int(available_mask).bit_count() > int(unique_route_task_limit):
+                frontier_refinement_reason = "unique_route_remaining_task_limit"
+                continue
+            remaining_sorties = max(0, int(data.sortie_limit) - int(count))
+            route_suffix_lb = local_unique_route.future_value(
+                int(available_mask),
+                int(remaining_sorties),
+                float(label.end_time),
+            )
+            frontier_refinement_attempted += 1
+            frontier_refinement_old_lb = float(old_lb)
+            frontier_refinement_old_suffix_lb = old_suffix_lb
+            if route_suffix_lb is None or not math.isfinite(float(route_suffix_lb)):
+                frontier_refinement_reason = "unique_route_budget"
+                continue
+            new_suffix_lb = float(route_suffix_lb)
+            new_lb = float(label_objective) + float(new_suffix_lb) - float(future_cut_reward)
+            frontier_refinement_new_lb = float(new_lb)
+            frontier_refinement_new_suffix_lb = float(new_suffix_lb)
+            if new_lb > old_lb + 1.0e-9:
+                frontier_ledger.update_lower_bound(token, float(new_lb))
+                token_diag["lower_bound"] = float(new_lb)
+                token_diag["suffix_lb"] = float(new_suffix_lb)
+                token_diag["suffix_winner"] = "frontier_refined_unique_route"
+                frontier_refinement_improved += 1
+                frontier_refinement_winner = "frontier_refined_unique_route"
+                frontier_refinement_reason = str(reason)
+            else:
+                frontier_refinement_reason = "no_improvement"
+            frontier_refined_global_rc_lb = frontier_ledger.global_remaining_rc_lb()
+            if (
+                frontier_refined_global_rc_lb is not None
+                and float(frontier_refined_global_rc_lb) >= float(target) - float(floor_eps)
+            ):
+                break
+        frontier_refinement_time += time.perf_counter() - started_refinement
+
+    def _frontier_deactivate_label(label: _DirectJourneyLabel) -> None:
+        if frontier_ledger is None:
+            return
+        token = frontier_label_tokens.pop(id(label), None)
+        if token is not None:
+            frontier_ledger.deactivate(token)
+            frontier_token_labels.pop(int(token.token_id), None)
+            frontier_token_diagnostics.pop(int(token.token_id), None)
+
+    def _frontier_replace_label(
+        parent_label: _DirectJourneyLabel,
+        children: list[tuple[_DirectJourneyLabel, tuple[float, float, float, float, str]]],
+    ) -> None:
+        if frontier_ledger is None:
+            return
+        parent_token = frontier_label_tokens.pop(id(parent_label), None)
+        if parent_token is None:
+            return
+        frontier_token_diagnostics.pop(int(parent_token.token_id), None)
+        frontier_token_labels.pop(int(parent_token.token_id), None)
+        child_tokens = frontier_ledger.replace_region(
+            parent_token,
+            tuple((float(components[0]), "direct_label_open") for _child, components in children),
+        )
+        for (child, components), token in zip(children, child_tokens):
+            frontier_label_tokens[id(child)] = token
+            frontier_token_labels[int(token.token_id)] = (child, int(len(child.trips)))
+            frontier_token_diagnostics[int(token.token_id)] = {
+                "lower_bound": float(components[0]),
+                "label_objective": float(components[1]),
+                "suffix_lb": float(components[2]),
+                "future_cut_reward": float(components[3]),
+                "suffix_winner": str(components[4]),
+            }
+
+    if bool(config.direct_journey_label_frontier_bound_ledger_enabled) and completion_bound is not None:
+        initial_frontier_components = _frontier_label_bound_components(initial, 0)
+        if initial_frontier_components is None:
+            _mark_frontier_unsupported("initial_frontier_bound_unavailable")
+        else:
+            frontier_ledger = FrontierBoundLedger()
+            initial_token = frontier_ledger.register_region(
+                float(initial_frontier_components[0]),
+                "direct_label_open",
+            )
+            frontier_label_tokens[id(initial)] = initial_token
+            frontier_token_labels[int(initial_token.token_id)] = (initial, 0)
+            frontier_token_diagnostics[int(initial_token.token_id)] = {
+                "lower_bound": float(initial_frontier_components[0]),
+                "label_objective": float(initial_frontier_components[1]),
+                "suffix_lb": float(initial_frontier_components[2]),
+                "future_cut_reward": float(initial_frontier_components[3]),
+                "suffix_winner": str(initial_frontier_components[4]),
+            }
+
+    def _frontier_bound_proof_kwargs() -> dict[str, Any]:
+        if not bool(config.direct_journey_label_frontier_bound_ledger_enabled):
+            return {}
+        if bool(config.direct_journey_label_frontier_refinement_enabled):
+            _frontier_refine_min_active_tokens("proof_kwargs")
+        pending_complete_min_rc = min((float(objective) for objective, _journey in candidates), default=None)
+        unsupported_reasons = set(frontier_unsupported_reasons)
+        frontier_lb: float | None = None
+        frontier_min_active_lb: float | None = None
+        frontier_min_active_label_objective: float | None = None
+        frontier_min_active_suffix_lb: float | None = None
+        frontier_min_active_future_cut_reward: float | None = None
+        frontier_min_active_suffix_winner = ""
+        frontier_region_count = 0
+        coverage_complete = False
+        if not bool(config.direct_journey_label_global_certificate_enabled):
+            unsupported_reasons.add("global_certificate_disabled")
+        if completion_bound is None:
+            unsupported_reasons.add("missing_completion_bound")
+        if bool(use_next_sortie_cache):
+            unsupported_reasons.add("next_sortie_cache_not_covered")
+        if bool(direct_label_beam_mode):
+            unsupported_reasons.add("beam_mode_restricted_universe")
+        if bool(repair_existing_only):
+            unsupported_reasons.add("repair_existing_only_restricted_universe")
+        if bool(new_task_set_only):
+            unsupported_reasons.add("new_task_set_only_restricted_universe")
+        if int(weak_filtered) > 0:
+            unsupported_reasons.add("weak_negative_journeys_filtered")
+        if int(duplicate_filtered) > 0:
+            unsupported_reasons.add("duplicate_negative_journeys_filtered")
+        if int(dominated_task_set_filtered) > 0 and not bool(exhausted):
+            unsupported_reasons.add("dominated_task_set_filtered_before_exhaustion")
+        if bool(frontier_coverage_dirty):
+            unsupported_reasons.add("frontier_coverage_dirty")
+        if not unsupported_reasons and frontier_ledger is not None:
+            values: list[float] = []
+            min_active_token = frontier_ledger.min_active_token()
+            if min_active_token is not None and math.isfinite(float(min_active_token.lower_bound)):
+                ledger_lb = float(min_active_token.lower_bound)
+                values.append(float(ledger_lb))
+                frontier_min_active_lb = float(ledger_lb)
+                token_diag = frontier_token_diagnostics.get(int(min_active_token.token_id), {})
+                if token_diag:
+                    raw_label_objective = token_diag.get("label_objective")
+                    raw_suffix_lb = token_diag.get("suffix_lb")
+                    raw_future_cut_reward = token_diag.get("future_cut_reward")
+                    raw_suffix_winner = token_diag.get("suffix_winner", "")
+                    if raw_label_objective is not None:
+                        frontier_min_active_label_objective = float(raw_label_objective)
+                    if raw_suffix_lb is not None:
+                        frontier_min_active_suffix_lb = float(raw_suffix_lb)
+                    if raw_future_cut_reward is not None:
+                        frontier_min_active_future_cut_reward = float(raw_future_cut_reward)
+                    frontier_min_active_suffix_winner = str(raw_suffix_winner or "")
+            if pending_complete_min_rc is not None and math.isfinite(float(pending_complete_min_rc)):
+                values.append(float(pending_complete_min_rc))
+            frontier_region_count = int(frontier_ledger.active_region_count())
+            if values:
+                frontier_lb = min(values)
+                coverage_complete = True
+            else:
+                unsupported_reasons.add("empty_frontier_bound")
+        elif not unsupported_reasons:
+            active_rpce_bound = (
+                rpce_bound
+                if rpce_bound is not None and bool(getattr(rpce_bound, "is_available", True))
+                else None
+            )
+            active_amcb_bound = (
+                amcb_bound
+                if amcb_bound is not None and not bool(getattr(amcb_bound, "disabled", False))
+                else None
+            )
+            frontier_lb, frontier_region_count = _direct_open_label_frontier_lower_bound(
+                data,
+                tuple(heap),
+                labels_by_count,
+                base_reduced_cost=float(base),
+                cut_duals=cut_duals,
+                cuts=cuts,
+                cut_masks=cut_masks,
+                cut_value_cache=cut_value_cache,
+                completion_bound=completion_bound,
+                rpce_bound=active_rpce_bound,
+                amcb_bound=active_amcb_bound,
+                unique_task_bound=unique_task_bound,
+                unique_route_bound=unique_route_bound,
+                positive_cut_reward_bound=positive_cut_reward_bound,
+                max_tasks_per_sortie=_max_tasks_per_trip(data, int(config.max_tasks_per_trip)),
+                branch_constraints=branch_constraints,
+                available_mask_completion_bound_skip_with_unique_route=bool(
+                    config.direct_journey_label_available_mask_completion_bound_skip_with_unique_route
+                ),
+                pending_complete_min_rc=pending_complete_min_rc,
+            )
+            if frontier_lb is None:
+                unsupported_reasons.add("empty_frontier_bound")
+            else:
+                coverage_complete = True
+        unsupported_count = len(unsupported_reasons)
+        return {
+            "global_remaining_rc_lb": None if frontier_lb is None else float(frontier_lb),
+            "global_remaining_rc_lb_valid": bool(coverage_complete and frontier_lb is not None),
+            "global_remaining_rc_lb_coverage_complete": bool(coverage_complete),
+            "frontier_region_count": int(frontier_region_count),
+            "frontier_unsupported_region_count": int(unsupported_count),
+            "pending_complete_min_rc": pending_complete_min_rc,
+            "frontier_min_active_lb": frontier_min_active_lb,
+            "frontier_min_active_label_objective": frontier_min_active_label_objective,
+            "frontier_min_active_suffix_lb": frontier_min_active_suffix_lb,
+            "frontier_min_active_future_cut_reward": frontier_min_active_future_cut_reward,
+            "frontier_min_active_suffix_winner": frontier_min_active_suffix_winner,
+            **_frontier_waterline_stats(),
+            "pricing_proof_kind": PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE,
+        }
+
     def _record_streamed_next_sortie(
         parent_label: _DirectJourneyLabel,
         trip: _DirectSortieSegment,
@@ -6884,6 +8056,9 @@ def _price_journeys_by_direct_labels(
         return _record_negative_label(new_label, float(new_label_objective))
 
     while heap:
+        now = time.perf_counter()
+        if _frontier_refinement_ready_for_reserve(now):
+            _frontier_refine_min_active_tokens("deadline_reserve")
         if deadline is not None and time.perf_counter() > deadline:
             exhausted = False
             reason = "time_limit"
@@ -6914,6 +8089,7 @@ def _price_journeys_by_direct_labels(
         _priority, count, _end, _serial, label = heapq.heappop(heap)
         if label not in labels_by_count[int(count)].get(int(label.mask), []):
             continue
+        child_frontier_regions: list[tuple[_DirectJourneyLabel, tuple[float, float, float, float, str]]] = []
         objective = _direct_journey_objective(float(base), label, cut_duals, cuts, cut_masks, cut_value_cache)
         best_objective = objective if best_objective is None else min(best_objective, objective)
         if _record_negative_label(label, float(objective)):
@@ -6940,12 +8116,14 @@ def _price_journeys_by_direct_labels(
                 **_direct_label_mask_diagnostic_kwargs(selected),
             )
         if int(count) >= int(data.sortie_limit):
+            _frontier_deactivate_label(label)
             continue
         if task_set_continuation_bound is not None:
             remaining = int(data.sortie_limit) - int(count)
             continuation = task_set_continuation_bound.value(int(label.mask), remaining)
             if continuation is not None and float(base) + float(label.value) + float(continuation) >= -float(config.eps):
                 direct_bound_pruned += 1
+                _frontier_deactivate_label(label)
                 continue
         remaining_threshold = max(0.0, -float(base) - float(label.value)) + float(config.eps)
         if cut_duals and not cut_pruning_safe:
@@ -7178,6 +8356,7 @@ def _price_journeys_by_direct_labels(
                     cuts=cuts,
                     cut_masks=cut_masks,
                     eps=float(config.eps),
+                    branch_constraints=branch_constraints,
                     completion_bound_stats=completion_bound_stats,
                 ):
                     completion_lb_pruned += 1
@@ -7220,6 +8399,7 @@ def _price_journeys_by_direct_labels(
             if not added:
                 continue
             if int(config.max_dp_states) > 0 and state_count > int(config.max_dp_states):
+                _mark_frontier_unsupported("direct_label_state_budget")
                 exhausted = False
                 reason = "direct_label_state_budget"
                 break
@@ -7269,6 +8449,7 @@ def _price_journeys_by_direct_labels(
                     cut_duals=cut_duals,
                     cuts=cuts,
                     cut_masks=cut_masks,
+                    branch_constraints=branch_constraints,
                 )
             serial += 1
             heapq.heappush(
@@ -7281,12 +8462,18 @@ def _price_journeys_by_direct_labels(
                     new_label,
                 ),
             )
+            frontier_components = _frontier_label_bound_components(new_label, int(count) + 1)
+            if frontier_components is not None:
+                child_frontier_regions.append((new_label, frontier_components))
+            elif frontier_ledger is not None:
+                _mark_frontier_unsupported("child_frontier_bound_unavailable")
         if incomplete_reason:
             exhausted = False
             reason = incomplete_reason
             break
         if not exhausted:
             break
+        _frontier_replace_label(label, child_frontier_regions)
         if not exhausted:
             break
 
@@ -7372,6 +8559,19 @@ def _price_journeys_by_direct_labels(
         # journey exists, so a proven no-column certificate must report a
         # nonnegative best RC to downstream diagnostics.
         reported_best_objective = 0.0
+    proof_kwargs: dict[str, Any] = {}
+    if status == "OPTIMAL" and final_reason == "direct_label_no_negative_journey":
+        proof_kwargs = {
+            "global_remaining_rc_lb": 0.0,
+            "global_remaining_rc_lb_valid": True,
+            "global_remaining_rc_lb_coverage_complete": True,
+            "frontier_region_count": 0,
+            "frontier_unsupported_region_count": 0,
+            "pending_complete_min_rc": None,
+            "pricing_proof_kind": PRICING_PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+        }
+    elif bool(config.direct_journey_label_frontier_bound_ledger_enabled):
+        proof_kwargs = _frontier_bound_proof_kwargs()
     result = JourneyPricingResult(
         [],
         bool(exhausted)
@@ -7396,6 +8596,7 @@ def _price_journeys_by_direct_labels(
         dominated_task_set_journeys_filtered=dominated_task_set_filtered,
         **_completion_bound_kwargs(),
         **_direct_label_mask_diagnostic_kwargs(),
+        **proof_kwargs,
     )
     if (
         bool(config.direct_journey_label_completion_bound_audit_enabled)
@@ -7739,6 +8940,7 @@ def _direct_next_sortie_trips(
                         cuts=cuts,
                         cut_masks=cut_masks,
                         eps=float(config.eps),
+                        branch_constraints=branch_constraints,
                         completion_bound_stats=completion_bound_stats,
                         optimistic_cut_value_cache=optimistic_cut_value_cache,
                         partial_cover_dual_sum_cache=partial_cover_dual_sum_cache,
@@ -7828,6 +9030,7 @@ def _direct_next_sortie_trips(
                     unique_task_bound=unique_task_bound,
                     unique_route_bound=unique_route_bound,
                     positive_cut_reward_bound=positive_cut_reward_bound,
+                    branch_constraints=branch_constraints,
                     completion_bound_stats=completion_bound_stats,
                     cut_value_cache=cut_value_cache,
                     optimistic_cut_value_cache=optimistic_cut_value_cache,
@@ -7941,6 +9144,7 @@ def _direct_sortie_partial_completion_bound_check(
     cuts: tuple[FutureCut, ...],
     cut_masks: tuple[int, ...],
     eps: float,
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
     available_mask_completion_bound_skip_with_unique_route: bool = True,
     completion_bound_stats: dict[str, int] | None = None,
     optimistic_cut_value_cache: dict[int, float] | None = None,
@@ -7984,10 +9188,21 @@ def _direct_sortie_partial_completion_bound_check(
         available_mask = int(unique_route_bound.full_mask) ^ (int(journey_label_mask) | int(label.mask))
     elif amcb_bound is not None:
         available_mask = int(amcb_bound.full_mask) ^ (int(journey_label_mask) | int(label.mask))
+    current_mask = int(journey_label_mask) | int(label.mask)
     if unique_task_bound is not None and remaining_visit_capacity > 0:
         _unique_task_started_ns = time.perf_counter_ns() if profile_enabled else 0
-        remaining_lb = unique_task_bound.value(int(available_mask), int(remaining_visit_capacity))
+        remaining_lb = unique_task_bound.branch_value(
+            int(available_mask),
+            int(remaining_visit_capacity),
+            current_mask=int(current_mask),
+            constraints=tuple(branch_constraints),
+        )
         remaining_lb_winner = "unique_task"
+        if math.isinf(float(remaining_lb)):
+            _profile_add("partial_bound_unique_task_ns", _unique_task_started_ns)
+            _increment_completion_bound_stat(completion_bound_stats, "partial_pruned_labels")
+            _increment_completion_bound_stat(completion_bound_stats, "partial_pruned_unique_task_branch_infeasible")
+            return True, float("inf")
         outgoing_cache_key = (int(label.last), int(available_mask))
         if min_outgoing_completion_arc_cache is not None and outgoing_cache_key in min_outgoing_completion_arc_cache:
             outgoing_arc_lb = min_outgoing_completion_arc_cache[outgoing_cache_key]
@@ -8005,9 +9220,11 @@ def _direct_sortie_partial_completion_bound_check(
             _increment_completion_bound_stat(completion_bound_stats, "partial_pruned_labels")
             _increment_completion_bound_stat(completion_bound_stats, "partial_pruned_no_outgoing")
             return True, float("inf")
-        outgoing_suffix_lb = float(outgoing_arc_lb) + unique_task_bound.outgoing_value(
+        outgoing_suffix_lb = float(outgoing_arc_lb) + unique_task_bound.branch_outgoing_value(
             int(available_mask),
             int(remaining_visit_capacity),
+            current_mask=int(current_mask),
+            constraints=tuple(branch_constraints),
         )
         if float(outgoing_suffix_lb) > float(remaining_lb):
             remaining_lb = float(outgoing_suffix_lb)
@@ -8172,6 +9389,7 @@ def _direct_completed_journey_suffix_optimistic_objective(
     cut_duals: dict[int, float],
     cuts: tuple[FutureCut, ...],
     cut_masks: tuple[int, ...],
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
     available_mask_completion_bound_skip_with_unique_route: bool = True,
 ) -> tuple[float, str, float]:
     suffix_lb = 0.0
@@ -8211,9 +9429,11 @@ def _direct_completed_journey_suffix_optimistic_objective(
                 suffix_lb = float(amcb_result.value)
                 suffix_lb_winner = "available_mask"
     if unique_task_bound is not None:
-        unique_suffix_lb = unique_task_bound.value(
+        unique_suffix_lb = unique_task_bound.branch_value(
             int(available_mask),
             int(remaining_sorties) * int(max_tasks_per_sortie),
+            current_mask=int(new_mask),
+            constraints=tuple(branch_constraints),
         )
         if float(unique_suffix_lb) > float(suffix_lb):
             suffix_lb = float(unique_suffix_lb)
@@ -8257,6 +9477,7 @@ def _direct_completed_journey_suffix_bound_prunes(
     cuts: tuple[FutureCut, ...],
     cut_masks: tuple[int, ...],
     eps: float,
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
     available_mask_completion_bound_skip_with_unique_route: bool = True,
     completion_bound_stats: dict[str, int] | None = None,
 ) -> bool:
@@ -8279,6 +9500,7 @@ def _direct_completed_journey_suffix_bound_prunes(
         cut_duals=cut_duals,
         cuts=cuts,
         cut_masks=cut_masks,
+        branch_constraints=tuple(branch_constraints),
     )
     if float(future_cut_reward) > 0.0:
         _increment_completion_bound_stat(completion_bound_stats, "suffix_cut_reward_positive_checks")
@@ -8290,6 +9512,84 @@ def _direct_completed_journey_suffix_bound_prunes(
         )
         return True
     return False
+
+
+def _direct_open_label_frontier_lower_bound(
+    data: FutureData,
+    heap_entries: tuple[tuple[float, int, float, int, _DirectJourneyLabel], ...],
+    labels_by_count: list[dict[int, list[_DirectJourneyLabel]]],
+    *,
+    base_reduced_cost: float,
+    cut_duals: dict[int, float],
+    cuts: tuple[FutureCut, ...],
+    cut_masks: tuple[int, ...],
+    cut_value_cache: dict[int, float] | None,
+    completion_bound: _DirectJourneyCompletionBound | None,
+    rpce_bound: ResourceParetoCompletionEnvelope | None = None,
+    amcb_bound: AvailableMaskCompletionBound | None = None,
+    unique_task_bound: _UniqueTaskVisitLowerBound | None,
+    unique_route_bound: "_UniqueRouteCompletionLowerBound | None",
+    positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None",
+    max_tasks_per_sortie: int,
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
+    available_mask_completion_bound_skip_with_unique_route: bool = True,
+    pending_complete_min_rc: float | None = None,
+) -> tuple[float | None, int]:
+    """Return an admissible LB over active direct-label frontier regions.
+
+    The search heap priority is not itself a certificate key.  This helper
+    recomputes a reduced-cost lower bound for each still-active journey label
+    using the same optimistic completed-journey suffix bound used for pruning.
+    Callers are responsible for invoking it only when every non-heap region is
+    covered; otherwise the returned value must stay diagnostic-only.
+    """
+
+    values: list[float] = []
+    active_count = 0
+    for _priority, count_raw, _end, _serial, label in heap_entries:
+        count = int(count_raw)
+        if count < 0 or count >= len(labels_by_count):
+            continue
+        if label not in labels_by_count[count].get(int(label.mask), []):
+            continue
+        label_objective = _direct_journey_objective(
+            float(base_reduced_cost),
+            label,
+            cut_duals,
+            cuts,
+            cut_masks,
+            cut_value_cache,
+        )
+        remaining_sorties = int(data.sortie_limit) - int(count)
+        frontier_lb, _winner, _future_cut_reward = _direct_completed_journey_suffix_optimistic_objective(
+            data,
+            new_mask=int(label.mask),
+            new_end_time=float(label.end_time),
+            new_objective=float(label_objective),
+            remaining_sorties=max(0, int(remaining_sorties)),
+            completion_bound=completion_bound,
+            rpce_bound=rpce_bound,
+            amcb_bound=amcb_bound,
+            unique_task_bound=unique_task_bound,
+            unique_route_bound=unique_route_bound,
+            positive_cut_reward_bound=positive_cut_reward_bound,
+            max_tasks_per_sortie=int(max_tasks_per_sortie),
+            available_mask_completion_bound_skip_with_unique_route=bool(
+                available_mask_completion_bound_skip_with_unique_route
+            ),
+            cut_duals=cut_duals,
+            cuts=cuts,
+            cut_masks=cut_masks,
+            branch_constraints=tuple(branch_constraints),
+        )
+        if math.isfinite(float(frontier_lb)):
+            values.append(float(frontier_lb))
+            active_count += 1
+    if pending_complete_min_rc is not None and math.isfinite(float(pending_complete_min_rc)):
+        values.append(float(pending_complete_min_rc))
+    if not values:
+        return None, int(active_count)
+    return min(values), int(active_count)
 
 
 def _direct_next_sortie_profiles(
@@ -8518,6 +9818,7 @@ def _complete_direct_sortie_label_trips(
     unique_task_bound: _UniqueTaskVisitLowerBound | None = None,
     unique_route_bound: "_UniqueRouteCompletionLowerBound | None" = None,
     positive_cut_reward_bound: "_PositiveSubsetCutRewardBound | None" = None,
+    branch_constraints: tuple[BranchConstraint, ...] = tuple(),
     completion_bound_stats: dict[str, int] | None = None,
     cut_value_cache: dict[int, float] | None = None,
     optimistic_cut_value_cache: dict[int, float] | None = None,
@@ -8613,6 +9914,7 @@ def _complete_direct_sortie_label_trips(
                 cuts=cuts,
                 cut_masks=cut_masks,
                 eps=float(config.eps),
+                branch_constraints=branch_constraints,
                 completion_bound_stats=completion_bound_stats,
             ):
                 bound_pruned += 1

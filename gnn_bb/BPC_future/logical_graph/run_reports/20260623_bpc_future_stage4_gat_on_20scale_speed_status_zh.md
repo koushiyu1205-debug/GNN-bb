@@ -10,6 +10,14 @@
 
 当前不能说 20 规模精确求解已经整体加速达标。
 
+后续主效果口径必须使用分层 random-TW 60-instance 集合：
+
+`BPC_future/logical_graph/tasks_020/...`
+
+本报告中的 `greedy/apollo20` 指 canonical `tasks_020/greedy-anchor/apollo15_20km` 集合内的实例，不是旧 `moon_trek_60` hard-set。旧 hard-set 结果只能作为诊断补充，不能计入主 benchmark 效果结论。
+
+20 规模后续运行时间口径分两层：per-instance 600s 可以作为诊断/采样预算，用来观察 tail；最终目标仍是 canonical `tasks_020` 的 60 个实例全部在 200s 内 `OPTIMAL`。
+
 已验证的局部加速来自 `completion-bound tail` 修复，而不是 v154/GAT 本身：
 
 - sector/apollo20 等 tail 受 `profile_labeling_task_set_superset_pruning` 影响的实例，禁用大规模证书阶段 superset pruning 后可以从 time limit 降到秒级最优。
@@ -1086,18 +1094,502 @@ stage4_candidate_ready = false
 
 `RF(14,20)` 比 `RF(17,20)` 的 pool width 略小，但仍进入 completion-bound tail，并继续产生 inactive-only columns。它不是当前缺失的 useful tail-reduction positive。当前问题因此更具体：在 root `RF(2,3)` 之后，depth=1 的 top width / incumbent-relation 候选仍不能消除 depth=2 proof tail。下一轮如果继续采样，应优先测 `RF(2,6)`、`RF(6,12)`、`RF(7,14)` 或改为测试 child ordering / completion-bound warm-start，而不是只在 `17/20` 与 `14/20` 之间切换。
 
+## cross-node cache 探针：GAT 开启 + branch 共享 pricing 构件
+
+为排除“只是重复构建 pricing / physical catalog 导致找不到正例”的可能，本轮跑了一个不改默认配置的 opt-in 探针：
+
+```text
+run_dir =
+  BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_crossnode_cache_greedy_apollo20_direct200
+
+status = EXTERNAL_TIME_LIMIT
+wall_time = 200.018320s
+```
+
+额外覆盖：
+
+- `journey_branch_pricing_cross_node_cache_enabled=True`
+- `journey_branch_pricing_cross_node_cache_max_entries=200000`
+- `journey_pricing_profile_labeling_physical_catalog_share_across_branches_enabled=True`
+- `journey_branch_pricing_profile_labeling_physical_catalog_share_across_branches_enabled=True`
+
+审计结果：
+
+```text
+branch_impact_report =
+  BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_impact_crossnode_cache_zh.md
+weak_negative_report =
+  BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_weak_negative_tail_crossnode_cache_zh.md
+
+branch_count = 2
+tail_class_counts = {'completion_bound_tail': 1, 'early_branch_continues': 1}
+selected_match_count = 2
+active_touch_branch_count = 1
+inactive_only_branch_count = 1
+total_child_negative_pricing_events = 12
+total_child_column_additions = 5
+total_child_added_journeys = 14
+total_child_completion_bound_retries = 3
+total_child_early_branch_triggers = 1
+
+weak_event_count = 10
+total_weak_negative_journeys_filtered = 288
+total_profile_weak_filtered_materialized_count = 288
+total_profile_generation_time = 20.519987
+total_profile_dp_time = 71.160076
+best_rough_rc = -35.51011308
+best_true_rc_after_materialization = -0.0
+```
+
+cache 字段显示 physical catalog 确实有命中：
+
+```text
+profile_catalog_hit=True  count = 10
+profile_catalog_hit=False count = 64
+completion_bound_cache_hit=True count = 0
+completion_bound_cache_hit=False count = 74
+```
+
+解释：
+
+跨节点共享物理 catalog 可以减少一部分重复构件构造，但没有改变核心失败模式。该探针在 root `RF(1,18)` 后，depth=1 选择 `RF(2,3)`，随后 depth=2 child 进入 completion-bound tail，出现 3 次 CB retry，并在 200s 外部时限内仍未闭合。
+
+这说明当前找不到正例不只是“没复用缓存”这么简单；更主要的问题仍是：现有 branch / candidate 选择不知道哪个动作会真正减少后续 negative pricing events、weak-negative materialization、CB retry 或 inactive-only tail。
+
+## forced root RF(2,6) 探针：低 pool width 仍非正例
+
+为验证 root 候选中更低 pool max width 的 `RF(2,6)` 是否可能成为 useful tail-reduction positive，本轮执行了受控 opt-in：
+
+```text
+run_dir =
+  BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_force26_greedy_apollo20_direct200
+
+journey_branch_candidate_priority = force_pair:2,6
+status = EXTERNAL_TIME_LIMIT
+wall_time = 200.017425s
+```
+
+绑定结果：
+
+- root `RF(2,6)` 合法匹配，`forced_pair_matched=true`；
+- 它在原 priority top 中 rank=2，被 force-pair 提到 priority rank=0；
+- root pool width 为 `243/264`，max child width 比默认 `RF(1,18)` 的 `301` 更小；
+- 但之后形成 depth 链：`RF(2,6)` -> `RF(14,17)` -> `RF(2,11)` -> `RF(4,5)`，最终仍进入 completion-bound tail。
+
+branch-impact 审计：
+
+```text
+audit_dir =
+  BPC_future/results/journey_branch_impact_audit_force26_20260623
+report =
+  BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_impact_force26_zh.md
+
+branch_count = 4
+branch_training_row_count = 4
+priority_mode_counts = {'force_pair:2,6': 4}
+selected_match_count = 4
+priority_top_first_branch_count = 4
+tail_class_counts = {'completion_bound_tail': 1, 'early_branch_continues': 3}
+active_touch_branch_count = 2
+inactive_only_branch_count = 2
+total_child_negative_pricing_events = 24
+total_child_column_additions = 13
+total_child_added_journeys = 44
+total_child_completion_bound_retries = 1
+total_child_early_branch_triggers = 3
+```
+
+weak-negative 审计：
+
+```text
+weak_audit_dir =
+  BPC_future/results/journey_weak_negative_tail_audit_force26_20260623
+report =
+  BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_weak_negative_tail_force26_zh.md
+
+weak_event_count = 5
+total_weak_negative_journeys_filtered = 216
+total_profile_weak_filtered_materialized_count = 216
+total_profile_generation_time = 10.119368
+total_profile_dp_time = 10.653457
+best_rough_rc = -11.774451333
+best_true_rc_after_materialization = -0.0
+node_counts = {'depth=0|node=0': 5}
+```
+
+tail-impact / positive-gap：
+
+```text
+rows_dir =
+  BPC_future/results/journey_tail_impact_training_rows_force26_20260623
+gap_audit_dir =
+  BPC_future/results/journey_tail_positive_gap_audit_force26_20260623
+
+training_row_count = 9
+source_counts = {'branch_impact': 4, 'weak_negative_tail': 5}
+y_useful_tail_reduction = 0
+y_tail_risk = 9
+y_weak_negative_filtered = 5
+y_completion_bound_tail = 1
+y_early_branch_continues = 3
+y_active_touch = 2
+y_inactive_only = 2
+positive_gap_reason = no_useful_tail_reduction_positive
+contrastive_tail_training_ready = false
+stage4_candidate_ready = false
+```
+
+最接近正例的两条 active-touch 行仍然没有缩短 proof tail：
+
+- depth=2 `RF(2,11)`：`early_branch_continues`，child negative pricing events = 4；
+- depth=3 `RF(4,5)`：`completion_bound_tail`，child negative pricing events = 8，CB retry = 1。
+
+结论：
+
+`RF(2,6)` 不是当前缺失的正例，而是一个更有信息量的 near-positive hard negative。它说明“root pool width 更窄”和“后续 active-touch”仍不足以保证加速；真正要学习的是 child negative pricing events、CB retry、early-branch chain 是否下降。下一批若继续采样，应测试同一路径下的 depth-scoped 替代候选或 child ordering，而不是继续只按 root pool width 选分支。
+
+## depth-scoped RF(4,9) 探针：局部 tail 变轻但仍未转正
+
+为进一步缩小对照，本轮固定 force26 的祖先路径，只替换 depth=3 的候选：
+
+```text
+run_dir =
+  BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_force26_depth3_49_greedy_apollo20_direct200
+
+journey_branch_candidate_priority = force_pair_depth:0:2,6;1:14,17;2:2,11;3:4,9
+status = EXTERNAL_TIME_LIMIT
+wall_time = 200.018478s
+```
+
+选择这个候选的原因：
+
+- force26 的 depth=3 默认 `RF(4,5)` 进入 completion-bound tail；
+- 同一 parent context 下 `RF(4,9)` 与 `RF(4,5)` fractionality 相同；
+- `RF(4,9)` 的 pool max child width 为 `108`，略小于 `RF(4,5)` 的 `109`。
+
+审计结果：
+
+```text
+branch_impact_dir =
+  BPC_future/results/journey_branch_impact_audit_force26_depth3_49_20260623
+weak_audit_dir =
+  BPC_future/results/journey_weak_negative_tail_audit_force26_depth3_49_20260623
+rows_dir =
+  BPC_future/results/journey_tail_impact_training_rows_force26_depth3_49_20260623
+gap_audit_dir =
+  BPC_future/results/journey_tail_positive_gap_audit_force26_depth3_49_20260623
+
+branch_count = 4
+tail_class_counts = {'completion_bound_tail': 1, 'early_branch_continues': 3}
+active_touch_branch_count = 1
+inactive_only_branch_count = 3
+total_child_negative_pricing_events = 19
+total_child_column_additions = 10
+total_child_added_journeys = 18
+total_child_completion_bound_retries = 1
+total_child_early_branch_triggers = 3
+
+weak_event_count = 5
+total_weak_negative_journeys_filtered = 216
+total_profile_weak_filtered_materialized_count = 216
+
+training_row_count = 9
+y_useful_tail_reduction = 0
+y_tail_risk = 9
+positive_gap_reason = no_useful_tail_reduction_positive
+```
+
+对比 force26 默认 depth=3 `RF(4,5)`：
+
+- total child negative pricing events 从 `24` 降到 `19`；
+- depth=3 child negative pricing events 从 `8` 降到 `3`；
+- 但 completion-bound retry 仍为 `1`；
+- 200s 内仍未闭合，仍不能作为 `y_useful_tail_reduction=1`。
+
+结论：
+
+`RF(4,9)` 是“局部更轻的 hard negative”，不是加速正例。它说明 regression labels 有价值：GAT branch-tail head 不应只学二分类正负，还应学 `child_negative_pricing_events`、`completion_bound_retries`、`early_branch_triggers` 的连续下降。但 Stage 4 opt-in 仍需要 binary useful-tail positive；否则模型最多能排序“坏得少一点”，还不能证明能把 20 规模 exact solve 推到 200s OPTIMAL。
+
+## 为什么正例这么难找
+
+当前正例定义很严格：
+
+```text
+same parent context
++ legal branch / child-ordering intervention
++ lower child negative pricing events / CB retry / early-branch chain
++ 仍保持 exact-safe closure
++ 对 20-scale wall-time 或 proof progress 有实质帮助
+```
+
+这比旧 5000 样本里的 “candidate true-RC negative / high ROI batch” 更难，因为它要求改变的是 proof tail，而不是单轮 column discovery。
+
+找不到正例实际表示：
+
+- 当前很多动作能找到负列，但不能让证明更快收口；
+- current pool width、fractionality、active-touch 都只是 proxy，不等价于 pricing 难度下降；
+- 负列链会从 root 后段迁移到 depth=1/2/3/4 子节点，而不是被消灭；
+- rough/profile negative 很多，但 true-RC materialization 后大量变成 weak/filtered/inactive-only tail；
+- completion-bound retry 和 exact pricing retry 的成本没有被 GAT 当前目标直接建模。
+
+本质原因是目标错位：
+
+```text
+旧 GAT 学的是：
+  哪些 true-RC negative / batch 值得优先 admission
+
+20-scale exact 加速真正需要的是：
+  哪个 branch / child ordering / candidate batch 会减少后续 proof work
+```
+
+对应到组件：
+
+- `HierarchicalOptionGAT` / graph embedding 本身不是主要问题，它能提供图和路径结构信号；
+- `ContextAwareColumnSelector` / v154 admission heads 仍偏 candidate-level safety / focused ranking，不能直接预测 branch proof tail；
+- `_choose_journey_branch` 当前主要依赖 fractionality、width、forced-pair 等手写 proxy，缺少 learned branch-impact score；
+- `audit_journey_branch_impact.py` 和 `build_journey_tail_impact_training_rows.py` 已经补上标签接口，但目前多是 hard negatives，缺少 useful-tail positives；
+- `journey_pricing.py` 的 weak-negative / completion-bound path 是真实耗时来源之一，但它仍没有被旧 admission 标签覆盖。
+
+所以问题不是 “GAT 没用”，而是 GAT 现在主要连在列发现/调度入口；20 规模的瓶颈已经转到 branch proof tail。要让 GAT 真正加速，需要新增 branch-tail head 和同 parent context 的正反事实样本；同时在 solver 侧继续做 exact-safe 的 proof-tail 复用、warm-start、child ordering 和 completion-bound 收口优化。
+
+## 新 branch-tail 标签不会替代旧 GAT 能力
+
+新增 branch-tail 标签不能直接混进旧的 high-priority / delay 标签里，否则确实会出现“顾着 proof tail，丢掉原来找 true-RC negative 的能力”的风险。
+
+正确边界是：
+
+- 保留旧的 5000-row admission / focused ranking / kNN-OOD / safety-shell 训练目标；
+- 追加新的 label namespace：`y_useful_tail_reduction`、`y_tail_risk`、`y_child_negative_pricing_events`、`y_child_completion_bound_retries`、`y_child_early_branch_triggers`；
+- 模型上使用独立 head：旧 head 继续判断 candidate / batch admission，新 head 只做 branch-impact / proof-tail 诊断；
+- 训练时对旧 checkpoint 做冻结、低学习率微调或 distillation，避免 catastrophic forgetting；
+- 每次新训练后仍必须跑旧 gate：focused pair、kNN/OOD safety、5/10 no-regression；
+- 新 head 先 shadow，只能在“旧能力不退化 + 新 tail 正负例可分”后进入 opt-in。
+
+在线含义也必须分层：
+
+```text
+candidate admission head:
+  这个 true-RC negative column / batch 是否值得优先加入或有限延迟
+
+branch-tail head:
+  当前 Ryan-Foster pair / child ordering 是否可能减少后续 proof tail
+```
+
+如果一个候选在旧 head 看是好列，但新 head 看是 tail-risk，它不应被当作旧 admission 负例；它只说明该候选不适合作为 proof-tail 加速信号。这样才能保留 GAT 现在已有的列发现能力，同时让 GAT 新增“减少 20 规模证明时间”的能力。
+
+## 专家分析后的理解：proof tail 需要 anytime official bound
+
+`BPC_future/logical_graph/bpc_future_expert_analysis.md` 给出的核心判断是：当前 proof tail 最大的问题不是缺少一个更复杂的 completion bound，而是 pricing 只有“扫空后给 no-negative certificate”这一条强终止路径。
+
+当前节点下界语义近似是：
+
+```text
+pricing exhausted and no negative journey
+  -> lower bound official
+pricing not exhausted
+  -> RMP-only / heuristic, 不能用于 exact-safe fathom
+```
+
+专家建议把 exact pricing 改成 anytime proof procedure：即使没有扫空，也必须返回一个严格有效的 `global_remaining_rc_lb`。如果所有未探索 journey 的 reduced cost 都能证明至少为 `r_lb`，令：
+
+```text
+delta = max(0, -r_lb)
+official_node_lb = z_RMP - active_fleet_limit * delta
+```
+
+直觉是：用 fleet dual repair 把所有潜在列的 reduced cost 修到非负，付出的代价是把节点 LB 保守地下调 `active_fleet_limit * delta`。这个 bound 不等于 full master LP certificate，但它是 branch-and-bound 可用的 official lower bound；只要它已经足够超过 incumbent，就可以 exact-safe fathom，不必把整个 pricing universe 扫空。
+
+这直接解释了当前 20 规模的现象：我们已经能在深层节点看到 `direct_label_no_negative_journey`、`completion_bound_retry` 和 bound fathom，但它们出现得太晚，而且没有形成浅层可用的 corrected LB，导致树继续展开。
+
+由此，GAT 的边界也更清楚：
+
+- GAT 可以继续用于 true-RC verified batch admission、delay queue、pricing mode switch、CB trigger、branch ordering 和 exact judge 内部搜索顺序；
+- GAT 不能当 pricing oracle、certificate source 或 official bound source；
+- branch-impact GAT 的目标不应是 child width，而应是 `child corrected official LB`、`fathom probability`、`proof CPU`、`exact expansions`、`CB retries`；
+- 新样本要做同 parent snapshot 的 counterfactual probes，并处理 right-censored child，而不是把 timeout child 简单标成 0。
+
+我的新增疑问：
+
+- 现有 `journey_pricing.py` 最小改动能否先从 completion-bound retry/frontier 中抽出一个保守 `global_remaining_rc_lb`，还是必须先重写成 heap/A* best-bound final judge？
+- `active_fleet_limit` 是否始终是 `R_N` 的安全取值，还是要和 branch state、已固定 journey、task-cover 可推导上界取更小值？
+- 对尚未生成 profile shard、start-time/path-option 分支、并行 worker shard，如果暂时没有 tight bound，应该返回哪个 trivial lower bound 才既安全又不至于完全无剪枝价值？
+- limited strong-branch probe 的预算应该按 CPU、label expansion 还是 pricing frontier size 截断，才能得到可训练的 corrected-LB regret 标签？
+
+## 3600s 20-scale 长跑：V154 + GAT 开启仍未闭合
+
+按预先写好的标签 manifest：
+
+- manifest：`BPC_future/logical_graph/run_reports/20260623_bpc_future_20scale_3600_probe_labels_zh.md`
+- run dir：`BPC_future/results/journey_20scale_longrun_3600_v154_20260623/gat_on_root56_depth3_width_greedy_apollo20_3600`
+- instance：`tasks_020/greedy-anchor/apollo15_20km/...seed61308...json`
+- 配置：GAT 开启，root56/depth3/width priority，cross-node physical/catalog cache 开启，diagnostic labels 开启，未 force pair。
+
+结果：
+
+```text
+status = EXTERNAL_TIME_LIMIT
+return_code = 124
+wall_time = 3600.080041s
+best_incumbent_seen_in_log = 503.939606 at t=2592.2s, node=48, depth=5
+started_nodes = 63
+queued_children = 86
+bound_fathoms = 15
+node_incomplete = 4
+max_depth = 7
+pricing_events = 468
+completion_bound_related_events = 117
+```
+
+`results.csv` 因 external timeout 没有 solver final fields，最终以 run log / JSONL 审计为准。日志里的 incumbent 轨迹显示，root 早期在 `38.7s` 到 `506.923489`，之后直到 `2592.2s` 才改善到 `503.939606`。这说明 3600s 长跑不是完全停滞，但远远没有达到 20 规模 `200s OPTIMAL` 的 Stage 4 目标。
+
+pricing reason 计数：
+
+```text
+streaming_partial_negative_journey = 142
+negative_journey = 65
+ng_dssr_time_limit = 59
+no_negative_journey = 58
+direct_label_no_negative_journey = 51
+partial_negative_journey = 32
+streaming_partial_dp_negative_journey = 31
+negative_journeys_already_in_pool = 13
+weak_negative_journeys_filtered = 4
+time_limit = 4
+direct_label_negative_journey = 2
+```
+
+这个分布很关键：不是单纯“找不到负列”，也不是单纯“最后一个节点 proof tail 卡死”。实际是负列生成、no-negative 证明、CB retry、分支扩树交替出现。后程确实出现连续 bound fathom，但节点树已经长到 60+，剪枝太晚。
+
+审计结果：
+
+```text
+branch-impact:
+  branch_training_row_count = 43
+  active_touch_branch_count = 8
+  inactive_only_branch_count = 22
+  tail_class_counts = {
+    completion_bound_tail: 30,
+    early_branch_continues: 1,
+    unprocessed_children: 12,
+  }
+  total_child_negative_pricing_events = 257
+  total_child_completion_bound_retries = 126
+  total_child_early_branch_triggers = 6
+
+weak-negative:
+  weak_event_count = 10
+  total_weak_negative_journeys_filtered = 288
+  repeated_weak_mask_count = 3
+
+tail-impact rows:
+  training_row_count = 53
+  y_useful_tail_reduction = 0
+  y_tail_risk = 53
+  y_completion_bound_tail = 30
+  y_weak_negative_filtered = 10
+  y_inactive_only = 22
+
+positive-gap:
+  useful_tail_reduction_positive_count = 0
+  positive_gap_reason = no_useful_tail_reduction_positive
+```
+
+报告文件：
+
+- `BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_impact_20scale_3600_v154_zh.md`
+- `BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_weak_negative_tail_20scale_3600_v154_zh.md`
+- `BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_impact_training_rows_20scale_3600_v154_zh.md`
+- `BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_positive_gap_20scale_3600_v154_zh.md`
+
+结论：
+
+V154/GAT 没有关掉，也不是完全没有作用：它能持续推进、能触发 completion-bound、后程也能 bound fathom 一些深层节点。但它没有真正解决 20 规模精确求解时间，因为它没有把 pricing 的局部证据转成浅层、可剪枝的 official lower bound，也没有学到哪一个 branch 会减少两边子树的总 proof CPU。
+
+这次长跑和专家分析指向同一个下一步：先做 `global_remaining_rc_lb` 与 `official_node_lb = z_RMP - R_N * delta` 的 exact-safe 最小实现；GAT 继续保留，但短期只作为 admission / mode scheduling / branch ordering 的 shadow 或 opt-in hint，不碰 certificate。
+
 ## 下一步
 
-主攻方向仍应是减少 20 规模 root/branch 的精确收口时间，而不是继续追 v154 的 77/78 到 78/78：
+主攻方向调整为先补 proof contract，再让 GAT 学真正的 proof ROI：
 
-- 让 GAT/learning 的候选从 inactive-only 转向 active-support-changing 或 branch-impactful columns；
-- 将 completion-bound 的昂贵访问转化为更大的 RMP 进展，避免每个 node 都重复长时间收口；
-- 对 greedy/apollo20 做 root 后分支节点的 CB 复用/预证书/更强下界，而不是扩大 replacement-only repair；
-- 把 GAT/learning 的作用从“列优先级”扩展到 audit-only 的 branch-impact 评分：预测哪个 Ryan-Foster pair 会减少后续 exact pricing/CB retry，而不是只看当前 pool width；
-- 把 weak-negative tail rows 作为明确负例来源，让 GAT 区分 true useful negative 与 rough/profile weak negative tail；
-- 专门生成或挖掘 `y_useful_tail_reduction=1` 的正例，否则 tail-impact GAT 只能做 hard-negative 诊断，不能形成加速策略；
-- 下一轮优先做同一 parent context 的 branch-candidate 受控 A/B，而不是再扩大旧日志合成范围；
-- 数据策略是扩展已有 5000 样本，不是重建全部样本：新增 branch-tail label namespace，旧样本不强行改标签。
+- 在 pricing 返回对象里新增 `global_remaining_rc_lb`、`bound_valid`、`frontier_state_count`，先实现 conservative 版本；
+- 在 B&B 节点层新增 `bound_kind`、`pricing_global_rc_lb`、`dual_repair_delta`、`official_node_lb`；
+- 用 `official_node_lb = z_RMP - active_fleet_limit * max(0, -global_remaining_rc_lb)` 做第一版 exact-safe corrected bound；
+- 把当前 completion-bound retry / final judge 的 frontier、未处理 profile shard、未展开 path-option 都纳入 lower-bound 覆盖，不能覆盖时返回安全 trivial bound；
+- 对 greedy/apollo20 做同一实例 A/B：旧 binary certificate only vs corrected official LB，目标是减少浅层之后的 children、CB retry CPU 和 p95 proof time；
+- GAT/learning 继续开启，但短期只用于 true-RC batch admission、delay queue、mode scheduling、branch ordering shadow；
+- branch-impact 新标签改为 counterfactual corrected-LB regret、child proof CPU、fathom probability、exact expansions、CB retries，并处理 right-censored child；
+- 保留旧 5000 样本和旧 gate，新增标签 namespace，避免 branch-tail head 破坏已有 candidate admission 能力。
+
+## 2026-06-23 V5 补充：branch-aware unique-task 与 AMCB
+
+在 canonical random-TW 20 `seed61000` 上补跑了两个 proof-tail 探针：
+
+- V5 branch-aware unique-task：300s 仍 `EXTERNAL_TIME_LIMIT`，但 node 1 `global_remaining_rc_lb` 从 V4 的 `-426.051783667` 收紧到 `-412.683770667`，说明 branch same/separate 松弛确实存在，但只解释了很小一部分尾部 gap。
+- AMCB 全局 opt-in：300s 仍 `EXTERNAL_TIME_LIMIT`，root CB certificate 从 `104.93s` 变慢到 `130.66s`，node 1 `global_remaining_rc_lb=-414.107463667`，AMCB 因 `state_budget/deadline` disabled，不能作为全局开关。
+
+当前结论：
+
+- 20 规模还没有真正加速到 200s 目标；
+- GAT/support-aware admission 对 root 有帮助，但 proof tail 的主要剩余问题仍是 frontier suffix bound 太松；
+- 直接全局打开更重的 route-aware/available-mask bound 会吃掉太多时间；
+- 下一步应做 tail-only / active-token-only frontier refinement，只对 final-probe ledger 中最小 active frontier token 做更强局部下界，失败时保留原 bound。
+
+详细记录见：
+
+- `BPC_future/logical_graph/run_reports/20260623_bpc_future_v5_branchaware_unique_task_and_amcb_probe_zh.md`
+
+## 2026-06-23 V7 补充：水位式 frontier refinement 诊断
+
+专家修正后，当前 frontier refinement 不再只盯一个最差 token，而是先计算当前节点要 fathom 所需的 reduced-cost 水位：
+
+- 若 `z_RMP < UB - eps`，即使把所有 frontier token 证明到 `g>=0`，corrected node bound 也不能达到 incumbent，因此不应花 final-probe refinement 预算；
+- 若 critical token 数很大，top-1/top-2 refinement 也不能改变 global floor，应 fail-fast 并记录分布。
+
+已完成的实现：
+
+- `JourneyPricingConfig/Result` 新增 `fathom_rc_target`、critical token、floor multiplicity、second/p05/p10/median active LB 等诊断；
+- `FrontierBoundLedger` 支持安全更新 token lower bound，heap stale key 会被丢弃；
+- driver 在 final-probe 前根据 `z_RMP/incumbent/R_N` 设置 target；target 不存在时 pricing 只记录诊断，不做 refinement。
+
+canonical random-TW 20 `seed61000` 的 300s 诊断结果：
+
+- status: `EXTERNAL_TIME_LIMIT`，wall `300.020187s`；
+- root CB certificate: `105.138437s`；
+- node 1 CB retry: `181.350206s`，`INCOMPLETE/time_limit`；
+- node 1 `z_RMP=580.221453667`，当时 incumbent 约 `584.354872`，所以 `frontier_fathom_rc_target=null`；
+- node 1 frontier 分布：`min=-412.683770667`、`second=-412.540795667`、`p05=-405.143052667`、`p10=-403.151726666`、`median=-395.956203667`。
+
+最新结论：
+
+- node 1 不是“单个 token 过低”导致不能剪枝，而是 `z_RMP` 本身低于 incumbent，proof-tail refinement 即使完美也无法 fathom；
+- 下一步应实现 Tier 1 critical-token micro-expansion，并同步关注提高 incumbent / RMP bound / branch 选择，而不是继续全局加重 unique-route20 或 AMCB。
+
+## 2026-06-23 修正：负列不会提高 `z_RMP`
+
+需要明确修正一个表述：在最小化列生成中，加入新的负 reduced-cost 列只会让 RMP objective 下降或不变，不会提高 `z_RMP`。继续 CG 的意义是正确闭合 LP，不是把当前节点推入可剪枝区间。
+
+对 seed61000 node 1：
+
+- `z_RMP=580.221453667`
+- incumbent 约 `584.354872`
+- 即使完整证明 `global_remaining_rc_lb >= 0`，corrected node bound 最多也只是 `580.221453667`，仍然低于 incumbent。
+
+因此 node 1 不属于 Tier 1 micro-expansion 可以直接 fathom 的节点。它更接近 Tail Action Controller 的 D 类：`z_RMP < UB - eps`，且 final probe 不能立即剪枝；若 CG 已经拖尾，应考虑 exact-safe early branch，并并行改善 incumbent、cuts/formulation 和 branch-impact。
+
+Tier 1 micro-expansion 的适用范围收窄为 A 类节点：
+
+- `z_RMP >= UB - eps`
+- `fathom_rc_target` 存在
+- `global_remaining_rc_lb < fathom_rc_target`
+- critical token count 和 floor multiplicity 都小
+- 预计 child 总数不超预算
+- frontier coverage 完整
+
+如果 target 接近 0 但几百/几千 token 都低于 target，这是 B 类“大面积低水位”，不能逐 token split，应转向 aggregate route-aware bound、更强 completion relaxation、cuts/formulation 或 token region 重组。
+
+详细记录见：
+
+- `BPC_future/logical_graph/run_reports/20260623_bpc_future_v7_waterline_frontier_refinement_diag_zh.md`
 
 ## 验证
 
@@ -1148,3 +1640,16 @@ stage4_candidate_ready = false
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/journey_branch_tail_depth_sequence_v154_20260623/runs --output-dir BPC_future/results/journey_branch_impact_audit_v154_depth_sequence_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_impact_v154_depth_sequence_zh.md`
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_tail_impact_training_rows.py --branch-input BPC_future/results/journey_branch_impact_audit_v154_depth_sequence_20260623 --output-dir BPC_future/results/journey_tail_impact_training_rows_v154_depth_sequence_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_impact_training_rows_v154_depth_sequence_zh.md`
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_tail_positive_gap.py BPC_future/results/journey_tail_impact_training_rows_v154_depth_sequence_20260623 --output-dir BPC_future/results/journey_tail_positive_gap_audit_v154_depth_sequence_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_positive_gap_v154_depth_sequence_zh.md --top-n 10`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py ... gat_on_root56_depth3_width_crossnode_cache_greedy_apollo20_direct200 ...`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_crossnode_cache_greedy_apollo20_direct200 --output-dir BPC_future/results/journey_branch_impact_audit_crossnode_cache_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_impact_crossnode_cache_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_weak_negative_tail.py BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_crossnode_cache_greedy_apollo20_direct200 --output-dir BPC_future/results/journey_weak_negative_tail_audit_crossnode_cache_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_weak_negative_tail_crossnode_cache_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py ... gat_on_root56_depth3_width_force26_greedy_apollo20_direct200 ... --set journey_branch_candidate_priority=force_pair:2,6`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_force26_greedy_apollo20_direct200 --output-dir BPC_future/results/journey_branch_impact_audit_force26_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_impact_force26_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_weak_negative_tail.py BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_force26_greedy_apollo20_direct200 --output-dir BPC_future/results/journey_weak_negative_tail_audit_force26_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_weak_negative_tail_force26_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_tail_impact_training_rows.py --branch-input BPC_future/results/journey_branch_impact_audit_force26_20260623 --weak-input BPC_future/results/journey_weak_negative_tail_audit_force26_20260623 --output-dir BPC_future/results/journey_tail_impact_training_rows_force26_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_impact_training_rows_force26_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_tail_positive_gap.py BPC_future/results/journey_tail_impact_training_rows_force26_20260623 --output-dir BPC_future/results/journey_tail_positive_gap_audit_force26_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_positive_gap_force26_zh.md --top-n 10`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py ... gat_on_root56_depth3_width_force26_depth3_49_greedy_apollo20_direct200 ... --set 'journey_branch_candidate_priority=force_pair_depth:0:2,6;1:14,17;2:2,11;3:4,9'`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_force26_depth3_49_greedy_apollo20_direct200 --output-dir BPC_future/results/journey_branch_impact_audit_force26_depth3_49_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_impact_force26_depth3_49_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_weak_negative_tail.py BPC_future/results/journey_completion_tail_direction1_v154_20260623/gat_on_root56_depth3_width_force26_depth3_49_greedy_apollo20_direct200 --output-dir BPC_future/results/journey_weak_negative_tail_audit_force26_depth3_49_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_weak_negative_tail_force26_depth3_49_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_tail_impact_training_rows.py --branch-input BPC_future/results/journey_branch_impact_audit_force26_depth3_49_20260623 --weak-input BPC_future/results/journey_weak_negative_tail_audit_force26_depth3_49_20260623 --output-dir BPC_future/results/journey_tail_impact_training_rows_force26_depth3_49_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_impact_training_rows_force26_depth3_49_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_tail_positive_gap.py BPC_future/results/journey_tail_impact_training_rows_force26_depth3_49_20260623 --output-dir BPC_future/results/journey_tail_positive_gap_audit_force26_depth3_49_20260623 --report BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_positive_gap_force26_depth3_49_zh.md --top-n 10`

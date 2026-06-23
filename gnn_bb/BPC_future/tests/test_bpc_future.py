@@ -56,6 +56,7 @@ from BPC_future.pricing.journey_pricing import (
     _JourneyLabel,
     _TaskSetReducedCostLowerBoundCache,
     _TaskSetResourceLowerBoundCache,
+    _UniqueTaskVisitLowerBound,
     _UniqueRouteCompletionLowerBound,
     _branch_constraints_cache_key,
     _add_direct_journey_label,
@@ -77,6 +78,7 @@ from BPC_future.pricing.journey_pricing import (
     _direct_ng_neighborhoods,
     _direct_label_diverse_harvest_soft_return_ready,
     _direct_completed_journey_suffix_optimistic_objective,
+    _direct_open_label_frontier_lower_bound,
     _direct_completion_bound_cache_key,
     _direct_repair_target_masks,
     _direct_ng_relaxed_iteration,
@@ -117,11 +119,15 @@ from BPC_future.pricing.journey_pricing import (
     seed_sortie_profile_catalog_from_journeys,
 )
 from BPC_future.pricing.journey_pricing import (
+    FrontierBoundLedger,
     PRICING_STATE_CERTIFIED_NO_NEGATIVE,
     PRICING_STATE_DUPLICATE_ONLY,
     PRICING_STATE_FOUND_NEGATIVE,
     PRICING_STATE_INCOMPLETE_LIMIT,
     PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED,
+    PRICING_PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+    PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE,
+    PRICING_PROOF_KIND_FRONTIER_BOUND_NO_NEGATIVE,
     JourneyPricingResult,
 )
 from BPC_future.pricing.sharded_pulse_final_judge import (
@@ -214,6 +220,7 @@ from BPC_future.solver.journey_driver import (
     _journey_dual_hash,
     _journey_dual_vector,
     _journey_immediate_certificate_no_reserve_config,
+    _journey_completion_bound_probe_budget_is_viable,
     _journey_pre_retry_completion_reserve_time,
     _journey_retry_budget_with_completion_reserve,
     _journey_retry_force_ng_config,
@@ -245,6 +252,9 @@ from BPC_future.solver.journey_driver import (
     _journey_pricing_caches_for_learning_pass,
     _journey_exact_pricing_duals,
     _journey_pricing_certificate_rejection_reason,
+    _journey_config_with_frontier_refinement_target,
+    _journey_pricing_corrected_node_bound,
+    _journey_tail_action_controller,
     _journey_pricing_is_global_certificate,
     _journey_pricing_state,
     _journey_pool_structure_diagnostics,
@@ -267,6 +277,7 @@ from BPC_future.solver.journey_driver import (
     _log_hidden_negative_audit,
     _log_journey_addition,
     _log_journey_branch_candidates,
+    _log_journey_corrected_node_bound_audit,
     _log_journey_counterfactual_replay_capture,
     _log_journey_pricing,
     _journey_active_task_set_hash,
@@ -400,9 +411,473 @@ class BPCFutureTests(unittest.TestCase):
         )
 
         self.assertEqual(result.reason, "direct_label_no_negative_journey")
+        self.assertEqual(result.pricing_proof_kind, PRICING_PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE)
+        self.assertTrue(result.global_remaining_rc_lb_valid)
+        self.assertTrue(result.global_remaining_rc_lb_coverage_complete)
         self.assertNotEqual(result.pricing_state, PRICING_STATE_DUPLICATE_ONLY)
         self.assertEqual(result.existing_journeys_filtered, 0)
         self.assertGreater(result.branch_infeasible_journeys_filtered, 0)
+
+    def test_frontier_bound_ledger_replaces_parent_atomically(self):
+        ledger = FrontierBoundLedger()
+        parent = ledger.register_region(-5.0, "root")
+        children = ledger.replace_region(parent, [(-2.0, "left"), (1.0, "right")])
+
+        self.assertFalse(parent.active)
+        self.assertEqual(len(children), 2)
+        self.assertEqual(ledger.active_region_count(), 2)
+        self.assertAlmostEqual(ledger.min_active_lower_bound(), -2.0)
+        ledger.record_pending_complete_rc(-3.0)
+        self.assertAlmostEqual(ledger.global_remaining_rc_lb(), -3.0)
+        ledger.record_unsupported_region()
+        self.assertEqual(ledger.unsupported_region_count, 1)
+
+    def test_frontier_bound_ledger_keeps_parent_for_interrupted_expansion(self):
+        ledger = FrontierBoundLedger()
+        parent = ledger.register_region(-7.0, "root")
+
+        self.assertTrue(parent.active)
+        self.assertEqual(ledger.active_region_count(), 1)
+        self.assertAlmostEqual(ledger.global_remaining_rc_lb(), -7.0)
+
+        children = ledger.replace_region(parent, [(-3.0, "child")])
+
+        self.assertFalse(parent.active)
+        self.assertEqual(len(children), 1)
+        self.assertEqual(ledger.active_region_count(), 1)
+        self.assertAlmostEqual(ledger.global_remaining_rc_lb(), -3.0)
+
+    def test_frontier_bound_ledger_update_lower_bound_discards_stale_heap_keys(self):
+        ledger = FrontierBoundLedger()
+        first = ledger.register_region(-500.0, "first")
+        second = ledger.register_region(-300.0, "second")
+
+        ledger.update_lower_bound(first, -100.0)
+
+        self.assertEqual(ledger.min_active_token(), second)
+        self.assertAlmostEqual(ledger.min_active_lower_bound(), -300.0)
+
+        ledger.update_lower_bound(second, -50.0)
+
+        self.assertEqual(ledger.min_active_token(), first)
+        self.assertAlmostEqual(ledger.min_active_lower_bound(), -100.0)
+
+    def test_frontier_bound_no_negative_can_certify_without_exhaustion(self):
+        pricing = JourneyPricingResult(
+            [],
+            False,
+            0.0,
+            0,
+            0,
+            0,
+            0,
+            "OPTIMAL",
+            "frontier_bound_no_negative_journey",
+            global_certificate_capable=True,
+            global_remaining_rc_lb=0.0,
+            global_remaining_rc_lb_valid=True,
+            global_remaining_rc_lb_coverage_complete=True,
+            frontier_region_count=3,
+            frontier_unsupported_region_count=0,
+            pricing_proof_kind=PRICING_PROOF_KIND_FRONTIER_BOUND_NO_NEGATIVE,
+        )
+
+        self.assertFalse(pricing.exhausted)
+        self.assertEqual(pricing.pricing_state, PRICING_STATE_CERTIFIED_NO_NEGATIVE)
+        self.assertTrue(_journey_pricing_is_global_certificate(pricing))
+
+    def test_frontier_bound_certificate_fails_closed_when_coverage_incomplete(self):
+        pricing = JourneyPricingResult(
+            [],
+            False,
+            0.0,
+            0,
+            0,
+            0,
+            0,
+            "OPTIMAL",
+            "frontier_bound_no_negative_journey",
+            global_certificate_capable=True,
+            global_remaining_rc_lb=0.0,
+            global_remaining_rc_lb_valid=True,
+            global_remaining_rc_lb_coverage_complete=False,
+            frontier_region_count=3,
+            frontier_unsupported_region_count=1,
+            pricing_proof_kind=PRICING_PROOF_KIND_FRONTIER_BOUND_NO_NEGATIVE,
+        )
+
+        self.assertEqual(pricing.pricing_state, PRICING_STATE_INCOMPLETE_LIMIT)
+        self.assertFalse(_journey_pricing_is_global_certificate(pricing))
+
+    def test_corrected_node_bound_uses_fleet_rhs_and_task_count(self):
+        pricing = JourneyPricingResult(
+            [],
+            False,
+            -0.25,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "frontier_bound_incomplete",
+            global_certificate_capable=True,
+            global_remaining_rc_lb=-0.25,
+            global_remaining_rc_lb_valid=True,
+            global_remaining_rc_lb_coverage_complete=True,
+            frontier_region_count=4,
+            frontier_unsupported_region_count=0,
+            pricing_proof_kind=PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE,
+        )
+
+        corrected = _journey_pricing_corrected_node_bound(
+            pricing,
+            rmp_objective=100.0,
+            rmp_fleet_limit_used=10,
+            task_count=4,
+            rc_bound_safety_eps=0.05,
+            node_bound_safety_eps=0.1,
+        )
+
+        self.assertTrue(corrected.valid)
+        self.assertEqual(corrected.bound_kind, "PRICING_CORRECTED_DUAL_BOUND")
+        self.assertAlmostEqual(corrected.journey_cardinality_upper_bound, 4.0)
+        self.assertAlmostEqual(corrected.safe_rc_lb, -0.3)
+        self.assertAlmostEqual(corrected.dual_repair_delta, 0.3)
+        self.assertAlmostEqual(corrected.corrected_node_lb, 98.7)
+
+    def test_corrected_node_bound_fails_closed_on_unsupported_frontier(self):
+        pricing = JourneyPricingResult(
+            [],
+            False,
+            -0.25,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "frontier_bound_incomplete",
+            global_certificate_capable=True,
+            global_remaining_rc_lb=-0.25,
+            global_remaining_rc_lb_valid=True,
+            global_remaining_rc_lb_coverage_complete=True,
+            frontier_region_count=4,
+            frontier_unsupported_region_count=1,
+            pricing_proof_kind=PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE,
+        )
+
+        corrected = _journey_pricing_corrected_node_bound(
+            pricing,
+            rmp_objective=100.0,
+            rmp_fleet_limit_used=4,
+            task_count=4,
+        )
+
+        self.assertFalse(corrected.valid)
+        self.assertEqual(corrected.reason, "frontier_unsupported_region")
+
+    def test_corrected_node_bound_audit_logs_proof_artifact(self):
+        data = load_future_data("very_small")
+        pricing = JourneyPricingResult(
+            [],
+            False,
+            -0.25,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "frontier_bound_incomplete",
+            global_certificate_capable=True,
+            global_remaining_rc_lb=-0.25,
+            global_remaining_rc_lb_valid=True,
+            global_remaining_rc_lb_coverage_complete=True,
+            frontier_region_count=4,
+            frontier_unsupported_region_count=0,
+            pricing_proof_kind=PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "audit.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            corrected = _log_journey_corrected_node_bound_audit(
+                logger,
+                data,
+                {"journey_corrected_node_bound_audit_enabled": True},
+                pricing,
+                rmp_objective=100.0,
+                rmp_fleet_limit_used=2,
+                dual_hash="dual",
+                cut_hash="cuts",
+                branch_constraints=tuple(),
+                pricing_kind="exact_completion_bound_retry",
+                cg_iter=3,
+                node_id=7,
+                depth=1,
+                incumbent=99.0,
+            )
+            logger.close()
+            rows = [
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        self.assertTrue(corrected.valid)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["event"], "journey_corrected_node_bound_audit")
+        self.assertEqual(rows[0]["bound_kind"], "PRICING_CORRECTED_DUAL_BOUND")
+        self.assertAlmostEqual(rows[0]["corrected_node_lb"], 99.5)
+        self.assertEqual(rows[0]["rmp_fleet_limit_used"], 2)
+        self.assertEqual(rows[0]["tail_action"], "FRONTIER_REFINEMENT")
+        self.assertTrue(rows[0]["fathom_possible_if_rc_zero"])
+
+    def test_tail_action_controller_classifies_sparse_broad_and_branch_tail(self):
+        sparse = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "frontier_bound_incomplete",
+            frontier_critical_token_count=3,
+            frontier_floor_multiplicity=2,
+        )
+        broad = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "frontier_bound_incomplete",
+            frontier_critical_token_count=300,
+            frontier_floor_multiplicity=40,
+        )
+        unproductive = JourneyPricingResult(
+            [],
+            False,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "INCOMPLETE",
+            "frontier_bound_incomplete",
+        )
+
+        config = {
+            "integer_tol": 1.0e-6,
+            "journey_tail_action_refinement_max_critical_tokens": 8,
+        }
+
+        self.assertEqual(
+            _journey_tail_action_controller(
+                sparse,
+                config,
+                rmp_objective=100.0,
+                incumbent=100.0,
+            )["tail_action"],
+            "FRONTIER_REFINEMENT",
+        )
+        self.assertEqual(
+            _journey_tail_action_controller(
+                broad,
+                config,
+                rmp_objective=100.0,
+                incumbent=100.0,
+            )["tail_action"],
+            "BROAD_PLATEAU_FALLBACK",
+        )
+        self.assertEqual(
+            _journey_tail_action_controller(
+                unproductive,
+                config,
+                rmp_objective=95.0,
+                incumbent=100.0,
+            )["tail_action"],
+            "EARLY_BRANCH",
+        )
+
+    def test_direct_open_label_frontier_lower_bound_scans_active_heap(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1),
+            False,
+        )
+        duals = JourneyDuals(cover={1: 200.0, 2: 200.0}, fleet_limit=0.0, cuts={})
+        completion_bound = _DirectJourneyCompletionBound(
+            data,
+            duals,
+            time_buckets=5,
+            energy_buckets=0,
+            max_tasks_per_sortie=2,
+            sortie_limit=1,
+        )
+        initial = _DirectJourneyLabel(end_time=0.0, value=0.0, mask=0, trips=tuple())
+        frontier_lb, active_count = _direct_open_label_frontier_lower_bound(
+            data,
+            ((0.0, 0, 0.0, 0, initial),),
+            [{0: [initial]}, {},],
+            base_reduced_cost=float(data.fixed_vehicle_cost),
+            cut_duals={},
+            cuts=tuple(),
+            cut_masks=tuple(),
+            cut_value_cache={},
+            completion_bound=completion_bound,
+            unique_task_bound=None,
+            unique_route_bound=None,
+            positive_cut_reward_bound=None,
+            max_tasks_per_sortie=2,
+        )
+
+        self.assertEqual(active_count, 1)
+        self.assertIsNotNone(frontier_lb)
+        assert frontier_lb is not None
+        self.assertTrue(math.isfinite(float(frontier_lb)))
+
+    def test_unique_task_branch_value_groups_same_vehicle_components(self):
+        bound = object.__new__(_UniqueTaskVisitLowerBound)
+        bound.full_mask = 0b111
+        bound.task_to_bit = {1: 0, 2: 1, 3: 2}
+        bound.bit_to_task = {0b001: 1, 0b010: 2, 0b100: 3}
+        bound.incoming_entries = ((0b001, -5.0), (0b010, -7.0), (0b100, -11.0))
+        bound.outgoing_entries = tuple(bound.incoming_entries)
+        bound._incoming_cache = {}
+        bound._outgoing_cache = {}
+        bound._value_cache = {}
+        bound._incoming_by_bit = {0b001: -5.0, 0b010: -7.0, 0b100: -11.0}
+        bound._outgoing_by_bit = dict(bound._incoming_by_bit)
+        bound._branch_cache = {}
+
+        self.assertAlmostEqual(bound.value(0b111, 2), -18.0)
+
+        same = (BranchConstraint("same_vehicle", 1, 2),)
+        self.assertAlmostEqual(
+            bound.branch_value(0b111, 1, current_mask=0, constraints=same),
+            -11.0,
+        )
+        self.assertAlmostEqual(
+            bound.branch_value(0b111, 2, current_mask=0, constraints=same),
+            -12.0,
+        )
+        self.assertAlmostEqual(
+            bound.branch_value(0b110, 1, current_mask=0b001, constraints=same),
+            -7.0,
+        )
+        self.assertTrue(
+            math.isinf(
+                bound.branch_value(0b100, 1, current_mask=0b001, constraints=same)
+            )
+        )
+
+        separate = (BranchConstraint("separate_vehicle", 1, 2),)
+        self.assertAlmostEqual(
+            bound.branch_value(0b110, 2, current_mask=0b001, constraints=separate),
+            -11.0,
+        )
+
+    def test_direct_label_frontier_bound_fails_closed_on_restricted_beam_mode(self):
+        data = _with_task_waiting_allowed(
+            replace(load_future_data("very_small"), tasks=(1, 2), sortie_limit=1),
+            False,
+        )
+        result = price_journeys(
+            data,
+            duals=JourneyDuals(cover={1: 0.0, 2: 0.0}, fleet_limit=0.0, cuts={}),
+            branch_constraints=tuple(),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                direct_journey_label_pricing_enabled=True,
+                direct_journey_label_completion_bound_enabled=True,
+                direct_journey_label_global_certificate_enabled=True,
+                direct_journey_label_frontier_bound_ledger_enabled=True,
+                direct_journey_label_next_sortie_cache_enabled=False,
+                direct_journey_label_completion_bound_partial_pruning_enabled=True,
+                direct_journey_label_max_labels_per_node=1,
+                time_bucket_size=5.0,
+                start_time_step=5.0,
+                max_tasks_per_trip=2,
+                max_dp_states=1000,
+                max_returned_journeys=10,
+                time_limit=5.0,
+            ),
+        )
+
+        self.assertEqual(result.pricing_proof_kind, PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE)
+        self.assertFalse(result.global_remaining_rc_lb_valid)
+        self.assertFalse(result.global_remaining_rc_lb_coverage_complete)
+        self.assertGreater(result.frontier_unsupported_region_count, 0)
+
+    def test_journey_pricing_config_maps_frontier_bound_ledger_flag(self):
+        data = load_future_data("very_small")
+        pricing_config = _journey_pricing_config(
+            data,
+            {
+                "journey_pricing_direct_journey_label_frontier_bound_ledger_enabled": True,
+                "journey_pricing_direct_journey_label_frontier_refinement_enabled": True,
+                "journey_pricing_direct_journey_label_frontier_refinement_time_limit": 2.5,
+                "journey_pricing_direct_journey_label_frontier_refinement_reserve_time": 1.25,
+                "journey_pricing_direct_journey_label_frontier_refinement_max_tokens": 3,
+                "journey_pricing_direct_journey_label_frontier_refinement_max_critical_tokens": 5,
+                "journey_pricing_direct_journey_label_frontier_refinement_floor_eps": 1.0e-5,
+                "journey_pricing_direct_journey_label_frontier_micro_expansion_enabled": False,
+                "journey_pricing_direct_journey_label_frontier_micro_expansion_max_children_per_token": 17,
+                "journey_pricing_direct_journey_label_frontier_refinement_unique_route_max_tasks": 20,
+                "journey_pricing_direct_journey_label_frontier_refinement_cache_max_states": 12345,
+            },
+            5.0,
+            5.0,
+            1.0e-6,
+            1.0,
+            heuristic=False,
+            cg_iter=1,
+        )
+
+        self.assertTrue(pricing_config.direct_journey_label_frontier_bound_ledger_enabled)
+        self.assertTrue(pricing_config.direct_journey_label_frontier_refinement_enabled)
+        self.assertAlmostEqual(pricing_config.direct_journey_label_frontier_refinement_time_limit, 2.5)
+        self.assertAlmostEqual(pricing_config.direct_journey_label_frontier_refinement_reserve_time, 1.25)
+        self.assertEqual(pricing_config.direct_journey_label_frontier_refinement_max_tokens, 3)
+        self.assertEqual(pricing_config.direct_journey_label_frontier_refinement_max_critical_tokens, 5)
+        self.assertAlmostEqual(pricing_config.direct_journey_label_frontier_refinement_floor_eps, 1.0e-5)
+        self.assertFalse(pricing_config.direct_journey_label_frontier_micro_expansion_enabled)
+        self.assertEqual(pricing_config.direct_journey_label_frontier_micro_expansion_max_children_per_token, 17)
+        self.assertEqual(pricing_config.direct_journey_label_frontier_refinement_unique_route_max_tasks, 20)
+        self.assertEqual(pricing_config.direct_journey_label_frontier_refinement_cache_max_states, 12345)
+
+    def test_frontier_refinement_target_requires_rmp_to_reach_incumbent_floor(self):
+        base = JourneyPricingConfig(direct_journey_label_frontier_refinement_enabled=True)
+
+        disabled = _journey_config_with_frontier_refinement_target(
+            base,
+            {"integer_tol": 1.0e-6},
+            rmp_objective=90.0,
+            incumbent=100.0,
+            rmp_fleet_limit_used=4,
+            task_count=6,
+        )
+        self.assertIsNone(disabled.direct_journey_label_frontier_refinement_fathom_rc_target)
+
+        enabled = _journey_config_with_frontier_refinement_target(
+            base,
+            {
+                "integer_tol": 1.0e-6,
+                "journey_corrected_node_bound_rc_safety_eps": 0.05,
+                "journey_corrected_node_bound_safety_eps": 0.1,
+            },
+            rmp_objective=105.0,
+            incumbent=100.0,
+            rmp_fleet_limit_used=4,
+            task_count=6,
+        )
+        expected = 0.05 + (100.0 - 1.0e-6 + 0.1 - 105.0) / 4.0
+        self.assertAlmostEqual(
+            enabled.direct_journey_label_frontier_refinement_fathom_rc_target,
+            expected,
+        )
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_rmp_reduced_cost_matches_manual_formula(self):
@@ -7761,15 +8236,21 @@ class BPCFutureTests(unittest.TestCase):
                 weak_filtered,
             )
         )
+        self.assertTrue(
+            _journey_skip_ordinary_retry_after_weak_negative_filtered(
+                {"journey_certificate_completion_bound_weak_negative_final_probe_enabled": True},
+                weak_filtered,
+            )
+        )
         self.assertFalse(
             _journey_skip_ordinary_retry_after_weak_negative_filtered(
-                {"journey_skip_ordinary_retry_after_weak_negative_filtered": True},
+                {"journey_certificate_completion_bound_weak_negative_final_probe_enabled": True},
                 SimpleNamespace(weak_negative_journeys_filtered=0, journeys=[]),
             )
         )
         self.assertFalse(
             _journey_skip_ordinary_retry_after_weak_negative_filtered(
-                {"journey_skip_ordinary_retry_after_weak_negative_filtered": True},
+                {"journey_certificate_completion_bound_weak_negative_final_probe_enabled": True},
                 SimpleNamespace(weak_negative_journeys_filtered=2, journeys=[object()]),
             )
         )
@@ -8115,6 +8596,65 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(event["fallback_fill_journeys"], 0)
         self.assertEqual(event["kept_journeys"], 1)
 
+    def test_journey_learning_true_rc_filter_support_aware_is_opt_in(self):
+        class CaptureLogger:
+            def __init__(self):
+                self.events = []
+
+            def log(self, event, **payload):
+                self.events.append({"event": event, **payload})
+
+        active_replacement = SimpleNamespace(signature=("active-replacement",), task_set=(1,), cost=8.0)
+        inactive_new_stronger = SimpleNamespace(signature=("inactive-new-stronger",), task_set=(2,), cost=0.0)
+        journeys = [active_replacement, inactive_new_stronger]
+
+        logger = CaptureLogger()
+        default_kept = _journey_learning_true_rc_filter(
+            logger,
+            journeys,
+            true_duals=JourneyDuals(cover={1: 10.0, 2: 20.0}, fleet_limit=0.0, cuts={}),
+            cuts=tuple(),
+            tol=1.0e-6,
+            keep_threshold=0.0,
+            max_kept=1,
+            fallback_keep_threshold=0.0,
+            fallback_max_kept=0,
+            cg_iter=1,
+            node_id=0,
+            depth=0,
+            pricing_kind="heuristic",
+            active_task_sets={frozenset({1})},
+            dominant_task_set_costs={frozenset({1}): 10.0},
+        )
+        self.assertEqual([journey.signature for journey in default_kept], [("inactive-new-stronger",)])
+        self.assertFalse(logger.events[-1]["support_aware_filter_enabled"])
+
+        support_logger = CaptureLogger()
+        support_kept = _journey_learning_true_rc_filter(
+            support_logger,
+            journeys,
+            true_duals=JourneyDuals(cover={1: 10.0, 2: 20.0}, fleet_limit=0.0, cuts={}),
+            cuts=tuple(),
+            tol=1.0e-6,
+            keep_threshold=0.0,
+            max_kept=1,
+            fallback_keep_threshold=0.0,
+            fallback_max_kept=0,
+            cg_iter=1,
+            node_id=0,
+            depth=0,
+            pricing_kind="heuristic",
+            support_aware_enabled=True,
+            active_task_sets={frozenset({1})},
+            dominant_task_set_costs={frozenset({1}): 10.0},
+        )
+        self.assertEqual([journey.signature for journey in support_kept], [("active-replacement",)])
+        event = support_logger.events[-1]
+        self.assertTrue(event["support_aware_filter_enabled"])
+        self.assertEqual(event["support_aware_candidate_active_support_changing_journeys"], 1)
+        self.assertEqual(event["support_aware_selected_active_support_changing_journeys"], 1)
+        self.assertEqual(event["support_aware_candidate_new_task_set_journeys"], 1)
+
     def test_journey_learning_runtime_for_pricing_honors_round_gate(self):
         runtime = SimpleNamespace(pricing_rounds_used=0)
         self.assertIs(
@@ -8344,6 +8884,17 @@ class BPCFutureTests(unittest.TestCase):
                 self.assertTrue(config.get("journey_certificate_completion_bound_enabled"))
                 self.assertTrue(config.get("journey_certificate_completion_bound_final_probe_only"))
                 self.assertTrue(config.get("journey_certificate_completion_bound_after_retry_enabled"))
+                if path.name == "moon_trek_20_smoke.yaml":
+                    self.assertTrue(
+                        config.get("journey_certificate_completion_bound_weak_negative_final_probe_enabled")
+                    )
+                    self.assertTrue(config.get("journey_learning_true_rc_support_aware_filter_enabled"))
+                    self.assertAlmostEqual(
+                        float(config.get("journey_learning_true_rc_support_overlap_threshold")),
+                        0.6,
+                    )
+                else:
+                    self.assertFalse(config.get("journey_learning_true_rc_support_aware_filter_enabled", False))
                 self.assertFalse(config.get("journey_certificate_fast_negative_return_enabled"))
                 self.assertGreaterEqual(int(config.get("journey_certificate_completion_bound_time_buckets")), 5)
                 self.assertLessEqual(int(config.get("journey_certificate_completion_bound_time_buckets")), 15)
@@ -11862,6 +12413,179 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(pool_master.call_count, 0)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_branch_node_can_fathom_with_corrected_bound_opt_in(self):
+        data = replace(load_future_data("very_small"), tasks=(1,), vehicles=(1,))
+        base_journey = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({1}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=10.0,
+            fixed_vehicle_cost=0.0,
+            cost=10.0,
+            signature=("corrected-bound-fathom",),
+        )
+        pool = JourneyPool()
+        pool.add(base_journey)
+        fake_solution = SimpleNamespace(
+            optimal=True,
+            objective=10.0,
+            duals=JourneyDuals(cover={1: 0.0}, fleet_limit=0.0),
+            journey_values=[(base_journey, 1.0)],
+            status="OPTIMAL",
+            variable_count=1,
+            active_fleet_limit=1,
+        )
+        corrected_pricing = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=-0.1,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=1,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="frontier_bound_incomplete",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
+            global_remaining_rc_lb=-0.1,
+            global_remaining_rc_lb_valid=True,
+            global_remaining_rc_lb_coverage_complete=True,
+            frontier_region_count=1,
+            frontier_unsupported_region_count=0,
+            pricing_proof_kind=PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "corrected_bound_fathom.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.solve_journey_rmp", return_value=fake_solution), patch(
+                    "BPC_future.solver.journey_driver.price_journeys", return_value=corrected_pricing
+                ), patch("BPC_future.solver.journey_driver.solve_journey_pool_master") as pool_master:
+                    result = _process_journey_branch_node(
+                        data,
+                        {
+                            "journey_heuristic_pricing_enabled": False,
+                            "journey_dynamic_subset_row_cuts_enabled": False,
+                            "journey_max_cg_iterations": 1,
+                            "journey_pool_integer_heuristic_enabled": False,
+                            "journey_corrected_node_bound_fathom_enabled": True,
+                            "journey_corrected_node_bound_audit_enabled": True,
+                        },
+                        pool,
+                        [],
+                        set(),
+                        JourneyNode(0.0, 0, 0, tuple()),
+                        9.9,
+                        {1: [SimpleNamespace(tasks=(1,))]},
+                        len(data.vehicles),
+                        logger,
+                        JourneyBranchStats(),
+                        deadline=time.perf_counter() + 10.0,
+                        bucket=1.0,
+                        start_step=1.0,
+                        eps=1.0e-6,
+                    )
+            finally:
+                logger.close()
+            rows = [
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(result["status"], "COMPLETE")
+        self.assertTrue(result["corrected_node_bound_fathom"])
+        self.assertEqual(result["bound_kind"], "PRICING_CORRECTED_DUAL_BOUND")
+        self.assertAlmostEqual(result["bound"], 9.9)
+        self.assertEqual(pool_master.call_count, 0)
+        self.assertTrue(any(row.get("event") == "journey_corrected_node_bound_fathom" for row in rows))
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_branch_node_corrected_bound_fathom_is_default_off(self):
+        data = replace(load_future_data("very_small"), tasks=(1,), vehicles=(1,))
+        base_journey = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({1}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=10.0,
+            fixed_vehicle_cost=0.0,
+            cost=10.0,
+            signature=("corrected-bound-default-off",),
+        )
+        pool = JourneyPool()
+        pool.add(base_journey)
+        fake_solution = SimpleNamespace(
+            optimal=True,
+            objective=10.0,
+            duals=JourneyDuals(cover={1: 0.0}, fleet_limit=0.0),
+            journey_values=[(base_journey, 1.0)],
+            status="OPTIMAL",
+            variable_count=1,
+            active_fleet_limit=1,
+        )
+        corrected_pricing = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=-0.1,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=1,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="frontier_bound_incomplete",
+            completion_bound_enabled=True,
+            global_certificate_capable=True,
+            global_remaining_rc_lb=-0.1,
+            global_remaining_rc_lb_valid=True,
+            global_remaining_rc_lb_coverage_complete=True,
+            frontier_region_count=1,
+            frontier_unsupported_region_count=0,
+            pricing_proof_kind=PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logger = FutureLogger(Path(tmp) / "corrected_bound_default_off.jsonl", console=False)
+            try:
+                with patch("BPC_future.solver.journey_driver.solve_journey_rmp", return_value=fake_solution), patch(
+                    "BPC_future.solver.journey_driver.price_journeys", return_value=corrected_pricing
+                ):
+                    result = _process_journey_branch_node(
+                        data,
+                        {
+                            "journey_heuristic_pricing_enabled": False,
+                            "journey_dynamic_subset_row_cuts_enabled": False,
+                            "journey_max_cg_iterations": 1,
+                            "journey_pool_integer_heuristic_enabled": False,
+                            "journey_retry_incomplete_no_column_enabled": False,
+                            "journey_certificate_completion_bound_after_retry_enabled": False,
+                            "journey_corrected_node_bound_audit_enabled": True,
+                        },
+                        pool,
+                        [],
+                        set(),
+                        JourneyNode(0.0, 0, 0, tuple()),
+                        9.9,
+                        {1: [SimpleNamespace(tasks=(1,))]},
+                        len(data.vehicles),
+                        logger,
+                        JourneyBranchStats(),
+                        deadline=time.perf_counter() + 10.0,
+                        bucket=1.0,
+                        start_step=1.0,
+                        eps=1.0e-6,
+                    )
+            finally:
+                logger.close()
+
+        self.assertEqual(result["status"], "PRICING_INCOMPLETE")
+        self.assertNotIn("corrected_node_bound_fathom", result)
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_journey_early_branch_uses_inherited_bound_not_unpriced_rmp_objective(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2), vehicles=(1, 2))
         j12 = JourneyColumn(
@@ -12812,6 +13536,32 @@ class BPCFutureTests(unittest.TestCase):
             ),
             5.0,
         )
+        weak_filtered = SimpleNamespace(weak_negative_journeys_filtered=1, journeys=[])
+        default_viable, default_budget = _journey_completion_bound_probe_budget_is_viable(
+            {
+                "journey_certificate_completion_bound_after_retry_reserve_time": 2.0,
+                "journey_certificate_completion_bound_after_retry_min_time": 6.0,
+            },
+            remaining=5.0,
+            min_pricing_time=0.2,
+            pricing=weak_filtered,
+        )
+        self.assertFalse(default_viable)
+        self.assertEqual(default_budget, 3.0)
+
+        weak_viable, weak_budget = _journey_completion_bound_probe_budget_is_viable(
+            {
+                "journey_certificate_completion_bound_after_retry_reserve_time": 2.0,
+                "journey_certificate_completion_bound_after_retry_min_time": 6.0,
+                "journey_certificate_completion_bound_weak_negative_final_probe_enabled": True,
+                "journey_certificate_completion_bound_weak_negative_min_time": 1.0,
+            },
+            remaining=5.0,
+            min_pricing_time=0.2,
+            pricing=weak_filtered,
+        )
+        self.assertTrue(weak_viable)
+        self.assertEqual(weak_budget, 3.0)
 
     def test_final_judge_config_with_call_deadline_sets_absolute_deadline(self):
         base = JourneyPricingConfig(time_limit=100.0)
@@ -12822,6 +13572,46 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIsNotNone(updated.absolute_deadline)
         self.assertGreaterEqual(float(updated.absolute_deadline), before + 0.25)
         self.assertLessEqual(float(updated.absolute_deadline), after + 0.25 + 1.0e-6)
+
+    def test_final_judge_call_budget_can_gate_two_cycle_opt_in(self):
+        base = JourneyPricingConfig(
+            direct_journey_label_completion_bound_enabled=True,
+            direct_journey_label_completion_bound_two_cycle_enabled=True,
+            direct_journey_label_completion_bound_two_cycle_max_states=123,
+            time_limit=100.0,
+        )
+        unchanged = _journey_config_with_call_deadline(
+            base,
+            time_limit=4.0,
+            control_config={
+                "journey_certificate_completion_bound_two_cycle_budget_gate_enabled": False,
+                "journey_certificate_completion_bound_two_cycle_min_time_limit": 6.0,
+            },
+        )
+        self.assertTrue(unchanged.direct_journey_label_completion_bound_two_cycle_enabled)
+        self.assertEqual(unchanged.direct_journey_label_completion_bound_two_cycle_max_states, 123)
+
+        gated = _journey_config_with_call_deadline(
+            base,
+            time_limit=4.0,
+            control_config={
+                "journey_certificate_completion_bound_two_cycle_budget_gate_enabled": True,
+                "journey_certificate_completion_bound_two_cycle_min_time_limit": 6.0,
+            },
+        )
+        self.assertFalse(gated.direct_journey_label_completion_bound_two_cycle_enabled)
+        self.assertEqual(gated.direct_journey_label_completion_bound_two_cycle_max_states, 0)
+
+        enough_budget = _journey_config_with_call_deadline(
+            base,
+            time_limit=8.0,
+            control_config={
+                "journey_certificate_completion_bound_two_cycle_budget_gate_enabled": True,
+                "journey_certificate_completion_bound_two_cycle_min_time_limit": 6.0,
+            },
+        )
+        self.assertTrue(enough_budget.direct_journey_label_completion_bound_two_cycle_enabled)
+        self.assertEqual(enough_budget.direct_journey_label_completion_bound_two_cycle_max_states, 123)
 
     def test_expired_absolute_deadline_returns_incomplete_not_certificate(self):
         data = load_future_data("very_small")
