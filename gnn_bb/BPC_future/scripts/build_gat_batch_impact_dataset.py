@@ -91,6 +91,25 @@ BATCH_IMPACT_CANDIDATE_FEATURE_SCHEMA: tuple[str, ...] = (
     "slack_min_late_time",
     "slack_mean_late_time",
     "slack_min_early_time",
+    "active_basis_exact_task_set_count_before",
+    "active_basis_task_overlap_count_before",
+    "active_basis_task_overlap_fraction_max_before",
+    "active_basis_task_jaccard_max_before",
+    "active_basis_lambda_overlap_sum_before",
+    "active_basis_lambda_exact_task_set_sum_before",
+    "active_basis_signature_duplicate_count_before",
+    "pool_task_overlap_count_before",
+    "pool_task_jaccard_max_before",
+    "forbidden_signature_duplicate_count_before",
+    "forbidden_task_overlap_count_before",
+    "branch_constraint_touch_count",
+    "branch_constraint_violation_count",
+    "branch_same_vehicle_pair_partial_count",
+    "branch_separate_vehicle_pair_violation_count",
+    "candidate_cut_coeff_l1_sum",
+    "candidate_cut_subset_row_coeff_sum",
+    "candidate_cut_fleet_coeff_count",
+    "candidate_cut_dual_abs_weighted_coeff_sum",
 )
 
 BATCH_IMPACT_CONTEXT_FEATURE_SCHEMA: tuple[str, ...] = (
@@ -220,6 +239,10 @@ def build_dataset(
     candidate_count_total = 0
     candidate_signature_source_present_total = 0
     matched_context_rows = 0
+    (
+        explicit_long_horizon_candidate_keys,
+        conflicting_explicit_long_horizon_candidate_keys,
+    ) = _explicit_long_horizon_candidate_key_sets(rows)
 
     for row_index, row in enumerate(rows):
         if max_rows and len(samples) >= int(max_rows):
@@ -284,6 +307,22 @@ def build_dataset(
                 else "empty_returned_batch"
             ] += 1
             continue
+        candidate_keys = [
+            _long_horizon_candidate_key(row, journey)
+            for journey in returned
+            if isinstance(journey, dict)
+        ]
+        if candidate_keys and any(
+            key in conflicting_explicit_long_horizon_candidate_keys for key in candidate_keys
+        ):
+            skipped["conflicting_explicit_long_horizon_label"] += 1
+            continue
+        if not _has_explicit_long_horizon_label(row):
+            if candidate_keys and all(
+                key in explicit_long_horizon_candidate_keys for key in candidate_keys
+            ):
+                skipped["shadowed_by_explicit_long_horizon_label"] += 1
+                continue
 
         graph_path = Path(str(row.get("instance_path") or event.get("instance_path") or ""))
         if not graph_path.exists():
@@ -550,6 +589,10 @@ def build_dataset(
         "candidate_count": int(candidate_count_total),
         "candidate_signature_source_present_count": int(candidate_signature_source_present_total),
         "candidate_signature_source_coverage": candidate_signature_source_coverage,
+        "explicit_long_horizon_candidate_key_count": len(explicit_long_horizon_candidate_keys),
+        "conflicting_explicit_long_horizon_candidate_key_count": len(
+            conflicting_explicit_long_horizon_candidate_keys
+        ),
         "context_match_rate": context_match_rate,
         "skipped_counts": dict(sorted(skipped.items())),
         "batch_label_counts": dict(sorted(batch_label_counts.items())),
@@ -615,6 +658,10 @@ def build_dataset(
         "candidate_count": int(candidate_count_total),
         "candidate_signature_source_present_count": int(candidate_signature_source_present_total),
         "candidate_signature_source_coverage": candidate_signature_source_coverage,
+        "explicit_long_horizon_candidate_key_count": len(explicit_long_horizon_candidate_keys),
+        "conflicting_explicit_long_horizon_candidate_key_count": len(
+            conflicting_explicit_long_horizon_candidate_keys
+        ),
         "context_match_rate": context_match_rate,
         "batch_label_counts": dict(sorted(batch_label_counts.items())),
         "candidate_label_counts": dict(sorted(candidate_label_counts.items())),
@@ -761,6 +808,128 @@ def _load_capture_events(path: Path) -> dict[tuple[str, int, str, int, int], dic
             )
             events[key] = event
     return events
+
+
+def _explicit_long_horizon_candidate_key_sets(
+    rows: list[dict[str, Any]],
+) -> tuple[set[tuple[Any, ...]], set[tuple[Any, ...]]]:
+    keys: set[tuple[Any, ...]] = set()
+    label_signatures_by_key: dict[tuple[Any, ...], set[str]] = {}
+    capture_cache: dict[str, dict[tuple[str, int, str, int, int], dict[str, Any]]] = {}
+    for row in rows:
+        if not _has_explicit_long_horizon_label(row):
+            continue
+        label_signature = _explicit_long_horizon_label_signature(row)
+        source_file = Path(str(row.get("source_file") or ""))
+        if not source_file.exists():
+            continue
+        events = capture_cache.get(str(source_file))
+        if events is None:
+            events = _load_capture_events(source_file)
+            capture_cache[str(source_file)] = events
+        event = events.get(_capture_key(row))
+        if event is None:
+            continue
+        for journey in _matched_returned_journeys(row, event):
+            if isinstance(journey, dict):
+                key = _long_horizon_candidate_key(row, journey)
+                keys.add(key)
+                label_signatures_by_key.setdefault(key, set()).add(label_signature)
+    conflicting_keys = {
+        key
+        for key, signatures in label_signatures_by_key.items()
+        if len(signatures) > 1
+    }
+    return keys, conflicting_keys
+
+
+def _explicit_long_horizon_candidate_keys(rows: list[dict[str, Any]]) -> set[tuple[Any, ...]]:
+    keys, _conflicting_keys = _explicit_long_horizon_candidate_key_sets(rows)
+    return keys
+
+
+def _has_explicit_long_horizon_label(row: dict[str, Any]) -> bool:
+    for key in (
+        "accepted_batch_roi_label",
+        "trajectory_accepted_batch_roi",
+        "label_batch_roi_positive",
+        "label_bad_mode_switch",
+        "label_support_changed_good",
+        "delta_v_label",
+        "trajectory_delta_v_label",
+        "barrier_slack_label",
+        "trajectory_barrier_slack_label",
+    ):
+        if key in row and row.get(key) not in (None, ""):
+            return True
+    return False
+
+
+def _explicit_long_horizon_label_signature(row: dict[str, Any]) -> str:
+    values: dict[str, Any] = {}
+    for key in (
+        "accepted_batch_roi_label",
+        "trajectory_accepted_batch_roi",
+        "label_batch_roi_positive",
+        "label_bad_mode_switch",
+        "label_tail_improved",
+        "label_support_changed_good",
+        "delta_v_label",
+        "trajectory_delta_v_label",
+        "barrier_slack_label",
+        "trajectory_barrier_slack_label",
+    ):
+        if key not in row or row.get(key) in (None, ""):
+            continue
+        if key.startswith("label_"):
+            values[key] = int(_row_bool_label(row, key, default=False))
+        else:
+            values[key] = round(_finite_float(row.get(key)), 9)
+    return json.dumps(values, sort_keys=True)
+
+
+def _capture_key(row: dict[str, Any]) -> tuple[str, int, str, int, int]:
+    return (
+        str(row.get("context_hash") or ""),
+        int(row.get("cg_iter") or -1),
+        str(row.get("pricing_kind") or ""),
+        int(row.get("node_id") or 0),
+        int(row.get("depth") or 0),
+    )
+
+
+def _matched_returned_journeys(row: dict[str, Any], event: dict[str, Any]) -> list[dict[str, Any]]:
+    returned = [journey for journey in (event.get("returned_journeys") or []) if isinstance(journey, dict)]
+    target_signature_samples = _row_target_signature_samples(row)
+    target_trace_key = _row_target_trace_key(row)
+    if target_signature_samples:
+        return [
+            journey
+            for journey in returned
+            if _journey_signature_sample_text(journey.get("signature")) in target_signature_samples
+        ]
+    if target_trace_key:
+        return [
+            journey
+            for journey in returned
+            if _journey_trace_key(journey) == target_trace_key
+        ]
+    return returned
+
+
+def _long_horizon_candidate_key(row: dict[str, Any], journey: dict[str, Any]) -> tuple[Any, ...]:
+    signature = journey.get("signature")
+    signature_id = journey_gat_candidate_id_from_signature(signature)
+    if not signature:
+        signature_id = json.dumps(_journey_trace_key(journey), sort_keys=True)
+    return (
+        str(row.get("context_hash") or ""),
+        int(row.get("cg_iter") or -1),
+        str(row.get("pricing_kind") or ""),
+        int(row.get("node_id") or 0),
+        int(row.get("depth") or 0),
+        str(signature_id),
+    )
 
 
 def _row_target_trace_key(row: dict[str, Any]) -> tuple[tuple[tuple[int, ...], tuple[str, ...], float], ...]:
@@ -1006,6 +1175,16 @@ def _candidate_feature(
         return _slack_candidate_feature(journey, field, task_time_windows=task_time_windows)
     if field.startswith("trace_"):
         return _trace_candidate_feature(journey, field)
+    if field.startswith("active_basis_"):
+        return _active_basis_candidate_feature(event, journey, field, task_set=task_set)
+    if field.startswith("pool_"):
+        return _pool_candidate_feature(event, field, task_set=task_set)
+    if field.startswith("forbidden_"):
+        return _forbidden_candidate_feature(event, journey, field, task_set=task_set)
+    if field.startswith("branch_"):
+        return _branch_candidate_feature(event, field, task_set=task_set)
+    if field.startswith("candidate_cut_"):
+        return _cut_candidate_feature(event, journey, field, task_set=task_set)
     return 0.0
 
 
@@ -1108,6 +1287,326 @@ def _slack_candidate_feature(
         return float(sum(late_slacks)) / float(len(late_slacks))
     if field == "slack_min_early_time":
         return _min_or_zero(early_slacks)
+    return 0.0
+
+
+def _active_basis_candidate_feature(
+    event: dict[str, Any],
+    journey: dict[str, Any],
+    field: str,
+    *,
+    task_set: set[int],
+) -> float:
+    rows = _active_basis_records(event)
+    active_task_sets = [
+        active_task_set
+        for active_task_set, _lambda_value, _signature in rows
+        if active_task_set
+    ]
+    if not active_task_sets:
+        active_task_sets = _payload_task_sets(event.get("active_basis_task_sets") or event.get("active_task_sets"))
+    if field == "active_basis_exact_task_set_count_before":
+        return float(sum(1 for active_task_set in active_task_sets if active_task_set == task_set))
+    if field == "active_basis_task_overlap_count_before":
+        return float(sum(1 for active_task_set in active_task_sets if task_set & active_task_set))
+    if field == "active_basis_task_overlap_fraction_max_before":
+        denom = max(1.0, float(len(task_set)))
+        return _max_or_zero(
+            float(len(task_set & active_task_set)) / denom
+            for active_task_set in active_task_sets
+        )
+    if field == "active_basis_task_jaccard_max_before":
+        return _max_or_zero(_task_set_jaccard(task_set, active_task_set) for active_task_set in active_task_sets)
+    if field == "active_basis_lambda_overlap_sum_before":
+        return float(
+            sum(
+                lambda_value
+                for active_task_set, lambda_value, _signature in rows
+                if task_set & active_task_set
+            )
+        )
+    if field == "active_basis_lambda_exact_task_set_sum_before":
+        return float(
+            sum(
+                lambda_value
+                for active_task_set, lambda_value, _signature in rows
+                if task_set == active_task_set
+            )
+        )
+    if field == "active_basis_signature_duplicate_count_before":
+        signature = journey.get("signature")
+        return float(
+            sum(
+                1
+                for _active_task_set, _lambda_value, active_signature in rows
+                if _signature_equal(signature, active_signature)
+            )
+        )
+    return 0.0
+
+
+def _pool_candidate_feature(
+    event: dict[str, Any],
+    field: str,
+    *,
+    task_set: set[int],
+) -> float:
+    pool_task_sets = _payload_task_sets(event.get("pool_task_sets"))
+    if field == "pool_task_overlap_count_before":
+        return float(sum(1 for pool_task_set in pool_task_sets if task_set & pool_task_set))
+    if field == "pool_task_jaccard_max_before":
+        return _max_or_zero(_task_set_jaccard(task_set, pool_task_set) for pool_task_set in pool_task_sets)
+    return 0.0
+
+
+def _forbidden_candidate_feature(
+    event: dict[str, Any],
+    journey: dict[str, Any],
+    field: str,
+    *,
+    task_set: set[int],
+) -> float:
+    forbidden_signatures = event.get("forbidden_signatures")
+    if field == "forbidden_signature_duplicate_count_before":
+        return float(_signature_count(journey.get("signature"), forbidden_signatures))
+    if field == "forbidden_task_overlap_count_before":
+        signature_task_sets = [
+            signature_task_set
+            for signature_task_set in (
+                _signature_task_set(signature)
+                for signature in (forbidden_signatures or [])
+            )
+            if signature_task_set
+        ]
+        return float(sum(1 for signature_task_set in signature_task_sets if task_set & signature_task_set))
+    return 0.0
+
+
+def _branch_candidate_feature(
+    event: dict[str, Any],
+    field: str,
+    *,
+    task_set: set[int],
+) -> float:
+    constraints = _branch_constraints(event)
+    touch_count = 0
+    violation_count = 0
+    same_partial_count = 0
+    separate_violation_count = 0
+    for constraint in constraints:
+        kind = str(constraint.get("kind") or "")
+        task_i = constraint.get("task_i")
+        task_j = constraint.get("task_j")
+        vehicle = constraint.get("vehicle")
+        touched = (
+            (task_i is not None and int(task_i) in task_set)
+            or (task_j is not None and int(task_j) in task_set)
+        )
+        touch_count += int(touched)
+        if kind == "separate_vehicle" and task_i is not None and task_j is not None:
+            violated = int(task_i) in task_set and int(task_j) in task_set
+            separate_violation_count += int(violated)
+            violation_count += int(violated)
+        elif kind == "same_vehicle" and task_i is not None and task_j is not None:
+            same_partial_count += int((int(task_i) in task_set) != (int(task_j) in task_set))
+    values = {
+        "branch_constraint_touch_count": float(touch_count),
+        "branch_constraint_violation_count": float(violation_count),
+        "branch_same_vehicle_pair_partial_count": float(same_partial_count),
+        "branch_separate_vehicle_pair_violation_count": float(separate_violation_count),
+    }
+    return values.get(field, 0.0)
+
+
+def _cut_candidate_feature(
+    event: dict[str, Any],
+    journey: dict[str, Any],
+    field: str,
+    *,
+    task_set: set[int],
+) -> float:
+    cuts = _cut_payloads(event)
+    coeffs: list[float] = []
+    subset_coeffs: list[float] = []
+    fleet_coeff_count = 0
+    weighted = 0.0
+    for index, cut in enumerate(cuts):
+        kind = str(cut.get("kind") or "")
+        coeff = _candidate_cut_coefficient(cut, journey, task_set=task_set)
+        coeffs.append(coeff)
+        if kind == "subset_row":
+            subset_coeffs.append(coeff)
+        if kind in {"fleet_lower_bound", "fleet_upper_bound"} and abs(coeff) > 0.0:
+            fleet_coeff_count += 1
+        weighted += abs(_cut_dual(event, index)) * abs(coeff)
+    values = {
+        "candidate_cut_coeff_l1_sum": float(sum(abs(value) for value in coeffs)),
+        "candidate_cut_subset_row_coeff_sum": float(sum(subset_coeffs)),
+        "candidate_cut_fleet_coeff_count": float(fleet_coeff_count),
+        "candidate_cut_dual_abs_weighted_coeff_sum": float(weighted),
+    }
+    return values.get(field, 0.0)
+
+
+def _active_basis_records(event: dict[str, Any]) -> list[tuple[set[int], float, Any]]:
+    rows = event.get("active_basis_rows")
+    result: list[tuple[set[int], float, Any]] = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            task_set = _task_set(row.get("active_journey_task_set"))
+            if not task_set:
+                task_set = _task_set_from_sequence(row.get("active_journey_sequence"))
+            result.append(
+                (
+                    task_set,
+                    _finite_float(row.get("active_lambda_value")),
+                    row.get("active_journey_signature"),
+                )
+            )
+    if result:
+        return result
+    return [
+        (task_set, 1.0, None)
+        for task_set in _payload_task_sets(event.get("active_basis_task_sets") or event.get("active_task_sets"))
+    ]
+
+
+def _payload_task_sets(payload: Any) -> list[set[int]]:
+    if not isinstance(payload, list):
+        return []
+    return [task_set for task_set in (_task_set(item) for item in payload) if task_set]
+
+
+def _task_set_from_sequence(value: Any) -> set[int]:
+    return set(_flatten_task_sequence(value))
+
+
+def _task_set_jaccard(left: set[int], right: set[int]) -> float:
+    if not left and not right:
+        return 0.0
+    union = left | right
+    return float(len(left & right)) / float(len(union)) if union else 0.0
+
+
+def _signature_equal(left: Any, right: Any) -> bool:
+    if left is None or right is None:
+        return False
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
+def _signature_task_set(signature: Any) -> set[int]:
+    if not isinstance(signature, list):
+        return set()
+    result: set[int] = set()
+    for item in signature:
+        if isinstance(item, (list, tuple)) and item:
+            result.update(_flatten_task_sequence(item[0]))
+        elif isinstance(item, int):
+            result.add(int(item))
+    return result
+
+
+def _branch_constraints(event: dict[str, Any]) -> list[dict[str, int | str | None]]:
+    raw_constraints = event.get("branch_constraints")
+    if not isinstance(raw_constraints, list):
+        return []
+    result: list[dict[str, int | str | None]] = []
+    for raw in raw_constraints:
+        parsed = _parse_branch_constraint(raw)
+        if parsed is not None:
+            result.append(parsed)
+    return result
+
+
+def _parse_branch_constraint(raw: Any) -> dict[str, int | str | None] | None:
+    if isinstance(raw, dict):
+        kind = str(raw.get("kind") or raw.get("type") or "")
+        return {
+            "kind": kind,
+            "task_i": _optional_int(raw.get("task_i", raw.get("i", raw.get("task")))),
+            "task_j": _optional_int(raw.get("task_j", raw.get("j"))),
+            "vehicle": _optional_int(raw.get("vehicle")),
+        }
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if text.startswith("RF(") and ")=" in text:
+        pair, kind = text[3:].split(")=", 1)
+        parts = [part.strip() for part in pair.split(",")]
+        if len(parts) == 2:
+            return {
+                "kind": kind.strip(),
+                "task_i": _optional_int(parts[0]),
+                "task_j": _optional_int(parts[1]),
+                "vehicle": None,
+            }
+    if text.startswith("task_vehicle(") and ")=" in text:
+        pair, state = text[len("task_vehicle(") :].split(")=", 1)
+        parts = [part.strip() for part in pair.split(",")]
+        if len(parts) == 2:
+            return {
+                "kind": f"task_vehicle_{state.strip()}",
+                "task_i": _optional_int(parts[0]),
+                "task_j": None,
+                "vehicle": _optional_int(parts[1]),
+            }
+    return None
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _cut_payloads(event: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_cuts = event.get("cuts")
+    if not isinstance(raw_cuts, list):
+        return []
+    result: list[dict[str, Any]] = []
+    for raw in raw_cuts:
+        if not isinstance(raw, dict):
+            continue
+        payload = raw.get("payload") if isinstance(raw.get("payload"), dict) else {}
+        kind = str(raw.get("kind") or payload.get("kind") or "")
+        merged = dict(payload)
+        merged.update(raw)
+        merged["kind"] = kind
+        result.append(merged)
+    return result
+
+
+def _candidate_cut_coefficient(
+    cut: dict[str, Any],
+    journey: dict[str, Any],
+    *,
+    task_set: set[int],
+) -> float:
+    kind = str(cut.get("kind") or "")
+    if kind == "subset_row":
+        cut_tasks = _task_set(cut.get("tasks"))
+        k = max(1, int(_finite_float(cut.get("k"), 2.0)))
+        return float(len(cut_tasks & task_set) // k)
+    if kind in {"fleet_lower_bound", "fleet_upper_bound"}:
+        return 1.0
+    if kind == "sortie_lower_bound":
+        return -float(len(_journey_trip_dicts(journey)) or 1)
+    return 0.0
+
+
+def _cut_dual(event: dict[str, Any], index: int) -> float:
+    cut_duals = event.get("cut_duals")
+    if isinstance(cut_duals, list) and 0 <= int(index) < len(cut_duals):
+        return _finite_float(cut_duals[int(index)])
+    if isinstance(cut_duals, dict):
+        for key in (int(index), str(index)):
+            if key in cut_duals:
+                return _finite_float(cut_duals.get(key))
     return 0.0
 
 
@@ -1284,7 +1783,6 @@ def _context_feature(event: dict[str, Any], row: dict[str, Any], field: str) -> 
         "active_basis_unique_task_set_count_before": "active_task_set_count",
         "lambda_active_count_before": "active_basis_journey_count",
         "lambda_fractional_count_before": "active_basis_fractional_journey_count",
-        "recent_objective_delta_before": "objective_delta",
         "rmp_objective_before": "objective_before",
         "pricing_tail_retry_count_before": "state_t_final_judge_retry_count",
         "final_judge_retry_count": "state_t_final_judge_retry_count",
@@ -1316,6 +1814,12 @@ def _context_feature(event: dict[str, Any], row: dict[str, Any], field: str) -> 
     if field == "branch_constraint_count":
         constraints = event.get("branch_constraints")
         return float(len(constraints)) if isinstance(constraints, list) else _finite_float(event.get(field))
+    if field == "recent_objective_delta_before":
+        # Do not alias this to objective_delta: objective_delta is the current
+        # batch outcome and would make same-context pairs carry label leakage.
+        if field in row:
+            return _finite_float(row.get(field))
+        return _finite_float(event.get(field))
     if field in row:
         return _finite_float(row.get(field))
     alias = aliases.get(field)

@@ -39,6 +39,7 @@ from BPC_future.scripts.train_gat_batch_impact import (
     _load_sample,
     _mean_ci_low,
     _normalize_sample,
+    _sample_model_kwargs,
     _wilson_ci_low,
 )
 
@@ -568,13 +569,14 @@ def _score_dataset(
     with torch.no_grad():
         for item in manifest.get("samples", []):
             sample = _normalize_sample(_load_sample(dataset_dir / item["path"]), manifest).to(device)
+            kwargs = _sample_model_kwargs(model, sample)
             output = model(
                 sample,
                 sample.candidate_task_membership,
                 sample.candidate_sequence_positions,
                 sample.candidate_features,
                 sample.context_features,
-                batch_features=sample.batch_features,
+                **kwargs,
             )
             records.append(_record_from_output(item=item, sample=sample, output=output))
     return records

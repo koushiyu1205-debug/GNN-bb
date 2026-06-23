@@ -155,6 +155,9 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
             self.assertIn("trace_occupancy_bucket_count", schema)
             self.assertIn("slack_min_late_time", schema)
             self.assertIn("slack_min_early_time", schema)
+            self.assertIn("active_basis_task_jaccard_max_before", schema)
+            self.assertIn("branch_separate_vehicle_pair_violation_count", schema)
+            self.assertIn("candidate_cut_dual_abs_weighted_coeff_sum", schema)
             self.assertEqual(
                 sample.candidate_features[0, schema.index("trace_arc_option_count")].item(),
                 3.0,
@@ -186,6 +189,46 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
             self.assertAlmostEqual(
                 sample.candidate_features[0, schema.index("slack_min_early_time")].item(),
                 -2.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("active_basis_exact_task_set_count_before")].item(),
+                1.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("active_basis_task_jaccard_max_before")].item(),
+                1.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("active_basis_lambda_overlap_sum_before")].item(),
+                0.75,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("active_basis_signature_duplicate_count_before")].item(),
+                1.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("pool_task_overlap_count_before")].item(),
+                1.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("forbidden_signature_duplicate_count_before")].item(),
+                1.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("branch_constraint_touch_count")].item(),
+                2.0,
+            )
+            self.assertEqual(
+                sample.candidate_features[0, schema.index("branch_separate_vehicle_pair_violation_count")].item(),
+                1.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("candidate_cut_coeff_l1_sum")].item(),
+                2.0,
+            )
+            self.assertAlmostEqual(
+                sample.candidate_features[0, schema.index("candidate_cut_dual_abs_weighted_coeff_sum")].item(),
+                0.7,
             )
             self.assertEqual(tuple(sample.candidate_path_token_ids.shape), (2, 3))
             self.assertEqual(tuple(sample.candidate_path_pair_ids.shape), (2, 3))
@@ -315,6 +358,24 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
             self.assertEqual(summary["pairwise_context_stats"]["same_context_pair_count"], 1)
             self.assertEqual(summary["pairwise_context_stats"]["same_context_comparable_pair_count"], 1)
             self.assertEqual(summary["pairwise_context_stats"]["positive_negative_label_pair_count"], 1)
+            manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+            context_schema = manifest["context_feature_schema"]
+            recent_objective_idx = context_schema.index("recent_objective_delta_before")
+            positive = torch.load(
+                output_dir / "samples" / "sample_000000.pt",
+                map_location="cpu",
+                weights_only=False,
+            )
+            negative = torch.load(
+                output_dir / "samples" / "sample_000001.pt",
+                map_location="cpu",
+                weights_only=False,
+            )
+            self.assertEqual(
+                positive.context_features[recent_objective_idx].item(),
+                negative.context_features[recent_objective_idx].item(),
+            )
+            self.assertEqual(positive.context_features[recent_objective_idx].item(), 0.0)
 
     def test_explicit_long_horizon_labels_override_immediate_objective_gain(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -391,6 +452,76 @@ class GATBatchImpactDatasetTests(unittest.TestCase):
             self.assertEqual(sample.y_accepted_batch_roi.tolist(), [-4.25])
             self.assertEqual(sample.y_delta_v.tolist(), [4.25])
             self.assertEqual(sample.y_barrier_slack.tolist(), [-4.25])
+
+    def test_explicit_long_horizon_label_shadows_default_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            graph_path = root / "graph.json"
+            graph_path.write_text(json.dumps(_toy_payload()), encoding="utf-8")
+            source_log = root / "events.jsonl"
+            rows_jsonl = root / "same_run_rows.jsonl"
+            output_dir = root / "dataset"
+
+            _write_jsonl(
+                source_log,
+                [
+                    _capture_event(
+                        graph_path=graph_path,
+                        context_hash="ctx-dup",
+                        cg_iter=1,
+                        instance="inst-dup",
+                        returned=[_journey("j1", [1, 2], -2.0, [[1, 2]])],
+                    )
+                ],
+            )
+            default_positive = _row(
+                source_file=source_log,
+                graph_path=graph_path,
+                context_hash="ctx-dup",
+                cg_iter=1,
+                instance="inst-dup",
+                region="apollo15_20km",
+                objective_improvement=3.0,
+                label_objective_improved=1,
+                active_changed_task_set_count=0,
+                new_task_set_count=1,
+                replacement_journeys=0,
+            )
+            explicit_negative = dict(default_positive)
+            explicit_negative.update(
+                {
+                    "accepted_batch_roi_label": -1.5,
+                    "label_batch_roi_positive": 0,
+                    "label_bad_mode_switch": 1,
+                }
+            )
+            _write_jsonl(rows_jsonl, [default_positive, explicit_negative])
+
+            summary = build_dataset(
+                input_jsonl=rows_jsonl,
+                output_dir=output_dir,
+                report=root / "report.md",
+                min_samples_for_training=1,
+                min_positive_batches_for_training=0,
+                min_delay_candidates_for_training=1,
+            )
+
+            self.assertTrue(summary["all_checks_pass"])
+            self.assertEqual(summary["sample_count"], 1)
+            self.assertEqual(
+                summary["skipped_counts"].get("shadowed_by_explicit_long_horizon_label"),
+                1,
+            )
+            self.assertEqual(summary["batch_label_counts"], {"non_improving": 1})
+            self.assertEqual(summary["candidate_label_counts"], {"delay_queue": 1})
+            sample = torch.load(
+                output_dir / "samples" / "sample_000000.pt",
+                map_location="cpu",
+                weights_only=False,
+            )
+            self.assertEqual(sample.y_candidate_high_priority.tolist(), [0.0])
+            self.assertEqual(sample.y_candidate_delay_risk.tolist(), [1.0])
+            self.assertEqual(sample.y_accepted_batch_roi.tolist(), [-1.5])
 
     def test_repeated_input_jsonl_paths_are_merged(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -541,12 +672,33 @@ def _capture_event(
         "active_basis_journey_count": 3,
         "active_task_set_count": 3,
         "active_basis_fractional_journey_count": 1,
+        "active_basis_rows": [
+            {
+                "active_journey_task_set": [1, 3],
+                "active_journey_signature": ["jp1"],
+                "active_lambda_value": 0.75,
+            },
+            {
+                "active_journey_task_set": [2],
+                "active_journey_signature": ["active-other"],
+                "active_lambda_value": 0.25,
+            },
+        ],
+        "active_task_sets": [[1, 3], [2]],
         "true_dual_vector": [1.0, -2.0, 3.0],
         "true_duals": {"fleet_limit": 4.0},
-        "cut_duals": {"cut-a": -0.5, "cut-b": 0.25},
-        "branch_constraints": [{"type": "same_vehicle"}],
+        "cut_duals": {"0": 0.2, "1": -0.5},
+        "cuts": [
+            {"index": 0, "kind": "fleet_lower_bound", "payload": {"kind": "fleet_lower_bound", "lb": 1}},
+            {"index": 1, "kind": "subset_row", "payload": {"kind": "subset_row", "tasks": [1, 3], "k": 2}},
+        ],
+        "branch_constraints": [
+            {"kind": "separate_vehicle", "task_i": 1, "task_j": 3},
+            {"kind": "same_vehicle", "task_i": 1, "task_j": 2},
+        ],
         "pool_task_sets": [[1, 2]],
         "pool_signatures": [["old"]],
+        "forbidden_signatures": [["jp1"]],
         "state_t_final_judge_retry_count": 2,
         "returned_journeys": returned,
     }

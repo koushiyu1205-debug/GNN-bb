@@ -42,6 +42,9 @@ BATCH_IMPACT_HEAD_NAMES: tuple[str, ...] = (
     "predicted_delta_v",
     "predicted_barrier_slack",
     "predicted_accepted_batch_roi",
+    "context_pair_preference",
+    "context_pair_delta",
+    "candidate_action_priority",
 )
 
 
@@ -477,6 +480,16 @@ class GATBatchImpactModel(nn.Module):
         path_type_vocab_size: int = 3,
         path_token_dim: int = 16,
         path_hidden_dim: int = 32,
+        path_feature_scale: float = 1.0,
+        path_feature_dropout: float = 0.0,
+        path_context_gate_hidden_dim: int = 0,
+        context_pair_hidden_dim: int = 0,
+        context_pair_delta_hidden_dim: int = 0,
+        candidate_context_interaction_dim: int = 0,
+        candidate_batch_priority_residual_scale: float = 0.0,
+        delay_risk_batch_priority_residual_scale: float = 0.0,
+        candidate_action_priority_residual_scale: float = 0.0,
+        delay_risk_action_priority_residual_scale: float = 0.0,
         use_layer_norm: bool = True,
     ) -> None:
         super().__init__()
@@ -494,6 +507,32 @@ class GATBatchImpactModel(nn.Module):
         self.path_type_vocab_size = int(path_type_vocab_size)
         self.path_token_dim = int(path_token_dim)
         self.path_hidden_dim = int(path_hidden_dim)
+        self.path_feature_scale = float(path_feature_scale)
+        self.path_feature_dropout_rate = float(path_feature_dropout)
+        self.path_context_gate_hidden_dim = max(0, int(path_context_gate_hidden_dim))
+        self.context_pair_hidden_dim = int(context_pair_hidden_dim)
+        self.context_pair_delta_hidden_dim = max(0, int(context_pair_delta_hidden_dim))
+        self.candidate_context_interaction_dim = max(0, int(candidate_context_interaction_dim))
+        if self.path_feature_scale < 0.0:
+            raise ValueError("path_feature_scale must be non-negative")
+        if self.path_feature_dropout_rate < 0.0 or self.path_feature_dropout_rate > 1.0:
+            raise ValueError("path_feature_dropout must be in [0, 1]")
+        self.candidate_batch_priority_residual_scale = max(
+            0.0,
+            float(candidate_batch_priority_residual_scale),
+        )
+        self.delay_risk_batch_priority_residual_scale = max(
+            0.0,
+            float(delay_risk_batch_priority_residual_scale),
+        )
+        self.candidate_action_priority_residual_scale = max(
+            0.0,
+            float(candidate_action_priority_residual_scale),
+        )
+        self.delay_risk_action_priority_residual_scale = max(
+            0.0,
+            float(delay_risk_action_priority_residual_scale),
+        )
         self.exactness_contract = dict(BATCH_IMPACT_EXACTNESS_CONTRACT)
 
         self.graph_encoder = HierarchicalOptionGAT(
@@ -522,16 +561,28 @@ class GATBatchImpactModel(nn.Module):
             if self.path_token_vocab_size > 0
             else None
         )
+        self.path_feature_dropout = nn.Dropout(self.path_feature_dropout_rate)
+        self.context_encoder = RMPContextEncoder(
+            context_feature_dim=self.context_feature_dim,
+            context_hidden_dim=self.context_hidden_dim,
+            dropout=float(dropout),
+        )
+        self.path_context_gate = (
+            nn.Sequential(
+                nn.Linear(self.path_hidden_dim + self.context_hidden_dim, self.path_context_gate_hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(float(dropout)),
+                nn.Linear(self.path_context_gate_hidden_dim, self.path_hidden_dim),
+                nn.Sigmoid(),
+            )
+            if self.path_token_encoder is not None and self.path_context_gate_hidden_dim > 0
+            else None
+        )
         self.candidate_encoder = JourneyCandidateEncoder(
             graph_hidden_dim=int(hidden_dim),
             candidate_feature_dim=self.candidate_feature_dim,
             path_feature_dim=path_feature_dim,
             candidate_hidden_dim=self.candidate_hidden_dim,
-            dropout=float(dropout),
-        )
-        self.context_encoder = RMPContextEncoder(
-            context_feature_dim=self.context_feature_dim,
-            context_hidden_dim=self.context_hidden_dim,
             dropout=float(dropout),
         )
         self.batch_encoder = BatchImpactEncoder(
@@ -540,8 +591,31 @@ class GATBatchImpactModel(nn.Module):
             batch_hidden_dim=self.batch_hidden_dim,
             dropout=float(dropout),
         )
+        if self.candidate_context_interaction_dim > 0:
+            self.candidate_interaction_projector = nn.Linear(
+                self.candidate_hidden_dim,
+                self.candidate_context_interaction_dim,
+            )
+            self.batch_interaction_projector = nn.Linear(
+                self.batch_hidden_dim,
+                self.candidate_context_interaction_dim,
+            )
+            self.context_interaction_projector = nn.Linear(
+                self.context_hidden_dim,
+                self.candidate_context_interaction_dim,
+            )
+        else:
+            self.candidate_interaction_projector = None
+            self.batch_interaction_projector = None
+            self.context_interaction_projector = None
 
-        candidate_decision_dim = self.candidate_hidden_dim + self.batch_hidden_dim + self.context_hidden_dim
+        candidate_interaction_feature_dim = 4 * self.candidate_context_interaction_dim
+        candidate_decision_dim = (
+            self.candidate_hidden_dim
+            + self.batch_hidden_dim
+            + self.context_hidden_dim
+            + candidate_interaction_feature_dim
+        )
         batch_decision_dim = self.batch_hidden_dim + self.context_hidden_dim
         self.high_priority_head = _mlp_head(candidate_decision_dim, self.impact_hidden_dim, dropout=float(dropout))
         self.delay_risk_head = _mlp_head(candidate_decision_dim, self.impact_hidden_dim, dropout=float(dropout))
@@ -553,6 +627,32 @@ class GATBatchImpactModel(nn.Module):
         self.delta_v_head = _mlp_head(batch_decision_dim, self.impact_hidden_dim, dropout=float(dropout))
         self.barrier_slack_head = _mlp_head(batch_decision_dim, self.impact_hidden_dim, dropout=float(dropout))
         self.accepted_batch_roi_head = _mlp_head(batch_decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.context_pair_delta_head = (
+            _mlp_head(batch_decision_dim, self.context_pair_delta_hidden_dim, dropout=float(dropout))
+            if self.context_pair_delta_hidden_dim > 0
+            else None
+        )
+        self.candidate_batch_priority_head = (
+            _mlp_head(batch_decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+            if (
+                self.candidate_batch_priority_residual_scale > 0.0
+                or self.delay_risk_batch_priority_residual_scale > 0.0
+            )
+            else None
+        )
+        self.candidate_action_priority_head = (
+            _mlp_head(candidate_decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+            if (
+                self.candidate_action_priority_residual_scale > 0.0
+                or self.delay_risk_action_priority_residual_scale > 0.0
+            )
+            else None
+        )
+        self.context_pair_comparator_head = (
+            _mlp_head(4 * batch_decision_dim, self.context_pair_hidden_dim, dropout=float(dropout))
+            if self.context_pair_hidden_dim > 0
+            else None
+        )
 
     def forward(
         self,
@@ -574,6 +674,7 @@ class GATBatchImpactModel(nn.Module):
         initial_task_h = encoded["initial_task_h"]
         path_output: Dict[str, Tensor] = {}
         candidate_path_embedding: Optional[Tensor] = None
+        context_embedding: Optional[Tensor] = None
         if self.path_token_encoder is not None:
             if (
                 candidate_path_token_ids is None
@@ -590,6 +691,26 @@ class GATBatchImpactModel(nn.Module):
                 device=task_h.device,
             )
             candidate_path_embedding = path_output["candidate_path_embedding"]
+            if self.path_context_gate is not None:
+                context_embedding = self.context_encoder(
+                    context_features,
+                    device=task_h.device,
+                    dtype=task_h.dtype,
+                )
+                context_for_path = context_embedding.unsqueeze(0).expand(
+                    candidate_path_embedding.size(0),
+                    -1,
+                )
+                path_context_gate = self.path_context_gate(
+                    torch.cat([candidate_path_embedding, context_for_path], dim=-1)
+                )
+                _assert_finite(path_context_gate, "candidate path context gate")
+                candidate_path_embedding = candidate_path_embedding * path_context_gate
+                path_output["candidate_path_context_gate"] = path_context_gate
+            candidate_path_embedding = (
+                self.path_feature_dropout(candidate_path_embedding) * self.path_feature_scale
+            )
+            path_output["candidate_path_embedding"] = candidate_path_embedding
         candidate_output = self.candidate_encoder(
             task_h=task_h,
             initial_task_h=initial_task_h,
@@ -599,11 +720,12 @@ class GATBatchImpactModel(nn.Module):
             candidate_path_embedding=candidate_path_embedding,
         )
         candidate_embedding = candidate_output["candidate_embedding"]
-        context_embedding = self.context_encoder(
-            context_features,
-            device=candidate_embedding.device,
-            dtype=candidate_embedding.dtype,
-        )
+        if context_embedding is None:
+            context_embedding = self.context_encoder(
+                context_features,
+                device=candidate_embedding.device,
+                dtype=candidate_embedding.dtype,
+            )
         batch_output = self.batch_encoder(
             candidate_embedding,
             candidate_mask=candidate_mask,
@@ -613,14 +735,24 @@ class GATBatchImpactModel(nn.Module):
 
         context_for_candidates = context_embedding.unsqueeze(0).expand(candidate_embedding.size(0), -1)
         batch_for_candidates = batch_embedding.unsqueeze(0).expand(candidate_embedding.size(0), -1)
+        candidate_context_interaction = self._candidate_context_interaction_features(
+            candidate_embedding,
+            batch_for_candidates,
+            context_for_candidates,
+        )
         candidate_decision_input = torch.cat(
-            [candidate_embedding, batch_for_candidates, context_for_candidates],
+            [
+                candidate_embedding,
+                batch_for_candidates,
+                context_for_candidates,
+                candidate_context_interaction,
+            ],
             dim=-1,
         )
         batch_decision_input = torch.cat([batch_embedding, context_embedding], dim=-1).unsqueeze(0)
 
-        high_priority_logit = self.high_priority_head(candidate_decision_input).squeeze(-1)
-        delay_risk_logit = self.delay_risk_head(candidate_decision_input).squeeze(-1)
+        base_high_priority_logit = self.high_priority_head(candidate_decision_input).squeeze(-1)
+        base_delay_risk_logit = self.delay_risk_head(candidate_decision_input).squeeze(-1)
         batch_roi_positive_logit = self.batch_roi_positive_head(batch_decision_input).squeeze(-1)
         objective_progress_logit = self.objective_progress_head(batch_decision_input).squeeze(-1)
         tail_improved_logit = self.tail_improved_head(batch_decision_input).squeeze(-1)
@@ -629,18 +761,62 @@ class GATBatchImpactModel(nn.Module):
         predicted_delta_v = self.delta_v_head(batch_decision_input).squeeze(-1)
         predicted_barrier_slack = self.barrier_slack_head(batch_decision_input).squeeze(-1)
         predicted_accepted_batch_roi = self.accepted_batch_roi_head(batch_decision_input).squeeze(-1)
+        context_pair_delta_logit = (
+            self.context_pair_delta_head(batch_decision_input).squeeze(-1)
+            if self.context_pair_delta_head is not None
+            else batch_roi_positive_logit.new_zeros(batch_roi_positive_logit.shape)
+        )
+        candidate_batch_priority_logit = (
+            self.candidate_batch_priority_head(batch_decision_input).squeeze(-1)
+            if self.candidate_batch_priority_head is not None
+            else batch_roi_positive_logit.new_zeros(batch_roi_positive_logit.shape)
+        )
+        candidate_action_priority_logit = (
+            self.candidate_action_priority_head(candidate_decision_input).squeeze(-1)
+            if self.candidate_action_priority_head is not None
+            else base_high_priority_logit.new_zeros(base_high_priority_logit.shape)
+        )
+        priority_for_candidates = candidate_batch_priority_logit.reshape(1).expand_as(
+            base_high_priority_logit
+        )
+        high_priority_logit = base_high_priority_logit
+        delay_risk_logit = base_delay_risk_logit
+        if self.candidate_batch_priority_residual_scale > 0.0:
+            high_priority_logit = high_priority_logit + (
+                self.candidate_batch_priority_residual_scale * priority_for_candidates
+            )
+        if self.delay_risk_batch_priority_residual_scale > 0.0:
+            delay_risk_logit = delay_risk_logit - (
+                self.delay_risk_batch_priority_residual_scale * priority_for_candidates
+            )
+        if self.candidate_action_priority_residual_scale > 0.0:
+            high_priority_logit = high_priority_logit + (
+                self.candidate_action_priority_residual_scale * candidate_action_priority_logit
+            )
+        if self.delay_risk_action_priority_residual_scale > 0.0:
+            delay_risk_logit = delay_risk_logit - (
+                self.delay_risk_action_priority_residual_scale * candidate_action_priority_logit
+            )
 
         outputs: Dict[str, Tensor] = {
             "candidate_embedding": candidate_embedding,
+            "candidate_context_interaction_embedding": candidate_context_interaction,
             "batch_embedding": batch_embedding,
             "context_embedding": context_embedding,
+            "batch_decision_embedding": batch_decision_input.squeeze(0),
             "task_counts": candidate_output["task_counts"],
             "order_span": candidate_output["order_span"],
             "batch_candidate_count": batch_output["batch_candidate_count"],
+            "base_high_priority_logit": base_high_priority_logit,
             "high_priority_logit": high_priority_logit,
             "high_priority_probability": torch.sigmoid(high_priority_logit),
+            "base_delay_risk_logit": base_delay_risk_logit,
             "delay_risk_logit": delay_risk_logit,
             "delay_risk_probability": torch.sigmoid(delay_risk_logit),
+            "candidate_batch_priority_logit": candidate_batch_priority_logit,
+            "candidate_batch_priority_probability": torch.sigmoid(candidate_batch_priority_logit),
+            "candidate_action_priority_logit": candidate_action_priority_logit,
+            "candidate_action_priority_probability": torch.sigmoid(candidate_action_priority_logit),
             "batch_roi_positive_logit": batch_roi_positive_logit,
             "batch_roi_positive_probability": torch.sigmoid(batch_roi_positive_logit),
             "objective_progress_logit": objective_progress_logit,
@@ -654,11 +830,66 @@ class GATBatchImpactModel(nn.Module):
             "predicted_delta_v": predicted_delta_v,
             "predicted_barrier_slack": predicted_barrier_slack,
             "predicted_accepted_batch_roi": predicted_accepted_batch_roi,
+            "context_pair_delta_logit": context_pair_delta_logit,
+            "context_pair_delta_probability": torch.sigmoid(context_pair_delta_logit),
         }
         outputs.update(path_output)
         for name, value in outputs.items():
             _assert_finite(value, name)
         return outputs
+
+    def _candidate_context_interaction_features(
+        self,
+        candidate_embedding: Tensor,
+        batch_for_candidates: Tensor,
+        context_for_candidates: Tensor,
+    ) -> Tensor:
+        if self.candidate_context_interaction_dim <= 0:
+            return candidate_embedding.new_empty((candidate_embedding.size(0), 0))
+        if (
+            self.candidate_interaction_projector is None
+            or self.batch_interaction_projector is None
+            or self.context_interaction_projector is None
+        ):
+            raise ValueError("candidate context interaction projectors are not initialized")
+        candidate_proj = self.candidate_interaction_projector(candidate_embedding)
+        batch_proj = self.batch_interaction_projector(batch_for_candidates)
+        context_proj = self.context_interaction_projector(context_for_candidates)
+        interaction = torch.cat(
+            [
+                candidate_proj * batch_proj,
+                candidate_proj * context_proj,
+                candidate_proj - batch_proj,
+                candidate_proj - context_proj,
+            ],
+            dim=-1,
+        )
+        _assert_finite(interaction, "candidate context interaction embedding")
+        return interaction
+
+    def context_pair_preference_logit(
+        self,
+        left_output: Dict[str, Tensor],
+        right_output: Dict[str, Tensor],
+    ) -> Tensor:
+        """Score whether the left same-context batch should rank above right.
+
+        This optional comparator is diagnostic/training-only. It gives Stage 3
+        pairwise supervision direct access to the local difference between two
+        batch/context embeddings. It is not a pricing oracle or admission rule.
+        """
+
+        if self.context_pair_comparator_head is None:
+            raise ValueError("context pair comparator is disabled")
+        left = left_output["batch_decision_embedding"].reshape(-1)
+        right = right_output["batch_decision_embedding"].reshape(-1)
+        if left.shape != right.shape:
+            raise ValueError("context pair comparator inputs must have matching shapes")
+        pair_input = torch.cat([left, right, left - right, left * right], dim=0).unsqueeze(0)
+        _assert_finite(pair_input, "context pair comparator input")
+        logit = self.context_pair_comparator_head(pair_input).squeeze(-1)
+        _assert_finite(logit, "context pair preference logit")
+        return logit
 
 
 def batch_impact_exactness_contract() -> Dict[str, bool]:

@@ -749,13 +749,13 @@ def _assert_offline_contract(metrics: dict[str, Any], manifest: dict[str, Any]) 
 def _write_report(report: Path, summary: dict[str, Any]) -> None:
     s = summary["summary"]
     lines = [
-        "# 2026-06-17 BPC_future GAT Stage 3 v98 Focused Pair Failure Anatomy 报告",
+        _report_title(report),
         "",
         "## 目的",
         "",
-        "对 v96 explicit focused tranche 的 same-context pair failures 做离线分类，",
+        "对指定 checkpoint 的 focused same-context positive/negative pair failures 做离线分类，",
         "判断失败更像 near-margin loss tuning 问题，还是 candidate/action-consequence",
-        " 表示结构性不可分问题。该审计只读 metrics / dataset，不运行 BPC / pricing / RMP / worker / certificate。",
+        "表示结构性不可分问题。该审计只读 metrics / dataset，不运行 BPC / pricing / RMP / worker / certificate。",
         "",
         "## 机器字段",
         "",
@@ -839,6 +839,17 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
     ]
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _report_title(report: Path) -> str:
+    stem = Path(report).stem
+    parts = stem.split("_")
+    date = parts[0] if parts and parts[0].isdigit() and len(parts[0]) == 8 else ""
+    version = next((part for part in parts if part.startswith("v") and part[1:].isdigit()), "current")
+    if date:
+        date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+        return f"# {date} BPC_future GAT Stage 3 {version} Focused Pair Failure Anatomy 报告"
+    return f"# BPC_future GAT Stage 3 {version} Focused Pair Failure Anatomy 报告"
 
 
 if __name__ == "__main__":

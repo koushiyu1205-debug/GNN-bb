@@ -52,10 +52,24 @@ def _results_csv_from_command(command: str) -> str:
     return ""
 
 
-def _command_allowed(command_type: str, include: set[str], exclude: set[str]) -> bool:
+def _matches_any_fragment(command_type: str, fragments: set[str]) -> bool:
+    return any(fragment in command_type for fragment in fragments)
+
+
+def _command_allowed(
+    command_type: str,
+    include: set[str],
+    exclude: set[str],
+    include_contains: set[str],
+    exclude_contains: set[str],
+) -> bool:
     if include and command_type not in include:
         return False
+    if include_contains and not _matches_any_fragment(command_type, include_contains):
+        return False
     if exclude and command_type in exclude:
+        return False
+    if exclude_contains and _matches_any_fragment(command_type, exclude_contains):
         return False
     return True
 
@@ -145,6 +159,8 @@ def execute_runbook(
     skip_existing: bool = True,
     include_command_types: set[str] | None = None,
     exclude_command_types: set[str] | None = None,
+    include_command_type_contains: set[str] | None = None,
+    exclude_command_type_contains: set[str] | None = None,
     cwd: Path = Path("."),
 ) -> dict[str, Any]:
     runbook = _read_json(runbook_summary)
@@ -156,6 +172,8 @@ def execute_runbook(
             str(command.get("command_type") or ""),
             include_command_types or set(),
             exclude_command_types or set(),
+            include_command_type_contains or set(),
+            exclude_command_type_contains or set(),
         )
     ]
     if execution_log is None:
@@ -251,6 +269,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-skip-existing", action="store_true")
     parser.add_argument("--include-command-type", action="append", default=[])
     parser.add_argument("--exclude-command-type", action="append", default=[])
+    parser.add_argument("--include-command-type-contains", action="append", default=[])
+    parser.add_argument("--exclude-command-type-contains", action="append", default=[])
     parser.add_argument("--cwd", type=Path, default=Path("."))
     args = parser.parse_args(argv)
     summary = execute_runbook(
@@ -262,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         skip_existing=not bool(args.no_skip_existing),
         include_command_types=_parse_types(args.include_command_type),
         exclude_command_types=_parse_types(args.exclude_command_type),
+        include_command_type_contains=_parse_types(args.include_command_type_contains),
+        exclude_command_type_contains=_parse_types(args.exclude_command_type_contains),
         cwd=args.cwd,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))

@@ -1,10 +1,10 @@
 # GAT Target Mode：有针对性扩充训练样本计划（优化版）
 
-版本：2026-06-17  
+版本：2026-06-18  
 适用阶段：Stage 3 数据补强 → Stage 4 候选前置准备  
 唯一目标：**合理扩充训练样本数量，并形成 Stage 3 retraining / Stage 4 audit precondition 数据合同**  
-计划规模：**2000 条有效 target-level 样本行**  
-执行边界：**只做数据扩充与样本组织，不改模型、不训练、不改 solver、不启用 GAT、不接 production**
+计划规模：**5000 条有效 target-level 样本行**  
+执行边界：**只做数据扩充与样本组织；允许 diagnostic-only replay capture / artifact tooling 补齐；不改模型、不训练、不改变 solver 决策语义、不启用 GAT、不接 production**
 
 ---
 
@@ -184,12 +184,25 @@ score(positive_target) > score(negative_target) + margin
 最终样本集必须同时满足：
 
 ```text
-有效 target-level rows >= 2000
-有效 batch-level samples >= 200
-有效 same-context hard pairs >= 450
+有效 target-level rows >= 5000
+有效 batch-level samples >= 500
+有效 same-context hard pairs >= 1200
 ```
 
-只达到 2000 target rows 但 batch samples 很少，仍然不合格；只达到 batch samples 但没有 hard pairs，也不合格。
+只达到 5000 target rows 但 batch samples 很少，仍然不合格；只达到 batch samples 但没有 hard pairs，也不合格。
+
+训练粒度必须保持分离：
+
+```text
+5000 条 target-level rows:
+    主要训练 candidate-level heads 和 same-context pairwise ranking。
+
+按 context_hash + candidate_batch_id group 后的 batch samples:
+    训练 batch-level ROI / tail / CBF heads。
+
+candidate 和 batch 一起训练，但 label 粒度不同；
+batch label 不得广播成 individual candidate label。
+```
 
 ---
 
@@ -417,7 +430,12 @@ batch 整体 ROI 为正，
 
 ## 8. 样本数量目标
 
-这里的 `2000` 指通过去重、causal evidence 审核、context 一致性审核、泄漏检查后的有效 target-level rows。
+这里的 `5000` 指通过去重、causal evidence 审核、context 一致性审核、泄漏检查后，
+再按 Stage 4 偏置配额选出的 `selected_for_training=true` target-level rows。
+
+如果 raw collection 超过 5000 行，不能把全部 raw rows 都计入质量门禁；必须先输出一个
+quota-selected training subset，再只用这个 subset 统计 family、scale、evidence、hard-pair
+和 Stage 4 audit 门禁。多余 raw rows 只能作为候选池、诊断背景或下一轮补样来源。
 
 建议 raw collection 额外多采 20%–30%，用于去重和剔除。
 
@@ -427,23 +445,66 @@ batch 整体 ROI 为正，
 
 | 任务规模 | 目标有效 target rows | 占比 | 80% 最低线 |
 |---:|---:|---:|---:|
-| 20 | 900 | 45% | 720 |
-| 30 | 300 | 15% | 240 |
-| 50 | 500 | 25% | 400 |
-| 100 | 300 | 15% | 240 |
-| **合计** | **2000** | **100%** | - |
+| 20 | 2500 | 50% | 2000 |
+| 30 | 500 | 10% | 400 |
+| 50 | 1000 | 20% | 800 |
+| 100 | 1000 | 20% | 800 |
+| **合计** | **5000** | **100%** | - |
 
 规模用途边界：
 
 ```text
 20-scale:
     是 Stage 4 online shadow / opt-in 前的主验收规模。
+    5000 样本集中按 50% 配额配置，是本计划的主支撑规模。
 
 30/50/100-scale:
     用于 scale generalization、family/scale holdout 和 heuristic acceleration
     辅助证据；
     不得直接用来声明 20-task exact proof 改善；
     不得把 local same-context ROI 解释成 exact optimality 或 certificate signal。
+
+    30/50/100 的 runbook execution success 不能自动计为可训练 causal row。
+    只有同时捕获到同 context 的 worker materialization / ablation evidence，
+    并通过 `worker_target_causal_match=true` 或等价 Level A/B 审核后，
+    才能进入 selected training subset 的 Level A/B 统计。
+
+    2026-06-18 的 100-scale 诊断说明：
+    exact-context / before_exact 路径在短时 task100 fallback run 中没有进入 exact pricing，
+    因而无法产出 worker materialization row；
+    open-context target_materialization / before_legacy_final_judge 路径可以产出
+    `journey_sharded_pulse_hidden_negative_worker`、matching replay capture、
+    同阶段 column addition 和下一轮 RMP improvement。
+
+    后续 100-scale 补样应先用 open-context materialization 发现实际 context，
+    再把实际 worker context_hash 绑定成 self-context Level A/B 行；
+    这些行只能作为 local trajectory ROI / ranking 训练证据，
+    不能声明 Stage 4 gate ready，也不能当 exact certificate signal。
+
+    2026-06-18 first238 追加诊断：
+    两段式 `plain capture -> negative returned_journey payload -> open-context worker`
+    可以为 100-scale greedy-anchor、random-wave 和 sector-wave 产出
+    self-context Level A/B rows。sector-wave 的关键问题不是无可训练样本，
+    而是 node/B&B heuristic pricing 分支此前缺少 replay capture diagnostic event；
+    补齐 diagnostic-only capture 后，100-scale 三个 family 的 80% family×scale
+    门槛均已可过线。
+
+    该补齐只允许作为样本采集和审计诊断，不得改变 pricing 选择、
+    exact certificate、bound 或 production solver 语义。
+
+    2026-06-19 first362 / followup40 当前状态：
+    Stage 4 偏置的 5000-row selected subset 已满足样本质量合同。
+    selected rows = 5000，20-scale rows = 2660，Level A/B rows = 1644，
+    20-scale Level A/B rows = 814，Level C weak rows = 3356，
+    same-context hard pairs = 5560。除 Stage4 audit binding 外，
+    数量、scale、family、family×scale、hard-pair 和 20-scale Level A/B
+    门槛均已过线。
+
+    因此，后续不应继续用普通 20-scale 总量扩张作为默认动作。
+    新 20-scale 样本只有在能提供 checkpoint-bound audit row、
+    替换 Level C weak row、或补充明确 failure case 时才优先进入下一轮。
+    Stage 4 readiness 需要训练后 checkpoint、kNN/OOD audit 和 online shadow
+    绑定，不能由当前离线样本配额直接推出。
 ```
 
 ---
@@ -452,10 +513,10 @@ batch 整体 ROI 为正，
 
 | family | 目标有效 target rows | 占比 | 80% 最低线 |
 |---|---:|---:|---:|
-| sector-wave | 900 | 45% | 720 |
-| random-wave | 700 | 35% | 560 |
-| greedy-anchor | 400 | 20% | 320 |
-| **合计** | **2000** | **100%** | - |
+| sector-wave | 2000 | 40% | 1600 |
+| random-wave | 1800 | 36% | 1440 |
+| greedy-anchor | 1200 | 24% | 960 |
+| **合计** | **5000** | **100%** | - |
 
 ---
 
@@ -467,11 +528,11 @@ batch 整体 ROI 为正，
 
 | scale | sector-wave | random-wave | greedy-anchor | 合计 |
 |---:|---:|---:|---:|---:|
-| 20 | 375 | 350 | 175 | 900 |
-| 30 | 100 | 125 | 75 | 300 |
-| 50 | 250 | 150 | 100 | 500 |
-| 100 | 175 | 75 | 50 | 300 |
-| **合计** | **900** | **700** | **400** | **2000** |
+| 20 | 1000 | 900 | 600 | 2500 |
+| 30 | 175 | 200 | 125 | 500 |
+| 50 | 425 | 350 | 225 | 1000 |
+| 100 | 400 | 350 | 250 | 1000 |
+| **合计** | **2000** | **1800** | **1200** | **5000** |
 
 最低要求：
 
@@ -481,22 +542,69 @@ batch 整体 ROI 为正，
 每个 cell 至少覆盖多个 context，避免单 context 过拟合。
 ```
 
+Stage 4 20-scale 支撑还需要单独统计：
+
+```text
+20-scale total rows >= 2000
+20-scale Level A/B target rows >= 800
+20-scale hard pairs >= 600
+20-scale sector/random/greedy 均有 positive 和 delay/bad/hard-negative 样本
+```
+
+动态边界：
+
+```text
+Stage 4 偏置不是无限继续加 20-scale。
+
+当 20-scale total rows 和 hard pairs 已过线，但 20-scale Level A/B 仍不足时，
+新的 20-scale 样本只有在满足以下至少一个条件时才优先进入 selected subset：
+    1. 新增 Level A/B target row；
+    2. 新增 Level A/B-supported hard pair；
+    3. 新增 Stage4 audit-evaluable row；
+    4. 替换现有 Level C weak row。
+
+否则，补样资源应优先转向：
+    1. 100-scale sector-wave / greedy-anchor 空 cell；
+    2. 100-scale random-wave 的 Level A/B 扩充；
+    3. Stage4 audit binding 和 kNN/OOD audit 字段回填。
+```
+
 ---
 
 ### 8.4 按样本类型
 
 | 样本类型 | 目标行数 | 说明 |
 |---|---:|---|
-| same-context hard-pair target rows | 900 | 约 450 个 hard pairs，每个 pair 至少一正一负 |
-| non-pair high_roi_positive | 500 | 补充正向 trajectory signal |
-| standalone hard-negative / delay-risk | 500 | 压制 false-safe、bad-mode、low-ROI accept |
-| kNN/OOD boundary rows | 100 | 训练与审计边界稳定性 |
-| **合计** | **2000** | - |
+| same-context hard-pair target rows | 2400 | 约 1200 个 hard pairs，每个 pair 至少一正一负 |
+| non-pair high_roi_positive | 1000 | 补充正向 trajectory signal |
+| standalone hard-negative / delay-risk | 1100 | 压制 false-safe、bad-mode、low-ROI accept |
+| kNN/OOD boundary rows | 500 | 训练与审计边界稳定性 |
+| **合计** | **5000** | - |
 
 说明：
 
 ```text
-900 条 hard-pair target rows ≈ 450 个 same-context positive-negative pairs。
+2400 条 hard-pair target rows ≈ 1200 个 same-context positive-negative pairs。
+```
+
+---
+
+### 8.5 按证据强度
+
+5000 条不是简单堆弱标签。建议强弱比例：
+
+| evidence level | 目标行数 | 最低线 | 说明 |
+|---|---:|---:|---|
+| Level A target-only | 750-1000 | 600 | 校准 individual target 边界 |
+| Level B ablation / marginal | 750-1000 | 600 | 校准边际贡献与 pairwise ranking |
+| Level C weak same-context trace | 3000-3500 | - | 扩大 family / scale 覆盖 |
+
+硬门槛：
+
+```text
+Level A/B target rows >= 1500
+Level C weak rows <= 3500
+Level A/B-supported hard pairs >= 500
 ```
 
 ---
@@ -919,19 +1027,23 @@ family_holdout / scale_holdout / context_holdout 必须各自输出 precision / 
 ### 16.1 数量门禁
 
 ```text
-有效 target-level rows >= 2000
-有效 batch-level samples >= 200
-有效 unique contexts >= 200
-有效 hard pairs >= 450
-Level A/B hard pairs >= 250
+有效 target-level rows >= 5000
+有效 batch-level samples >= 500
+有效 unique contexts >= 350
+有效 hard pairs >= 1200
+Level A/B target rows >= 1500
+Level A/B hard pairs >= 500
+Level C weak rows <= 3500
 Level C-only hard pair ratio <= 40%
-20-task rows >= 720
-30-task rows >= 240
-50-task rows >= 400
-100-task rows >= 240
-sector-wave rows >= 720
-random-wave rows >= 560
-greedy-anchor rows >= 320
+20-task rows >= 2000
+30-task rows >= 400
+50-task rows >= 800
+100-task rows >= 800
+20-task Level A/B target rows >= 800
+20-task hard pairs >= 600
+sector-wave rows >= 1600
+random-wave rows >= 1440
+greedy-anchor rows >= 960
 每个 scale × family cell >= 目标的 80%
 ```
 
@@ -996,19 +1108,22 @@ stage4_gate_*
 1. stage3_targeted_sample_plan_manifest_v107_optimized.json
 
 2. stage3_targeted_target_rows_v107_optimized.jsonl
-   目标：至少 2000 条有效 target-level rows
+   目标：至少 5000 条有效 target-level rows
 
 3. stage3_targeted_batch_samples_v107_optimized.jsonl
-   目标：至少 200 个有效 batch-level samples
+   目标：至少 500 个有效 batch-level samples
 
 4. stage3_targeted_pair_index_v107_optimized.jsonl
-   目标：至少 450 个 same-context hard pairs
+   目标：至少 1200 个 same-context hard pairs
 
 5. stage3_targeted_knn_ood_audit_v107_optimized.jsonl
    目标：Stage-4-gate-evaluable 样本 audit 字段完整，且绑定 checkpoint / rule
 
 6. sample_allocation_report_v107_optimized.md
    包含 family、scale、family×scale、label、hard pair、audit_missing、剔除原因分布
+
+7. selection_manifest_v107_optimized.json
+   记录 raw pool 到 5000 行 selected training subset 的选择规则、配额缺口和未选中有效行数
 ```
 
 建议额外交付：
@@ -1115,20 +1230,24 @@ pairwise group 不得跨 context。
 本计划完成的标准：
 
 ```text
-1. 至少 2000 条有效 target-level rows。
-2. 至少 200 个有效 batch-level samples。
-3. 至少 200 个有效 unique contexts。
-4. 至少 450 个有效 same-context hard pairs。
-5. 20/30/50/100 四档均达到最低样本线。
-6. sector/random/greedy 三类 family 均达到最低样本线。
-7. family × scale 交叉分布无明显空洞。
-8. candidate-level labels 与 batch-level labels 分离，无 batch label 广播污染。
-9. Stage-4-gate-evaluable 样本 kNN/OOD audit 字段完整，并绑定 checkpoint / threshold / OOD rule。
-10. 所有样本有 causal_evidence_id。
-11. 所有样本通过去重、context 一致性和泄漏检查。
-12. 输出 label_threshold_manifest，所有 label 可追溯到统一阈值。
-13. 输出 split_manifest，主结论不依赖 random-row split。
-14. 输出 final manifest、target rows、batch samples、pair index、audit rows、allocation report。
+1. 至少 5000 条有效 target-level rows。
+2. 至少 500 个有效 batch-level samples。
+3. 至少 350 个有效 unique contexts。
+4. 至少 1200 个有效 same-context hard pairs。
+5. 至少 1500 条 Level A/B target rows。
+6. 至少 500 个 Level A/B-supported same-context hard pairs。
+7. Level C weak rows 不超过 3500 条。
+8. 20/30/50/100 四档均达到最低样本线。
+9. 20-task Level A/B target rows 和 hard pairs 达到 Stage 4 支撑线。
+10. sector/random/greedy 三类 family 均达到最低样本线。
+11. family × scale 交叉分布无明显空洞。
+12. candidate-level labels 与 batch-level labels 分离，无 batch label 广播污染。
+13. Stage-4-gate-evaluable 样本 kNN/OOD audit 字段完整，并绑定 checkpoint / threshold / OOD rule。
+14. 所有样本有 causal_evidence_id。
+15. 所有样本通过去重、context 一致性和泄漏检查。
+16. 输出 label_threshold_manifest，所有 label 可追溯到统一阈值。
+17. 输出 split_manifest，主结论不依赖 random-row split。
+18. 输出 final manifest、target rows、batch samples、pair index、audit rows、allocation report。
 ```
 
 本计划完成后，下一步才是：
@@ -1179,11 +1298,11 @@ production_ready = false
 执行优先级：
 
 ```text
-1. 先 hard pair；
-2. 再 target-level causal label；
-3. 再 family × scale 补齐；
-4. 再 kNN/OOD audit 闭环；
-5. 最后去重和质量门禁。
+1. 先满足 20-scale 主验收规模的 hard pair 与 Level A/B 支撑线；
+2. 20-scale total / hard pairs 过线后，只继续收 Level A/B、audit-evaluable 或可替换 Level C weak 的 20-scale 行；
+3. 同步优先补 100-scale sector-wave / greedy-anchor 空 cell 和 random-wave Level A/B；
+4. 再补 kNN/OOD audit binding，使样本能进入 Stage4 gate 统计；
+5. 最后做去重、quota-selected subset 和质量门禁收口。
 ```
 
 如果这批样本质量足够，后续训练才有可能真正修复：

@@ -4125,6 +4125,26 @@ def _process_journey_branch_node(
                     node_id=node.id,
                     depth=node.depth,
                 )
+                _log_journey_counterfactual_replay_capture(
+                    logger,
+                    data,
+                    config,
+                    pricing,
+                    solution.duals,
+                    tuple(cuts),
+                    tuple(node.branch_constraints),
+                    journey_pool,
+                    pricing_config=heuristic_config,
+                    pricing_kind="heuristic",
+                    cg_iter=cg_iter,
+                    rmp_objective=float(solution.objective),
+                    active_task_sets=active_task_sets,
+                    active_variable_values=getattr(solution, "variable_values", None),
+                    active_reduced_costs=getattr(solution, "reduced_costs", None),
+                    pricing_dual_source=heuristic_dual_source,
+                    node_id=node.id,
+                    depth=node.depth,
+                )
                 _log_journey_pulse_residual_replay_diagnostic(
                     logger,
                     data,

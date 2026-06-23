@@ -57,6 +57,7 @@ class TrainBatchImpactArgs:
     checkpoint_out: Path = DEFAULT_CHECKPOINT
     metrics_out: Path = DEFAULT_METRICS
     report: Path = DEFAULT_REPORT
+    epoch_checkpoint_dir: Path | None = None
     device: str = "cpu"
     epochs: int = 8
     lr: float = 1.0e-3
@@ -68,8 +69,19 @@ class TrainBatchImpactArgs:
     context_hidden_dim: int = 24
     batch_hidden_dim: int = 32
     impact_hidden_dim: int = 32
+    context_pair_hidden_dim: int = 0
+    context_pair_delta_hidden_dim: int = 0
+    candidate_context_interaction_dim: int = 0
+    candidate_batch_priority_residual_scale: float = 0.0
+    delay_risk_batch_priority_residual_scale: float = 0.0
+    candidate_action_priority_residual_scale: float = 0.0
+    delay_risk_action_priority_residual_scale: float = 0.0
+    disable_path_token_encoder: bool = False
     path_token_dim: int = 16
     path_hidden_dim: int = 32
+    path_feature_scale: float = 1.0
+    path_feature_dropout: float = 0.0
+    path_context_gate_hidden_dim: int = 0
     num_gnn_layers: int = 1
     heads: int = 4
     dropout: float = 0.05
@@ -125,11 +137,25 @@ class TrainBatchImpactArgs:
     pairwise_candidate_ranking_loss_multiplier: float = 0.75
     pairwise_false_delay_contrast_loss_multiplier: float = 0.5
     pairwise_delay_risk_contrast_loss_multiplier: float = 0.0
+    context_pair_comparator_loss_multiplier: float = 0.0
+    context_pair_delta_loss_multiplier: float = 0.0
     focused_pair_loss_multiplier: float = 0.0
     focused_pair_candidate_loss_multiplier: float = 0.0
+    focused_pair_raw_all_candidate_loss_multiplier: float = 0.0
     focused_pair_admission_loss_multiplier: float = 0.0
     focused_pair_delay_risk_loss_multiplier: float = 0.0
     focused_pair_batch_loss_multiplier: float = 0.0
+    focused_pair_batch_priority_loss_multiplier: float = 0.0
+    focused_pair_action_priority_loss_multiplier: float = 0.0
+    focused_pair_context_comparator_loss_multiplier: float = 0.0
+    focused_pair_delta_loss_multiplier: float = 0.0
+    focused_pair_training_row_indices_file: Path | None = None
+    focused_pair_boost_row_indices_file: Path | None = None
+    focused_pair_boost_loss_multiplier: float = 0.0
+    focused_pair_frontier_context_keys_file: Path | None = None
+    focused_pair_frontier_context_loss_multiplier: float = 0.0
+    targeted_safe_positive_row_indices_file: Path | None = None
+    targeted_safe_positive_loss_multiplier: float = 0.0
     pairwise_roi_margin: float = 0.05
     min_pairwise_roi_delta: float = 1.0e-6
     focused_pair_gate_row_index_min: int | None = None
@@ -150,6 +176,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-out", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument("--metrics-out", type=Path, default=DEFAULT_METRICS)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument(
+        "--epoch-checkpoint-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory for diagnostic per-epoch checkpoints and matching "
+            "training-summary JSON files. Default keeps legacy selected-checkpoint-only output."
+        ),
+    )
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1.0e-3)
@@ -161,8 +196,108 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--context-hidden-dim", type=int, default=24)
     parser.add_argument("--batch-hidden-dim", type=int, default=32)
     parser.add_argument("--impact-hidden-dim", type=int, default=32)
+    parser.add_argument(
+        "--context-pair-hidden-dim",
+        type=int,
+        default=0,
+        help=(
+            "Hidden dimension for the optional same-context pair comparator. "
+            "Default 0 disables the comparator and preserves legacy checkpoints."
+        ),
+    )
+    parser.add_argument(
+        "--context-pair-delta-hidden-dim",
+        type=int,
+        default=0,
+        help=(
+            "Hidden dimension for the optional context-local pair-delta rank score "
+            "head. Default 0 disables the head and preserves admission logits."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-context-interaction-dim",
+        type=int,
+        default=0,
+        help=(
+            "Optional projection size for candidate x batch/context interaction "
+            "features feeding the candidate high-priority and delay-risk heads. "
+            "Default 0 preserves legacy head inputs."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-batch-priority-residual-scale",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional scale for adding a batch/context priority residual to every "
+            "candidate high-priority raw logit. Default 0 preserves legacy logits."
+        ),
+    )
+    parser.add_argument(
+        "--delay-risk-batch-priority-residual-scale",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional scale for subtracting the same batch/context priority residual "
+            "from every candidate delay-risk logit. Default 0 preserves legacy logits."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-action-priority-residual-scale",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional scale for adding a per-candidate action priority residual "
+            "to the candidate HIGH_PRIORITY raw logit. Default 0 preserves legacy logits."
+        ),
+    )
+    parser.add_argument(
+        "--delay-risk-action-priority-residual-scale",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional scale for subtracting the per-candidate action priority residual "
+            "from the candidate delay-risk logit. Default 0 preserves legacy logits."
+        ),
+    )
     parser.add_argument("--path-token-dim", type=int, default=16)
     parser.add_argument("--path-hidden-dim", type=int, default=32)
+    parser.add_argument(
+        "--path-feature-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Diagnostic regularization: multiply encoded path-token features before "
+            "the candidate encoder. Default 1 preserves existing behavior."
+        ),
+    )
+    parser.add_argument(
+        "--path-feature-dropout",
+        type=float,
+        default=0.0,
+        help=(
+            "Diagnostic regularization: dropout applied only to encoded path-token "
+            "features during training. Default 0 preserves existing behavior."
+        ),
+    )
+    parser.add_argument(
+        "--path-context-gate-hidden-dim",
+        type=int,
+        default=0,
+        help=(
+            "Optional hidden dimension for a context-conditioned gate over encoded "
+            "path-token features. Default 0 disables the gate and preserves existing behavior."
+        ),
+    )
+    parser.add_argument(
+        "--disable-path-token-encoder",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Diagnostic ablation: ignore candidate path-token tensors when building the "
+            "offline model. Default false preserves existing path-token-enabled behavior."
+        ),
+    )
     parser.add_argument("--num-gnn-layers", type=int, default=1)
     parser.add_argument("--heads", type=int, default=4)
     parser.add_argument("--dropout", type=float, default=0.05)
@@ -428,6 +563,26 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--context-pair-comparator-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional same-context pair comparator BCE loss. This trains a "
+            "diagnostic pair head on [left, right, diff, product] batch/context "
+            "embeddings. Requires --context-pair-hidden-dim > 0."
+        ),
+    )
+    parser.add_argument(
+        "--context-pair-delta-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional same-context ranking loss for the context-pair-delta score. "
+            "Requires --context-pair-delta-hidden-dim > 0. The score is "
+            "diagnostic/training-only and does not replace admission gate heads."
+        ),
+    )
+    parser.add_argument(
         "--focused-pair-loss-multiplier",
         type=float,
         default=0.0,
@@ -445,6 +600,17 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Focused tranche raw HIGH_PRIORITY head ranking weight. It trains "
             "labeled positive candidates above labeled delay/hard-negative "
+            "candidates. Default 0 preserves legacy behavior."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-raw-all-candidate-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche raw HIGH_PRIORITY ranking weight aligned to the "
+            "focused gate. It trains the positive labeled candidate max logit "
+            "above the negative row's max raw candidate logit over all "
             "candidates. Default 0 preserves legacy behavior."
         ),
     )
@@ -478,6 +644,105 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--focused-pair-batch-priority-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche ranking weight for the optional candidate batch-priority "
+            "residual head. Requires a nonzero batch-priority residual scale."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-action-priority-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche ranking weight for the optional candidate/action priority "
+            "residual head. It ranks the positive labeled candidate above the negative "
+            "row's max candidate action-priority logit."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-context-comparator-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche same-context pair comparator BCE weight. It uses "
+            "the optional context-pair comparator head only on focused/boost "
+            "pairs, avoiding the cost of all same-context ROI pairs. Requires "
+            "--context-pair-hidden-dim > 0."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-delta-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Focused tranche ranking weight for the optional context-pair-delta "
+            "score head. This is diagnostic/training-only; focused Stage 4 "
+            "blocking gates still use raw/admission/delay heads."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-boost-row-indices-file",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON file containing row indices to replay with extra "
+            "focused pair loss during training only. The focused pair gate still "
+            "uses --focused-pair-row-indices-file."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-boost-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Extra replay multiplier for --focused-pair-boost-row-indices-file. "
+            "Default 0 preserves legacy training behavior."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-frontier-context-keys-file",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON/JSONL file containing frontier context hashes or "
+            "instance|hash keys for training-only balanced focused replay. "
+            "Gate evaluation is unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-frontier-context-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Extra multiplier for per-context balanced focused head replay over "
+            "--focused-pair-frontier-context-keys-file. Default 0 preserves "
+            "legacy training behavior."
+        ),
+    )
+    parser.add_argument(
+        "--targeted-safe-positive-row-indices-file",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON/JSONL row-index selector for training-only replay of "
+            "safe positive samples, intended for near-threshold kNN/OOD delayed "
+            "high-ROI rows. Gate evaluation is unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--targeted-safe-positive-loss-multiplier",
+        type=float,
+        default=0.0,
+        help=(
+            "Extra sample-loss multiplier for safe positives selected by "
+            "--targeted-safe-positive-row-indices-file. Default 0 preserves "
+            "legacy training behavior."
+        ),
+    )
+    parser.add_argument(
         "--min-pairwise-roi-delta",
         type=float,
         default=1.0e-6,
@@ -500,6 +765,17 @@ def parse_args() -> argparse.Namespace:
             "Optional JSON file containing explicit focused row indices. This "
             "is preferred when a mined tranche is non-contiguous and row_index_min "
             "would include unrelated rows."
+        ),
+    )
+    parser.add_argument(
+        "--focused-pair-training-row-indices-file",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON file containing focused row indices used only for "
+            "training loss. The focused gate still uses "
+            "--focused-pair-row-indices-file, which allows train-only loss "
+            "without weakening the full focused gate."
         ),
     )
     parser.add_argument(
@@ -554,6 +830,199 @@ def main() -> int:
     return 0 if summary["all_checks_pass"] else 1
 
 
+def _cpu_state_dict(model: torch.nn.Module) -> dict[str, torch.Tensor]:
+    return {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+
+
+def _write_epoch_checkpoint(
+    output_dir: Path,
+    *,
+    epoch: int,
+    model: GATBatchImpactModel,
+    model_config: dict[str, Any],
+    manifest: dict[str, Any],
+    samples: list[Any],
+    dataset_dir: Path,
+    split: _Split,
+    gate_config: dict[str, Any],
+    args: argparse.Namespace | TrainBatchImpactArgs,
+    loss_options: dict[str, Any],
+    context_pair_stats: dict[str, Any],
+    pairwise_ranking_loss_active: bool,
+    pairwise_ranking_status: str,
+    training_run_config: dict[str, Any],
+    history_row: dict[str, Any],
+    threshold_metrics: dict[str, Any],
+    device: torch.device,
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = output_dir / f"epoch_{int(epoch):03d}.pt"
+    metrics_path = output_dir / f"epoch_{int(epoch):03d}_metrics.json"
+    selected_metrics = dict(threshold_metrics["selected_metrics"])
+    focused_pair_gate_metrics = _focused_pair_gate_metrics(
+        manifest_items=list(manifest.get("samples", [])),
+        prediction_records=_prediction_records(model, samples, device),
+        gate_config=gate_config,
+        args=args,
+    )
+    focused_pair_gate_reject_reasons = _focused_pair_gate_reject_reasons(
+        focused_pair_gate_metrics
+    )
+    checkpoint = {
+        "model_state_dict": _cpu_state_dict(model),
+        "model_config": model_config,
+        "candidate_feature_schema": manifest["candidate_feature_schema"],
+        "context_feature_schema": manifest["context_feature_schema"],
+        "batch_feature_schema": manifest["batch_feature_schema"],
+        "candidate_path_token_schema": manifest.get("candidate_path_token_schema", {}),
+        "candidate_feature_mean": manifest["candidate_feature_mean"],
+        "candidate_feature_std": manifest["candidate_feature_std"],
+        "context_feature_mean": manifest["context_feature_mean"],
+        "context_feature_std": manifest["context_feature_std"],
+        "batch_feature_mean": manifest["batch_feature_mean"],
+        "batch_feature_std": manifest["batch_feature_std"],
+        "version": "gat_batch_impact_v1",
+        "target_label": "same_context_batch_trajectory_roi",
+        "label_schema": list(manifest.get("label_schema") or []),
+        "exactness_contract": batch_impact_exactness_contract(),
+        "training_contract": {
+            "training_objective": "precision_constrained_roi_maximization",
+            "checkpoint_selection": CHECKPOINT_SELECTION_POLICY,
+            "main_split": split.info,
+            "uses_random_row_split": False,
+            "uses_post_addition_features_as_inputs": False,
+            "hard_roi_threshold": loss_options["hard_roi_threshold"],
+            "pairwise_ranking_loss_active": pairwise_ranking_loss_active,
+            "pairwise_ranking_status": pairwise_ranking_status,
+            "context_pair_stats": context_pair_stats,
+            "context_pair_hidden_dim": int(model_config.get("context_pair_hidden_dim", 0)),
+            "context_pair_delta_hidden_dim": int(
+                model_config.get("context_pair_delta_hidden_dim", 0)
+            ),
+            "path_feature_scale": float(model_config.get("path_feature_scale", 1.0)),
+            "path_feature_dropout": float(model_config.get("path_feature_dropout", 0.0)),
+            "path_context_gate_hidden_dim": int(model_config.get("path_context_gate_hidden_dim", 0)),
+            "candidate_batch_priority_residual_scale": float(
+                model_config.get("candidate_batch_priority_residual_scale", 0.0)
+            ),
+            "delay_risk_batch_priority_residual_scale": float(
+                model_config.get("delay_risk_batch_priority_residual_scale", 0.0)
+            ),
+            "candidate_action_priority_residual_scale": float(
+                model_config.get("candidate_action_priority_residual_scale", 0.0)
+            ),
+            "delay_risk_action_priority_residual_scale": float(
+                model_config.get("delay_risk_action_priority_residual_scale", 0.0)
+            ),
+            "context_pair_comparator_loss_multiplier": loss_options[
+                "context_pair_comparator_loss_multiplier"
+            ],
+            "context_pair_delta_loss_multiplier": loss_options[
+                "context_pair_delta_loss_multiplier"
+            ],
+            "focused_pair_batch_priority_loss_multiplier": loss_options[
+                "focused_pair_batch_priority_loss_multiplier"
+            ],
+            "focused_pair_action_priority_loss_multiplier": loss_options[
+                "focused_pair_action_priority_loss_multiplier"
+            ],
+            "focused_pair_context_comparator_loss_multiplier": loss_options[
+                "focused_pair_context_comparator_loss_multiplier"
+            ],
+            "focused_pair_delta_loss_multiplier": loss_options[
+                "focused_pair_delta_loss_multiplier"
+            ],
+            "focused_pair_frontier_context_keys_file": loss_options[
+                "focused_pair_frontier_context_keys_file"
+            ],
+            "focused_pair_frontier_context_keys_count": len(
+                loss_options.get("focused_pair_frontier_context_keys") or []
+            ),
+            "focused_pair_frontier_context_loss_multiplier": loss_options[
+                "focused_pair_frontier_context_loss_multiplier"
+            ],
+            "focused_pair_gate": focused_pair_gate_metrics,
+            "training_run_config": training_run_config,
+            "requires_knn_ood_shell_before_stage4": True,
+            "requires_5_10_no_regression_before_stage4": True,
+            "requires_20_wall_time_roi_before_stage4": True,
+            "production_ready": False,
+            "default_enabled": False,
+        },
+        "deployment_gate": {
+            "gate_config": gate_config,
+            "checkpoint_gate_pass": bool(
+                selected_metrics.get("checkpoint_gate_pass")
+                and not focused_pair_gate_reject_reasons
+            ),
+            "stage4_candidate_ready": False,
+            "training_stability_reject_reasons": [],
+            "hard_reject_reason_categories": _hard_reject_reason_categories(
+                list(selected_metrics.get("checkpoint_gate_reject_reasons") or [])
+                + focused_pair_gate_reject_reasons
+            ),
+            "stage4_blockers": sorted(
+                set(
+                    ["knn_ood_holdout_audit_not_run", "online_shadow_and_opt_in_ab_not_run"]
+                    + focused_pair_gate_reject_reasons
+                )
+            ),
+        },
+        "training": {
+            "epochs": int(epoch),
+            "loss_options": loss_options,
+            "history": [dict(history_row)],
+            "validation_deployment_metrics": selected_metrics,
+            "threshold_search": threshold_metrics,
+            "focused_pair_gate": focused_pair_gate_metrics,
+            "training_run_config": training_run_config,
+        },
+    }
+    torch.save(checkpoint, checkpoint_path)
+    summary = {
+        "schema_version": "gat_batch_impact_training_summary_v1",
+        "diagnostic_only": True,
+        "runs_bpc_or_pricing": False,
+        "status": "gat_batch_impact_epoch_checkpoint",
+        "dataset_dir": str(dataset_dir),
+        "checkpoint_out": str(checkpoint_path),
+        "metrics_out": str(metrics_path),
+        "epoch": int(epoch),
+        "training_objective": "precision_constrained_roi_maximization",
+        "checkpoint_selection": CHECKPOINT_SELECTION_POLICY,
+        "split": split.info,
+        "loss_options": loss_options,
+        "history": [dict(history_row)],
+        "validation_deployment_metrics": selected_metrics,
+        "threshold_search": threshold_metrics,
+        "focused_pair_gate": focused_pair_gate_metrics,
+        "focused_pair_gate_reject_reasons": focused_pair_gate_reject_reasons,
+        "training_run_config": training_run_config,
+        "checkpoint_gate_pass": bool(
+            selected_metrics.get("checkpoint_gate_pass")
+            and not focused_pair_gate_reject_reasons
+        ),
+        "stage4_candidate_ready": False,
+        "stage4_blockers": sorted(
+            set(
+                ["knn_ood_holdout_audit_not_run", "online_shadow_and_opt_in_ab_not_run"]
+                + focused_pair_gate_reject_reasons
+            )
+        ),
+        "production_ready": False,
+        "default_enabled": False,
+        "selector_is_pricing_oracle": False,
+        "selector_can_certificate": False,
+        "gate_can_permanently_discard_negative_columns": False,
+        "all_checks_pass": True,
+    }
+    metrics_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return checkpoint_path
+
+
 def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, Any]:
     random.seed(int(args.seed))
     torch.manual_seed(int(args.seed))
@@ -588,6 +1057,31 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         "context_hidden_dim": int(args.context_hidden_dim),
         "batch_hidden_dim": int(args.batch_hidden_dim),
         "impact_hidden_dim": int(args.impact_hidden_dim),
+        "context_pair_hidden_dim": max(0, int(getattr(args, "context_pair_hidden_dim", 0))),
+        "context_pair_delta_hidden_dim": max(
+            0,
+            int(getattr(args, "context_pair_delta_hidden_dim", 0)),
+        ),
+        "candidate_context_interaction_dim": max(
+            0,
+            int(getattr(args, "candidate_context_interaction_dim", 0)),
+        ),
+        "candidate_batch_priority_residual_scale": max(
+            0.0,
+            float(getattr(args, "candidate_batch_priority_residual_scale", 0.0)),
+        ),
+        "delay_risk_batch_priority_residual_scale": max(
+            0.0,
+            float(getattr(args, "delay_risk_batch_priority_residual_scale", 0.0)),
+        ),
+        "candidate_action_priority_residual_scale": max(
+            0.0,
+            float(getattr(args, "candidate_action_priority_residual_scale", 0.0)),
+        ),
+        "delay_risk_action_priority_residual_scale": max(
+            0.0,
+            float(getattr(args, "delay_risk_action_priority_residual_scale", 0.0)),
+        ),
         "use_layer_norm": True,
     }
     device = torch.device(str(args.device))
@@ -613,7 +1107,7 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
     )
 
     best_state: dict[str, torch.Tensor] | None = None
-    best_selection_key: tuple[float, float, float, float] | None = None
+    best_selection_key: tuple[float, ...] | None = None
     best_validation_loss = float("inf")
     selected_validation_loss = float("inf")
     best_epoch = 0
@@ -623,6 +1117,8 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
     history: list[dict[str, Any]] = []
     nonfinite_skipped_update_count = 0
     attempted_update_count = 0
+    epoch_checkpoint_dir = getattr(args, "epoch_checkpoint_dir", None)
+    epoch_checkpoint_paths: list[str] = []
     for epoch in range(1, int(args.epochs) + 1):
         train_epoch = _run_epoch(model, split.train, optimizer, device, loss_options=loss_options)
         train_loss = float(train_epoch["loss"])
@@ -644,37 +1140,66 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
             local_gate_pass_score=local_gate_pass_score,
             validation_loss=float(validation_loss),
         )
-        history.append(
-            {
-                "epoch": int(epoch),
-                "train_loss": float(train_loss),
-                "skipped_update_count": int(train_epoch["skipped_update_count"]),
-                "attempted_update_count": int(train_epoch["attempted_update_count"]),
-                "nonfinite_skipped_update_rate": (
-                    float(train_epoch["skipped_update_count"]) / float(train_epoch["attempted_update_count"])
-                    if int(train_epoch["attempted_update_count"]) > 0
-                    else 0.0
-                ),
-                "validation_loss": float(validation_loss),
-                "selected_threshold": float(selected_metrics["threshold"]),
-                "selected_batch_threshold": float(selected_metrics["batch_threshold"]),
-                "selected_candidate_threshold": float(selected_metrics["candidate_threshold"]),
-                "checkpoint_gate_pass": bool(selected_metrics["checkpoint_gate_pass"]),
-                "threshold_local_gate_pass": bool(selected_metrics["threshold_local_gate_pass"]),
-                "accepted_batch_count": int(selected_metrics["accepted_batch_count"]),
-                "high_priority_precision": selected_metrics["high_priority_precision"],
-                "safe_precision": selected_metrics["safe_precision"],
-                "accepted_batch_roi": selected_metrics["accepted_batch_roi"],
-                "false_high_priority_on_delay": selected_metrics["false_high_priority_on_delay"],
-                "expected_trajectory_utility": selected_metrics["expected_trajectory_utility"],
-            }
-        )
+        history_row = {
+            "epoch": int(epoch),
+            "train_loss": float(train_loss),
+            "skipped_update_count": int(train_epoch["skipped_update_count"]),
+            "attempted_update_count": int(train_epoch["attempted_update_count"]),
+            "nonfinite_skipped_update_rate": (
+                float(train_epoch["skipped_update_count"]) / float(train_epoch["attempted_update_count"])
+                if int(train_epoch["attempted_update_count"]) > 0
+                else 0.0
+            ),
+            "validation_loss": float(validation_loss),
+            "selected_threshold": float(selected_metrics["threshold"]),
+            "selected_batch_threshold": float(selected_metrics["batch_threshold"]),
+            "selected_candidate_threshold": float(selected_metrics["candidate_threshold"]),
+            "checkpoint_gate_pass": bool(selected_metrics["checkpoint_gate_pass"]),
+            "threshold_local_gate_pass": bool(selected_metrics["threshold_local_gate_pass"]),
+            "accepted_batch_count": int(selected_metrics["accepted_batch_count"]),
+            "high_priority_precision": selected_metrics["high_priority_precision"],
+            "safe_precision": selected_metrics["safe_precision"],
+            "accepted_batch_roi": selected_metrics["accepted_batch_roi"],
+            "false_high_priority_on_delay": selected_metrics["false_high_priority_on_delay"],
+            "expected_trajectory_utility": selected_metrics["expected_trajectory_utility"],
+        }
+        history.append(history_row)
+        if epoch_checkpoint_dir is not None:
+            epoch_checkpoint_paths.append(
+                str(
+                    _write_epoch_checkpoint(
+                        Path(epoch_checkpoint_dir),
+                        epoch=int(epoch),
+                        model=model,
+                        model_config=model_config,
+                        manifest=manifest,
+                        samples=samples,
+                        dataset_dir=dataset_dir,
+                        split=split,
+                        gate_config=_gate_config(args, manifest),
+                        args=args,
+                        loss_options=loss_options,
+                        context_pair_stats=context_pair_stats,
+                        pairwise_ranking_loss_active=pairwise_ranking_loss_active,
+                        pairwise_ranking_status=pairwise_ranking_status,
+                        training_run_config=_training_run_config(
+                            args,
+                            model_config=model_config,
+                            gate_config=_gate_config(args, manifest),
+                            loss_options=loss_options,
+                        ),
+                        history_row=history_row,
+                        threshold_metrics=threshold_metrics,
+                        device=device,
+                    )
+                )
+            )
         if best_selection_key is None or selection_key > best_selection_key:
             best_selection_key = selection_key
             selected_validation_loss = float(validation_loss)
             best_epoch = int(epoch)
             best_threshold_metrics = threshold_metrics
-            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+            best_state = _cpu_state_dict(model)
         print(
             "epoch="
             f"{epoch} train_loss={train_loss:.6f} validation_loss={validation_loss:.6f} "
@@ -856,9 +1381,37 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
             "pairwise_delay_risk_contrast_loss_multiplier": loss_options[
                 "pairwise_delay_risk_contrast_loss_multiplier"
             ],
+            "context_pair_hidden_dim": int(model_config.get("context_pair_hidden_dim", 0)),
+            "context_pair_delta_hidden_dim": int(
+                model_config.get("context_pair_delta_hidden_dim", 0)
+            ),
+            "path_feature_scale": float(model_config.get("path_feature_scale", 1.0)),
+            "path_feature_dropout": float(model_config.get("path_feature_dropout", 0.0)),
+            "path_context_gate_hidden_dim": int(model_config.get("path_context_gate_hidden_dim", 0)),
+            "candidate_batch_priority_residual_scale": float(
+                model_config.get("candidate_batch_priority_residual_scale", 0.0)
+            ),
+            "delay_risk_batch_priority_residual_scale": float(
+                model_config.get("delay_risk_batch_priority_residual_scale", 0.0)
+            ),
+            "candidate_action_priority_residual_scale": float(
+                model_config.get("candidate_action_priority_residual_scale", 0.0)
+            ),
+            "delay_risk_action_priority_residual_scale": float(
+                model_config.get("delay_risk_action_priority_residual_scale", 0.0)
+            ),
+            "context_pair_comparator_loss_multiplier": loss_options[
+                "context_pair_comparator_loss_multiplier"
+            ],
+            "context_pair_delta_loss_multiplier": loss_options[
+                "context_pair_delta_loss_multiplier"
+            ],
             "focused_pair_loss_multiplier": loss_options["focused_pair_loss_multiplier"],
             "focused_pair_candidate_loss_multiplier": loss_options[
                 "focused_pair_candidate_loss_multiplier"
+            ],
+            "focused_pair_raw_all_candidate_loss_multiplier": loss_options[
+                "focused_pair_raw_all_candidate_loss_multiplier"
             ],
             "focused_pair_admission_loss_multiplier": loss_options[
                 "focused_pair_admission_loss_multiplier"
@@ -868,6 +1421,45 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
             ],
             "focused_pair_batch_loss_multiplier": loss_options[
                 "focused_pair_batch_loss_multiplier"
+            ],
+            "focused_pair_batch_priority_loss_multiplier": loss_options[
+                "focused_pair_batch_priority_loss_multiplier"
+            ],
+            "focused_pair_action_priority_loss_multiplier": loss_options[
+                "focused_pair_action_priority_loss_multiplier"
+            ],
+            "focused_pair_context_comparator_loss_multiplier": loss_options[
+                "focused_pair_context_comparator_loss_multiplier"
+            ],
+            "focused_pair_delta_loss_multiplier": loss_options[
+                "focused_pair_delta_loss_multiplier"
+            ],
+            "focused_pair_boost_row_indices_file": loss_options[
+                "focused_pair_boost_row_indices_file"
+            ],
+            "focused_pair_boost_row_indices_count": len(
+                loss_options.get("focused_pair_boost_row_indices") or []
+            ),
+            "focused_pair_boost_loss_multiplier": loss_options[
+                "focused_pair_boost_loss_multiplier"
+            ],
+            "focused_pair_frontier_context_keys_file": loss_options[
+                "focused_pair_frontier_context_keys_file"
+            ],
+            "focused_pair_frontier_context_keys_count": len(
+                loss_options.get("focused_pair_frontier_context_keys") or []
+            ),
+            "focused_pair_frontier_context_loss_multiplier": loss_options[
+                "focused_pair_frontier_context_loss_multiplier"
+            ],
+            "targeted_safe_positive_row_indices_file": loss_options[
+                "targeted_safe_positive_row_indices_file"
+            ],
+            "targeted_safe_positive_row_indices_count": len(
+                loss_options.get("targeted_safe_positive_row_indices") or []
+            ),
+            "targeted_safe_positive_loss_multiplier": loss_options[
+                "targeted_safe_positive_loss_multiplier"
             ],
             "focused_pair_row_index_min": loss_options["focused_pair_row_index_min"],
             "focused_pair_row_indices_file": loss_options[
@@ -931,6 +1523,8 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
                 )
             ),
             "history": history,
+            "epoch_checkpoint_dir": None if epoch_checkpoint_dir is None else str(epoch_checkpoint_dir),
+            "epoch_checkpoint_paths": list(epoch_checkpoint_paths),
             "train_deployment_metrics": train_deployment_metrics,
             "validation_deployment_metrics": validation_deployment_metrics,
             "family_holdout_metrics": family_holdout_metrics,
@@ -991,6 +1585,8 @@ def train_batch_impact(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[
         "training_stability_reject_reasons": training_stability_reject_reasons,
         "checkpoint_selection": CHECKPOINT_SELECTION_POLICY,
         "history": history,
+        "epoch_checkpoint_dir": None if epoch_checkpoint_dir is None else str(epoch_checkpoint_dir),
+        "epoch_checkpoint_paths": list(epoch_checkpoint_paths),
         "train_deployment_metrics": train_deployment_metrics,
         "validation_deployment_metrics": validation_deployment_metrics,
         "threshold_search": validation_threshold_search,
@@ -1083,13 +1679,26 @@ def _path_token_model_config(
     schema = dict(manifest.get("candidate_path_token_schema") or {})
     token_bucket_count = int(schema.get("token_hash_bucket_count") or 0)
     pair_bucket_count = int(schema.get("pair_hash_bucket_count") or 0)
-    if token_bucket_count <= 0 or pair_bucket_count <= 0:
+    if (
+        bool(getattr(args, "disable_path_token_encoder", False))
+        or token_bucket_count <= 0
+        or pair_bucket_count <= 0
+    ):
         return {
             "path_token_vocab_size": 0,
             "path_pair_vocab_size": 0,
             "path_type_vocab_size": 3,
             "path_token_dim": int(getattr(args, "path_token_dim", 16)),
             "path_hidden_dim": int(getattr(args, "path_hidden_dim", 32)),
+            "path_feature_scale": max(0.0, float(getattr(args, "path_feature_scale", 1.0))),
+            "path_feature_dropout": min(
+                1.0,
+                max(0.0, float(getattr(args, "path_feature_dropout", 0.0))),
+            ),
+            "path_context_gate_hidden_dim": max(
+                0,
+                int(getattr(args, "path_context_gate_hidden_dim", 0)),
+            ),
         }
     type_ids = dict(schema.get("type_ids") or {})
     type_vocab_size = max([int(value) for value in type_ids.values()] + [3])
@@ -1099,6 +1708,15 @@ def _path_token_model_config(
         "path_type_vocab_size": int(type_vocab_size),
         "path_token_dim": int(getattr(args, "path_token_dim", 16)),
         "path_hidden_dim": int(getattr(args, "path_hidden_dim", 32)),
+        "path_feature_scale": max(0.0, float(getattr(args, "path_feature_scale", 1.0))),
+        "path_feature_dropout": min(
+            1.0,
+            max(0.0, float(getattr(args, "path_feature_dropout", 0.0))),
+        ),
+        "path_context_gate_hidden_dim": max(
+            0,
+            int(getattr(args, "path_context_gate_hidden_dim", 0)),
+        ),
     }
 
 
@@ -1279,6 +1897,58 @@ def _focused_training_pairs(
     return pairs
 
 
+def _focused_frontier_context_pair_groups(
+    samples: list[Any],
+    *,
+    context_keys: list[str] | None,
+) -> list[tuple[str, list[tuple[Any, Any, float]]]]:
+    aliases: list[str] = []
+    _append_context_key_aliases(list(context_keys or []), aliases)
+    key_set = {str(value) for value in aliases if str(value)}
+    if not key_set:
+        return []
+    by_context: dict[str, list[Any]] = {}
+    for sample in samples:
+        context_hash = _sample_context_hash(sample)
+        if context_hash in key_set:
+            by_context.setdefault(context_hash, []).append(sample)
+    groups: list[tuple[str, list[tuple[Any, Any, float]]]] = []
+    for context_hash, samples_in_context in sorted(by_context.items()):
+        pairs = _focused_training_pairs(
+            samples_in_context,
+            focus_row_index_min=None,
+            focus_row_indices=[
+                int(row_index)
+                for row_index in (
+                    _sample_int_attr(sample, "batch_impact_source_row_index")
+                    for sample in samples_in_context
+                )
+                if row_index is not None
+            ],
+        )
+        if pairs:
+            groups.append((context_hash, pairs))
+    return groups
+
+
+def _targeted_safe_positive_samples(
+    samples: list[Any],
+    *,
+    row_indices: list[int] | None,
+) -> list[Any]:
+    index_set = {int(value) for value in (row_indices or [])}
+    if not index_set:
+        return []
+    selected: list[Any] = []
+    for sample in samples:
+        row_index = _sample_int_attr(sample, "batch_impact_source_row_index")
+        if row_index is None or int(row_index) not in index_set:
+            continue
+        if _sample_focused_label_class(sample) == "positive_high_priority":
+            selected.append(sample)
+    return selected
+
+
 def _sample_focused_label_class(sample: Any) -> str:
     high_priority = _sample_tensor_any(sample, "y_candidate_high_priority")
     delay = _sample_tensor_any(sample, "y_candidate_delay_risk")
@@ -1440,6 +2110,8 @@ def _pairwise_loss_enabled(loss_options: dict[str, Any]) -> bool:
         or float(loss_options.get("pairwise_candidate_ranking_loss_multiplier", 0.0)) > 0.0
         or float(loss_options.get("pairwise_false_delay_contrast_loss_multiplier", 0.0)) > 0.0
         or float(loss_options.get("pairwise_delay_risk_contrast_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("context_pair_comparator_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("context_pair_delta_loss_multiplier", 0.0)) > 0.0
     )
 
 
@@ -1459,18 +2131,55 @@ def _focused_pair_head_loss_enabled(loss_options: dict[str, Any]) -> bool:
             loss_options.get("focused_pair_row_index_min") is not None
             or bool(loss_options.get("focused_pair_row_indices") or [])
         )
-        and (
-            float(loss_options.get("focused_pair_candidate_loss_multiplier", 0.0)) > 0.0
-            or (
-                float(loss_options.get("focused_pair_admission_loss_multiplier", 0.0))
-                > 0.0
+        and _focused_pair_head_terms_enabled(loss_options)
+    )
+
+
+def _focused_pair_head_terms_enabled(loss_options: dict[str, Any]) -> bool:
+    return (
+        float(loss_options.get("focused_pair_candidate_loss_multiplier", 0.0)) > 0.0
+        or (
+            float(
+                loss_options.get(
+                    "focused_pair_raw_all_candidate_loss_multiplier",
+                    0.0,
+                )
             )
-            or (
-                float(loss_options.get("focused_pair_delay_risk_loss_multiplier", 0.0))
-                > 0.0
-            )
-            or float(loss_options.get("focused_pair_batch_loss_multiplier", 0.0)) > 0.0
+            > 0.0
         )
+        or float(loss_options.get("focused_pair_admission_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("focused_pair_delay_risk_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("focused_pair_batch_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("focused_pair_batch_priority_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("focused_pair_action_priority_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("focused_pair_context_comparator_loss_multiplier", 0.0)) > 0.0
+        or float(loss_options.get("focused_pair_delta_loss_multiplier", 0.0)) > 0.0
+    )
+
+
+def _focused_pair_frontier_context_loss_enabled(loss_options: dict[str, Any]) -> bool:
+    return (
+        float(loss_options.get("focused_pair_frontier_context_loss_multiplier", 0.0)) > 0.0
+        and bool(loss_options.get("focused_pair_frontier_context_keys") or [])
+        and _focused_pair_head_terms_enabled(loss_options)
+    )
+
+
+def _focused_pair_boost_loss_enabled(loss_options: dict[str, Any]) -> bool:
+    return (
+        float(loss_options.get("focused_pair_boost_loss_multiplier", 0.0)) > 0.0
+        and bool(loss_options.get("focused_pair_boost_row_indices") or [])
+        and (
+            _focused_pair_loss_enabled(loss_options)
+            or _focused_pair_head_loss_enabled(loss_options)
+        )
+    )
+
+
+def _targeted_safe_positive_loss_enabled(loss_options: dict[str, Any]) -> bool:
+    return (
+        float(loss_options.get("targeted_safe_positive_loss_multiplier", 0.0)) > 0.0
+        and bool(loss_options.get("targeted_safe_positive_row_indices") or [])
     )
 
 
@@ -1479,6 +2188,34 @@ def _focused_pair_row_indices(args: argparse.Namespace | TrainBatchImpactArgs) -
     if path is None:
         return []
     return _read_focused_pair_row_indices_file(Path(path))
+
+
+def _focused_pair_training_row_indices(args: argparse.Namespace | TrainBatchImpactArgs) -> list[int]:
+    path = getattr(args, "focused_pair_training_row_indices_file", None)
+    if path is None:
+        return _focused_pair_row_indices(args)
+    return _read_focused_pair_row_indices_file(Path(path))
+
+
+def _focused_pair_boost_row_indices(args: argparse.Namespace | TrainBatchImpactArgs) -> list[int]:
+    path = getattr(args, "focused_pair_boost_row_indices_file", None)
+    if path is None:
+        return []
+    return _read_focused_pair_row_indices_file(Path(path))
+
+
+def _targeted_safe_positive_row_indices(args: argparse.Namespace | TrainBatchImpactArgs) -> list[int]:
+    path = getattr(args, "targeted_safe_positive_row_indices_file", None)
+    if path is None:
+        return []
+    return _read_focused_pair_row_indices_file(Path(path))
+
+
+def _focused_pair_frontier_context_keys(args: argparse.Namespace | TrainBatchImpactArgs) -> list[str]:
+    path = getattr(args, "focused_pair_frontier_context_keys_file", None)
+    if path is None:
+        return []
+    return _read_context_keys_file(Path(path))
 
 
 def _read_focused_pair_row_indices_file(path: Path) -> list[int]:
@@ -1521,6 +2258,56 @@ def _read_focused_pair_row_indices_file(path: Path) -> list[int]:
     return sorted(set(indices))
 
 
+def _append_context_key_aliases(value: Any, keys: list[str]) -> None:
+    if value is None:
+        return
+    if isinstance(value, dict):
+        for key in (
+            "context_key",
+            "context_hash",
+            "hash",
+            "key",
+        ):
+            if key in value:
+                _append_context_key_aliases(value.get(key), keys)
+        for key in (
+            "frontier_context_keys",
+            "context_keys",
+            "context_hashes",
+            "contexts",
+            "keys",
+        ):
+            if key in value:
+                _append_context_key_aliases(value.get(key), keys)
+        return
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _append_context_key_aliases(item, keys)
+        return
+    text = str(value).strip()
+    if not text:
+        return
+    keys.append(text)
+    if "|" in text:
+        suffix = text.rsplit("|", 1)[-1].strip()
+        if suffix:
+            keys.append(suffix)
+
+
+def _read_context_keys_file(path: Path) -> list[str]:
+    keys: list[str] = []
+    if path.suffix.lower() == ".jsonl":
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if stripped:
+                    _append_context_key_aliases(json.loads(stripped), keys)
+    else:
+        with path.open("r", encoding="utf-8") as handle:
+            _append_context_key_aliases(json.load(handle), keys)
+    return sorted(set(keys))
+
+
 def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, Any]:
     explicit_hard_roi = getattr(args, "hard_roi_threshold", None)
     baseline_selection_roi = _baseline_selection_roi(args)
@@ -1528,6 +2315,9 @@ def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, 
         float(getattr(args, "min_accepted_batch_roi", 0.65)),
         baseline_selection_roi + float(getattr(args, "min_roi_margin_over_baseline", 0.20)),
     )
+    focused_pair_gate_row_indices = _focused_pair_row_indices(args)
+    focused_pair_training_row_indices = _focused_pair_training_row_indices(args)
+    focused_pair_frontier_context_keys = _focused_pair_frontier_context_keys(args)
     return {
         "false_high_priority_loss_multiplier": max(
             1.0,
@@ -1612,6 +2402,14 @@ def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, 
             0.0,
             float(getattr(args, "pairwise_delay_risk_contrast_loss_multiplier", 0.0)),
         ),
+        "context_pair_comparator_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "context_pair_comparator_loss_multiplier", 0.0)),
+        ),
+        "context_pair_delta_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "context_pair_delta_loss_multiplier", 0.0)),
+        ),
         "focused_pair_loss_multiplier": max(
             0.0,
             float(getattr(args, "focused_pair_loss_multiplier", 0.0)),
@@ -1619,6 +2417,16 @@ def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, 
         "focused_pair_candidate_loss_multiplier": max(
             0.0,
             float(getattr(args, "focused_pair_candidate_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_raw_all_candidate_loss_multiplier": max(
+            0.0,
+            float(
+                getattr(
+                    args,
+                    "focused_pair_raw_all_candidate_loss_multiplier",
+                    0.0,
+                )
+            ),
         ),
         "focused_pair_admission_loss_multiplier": max(
             0.0,
@@ -1632,13 +2440,65 @@ def _loss_options(args: argparse.Namespace | TrainBatchImpactArgs) -> dict[str, 
             0.0,
             float(getattr(args, "focused_pair_batch_loss_multiplier", 0.0)),
         ),
+        "focused_pair_batch_priority_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_batch_priority_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_action_priority_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_action_priority_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_context_comparator_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_context_comparator_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_delta_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_delta_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_boost_row_indices_file": (
+            None
+            if getattr(args, "focused_pair_boost_row_indices_file", None) is None
+            else str(getattr(args, "focused_pair_boost_row_indices_file"))
+        ),
+        "focused_pair_boost_row_indices": _focused_pair_boost_row_indices(args),
+        "focused_pair_boost_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_boost_loss_multiplier", 0.0)),
+        ),
+        "focused_pair_frontier_context_keys_file": (
+            None
+            if getattr(args, "focused_pair_frontier_context_keys_file", None) is None
+            else str(getattr(args, "focused_pair_frontier_context_keys_file"))
+        ),
+        "focused_pair_frontier_context_keys": focused_pair_frontier_context_keys,
+        "focused_pair_frontier_context_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "focused_pair_frontier_context_loss_multiplier", 0.0)),
+        ),
+        "targeted_safe_positive_row_indices_file": (
+            None
+            if getattr(args, "targeted_safe_positive_row_indices_file", None) is None
+            else str(getattr(args, "targeted_safe_positive_row_indices_file"))
+        ),
+        "targeted_safe_positive_row_indices": _targeted_safe_positive_row_indices(args),
+        "targeted_safe_positive_loss_multiplier": max(
+            0.0,
+            float(getattr(args, "targeted_safe_positive_loss_multiplier", 0.0)),
+        ),
         "focused_pair_row_index_min": getattr(args, "focused_pair_gate_row_index_min", None),
         "focused_pair_row_indices_file": (
             None
             if getattr(args, "focused_pair_row_indices_file", None) is None
             else str(getattr(args, "focused_pair_row_indices_file"))
         ),
-        "focused_pair_row_indices": _focused_pair_row_indices(args),
+        "focused_pair_gate_row_indices": focused_pair_gate_row_indices,
+        "focused_pair_training_row_indices_file": (
+            None
+            if getattr(args, "focused_pair_training_row_indices_file", None) is None
+            else str(getattr(args, "focused_pair_training_row_indices_file"))
+        ),
+        "focused_pair_row_indices": focused_pair_training_row_indices,
         "pairwise_roi_margin": max(0.0, float(getattr(args, "pairwise_roi_margin", 0.05))),
         "min_pairwise_roi_delta": max(
             0.0,
@@ -1677,12 +2537,18 @@ def _training_run_config(
                 if getattr(args, "focused_pair_row_indices_file", None) is None
                 else str(getattr(args, "focused_pair_row_indices_file"))
             ),
-            "focused_pair_row_indices_count": len(
+            "focused_pair_row_indices_count": len(_focused_pair_row_indices(args)),
+            "focused_pair_training_row_indices_file": (
+                None
+                if getattr(args, "focused_pair_training_row_indices_file", None) is None
+                else str(getattr(args, "focused_pair_training_row_indices_file"))
+            ),
+            "focused_pair_training_row_indices_count": len(
                 loss_options.get("focused_pair_row_indices") or []
             ),
             "focused_pair_selector": (
                 "explicit_row_indices"
-                if loss_options.get("focused_pair_row_indices")
+                if _focused_pair_row_indices(args)
                 else (
                     "row_index_min"
                     if getattr(args, "focused_pair_gate_row_index_min", None) is not None
@@ -1788,6 +2654,37 @@ def _run_epoch(
     for sample in shuffled:
         optimizer.zero_grad(set_to_none=True)
         loss = _sample_loss(model, sample, device, loss_options=loss_options)
+        if not bool(torch.isfinite(loss)):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        if float(loss_options["max_grad_norm"]) > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), float(loss_options["max_grad_norm"]))
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        optimizer.step()
+        for param in model.parameters():
+            if param.grad is not None and not bool(torch.isfinite(param).all()):
+                raise ValueError("batch-impact model parameter became NaN or Inf after optimizer step")
+        total += float(loss.detach().cpu())
+        count += 1
+    targeted_samples = _targeted_safe_positive_samples(
+        shuffled,
+        row_indices=loss_options.get("targeted_safe_positive_row_indices"),
+    )
+    if not _targeted_safe_positive_loss_enabled(loss_options):
+        targeted_samples = []
+    targeted_multiplier = float(loss_options.get("targeted_safe_positive_loss_multiplier", 0.0))
+    for sample in targeted_samples:
+        optimizer.zero_grad(set_to_none=True)
+        loss = targeted_multiplier * _sample_loss(model, sample, device, loss_options=loss_options)
         if not bool(torch.isfinite(loss)):
             skipped += 1
             optimizer.zero_grad(set_to_none=True)
@@ -1923,11 +2820,107 @@ def _run_epoch(
                 raise ValueError("batch-impact model parameter became NaN or Inf after optimizer step")
         total += float(loss.detach().cpu())
         count += 1
+    frontier_context_pair_groups = _focused_frontier_context_pair_groups(
+        shuffled,
+        context_keys=loss_options.get("focused_pair_frontier_context_keys"),
+    )
+    if not _focused_pair_frontier_context_loss_enabled(loss_options):
+        frontier_context_pair_groups = []
+    frontier_context_multiplier = float(
+        loss_options.get("focused_pair_frontier_context_loss_multiplier", 0.0)
+    )
+    for _context_hash, context_pairs in frontier_context_pair_groups:
+        if not context_pairs:
+            continue
+        optimizer.zero_grad(set_to_none=True)
+        context_loss: torch.Tensor | None = None
+        for better, worse, roi_delta in context_pairs:
+            pair_loss = _focused_pair_head_loss(
+                model,
+                better,
+                worse,
+                device,
+                roi_delta=roi_delta,
+                loss_options=loss_options,
+            )
+            context_loss = pair_loss if context_loss is None else context_loss + pair_loss
+        if context_loss is None:
+            continue
+        loss = frontier_context_multiplier * context_loss / float(len(context_pairs))
+        if not bool(torch.isfinite(loss)):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        if float(loss_options["max_grad_norm"]) > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), float(loss_options["max_grad_norm"]))
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        optimizer.step()
+        for param in model.parameters():
+            if param.grad is not None and not bool(torch.isfinite(param).all()):
+                raise ValueError("batch-impact model parameter became NaN or Inf after optimizer step")
+        total += float(loss.detach().cpu())
+        count += 1
+    focused_boost_pairs = _focused_training_pairs(
+        shuffled,
+        focus_row_index_min=None,
+        focus_row_indices=loss_options.get("focused_pair_boost_row_indices"),
+    )
+    if not _focused_pair_boost_loss_enabled(loss_options):
+        focused_boost_pairs = []
+    boost_multiplier = float(loss_options.get("focused_pair_boost_loss_multiplier", 0.0))
+    focused_multiplier = float(loss_options.get("focused_pair_loss_multiplier", 0.0))
+    for better, worse, roi_delta in focused_boost_pairs:
+        optimizer.zero_grad(set_to_none=True)
+        loss = _focused_pair_boost_loss(
+            model,
+            better,
+            worse,
+            device,
+            roi_delta=roi_delta,
+            boost_multiplier=boost_multiplier,
+            focused_multiplier=focused_multiplier,
+            loss_options=loss_options,
+        )
+        if not bool(torch.isfinite(loss)):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        if float(loss_options["max_grad_norm"]) > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), float(loss_options["max_grad_norm"]))
+        if not _gradients_are_finite(model):
+            skipped += 1
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        optimizer.step()
+        for param in model.parameters():
+            if param.grad is not None and not bool(torch.isfinite(param).all()):
+                raise ValueError("batch-impact model parameter became NaN or Inf after optimizer step")
+        total += float(loss.detach().cpu())
+        count += 1
     return {
         "loss": total / max(1, count),
         "skipped_update_count": skipped,
         "attempted_update_count": (
-            len(shuffled) + len(pairwise_pairs) + len(focused_pairs) + len(focused_head_pairs)
+            len(shuffled)
+            + len(targeted_samples)
+            + len(pairwise_pairs)
+            + len(focused_pairs)
+            + len(focused_head_pairs)
+            + len(frontier_context_pair_groups)
+            + len(focused_boost_pairs)
         ),
     }
 
@@ -2016,6 +3009,41 @@ def _evaluate_loss(
                     device,
                     roi_delta=roi_delta,
                     loss_options=loss_options,
+                )
+                .detach()
+                .cpu()
+            )
+            count += 1
+        frontier_context_pair_groups = _focused_frontier_context_pair_groups(
+            samples,
+            context_keys=loss_options.get("focused_pair_frontier_context_keys"),
+        )
+        if not _focused_pair_frontier_context_loss_enabled(loss_options):
+            frontier_context_pair_groups = []
+        frontier_context_multiplier = float(
+            loss_options.get("focused_pair_frontier_context_loss_multiplier", 0.0)
+        )
+        for _context_hash, context_pairs in frontier_context_pair_groups:
+            if not context_pairs:
+                continue
+            context_loss = None
+            for better, worse, roi_delta in context_pairs:
+                pair_loss = _focused_pair_head_loss(
+                    model,
+                    better,
+                    worse,
+                    device,
+                    roi_delta=roi_delta,
+                    loss_options=loss_options,
+                )
+                context_loss = pair_loss if context_loss is None else context_loss + pair_loss
+            if context_loss is None:
+                continue
+            total += float(
+                (
+                    frontier_context_multiplier
+                    * context_loss
+                    / float(len(context_pairs))
                 )
                 .detach()
                 .cpu()
@@ -2258,6 +3286,44 @@ def _candidate_acceptance_logit_from_output(
     return logits.max().reshape(1)
 
 
+def _candidate_raw_logit_from_output(
+    sample: Any,
+    output: dict[str, torch.Tensor],
+    *,
+    labeled_safe_only: bool,
+) -> torch.Tensor:
+    logits = output["high_priority_logit"].reshape(-1)
+    if logits.numel() <= 0:
+        raise ValueError("candidate raw ranking requires at least one candidate logit")
+    if labeled_safe_only:
+        labels = sample.y_candidate_high_priority.to(device=logits.device).reshape(-1) > 0.5
+        if labels.numel() != logits.numel():
+            raise ValueError("candidate high-priority labels must match candidate logits")
+        if not bool(torch.any(labels)):
+            return logits.new_empty((0,))
+        logits = logits[labels]
+    return logits.max().reshape(1)
+
+
+def _candidate_action_priority_logit_from_output(
+    sample: Any,
+    output: dict[str, torch.Tensor],
+    *,
+    labeled_safe_only: bool,
+) -> torch.Tensor:
+    logits = output["candidate_action_priority_logit"].reshape(-1)
+    if logits.numel() <= 0:
+        raise ValueError("candidate action-priority ranking requires at least one candidate logit")
+    if labeled_safe_only:
+        labels = sample.y_candidate_high_priority.to(device=logits.device).reshape(-1) > 0.5
+        if labels.numel() != logits.numel():
+            raise ValueError("candidate high-priority labels must match candidate action-priority logits")
+        if not bool(torch.any(labels)):
+            return logits.new_empty((0,))
+        logits = logits[labels]
+    return logits.max().reshape(1)
+
+
 def _pairwise_ranking_loss(
     model: GATBatchImpactModel,
     better: Any,
@@ -2317,6 +3383,21 @@ def _pairwise_ranking_loss(
         base_tensor=better_score,
         loss_options=loss_options,
     )
+    context_pair_comparator_loss = _context_pair_comparator_loss(
+        model,
+        better_output,
+        worse_output,
+        base_tensor=better_score,
+        loss_options=loss_options,
+    )
+    context_pair_delta_loss = _context_pair_delta_loss(
+        model,
+        better_output,
+        worse_output,
+        base_tensor=better_score,
+        loss_options=loss_options,
+        multiplier_name="context_pair_delta_loss_multiplier",
+    )
     roi_weight = min(5.0, max(1.0, float(abs(roi_delta))))
     return (
         roi_weight
@@ -2328,7 +3409,58 @@ def _pairwise_ranking_loss(
             * false_delay_contrast_loss
             + float(loss_options.get("pairwise_delay_risk_contrast_loss_multiplier", 0.0))
             * delay_risk_contrast_loss
+            + float(loss_options.get("context_pair_comparator_loss_multiplier", 0.0))
+            * context_pair_comparator_loss
+            + float(loss_options.get("context_pair_delta_loss_multiplier", 0.0))
+            * context_pair_delta_loss
         )
+    )
+
+
+def _context_pair_comparator_loss(
+    model: GATBatchImpactModel,
+    better_output: dict[str, torch.Tensor],
+    worse_output: dict[str, torch.Tensor],
+    *,
+    base_tensor: torch.Tensor,
+    loss_options: dict[str, Any],
+) -> torch.Tensor:
+    if float(loss_options.get("context_pair_comparator_loss_multiplier", 0.0)) <= 0.0:
+        return base_tensor.new_tensor(0.0)
+    if getattr(model, "context_pair_comparator_head", None) is None:
+        raise ValueError(
+            "context pair comparator loss requires --context-pair-hidden-dim > 0"
+        )
+    forward_logit = model.context_pair_preference_logit(better_output, worse_output)
+    reverse_logit = model.context_pair_preference_logit(worse_output, better_output)
+    return 0.5 * (
+        F.binary_cross_entropy_with_logits(forward_logit, torch.ones_like(forward_logit))
+        + F.binary_cross_entropy_with_logits(reverse_logit, torch.zeros_like(reverse_logit))
+    )
+
+
+def _context_pair_delta_loss(
+    model: GATBatchImpactModel,
+    better_output: dict[str, torch.Tensor],
+    worse_output: dict[str, torch.Tensor],
+    *,
+    base_tensor: torch.Tensor,
+    loss_options: dict[str, Any],
+    multiplier_name: str,
+) -> torch.Tensor:
+    if float(loss_options.get(multiplier_name, 0.0)) <= 0.0:
+        return base_tensor.new_tensor(0.0)
+    if getattr(model, "context_pair_delta_head", None) is None:
+        raise ValueError(
+            "context pair-delta loss requires --context-pair-delta-hidden-dim > 0"
+        )
+    better_score = better_output["context_pair_delta_logit"].reshape(1)
+    worse_score = worse_output["context_pair_delta_logit"].reshape(1)
+    return F.margin_ranking_loss(
+        better_score,
+        worse_score,
+        torch.ones_like(better_score),
+        margin=float(loss_options["pairwise_roi_margin"]),
     )
 
 
@@ -2372,6 +3504,26 @@ def _focused_pair_head_loss(
             torch.ones_like(better_hp),
             margin=margin,
         )
+    if float(loss_options.get("focused_pair_raw_all_candidate_loss_multiplier", 0.0)) > 0.0:
+        better_raw = _candidate_raw_logit_from_output(
+            better,
+            better_output,
+            labeled_safe_only=True,
+        )
+        if int(better_raw.numel()) > 0:
+            worse_raw = _candidate_raw_logit_from_output(
+                worse,
+                worse_output,
+                labeled_safe_only=False,
+            )
+            total = total + float(
+                loss_options["focused_pair_raw_all_candidate_loss_multiplier"]
+            ) * F.margin_ranking_loss(
+                better_raw,
+                worse_raw,
+                torch.ones_like(better_raw),
+                margin=margin,
+            )
     if float(loss_options.get("focused_pair_admission_loss_multiplier", 0.0)) > 0.0:
         better_admission_score = _candidate_acceptance_logit_from_output(
             better,
@@ -2417,8 +3569,115 @@ def _focused_pair_head_loss(
             torch.ones_like(better_batch_score),
             margin=margin,
         )
+    if float(loss_options.get("focused_pair_batch_priority_loss_multiplier", 0.0)) > 0.0:
+        if (
+            getattr(model, "candidate_batch_priority_head", None) is None
+            and not ("candidate_batch_priority_logit" in better_output and "candidate_batch_priority_logit" in worse_output)
+        ):
+            raise ValueError(
+                "focused pair batch-priority loss requires a nonzero "
+                "batch-priority residual scale"
+            )
+        better_priority_score = better_output["candidate_batch_priority_logit"].reshape(1)
+        worse_priority_score = worse_output["candidate_batch_priority_logit"].reshape(1)
+        total = total + float(
+            loss_options["focused_pair_batch_priority_loss_multiplier"]
+        ) * F.margin_ranking_loss(
+            better_priority_score,
+            worse_priority_score,
+            torch.ones_like(better_priority_score),
+            margin=margin,
+        )
+    if float(loss_options.get("focused_pair_action_priority_loss_multiplier", 0.0)) > 0.0:
+        if getattr(model, "candidate_action_priority_head", None) is None:
+            raise ValueError(
+                "focused pair action-priority loss requires a nonzero "
+                "action-priority residual scale"
+            )
+        better_action_priority_score = _candidate_action_priority_logit_from_output(
+            better,
+            better_output,
+            labeled_safe_only=True,
+        )
+        if int(better_action_priority_score.numel()) > 0:
+            worse_action_priority_score = _candidate_action_priority_logit_from_output(
+                worse,
+                worse_output,
+                labeled_safe_only=False,
+            )
+            total = total + float(
+                loss_options["focused_pair_action_priority_loss_multiplier"]
+            ) * F.margin_ranking_loss(
+                better_action_priority_score,
+                worse_action_priority_score,
+                torch.ones_like(better_action_priority_score),
+                margin=margin,
+            )
+    focused_context_pair_multiplier = float(
+        loss_options.get("focused_pair_context_comparator_loss_multiplier", 0.0)
+    )
+    if focused_context_pair_multiplier > 0.0:
+        comparator_options = {
+            "context_pair_comparator_loss_multiplier": focused_context_pair_multiplier
+        }
+        total = total + focused_context_pair_multiplier * _context_pair_comparator_loss(
+            model,
+            better_output,
+            worse_output,
+            base_tensor=better_batch_score,
+            loss_options=comparator_options,
+        )
+    focused_pair_delta_multiplier = float(
+        loss_options.get("focused_pair_delta_loss_multiplier", 0.0)
+    )
+    if focused_pair_delta_multiplier > 0.0:
+        total = total + focused_pair_delta_multiplier * _context_pair_delta_loss(
+            model,
+            better_output,
+            worse_output,
+            base_tensor=better_batch_score,
+            loss_options=loss_options,
+            multiplier_name="focused_pair_delta_loss_multiplier",
+        )
     roi_weight = min(5.0, max(1.0, float(abs(roi_delta))))
     return roi_weight * total
+
+
+def _focused_pair_boost_loss(
+    model: GATBatchImpactModel,
+    better: Any,
+    worse: Any,
+    device: torch.device,
+    *,
+    roi_delta: float,
+    boost_multiplier: float,
+    focused_multiplier: float,
+    loss_options: dict[str, Any],
+) -> torch.Tensor:
+    base = None
+    if float(focused_multiplier) > 0.0:
+        base = float(focused_multiplier) * _pairwise_ranking_loss(
+            model,
+            better,
+            worse,
+            device,
+            roi_delta=roi_delta,
+            loss_options=loss_options,
+        )
+    if _focused_pair_head_loss_enabled(loss_options):
+        head_loss = _focused_pair_head_loss(
+            model,
+            better,
+            worse,
+            device,
+            roi_delta=roi_delta,
+            loss_options=loss_options,
+        )
+        base = head_loss if base is None else base + head_loss
+    if base is None:
+        _, output = _sample_model_output(model, better, device)
+        base = output["batch_roi_positive_logit"].sum() * 0.0
+    return float(boost_multiplier) * base
 
 
 def _pairwise_false_delay_contrast_loss(
@@ -2518,47 +3777,55 @@ def _prediction_records(
     samples: list[Any],
     device: torch.device,
 ) -> list[dict[str, Any]]:
+    was_training = model.training
     model.eval()
     records: list[dict[str, Any]] = []
-    with torch.no_grad():
-        for sample in samples:
-            sample = sample.to(device)
-            output = model(
-                sample,
-                sample.candidate_task_membership,
-                sample.candidate_sequence_positions,
-                sample.candidate_features,
-                sample.context_features,
-                **_sample_model_kwargs(model, sample),
-            )
-            records.append(
-                {
-                    "family": str(getattr(sample, "batch_impact_instance_family", "") or "unknown"),
-                    "context_hash": str(getattr(sample, "batch_impact_context_hash", "") or ""),
-                    "batch_score": float(output["batch_roi_positive_probability"].detach().cpu().item()),
-                    "candidate_scores": [
-                        float(value)
-                        for value in output["high_priority_probability"].detach().cpu().reshape(-1).tolist()
-                    ],
-                    "candidate_delay_scores": [
-                        float(value)
-                        for value in output["delay_risk_probability"].detach().cpu().reshape(-1).tolist()
-                    ],
-                    "candidate_high_priority_labels": [
-                        int(value)
-                        for value in sample.y_candidate_high_priority.detach().cpu().reshape(-1).to(dtype=torch.long).tolist()
-                    ],
-                    "candidate_delay_labels": [
-                        int(value)
-                        for value in sample.y_candidate_delay_risk.detach().cpu().reshape(-1).to(dtype=torch.long).tolist()
-                    ],
-                    "batch_roi_positive": int(sample.y_batch_roi_positive.detach().cpu().item() > 0.5),
-                    "bad_mode_switch": int(sample.y_bad_mode_switch.detach().cpu().item() > 0.5),
-                    "tail_improved": int(sample.y_tail_improved.detach().cpu().item() > 0.5),
-                    "support_changed_good": int(sample.y_support_changed_good.detach().cpu().item() > 0.5),
-                    "accepted_batch_roi_label": float(sample.y_accepted_batch_roi.detach().cpu().item()),
-                }
-            )
+    try:
+        with torch.no_grad():
+            for sample in samples:
+                sample = sample.to(device)
+                output = model(
+                    sample,
+                    sample.candidate_task_membership,
+                    sample.candidate_sequence_positions,
+                    sample.candidate_features,
+                    sample.context_features,
+                    **_sample_model_kwargs(model, sample),
+                )
+                records.append(
+                    {
+                        "family": str(getattr(sample, "batch_impact_instance_family", "") or "unknown"),
+                        "context_hash": str(getattr(sample, "batch_impact_context_hash", "") or ""),
+                        "batch_score": float(output["batch_roi_positive_probability"].detach().cpu().item()),
+                        "context_pair_delta_score": float(
+                            output["context_pair_delta_logit"].detach().cpu().reshape(-1)[0].item()
+                        ),
+                        "candidate_scores": [
+                            float(value)
+                            for value in output["high_priority_probability"].detach().cpu().reshape(-1).tolist()
+                        ],
+                        "candidate_delay_scores": [
+                            float(value)
+                            for value in output["delay_risk_probability"].detach().cpu().reshape(-1).tolist()
+                        ],
+                        "candidate_high_priority_labels": [
+                            int(value)
+                            for value in sample.y_candidate_high_priority.detach().cpu().reshape(-1).to(dtype=torch.long).tolist()
+                        ],
+                        "candidate_delay_labels": [
+                            int(value)
+                            for value in sample.y_candidate_delay_risk.detach().cpu().reshape(-1).to(dtype=torch.long).tolist()
+                        ],
+                        "batch_roi_positive": int(sample.y_batch_roi_positive.detach().cpu().item() > 0.5),
+                        "bad_mode_switch": int(sample.y_bad_mode_switch.detach().cpu().item() > 0.5),
+                        "tail_improved": int(sample.y_tail_improved.detach().cpu().item() > 0.5),
+                        "support_changed_good": int(sample.y_support_changed_good.detach().cpu().item() > 0.5),
+                        "accepted_batch_roi_label": float(sample.y_accepted_batch_roi.detach().cpu().item()),
+                    }
+                )
+    finally:
+        if was_training:
+            model.train()
     return records
 
 
@@ -2858,8 +4125,14 @@ def _checkpoint_selection_key(
     local_gate_pass_score: float,
     validation_loss: float,
 ) -> tuple[float, ...]:
+    if float(local_gate_pass_score) <= 0.0:
+        return (
+            0.0,
+            *_threshold_diagnostic_selection_key(metrics),
+            -float(validation_loss),
+        )
     return (
-        float(local_gate_pass_score),
+        1.0,
         *_threshold_feasible_selection_key(metrics),
         -float(validation_loss),
     )
@@ -3445,6 +4718,7 @@ def _focused_pair_row(
         ),
         "bad_mode_switch": int(prediction.get("bad_mode_switch") or 0),
         "batch_score": float(prediction.get("batch_score") or 0.0),
+        "context_pair_delta_score": float(prediction.get("context_pair_delta_score") or 0.0),
         "max_raw_candidate_score": max(candidate_scores) if candidate_scores else 0.0,
         "max_admission_score": max(admission_scores) if admission_scores else 0.0,
         "max_delay_risk_score": max(delay_scores) if delay_scores else 0.0,
@@ -3513,6 +4787,10 @@ def _focused_context_and_pair_rows(
                     "positive_lower_delay_risk",
                 ),
                 "strict_pair_pass_rate": _focused_rate(pairs, "pair_pass"),
+                "context_pair_delta_pair_pass_rate": _focused_rate(
+                    pairs,
+                    "context_pair_delta_positive_above_negative",
+                ),
             }
         )
     return context_rows, pair_rows
@@ -3531,6 +4809,9 @@ def _focused_pair_compare(
     delay_margin = float(negative["max_delay_risk_score"]) - float(
         positive["max_delay_risk_score"]
     )
+    context_pair_delta_margin = float(positive["context_pair_delta_score"]) - float(
+        negative["context_pair_delta_score"]
+    )
     return {
         "context_key": str(positive["context_key"]),
         "context_hash": str(positive["context_hash"]),
@@ -3544,9 +4825,11 @@ def _focused_pair_compare(
         "raw_margin": raw_margin,
         "admission_margin": admission_margin,
         "delay_risk_margin": delay_margin,
+        "context_pair_delta_margin": context_pair_delta_margin,
         "raw_positive_above_negative": raw_margin > 0.0,
         "admission_positive_above_negative": admission_margin > 0.0,
         "positive_lower_delay_risk": delay_margin > 0.0,
+        "context_pair_delta_positive_above_negative": context_pair_delta_margin > 0.0,
         "pair_pass": raw_margin > 0.0 and admission_margin > 0.0 and delay_margin > 0.0,
     }
 
@@ -3584,6 +4867,10 @@ def _focused_pair_summary(
             "positive_lower_delay_risk",
         ),
         "strict_pair_pass_count": _focused_count_true(pair_rows, "pair_pass"),
+        "context_pair_delta_pair_pass_count": _focused_count_true(
+            pair_rows,
+            "context_pair_delta_positive_above_negative",
+        ),
         "raw_pair_pass_rate": _focused_rate(pair_rows, "raw_positive_above_negative"),
         "admission_pair_pass_rate": _focused_rate(
             pair_rows,
@@ -3591,6 +4878,10 @@ def _focused_pair_summary(
         ),
         "delay_risk_pair_pass_rate": _focused_rate(pair_rows, "positive_lower_delay_risk"),
         "strict_pair_pass_rate": _focused_rate(pair_rows, "pair_pass"),
+        "context_pair_delta_pair_pass_rate": _focused_rate(
+            pair_rows,
+            "context_pair_delta_positive_above_negative",
+        ),
         "label_counts": dict(sorted(label_counts.items())),
         "family_counts": dict(sorted(family_counts.items())),
         "primary": _focused_primary_diagnosis(pair_rows, context_rows),
@@ -3642,6 +4933,9 @@ def _focused_pair_gate(
             "admission_pair_pass_rate": summary.get("admission_pair_pass_rate"),
             "delay_risk_pair_pass_rate": summary.get("delay_risk_pair_pass_rate"),
             "strict_pair_pass_rate": summary.get("strict_pair_pass_rate"),
+            "context_pair_delta_pair_pass_rate": summary.get(
+                "context_pair_delta_pair_pass_rate"
+            ),
         },
         "blocking_primary": (
             "focused_context_pair_gate_passed"
@@ -3710,6 +5004,14 @@ def _record_candidate_prediction_indices(
     candidate_threshold: float,
     gate_config: dict[str, Any] | None = None,
 ) -> tuple[list[int], int, int, int, int, int]:
+    cache_key = _record_candidate_prediction_cache_key(
+        candidate_threshold=candidate_threshold,
+        gate_config=gate_config,
+    )
+    cache = record.setdefault("_candidate_prediction_cache", {})
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
     delay_gate_enabled = _candidate_delay_gate_enabled(gate_config)
     delay_threshold = _candidate_delay_risk_threshold(gate_config)
     raw_scores = [float(score) for score in record.get("candidate_scores", [])]
@@ -3761,7 +5063,27 @@ def _record_candidate_prediction_indices(
         ):
             rescue_promoted += 1
         predicted.append(int(idx))
-    return predicted, blocked, score_blocked, suppressed, rescue_eligible, rescue_promoted
+    result = (predicted, blocked, score_blocked, suppressed, rescue_eligible, rescue_promoted)
+    cache[cache_key] = result
+    return result
+
+
+def _record_candidate_prediction_cache_key(
+    *,
+    candidate_threshold: float,
+    gate_config: dict[str, Any] | None,
+) -> tuple[Any, ...]:
+    return (
+        "candidate_prediction_v1",
+        float(candidate_threshold),
+        bool(_candidate_delay_gate_enabled(gate_config)),
+        float(_candidate_delay_risk_threshold(gate_config)),
+        _candidate_admission_score_mode(gate_config),
+        float(_candidate_delay_score_penalty(gate_config)),
+        float(_candidate_rescue_raw_score_threshold(gate_config)),
+        float(_candidate_rescue_delay_risk_threshold(gate_config)),
+        float(_candidate_rescue_delay_score_penalty(gate_config)),
+    )
 
 
 def _record_candidate_decision_counts(
@@ -4477,7 +5799,7 @@ def _selected_checkpoint_reason(
         return "local_deployment_gate_passed_roi_ci_baseline_then_validation_loss_tiebreaker"
     if local_gate:
         return "local_deployment_gate_passed_then_ranked_by_roi_ci_baseline_utility_loss"
-    return "no_local_deployment_gate_passed_selected_best_diagnostic_by_reject_reasons_precision_roi_ci"
+    return "no_local_deployment_gate_passed_selected_best_diagnostic_by_reject_reasons_precision_ci_safe_ci_coverage"
 
 
 def _rejected_checkpoint_reasons(
@@ -4541,16 +5863,68 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"{summary['loss_options']['pairwise_false_delay_contrast_loss_multiplier']}",
         "pairwise_delay_risk_contrast_loss_multiplier = "
         f"{summary['loss_options']['pairwise_delay_risk_contrast_loss_multiplier']}",
+        "context_pair_hidden_dim = "
+        f"{summary['training_run_config']['model_config'].get('context_pair_hidden_dim')}",
+        "context_pair_delta_hidden_dim = "
+        f"{summary['training_run_config']['model_config'].get('context_pair_delta_hidden_dim')}",
+        "path_feature_scale = "
+        f"{summary['training_run_config']['model_config'].get('path_feature_scale')}",
+        "path_feature_dropout = "
+        f"{summary['training_run_config']['model_config'].get('path_feature_dropout')}",
+        "path_context_gate_hidden_dim = "
+        f"{summary['training_run_config']['model_config'].get('path_context_gate_hidden_dim')}",
+        "candidate_context_interaction_dim = "
+        f"{summary['training_run_config']['model_config'].get('candidate_context_interaction_dim')}",
+        "candidate_batch_priority_residual_scale = "
+        f"{summary['training_run_config']['model_config'].get('candidate_batch_priority_residual_scale')}",
+        "delay_risk_batch_priority_residual_scale = "
+        f"{summary['training_run_config']['model_config'].get('delay_risk_batch_priority_residual_scale')}",
+        "candidate_action_priority_residual_scale = "
+        f"{summary['training_run_config']['model_config'].get('candidate_action_priority_residual_scale')}",
+        "delay_risk_action_priority_residual_scale = "
+        f"{summary['training_run_config']['model_config'].get('delay_risk_action_priority_residual_scale')}",
+        "context_pair_comparator_loss_multiplier = "
+        f"{summary['loss_options']['context_pair_comparator_loss_multiplier']}",
+        "context_pair_delta_loss_multiplier = "
+        f"{summary['loss_options']['context_pair_delta_loss_multiplier']}",
         "focused_pair_loss_multiplier = "
         f"{summary['loss_options']['focused_pair_loss_multiplier']}",
         "focused_pair_candidate_loss_multiplier = "
         f"{summary['loss_options']['focused_pair_candidate_loss_multiplier']}",
+        "focused_pair_raw_all_candidate_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_raw_all_candidate_loss_multiplier']}",
         "focused_pair_admission_loss_multiplier = "
         f"{summary['loss_options']['focused_pair_admission_loss_multiplier']}",
         "focused_pair_delay_risk_loss_multiplier = "
         f"{summary['loss_options']['focused_pair_delay_risk_loss_multiplier']}",
         "focused_pair_batch_loss_multiplier = "
         f"{summary['loss_options']['focused_pair_batch_loss_multiplier']}",
+        "focused_pair_batch_priority_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_batch_priority_loss_multiplier']}",
+        "focused_pair_action_priority_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_action_priority_loss_multiplier']}",
+        "focused_pair_context_comparator_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_context_comparator_loss_multiplier']}",
+        "focused_pair_delta_loss_multiplier = "
+        f"{summary['loss_options']['focused_pair_delta_loss_multiplier']}",
+        "focused_pair_boost_row_indices_file = "
+        f"{summary['loss_options'].get('focused_pair_boost_row_indices_file')}",
+        "focused_pair_boost_row_indices_count = "
+        f"{len(summary['loss_options'].get('focused_pair_boost_row_indices') or [])}",
+        "focused_pair_boost_loss_multiplier = "
+        f"{summary['loss_options'].get('focused_pair_boost_loss_multiplier')}",
+        "focused_pair_frontier_context_keys_file = "
+        f"{summary['loss_options'].get('focused_pair_frontier_context_keys_file')}",
+        "focused_pair_frontier_context_keys_count = "
+        f"{len(summary['loss_options'].get('focused_pair_frontier_context_keys') or [])}",
+        "focused_pair_frontier_context_loss_multiplier = "
+        f"{summary['loss_options'].get('focused_pair_frontier_context_loss_multiplier')}",
+        "targeted_safe_positive_row_indices_file = "
+        f"{summary['loss_options'].get('targeted_safe_positive_row_indices_file')}",
+        "targeted_safe_positive_row_indices_count = "
+        f"{len(summary['loss_options'].get('targeted_safe_positive_row_indices') or [])}",
+        "targeted_safe_positive_loss_multiplier = "
+        f"{summary['loss_options'].get('targeted_safe_positive_loss_multiplier')}",
         "focused_pair_row_index_min = "
         f"{summary['loss_options'].get('focused_pair_row_index_min')}",
         "focused_pair_row_indices_file = "

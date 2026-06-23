@@ -89,7 +89,7 @@ class GATBatchImpactFeatureStructureGapTests(unittest.TestCase):
         )
         self.assertEqual(
             recommended_next_step(summary)["primary"],
-            "add_trace_timing_slack_and_candidate_interaction_features_then_retrain",
+            "add_selected_arc_option_sequence_or_targeted_context_pair_comparator_then_retrain",
         )
 
     def test_constant_candidate_feature_summary(self) -> None:

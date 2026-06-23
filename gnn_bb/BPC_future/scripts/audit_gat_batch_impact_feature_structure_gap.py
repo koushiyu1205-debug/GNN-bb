@@ -13,6 +13,7 @@ import argparse
 from collections import Counter, defaultdict
 import json
 from pathlib import Path
+import re
 import sys
 from statistics import mean
 from typing import Any
@@ -408,6 +409,22 @@ def build_feature_category_coverage(
     candidate = set(candidate_schema)
     context = set(context_schema)
     batch = set(batch_schema)
+    arc_option_fields = _matching_fields(
+        candidate_schema,
+        ("arc_option", "path_option", "path_token", "trace_low_time_arc", "trace_low_energy_arc", "trace_low_risk_arc"),
+    )
+    timing_fields = _matching_fields(
+        candidate_schema,
+        ("start", "time", "duration", "gap", "idle", "service"),
+    )
+    slack_fields = _matching_fields(
+        candidate_schema,
+        ("energy", "load", "slack", "survival", "window"),
+    )
+    candidate_branch_cut_fields = _matching_fields(
+        candidate_schema,
+        ("branch_", "candidate_cut_", "cut_"),
+    )
     rows = [
         _category(
             "reduced_cost_and_cost",
@@ -429,21 +446,21 @@ def build_feature_category_coverage(
         ),
         _category(
             "selected_arc_option_sequence",
-            "missing",
-            _matching_fields(candidate_schema, ("arc", "option", "path")),
-            "No selected path-option / arc-option sequence feature is present per candidate.",
+            "aggregate_counts_only" if arc_option_fields else "missing",
+            arc_option_fields,
+            "Candidate input has arc/path aggregate counts, but not the selected arc-option identity sequence.",
         ),
         _category(
             "start_time_and_sortie_timing",
-            "missing",
-            _matching_fields(candidate_schema, ("start", "time", "gap", "duration")),
-            "No start-time, per-sortie timing, or inter-sortie gap feature is present.",
+            "scalar_present" if timing_fields else "missing",
+            timing_fields,
+            "Candidate input has scalar timing summaries; it still lacks per-sortie timing sequence structure.",
         ),
         _category(
             "resource_and_window_slack",
-            "missing",
-            _matching_fields(candidate_schema, ("energy", "load", "slack", "window")),
-            "No energy, load, or time-window slack feature is present.",
+            "scalar_present" if slack_fields else "missing",
+            slack_fields,
+            "Candidate input has scalar energy/load/slack summaries; it still lacks per-arc slack structure.",
         ),
         _category(
             "active_basis_overlap_detail",
@@ -453,9 +470,10 @@ def build_feature_category_coverage(
         ),
         _category(
             "branch_cut_per_candidate_interaction",
-            "aggregate_context_only",
-            sorted(context & {"branch_constraint_count", "cut_dual_l1_norm"}),
-            "Branch/cut counts are context aggregates; per-candidate cut coefficients are absent.",
+            "candidate_scalar_present" if candidate_branch_cut_fields else "aggregate_context_only",
+            sorted(candidate_branch_cut_fields)
+            or sorted(context & {"branch_constraint_count", "cut_dual_l1_norm"}),
+            "Candidate input has branch/cut scalar interaction features when listed; coefficient sequence/detail remains absent.",
         ),
         _category(
             "trajectory_tail_proxy",
@@ -484,10 +502,11 @@ def summarize_feature_structure_gap(
     context_count = len({str(row["context_key"]) for row in row_records})
     gap_counts = Counter(str(row["gap_class"]) for row in pair_rows)
     missing_statuses = {"missing", "metadata_only", "coarse_only", "aggregate_context_only"}
+    under_specified_statuses = missing_statuses | {"aggregate_counts_only"}
     critical_missing = [
         row["category"]
         for row in category_coverage
-        if row["status"] in missing_statuses
+        if row["status"] in under_specified_statuses
         and row["category"]
         not in {"active_basis_overlap_detail", "trajectory_tail_proxy", "signature_identity"}
     ]
@@ -547,8 +566,8 @@ def recommended_next_step(summary: dict[str, Any]) -> dict[str, Any]:
     primary = str(summary.get("primary") or "")
     if primary == "candidate_input_under_specified_for_action_consequence":
         return {
-            "primary": "add_trace_timing_slack_and_candidate_interaction_features_then_retrain",
-            "reason": "focused positive-negative pairs differ in coarse inputs but raw ranking still fails while critical action-consequence categories are absent",
+            "primary": "add_selected_arc_option_sequence_or_targeted_context_pair_comparator_then_retrain",
+            "reason": "focused positive-negative pairs differ in visible scalar inputs, but raw ranking still fails while selected arc-option identity/sequence remains only coarsely represented",
         }
     if primary == "candidate_head_misranks_despite_visible_coarse_features":
         return {
@@ -580,7 +599,15 @@ def _category(category: str, status: str, fields: list[str], note: str) -> dict[
         "category": category,
         "status": status,
         "evidence_fields": fields,
-        "model_input": status in {"present", "coarse_only", "aggregate_context_only"},
+        "model_input": status
+        in {
+            "present",
+            "coarse_only",
+            "aggregate_context_only",
+            "aggregate_counts_only",
+            "scalar_present",
+            "candidate_scalar_present",
+        },
         "note": note,
     }
 
@@ -666,16 +693,17 @@ def write_report(
     category_coverage: list[dict[str, Any]],
 ) -> None:
     s = summary["summary"]
+    report_label = _infer_version_label(report, Path(summary["output_dir"]))
     constant_names = ", ".join(s["constant_candidate_feature_names"]) or "none"
     critical_missing = ", ".join(s["critical_missing_feature_categories"]) or "none"
     lines = [
-        "# 2026-06-17 BPC_future GAT Stage 3 v62 Feature/Structure Gap 审计报告",
+        f"# 2026-06-23 BPC_future GAT Stage 3 {report_label} Feature/Structure Gap 审计报告",
         "",
         "## 目的",
         "",
-        "量化 v61 提出的 candidate input 欠指定问题：固定 v53/v60 focused rows，比较同一 context 内 positive target 和 hard-negative target 在当前模型可见输入上的差异，并检查哪些 action-consequence 信息只在 metadata/log 或完全缺失。",
+        "量化当前 candidate input 的可分性和欠指定问题：固定本轮 focused pair rows，比较同一 context 内 positive target 和 hard-negative target 在当前模型可见输入上的差异，并检查哪些 action-consequence 信息仍只有粗粒度标量或 metadata。",
         "",
-        "该脚本只读 batch-impact dataset 和 v60 pair rows，不运行 BPC / pricing / RMP / worker / certificate。",
+        "该脚本只读 batch-impact dataset 和 focused pair rows，不运行 BPC / pricing / RMP / worker / certificate。",
         "",
         "## 机器字段",
         "",
@@ -706,7 +734,7 @@ def write_report(
         f"- critical missing / under-specified categories：`{critical_missing}`。",
         f"- pair gap class counts：`{json.dumps(s['gap_class_counts'], ensure_ascii=False, sort_keys=True)}`。",
         "",
-        "解释：focused 正负 target 在 task set / sequence position / scalar features 上通常不是完全碰撞；但 v60 raw ranking 仍有失败，同时 path-option、timing、slack、branch/cut per-candidate interaction 等 action-consequence 特征缺失。因此下一步不应继续只调 threshold / delay penalty。",
+        "解释：focused 正负 target 在 task set / sequence position / scalar features 上通常不是完全碰撞；当前 raw ranking 仍有失败，说明问题已经从“完全不可见”转为“可见标量不足以稳定排序”。selected arc-option identity/sequence 仍是粗粒度计数，下一步不应继续只调 threshold / delay penalty。",
         "",
         "## Feature Category Coverage",
         "",
@@ -758,6 +786,14 @@ def write_report(
     ]
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _infer_version_label(*paths: Path) -> str:
+    for path in paths:
+        match = re.search(r"(?<![A-Za-z0-9])v\d+(?![A-Za-z0-9])", str(path))
+        if match:
+            return match.group(0)
+    return "vnext"
 
 
 if __name__ == "__main__":
