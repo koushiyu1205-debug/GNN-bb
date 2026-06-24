@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+from BPC_future.scripts.audit_journey_branch_counterfactual_delta import build_counterfactual_delta
+
+
+class JourneyBranchCounterfactualDeltaAuditTests(unittest.TestCase):
+    def test_build_counterfactual_delta_labels_wall_improvement_and_regression(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            runbook_path = tmp_path / "runbook.json"
+            fast_result = tmp_path / "fast.csv"
+            slow_result = tmp_path / "slow.csv"
+            entries = [
+                {
+                    "experiment": "fast_alt",
+                    "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                    "source_node_id": 0,
+                    "source_depth": 0,
+                    "source_selected_pair": [1, 2],
+                    "forced_pair": [1, 3],
+                    "command": ["runner", "--results-csv", str(fast_result)],
+                },
+                {
+                    "experiment": "slow_alt",
+                    "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                    "source_node_id": 0,
+                    "source_depth": 0,
+                    "source_selected_pair": [1, 2],
+                    "forced_pair": [2, 3],
+                    "command": ["runner", "--results-csv", str(slow_result)],
+                },
+            ]
+            runbook_path.write_text(json.dumps({"entries": entries}, sort_keys=True) + "\n", encoding="utf-8")
+            baseline_result = tmp_path / "baseline.csv"
+            self._write_results(
+                baseline_result,
+                [
+                    {
+                        "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                        "status": "OPTIMAL",
+                        "wall_time": "40.0",
+                        "solving_time": "38.0",
+                        "node_count": "3",
+                        "pricing_calls": "30",
+                        "exact_pricing_calls": "10",
+                    }
+                ],
+            )
+            self._write_results(
+                fast_result,
+                [
+                    {
+                        "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                        "status": "OPTIMAL",
+                        "wall_time": "35.0",
+                        "solving_time": "33.0",
+                        "node_count": "3",
+                        "pricing_calls": "29",
+                        "exact_pricing_calls": "9",
+                    }
+                ],
+            )
+            self._write_results(
+                slow_result,
+                [
+                    {
+                        "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                        "status": "OPTIMAL",
+                        "wall_time": "45.0",
+                        "solving_time": "43.0",
+                        "node_count": "5",
+                        "pricing_calls": "40",
+                        "exact_pricing_calls": "14",
+                    }
+                ],
+            )
+            baseline_dir = tmp_path / "baseline_audit"
+            alt_dir = tmp_path / "alt_audit"
+            baseline_dir.mkdir()
+            alt_dir.mkdir()
+            baseline_row = self._branch_row(task_i=1, task_j=2, forced_pair=None, matched=None)
+            fast_row = self._branch_row(task_i=1, task_j=3, forced_pair=[1, 3], matched=True)
+            slow_row = self._branch_row(task_i=2, task_j=3, forced_pair=[2, 3], matched=True)
+            (baseline_dir / "branch_impact_rows.jsonl").write_text(
+                json.dumps(baseline_row, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            (alt_dir / "branch_impact_rows.jsonl").write_text(
+                json.dumps(fast_row, sort_keys=True) + "\n" + json.dumps(slow_row, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            summary = build_counterfactual_delta(
+                runbook_path,
+                [baseline_result],
+                [baseline_dir],
+                [alt_dir],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                min_wall_improvement=1.0,
+            )
+
+            self.assertTrue(summary["diagnostic_only"])
+            self.assertFalse(summary["runs_bpc_or_pricing"])
+            self.assertEqual(summary["matched_counterfactual_count"], 2)
+            self.assertEqual(summary["forced_pair_matched_count"], 2)
+            self.assertTrue(summary["counterfactual_training_ready"])
+            by_experiment = {row["experiment"]: row for row in summary["rows"]}
+            self.assertEqual(by_experiment["fast_alt"]["deltas"]["wall_time_delta"], -5.0)
+            self.assertEqual(by_experiment["fast_alt"]["labels"]["y_counterfactual_wall_improved"], 1.0)
+            self.assertEqual(
+                by_experiment["fast_alt"]["labels"]["y_counterfactual_proof_cost_improved"],
+                1.0,
+            )
+            self.assertTrue(by_experiment["fast_alt"]["usable_for_counterfactual_training"])
+            self.assertEqual(by_experiment["slow_alt"]["deltas"]["wall_time_delta"], 5.0)
+            self.assertEqual(by_experiment["slow_alt"]["labels"]["y_counterfactual_regression"], 1.0)
+            self.assertTrue((tmp_path / "out" / "summary.json").exists())
+            self.assertTrue((tmp_path / "out" / "branch_counterfactual_delta_rows.jsonl").exists())
+            self.assertIn("official_bound_effect = false", (tmp_path / "report.md").read_text(encoding="utf-8"))
+
+    def test_timeout_vs_timeout_only_sets_proxy_label(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            runbook_path = tmp_path / "runbook.json"
+            alt_result = tmp_path / "alt.csv"
+            runbook_path.write_text(
+                json.dumps(
+                    {
+                        "entries": [
+                            {
+                                "experiment": "timeout_alt",
+                                "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                                "source_node_id": 0,
+                                "source_depth": 0,
+                                "source_selected_pair": [1, 2],
+                                "forced_pair": [1, 3],
+                                "command": ["runner", "--results-csv", str(alt_result)],
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            baseline_result = tmp_path / "baseline.csv"
+            self._write_results(
+                baseline_result,
+                [
+                    {
+                        "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                        "status": "EXTERNAL_TIME_LIMIT",
+                        "wall_time": "220.0",
+                        "solving_time": "",
+                        "node_count": "",
+                        "pricing_calls": "",
+                        "exact_pricing_calls": "",
+                    }
+                ],
+            )
+            self._write_results(
+                alt_result,
+                [
+                    {
+                        "instance": "BPC_future/logical_graph/tasks_020/demo.json",
+                        "status": "EXTERNAL_TIME_LIMIT",
+                        "wall_time": "220.0",
+                        "solving_time": "",
+                        "node_count": "",
+                        "pricing_calls": "",
+                        "exact_pricing_calls": "",
+                    }
+                ],
+            )
+            baseline_dir = tmp_path / "baseline_audit"
+            alt_dir = tmp_path / "alt_audit"
+            baseline_dir.mkdir()
+            alt_dir.mkdir()
+            baseline_row = self._branch_row(
+                task_i=1,
+                task_j=2,
+                forced_pair=None,
+                matched=None,
+                child_negative_pricing_events=4.0,
+                child_completion_bound_retries=2.0,
+            )
+            alt_row = self._branch_row(
+                task_i=1,
+                task_j=3,
+                forced_pair=[1, 3],
+                matched=True,
+                child_negative_pricing_events=3.0,
+                child_completion_bound_retries=1.0,
+            )
+            (baseline_dir / "branch_impact_rows.jsonl").write_text(
+                json.dumps(baseline_row, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            (alt_dir / "branch_impact_rows.jsonl").write_text(
+                json.dumps(alt_row, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            summary = build_counterfactual_delta(
+                runbook_path,
+                [baseline_result],
+                [baseline_dir],
+                [alt_dir],
+                tmp_path / "out",
+                tmp_path / "report.md",
+            )
+
+            self.assertFalse(summary["counterfactual_training_ready"])
+            self.assertEqual(summary["right_censored_counterfactual_count"], 1)
+            self.assertEqual(summary["usable_counterfactual_training_count"], 0)
+            row = summary["rows"][0]
+            self.assertTrue(row["right_censored_counterfactual"])
+            self.assertFalse(row["usable_for_counterfactual_training"])
+            self.assertEqual(row["labels"]["y_counterfactual_proof_cost_improved"], 0.0)
+            self.assertEqual(row["labels"]["y_counterfactual_proof_cost_proxy_improved"], 1.0)
+            self.assertEqual(row["labels"]["y_counterfactual_right_censored"], 1.0)
+
+    @staticmethod
+    def _write_results(path: Path, rows: list[dict[str, str]]) -> None:
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "instance",
+                    "status",
+                    "wall_time",
+                    "solving_time",
+                    "node_count",
+                    "pricing_calls",
+                    "exact_pricing_calls",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+
+    @staticmethod
+    def _branch_row(
+        *,
+        task_i: int,
+        task_j: int,
+        forced_pair: list[int] | None,
+        matched: bool | None,
+        child_negative_pricing_events: float = 4.0,
+        child_completion_bound_retries: float = 2.0,
+    ) -> dict[str, object]:
+        return {
+            "log_file": "BPC_future/results/logs/BPC_future/logical_graph/tasks_020/demo.json.jsonl",
+            "branch_node_id": 0,
+            "depth": 0,
+            "task_i": task_i,
+            "task_j": task_j,
+            "forced_pair": forced_pair,
+            "forced_pair_matched": matched,
+            "tail_class": "completion_bound_tail",
+            "branch_labels": {
+                "y_child_negative_pricing_events": child_negative_pricing_events,
+                "y_child_completion_bound_retries": child_completion_bound_retries,
+                "y_child_early_branch_triggers": 0.0,
+            },
+        }
+
+
+if __name__ == "__main__":
+    unittest.main()

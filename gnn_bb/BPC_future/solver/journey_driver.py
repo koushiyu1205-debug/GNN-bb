@@ -1249,6 +1249,12 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
                 cg_iter=cg_iter,
                 node_id=0,
                 depth=0,
+                incumbent=incumbent,
+                recent_active_support_additions=_journey_recent_active_support_additions(
+                    recent_changed_task_sets,
+                    active_task_sets,
+                ),
+                recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(objective_delta),
             )
 
         exact_duals, exact_dual_source = _journey_exact_pricing_duals(
@@ -3232,6 +3238,7 @@ def _solve_bpc_future_journey_branch_price(
     integer_tol = float(config.get("integer_tol", 1.0e-6))
     eps = float(config.get("pricing_eps", 1.0e-6))
     max_nodes = int(config.get("journey_max_nodes", config.get("max_nodes", 1000)))
+    branch_score_map = _journey_branch_score_map_from_config(config)
 
     from BPC_future.core.columns import TripPool
 
@@ -3410,6 +3417,7 @@ def _solve_bpc_future_journey_branch_price(
                 integer_tol,
                 node_id=node.id,
                 depth=node.depth,
+                branch_score_map=branch_score_map,
                 incumbent_solution=final_solution,
                 journey_pool=journey_pool,
             )
@@ -3420,7 +3428,15 @@ def _solve_bpc_future_journey_branch_price(
                 integer_tol,
                 tie_tolerance=float(config.get("journey_branch_fractionality_tie_tolerance", 0.0)),
                 priority_mode=str(config.get("journey_branch_candidate_priority", "fractionality")),
+                node_id=node.id,
                 branch_depth=node.depth,
+                branch_score_map=branch_score_map,
+                branch_score_horizon_tie_tolerance=_optional_float_config(
+                    config, "journey_branch_candidate_score_horizon_tie_tolerance"
+                ),
+                branch_score_horizon_min_score=float(
+                    config.get("journey_branch_candidate_score_horizon_min_score", 0.0)
+                ),
                 incumbent_solution=final_solution,
                 journey_pool=journey_pool,
             )
@@ -3435,6 +3451,12 @@ def _solve_bpc_future_journey_branch_price(
                 continue
             left, right = branch
             stats.branch_nodes += 1
+            branch_trigger = str(node_result.get("branch_trigger", "") or "")
+            early_branch_source = "tail_action_controller" if branch_trigger == "tail_action_controller" else "early_incomplete_pricing"
+            tail_action_child_priority = bool(
+                branch_trigger == "tail_action_controller"
+                and config.get("journey_tail_action_child_priority_enabled", False)
+            )
             logger.log(
                 "journey_branch",
                 node_id=node.id,
@@ -3442,9 +3464,11 @@ def _solve_bpc_future_journey_branch_price(
                 bound=round(float(node.lower_bound), 6),
                 left=left.name(),
                 right=right.name(),
-                source="early_incomplete_pricing",
+                source=early_branch_source,
+                trigger=branch_trigger,
                 exact_bound_available=False,
                 child_lower_bound_exact=False,
+                tail_action_child_priority=tail_action_child_priority,
             )
             by_width = bool(config.get("journey_child_priority_by_width_enabled", False))
             priority_mode = str(config.get("journey_child_priority_mode", "width" if by_width else "declared"))
@@ -3455,10 +3479,16 @@ def _solve_bpc_future_journey_branch_price(
                 (left, right),
                 by_width=by_width,
                 priority_mode=priority_mode,
+                branch_depth=node.depth,
                 journey_values=solution.journey_values,
                 incumbent_solution=final_solution,
             ):
-                queue_width = int(allowed_count) if by_width else 0
+                queue_width = _journey_child_queue_priority_width(
+                    config,
+                    allowed_count=int(allowed_count),
+                    by_width=by_width,
+                    tail_action_child_priority=tail_action_child_priority,
+                )
                 logger.log(
                     "journey_child_queued",
                     parent_node_id=node.id,
@@ -3467,6 +3497,8 @@ def _solve_bpc_future_journey_branch_price(
                     constraint=constraint.name(),
                     allowed_current_journeys=int(allowed_count),
                     priority_mode=priority_mode,
+                    queue_priority_width=int(queue_width),
+                    tail_action_child_priority=tail_action_child_priority,
                     branch_same_mass=None if same_mass is None else round(float(same_mass), 9),
                     lower_bound=round(float(node.lower_bound), 6),
                     lower_bound_exact=False,
@@ -3520,6 +3552,7 @@ def _solve_bpc_future_journey_branch_price(
             integer_tol,
             node_id=node.id,
             depth=node.depth,
+            branch_score_map=branch_score_map,
             incumbent_solution=final_solution,
             journey_pool=journey_pool,
         )
@@ -3530,7 +3563,15 @@ def _solve_bpc_future_journey_branch_price(
             integer_tol,
             tie_tolerance=float(config.get("journey_branch_fractionality_tie_tolerance", 0.0)),
             priority_mode=str(config.get("journey_branch_candidate_priority", "fractionality")),
+            node_id=node.id,
             branch_depth=node.depth,
+            branch_score_map=branch_score_map,
+            branch_score_horizon_tie_tolerance=_optional_float_config(
+                config, "journey_branch_candidate_score_horizon_tie_tolerance"
+            ),
+            branch_score_horizon_min_score=float(
+                config.get("journey_branch_candidate_score_horizon_min_score", 0.0)
+            ),
             incumbent_solution=final_solution,
             journey_pool=journey_pool,
         )
@@ -3564,6 +3605,7 @@ def _solve_bpc_future_journey_branch_price(
             (left, right),
             by_width=by_width,
             priority_mode=priority_mode,
+            branch_depth=node.depth,
             journey_values=solution.journey_values,
             incumbent_solution=final_solution,
         ):
@@ -3780,6 +3822,8 @@ def _process_journey_branch_node(
             depth=node.depth,
             pricing_kind=pricing_kind,
             certificate_candidate=certificate_candidate,
+            active_task_sets=active_task_sets,
+            dominant_task_set_costs=_journey_pool_task_set_costs(journey_pool),
         )
 
     def release_gat_admission_before_certificate(pricing_result: Any, pricing_kind: str) -> int:
@@ -3802,6 +3846,8 @@ def _process_journey_branch_node(
             depth=node.depth,
             pricing_kind=str(pricing_kind),
             certificate_candidate=True,
+            active_task_sets=active_task_sets,
+            dominant_task_set_costs=_journey_pool_task_set_costs(journey_pool),
         )
         if not released_journeys:
             return 0
@@ -5376,6 +5422,11 @@ def _process_journey_branch_node(
             node_id=node.id,
             depth=node.depth,
         )
+        recent_active_support_additions_for_tail = _journey_recent_active_support_additions(
+            recent_changed_task_sets,
+            active_task_sets,
+        )
+        recent_rmp_objective_progress_for_tail = _journey_recent_rmp_objective_progress(objective_delta)
         corrected_bound = _log_journey_corrected_node_bound_audit(
             logger,
             data,
@@ -5390,6 +5441,17 @@ def _process_journey_branch_node(
             cg_iter=cg_iter,
             node_id=node.id,
             depth=node.depth,
+            incumbent=local_incumbent,
+            recent_active_support_additions=recent_active_support_additions_for_tail,
+            recent_rmp_objective_progress=recent_rmp_objective_progress_for_tail,
+        )
+        tail_action_payload = _journey_tail_action_controller(
+            pricing,
+            config,
+            rmp_objective=float(solution.objective),
+            incumbent=local_incumbent,
+            recent_active_support_additions=recent_active_support_additions_for_tail,
+            recent_rmp_objective_progress=recent_rmp_objective_progress_for_tail,
         )
         corrected_fathom = corrected_bound_fathom_payload(
             corrected_bound,
@@ -5653,6 +5715,49 @@ def _process_journey_branch_node(
                     certificate_no_column_rounds = 0
                     if not bool(skip_short_exact):
                         retry_negative_after_no_column_rounds = 0
+                if _journey_should_early_branch_on_tail_action(
+                    config,
+                    node,
+                    cg_iter,
+                    solution,
+                    integer_tol,
+                    tail_action_payload,
+                    added_columns=int(added),
+                    remaining=max(0.0, deadline - time.perf_counter()),
+                ):
+                    logger.log(
+                        "journey_early_branch_trigger",
+                        node_id=node.id,
+                        depth=node.depth,
+                        cg_iter=cg_iter,
+                        reason=str(tail_action_payload.get("tail_action_reason", "")),
+                        trigger="tail_action_controller",
+                        tail_action=str(tail_action_payload.get("tail_action", "")),
+                        added_journeys=added,
+                        inherited_lower_bound=round(float(node.lower_bound), 6),
+                        rmp_objective=round(float(solution.objective), 6),
+                        rmp_to_incumbent_gap=None
+                        if tail_action_payload.get("rmp_to_incumbent_gap") is None
+                        else round(float(tail_action_payload["rmp_to_incumbent_gap"]), 9),
+                        recent_active_support_additions=tail_action_payload.get(
+                            "recent_active_support_additions"
+                        ),
+                        recent_rmp_objective_progress=None
+                        if tail_action_payload.get("recent_rmp_objective_progress") is None
+                        else round(float(tail_action_payload["recent_rmp_objective_progress"]), 9),
+                        recent_true_rc_productivity=int(
+                            tail_action_payload.get("recent_true_rc_productivity", 0)
+                        ),
+                        exact_bound_available=False,
+                        child_lower_bound_exact=False,
+                    )
+                    return payload(
+                        "BRANCH",
+                        solution=solution,
+                        bound=float(node.lower_bound),
+                        exact_bound=False,
+                        branch_trigger="tail_action_controller",
+                    )
                 if _journey_should_early_branch(config, node, cg_iter, solution, integer_tol):
                     logger.log(
                         "journey_early_branch_trigger",
@@ -5801,6 +5906,12 @@ def _process_journey_branch_node(
                             cg_iter=cg_iter,
                             node_id=node.id,
                             depth=node.depth,
+                            incumbent=local_incumbent,
+                            recent_active_support_additions=_journey_recent_active_support_additions(
+                                recent_changed_task_sets,
+                                active_task_sets,
+                            ),
+                            recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(objective_delta),
                         )
                         corrected_fathom = corrected_bound_fathom_payload(
                             corrected_bound,
@@ -6118,6 +6229,12 @@ def _process_journey_branch_node(
                     cg_iter=cg_iter,
                     node_id=node.id,
                     depth=node.depth,
+                    incumbent=local_incumbent,
+                    recent_active_support_additions=_journey_recent_active_support_additions(
+                        recent_changed_task_sets,
+                        active_task_sets,
+                    ),
+                    recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(objective_delta),
                 )
                 corrected_fathom = corrected_bound_fathom_payload(
                     corrected_bound,
@@ -6220,6 +6337,14 @@ def _process_journey_branch_node(
                                 cg_iter=cg_iter,
                                 node_id=node.id,
                                 depth=node.depth,
+                                incumbent=local_incumbent,
+                                recent_active_support_additions=_journey_recent_active_support_additions(
+                                    recent_changed_task_sets,
+                                    active_task_sets,
+                                ),
+                                recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(
+                                    objective_delta
+                                ),
                             )
                             _log_hidden_negative_audit(
                                 logger,
@@ -6415,6 +6540,14 @@ def _process_journey_branch_node(
                                 cg_iter=cg_iter,
                                 node_id=node.id,
                                 depth=node.depth,
+                                incumbent=local_incumbent,
+                                recent_active_support_additions=_journey_recent_active_support_additions(
+                                    recent_changed_task_sets,
+                                    active_task_sets,
+                                ),
+                                recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(
+                                    objective_delta
+                                ),
                             )
                             corrected_fathom = corrected_bound_fathom_payload(
                                 corrected_bound,
@@ -6522,6 +6655,14 @@ def _process_journey_branch_node(
                                     cg_iter=cg_iter,
                                     node_id=node.id,
                                     depth=node.depth,
+                                    incumbent=local_incumbent,
+                                    recent_active_support_additions=_journey_recent_active_support_additions(
+                                        recent_changed_task_sets,
+                                        active_task_sets,
+                                    ),
+                                    recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(
+                                        objective_delta
+                                    ),
                                 )
                                 corrected_fathom = corrected_bound_fathom_payload(
                                     corrected_bound,
@@ -7054,6 +7195,13 @@ def _process_journey_branch_node(
                                 node_id=node.id,
                                 depth=node.depth,
                                 incumbent=local_incumbent,
+                                recent_active_support_additions=_journey_recent_active_support_additions(
+                                    recent_changed_task_sets,
+                                    active_task_sets,
+                                ),
+                                recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(
+                                    objective_delta
+                                ),
                             )
                             corrected_fathom = corrected_bound_fathom_payload(
                                 corrected_bound,
@@ -7200,6 +7348,91 @@ def _process_journey_branch_node(
                 else:
                     return payload("PRICING_INCOMPLETE", reason=str(pricing.reason or "pricing_incomplete"))
         if bool(pricing.exhausted) and _journey_completion_bound_final_probe_needed(config, pricing):
+            no_column_branch_remaining = max(0.0, deadline - time.perf_counter())
+            if _journey_should_early_branch_on_tail_action_no_column(
+                config,
+                node,
+                cg_iter,
+                solution,
+                integer_tol,
+                pricing,
+                tail_action_payload,
+                remaining=no_column_branch_remaining,
+                certificate_candidate=certificate_candidate,
+                data=data,
+                incumbent_solution=local_solution,
+                journey_pool=journey_pool,
+            ):
+                _width_guard_passed, no_column_branch_width = (
+                    _journey_tail_action_no_column_branch_width_guard(
+                        config,
+                        data,
+                        node,
+                        solution,
+                        integer_tol,
+                        incumbent_solution=local_solution,
+                        journey_pool=journey_pool,
+                    )
+                )
+                logger.log(
+                    "journey_early_branch_trigger",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    reason=str(tail_action_payload.get("tail_action_reason", "")),
+                    trigger="tail_action_controller",
+                    tail_action=str(tail_action_payload.get("tail_action", "")),
+                    tail_action_no_column=True,
+                    inherited_lower_bound=round(float(node.lower_bound), 6),
+                    rmp_objective=round(float(solution.objective), 6),
+                    rmp_to_incumbent_gap=None
+                    if tail_action_payload.get("rmp_to_incumbent_gap") is None
+                    else round(float(tail_action_payload["rmp_to_incumbent_gap"]), 9),
+                    recent_active_support_additions=tail_action_payload.get(
+                        "recent_active_support_additions"
+                    ),
+                    recent_rmp_objective_progress=None
+                    if tail_action_payload.get("recent_rmp_objective_progress") is None
+                    else round(float(tail_action_payload["recent_rmp_objective_progress"]), 9),
+                    recent_true_rc_productivity=int(
+                        tail_action_payload.get("recent_true_rc_productivity", 0)
+                    ),
+                    previous_status=pricing.status,
+                    previous_reason=pricing.reason,
+                    previous_pricing_state=_journey_pricing_state(pricing),
+                    previous_best_reduced_cost=None
+                    if pricing.best_reduced_cost is None
+                    else round(float(pricing.best_reduced_cost), 9),
+                    remaining=round(float(no_column_branch_remaining), 6),
+                    certificate_candidate=bool(certificate_candidate),
+                    no_column_branch_task_i=no_column_branch_width.get("task_i"),
+                    no_column_branch_task_j=no_column_branch_width.get("task_j"),
+                    no_column_branch_pool_same_allowed=no_column_branch_width.get(
+                        "pool_same_allowed"
+                    ),
+                    no_column_branch_pool_separate_allowed=no_column_branch_width.get(
+                        "pool_separate_allowed"
+                    ),
+                    no_column_branch_pool_max_child_width=no_column_branch_width.get(
+                        "pool_max_child_width"
+                    ),
+                    no_column_branch_pool_total_child_width=no_column_branch_width.get(
+                        "pool_total_child_width"
+                    ),
+                    no_column_branch_pool_balance_gap=no_column_branch_width.get(
+                        "pool_balance_gap"
+                    ),
+                    no_column_branch_width_guard_reason=no_column_branch_width.get("reason"),
+                    exact_bound_available=False,
+                    child_lower_bound_exact=False,
+                )
+                return payload(
+                    "BRANCH",
+                    solution=solution,
+                    bound=float(node.lower_bound),
+                    exact_bound=False,
+                    branch_trigger="tail_action_controller",
+                )
             repair_remaining = max(0.0, deadline - time.perf_counter())
             repair_config, repair_mode = _journey_profile_repair_config(
                 config,
@@ -7927,6 +8160,12 @@ def _process_journey_branch_node(
                         cg_iter=cg_iter,
                         node_id=node.id,
                         depth=node.depth,
+                        incumbent=local_incumbent,
+                        recent_active_support_additions=_journey_recent_active_support_additions(
+                            recent_changed_task_sets,
+                            active_task_sets,
+                        ),
+                        recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(objective_delta),
                     )
                     corrected_fathom = corrected_bound_fathom_payload(
                         corrected_bound,
@@ -8032,6 +8271,12 @@ def _process_journey_branch_node(
                             cg_iter=cg_iter,
                             node_id=node.id,
                             depth=node.depth,
+                            incumbent=local_incumbent,
+                            recent_active_support_additions=_journey_recent_active_support_additions(
+                                recent_changed_task_sets,
+                                active_task_sets,
+                            ),
+                            recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(objective_delta),
                         )
                         corrected_fathom = corrected_bound_fathom_payload(
                             corrected_bound,
@@ -8478,11 +8723,24 @@ def _journey_child_constraint_order(
     *,
     by_width: bool,
     priority_mode: str | None = None,
+    branch_depth: int | None = None,
     journey_values: list[tuple[Any, float]] | None = None,
     incumbent_solution: dict[int, list[Any]] | None = None,
 ) -> list[tuple[BranchConstraint, int]]:
     ordered = _ordered_journey_child_constraints(journey_pool, parent_constraints, branch)
     mode = str(priority_mode or ("width" if by_width else "declared"))
+    forced_kind = _journey_forced_child_kind(mode, depth=branch_depth)
+    if forced_kind is not None:
+        allowed_by_key = {_branch_constraint_key(constraint): allowed for constraint, allowed in ordered}
+        declared = [(constraint, int(allowed_by_key.get(_branch_constraint_key(constraint), 0))) for constraint in branch]
+        order_index = {_branch_constraint_key(constraint): index for index, constraint in enumerate(branch)}
+        return sorted(
+            declared,
+            key=lambda item: (
+                0 if item[0].kind == forced_kind else 1,
+                int(order_index.get(_branch_constraint_key(item[0]), 0)),
+            ),
+        )
     if mode == "width" or (bool(by_width) and mode in {"", "declared"}):
         return ordered
     allowed_by_key = {_branch_constraint_key(constraint): allowed for constraint, allowed in ordered}
@@ -8519,6 +8777,40 @@ def _journey_child_constraint_order(
         return (0 if preferred else 1, int(order_index.get(_branch_constraint_key(constraint), 0)))
 
     return sorted(declared, key=rank)
+
+
+def _journey_forced_child_kind(priority_mode: Any, *, depth: int | None = None) -> str | None:
+    text = str(priority_mode or "").strip()
+    valid = {"same_vehicle", "separate_vehicle"}
+    for prefix in ("force_child_kind_depth:", "forced_child_kind_depth:"):
+        if not text.startswith(prefix):
+            continue
+        payload = text[len(prefix) :].strip()
+        for rule in re.split(r"[|;]", payload):
+            rule = rule.strip()
+            if not rule:
+                continue
+            if ":" in rule:
+                depth_text, kind_text = rule.split(":", 1)
+            elif "=" in rule:
+                depth_text, kind_text = rule.split("=", 1)
+            else:
+                continue
+            depth_text = depth_text.strip().removeprefix("d").removeprefix("D")
+            try:
+                rule_depth = int(depth_text)
+            except ValueError:
+                continue
+            if depth is None or int(depth) != int(rule_depth):
+                continue
+            kind = kind_text.strip()
+            return kind if kind in valid else None
+        return None
+    for prefix in ("force_child_kind:", "forced_child_kind:", "force_child_kind=", "forced_child_kind="):
+        if text.startswith(prefix):
+            kind = text[len(prefix) :].strip()
+            return kind if kind in valid else None
+    return None
 
 
 def _journey_branch_same_mass(
@@ -8577,7 +8869,11 @@ def _choose_journey_branch(
     *,
     tie_tolerance: float = 0.0,
     priority_mode: str = "fractionality",
+    node_id: int | None = None,
     branch_depth: int | None = None,
+    branch_score_map: dict[str, float] | None = None,
+    branch_score_horizon_tie_tolerance: float | None = None,
+    branch_score_horizon_min_score: float = 0.0,
     incumbent_solution: dict[int, list[Any]] | None = None,
     journey_pool: JourneyPool | None = None,
 ) -> tuple[BranchConstraint, BranchConstraint] | None:
@@ -8595,7 +8891,12 @@ def _choose_journey_branch(
         candidates,
         tie_tolerance=tie_tolerance,
         priority_mode=priority_mode,
+        node_id=node_id,
         branch_depth=branch_depth,
+        branch_score_map=branch_score_map,
+        branch_score_horizon_tie_tolerance=branch_score_horizon_tie_tolerance,
+        branch_score_horizon_min_score=branch_score_horizon_min_score,
+        constraints=constraints,
     )
     i = int(chosen["task_i"])
     j = int(chosen["task_j"])
@@ -8621,16 +8922,277 @@ def _eligible_journey_branch_candidates(
     ]
 
 
+def _journey_branch_score_horizon_effective_tie_tolerance(
+    candidates: list[dict[str, Any]],
+    *,
+    tie_tolerance: float,
+    priority_mode: str,
+    node_id: int | None = None,
+    branch_depth: int | None = None,
+    branch_score_map: dict[str, float] | None = None,
+    branch_score_horizon_tie_tolerance: float | None = None,
+    branch_score_horizon_min_score: float = 0.0,
+) -> float:
+    base_tolerance = max(0.0, float(tie_tolerance))
+    if str(priority_mode) != "branch_score_horizon" or not candidates or not branch_score_map:
+        return base_tolerance
+
+    max_tolerance = (
+        max(base_tolerance, 0.2)
+        if branch_score_horizon_tie_tolerance is None
+        else max(base_tolerance, float(branch_score_horizon_tie_tolerance))
+    )
+    max_frac = max(float(candidate["fractionality"]) for candidate in candidates)
+    scored: list[tuple[float, float, float, int, int]] = []
+    for candidate in candidates:
+        score, _source = _journey_branch_candidate_score(
+            candidate,
+            branch_score_map,
+            node_id=node_id,
+            depth=branch_depth,
+        )
+        if score is None or float(score) <= float(branch_score_horizon_min_score):
+            continue
+        required_tolerance = max(0.0, float(max_frac) - float(candidate["fractionality"]))
+        if required_tolerance > max_tolerance + 1.0e-12:
+            continue
+        scored.append(
+            (
+                -float(score),
+                required_tolerance,
+                -float(candidate["fractionality"]),
+                int(candidate["task_i"]),
+                int(candidate["task_j"]),
+            )
+        )
+    if not scored:
+        return base_tolerance
+    scored.sort()
+    return max(base_tolerance, float(scored[0][1]))
+
+
+_JOURNEY_BRANCH_SCORE_FIELDS = (
+    "branch_score",
+    "score",
+    "impact_score",
+    "gat_score",
+    "predicted_score",
+)
+
+
+def _journey_branch_score_value(raw: Any) -> float | None:
+    value = raw
+    if isinstance(raw, dict):
+        value = None
+        for key in _JOURNEY_BRANCH_SCORE_FIELDS:
+            if raw.get(key) is not None:
+                value = raw.get(key)
+                break
+    if value is None:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(score):
+        return None
+    return score
+
+
+def _journey_branch_score_pair_from_row(row: dict[str, Any]) -> tuple[int, int] | None:
+    pair = row.get("pair") or row.get("branch_pair") or row.get("candidate_pair")
+    if isinstance(pair, str):
+        parsed = _parse_journey_forced_pair_payload(pair)
+        if parsed is not None:
+            return parsed
+    if isinstance(pair, (list, tuple)) and len(pair) == 2:
+        try:
+            return tuple(sorted((int(pair[0]), int(pair[1]))))
+        except (TypeError, ValueError):
+            return None
+    key_pairs = (
+        ("task_i", "task_j"),
+        ("branch_task_i", "branch_task_j"),
+        ("candidate_task_i", "candidate_task_j"),
+        ("alternative_task_i", "alternative_task_j"),
+    )
+    for left_key, right_key in key_pairs:
+        if row.get(left_key) is None or row.get(right_key) is None:
+            continue
+        try:
+            i, j = int(row[left_key]), int(row[right_key])
+        except (TypeError, ValueError):
+            continue
+        if i != j:
+            return tuple(sorted((i, j)))
+    return None
+
+
+def _journey_branch_score_specific_key(
+    pair: tuple[int, int],
+    *,
+    node_id: int | None = None,
+    depth: int | None = None,
+) -> str:
+    i, j = tuple(sorted((int(pair[0]), int(pair[1]))))
+    pair_text = f"{i},{j}"
+    if node_id is not None and depth is not None:
+        return f"node:{int(node_id)}:depth:{int(depth)}:{pair_text}"
+    if depth is not None:
+        return f"depth:{int(depth)}:{pair_text}"
+    if node_id is not None:
+        return f"node:{int(node_id)}:{pair_text}"
+    return pair_text
+
+
+def _journey_branch_score_lookup_keys(
+    candidate: dict[str, Any],
+    *,
+    node_id: int | None = None,
+    depth: int | None = None,
+) -> tuple[str, ...]:
+    i, j = tuple(sorted((int(candidate["task_i"]), int(candidate["task_j"]))))
+    pair_text = f"{i},{j}"
+    keys: list[str] = []
+    if node_id is not None and depth is not None:
+        keys.extend(
+            (
+                f"node:{int(node_id)}:depth:{int(depth)}:{pair_text}",
+                f"node:{int(node_id)}:depth:{int(depth)}:pair:{pair_text}",
+            )
+        )
+    if depth is not None:
+        keys.extend((f"depth:{int(depth)}:{pair_text}", f"depth:{int(depth)}:pair:{pair_text}"))
+    if node_id is not None:
+        keys.extend((f"node:{int(node_id)}:{pair_text}", f"node:{int(node_id)}:pair:{pair_text}"))
+    keys.extend((pair_text, f"pair:{pair_text}"))
+    return tuple(keys)
+
+
+def _normalize_journey_branch_score_map(raw: Any) -> dict[str, float]:
+    if raw in (None, ""):
+        return {}
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {}
+        parsed: Any | None = None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            candidate_path = Path(text).expanduser()
+            if candidate_path.exists() and candidate_path.is_file():
+                try:
+                    parsed = json.loads(candidate_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    return {}
+            else:
+                return {}
+        raw = parsed
+    score_map: dict[str, float] = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            if isinstance(value, dict) and _journey_branch_score_pair_from_row(value) is not None:
+                row_score = _journey_branch_score_value(value)
+                if row_score is None:
+                    continue
+                pair = _journey_branch_score_pair_from_row(value)
+                if pair is None:
+                    continue
+                node = value.get("node_id")
+                depth = value.get("depth")
+                try:
+                    node_id = None if node is None else int(node)
+                    branch_depth = None if depth is None else int(depth)
+                except (TypeError, ValueError):
+                    node_id = None
+                    branch_depth = None
+                score_map[_journey_branch_score_specific_key(pair, node_id=node_id, depth=branch_depth)] = row_score
+                continue
+            score = _journey_branch_score_value(value)
+            if score is None:
+                continue
+            if isinstance(key, (list, tuple)) and len(key) == 2:
+                try:
+                    pair = tuple(sorted((int(key[0]), int(key[1]))))
+                except (TypeError, ValueError):
+                    continue
+                score_map[_journey_branch_score_specific_key(pair)] = score
+                continue
+            score_map[str(key)] = score
+        return score_map
+    if isinstance(raw, list):
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+            score = _journey_branch_score_value(row)
+            pair = _journey_branch_score_pair_from_row(row)
+            if score is None or pair is None:
+                continue
+            node = row.get("node_id")
+            depth = row.get("depth")
+            try:
+                node_id = None if node is None else int(node)
+                branch_depth = None if depth is None else int(depth)
+            except (TypeError, ValueError):
+                node_id = None
+                branch_depth = None
+            score_map[_journey_branch_score_specific_key(pair, node_id=node_id, depth=branch_depth)] = score
+    return score_map
+
+
+def _optional_float_config(config: dict[str, Any], key: str) -> float | None:
+    value = config.get(key)
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return float(parsed)
+
+
+def _journey_branch_score_map_from_config(config: dict[str, Any]) -> dict[str, float]:
+    score_map = _normalize_journey_branch_score_map(config.get("journey_branch_candidate_score_map"))
+    path = config.get("journey_branch_candidate_score_path")
+    if path not in (None, ""):
+        score_map.update(_normalize_journey_branch_score_map(str(path)))
+    return score_map
+
+
+def _journey_branch_candidate_score(
+    candidate: dict[str, Any],
+    score_map: dict[str, float] | None,
+    *,
+    node_id: int | None = None,
+    depth: int | None = None,
+) -> tuple[float | None, str | None]:
+    if not score_map:
+        return None, None
+    for key in _journey_branch_score_lookup_keys(candidate, node_id=node_id, depth=depth):
+        score = score_map.get(key)
+        if score is not None:
+            return float(score), key
+    return None, None
+
+
 def _ordered_journey_branch_candidates_for_priority(
     candidates: list[dict[str, Any]],
     *,
     tie_tolerance: float,
     priority_mode: str,
+    node_id: int | None = None,
     branch_depth: int | None = None,
+    branch_score_map: dict[str, float] | None = None,
+    branch_score_horizon_tie_tolerance: float | None = None,
+    branch_score_horizon_min_score: float = 0.0,
+    constraints: tuple[BranchConstraint, ...] | None = None,
 ) -> list[dict[str, Any]]:
     if not candidates:
         return []
-    forced_pair = _journey_forced_branch_pair(priority_mode, depth=branch_depth)
+    forced_pair = _journey_forced_branch_pair(priority_mode, depth=branch_depth, constraints=constraints)
     if forced_pair is not None:
         forced = [
             candidate
@@ -8647,11 +9209,57 @@ def _ordered_journey_branch_candidates_for_priority(
                 remaining,
                 tie_tolerance=tie_tolerance,
                 priority_mode="fractionality",
+                node_id=node_id,
                 branch_depth=branch_depth,
+                branch_score_map=branch_score_map,
+                branch_score_horizon_tie_tolerance=branch_score_horizon_tie_tolerance,
+                branch_score_horizon_min_score=branch_score_horizon_min_score,
+                constraints=constraints,
             )
             return [forced[0], *fallback]
-    eligible = _eligible_journey_branch_candidates(candidates, tie_tolerance=tie_tolerance)
     mode = str(priority_mode)
+    effective_tie_tolerance = _journey_branch_score_horizon_effective_tie_tolerance(
+        candidates,
+        tie_tolerance=tie_tolerance,
+        priority_mode=mode,
+        node_id=node_id,
+        branch_depth=branch_depth,
+        branch_score_map=branch_score_map,
+        branch_score_horizon_tie_tolerance=branch_score_horizon_tie_tolerance,
+        branch_score_horizon_min_score=branch_score_horizon_min_score,
+    )
+    eligible = _eligible_journey_branch_candidates(candidates, tie_tolerance=effective_tie_tolerance)
+    if mode in {"branch_score", "branch_score_horizon"}:
+        if not branch_score_map:
+            return _ordered_journey_branch_candidates_for_priority(
+                candidates,
+                tie_tolerance=tie_tolerance,
+                priority_mode="fractionality",
+                node_id=node_id,
+                branch_depth=branch_depth,
+                constraints=constraints,
+            )
+
+        def branch_score_sort_key(candidate: dict[str, Any]) -> tuple[bool, float, float, int, int]:
+            score, _source = _journey_branch_candidate_score(
+                candidate,
+                branch_score_map,
+                node_id=node_id,
+                depth=branch_depth,
+            )
+            if mode == "branch_score_horizon" and (
+                score is None or float(score) <= float(branch_score_horizon_min_score)
+            ):
+                score = None
+            return (
+                score is None,
+                -float(score or 0.0),
+                -float(candidate["fractionality"]),
+                int(candidate["task_i"]),
+                int(candidate["task_j"]),
+            )
+
+        return sorted(eligible, key=branch_score_sort_key)
     if mode == "pool_split":
         with_width = [candidate for candidate in eligible if candidate.get("pool_same_allowed") is not None]
         pool = with_width or eligible
@@ -8705,13 +9313,23 @@ def _select_journey_branch_candidate(
     *,
     tie_tolerance: float,
     priority_mode: str,
+    node_id: int | None = None,
     branch_depth: int | None = None,
+    branch_score_map: dict[str, float] | None = None,
+    branch_score_horizon_tie_tolerance: float | None = None,
+    branch_score_horizon_min_score: float = 0.0,
+    constraints: tuple[BranchConstraint, ...] | None = None,
 ) -> dict[str, Any]:
     ordered = _ordered_journey_branch_candidates_for_priority(
         candidates,
         tie_tolerance=tie_tolerance,
         priority_mode=priority_mode,
+        node_id=node_id,
         branch_depth=branch_depth,
+        branch_score_map=branch_score_map,
+        branch_score_horizon_tie_tolerance=branch_score_horizon_tie_tolerance,
+        branch_score_horizon_min_score=branch_score_horizon_min_score,
+        constraints=constraints,
     )
     if not ordered:
         raise ValueError("cannot choose journey branch from empty candidates")
@@ -8732,8 +9350,83 @@ def _parse_journey_forced_pair_payload(payload: str) -> tuple[int, int] | None:
     return tuple(sorted((i, j)))
 
 
-def _journey_forced_branch_pair(priority_mode: Any, *, depth: int | None = None) -> tuple[int, int] | None:
+def _parse_journey_force_path_segment(segment: str) -> tuple[int, tuple[int, int], str | None] | None:
+    if ":" not in segment:
+        return None
+    depth_text, payload = segment.split(":", 1)
+    depth_text = depth_text.strip().removeprefix("d").removeprefix("D")
+    try:
+        segment_depth = int(depth_text)
+    except ValueError:
+        return None
+    kind = None
+    pair_text = payload
+    if "=" in payload:
+        pair_text, kind_text = payload.split("=", 1)
+        candidate_kind = kind_text.strip()
+        if candidate_kind in {"same_vehicle", "separate_vehicle"}:
+            kind = candidate_kind
+        else:
+            return None
+    pair = _parse_journey_forced_pair_payload(pair_text)
+    if pair is None:
+        return None
+    return int(segment_depth), pair, kind
+
+
+def _branch_constraint_matches_force_path_segment(
+    constraint: BranchConstraint,
+    *,
+    pair: tuple[int, int],
+    kind: str | None,
+) -> bool:
+    if constraint.task_j is None:
+        return False
+    constraint_pair = tuple(sorted((int(constraint.task_i), int(constraint.task_j))))
+    if constraint_pair != tuple(pair):
+        return False
+    return kind is None or str(constraint.kind) == str(kind)
+
+
+def _journey_forced_branch_pair(
+    priority_mode: Any,
+    *,
+    depth: int | None = None,
+    constraints: tuple[BranchConstraint, ...] | None = None,
+) -> tuple[int, int] | None:
     text = str(priority_mode or "").strip()
+    for prefix in ("force_pair_path:", "forced_pair_path:"):
+        if not text.startswith(prefix):
+            continue
+        if depth is None:
+            return None
+        parsed_segments: list[tuple[int, tuple[int, int], str | None]] = []
+        for raw_segment in re.split(r"[|;]", text[len(prefix) :].strip()):
+            raw_segment = raw_segment.strip()
+            if not raw_segment:
+                continue
+            parsed = _parse_journey_force_path_segment(raw_segment)
+            if parsed is None:
+                return None
+            parsed_segments.append(parsed)
+        target_pair: tuple[int, int] | None = None
+        for segment_depth, pair, kind in parsed_segments:
+            if int(segment_depth) == int(depth):
+                if kind is not None:
+                    return None
+                target_pair = pair
+                continue
+            if int(segment_depth) >= int(depth):
+                return None
+            if constraints is None or int(segment_depth) >= len(constraints):
+                return None
+            if not _branch_constraint_matches_force_path_segment(
+                constraints[int(segment_depth)],
+                pair=pair,
+                kind=kind,
+            ):
+                return None
+        return target_pair
     for prefix in ("force_pair_depth:", "forced_pair_depth:"):
         if text.startswith(prefix):
             payload = text[len(prefix) :].strip()
@@ -8859,6 +9552,7 @@ def _log_journey_branch_candidates(
     *,
     node_id: int,
     depth: int,
+    branch_score_map: dict[str, float] | None = None,
     incumbent_solution: dict[int, list[Any]] | None = None,
     journey_pool: JourneyPool | None = None,
 ) -> None:
@@ -8875,17 +9569,43 @@ def _log_journey_branch_candidates(
     )
     tie_tolerance = float(config.get("journey_branch_fractionality_tie_tolerance", 0.0))
     priority_mode = str(config.get("journey_branch_candidate_priority", "fractionality"))
+    resolved_branch_score_map = branch_score_map or _journey_branch_score_map_from_config(config)
+    branch_score_horizon_tie_tolerance = _optional_float_config(
+        config, "journey_branch_candidate_score_horizon_tie_tolerance"
+    )
+    branch_score_horizon_min_score = float(config.get("journey_branch_candidate_score_horizon_min_score", 0.0))
+    effective_tie_tolerance = _journey_branch_score_horizon_effective_tie_tolerance(
+        candidates,
+        tie_tolerance=tie_tolerance,
+        priority_mode=priority_mode,
+        node_id=node_id,
+        branch_depth=depth,
+        branch_score_map=resolved_branch_score_map,
+        branch_score_horizon_tie_tolerance=branch_score_horizon_tie_tolerance,
+        branch_score_horizon_min_score=branch_score_horizon_min_score,
+    )
     priority_order = _ordered_journey_branch_candidates_for_priority(
         candidates,
         tie_tolerance=tie_tolerance,
         priority_mode=priority_mode,
+        node_id=node_id,
         branch_depth=depth,
+        branch_score_map=resolved_branch_score_map,
+        branch_score_horizon_tie_tolerance=branch_score_horizon_tie_tolerance,
+        branch_score_horizon_min_score=branch_score_horizon_min_score,
+        constraints=constraints,
     )
     selected = priority_order[0] if priority_order else None
-    forced_pair = _journey_forced_branch_pair(priority_mode, depth=depth)
+    forced_pair = _journey_forced_branch_pair(priority_mode, depth=depth, constraints=constraints)
     max_frac = None if not candidates else max(float(candidate["fractionality"]) for candidate in candidates)
 
     def candidate_payload(candidate: dict[str, Any]) -> dict[str, Any]:
+        branch_score, branch_score_source = _journey_branch_candidate_score(
+            candidate,
+            resolved_branch_score_map,
+            node_id=node_id,
+            depth=depth,
+        )
         return {
             "task_i": int(candidate["task_i"]),
             "task_j": int(candidate["task_j"]),
@@ -8899,6 +9619,8 @@ def _log_journey_branch_candidates(
             "pool_max_child_width": candidate.get("pool_max_child_width"),
             "pool_total_child_width": candidate.get("pool_total_child_width"),
             "pool_balance_gap": candidate.get("pool_balance_gap"),
+            "branch_score": None if branch_score is None else round(float(branch_score), 9),
+            "branch_score_source": branch_score_source,
         }
 
     logger.log(
@@ -8908,6 +9630,13 @@ def _log_journey_branch_candidates(
         candidate_count=len(candidates),
         max_fractionality=None if max_frac is None else round(float(max_frac), 9),
         tie_tolerance=round(float(tie_tolerance), 9),
+        effective_tie_tolerance=round(float(effective_tie_tolerance), 9),
+        branch_score_horizon_tie_tolerance=(
+            None
+            if branch_score_horizon_tie_tolerance is None
+            else round(float(branch_score_horizon_tie_tolerance), 9)
+        ),
+        branch_score_horizon_min_score=round(float(branch_score_horizon_min_score), 9),
         priority_mode=priority_mode,
         forced_pair=None if forced_pair is None else list(forced_pair),
         forced_pair_matched=bool(
@@ -8916,6 +9645,9 @@ def _log_journey_branch_candidates(
             and tuple(sorted((int(selected["task_i"]), int(selected["task_j"])))) == forced_pair
         ),
         eligible_count=len(_eligible_journey_branch_candidates(candidates, tie_tolerance=tie_tolerance)),
+        effective_eligible_count=len(
+            _eligible_journey_branch_candidates(candidates, tie_tolerance=effective_tie_tolerance)
+        ),
         selected=None if selected is None else candidate_payload(selected),
         top=[candidate_payload(candidate) for candidate in candidates[: max(0, top_n)]],
         priority_top=[candidate_payload(candidate) for candidate in priority_order[: max(0, top_n)]],
@@ -8955,6 +9687,119 @@ def _journey_should_early_branch(
     if _choose_journey_branch_placeholder(solution, node.branch_constraints, float(integer_tol)) is None:
         return False
     return True
+
+
+def _journey_child_queue_priority_width(
+    config: dict[str, Any],
+    *,
+    allowed_count: int,
+    by_width: bool,
+    tail_action_child_priority: bool = False,
+) -> int:
+    if bool(tail_action_child_priority):
+        return int(config.get("journey_tail_action_child_priority_width", -1))
+    return int(allowed_count) if bool(by_width) else 0
+
+
+def _journey_optional_nonnegative_int(config: dict[str, Any], key: str) -> int | None:
+    value = config.get(key)
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return parsed
+
+
+def _journey_tail_action_no_column_branch_width_guard(
+    config: dict[str, Any],
+    data: FutureData | None,
+    node: JourneyNode,
+    solution: Any,
+    integer_tol: float,
+    *,
+    incumbent_solution: dict[int, list[Any]] | None = None,
+    journey_pool: JourneyPool | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Check optional width budgets for no-column tail-action branching."""
+
+    max_child_width = _journey_optional_nonnegative_int(
+        config, "journey_tail_action_no_column_early_branch_max_pool_child_width"
+    )
+    max_total_width = _journey_optional_nonnegative_int(
+        config, "journey_tail_action_no_column_early_branch_max_pool_total_child_width"
+    )
+    max_balance_gap = _journey_optional_nonnegative_int(
+        config, "journey_tail_action_no_column_early_branch_max_pool_balance_gap"
+    )
+    guard_requested = any(
+        value is not None for value in (max_child_width, max_total_width, max_balance_gap)
+    )
+    if data is None or journey_pool is None:
+        if guard_requested:
+            return False, {"reason": "missing_branch_width_context"}
+        return True, {"reason": "width_guard_disabled"}
+
+    candidates = _journey_branch_candidates(
+        data,
+        list(getattr(solution, "journey_values", []) or []),
+        node.branch_constraints,
+        float(integer_tol),
+        incumbent_solution=incumbent_solution,
+        journey_pool=journey_pool,
+    )
+    if not candidates:
+        return False, {"reason": "no_fractional_branch_candidate"}
+    selected = _select_journey_branch_candidate(
+        candidates,
+        tie_tolerance=float(config.get("journey_branch_fractionality_tie_tolerance", 0.0)),
+        priority_mode=str(config.get("journey_branch_candidate_priority", "fractionality")),
+        node_id=node.id,
+        branch_depth=node.depth,
+        branch_score_map=_journey_branch_score_map_from_config(config),
+        branch_score_horizon_tie_tolerance=_optional_float_config(
+            config, "journey_branch_candidate_score_horizon_tie_tolerance"
+        ),
+        branch_score_horizon_min_score=float(
+            config.get("journey_branch_candidate_score_horizon_min_score", 0.0)
+        ),
+        constraints=node.branch_constraints,
+    )
+    metadata = {
+        "reason": "ok",
+        "task_i": int(selected["task_i"]),
+        "task_j": int(selected["task_j"]),
+        "pool_same_allowed": selected.get("pool_same_allowed"),
+        "pool_separate_allowed": selected.get("pool_separate_allowed"),
+        "pool_max_child_width": selected.get("pool_max_child_width"),
+        "pool_total_child_width": selected.get("pool_total_child_width"),
+        "pool_balance_gap": selected.get("pool_balance_gap"),
+        "max_pool_child_width": max_child_width,
+        "max_pool_total_child_width": max_total_width,
+        "max_pool_balance_gap": max_balance_gap,
+    }
+    if not guard_requested:
+        return True, metadata
+
+    pool_max = selected.get("pool_max_child_width")
+    pool_total = selected.get("pool_total_child_width")
+    pool_balance = selected.get("pool_balance_gap")
+    if pool_max is None or pool_total is None or pool_balance is None:
+        metadata["reason"] = "missing_selected_branch_width"
+        return False, metadata
+    if max_child_width is not None and int(pool_max) > int(max_child_width):
+        metadata["reason"] = "pool_child_width_exceeds_cap"
+        return False, metadata
+    if max_total_width is not None and int(pool_total) > int(max_total_width):
+        metadata["reason"] = "pool_total_width_exceeds_cap"
+        return False, metadata
+    if max_balance_gap is not None and int(pool_balance) > int(max_balance_gap):
+        metadata["reason"] = "pool_balance_gap_exceeds_cap"
+        return False, metadata
+    return True, metadata
 
 
 def _journey_should_early_branch_after_incomplete_no_column(
@@ -9116,6 +9961,35 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
             raise ValueError(
                 "journey_learning_required=True requires journey_learning_stagnation_forces_exact=False"
             )
+
+    if int(config.get("journey_gat_admission_max_delay_rounds", 1)) < 0:
+        raise ValueError("journey_gat_admission_max_delay_rounds must be nonnegative")
+    if int(config.get("journey_gat_admission_max_delay_queue_size", 0)) < 0:
+        raise ValueError("journey_gat_admission_max_delay_queue_size must be nonnegative")
+    support_overlap = float(
+        config.get(
+            "journey_gat_admission_support_overlap_threshold",
+            config.get("journey_learning_true_rc_support_overlap_threshold", 1.0),
+        )
+    )
+    if support_overlap < 0.0 or support_overlap > 1.0:
+        raise ValueError("journey_gat_admission_support_overlap_threshold must be in [0, 1]")
+    if int(config.get("journey_gat_admission_support_delay_min_depth", 1)) < 0:
+        raise ValueError("journey_gat_admission_support_delay_min_depth must be nonnegative")
+    valid_support_kinds = {
+        "active_support_changing",
+        "new_task_set",
+        "inactive_only_replacement",
+        "duplicate_or_other",
+    }
+    invalid_support_kinds = _journey_gat_admission_high_priority_support_kinds(config).difference(
+        valid_support_kinds
+    )
+    if invalid_support_kinds:
+        raise ValueError(
+            "journey_gat_admission_support_high_priority_kinds contains unsupported values: "
+            + ", ".join(sorted(invalid_support_kinds))
+        )
 
     completion_bound_required = bool(
         config.get(
@@ -10957,6 +11831,99 @@ def _journey_gat_admission_require_online_safe_hit_for_delay(config: dict[str, A
     return bool(config.get("journey_gat_admission_require_online_safe_hit_for_delay", True))
 
 
+def _journey_gat_admission_support_aware_enabled(config: dict[str, Any]) -> bool:
+    return bool(config.get("journey_gat_admission_support_aware_enabled", False))
+
+
+def _journey_gat_admission_support_context_ready(
+    active_task_sets: Iterable[frozenset[int]] | None,
+    dominant_task_set_costs: dict[frozenset[int], float] | None,
+) -> bool:
+    return active_task_sets is not None and dominant_task_set_costs is not None
+
+
+def _journey_gat_admission_high_priority_support_kinds(config: dict[str, Any]) -> set[str]:
+    configured = config.get("journey_gat_admission_support_high_priority_kinds")
+    if configured is None:
+        return {"active_support_changing", "new_task_set"}
+    return {str(item) for item in configured or tuple()}
+
+
+def _journey_gat_admission_demote_inactive_only(config: dict[str, Any]) -> bool:
+    return bool(config.get("journey_gat_admission_support_demote_inactive_only", True))
+
+
+def _journey_gat_admission_support_delay_min_depth(config: dict[str, Any]) -> int:
+    return max(0, int(config.get("journey_gat_admission_support_delay_min_depth", 1)))
+
+
+def _journey_gat_admission_support_overlap_threshold(config: dict[str, Any]) -> float:
+    return min(
+        1.0,
+        max(
+            0.0,
+            float(
+                config.get(
+                    "journey_gat_admission_support_overlap_threshold",
+                    config.get("journey_learning_true_rc_support_overlap_threshold", 1.0),
+                )
+            ),
+        ),
+    )
+
+
+def _journey_gat_support_admission_metadata(
+    journey: Any,
+    *,
+    active_task_sets: Iterable[frozenset[int]] | None,
+    dominant_task_set_costs: dict[frozenset[int], float] | None,
+    support_overlap_threshold: float,
+) -> dict[str, Any]:
+    task_set = frozenset(int(task) for task in getattr(journey, "task_set", tuple()))
+    active_sets = {
+        frozenset(int(task) for task in active)
+        for active in (active_task_sets or tuple())
+        if active
+    }
+    existing_costs = {
+        frozenset(int(task) for task in known): float(cost)
+        for known, cost in (dominant_task_set_costs or {}).items()
+    }
+
+    def overlaps_active() -> bool:
+        if not task_set or not active_sets:
+            return False
+        if float(support_overlap_threshold) >= 1.0:
+            return task_set in active_sets
+        for active in active_sets:
+            union = task_set.union(active)
+            if union and len(task_set.intersection(active)) / float(len(union)) >= float(support_overlap_threshold):
+                return True
+        return False
+
+    existing_cost = existing_costs.get(task_set)
+    is_new_task_set = task_set not in existing_costs
+    is_replacement = False
+    if existing_cost is not None:
+        is_replacement = float(getattr(journey, "cost", math.inf)) < float(existing_cost) - 1.0e-9
+    active_support_changing = bool(overlaps_active() and (is_new_task_set or is_replacement))
+    if active_support_changing:
+        category = "active_support_changing"
+    elif is_new_task_set:
+        category = "new_task_set"
+    elif is_replacement:
+        category = "inactive_only_replacement"
+    else:
+        category = "duplicate_or_other"
+    return {
+        "support_category": category,
+        "support_active_support_changing": bool(active_support_changing),
+        "support_new_task_set": bool(is_new_task_set),
+        "support_replacement": bool(is_replacement),
+        "support_inactive_only": bool(category in {"inactive_only_replacement", "duplicate_or_other"}),
+    }
+
+
 def _journey_gat_target_mode_admission_schedule(
     logger: FutureLogger,
     runtime: _JourneyGATAdmissionRuntime | None,
@@ -10970,6 +11937,8 @@ def _journey_gat_target_mode_admission_schedule(
     depth: int,
     pricing_kind: str,
     certificate_candidate: bool,
+    active_task_sets: Iterable[frozenset[int]] | None = None,
+    dominant_task_set_costs: dict[frozenset[int], float] | None = None,
 ) -> list[Any]:
     journeys_list = list(journeys)
     if runtime is None:
@@ -10989,6 +11958,36 @@ def _journey_gat_target_mode_admission_schedule(
             admitted_journeys=len(journeys_list),
         )
         return journeys_list
+
+    support_aware_enabled = bool(
+        _journey_gat_admission_support_aware_enabled(config)
+        and _journey_gat_admission_support_context_ready(active_task_sets, dominant_task_set_costs)
+    )
+    support_threshold = _journey_gat_admission_support_overlap_threshold(config)
+    support_high_priority_kinds = _journey_gat_admission_high_priority_support_kinds(config)
+    support_demote_inactive_only = bool(_journey_gat_admission_demote_inactive_only(config))
+    support_delay_allowed = bool(
+        support_aware_enabled
+        and int(depth) >= _journey_gat_admission_support_delay_min_depth(config)
+    )
+    support_metadata = [
+        _journey_gat_support_admission_metadata(
+            journey,
+            active_task_sets=active_task_sets,
+            dominant_task_set_costs=dominant_task_set_costs,
+            support_overlap_threshold=support_threshold,
+        )
+        if support_aware_enabled
+        else {}
+        for journey in journeys_list
+    ]
+    support_force_high_priority = [
+        bool(meta.get("support_category") in support_high_priority_kinds) for meta in support_metadata
+    ]
+    support_candidate_active = sum(int(bool(meta.get("support_active_support_changing"))) for meta in support_metadata)
+    support_candidate_new = sum(int(bool(meta.get("support_new_task_set"))) for meta in support_metadata)
+    support_candidate_inactive = sum(int(bool(meta.get("support_inactive_only"))) for meta in support_metadata)
+    support_online_high_priority_count = sum(int(value) for value in support_force_high_priority)
 
     mutating = _journey_gat_admission_mutating_pricing_kind(config, pricing_kind)
     before_certificate = bool(certificate_candidate)
@@ -11012,12 +12011,17 @@ def _journey_gat_target_mode_admission_schedule(
             candidate_journeys=len(journeys_list),
             admitted_journeys=len(admitted),
             released_journeys=len(released),
+            support_aware_admission_enabled=bool(support_aware_enabled),
+            support_candidate_active_support_changing_journeys=int(support_candidate_active),
+            support_candidate_new_task_set_journeys=int(support_candidate_new),
+            support_candidate_inactive_only_journeys=int(support_candidate_inactive),
+            support_online_high_priority_journeys=int(support_online_high_priority_count),
             exact_path_preserved=True,
         )
         return admitted
 
     safe_candidate_ids = _journey_gat_safe_candidate_ids(config)
-    if not _journey_gat_admission_safe_source_available(config, safe_candidate_ids):
+    if not (_journey_gat_admission_safe_source_available(config, safe_candidate_ids) or support_aware_enabled):
         released = _journey_gat_release_due_journeys(
             runtime,
             current_round=int(cg_iter),
@@ -11038,6 +12042,7 @@ def _journey_gat_target_mode_admission_schedule(
             admitted_journeys=len(admitted),
             released_journeys=len(released),
             safe_source_candidate_count=len(safe_candidate_ids),
+            support_aware_admission_enabled=bool(support_aware_enabled),
             exact_path_preserved=True,
         )
         return admitted
@@ -11047,7 +12052,7 @@ def _journey_gat_target_mode_admission_schedule(
     if (
         _journey_gat_admission_require_online_safe_hit_for_delay(config)
         and safe_candidate_ids
-        and online_safe_hit_count == 0
+        and online_safe_hit_count + support_online_high_priority_count == 0
     ):
         released = _journey_gat_release_due_journeys(
             runtime,
@@ -11070,19 +12075,56 @@ def _journey_gat_target_mode_admission_schedule(
             released_journeys=len(released),
             safe_source_candidate_count=len(safe_candidate_ids),
             online_safe_hit_journeys=0,
+            support_aware_admission_enabled=bool(support_aware_enabled),
+            support_online_high_priority_journeys=int(support_online_high_priority_count),
             exact_path_preserved=True,
         )
         return admitted
 
     admitted: list[Any] = []
     decisions = []
-    for journey, candidate_id in zip(journeys_list, candidate_ids):
+    support_high_priority_journeys = 0
+    support_delayed_inactive_only_journeys = 0
+    support_demoted_safe_hit_journeys = 0
+    support_delay_depth_blocked_journeys = 0
+    for journey, candidate_id, meta, force_support_high in zip(
+        journeys_list,
+        candidate_ids,
+        support_metadata,
+        support_force_high_priority,
+    ):
         true_rc = float(manual_journey_reduced_cost(journey, true_duals, cuts=cuts))
+        support_inactive_only = bool(meta.get("support_inactive_only", False))
+        force_support_inactive_admit = bool(
+            support_aware_enabled and support_inactive_only and not support_delay_allowed
+        )
+        support_delay_depth_blocked_journeys += int(force_support_inactive_admit)
+        demote_safe_hit = bool(
+            support_aware_enabled
+            and support_delay_allowed
+            and support_demote_inactive_only
+            and support_inactive_only
+            and candidate_id in safe_candidate_ids
+            and not force_support_high
+        )
+        support_demoted_safe_hit_journeys += int(demote_safe_hit)
+        candidate_metadata = dict(meta)
+        if force_support_high:
+            candidate_metadata["force_high_priority"] = True
+            candidate_metadata["force_high_priority_reason"] = (
+                "support_aware_active_or_new_true_negative"
+            )
+        elif force_support_inactive_admit:
+            candidate_metadata["force_high_priority"] = True
+            candidate_metadata["force_high_priority_reason"] = (
+                "support_aware_inactive_delay_depth_blocked"
+            )
         decision = runtime.queue.decide(
             GATAdmissionCandidate(
                 candidate_id=candidate_id,
                 true_reduced_cost=true_rc,
-                safe_and_in_distribution=candidate_id in safe_candidate_ids,
+                safe_and_in_distribution=bool(candidate_id in safe_candidate_ids and not demote_safe_hit),
+                metadata=candidate_metadata,
             ),
             current_round=int(cg_iter),
         )
@@ -11090,8 +12132,10 @@ def _journey_gat_target_mode_admission_schedule(
         if decision.decision == GAT_HIGH_PRIORITY:
             admitted.append(journey)
             runtime.delayed_journeys.pop(candidate_id, None)
+            support_high_priority_journeys += int(force_support_high)
         elif decision.decision == GAT_DELAY_QUEUE:
             runtime.delayed_journeys[candidate_id] = journey
+            support_delayed_inactive_only_journeys += int(support_inactive_only)
         elif decision.decision == GAT_REJECT_NONNEGATIVE_ONLY:
             runtime.delayed_journeys.pop(candidate_id, None)
     released = _journey_gat_release_due_journeys(
@@ -11120,6 +12164,15 @@ def _journey_gat_target_mode_admission_schedule(
         true_negative_journeys=int(counts.get("true_negative", 0)),
         safe_source_candidate_count=len(safe_candidate_ids),
         online_safe_hit_journeys=online_safe_hit_count,
+        support_aware_admission_enabled=bool(support_aware_enabled),
+        support_candidate_active_support_changing_journeys=int(support_candidate_active),
+        support_candidate_new_task_set_journeys=int(support_candidate_new),
+        support_candidate_inactive_only_journeys=int(support_candidate_inactive),
+        support_online_high_priority_journeys=int(support_online_high_priority_count),
+        support_high_priority_journeys=int(support_high_priority_journeys),
+        support_delayed_inactive_only_journeys=int(support_delayed_inactive_only_journeys),
+        support_demoted_safe_hit_journeys=int(support_demoted_safe_hit_journeys),
+        support_delay_depth_blocked_journeys=int(support_delay_depth_blocked_journeys),
         exact_path_preserved=True,
     )
     return admitted
@@ -11176,6 +12229,15 @@ def _log_journey_gat_admission_event(
     true_negative_journeys: int = 0,
     safe_source_candidate_count: int = 0,
     online_safe_hit_journeys: int = 0,
+    support_aware_admission_enabled: bool = False,
+    support_candidate_active_support_changing_journeys: int = 0,
+    support_candidate_new_task_set_journeys: int = 0,
+    support_candidate_inactive_only_journeys: int = 0,
+    support_online_high_priority_journeys: int = 0,
+    support_high_priority_journeys: int = 0,
+    support_delayed_inactive_only_journeys: int = 0,
+    support_demoted_safe_hit_journeys: int = 0,
+    support_delay_depth_blocked_journeys: int = 0,
     exact_path_preserved: bool = True,
 ) -> None:
     preflight = runtime.queue.certificate_preflight()
@@ -11197,6 +12259,17 @@ def _log_journey_gat_admission_event(
         true_negative_journeys=int(true_negative_journeys),
         safe_source_candidate_count=int(safe_source_candidate_count),
         online_safe_hit_journeys=int(online_safe_hit_journeys),
+        support_aware_admission_enabled=bool(support_aware_admission_enabled),
+        support_candidate_active_support_changing_journeys=int(
+            support_candidate_active_support_changing_journeys
+        ),
+        support_candidate_new_task_set_journeys=int(support_candidate_new_task_set_journeys),
+        support_candidate_inactive_only_journeys=int(support_candidate_inactive_only_journeys),
+        support_online_high_priority_journeys=int(support_online_high_priority_journeys),
+        support_high_priority_journeys=int(support_high_priority_journeys),
+        support_delayed_inactive_only_journeys=int(support_delayed_inactive_only_journeys),
+        support_demoted_safe_hit_journeys=int(support_demoted_safe_hit_journeys),
+        support_delay_depth_blocked_journeys=int(support_delay_depth_blocked_journeys),
         delay_queue_size=len(runtime.queue),
         delayed_negative_journeys=len(preflight.delayed_negative_ids),
         delayed_nonnegative_journeys=len(preflight.delayed_nonnegative_ids),
@@ -19152,16 +20225,32 @@ def _journey_tail_action_controller(
     *,
     rmp_objective: float | None,
     incumbent: float | None,
+    recent_active_support_additions: int | None = None,
+    recent_rmp_objective_progress: float | None = None,
 ) -> dict[str, Any]:
     true_rc_productivity = len(getattr(pricing, "journeys", tuple()) or tuple())
+    active_support_additions = None
+    if recent_active_support_additions is not None:
+        try:
+            active_support_additions = max(0, int(recent_active_support_additions))
+        except (TypeError, ValueError):
+            active_support_additions = None
+    rmp_progress = None
+    if recent_rmp_objective_progress is not None:
+        try:
+            rmp_progress = max(0.0, abs(float(recent_rmp_objective_progress)))
+        except (TypeError, ValueError):
+            rmp_progress = None
+        if rmp_progress is not None and not math.isfinite(rmp_progress):
+            rmp_progress = None
     if rmp_objective is None or incumbent is None:
         return {
             "tail_action": "UNKNOWN",
             "tail_action_reason": "missing_rmp_or_incumbent",
             "rmp_to_incumbent_gap": None,
             "fathom_possible_if_rc_zero": False,
-            "recent_active_support_additions": None,
-            "recent_rmp_objective_progress": None,
+            "recent_active_support_additions": active_support_additions,
+            "recent_rmp_objective_progress": rmp_progress,
             "recent_true_rc_productivity": int(true_rc_productivity),
         }
     try:
@@ -19173,8 +20262,8 @@ def _journey_tail_action_controller(
             "tail_action_reason": "invalid_rmp_or_incumbent",
             "rmp_to_incumbent_gap": None,
             "fathom_possible_if_rc_zero": False,
-            "recent_active_support_additions": None,
-            "recent_rmp_objective_progress": None,
+            "recent_active_support_additions": active_support_additions,
+            "recent_rmp_objective_progress": rmp_progress,
             "recent_true_rc_productivity": int(true_rc_productivity),
         }
     if not math.isfinite(rmp) or not math.isfinite(ub):
@@ -19183,8 +20272,8 @@ def _journey_tail_action_controller(
             "tail_action_reason": "nonfinite_rmp_or_incumbent",
             "rmp_to_incumbent_gap": None,
             "fathom_possible_if_rc_zero": False,
-            "recent_active_support_additions": None,
-            "recent_rmp_objective_progress": None,
+            "recent_active_support_additions": active_support_additions,
+            "recent_rmp_objective_progress": rmp_progress,
             "recent_true_rc_productivity": int(true_rc_productivity),
         }
     integer_tol = float(config.get("integer_tol", 1.0e-6))
@@ -19200,16 +20289,70 @@ def _journey_tail_action_controller(
     critical_count = int(getattr(pricing, "frontier_critical_token_count", 0))
     floor_multiplicity = int(getattr(pricing, "frontier_floor_multiplicity", 0))
     fathom_possible = bool(float(rmp) >= float(ub) - float(integer_tol))
-    if fathom_possible:
-        if critical_count <= int(refinement_cap) and floor_multiplicity <= int(refinement_cap):
+    raw_frontier_target = getattr(pricing, "frontier_fathom_rc_target", None)
+    frontier_target = None
+    if raw_frontier_target is not None:
+        try:
+            frontier_target = float(raw_frontier_target)
+        except (TypeError, ValueError):
+            frontier_target = None
+        if frontier_target is not None and not math.isfinite(float(frontier_target)):
+            frontier_target = None
+    raw_global_lb = getattr(pricing, "global_remaining_rc_lb", None)
+    global_lb = None
+    if raw_global_lb is not None:
+        try:
+            global_lb = float(raw_global_lb)
+        except (TypeError, ValueError):
+            global_lb = None
+        if global_lb is not None and not math.isfinite(float(global_lb)):
+            global_lb = None
+    frontier_coverage_complete = bool(getattr(pricing, "global_remaining_rc_lb_coverage_complete", False))
+    frontier_lb_valid = bool(getattr(pricing, "global_remaining_rc_lb_valid", False))
+    objective_progress_eps = max(
+        0.0,
+        float(config.get("journey_tail_action_rmp_objective_progress_eps", integer_tol)),
+    )
+    if int(true_rc_productivity) > 0 and fathom_possible:
+        action = "CONTINUE_COLUMN_GENERATION"
+        reason = "fathom_possible_but_negative_column_requires_lp_closure"
+    elif fathom_possible:
+        if frontier_target is None:
+            action = "BROAD_PLATEAU_FALLBACK"
+            reason = "fathom_possible_missing_refinement_target"
+        elif not bool(frontier_lb_valid and frontier_coverage_complete):
+            action = "BROAD_PLATEAU_FALLBACK"
+            reason = "fathom_possible_frontier_coverage_incomplete"
+        elif global_lb is None:
+            action = "BROAD_PLATEAU_FALLBACK"
+            reason = "fathom_possible_missing_global_rc_lb"
+        elif float(global_lb) >= float(frontier_target) - float(integer_tol):
+            action = "CONTINUE_COLUMN_GENERATION"
+            reason = "fathom_possible_frontier_already_at_target"
+        elif critical_count <= int(refinement_cap) and floor_multiplicity <= int(refinement_cap):
             action = "FRONTIER_REFINEMENT"
             reason = "fathom_possible_sparse_low_waterline"
         else:
             action = "BROAD_PLATEAU_FALLBACK"
             reason = "fathom_possible_broad_low_waterline"
     elif int(true_rc_productivity) > 0:
-        action = "CONTINUE_COLUMN_GENERATION"
-        reason = "rmp_below_incumbent_pricing_productive_for_lp_closure"
+        objective_moving = bool(rmp_progress is not None and rmp_progress > objective_progress_eps)
+        active_support_moving = bool(
+            active_support_additions is not None and int(active_support_additions) > 0
+        )
+        missing_productivity_signals = active_support_additions is None and rmp_progress is None
+        if active_support_moving:
+            action = "CONTINUE_COLUMN_GENERATION"
+            reason = "rmp_below_incumbent_pricing_active_support_productive"
+        elif objective_moving:
+            action = "CONTINUE_COLUMN_GENERATION"
+            reason = "rmp_below_incumbent_pricing_objective_moving"
+        elif missing_productivity_signals or active_support_additions is None or rmp_progress is None:
+            action = "CONTINUE_COLUMN_GENERATION"
+            reason = "rmp_below_incumbent_pricing_productivity_signals_incomplete"
+        else:
+            action = "EARLY_BRANCH"
+            reason = "rmp_below_incumbent_weak_columns_no_active_or_objective_progress"
     else:
         action = "EARLY_BRANCH"
         reason = "rmp_below_incumbent_pricing_unproductive_for_fathom"
@@ -19218,10 +20361,276 @@ def _journey_tail_action_controller(
         "tail_action_reason": reason,
         "rmp_to_incumbent_gap": float(ub) - float(rmp),
         "fathom_possible_if_rc_zero": bool(fathom_possible),
-        "recent_active_support_additions": None,
-        "recent_rmp_objective_progress": None,
+        "recent_active_support_additions": active_support_additions,
+        "recent_rmp_objective_progress": rmp_progress,
         "recent_true_rc_productivity": int(true_rc_productivity),
     }
+
+
+def _journey_should_early_branch_on_tail_action(
+    config: dict[str, Any],
+    node: JourneyNode,
+    cg_iter: int,
+    solution: Any,
+    integer_tol: float,
+    tail_action_payload: dict[str, Any],
+    *,
+    added_columns: int,
+    remaining: float | None = None,
+) -> bool:
+    """Return whether a D-class tail-action decision may branch now.
+
+    This is exact-safe only as an early branching rule.  It does not certify the
+    current node and the caller must keep using the inherited non-exact bound.
+    """
+
+    if not bool(config.get("journey_tail_action_early_branch_enabled", False)):
+        return False
+    if str(tail_action_payload.get("tail_action", "")) != "EARLY_BRANCH":
+        return False
+    if bool(tail_action_payload.get("fathom_possible_if_rc_zero", False)):
+        return False
+    if bool(config.get("journey_tail_action_early_branch_require_complete_productivity_signals", True)):
+        if tail_action_payload.get("recent_active_support_additions") is None:
+            return False
+        if tail_action_payload.get("recent_rmp_objective_progress") is None:
+            return False
+
+    raw_reasons = config.get(
+        "journey_tail_action_early_branch_reasons",
+        "rmp_below_incumbent_weak_columns_no_active_or_objective_progress",
+    )
+    if isinstance(raw_reasons, str):
+        allowed_reasons = {part.strip() for part in raw_reasons.split(",") if part.strip()}
+    else:
+        allowed_reasons = {str(part) for part in (raw_reasons or tuple())}
+    reason = str(tail_action_payload.get("tail_action_reason", ""))
+    if allowed_reasons and reason not in allowed_reasons:
+        return False
+
+    min_added = max(0, int(config.get("journey_tail_action_early_branch_min_added_columns", 1)))
+    if int(added_columns) < min_added:
+        return False
+    min_true_rc = max(0, int(config.get("journey_tail_action_early_branch_min_true_rc_productivity", 1)))
+    if int(tail_action_payload.get("recent_true_rc_productivity") or 0) < min_true_rc:
+        return False
+    min_gap = max(0.0, float(config.get("journey_tail_action_early_branch_min_rmp_to_incumbent_gap", 0.0)))
+    gap = tail_action_payload.get("rmp_to_incumbent_gap")
+    if gap is None:
+        return False
+    try:
+        if float(gap) < min_gap:
+            return False
+    except (TypeError, ValueError):
+        return False
+    if remaining is not None:
+        min_remaining = max(0.0, float(config.get("journey_tail_action_early_branch_min_remaining", 0.0)))
+        if float(remaining) < min_remaining:
+            return False
+
+    max_depth = int(
+        config.get(
+            "journey_tail_action_early_branch_max_depth",
+            config.get("journey_early_branching_max_depth", 0),
+        )
+    )
+    if int(node.depth) > max_depth:
+        return False
+    if int(node.depth) > 0:
+        min_cg_iter = int(
+            config.get(
+                "journey_tail_action_early_branch_child_min_cg_iter",
+                config.get(
+                    "journey_tail_action_early_branch_min_cg_iter",
+                    config.get(
+                        "journey_early_branching_child_min_cg_iter",
+                        config.get("journey_early_branching_min_cg_iter", 1),
+                    ),
+                ),
+            )
+        )
+    else:
+        min_cg_iter = int(
+            config.get(
+                "journey_tail_action_early_branch_min_cg_iter",
+                config.get("journey_early_branching_min_cg_iter", 1),
+            )
+        )
+    if int(cg_iter) < max(1, min_cg_iter):
+        return False
+    if _journey_lp_integral(getattr(solution, "journey_values", []) or [], float(integer_tol)):
+        return False
+    if _choose_journey_branch_placeholder(solution, node.branch_constraints, float(integer_tol)) is None:
+        return False
+    return True
+
+
+def _journey_should_early_branch_on_tail_action_no_column(
+    config: dict[str, Any],
+    node: JourneyNode,
+    cg_iter: int,
+    solution: Any,
+    integer_tol: float,
+    pricing: Any,
+    tail_action_payload: dict[str, Any],
+    *,
+    remaining: float | None = None,
+    certificate_candidate: bool = False,
+    data: FutureData | None = None,
+    incumbent_solution: dict[int, list[Any]] | None = None,
+    journey_pool: JourneyPool | None = None,
+) -> bool:
+    """Return whether a local no-column D-class tail may branch before final probe.
+
+    This is exact-safe only as a search scheduling rule. It does not certify
+    the current node; children must inherit the existing non-exact lower bound.
+    """
+
+    if not bool(config.get("journey_tail_action_no_column_early_branch_enabled", False)):
+        return False
+    if getattr(pricing, "journeys", None):
+        return False
+    if bool(config.get("journey_tail_action_no_column_early_branch_require_local_no_column", True)):
+        if _journey_pricing_state(pricing) != PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED:
+            return False
+    elif not bool(getattr(pricing, "exhausted", False)):
+        return False
+    if bool(certificate_candidate) and bool(
+        config.get("journey_tail_action_no_column_early_branch_disable_on_certificate_candidate", False)
+    ):
+        return False
+    if str(tail_action_payload.get("tail_action", "")) != "EARLY_BRANCH":
+        return False
+    if bool(tail_action_payload.get("fathom_possible_if_rc_zero", False)):
+        return False
+    if bool(
+        config.get(
+            "journey_tail_action_no_column_early_branch_require_complete_productivity_signals",
+            True,
+        )
+    ):
+        if tail_action_payload.get("recent_active_support_additions") is None:
+            return False
+        if tail_action_payload.get("recent_rmp_objective_progress") is None:
+            return False
+
+    raw_reasons = config.get(
+        "journey_tail_action_no_column_early_branch_reasons",
+        "rmp_below_incumbent_pricing_unproductive_for_fathom",
+    )
+    if isinstance(raw_reasons, str):
+        allowed_reasons = {part.strip() for part in raw_reasons.split(",") if part.strip()}
+    else:
+        allowed_reasons = {str(part) for part in (raw_reasons or tuple())}
+    reason = str(tail_action_payload.get("tail_action_reason", ""))
+    if allowed_reasons and reason not in allowed_reasons:
+        return False
+
+    min_true_rc = max(
+        0,
+        int(config.get("journey_tail_action_no_column_early_branch_min_true_rc_productivity", 0)),
+    )
+    if int(tail_action_payload.get("recent_true_rc_productivity") or 0) < min_true_rc:
+        return False
+    min_gap = max(
+        0.0,
+        float(config.get("journey_tail_action_no_column_early_branch_min_rmp_to_incumbent_gap", 0.0)),
+    )
+    gap = tail_action_payload.get("rmp_to_incumbent_gap")
+    if gap is None:
+        return False
+    try:
+        if float(gap) < min_gap:
+            return False
+    except (TypeError, ValueError):
+        return False
+    if remaining is not None:
+        min_remaining = max(
+            0.0,
+            float(config.get("journey_tail_action_no_column_early_branch_min_remaining", 0.0)),
+        )
+        if float(remaining) < min_remaining:
+            return False
+
+    min_depth = max(0, int(config.get("journey_tail_action_no_column_early_branch_min_depth", 1)))
+    if int(node.depth) < min_depth:
+        return False
+    max_depth = int(
+        config.get(
+            "journey_tail_action_no_column_early_branch_max_depth",
+            config.get(
+                "journey_tail_action_early_branch_max_depth",
+                config.get("journey_early_branching_max_depth", 0),
+            ),
+        )
+    )
+    if int(node.depth) > max_depth:
+        return False
+    if int(node.depth) > 0:
+        min_cg_iter = int(
+            config.get(
+                "journey_tail_action_no_column_early_branch_child_min_cg_iter",
+                config.get(
+                    "journey_tail_action_no_column_early_branch_min_cg_iter",
+                    config.get(
+                        "journey_tail_action_early_branch_child_min_cg_iter",
+                        config.get("journey_tail_action_early_branch_min_cg_iter", 1),
+                    ),
+                ),
+            )
+        )
+    else:
+        min_cg_iter = int(
+            config.get(
+                "journey_tail_action_no_column_early_branch_min_cg_iter",
+                config.get("journey_tail_action_early_branch_min_cg_iter", 1),
+            )
+        )
+    if int(cg_iter) < max(1, min_cg_iter):
+        return False
+    if _journey_lp_integral(getattr(solution, "journey_values", []) or [], float(integer_tol)):
+        return False
+    if _choose_journey_branch_placeholder(solution, node.branch_constraints, float(integer_tol)) is None:
+        return False
+    width_guard_passes, _width_guard = _journey_tail_action_no_column_branch_width_guard(
+        config,
+        data,
+        node,
+        solution,
+        float(integer_tol),
+        incumbent_solution=incumbent_solution,
+        journey_pool=journey_pool,
+    )
+    if not width_guard_passes:
+        return False
+    return True
+
+
+def _journey_recent_active_support_additions(
+    recent_changed_task_sets: tuple[frozenset[int], ...] | list[frozenset[int]],
+    active_task_sets: set[frozenset[int]] | frozenset[frozenset[int]] | None,
+) -> int | None:
+    changed = {
+        frozenset(int(task) for task in task_set)
+        for task_set in (recent_changed_task_sets or tuple())
+        if task_set
+    }
+    if not changed or active_task_sets is None:
+        return None
+    active = {frozenset(int(task) for task in task_set) for task_set in active_task_sets if task_set}
+    return int(len(changed.intersection(active)))
+
+
+def _journey_recent_rmp_objective_progress(objective_delta: float | None) -> float | None:
+    if objective_delta is None:
+        return None
+    try:
+        progress = abs(float(objective_delta))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(progress):
+        return None
+    return float(progress)
 
 
 def _log_journey_corrected_node_bound_audit(
@@ -19240,6 +20649,8 @@ def _log_journey_corrected_node_bound_audit(
     node_id: int,
     depth: int,
     incumbent: float | None = None,
+    recent_active_support_additions: int | None = None,
+    recent_rmp_objective_progress: float | None = None,
 ) -> _JourneyCorrectedNodeBound:
     corrected = _journey_pricing_corrected_node_bound(
         pricing,
@@ -19249,12 +20660,16 @@ def _log_journey_corrected_node_bound_audit(
         rc_bound_safety_eps=float(config.get("journey_corrected_node_bound_rc_safety_eps", 0.0)),
         node_bound_safety_eps=float(config.get("journey_corrected_node_bound_safety_eps", 0.0)),
     )
-    if bool(config.get("journey_corrected_node_bound_audit_enabled", False)):
+    if bool(config.get("journey_corrected_node_bound_audit_enabled", False)) or bool(
+        config.get("journey_tail_action_audit_enabled", False)
+    ):
         tail_action_payload = _journey_tail_action_controller(
             pricing,
             config,
             rmp_objective=rmp_objective,
             incumbent=incumbent,
+            recent_active_support_additions=recent_active_support_additions,
+            recent_rmp_objective_progress=recent_rmp_objective_progress,
         )
         logger.log(
             "journey_corrected_node_bound_audit",
@@ -19274,7 +20689,9 @@ def _log_journey_corrected_node_bound_audit(
             else round(float(tail_action_payload["rmp_to_incumbent_gap"]), 9),
             fathom_possible_if_rc_zero=bool(tail_action_payload.get("fathom_possible_if_rc_zero", False)),
             recent_active_support_additions=tail_action_payload.get("recent_active_support_additions"),
-            recent_rmp_objective_progress=tail_action_payload.get("recent_rmp_objective_progress"),
+            recent_rmp_objective_progress=None
+            if tail_action_payload.get("recent_rmp_objective_progress") is None
+            else round(float(tail_action_payload["recent_rmp_objective_progress"]), 9),
             recent_true_rc_productivity=int(tail_action_payload.get("recent_true_rc_productivity", 0)),
             rmp_fleet_limit_used=None
             if corrected.rmp_fleet_limit_used is None

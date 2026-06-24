@@ -1,0 +1,684 @@
+#!/usr/bin/env python3
+"""Audit Journey Tail Action Controller decisions from solver JSONL logs."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from collections import Counter
+import json
+from pathlib import Path
+from typing import Any, Iterable
+
+
+DEFAULT_OUTPUT_DIR = Path("BPC_future/results/journey_tail_action_controller_audit_20260623")
+DEFAULT_REPORT = Path(
+    "BPC_future/logical_graph/run_reports/"
+    "20260623_bpc_future_journey_tail_action_controller_audit_zh.md"
+)
+
+
+ROW_FIELDS = [
+    "log_file",
+    "time",
+    "node_id",
+    "depth",
+    "cg_iter",
+    "pricing_kind",
+    "pricing_status",
+    "pricing_reason",
+    "valid",
+    "reason",
+    "rmp_objective",
+    "incumbent",
+    "rmp_to_incumbent_gap",
+    "tail_action",
+    "tail_action_reason",
+    "fathom_possible_if_rc_zero",
+    "recent_active_support_additions",
+    "recent_rmp_objective_progress",
+    "recent_true_rc_productivity",
+    "global_remaining_rc_lb",
+    "corrected_node_lb",
+    "frontier_fathom_rc_target",
+    "frontier_critical_token_count",
+    "frontier_floor_multiplicity",
+    "frontier_floor_band_count_0_1",
+    "frontier_floor_band_count_1",
+    "frontier_floor_band_count_5",
+    "frontier_floor_band_count_10",
+    "frontier_target_band_count",
+    "frontier_region_count",
+    "frontier_micro_expansion_attempted",
+    "frontier_micro_expansion_expanded",
+    "frontier_micro_expansion_children",
+    "frontier_micro_expansion_reason",
+]
+
+
+EARLY_BRANCH_FIELDS = [
+    "log_file",
+    "time",
+    "node_id",
+    "depth",
+    "cg_iter",
+    "trigger",
+    "tail_action",
+    "tail_action_no_column",
+    "reason",
+    "added_journeys",
+    "inherited_lower_bound",
+    "rmp_objective",
+    "rmp_to_incumbent_gap",
+    "recent_active_support_additions",
+    "recent_rmp_objective_progress",
+    "recent_true_rc_productivity",
+    "previous_status",
+    "previous_reason",
+    "previous_pricing_state",
+    "previous_best_reduced_cost",
+    "remaining",
+    "certificate_candidate",
+    "no_column_branch_task_i",
+    "no_column_branch_task_j",
+    "no_column_branch_pool_same_allowed",
+    "no_column_branch_pool_separate_allowed",
+    "no_column_branch_pool_max_child_width",
+    "no_column_branch_pool_total_child_width",
+    "no_column_branch_pool_balance_gap",
+    "no_column_branch_width_guard_reason",
+    "exact_bound_available",
+    "child_lower_bound_exact",
+    "queued_child_count",
+    "queued_child_ids",
+    "queued_child_lower_bound_exact_count",
+    "queued_child_nonexact_count",
+    "queued_child_min_allowed_current_journeys",
+    "queued_child_max_allowed_current_journeys",
+    "queued_child_min_queue_priority_width",
+    "queued_child_max_queue_priority_width",
+    "observed_child_audit_count",
+    "observed_child_actions",
+    "observed_child_pricing_kinds",
+    "child_direct_started_count",
+    "child_direct_unstarted_count",
+    "child_first_start_delay",
+    "child_subtree_node_count",
+    "child_subtree_node_start_count",
+    "child_subtree_max_depth",
+    "child_subtree_pricing_event_count",
+    "child_subtree_negative_pricing_event_count",
+    "child_subtree_completion_retry_count",
+    "child_subtree_early_branch_trigger_count",
+    "child_subtree_no_column_early_branch_trigger_count",
+    "child_subtree_tail_action_audit_count",
+    "child_subtree_last_event_time",
+    "child_subtree_observed_wall_span",
+]
+
+
+def _iter_jsonl(paths: Iterable[Path]) -> Iterable[Path]:
+    for path in paths:
+        if path.is_file() and path.suffix == ".jsonl":
+            yield path
+        elif path.is_dir():
+            yield from sorted(path.rglob("*.jsonl"))
+
+
+def _read_events(path: Path) -> Iterable[dict[str, Any]]:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            yield record
+
+
+def _tail_action_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | None:
+    if record.get("event") != "journey_corrected_node_bound_audit":
+        return None
+    row = {"log_file": str(path)}
+    for key in ROW_FIELDS:
+        if key == "log_file":
+            continue
+        row[key] = record.get(key)
+    return row
+
+
+def _early_branch_trigger_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | None:
+    if record.get("event") != "journey_early_branch_trigger":
+        return None
+    row = {"log_file": str(path)}
+    for key in EARLY_BRANCH_FIELDS:
+        if key == "log_file":
+            continue
+        row[key] = record.get(key)
+    return row
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=ROW_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field) for field in ROW_FIELDS})
+
+
+def _write_early_branch_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=EARLY_BRANCH_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field) for field in EARLY_BRANCH_FIELDS})
+
+
+def _child_queue_summary(children: list[dict[str, Any]]) -> dict[str, Any]:
+    child_ids = [
+        str(child.get("child_node_id"))
+        for child in children
+        if child.get("child_node_id") is not None
+    ]
+    exact_flags = [bool(child.get("lower_bound_exact")) for child in children]
+    allowed = [
+        int(child.get("allowed_current_journeys"))
+        for child in children
+        if child.get("allowed_current_journeys") is not None
+    ]
+    queue_priorities = [
+        int(child.get("queue_priority_width"))
+        for child in children
+        if child.get("queue_priority_width") is not None
+    ]
+    return {
+        "queued_child_count": len(children),
+        "queued_child_ids": ",".join(child_ids),
+        "queued_child_lower_bound_exact_count": sum(1 for flag in exact_flags if flag),
+        "queued_child_nonexact_count": sum(1 for flag in exact_flags if not flag),
+        "queued_child_min_allowed_current_journeys": min(allowed) if allowed else None,
+        "queued_child_max_allowed_current_journeys": max(allowed) if allowed else None,
+        "queued_child_min_queue_priority_width": min(queue_priorities) if queue_priorities else None,
+        "queued_child_max_queue_priority_width": max(queue_priorities) if queue_priorities else None,
+    }
+
+
+def _observed_child_summary(
+    children: list[dict[str, Any]],
+    audit_rows_by_node: dict[tuple[str, int], list[dict[str, Any]]],
+) -> dict[str, Any]:
+    observed_rows: list[dict[str, Any]] = []
+    actions: Counter[str] = Counter()
+    pricing_kinds: Counter[str] = Counter()
+    for child in children:
+        child_id = child.get("child_node_id")
+        if child_id is None:
+            continue
+        try:
+            node_id = int(child_id)
+        except (TypeError, ValueError):
+            continue
+        rows = audit_rows_by_node.get((str(child.get("log_file")), node_id), [])
+        if not rows:
+            continue
+        observed_rows.extend(rows)
+        for row in rows:
+            actions[str(row.get("tail_action") or "")] += 1
+            pricing_kinds[str(row.get("pricing_kind") or "")] += 1
+    return {
+        "observed_child_audit_count": len(observed_rows),
+        "observed_child_actions": ",".join(f"{key}:{value}" for key, value in sorted(actions.items())),
+        "observed_child_pricing_kinds": ",".join(
+            f"{key}:{value}" for key, value in sorted(pricing_kinds.items())
+        ),
+    }
+
+
+def _node_id_from_record(record: dict[str, Any]) -> int | None:
+    node_id = record.get("node_id")
+    if node_id is None:
+        node_id = record.get("child_node_id")
+    if node_id is None:
+        return None
+    try:
+        return int(node_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def _event_time(record: dict[str, Any]) -> float | None:
+    try:
+        return float(record.get("time"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _pricing_event_has_negative_signal(event: dict[str, Any]) -> bool:
+    if str(event.get("pricing_state") or "") == "FOUND_NEGATIVE":
+        return True
+    best_reduced_cost = event.get("best_reduced_cost")
+    if best_reduced_cost is not None:
+        try:
+            if float(best_reduced_cost) < -1.0e-9:
+                return True
+        except (TypeError, ValueError):
+            pass
+    reason = str(event.get("reason") or "")
+    if "no_negative" in reason:
+        return False
+    return "negative_journey" in reason or "weak_negative" in reason
+
+
+def _descendant_node_ids(
+    log_file: str,
+    roots: list[int],
+    child_queued_by_parent: dict[tuple[str, int], list[dict[str, Any]]],
+) -> set[int]:
+    seen: set[int] = set()
+    pending = list(roots)
+    while pending:
+        node_id = int(pending.pop(0))
+        if node_id in seen:
+            continue
+        seen.add(node_id)
+        for child in child_queued_by_parent.get((log_file, node_id), []):
+            child_id = child.get("child_node_id")
+            if child_id is None:
+                continue
+            try:
+                parsed = int(child_id)
+            except (TypeError, ValueError):
+                continue
+            if parsed not in seen:
+                pending.append(parsed)
+    return seen
+
+
+def _subtree_activity_summary(
+    trigger_row: dict[str, Any],
+    children: list[dict[str, Any]],
+    child_queued_by_parent: dict[tuple[str, int], list[dict[str, Any]]],
+    events_by_node: dict[tuple[str, int], list[dict[str, Any]]],
+    audit_rows_by_node: dict[tuple[str, int], list[dict[str, Any]]],
+) -> dict[str, Any]:
+    log_file = str(trigger_row.get("log_file"))
+    direct_child_ids: list[int] = []
+    for child in children:
+        child_id = child.get("child_node_id")
+        if child_id is None:
+            continue
+        try:
+            direct_child_ids.append(int(child_id))
+        except (TypeError, ValueError):
+            continue
+    subtree_ids = _descendant_node_ids(log_file, direct_child_ids, child_queued_by_parent)
+    direct_start_times: list[float] = []
+    all_events: list[dict[str, Any]] = []
+    depths: list[int] = []
+    for node_id in sorted(subtree_ids):
+        node_events = events_by_node.get((log_file, int(node_id)), [])
+        all_events.extend(node_events)
+        for event in node_events:
+            if event.get("event") == "journey_node_start":
+                time_value = _event_time(event)
+                if int(node_id) in direct_child_ids and time_value is not None:
+                    direct_start_times.append(time_value)
+            if event.get("depth") is not None:
+                try:
+                    depths.append(int(event.get("depth")))
+                except (TypeError, ValueError):
+                    pass
+        for row in audit_rows_by_node.get((log_file, int(node_id)), []):
+            if row.get("depth") is not None:
+                try:
+                    depths.append(int(row.get("depth")))
+                except (TypeError, ValueError):
+                    pass
+    for child in children:
+        if child.get("depth") is not None:
+            try:
+                depths.append(int(child.get("depth")))
+            except (TypeError, ValueError):
+                pass
+    pricing_events = [event for event in all_events if event.get("event") == "journey_pricing"]
+    negative_pricing_events = [
+        event
+        for event in pricing_events
+        if _pricing_event_has_negative_signal(event)
+    ]
+    completion_retry_events = [
+        event
+        for event in all_events
+        if event.get("event") == "journey_exact_pricing_completion_bound_retry"
+        or str(event.get("pricing_kind") or "") == "exact_completion_bound_retry"
+    ]
+    subtree_early_branch_events = [
+        event for event in all_events if event.get("event") == "journey_early_branch_trigger"
+    ]
+    no_column_subtree_early_branch_events = [
+        event for event in subtree_early_branch_events if bool(event.get("tail_action_no_column"))
+    ]
+    node_start_count = sum(1 for event in all_events if event.get("event") == "journey_node_start")
+    audit_count = sum(
+        len(audit_rows_by_node.get((log_file, int(node_id)), []))
+        for node_id in subtree_ids
+    )
+    event_times = [
+        time_value
+        for time_value in (_event_time(event) for event in all_events)
+        if time_value is not None
+    ]
+    trigger_time = _event_time(trigger_row)
+    first_start_delay = None
+    if direct_start_times and trigger_time is not None:
+        first_start_delay = min(direct_start_times) - trigger_time
+    observed_span = None
+    last_event_time = max(event_times) if event_times else None
+    if last_event_time is not None and trigger_time is not None:
+        observed_span = last_event_time - trigger_time
+    return {
+        "child_direct_started_count": len(set(int(node_id) for node_id in direct_child_ids if any(
+            event.get("event") == "journey_node_start"
+            for event in events_by_node.get((log_file, int(node_id)), [])
+        ))),
+        "child_direct_unstarted_count": max(
+            0,
+            len(set(direct_child_ids))
+            - len(set(int(node_id) for node_id in direct_child_ids if any(
+                event.get("event") == "journey_node_start"
+                for event in events_by_node.get((log_file, int(node_id)), [])
+            ))),
+        ),
+        "child_first_start_delay": None if first_start_delay is None else round(float(first_start_delay), 6),
+        "child_subtree_node_count": len(subtree_ids),
+        "child_subtree_node_start_count": int(node_start_count),
+        "child_subtree_max_depth": max(depths) if depths else None,
+        "child_subtree_pricing_event_count": len(pricing_events),
+        "child_subtree_negative_pricing_event_count": len(negative_pricing_events),
+        "child_subtree_completion_retry_count": len(completion_retry_events),
+        "child_subtree_early_branch_trigger_count": len(subtree_early_branch_events),
+        "child_subtree_no_column_early_branch_trigger_count": len(no_column_subtree_early_branch_events),
+        "child_subtree_tail_action_audit_count": int(audit_count),
+        "child_subtree_last_event_time": None if last_event_time is None else round(float(last_event_time), 6),
+        "child_subtree_observed_wall_span": None if observed_span is None else round(float(observed_span), 6),
+    }
+
+
+def audit_tail_actions(
+    paths: list[Path],
+    output_dir: Path,
+    report: Path,
+    *,
+    sample_limit: int = 20,
+) -> dict[str, Any]:
+    log_paths = list(_iter_jsonl(paths))
+    rows: list[dict[str, Any]] = []
+    early_branch_rows: list[dict[str, Any]] = []
+    child_queued_by_parent: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    audit_rows_by_node: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    events_by_node: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for path in log_paths:
+        for record in _read_events(path):
+            event_node_id = _node_id_from_record(record)
+            if event_node_id is not None:
+                events_by_node.setdefault((str(path), int(event_node_id)), []).append(
+                    {"log_file": str(path), **record}
+                )
+            row = _tail_action_row(path, record)
+            if row is not None:
+                rows.append(row)
+                node_id = row.get("node_id")
+                if node_id is not None:
+                    try:
+                        audit_rows_by_node.setdefault((str(path), int(node_id)), []).append(row)
+                    except (TypeError, ValueError):
+                        pass
+            branch_row = _early_branch_trigger_row(path, record)
+            if branch_row is not None:
+                early_branch_rows.append(branch_row)
+            if record.get("event") == "journey_child_queued":
+                parent_id = record.get("parent_node_id")
+                if parent_id is not None:
+                    child_row = {"log_file": str(path), **record}
+                    try:
+                        child_queued_by_parent.setdefault((str(path), int(parent_id)), []).append(child_row)
+                    except (TypeError, ValueError):
+                        pass
+
+    for row in early_branch_rows:
+        node_id = row.get("node_id")
+        children: list[dict[str, Any]] = []
+        if node_id is not None:
+            try:
+                children = child_queued_by_parent.get((str(row.get("log_file")), int(node_id)), [])
+            except (TypeError, ValueError):
+                children = []
+        row.update(_child_queue_summary(children))
+        row.update(_observed_child_summary(children, audit_rows_by_node))
+        row.update(
+            _subtree_activity_summary(
+                row,
+                children,
+                child_queued_by_parent,
+                events_by_node,
+                audit_rows_by_node,
+            )
+        )
+
+    action_counts = Counter(str(row.get("tail_action") or "") for row in rows)
+    reason_counts = Counter(str(row.get("tail_action_reason") or "") for row in rows)
+    pricing_kind_counts = Counter(str(row.get("pricing_kind") or "") for row in rows)
+    node_counts = Counter(f"depth={row.get('depth')}|node={row.get('node_id')}" for row in rows)
+    fathom_possible_count = sum(1 for row in rows if bool(row.get("fathom_possible_if_rc_zero")))
+    micro_attempt_rows = [
+        row for row in rows
+        if int(row.get("frontier_micro_expansion_attempted") or 0) > 0
+    ]
+    active_support_rows = [
+        row for row in rows
+        if int(row.get("recent_active_support_additions") or 0) > 0
+    ]
+    rmp_progress_rows = [
+        row for row in rows
+        if float(row.get("recent_rmp_objective_progress") or 0.0) > 0.0
+    ]
+    a_class_rows = [row for row in rows if row.get("tail_action") == "FRONTIER_REFINEMENT"]
+    b_class_rows = [row for row in rows if row.get("tail_action") == "BROAD_PLATEAU_FALLBACK"]
+    c_class_rows = [row for row in rows if row.get("tail_action") == "CONTINUE_COLUMN_GENERATION"]
+    d_class_rows = [row for row in rows if row.get("tail_action") == "EARLY_BRANCH"]
+    unknown_rows = [row for row in rows if row.get("tail_action") in (None, "", "UNKNOWN")]
+    tail_action_early_branch_rows = [
+        row for row in early_branch_rows
+        if row.get("trigger") == "tail_action_controller"
+    ]
+    tail_action_no_column_early_branch_rows = [
+        row for row in tail_action_early_branch_rows
+        if bool(row.get("tail_action_no_column"))
+    ]
+    nonexact_branch_rows = [
+        row for row in early_branch_rows
+        if not bool(row.get("exact_bound_available")) and not bool(row.get("child_lower_bound_exact"))
+    ]
+    tail_action_child_count = sum(int(row.get("queued_child_count") or 0) for row in tail_action_early_branch_rows)
+    tail_action_nonexact_child_count = sum(
+        int(row.get("queued_child_nonexact_count") or 0)
+        for row in tail_action_early_branch_rows
+    )
+    observed_tail_action_child_count = sum(
+        int(row.get("observed_child_audit_count") or 0)
+        for row in tail_action_early_branch_rows
+    )
+    tail_action_queue_priorities = [
+        int(row.get(field))
+        for row in tail_action_early_branch_rows
+        for field in ("queued_child_min_queue_priority_width", "queued_child_max_queue_priority_width")
+        if row.get(field) is not None
+    ]
+    summary = {
+        "schema_version": "journey_tail_action_controller_audit_v1",
+        "diagnostic_only": True,
+        "runs_bpc_or_pricing": False,
+        "certificate_effect": False,
+        "official_bound_effect": False,
+        "input_paths": [str(path) for path in paths],
+        "log_file_count": len(log_paths),
+        "row_count": len(rows),
+        "tail_action_counts": dict(sorted(action_counts.items())),
+        "tail_action_reason_counts": dict(sorted(reason_counts.items())),
+        "pricing_kind_counts": dict(sorted(pricing_kind_counts.items())),
+        "node_counts": dict(sorted(node_counts.items())),
+        "fathom_possible_if_rc_zero_count": int(fathom_possible_count),
+        "a_frontier_refinement_count": len(a_class_rows),
+        "b_broad_plateau_count": len(b_class_rows),
+        "c_continue_cg_count": len(c_class_rows),
+        "d_early_branch_count": len(d_class_rows),
+        "unknown_action_count": len(unknown_rows),
+        "micro_expansion_attempt_row_count": len(micro_attempt_rows),
+        "recent_active_support_addition_row_count": len(active_support_rows),
+        "recent_rmp_objective_progress_row_count": len(rmp_progress_rows),
+        "early_branch_trigger_count": len(early_branch_rows),
+        "tail_action_early_branch_trigger_count": len(tail_action_early_branch_rows),
+        "tail_action_no_column_early_branch_trigger_count": len(
+            tail_action_no_column_early_branch_rows
+        ),
+        "nonexact_early_branch_trigger_count": len(nonexact_branch_rows),
+        "tail_action_queued_child_count": int(tail_action_child_count),
+        "tail_action_nonexact_queued_child_count": int(tail_action_nonexact_child_count),
+        "tail_action_observed_child_audit_count": int(observed_tail_action_child_count),
+        "tail_action_child_min_queue_priority_width": (
+            min(tail_action_queue_priorities) if tail_action_queue_priorities else None
+        ),
+        "tail_action_child_max_queue_priority_width": (
+            max(tail_action_queue_priorities) if tail_action_queue_priorities else None
+        ),
+        "rows_jsonl": str(output_dir / "tail_action_rows.jsonl"),
+        "rows_csv": str(output_dir / "tail_action_rows.csv"),
+        "early_branch_rows_jsonl": str(output_dir / "early_branch_trigger_rows.jsonl"),
+        "early_branch_rows_csv": str(output_dir / "early_branch_trigger_rows.csv"),
+        "sample_rows": rows[:sample_limit],
+        "sample_early_branch_rows": early_branch_rows[:sample_limit],
+    }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(output_dir / "summary.json", summary)
+    _write_jsonl(output_dir / "tail_action_rows.jsonl", rows)
+    _write_csv(output_dir / "tail_action_rows.csv", rows)
+    _write_jsonl(output_dir / "early_branch_trigger_rows.jsonl", early_branch_rows)
+    _write_early_branch_csv(output_dir / "early_branch_trigger_rows.csv", early_branch_rows)
+    _write_report(report, summary)
+    return summary
+
+
+def _write_report(report: Path, summary: dict[str, Any]) -> None:
+    report.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Journey Tail Action Controller 审计",
+        "",
+        "## 元信息",
+        "",
+        f"- diagnostic_only = {str(summary['diagnostic_only']).lower()}",
+        f"- runs_bpc_or_pricing = {str(summary['runs_bpc_or_pricing']).lower()}",
+        f"- certificate_effect = {str(summary['certificate_effect']).lower()}",
+        f"- official_bound_effect = {str(summary['official_bound_effect']).lower()}",
+        f"- log_file_count = {summary['log_file_count']}",
+        f"- row_count = {summary['row_count']}",
+        "",
+        "## Tail Action Counts",
+        "",
+    ]
+    for action, count in summary["tail_action_counts"].items():
+        lines.append(f"- `{action}`: {count}")
+    lines.extend(
+        [
+            "",
+            "## 关键计数",
+            "",
+            f"- A/frontier refinement: {summary['a_frontier_refinement_count']}",
+            f"- B/broad plateau: {summary['b_broad_plateau_count']}",
+            f"- C/continue CG: {summary['c_continue_cg_count']}",
+            f"- D/early branch: {summary['d_early_branch_count']}",
+            f"- unknown action: {summary['unknown_action_count']}",
+            f"- fathom_possible_if_rc_zero: {summary['fathom_possible_if_rc_zero_count']}",
+            f"- micro expansion attempted rows: {summary['micro_expansion_attempt_row_count']}",
+            f"- recent active-support addition rows: {summary['recent_active_support_addition_row_count']}",
+            f"- recent RMP objective progress rows: {summary['recent_rmp_objective_progress_row_count']}",
+            f"- early branch triggers: {summary['early_branch_trigger_count']}",
+            f"- tail-action early branch triggers: {summary['tail_action_early_branch_trigger_count']}",
+            f"- tail-action no-column early branch triggers: {summary['tail_action_no_column_early_branch_trigger_count']}",
+            f"- non-exact early branch triggers: {summary['nonexact_early_branch_trigger_count']}",
+            f"- tail-action queued children: {summary['tail_action_queued_child_count']}",
+            f"- tail-action non-exact queued children: {summary['tail_action_nonexact_queued_child_count']}",
+            f"- observed tail-action child audit rows: {summary['tail_action_observed_child_audit_count']}",
+            f"- tail-action child min queue priority width: {summary['tail_action_child_min_queue_priority_width']}",
+            f"- tail-action child max queue priority width: {summary['tail_action_child_max_queue_priority_width']}",
+            "",
+            "## 输出",
+            "",
+            f"- summary: `{summary.get('rows_jsonl', '')}` 的同目录 `summary.json`",
+            f"- rows jsonl: `{summary['rows_jsonl']}`",
+            f"- rows csv: `{summary['rows_csv']}`",
+            f"- early branch rows jsonl: `{summary['early_branch_rows_jsonl']}`",
+            f"- early branch rows csv: `{summary['early_branch_rows_csv']}`",
+            "",
+        ]
+    )
+    if summary.get("sample_early_branch_rows"):
+        lines.extend(
+            [
+                "## Early Branch Child Activity",
+                "",
+            ]
+        )
+        for row in summary.get("sample_early_branch_rows", []):
+            lines.append(
+                "- "
+                f"node={row.get('node_id')} depth={row.get('depth')} cg={row.get('cg_iter')} "
+                f"no_column={str(bool(row.get('tail_action_no_column'))).lower()} "
+                f"children=`{row.get('queued_child_ids') or ''}` "
+                f"started={row.get('child_direct_started_count')}/"
+                f"{int(row.get('queued_child_count') or 0)} "
+                f"subtree_nodes={row.get('child_subtree_node_count')} "
+                f"pricing={row.get('child_subtree_pricing_event_count')} "
+                f"negative_pricing={row.get('child_subtree_negative_pricing_event_count')} "
+                f"cb_retry={row.get('child_subtree_completion_retry_count')} "
+                f"subtree_early_branch={row.get('child_subtree_early_branch_trigger_count')} "
+                f"subtree_no_column={row.get('child_subtree_no_column_early_branch_trigger_count')} "
+                f"span={row.get('child_subtree_observed_wall_span')}"
+            )
+        lines.append("")
+    report.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("paths", nargs="+", type=Path)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--sample-limit", type=int, default=20)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_args()
+    audit_tail_actions(
+        list(args.paths),
+        args.output_dir,
+        args.report,
+        sample_limit=max(0, int(args.sample_limit)),
+    )
+
+
+if __name__ == "__main__":
+    main()

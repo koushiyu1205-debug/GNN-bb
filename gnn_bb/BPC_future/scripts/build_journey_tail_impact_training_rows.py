@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Build audit-only Journey tail-impact training rows.
 
-This script fuses two diagnostic sources:
+This script fuses diagnostic sources:
 
 * weak rough-negative pricing rows that were filtered by true-RC materialization;
 * branch-impact rows that describe whether a branch reduces or moves proof tail.
+* tail-action proof-cost rows;
+* late true-negative / weak-filtered pricing tail rows.
 
 It is intentionally offline.  It reads existing audit artifacts only and does
 not run BPC, pricing, RMP, or produce certificates.
@@ -28,6 +30,8 @@ DEFAULT_REPORT = Path(
 TAIL_IMPACT_FEATURE_SCHEMA: tuple[str, ...] = (
     "source_is_branch",
     "source_is_weak_negative",
+    "source_is_tail_action",
+    "source_is_late_negative",
     "depth",
     "time",
     "cg_iter",
@@ -51,6 +55,26 @@ TAIL_IMPACT_FEATURE_SCHEMA: tuple[str, ...] = (
     "branch_child_negative_pricing_events",
     "branch_child_completion_bound_retries",
     "branch_child_early_branch_triggers",
+    "tail_action_no_column",
+    "tail_action_pool_max_child_width",
+    "tail_action_pool_total_child_width",
+    "tail_action_pool_balance_gap",
+    "tail_action_direct_started_count",
+    "tail_action_direct_unstarted_count",
+    "tail_action_subtree_node_count",
+    "tail_action_subtree_pricing_events",
+    "tail_action_subtree_negative_pricing_events",
+    "tail_action_subtree_completion_retries",
+    "tail_action_subtree_early_branch_triggers",
+    "tail_action_subtree_no_column_triggers",
+    "tail_action_subtree_observed_wall_span",
+    "late_has_true_negative",
+    "late_has_weak_filtered",
+    "late_active_changed_task_sets",
+    "late_inactive_changed_task_sets",
+    "late_added_journeys",
+    "late_new_task_sets",
+    "late_replacement_task_sets",
 )
 
 TAIL_IMPACT_LABEL_SCHEMA: tuple[str, ...] = (
@@ -65,6 +89,13 @@ TAIL_IMPACT_LABEL_SCHEMA: tuple[str, ...] = (
     "y_child_negative_pricing_events",
     "y_child_completion_bound_retries",
     "y_child_early_branch_triggers",
+    "y_tail_action_no_column",
+    "y_child_unstarted",
+    "y_subtree_no_column_chain",
+    "y_late_true_negative",
+    "y_late_active_support_changing",
+    "y_late_inactive_only",
+    "y_late_weak_filtered",
 )
 
 
@@ -129,6 +160,50 @@ def _load_branch_training_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
             continue
         payload = _read_json(path)
         raw_rows = payload.get("branch_training_rows")
+        if isinstance(raw_rows, list):
+            rows.extend(row for row in raw_rows if isinstance(row, dict))
+    return rows
+
+
+def _load_tail_action_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        if path.is_dir():
+            rows.extend(_iter_jsonl(path / "early_branch_trigger_rows.jsonl"))
+            continue
+        if path.name == "summary.json":
+            rows.extend(_iter_jsonl(path.parent / "early_branch_trigger_rows.jsonl"))
+            raw_rows = _read_json(path).get("sample_early_branch_rows")
+            if isinstance(raw_rows, list):
+                rows.extend(row for row in raw_rows if isinstance(row, dict))
+            continue
+        if path.suffix == ".jsonl":
+            rows.extend(_iter_jsonl(path))
+            continue
+        payload = _read_json(path)
+        raw_rows = payload.get("sample_early_branch_rows")
+        if isinstance(raw_rows, list):
+            rows.extend(row for row in raw_rows if isinstance(row, dict))
+    return rows
+
+
+def _load_late_negative_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        if path.is_dir():
+            rows.extend(_iter_jsonl(path / "late_negative_tail_rows.jsonl"))
+            continue
+        if path.name == "summary.json":
+            rows.extend(_iter_jsonl(path.parent / "late_negative_tail_rows.jsonl"))
+            raw_rows = _read_json(path).get("rows")
+            if isinstance(raw_rows, list):
+                rows.extend(row for row in raw_rows if isinstance(row, dict))
+            continue
+        if path.suffix == ".jsonl":
+            rows.extend(_iter_jsonl(path))
+            continue
+        payload = _read_json(path)
+        raw_rows = payload.get("rows")
         if isinstance(raw_rows, list):
             rows.extend(row for row in raw_rows if isinstance(row, dict))
     return rows
@@ -295,16 +370,174 @@ def _branch_training_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _tail_action_training_row(row: dict[str, Any]) -> dict[str, Any]:
+    negative_events = _float(row.get("child_subtree_negative_pricing_event_count"))
+    completion_retries = _float(row.get("child_subtree_completion_retry_count"))
+    early_branches = _float(row.get("child_subtree_early_branch_trigger_count"))
+    no_column_chain = _float(row.get("child_subtree_no_column_early_branch_trigger_count"))
+    unstarted = _float(row.get("child_direct_unstarted_count"))
+    tail_risk = 1.0 if (
+        negative_events > 0.0
+        or completion_retries > 0.0
+        or early_branches > 0.0
+        or no_column_chain > 0.0
+        or unstarted > 0.0
+    ) else 0.0
+    labels = _label_vector(
+        {
+            "y_useful_tail_reduction": 0.0,
+            "y_tail_risk": tail_risk,
+            "y_completion_bound_tail": 1.0 if completion_retries > 0.0 else 0.0,
+            "y_early_branch_continues": 1.0 if early_branches > 0.0 else 0.0,
+            "y_negative_chain_continues": 1.0 if negative_events > 0.0 else 0.0,
+            "y_child_negative_pricing_events": negative_events,
+            "y_child_completion_bound_retries": completion_retries,
+            "y_child_early_branch_triggers": early_branches,
+            "y_tail_action_no_column": 1.0 if bool(row.get("tail_action_no_column")) else 0.0,
+            "y_child_unstarted": unstarted,
+            "y_subtree_no_column_chain": no_column_chain,
+        }
+    )
+    features = _feature_vector(
+        {
+            "source_is_tail_action": 1.0,
+            "depth": row.get("depth"),
+            "time": row.get("time"),
+            "cg_iter": row.get("cg_iter"),
+            "branch_pool_max_child_width": row.get("no_column_branch_pool_max_child_width"),
+            "branch_pool_total_child_width": row.get("no_column_branch_pool_total_child_width"),
+            "branch_pool_balance_gap": row.get("no_column_branch_pool_balance_gap"),
+            "branch_child_negative_pricing_events": negative_events,
+            "branch_child_completion_bound_retries": completion_retries,
+            "branch_child_early_branch_triggers": early_branches,
+            "tail_action_no_column": 1.0 if bool(row.get("tail_action_no_column")) else 0.0,
+            "tail_action_pool_max_child_width": row.get("no_column_branch_pool_max_child_width"),
+            "tail_action_pool_total_child_width": row.get("no_column_branch_pool_total_child_width"),
+            "tail_action_pool_balance_gap": row.get("no_column_branch_pool_balance_gap"),
+            "tail_action_direct_started_count": row.get("child_direct_started_count"),
+            "tail_action_direct_unstarted_count": row.get("child_direct_unstarted_count"),
+            "tail_action_subtree_node_count": row.get("child_subtree_node_count"),
+            "tail_action_subtree_pricing_events": row.get("child_subtree_pricing_event_count"),
+            "tail_action_subtree_negative_pricing_events": negative_events,
+            "tail_action_subtree_completion_retries": completion_retries,
+            "tail_action_subtree_early_branch_triggers": early_branches,
+            "tail_action_subtree_no_column_triggers": no_column_chain,
+            "tail_action_subtree_observed_wall_span": row.get("child_subtree_observed_wall_span"),
+        }
+    )
+    return {
+        "schema_version": "journey_tail_impact_training_row_v2",
+        "source_type": "tail_action_proof_cost",
+        "diagnostic_only": True,
+        "runs_bpc_or_pricing": False,
+        "production_ready": False,
+        "certificate_effect": False,
+        "official_bound_effect": False,
+        "log_file": row.get("log_file"),
+        "node_id": row.get("node_id"),
+        "depth": row.get("depth"),
+        "cg_iter": row.get("cg_iter"),
+        "time": row.get("time"),
+        "task_i": row.get("no_column_branch_task_i"),
+        "task_j": row.get("no_column_branch_task_j"),
+        "tail_class": "tail_action_no_column" if bool(row.get("tail_action_no_column")) else "tail_action_branch",
+        "feature_schema": list(TAIL_IMPACT_FEATURE_SCHEMA),
+        "features": features,
+        "label_schema": list(TAIL_IMPACT_LABEL_SCHEMA),
+        "labels": labels,
+        "raw_source": row,
+    }
+
+
+def _late_negative_training_row(row: dict[str, Any]) -> dict[str, Any]:
+    has_true_negative = bool(row.get("has_true_negative"))
+    has_weak_filtered = bool(row.get("has_weak_filtered"))
+    active_changed = _float(row.get("active_changed_task_set_count"))
+    inactive_changed = _float(row.get("inactive_changed_task_set_count"))
+    weak_filtered = _float(row.get("weak_negative_journeys_filtered"))
+    labels = _label_vector(
+        {
+            "y_useful_tail_reduction": 0.0,
+            "y_tail_risk": 1.0,
+            "y_weak_negative_filtered": 1.0 if has_weak_filtered else 0.0,
+            "y_negative_chain_continues": 1.0 if has_true_negative else 0.0,
+            "y_active_touch": 1.0 if active_changed > 0.0 else 0.0,
+            "y_inactive_only": 1.0 if inactive_changed > 0.0 and active_changed <= 0.0 else 0.0,
+            "y_late_true_negative": 1.0 if has_true_negative else 0.0,
+            "y_late_active_support_changing": 1.0 if active_changed > 0.0 else 0.0,
+            "y_late_inactive_only": 1.0 if inactive_changed > 0.0 and active_changed <= 0.0 else 0.0,
+            "y_late_weak_filtered": 1.0 if has_weak_filtered else 0.0,
+        }
+    )
+    features = _feature_vector(
+        {
+            "source_is_late_negative": 1.0,
+            "depth": row.get("depth"),
+            "time": row.get("time"),
+            "cg_iter": row.get("cg_iter"),
+            "pricing_time_limit": row.get("pricing_time_limit"),
+            "profile_generation_time": row.get("profile_generation_time"),
+            "profile_dp_time": row.get("profile_dp_time"),
+            "dp_state_count": row.get("dp_state_count"),
+            "negative_journeys": row.get("negative_journeys"),
+            "selected_trips": row.get("selected_trips"),
+            "weak_negative_journeys_filtered": weak_filtered,
+            "profile_weak_filtered_materialized_count": row.get(
+                "profile_weak_filtered_materialized_count"
+            ),
+            "weak_best_rough_rc": row.get("profile_weak_filtered_best_rough_rc"),
+            "weak_best_true_rc": row.get("profile_weak_filtered_best_true_rc"),
+            "weak_max_true_minus_rough": row.get("profile_weak_filtered_max_true_minus_rough"),
+            "late_has_true_negative": 1.0 if has_true_negative else 0.0,
+            "late_has_weak_filtered": 1.0 if has_weak_filtered else 0.0,
+            "late_active_changed_task_sets": active_changed,
+            "late_inactive_changed_task_sets": inactive_changed,
+            "late_added_journeys": row.get("added_journeys"),
+            "late_new_task_sets": row.get("new_task_set_count"),
+            "late_replacement_task_sets": row.get("replacement_task_set_count"),
+        }
+    )
+    return {
+        "schema_version": "journey_tail_impact_training_row_v3",
+        "source_type": "late_negative_tail",
+        "diagnostic_only": True,
+        "runs_bpc_or_pricing": False,
+        "production_ready": False,
+        "certificate_effect": False,
+        "official_bound_effect": False,
+        "log_file": row.get("log_file"),
+        "node_id": row.get("node_id"),
+        "depth": row.get("depth"),
+        "cg_iter": row.get("cg_iter"),
+        "time": row.get("time"),
+        "task_i": None,
+        "task_j": None,
+        "tail_class": row.get("tail_class"),
+        "feature_schema": list(TAIL_IMPACT_FEATURE_SCHEMA),
+        "features": features,
+        "label_schema": list(TAIL_IMPACT_LABEL_SCHEMA),
+        "labels": labels,
+        "raw_source": row,
+    }
+
+
 def build_tail_impact(
     weak_inputs: list[Path],
     branch_inputs: list[Path],
     output_dir: Path,
     report: Path,
+    *,
+    tail_action_inputs: list[Path] | None = None,
+    late_negative_inputs: list[Path] | None = None,
 ) -> dict[str, Any]:
     weak_rows = _load_weak_rows(weak_inputs)
     branch_rows = _load_branch_training_rows(branch_inputs)
+    tail_action_rows = _load_tail_action_rows(tail_action_inputs or [])
+    late_negative_rows = _load_late_negative_rows(late_negative_inputs or [])
     rows = [_weak_training_row(row) for row in weak_rows]
     rows.extend(_branch_training_row(row) for row in branch_rows)
+    rows.extend(_tail_action_training_row(row) for row in tail_action_rows)
+    rows.extend(_late_negative_training_row(row) for row in late_negative_rows)
     raw_training_row_count = len(rows)
     rows = _dedupe_rows(rows)
     source_counts = Counter(str(row.get("source_type") or "") for row in rows)
@@ -325,9 +558,27 @@ def build_tail_impact(
         "child_early_branch_triggers": int(
             sum(_float(row.get("labels", {}).get("y_child_early_branch_triggers")) for row in rows)
         ),
+        "child_unstarted": int(
+            sum(_float(row.get("labels", {}).get("y_child_unstarted")) for row in rows)
+        ),
+        "subtree_no_column_chain": int(
+            sum(_float(row.get("labels", {}).get("y_subtree_no_column_chain")) for row in rows)
+        ),
+        "late_true_negative": int(
+            sum(_float(row.get("labels", {}).get("y_late_true_negative")) for row in rows)
+        ),
+        "late_active_support_changing": int(
+            sum(_float(row.get("labels", {}).get("y_late_active_support_changing")) for row in rows)
+        ),
+        "late_inactive_only": int(
+            sum(_float(row.get("labels", {}).get("y_late_inactive_only")) for row in rows)
+        ),
+        "late_weak_filtered": int(
+            sum(_float(row.get("labels", {}).get("y_late_weak_filtered")) for row in rows)
+        ),
     }
     summary = {
-        "schema_version": "journey_tail_impact_training_rows_v1",
+        "schema_version": "journey_tail_impact_training_rows_v3",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "production_ready": False,
@@ -336,6 +587,8 @@ def build_tail_impact(
         "official_bound_effect": False,
         "weak_input_paths": [str(path) for path in weak_inputs],
         "branch_input_paths": [str(path) for path in branch_inputs],
+        "tail_action_input_paths": [str(path) for path in (tail_action_inputs or [])],
+        "late_negative_input_paths": [str(path) for path in (late_negative_inputs or [])],
         "feature_schema": list(TAIL_IMPACT_FEATURE_SCHEMA),
         "label_schema": list(TAIL_IMPACT_LABEL_SCHEMA),
         "training_row_count": len(rows),
@@ -343,6 +596,8 @@ def build_tail_impact(
         "deduplicated_row_count": raw_training_row_count - len(rows),
         "weak_row_count": len(weak_rows),
         "branch_row_count": len(branch_rows),
+        "tail_action_row_count": len(tail_action_rows),
+        "late_negative_row_count": len(late_negative_rows),
         "source_counts": dict(sorted(source_counts.items())),
         "tail_class_counts": dict(sorted(tail_class_counts.items())),
         "label_positive_counts": label_positive_counts,
@@ -414,7 +669,7 @@ def _render_report(summary: dict[str, Any], output_dir: Path) -> str:
         "",
         "## 目的",
         "",
-        "合成 weak-negative tail 与 branch-impact 两类离线审计 row，为后续 GAT 学习“哪些候选会制造 proof tail、哪些分支会缩短 proof tail”提供统一训练接口。该脚本只读现有审计产物，不运行 BPC / pricing / RMP，不产生 certificate 或 official bound。",
+        "合成 weak-negative tail、branch-impact、tail-action proof-cost 与 late-negative tail 离线审计 row，为后续 GAT 学习“哪些候选会制造 proof tail、哪些分支会缩短 proof tail、哪些 true-negative 真的改变 active support”提供统一训练接口。该脚本只读现有审计产物，不运行 BPC / pricing / RMP，不产生 certificate 或 official bound。",
         "",
         "## 机器字段",
         "",
@@ -426,6 +681,8 @@ def _render_report(summary: dict[str, Any], output_dir: Path) -> str:
         f"deduplicated_row_count = {summary.get('deduplicated_row_count')}",
         f"weak_row_count = {summary.get('weak_row_count')}",
         f"branch_row_count = {summary.get('branch_row_count')}",
+        f"tail_action_row_count = {summary.get('tail_action_row_count')}",
+        f"late_negative_row_count = {summary.get('late_negative_row_count')}",
         f"source_counts = {summary.get('source_counts')}",
         f"tail_class_counts = {summary.get('tail_class_counts')}",
         f"label_positive_counts = {summary.get('label_positive_counts')}",
@@ -441,7 +698,7 @@ def _render_report(summary: dict[str, Any], output_dir: Path) -> str:
         "",
         "## 解释",
         "",
-        "这一步没有让 20 规模求解变快，也不改变 solver。它把当前失败机制转成统一监督信号：weak-negative row 是 rough/profile 负列信号失效的负例，branch-impact row 是分支后 active-support、negative-chain、completion-bound tail 的结果标签。",
+        "这一步没有让 20 规模求解变快，也不改变 solver。它把当前失败机制转成统一监督信号：weak-negative row 是 rough/profile 负列信号失效的负例，branch-impact row 是分支后 active-support、negative-chain、completion-bound tail 的结果标签，tail-action row 记录 early branch 后子树的 proof-cost 和 no-column 链条，late-negative row 则区分 true negative 是 active-support-changing 还是 inactive-only。",
         "",
         "如果 `contrastive_tail_training_ready=false`，这批数据只能作为 hard-negative catalog，不能单独训练“选好分支/好候选”的 GAT；下一步必须补能减少 tail 的正例。不能把这些 row 当作剪枝依据或 no-negative certificate。",
     ]
@@ -452,11 +709,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--weak-input", nargs="*", type=Path, default=[])
     parser.add_argument("--branch-input", nargs="*", type=Path, default=[])
+    parser.add_argument("--tail-action-input", nargs="*", type=Path, default=[])
+    parser.add_argument("--late-negative-input", nargs="*", type=Path, default=[])
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     args = parser.parse_args()
 
-    summary = build_tail_impact(args.weak_input, args.branch_input, args.output_dir, args.report)
+    summary = build_tail_impact(
+        args.weak_input,
+        args.branch_input,
+        args.output_dir,
+        args.report,
+        tail_action_inputs=args.tail_action_input,
+        late_negative_inputs=args.late_negative_input,
+    )
     printable = dict(summary)
     printable.pop("rows", None)
     print(json.dumps(printable, ensure_ascii=False, indent=2, sort_keys=True))

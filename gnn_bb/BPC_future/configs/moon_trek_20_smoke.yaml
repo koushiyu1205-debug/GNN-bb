@@ -65,6 +65,10 @@ max_cg_iterations: 120
 journey_branching_enabled: True
 journey_max_nodes: 1000
 journey_max_cg_iterations: 80
+# Diagnostic only: capture branch candidate features for branch-impact /
+# child-proof-cost learning.  This does not change the selected branch unless a
+# separate journey_branch_candidate_priority opt-in is provided.
+journey_branch_candidate_log_top_n: 12
 journey_initial_source_trip_limit: 1800
 journey_initial_max_columns: 6000
 journey_pool_source_trip_limit: 1800
@@ -152,6 +156,14 @@ journey_certificate_completion_bound_pre_exact_handoff_min_flat_rounds: 3
 journey_certificate_completion_bound_pre_exact_handoff_disable_on_branch_depth_gt: 0
 journey_certificate_completion_bound_pre_exact_handoff_slack_time: 2.0
 journey_certificate_completion_bound_audit_enabled: False
+# Canonical random-TW 20-task benchmark runs should keep tail-action diagnostics
+# on, even when behavioral gates stay opt-in.  This only emits
+# journey_corrected_node_bound_audit rows; it does not enable corrected-bound
+# fathoming or tail-action early branching.
+journey_tail_action_audit_enabled: True
+journey_corrected_node_bound_fathom_enabled: False
+journey_tail_action_early_branch_enabled: False
+journey_tail_action_no_column_early_branch_enabled: False
 journey_certificate_completion_bound_unique_task_helper_enabled: True
 journey_certificate_completion_bound_unique_route_helper_enabled: True
 journey_certificate_completion_bound_unique_route_exact_first_step_enabled: True

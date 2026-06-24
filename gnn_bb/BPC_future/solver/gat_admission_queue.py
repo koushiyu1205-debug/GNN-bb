@@ -96,6 +96,15 @@ class GATAdmissionQueue:
                 true_reduced_cost=float(candidate.true_reduced_cost),
                 is_true_rc_negative=False,
             )
+        if bool(candidate.metadata.get("force_high_priority", False)):
+            self._entries.pop(candidate.candidate_id, None)
+            return GATAdmissionDecision(
+                candidate_id=candidate.candidate_id,
+                decision=GAT_HIGH_PRIORITY,
+                reason=str(candidate.metadata.get("force_high_priority_reason", "true_rc_negative_forced_high_priority")),
+                true_reduced_cost=float(candidate.true_reduced_cost),
+                is_true_rc_negative=True,
+            )
         if bool(candidate.safe_and_in_distribution):
             self._entries.pop(candidate.candidate_id, None)
             return GATAdmissionDecision(

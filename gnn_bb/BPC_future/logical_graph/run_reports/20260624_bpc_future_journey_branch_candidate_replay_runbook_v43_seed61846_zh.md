@@ -1,0 +1,257 @@
+# Journey Branch Candidate Replay Runbook
+
+日期：2026-06-24
+
+## Purpose
+
+Generate forced-pair replay commands from logged `journey_branch_candidates` events. The runbook only creates commands; it does not run BPC / pricing / RMP and does not create certificates or official bounds.
+
+## Machine Fields
+
+```text
+output_dir = BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624
+entry_count = 12
+candidate_event_count_seen = 3
+skipped_missing_instance_event_count = 0
+alt_pairs_per_event = 4
+candidate_source = priority_top
+candidate_log_top_n = 100
+production_ready = false
+stage4_candidate_ready = false
+certificate_effect = false
+official_bound_effect = false
+```
+
+## Entries
+
+### 001_candidate_alt_d0_n0_r4_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 0
+source_depth = 0
+source_selected_pair = [2, 5]
+forced_pair = [3, 18]
+forced_pair_path_rule = force_pair_path:0:3,18
+source_alt_rank = 4
+source_alt_pool_max_child_width = 375
+source_alt_pool_total_child_width = 644
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/001_candidate_alt_d0_n0_r4_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/001_candidate_alt_d0_n0_r4_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/001_candidate_alt_d0_n0_r4_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/001_candidate_alt_d0_n0_r4_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_branch_candidate_priority=force_pair_path:0:3,18 --set journey_branch_candidate_log_top_n=100
+```
+
+### 002_candidate_alt_d0_n0_r7_5_8_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 0
+source_depth = 0
+source_selected_pair = [2, 5]
+forced_pair = [5, 8]
+forced_pair_path_rule = force_pair_path:0:5,8
+source_alt_rank = 7
+source_alt_pool_max_child_width = 376
+source_alt_pool_total_child_width = 625
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/002_candidate_alt_d0_n0_r7_5_8_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/002_candidate_alt_d0_n0_r7_5_8_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/002_candidate_alt_d0_n0_r7_5_8_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/002_candidate_alt_d0_n0_r7_5_8_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_branch_candidate_priority=force_pair_path:0:5,8 --set journey_branch_candidate_log_top_n=100
+```
+
+### 003_candidate_alt_d0_n0_r11_5_14_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 0
+source_depth = 0
+source_selected_pair = [2, 5]
+forced_pair = [5, 14]
+forced_pair_path_rule = force_pair_path:0:5,14
+source_alt_rank = 11
+source_alt_pool_max_child_width = 380
+source_alt_pool_total_child_width = 641
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/003_candidate_alt_d0_n0_r11_5_14_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/003_candidate_alt_d0_n0_r11_5_14_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/003_candidate_alt_d0_n0_r11_5_14_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/003_candidate_alt_d0_n0_r11_5_14_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_branch_candidate_priority=force_pair_path:0:5,14 --set journey_branch_candidate_log_top_n=100
+```
+
+### 004_candidate_alt_d0_n0_r6_4_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 0
+source_depth = 0
+source_selected_pair = [2, 5]
+forced_pair = [4, 18]
+forced_pair_path_rule = force_pair_path:0:4,18
+source_alt_rank = 6
+source_alt_pool_max_child_width = 380
+source_alt_pool_total_child_width = 649
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/004_candidate_alt_d0_n0_r6_4_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/004_candidate_alt_d0_n0_r6_4_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/004_candidate_alt_d0_n0_r6_4_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/004_candidate_alt_d0_n0_r6_4_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_branch_candidate_priority=force_pair_path:0:4,18 --set journey_branch_candidate_log_top_n=100
+```
+
+### 005_candidate_alt_d1_n1_r9_8_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 1
+source_depth = 1
+source_selected_pair = [2, 17]
+forced_pair = [8, 18]
+forced_pair_path_rule = force_pair_path:0:2,5=same_vehicle;1:8,18
+source_alt_rank = 9
+source_alt_pool_max_child_width = 295
+source_alt_pool_total_child_width = 483
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/005_candidate_alt_d1_n1_r9_8_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/005_candidate_alt_d1_n1_r9_8_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/005_candidate_alt_d1_n1_r9_8_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/005_candidate_alt_d1_n1_r9_8_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=same_vehicle;1:8,18' --set journey_branch_candidate_log_top_n=100
+```
+
+### 006_candidate_alt_d1_n1_r8_8_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 1
+source_depth = 1
+source_selected_pair = [2, 17]
+forced_pair = [8, 17]
+forced_pair_path_rule = force_pair_path:0:2,5=same_vehicle;1:8,17
+source_alt_rank = 8
+source_alt_pool_max_child_width = 300
+source_alt_pool_total_child_width = 491
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/006_candidate_alt_d1_n1_r8_8_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/006_candidate_alt_d1_n1_r8_8_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/006_candidate_alt_d1_n1_r8_8_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/006_candidate_alt_d1_n1_r8_8_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=same_vehicle;1:8,17' --set journey_branch_candidate_log_top_n=100
+```
+
+### 007_candidate_alt_d1_n1_r11_14_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 1
+source_depth = 1
+source_selected_pair = [2, 17]
+forced_pair = [14, 18]
+forced_pair_path_rule = force_pair_path:0:2,5=same_vehicle;1:14,18
+source_alt_rank = 11
+source_alt_pool_max_child_width = 302
+source_alt_pool_total_child_width = 494
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/007_candidate_alt_d1_n1_r11_14_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/007_candidate_alt_d1_n1_r11_14_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/007_candidate_alt_d1_n1_r11_14_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/007_candidate_alt_d1_n1_r11_14_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=same_vehicle;1:14,18' --set journey_branch_candidate_log_top_n=100
+```
+
+### 008_candidate_alt_d1_n1_r10_14_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 1
+source_depth = 1
+source_selected_pair = [2, 17]
+forced_pair = [14, 17]
+forced_pair_path_rule = force_pair_path:0:2,5=same_vehicle;1:14,17
+source_alt_rank = 10
+source_alt_pool_max_child_width = 307
+source_alt_pool_total_child_width = 502
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/008_candidate_alt_d1_n1_r10_14_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/008_candidate_alt_d1_n1_r10_14_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/008_candidate_alt_d1_n1_r10_14_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/008_candidate_alt_d1_n1_r10_14_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=same_vehicle;1:14,17' --set journey_branch_candidate_log_top_n=100
+```
+
+### 009_candidate_alt_d1_n2_r1_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 2
+source_depth = 1
+source_selected_pair = [3, 17]
+forced_pair = [3, 18]
+forced_pair_path_rule = force_pair_path:0:2,5=separate_vehicle;1:3,18
+source_alt_rank = 1
+source_alt_pool_max_child_width = 385
+source_alt_pool_total_child_width = 665
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/009_candidate_alt_d1_n2_r1_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/009_candidate_alt_d1_n2_r1_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/009_candidate_alt_d1_n2_r1_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/009_candidate_alt_d1_n2_r1_3_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=separate_vehicle;1:3,18' --set journey_branch_candidate_log_top_n=100
+```
+
+### 010_candidate_alt_d1_n2_r11_13_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 2
+source_depth = 1
+source_selected_pair = [3, 17]
+forced_pair = [13, 18]
+forced_pair_path_rule = force_pair_path:0:2,5=separate_vehicle;1:13,18
+source_alt_rank = 11
+source_alt_pool_max_child_width = 389
+source_alt_pool_total_child_width = 649
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/010_candidate_alt_d1_n2_r11_13_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/010_candidate_alt_d1_n2_r11_13_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/010_candidate_alt_d1_n2_r11_13_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/010_candidate_alt_d1_n2_r11_13_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=separate_vehicle;1:13,18' --set journey_branch_candidate_log_top_n=100
+```
+
+### 011_candidate_alt_d1_n2_r7_9_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 2
+source_depth = 1
+source_selected_pair = [3, 17]
+forced_pair = [9, 18]
+forced_pair_path_rule = force_pair_path:0:2,5=separate_vehicle;1:9,18
+source_alt_rank = 7
+source_alt_pool_max_child_width = 390
+source_alt_pool_total_child_width = 651
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/011_candidate_alt_d1_n2_r7_9_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/011_candidate_alt_d1_n2_r7_9_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/011_candidate_alt_d1_n2_r7_9_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/011_candidate_alt_d1_n2_r7_9_18_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=separate_vehicle;1:9,18' --set journey_branch_candidate_log_top_n=100
+```
+
+### 012_candidate_alt_d1_n2_r10_13_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+source_node_id = 2
+source_depth = 1
+source_selected_pair = [3, 17]
+forced_pair = [13, 17]
+forced_pair_path_rule = force_pair_path:0:2,5=separate_vehicle;1:13,17
+source_alt_rank = 10
+source_alt_pool_max_child_width = 390
+source_alt_pool_total_child_width = 661
+source_alt_branch_score = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/012_candidate_alt_d1_n2_r10_13_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/012_candidate_alt_d1_n2_r10_13_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/012_candidate_alt_d1_n2_r10_13_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624/runs/012_candidate_alt_d1_n2_r10_13_17_tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,5=separate_vehicle;1:13,17' --set journey_branch_candidate_log_top_n=100
+```
+
+## Boundary
+
+These commands only change branch candidate priority for counterfactual sampling. If replay cannot bind the forced pair, the solver falls back to existing exact-safe logic; final no-negative closure, node bounds, fathom, and certificates still come only from exact-safe pricing/proof.

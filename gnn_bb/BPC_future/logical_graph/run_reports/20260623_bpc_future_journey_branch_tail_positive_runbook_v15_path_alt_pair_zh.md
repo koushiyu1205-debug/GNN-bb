@@ -1,0 +1,337 @@
+# Journey Branch-Tail Positive Collection Runbook
+
+日期：2026-06-23
+
+## 目的
+
+在已有 5000 个 Stage 3 样本基础上追加 branch-tail intervention 样本，而不是重新生成全部样本。runbook 只生成 opt-in 命令，不运行 BPC / pricing / RMP，不产生 certificate 或 official bound。
+
+## 机器字段
+
+```text
+journey_branch_tail_positive_runbook = current
+output_dir = BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623
+entry_count = 14
+base_sample_strategy = extend_existing_5000_with_branch_tail_interventions
+candidate_source = root_level_near_positive_rows_tail_action_proof_cost_rows_and_optional_priority_top_alt_pairs
+tail_impact_input_paths = ['BPC_future/results/journey_tail_impact_training_rows_v13_child_order_node3_separate_20260623', 'BPC_future/results/journey_tail_impact_training_rows_v13_child_order_node4_same_20260623']
+tail_alt_pairs_per_node = 2
+production_ready = false
+stage4_candidate_ready = false
+certificate_effect = false
+official_bound_effect = false
+```
+
+## 条目
+
+### 01_force_pair_2_13_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph.json
+forced_pair = [2, 13]
+forced_pair_depth_rule = None
+forced_pair_path_rule = None
+forced_child_kind_depth_rule = None
+preferred_target_child_kind = None
+source_tail_class = early_branch_continues
+source_tail_badness_score = 58.0
+source_type = None
+source_original_forced_pair = None
+source_alt_rank = None
+source_alt_pool_max_child_width = None
+source_alt_pool_total_child_width = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/01_force_pair_2_13_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/01_force_pair_2_13_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/01_force_pair_2_13_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/01_force_pair_2_13_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=True --set journey_early_branching_min_cg_iter=56 --set journey_early_branching_child_min_cg_iter=3 --set journey_early_branching_max_depth=1 --set journey_child_priority_by_width_enabled=True --set journey_early_branching_after_incomplete_no_column_enabled=True --set journey_early_branching_after_incomplete_no_column_min_remaining=20.0 --set journey_branch_fractionality_tie_tolerance=0.05 --set journey_branch_candidate_priority=force_pair:2,13 --set journey_branch_candidate_log_top_n=12
+```
+
+### 02_force_pair_2_3_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph.json
+forced_pair = [2, 3]
+forced_pair_depth_rule = None
+forced_pair_path_rule = None
+forced_child_kind_depth_rule = None
+preferred_target_child_kind = None
+source_tail_class = early_branch_continues
+source_tail_badness_score = 59.0
+source_type = None
+source_original_forced_pair = None
+source_alt_rank = None
+source_alt_pool_max_child_width = None
+source_alt_pool_total_child_width = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/02_force_pair_2_3_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/02_force_pair_2_3_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/02_force_pair_2_3_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/02_force_pair_2_3_apollo15_20km_greedy-anchor_randomtw_tasks020_04_seed61308_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=True --set journey_early_branching_min_cg_iter=56 --set journey_early_branching_child_min_cg_iter=3 --set journey_early_branching_max_depth=1 --set journey_child_priority_by_width_enabled=True --set journey_early_branching_after_incomplete_no_column_enabled=True --set journey_early_branching_after_incomplete_no_column_min_remaining=20.0 --set journey_branch_fractionality_tie_tolerance=0.05 --set journey_branch_candidate_priority=force_pair:2,3 --set journey_branch_candidate_log_top_n=12
+```
+
+### 03_tail_action_child_order_d2_n3_4_12_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [4, 12]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,12
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,12
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:same_vehicle;2:same_vehicle
+preferred_target_child_kind = same_vehicle
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_proof_cost
+source_original_forced_pair = None
+source_alt_rank = None
+source_alt_pool_max_child_width = None
+source_alt_pool_total_child_width = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/03_tail_action_child_order_d2_n3_4_12_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/03_tail_action_child_order_d2_n3_4_12_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/03_tail_action_child_order_d2_n3_4_12_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/03_tail_action_child_order_d2_n3_4_12_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,12' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:same_vehicle;2:same_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 04_tail_action_alt_pair_d2_n3_r1_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [4, 14]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,14
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,14
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:same_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [4, 12]
+source_alt_rank = 1
+source_alt_pool_max_child_width = 110
+source_alt_pool_total_child_width = 198
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/04_tail_action_alt_pair_d2_n3_r1_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/04_tail_action_alt_pair_d2_n3_r1_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/04_tail_action_alt_pair_d2_n3_r1_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/04_tail_action_alt_pair_d2_n3_r1_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,14' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:same_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 05_tail_action_alt_pair_d2_n3_r2_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [5, 14]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:5,14
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:5,14
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:same_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [4, 12]
+source_alt_rank = 2
+source_alt_pool_max_child_width = 110
+source_alt_pool_total_child_width = 198
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/05_tail_action_alt_pair_d2_n3_r2_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/05_tail_action_alt_pair_d2_n3_r2_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/05_tail_action_alt_pair_d2_n3_r2_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/05_tail_action_alt_pair_d2_n3_r2_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:5,14' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:same_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 06_tail_action_child_order_d2_n4_4_12_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [4, 12]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:4,12
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:4,12
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:separate_vehicle;2:separate_vehicle
+preferred_target_child_kind = separate_vehicle
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_proof_cost
+source_original_forced_pair = None
+source_alt_rank = None
+source_alt_pool_max_child_width = None
+source_alt_pool_total_child_width = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/06_tail_action_child_order_d2_n4_4_12_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/06_tail_action_child_order_d2_n4_4_12_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/06_tail_action_child_order_d2_n4_4_12_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/06_tail_action_child_order_d2_n4_4_12_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:4,12' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:separate_vehicle;2:separate_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 07_tail_action_alt_pair_d2_n4_r8_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [9, 13]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,13
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,13
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:separate_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [4, 12]
+source_alt_rank = 8
+source_alt_pool_max_child_width = 157
+source_alt_pool_total_child_width = 274
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/07_tail_action_alt_pair_d2_n4_r8_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/07_tail_action_alt_pair_d2_n4_r8_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/07_tail_action_alt_pair_d2_n4_r8_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/07_tail_action_alt_pair_d2_n4_r8_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,13' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:separate_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 08_tail_action_alt_pair_d2_n4_r7_9_11_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [9, 11]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,11
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,11
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:separate_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [4, 12]
+source_alt_rank = 7
+source_alt_pool_max_child_width = 163
+source_alt_pool_total_child_width = 277
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/08_tail_action_alt_pair_d2_n4_r7_9_11_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/08_tail_action_alt_pair_d2_n4_r7_9_11_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/08_tail_action_alt_pair_d2_n4_r7_9_11_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/08_tail_action_alt_pair_d2_n4_r7_9_11_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,11' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:separate_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 09_tail_action_child_order_d2_n3_1_9_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [1, 9]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:1,9
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:1,9
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:separate_vehicle;2:separate_vehicle
+preferred_target_child_kind = separate_vehicle
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_proof_cost
+source_original_forced_pair = None
+source_alt_rank = None
+source_alt_pool_max_child_width = None
+source_alt_pool_total_child_width = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/09_tail_action_child_order_d2_n3_1_9_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/09_tail_action_child_order_d2_n3_1_9_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/09_tail_action_child_order_d2_n3_1_9_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/09_tail_action_child_order_d2_n3_1_9_separate_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:1,9' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:separate_vehicle;2:separate_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 10_tail_action_alt_pair_d2_n3_r7_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [9, 13]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,13
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,13
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:separate_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [1, 9]
+source_alt_rank = 7
+source_alt_pool_max_child_width = 154
+source_alt_pool_total_child_width = 269
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/10_tail_action_alt_pair_d2_n3_r7_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/10_tail_action_alt_pair_d2_n3_r7_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/10_tail_action_alt_pair_d2_n3_r7_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/10_tail_action_alt_pair_d2_n3_r7_9_13_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:9,13' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:separate_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 11_tail_action_alt_pair_d2_n3_r11_13_20_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [13, 20]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:13,20
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:13,20
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:separate_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [1, 9]
+source_alt_rank = 11
+source_alt_pool_max_child_width = 158
+source_alt_pool_total_child_width = 276
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/11_tail_action_alt_pair_d2_n3_r11_13_20_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/11_tail_action_alt_pair_d2_n3_r11_13_20_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/11_tail_action_alt_pair_d2_n3_r11_13_20_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/11_tail_action_alt_pair_d2_n3_r11_13_20_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=separate_vehicle;2:13,20' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:separate_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 12_tail_action_child_order_d2_n4_1_9_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [1, 9]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:1,9
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:1,9
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:same_vehicle;2:same_vehicle
+preferred_target_child_kind = same_vehicle
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_proof_cost
+source_original_forced_pair = None
+source_alt_rank = None
+source_alt_pool_max_child_width = None
+source_alt_pool_total_child_width = None
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/12_tail_action_child_order_d2_n4_1_9_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/12_tail_action_child_order_d2_n4_1_9_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/12_tail_action_child_order_d2_n4_1_9_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/12_tail_action_child_order_d2_n4_1_9_same_vehicle_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:1,9' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:same_vehicle;2:same_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 13_tail_action_alt_pair_d2_n4_r2_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [4, 14]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,14
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,14
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:same_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [1, 9]
+source_alt_rank = 2
+source_alt_pool_max_child_width = 110
+source_alt_pool_total_child_width = 198
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/13_tail_action_alt_pair_d2_n4_r2_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/13_tail_action_alt_pair_d2_n4_r2_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/13_tail_action_alt_pair_d2_n4_r2_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/13_tail_action_alt_pair_d2_n4_r2_4_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:4,14' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:same_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+### 14_tail_action_alt_pair_d2_n4_r3_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+forced_pair = [5, 14]
+forced_pair_depth_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:5,14
+forced_pair_path_rule = force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:5,14
+forced_child_kind_depth_rule = force_child_kind_depth:0:same_vehicle;1:same_vehicle
+preferred_target_child_kind = None
+source_tail_class = tail_action_no_column
+source_tail_badness_score = None
+source_type = tail_action_alt_pair
+source_original_forced_pair = [1, 9]
+source_alt_rank = 3
+source_alt_pool_max_child_width = 110
+source_alt_pool_total_child_width = 198
+```
+
+```bash
+/home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 260 --results-csv BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/14_tail_action_alt_pair_d2_n4_r3_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/results.csv --log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/14_tail_action_alt_pair_d2_n4_r3_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/logs --solution-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/14_tail_action_alt_pair_d2_n4_r3_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/solutions --run-log-dir BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623/runs/14_tail_action_alt_pair_d2_n4_r3_5_14_apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set journey_early_branching_enabled=False --set journey_tail_action_early_branch_enabled=True --set journey_tail_action_early_branch_min_cg_iter=35 --set journey_tail_action_early_branch_child_min_cg_iter=2 --set journey_tail_action_early_branch_max_depth=1 --set journey_tail_action_early_branch_min_true_rc_productivity=1 --set journey_tail_action_child_priority_enabled=True --set journey_tail_action_child_priority_width=-1 --set journey_tail_action_no_column_early_branch_enabled=True --set journey_tail_action_no_column_early_branch_min_depth=2 --set journey_tail_action_no_column_early_branch_max_depth=2 --set journey_tail_action_no_column_early_branch_child_min_cg_iter=1 --set journey_tail_action_no_column_early_branch_min_true_rc_productivity=0 --set journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False --set journey_tail_action_no_column_early_branch_max_pool_child_width=180 --set journey_tail_action_no_column_early_branch_max_pool_total_child_width=360 --set journey_tail_action_no_column_early_branch_max_pool_balance_gap=180 --set journey_branch_fractionality_tie_tolerance=0.05 --set 'journey_branch_candidate_priority=force_pair_path:0:3,7=same_vehicle;1:2,10=same_vehicle;2:5,14' --set 'journey_child_priority_mode=force_child_kind_depth:0:same_vehicle;1:same_vehicle' --set journey_branch_candidate_log_top_n=12
+```
+
+## 边界
+
+这些命令只改变 Ryan-Foster 候选选择顺序和可选的 child queue 顺序；如果 forced pair 不是当前合法 fractional candidate，会回退到默认 fractionality 选择。最终 no-negative closure 仍只来自 exact pricing。

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from datetime import date
 import json
 from pathlib import Path
 import re
@@ -301,13 +302,18 @@ def _summarize_branch(
     branch: dict[str, Any],
     children_by_parent: dict[int, list[dict[str, Any]]],
     by_node: dict[int, list[dict[str, Any]]],
+    *,
+    run_status: str,
+    log_has_finish: bool,
+    run_end_time: float,
 ) -> dict[str, Any]:
     branch_node_id = _int(branch, "node_id", -1)
     candidate_log = _find_candidate_log(events, branch_index, branch)
+    branch_time = _float(branch, "time", 0.0)
     children = [
         _summarize_child(child, by_node)
         for child in children_by_parent.get(branch_node_id, [])
-        if child.get("time", 0.0) >= branch.get("time", 0.0)
+        if child.get("time", 0.0) >= branch_time
     ]
     started_children = [child for child in children if bool(child.get("started"))]
     first_started_child = min(
@@ -330,11 +336,22 @@ def _summarize_branch(
         for child in children
         if child.get("allowed_current_journeys") is not None
     ]
+    unprocessed_child_count = len(children) - len(started_children)
+    label_observation_complete = (
+        bool(log_has_finish)
+        and str(run_status) == "OPTIMAL"
+        and int(unprocessed_child_count) <= 0
+    )
+    right_censored = not bool(label_observation_complete)
     row = {
         "log_file": str(path),
+        "run_status": str(run_status),
+        "log_has_finish": bool(log_has_finish),
+        "log_end_time": round(float(run_end_time), 6),
         "branch_node_id": branch_node_id,
         "depth": branch.get("depth"),
-        "branch_time": round(_float(branch, "time", 0.0), 6),
+        "branch_time": round(float(branch_time), 6),
+        "branch_observation_window": round(max(0.0, float(run_end_time) - float(branch_time)), 6),
         "left": branch.get("left"),
         "right": branch.get("right"),
         "task_i": None if left is None else left["task_i"],
@@ -344,6 +361,8 @@ def _summarize_branch(
         "candidate_count": None if candidate_log is None else candidate_log.get("candidate_count"),
         "eligible_count": None if candidate_log is None else candidate_log.get("eligible_count"),
         "priority_mode": None if candidate_log is None else candidate_log.get("priority_mode"),
+        "forced_pair": None if candidate_log is None else candidate_log.get("forced_pair"),
+        "forced_pair_matched": None if candidate_log is None else candidate_log.get("forced_pair_matched"),
         "selected": selected,
         "observed_branch_candidate": observed_candidate,
         "selected_matches_branch": None
@@ -356,8 +375,11 @@ def _summarize_branch(
         "top": top,
         "priority_top": priority_top,
         "processed_child_count": len(started_children),
-        "unprocessed_child_count": len(children) - len(started_children),
+        "unprocessed_child_count": int(unprocessed_child_count),
         "child_count": len(children),
+        "all_children_started": bool(children and int(unprocessed_child_count) <= 0),
+        "right_censored": bool(right_censored),
+        "label_observation_complete": bool(label_observation_complete),
         "min_child_allowed_current_journeys": min(child_widths) if child_widths else None,
         "max_child_allowed_current_journeys": max(child_widths) if child_widths else None,
         "sum_child_negative_pricing_event_count": int(
@@ -405,6 +427,9 @@ def _summarize_branch(
     }
     feature_source = "candidate_log" if observed_candidate is not None else "child_width_fallback"
     row["branch_feature_source"] = feature_source
+    row["usable_for_branch_impact_training"] = bool(
+        row["label_observation_complete"] and feature_source == "candidate_log"
+    )
     row["branch_feature_vector"] = _branch_feature_vector(row, observed_candidate)
     row["branch_labels"] = _branch_labels(row)
     return row
@@ -509,6 +534,12 @@ def _training_row(row: dict[str, Any]) -> dict[str, Any]:
         "task_i": row.get("task_i"),
         "task_j": row.get("task_j"),
         "branch_feature_source": row.get("branch_feature_source"),
+        "forced_pair": row.get("forced_pair"),
+        "forced_pair_matched": row.get("forced_pair_matched"),
+        "run_status": row.get("run_status"),
+        "right_censored": bool(row.get("right_censored")),
+        "label_observation_complete": bool(row.get("label_observation_complete")),
+        "usable_for_branch_impact_training": bool(row.get("usable_for_branch_impact_training")),
         "branch_feature_schema": list(BRANCH_IMPACT_FEATURE_SCHEMA),
         "branch_features": row.get("branch_feature_vector"),
         "branch_label_schema": list(BRANCH_IMPACT_LABEL_SCHEMA),
@@ -546,6 +577,10 @@ def _optional_int(value: Any) -> int | None:
 
 def _summarize_log(path: Path) -> list[dict[str, Any]]:
     events = _read_events(path)
+    finish_events = [record for record in events if record.get("event") == "finish"]
+    log_has_finish = bool(finish_events)
+    run_status = str(finish_events[-1].get("status") or "UNKNOWN") if finish_events else "NO_FINISH"
+    run_end_time = max((_float(record, "time", 0.0) for record in events), default=0.0)
     by_node: dict[int, list[dict[str, Any]]] = {}
     children_by_parent: dict[int, list[dict[str, Any]]] = {}
     for record in events:
@@ -559,7 +594,19 @@ def _summarize_log(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, record in enumerate(events):
         if record.get("event") == "journey_branch":
-            rows.append(_summarize_branch(path, events, index, record, children_by_parent, by_node))
+            rows.append(
+                _summarize_branch(
+                    path,
+                    events,
+                    index,
+                    record,
+                    children_by_parent,
+                    by_node,
+                    run_status=run_status,
+                    log_has_finish=log_has_finish,
+                    run_end_time=run_end_time,
+                )
+            )
     return rows
 
 
@@ -570,6 +617,13 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     top_contains_branch_rows = [row for row in rows if row.get("branch_rank_in_top") is not None]
     top_first_branch_rows = [row for row in rows if row.get("branch_rank_in_top") == 0]
     priority_top_first_branch_rows = [row for row in rows if row.get("branch_rank_in_priority_top") == 0]
+    candidate_log_rows = [row for row in rows if row.get("branch_feature_source") == "candidate_log"]
+    forced_pair_rows = [row for row in rows if row.get("forced_pair") is not None]
+    forced_pair_matched_rows = [row for row in rows if row.get("forced_pair_matched") is True]
+    right_censored_rows = [row for row in rows if bool(row.get("right_censored"))]
+    complete_label_rows = [row for row in rows if bool(row.get("label_observation_complete"))]
+    usable_training_rows = [row for row in rows if bool(row.get("usable_for_branch_impact_training"))]
+    run_status_counts = Counter(str(row.get("run_status") or "UNKNOWN") for row in rows)
     active_touch_rows = [
         row
         for row in rows
@@ -591,6 +645,13 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "top_contains_branch_count": len(top_contains_branch_rows),
         "top_first_branch_count": len(top_first_branch_rows),
         "priority_top_first_branch_count": len(priority_top_first_branch_rows),
+        "candidate_log_branch_count": len(candidate_log_rows),
+        "forced_pair_branch_count": len(forced_pair_rows),
+        "forced_pair_matched_branch_count": len(forced_pair_matched_rows),
+        "right_censored_branch_count": len(right_censored_rows),
+        "complete_label_branch_count": len(complete_label_rows),
+        "usable_branch_impact_training_count": len(usable_training_rows),
+        "run_status_counts": dict(sorted(run_status_counts.items())),
         "active_touch_branch_count": len(active_touch_rows),
         "inactive_only_branch_count": len(inactive_only_rows),
         "unprocessed_child_count": int(sum(int(row.get("unprocessed_child_count") or 0) for row in rows)),
@@ -617,6 +678,20 @@ def _interpret(rows: list[dict[str, Any]]) -> str:
     if not rows:
         return "没有找到 journey_branch 事件。"
     tail_counts = Counter(str(row.get("tail_class") or "") for row in rows)
+    candidate_log_count = sum(1 for row in rows if row.get("branch_feature_source") == "candidate_log")
+    usable_count = sum(1 for row in rows if bool(row.get("usable_for_branch_impact_training")))
+    right_censored_count = sum(1 for row in rows if bool(row.get("right_censored")))
+    if usable_count <= 0:
+        if candidate_log_count <= 0:
+            return (
+                "本批 branch row 没有 branch-candidate feature log，只能使用 child-width fallback；"
+                "再加上右删失 row 较多，因此只能做 proof-tail 诊断，不能直接作为 GAT branch-impact 正例训练集。"
+            )
+        if right_censored_count:
+            return (
+                "本批 branch row 存在右删失，子树未完整观测；可以做 hard-negative/风险诊断，"
+                "但不能把未处理 child 当成稳定 branch-impact 标签。"
+            )
     inactive_only = sum(
         1
         for row in rows
@@ -686,7 +761,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
     lines = [
         "# Journey Branch-Impact Audit",
         "",
-        "日期：2026-06-23",
+        f"日期：{date.today().isoformat()}",
         "",
         "## 目的",
         "",
@@ -706,6 +781,13 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"top_contains_branch_count = {aggregate['top_contains_branch_count']}",
         f"top_first_branch_count = {aggregate['top_first_branch_count']}",
         f"priority_top_first_branch_count = {aggregate['priority_top_first_branch_count']}",
+        f"candidate_log_branch_count = {aggregate['candidate_log_branch_count']}",
+        f"forced_pair_branch_count = {aggregate['forced_pair_branch_count']}",
+        f"forced_pair_matched_branch_count = {aggregate['forced_pair_matched_branch_count']}",
+        f"right_censored_branch_count = {aggregate['right_censored_branch_count']}",
+        f"complete_label_branch_count = {aggregate['complete_label_branch_count']}",
+        f"usable_branch_impact_training_count = {aggregate['usable_branch_impact_training_count']}",
+        f"run_status_counts = {aggregate['run_status_counts']}",
         f"active_touch_branch_count = {aggregate['active_touch_branch_count']}",
         f"inactive_only_branch_count = {aggregate['inactive_only_branch_count']}",
         f"unprocessed_child_count = {aggregate['unprocessed_child_count']}",
@@ -742,6 +824,9 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         "若 `selected_match_count = 0` 但 `top_contains_branch_count > 0`，通常表示输入日志生成于 "
         "`selected` / `priority_top` 字段加入之前；此时只能从 `top` 中反推实际分支候选位置，"
         "不能把 `selected_match_count = 0` 解读为分支选择错误。",
+        "",
+        "若 `candidate_log_branch_count = 0`，说明该批日志完全缺少 branch-candidate 特征；"
+        "这些 rows 只能作为 proof-cost / tail-risk 诊断，不能作为 GAT branch-impact 排序训练 row。",
         "",
         "## Records",
         "",

@@ -1530,9 +1530,10 @@ V154/GAT 没有关掉，也不是完全没有作用：它能持续推进、能�
 当前结论：
 
 - 20 规模还没有真正加速到 200s 目标；
-- GAT/support-aware admission 对 root 有帮助，但 proof tail 的主要剩余问题仍是 frontier suffix bound 太松；
-- 直接全局打开更重的 route-aware/available-mask bound 会吃掉太多时间；
-- 下一步应做 tail-only / active-token-only frontier refinement，只对 final-probe ledger 中最小 active frontier token 做更强局部下界，失败时保留原 bound。
+- GAT/support-aware admission 对 root 有帮助，但 seed61000 node 1 的第一道门槛不是“把 frontier floor 抬到 0 就能 fathom”，而是 `z_RMP=580.221453667 < UB≈584.354872`；
+- 直接全局打开更重的 route-aware/available-mask bound 会吃掉太多时间，而且不能改变当前 RMP objective；
+- Tier 1 frontier refinement 只应作为 A 类节点工具：final-probe 已无待加入负列、`z_RMP >= UB - eps`、`fathom_rc_target` 存在、critical token/floor multiplicity 都小且 coverage 完整；
+- 对 seed61000 node 1 这类 D 类节点，主线应转向 exact-safe early branch、branch-impact/child proof-cost、incumbent improvement、pricing-compatible cuts 或更强 formulation。
 
 详细记录见：
 
@@ -1562,7 +1563,7 @@ canonical random-TW 20 `seed61000` 的 300s 诊断结果：
 最新结论：
 
 - node 1 不是“单个 token 过低”导致不能剪枝，而是 `z_RMP` 本身低于 incumbent，proof-tail refinement 即使完美也无法 fathom；
-- 下一步应实现 Tier 1 critical-token micro-expansion，并同步关注提高 incumbent / RMP bound / branch 选择，而不是继续全局加重 unique-route20 或 AMCB。
+- 下一步的 Tier 1 critical-token micro-expansion 只能作为 A 类节点工具：必须先满足 `z_RMP >= UB - eps`、`fathom_rc_target` 存在、critical token / floor multiplicity 稀疏、child 预算可控且 coverage 完整；seed61000 node 1 这类不可 fathom 的 D 类节点不应消耗 micro-expansion 预算，应同步关注 incumbent improvement、cuts/formulation、branch-impact / child proof cost，而不是继续全局加重 unique-route20 或 AMCB。
 
 ## 2026-06-23 修正：负列不会提高 `z_RMP`
 
@@ -1580,6 +1581,7 @@ Tier 1 micro-expansion 的适用范围收窄为 A 类节点：
 
 - `z_RMP >= UB - eps`
 - `fathom_rc_target` 存在
+- `global_remaining_rc_lb` 有效且 frontier coverage 完整
 - `global_remaining_rc_lb < fathom_rc_target`
 - critical token count 和 floor multiplicity 都小
 - 预计 child 总数不超预算
@@ -1587,12 +1589,1915 @@ Tier 1 micro-expansion 的适用范围收窄为 A 类节点：
 
 如果 target 接近 0 但几百/几千 token 都低于 target，这是 B 类“大面积低水位”，不能逐 token split，应转向 aggregate route-aware bound、更强 completion relaxation、cuts/formulation 或 token region 重组。
 
+2026-06-24 代码侧已把 Tail Action Controller 的 A 类标签收紧到这些必要条件：有 true-RC 负列时先继续 CG；缺 `fathom_rc_target`、global RC LB 无效、coverage 不完整、缺 global LB 或 global floor 已达到 target 时，都不会记录为 `FRONTIER_REFINEMENT`。这只是诊断分类收紧，不表示完整 Tier 1 split 已完成。
+
+## 2026-06-23 V8 复验：Tail Action Controller 已绑定 incumbent
+
+在 V8 初次 300s 诊断中发现 corrected-bound audit 调用没有统一传入 incumbent，导致 `tail_action=UNKNOWN`。修复后用同一 canonical random-TW 20 `seed61000` 跑 220s 复验，结果仍为 `EXTERNAL_TIME_LIMIT`，但分类字段已按预期写出。
+
+复验输出：
+
+- CSV: `BPC_future/results/20260623_v8_tail_action_controller_220_randomtw20_seed61000.csv`
+- JSONL: `BPC_future/results/logs_20260623_v8_tail_action_controller_220_randomtw20_seed61000/...jsonl`
+
+关键日志：
+
+- root final retry: `time=104.954704s`，`z_RMP=580.044467333`，incumbent `584.354872`，`global_remaining_rc_lb=0.0`，`tail_action=EARLY_BRANCH`，`fathom_possible_if_rc_zero=false`；
+- node 1 final retry: `time=198.026044s`，`z_RMP=580.221453667`，incumbent `584.354872`，`global_remaining_rc_lb=-412.683770667`，`tail_action=EARLY_BRANCH`，`fathom_possible_if_rc_zero=false`；
+- node 1 `frontier_micro_expansion_attempted=0`，`frontier_refinement_reason=missing_fathom_rc_target`。
+
+node 1 floor band：
+
+- `frontier_floor_band_count_0_1=1`
+- `frontier_floor_band_count_1=8`
+- `frontier_floor_band_count_5=761`
+- `frontier_floor_band_count_10=2704`
+- `frontier_region_count=25589`
+
+结论：controller 现在能把 seed61000 node 1 正确归到 D 类，不会误用 Tier 1 micro-expansion。下一步应把这个日志解析扩到 random-TW 20 的 60-instance 集合，统计 A/B/C/D 类比例，再决定 refinement、branch、incumbent/cuts 哪条线优先吃预算。
+
 详细记录见：
 
 - `BPC_future/logical_graph/run_reports/20260623_bpc_future_v7_waterline_frontier_refinement_diag_zh.md`
 
+## 2026-06-23 V9：Tail Action D 类 opt-in early branch
+
+进一步补充 180s canonical random-TW 20 `seed61000` signal run，把 `recent_active_support_additions` 和 `recent_rmp_objective_progress` 接入 corrected-bound audit，并把 D 类接成默认关闭的 exact-safe early branch opt-in。
+
+输出：
+
+- CSV: `BPC_future/results/20260623_v9_tail_action_early_branch_180_randomtw20_seed61000.csv`
+- audit summary: `BPC_future/results/journey_tail_action_controller_audit_v9_tail_action_early_branch_180_seed61000_20260623/summary.json`
+- report: `BPC_future/logical_graph/run_reports/20260623_bpc_future_v9_tail_action_early_branch_180_seed61000_zh.md`
+
+审计结果：
+
+- `row_count=10`
+- `CONTINUE_COLUMN_GENERATION=6`
+- `EARLY_BRANCH=4`
+- `recent_active_support_addition_row_count=4`
+- `recent_rmp_objective_progress_row_count=3`
+- `fathom_possible_if_rc_zero_count=0`
+- `micro_expansion_attempt_row_count=0`
+
+最关键的一行是 node 1 `cg_iter=2`：`recent_true_rc_productivity=1`，但 `recent_active_support_additions=0`、`recent_rmp_objective_progress=0.0`，因此 controller 给出 `EARLY_BRANCH`，reason 为 `rmp_below_incumbent_weak_columns_no_active_or_objective_progress`。随后实际触发：
+
+```text
+time=139.743157
+event=journey_early_branch_trigger
+trigger=tail_action_controller
+node_id=1
+cg_iter=2
+inherited_lower_bound=580.044467
+rmp_objective=580.221454
+exact_bound_available=false
+child_lower_bound_exact=false
+```
+
+node 1 的两个 child 都以 `lower_bound=580.044467`、`lower_bound_exact=false` 入队，没有使用当前 `z_RMP=580.221454` 作为 exact bound。
+
+这说明当前实现已经不再把“还能找到负列”粗略等同于 C 类。只有负列继续改变 active support 或让 RMP objective 有实际移动时，才归为 C 类继续短预算 CG；否则归为 D 类，下一步可走 exact-safe early branch / branch-impact，而不是消耗 Tier 1 micro-expansion。
+
+但该 180s opt-in 探针仍为 `EXTERNAL_TIME_LIMIT`：D 类 early branch 避开了 node 1 的一次 tail，但后续 node 2 仍卡住。因此这不是 20 规模 200s 的完成证据，而是一个 exact-safe 调度改动。
+
+扩展后的审计脚本新增 `early_branch_trigger_rows.jsonl/csv`，把 D 类触发和 child queue 绑定起来。V9 seed61000 结果：
+
+- `early_branch_trigger_count=1`
+- `tail_action_early_branch_trigger_count=1`
+- `nonexact_early_branch_trigger_count=1`
+- `tail_action_queued_child_count=2`
+- `tail_action_nonexact_queued_child_count=2`
+- `tail_action_observed_child_audit_count=0`
+- `queued_child_ids=3,4`
+- `queued_child_min_allowed_current_journeys=118`
+- `queued_child_max_allowed_current_journeys=167`
+
+这说明 D 类分支确实生成了两个 non-exact child，但 180s 内没有处理到它们；搜索先进入 root sibling node 2。下一步的重点应转向 child ordering / branch-impact：不是只问“要不要早分支”，而是要判断 D 类分支后的 child 是否应该优先处理，以及哪个 child 更可能降低后续 exact pricing / CB tail。
+
+后续代码已补默认关闭的 `journey_tail_action_child_priority_enabled`：它允许 D 类 tail-action child 使用 `journey_tail_action_child_priority_width` 调整队列顺序，并在 `journey_child_queued` / tail-action 审计中记录 `queue_priority_width`。该开关只是调度优先级，不改变 lower bound、exactness、分支约束或剪枝；现有 V9 日志早于该补丁，不能作为速度收益证据。
+
+## 2026-06-23 V10：D 类 child-priority fresh probe
+
+为验证 child-priority 是否真的改变队列顺序，重新跑 canonical random-TW 20 `seed61000`，外部预算 220s，并显式打开：
+
+```text
+journey_tail_action_early_branch_enabled=True
+journey_tail_action_early_branch_min_cg_iter=35
+journey_tail_action_early_branch_child_min_cg_iter=2
+journey_tail_action_early_branch_max_depth=1
+journey_tail_action_child_priority_enabled=True
+journey_tail_action_child_priority_width=-1
+```
+
+输出：
+
+- CSV: `BPC_future/results/20260623_v10_tail_action_child_priority_220_randomtw20_seed61000.csv`
+- JSONL: `BPC_future/results/logs_20260623_v10_tail_action_child_priority_220_randomtw20_seed61000/...jsonl`
+- audit summary: `BPC_future/results/journey_tail_action_controller_audit_v10_tail_action_child_priority_220_seed61000_20260623/summary.json`
+- audit report: `BPC_future/logical_graph/run_reports/20260623_bpc_future_v10_tail_action_child_priority_220_seed61000_zh.md`
+
+结果仍为 `EXTERNAL_TIME_LIMIT`，wall `220.034807s`。
+
+关键事件：
+
+```text
+125.603298s  root exact_completion_bound_retry OPTIMAL
+125.685520s  root branch，child 1/2 lower_bound_exact=true
+162.723293s  node 1 tail-action early branch，trigger=tail_action_controller
+162.761930s  child 3 queued，queue_priority_width=-1，lower_bound_exact=false
+162.761971s  child 4 queued，queue_priority_width=-1，lower_bound_exact=false
+162.781012s  node 3 RMP starts
+216.582741s  node 3 enters exact_pricing_completion_bound_retry
+220.034807s  external timeout
+```
+
+审计摘要：
+
+- `row_count=13`
+- `CONTINUE_COLUMN_GENERATION=6`
+- `FRONTIER_REFINEMENT=3`
+- `EARLY_BRANCH=4`
+- `early_branch_trigger_count=1`
+- `tail_action_queued_child_count=2`
+- `tail_action_nonexact_queued_child_count=2`
+- `tail_action_observed_child_audit_count=4`
+- `tail_action_child_min_queue_priority_width=-1`
+- `tail_action_child_max_queue_priority_width=-1`
+
+结论：
+
+- child-priority 成功解决 V9 暴露的“D 类 child 生成了但 180s 内没处理到”的队列问题：V10 中 node 1 分支后下一条 RMP 是 node 3，而不是 root sibling node 2。
+- 但它没有解决 20 规模 200s/220s optimal：node 3 本身在后段进入 completion-bound retry，并在外部 220s 超时。
+- V10 旧日志中 node 3 前几轮 `rmp_objective >= incumbent`，controller 给出 `FRONTIER_REFINEMENT`，但这些行仍是 `negative_journey_requires_column_addition`，不是 final-probe 可直接剪枝的 Tier 1 机会；后续控制器已收紧为“有负列先继续 CG”。到 no-negative 时，node 3 已变为 `rmp_objective=584.2437713 < incumbent=584.354872`，再次不属于可直接 fathom 的 A 类。
+
+因此下一步不应继续只调队列顺序；主线应转到两件事：
+
+1. 对 node 3 类 child 的 proof tail 做 exact-safe 提前 close：更早的 completion-bound handoff、child-level tail action gate、或 batch/aggregate completion relaxation。
+2. 继续改善 incumbent/cuts/branch-impact，让子节点在 no-negative/final-probe 时仍保持 `z_RMP >= UB - eps`，否则 Tier 1 micro-expansion 仍没有直接剪枝空间。
+
+## 2026-06-23 V11b：no-column D 类 gate fresh probe
+
+V10 暴露的下一个阻塞是 node 3 在 local no-column 后进入 completion-bound retry。为验证是否可以 exact-safe 地跳过这类 retry，新增默认关闭的 no-column D 类 early-branch gate：
+
+```text
+journey_tail_action_no_column_early_branch_enabled=True
+journey_tail_action_no_column_early_branch_min_depth=2
+journey_tail_action_no_column_early_branch_max_depth=2
+journey_tail_action_no_column_early_branch_child_min_cg_iter=4
+```
+
+这个 gate 只改变搜索调度：
+
+- 不产生 certificate；
+- 不把当前 RMP objective 当 exact node bound；
+- 不用该 bound 剪枝；
+- child 继承已有合法祖先下界，且 `lower_bound_exact=false`；
+- child 仍必须通过 exact pricing / completion-bound closure。
+
+输出：
+
+- CSV: `BPC_future/results/20260623_v11b_tail_action_no_column_depth2_300_randomtw20_seed61000.csv`
+- JSONL: `BPC_future/results/logs_20260623_v11b_tail_action_no_column_depth2_300_randomtw20_seed61000/...jsonl`
+- audit summary: `BPC_future/results/journey_tail_action_controller_audit_v11b_tail_action_no_column_depth2_300_seed61000_20260623/summary.json`
+- audit report: `BPC_future/logical_graph/run_reports/20260623_bpc_future_v11b_tail_action_no_column_depth2_300_seed61000_zh.md`
+
+结果仍为 `EXTERNAL_TIME_LIMIT`，wall `300.029456s`。
+
+关键事件：
+
+```text
+90.313525s   root local no-column D 类 audit，但 depth gate 阻止 root 误分支
+105.265030s  root completion-bound certificate
+142.493001s  node 1 普通 D 类 tail-action branch，child 3/4 lower_bound_exact=false
+196.221668s  node 3 no-column D 类 branch，tail_action_no_column=true
+231.713072s  node 4 cg1 进入 completion-bound retry
+276.772964s  node 5 开始处理
+294.162041s  node 5 仍找到 true negative journey
+300.029456s  external timeout
+```
+
+审计摘要：
+
+- `row_count=17`
+- `tail_action_early_branch_trigger_count=2`
+- `tail_action_no_column_early_branch_trigger_count=1`
+- `tail_action_queued_child_count=4`
+- `tail_action_nonexact_queued_child_count=4`
+- `tail_action_child_min_queue_priority_width=-1`
+
+结论：
+
+- V11b 证明 no-column D 类 gate 可以 exact-safe 地跳过 V10 的 node 3 completion-bound retry。
+- root 没有被误分支，说明 `min_depth=2` 的保护必要且有效。
+- 但 300s 仍未 OPTIMAL，说明当前 20 规模阻塞不是单个 node3 retry，而是 sibling/deeper child 的 proof-tail 链。
+- 如果下一步把 no-column gate 放宽到 cg1，必须同时加 branch-width、remaining time、depth、child-budget 等限制，否则可能只是更快制造更深子树。
+
+因此下一阶段应三线并行：
+
+1. 完成严格 gated 的 deterministic Tier 1，只用于 `z_RMP >= UB - eps` 的 A 类稀疏低水位节点。
+2. 改善节点进入可剪枝区间的能力：incumbent improvement、pricing-compatible cuts、更强 formulation、branch strong-bound gain、child proof cost 和 child ordering。
+3. 保留 GAT，但让它学习 tail action 调度：`time_to_next_official_bound`、`corrected_fathom_probability`、`final_probe_cpu`、`child_safe_bound_gain`、`child_time_to_certificate`、`incumbent_improvement_probability`。Tier 1 正确性仍由 deterministic exact-safe split 保证，不能交给 GAT。
+
+## 2026-06-23 V12：cg1 no-column + width guard probe
+
+V11b 后，补了 no-column D 类 gate 的宽度/child-budget 保护：
+
+```text
+journey_tail_action_no_column_early_branch_max_pool_child_width
+journey_tail_action_no_column_early_branch_max_pool_total_child_width
+journey_tail_action_no_column_early_branch_max_pool_balance_gap
+```
+
+这些限制只在配置后生效；若配置了限制但缺少 branch width context，则 fail-closed，不触发 early branch。触发日志会记录：
+
+```text
+no_column_branch_task_i/task_j
+no_column_branch_pool_max_child_width
+no_column_branch_pool_total_child_width
+no_column_branch_width_guard_reason
+```
+
+V12 使用 canonical random-TW 20 `seed61000`，260s 预算，允许 depth=2、cg>=1 的 no-column 分支，并设置：
+
+```text
+max_pool_child_width=180
+max_pool_total_child_width=360
+max_pool_balance_gap=180
+```
+
+输出：
+
+- CSV: `BPC_future/results/20260623_v12_no_column_cg1_widthguard_260_randomtw20_seed61000.csv`
+- JSONL: `BPC_future/results/logs_20260623_v12_no_column_cg1_widthguard_260_randomtw20_seed61000/...jsonl`
+- audit summary: `BPC_future/results/journey_tail_action_controller_audit_v12_no_column_cg1_widthguard_260_seed61000_20260623/summary.json`
+- audit report: `BPC_future/logical_graph/run_reports/20260623_bpc_future_v12_no_column_cg1_widthguard_260_seed61000_zh.md`
+
+结果仍为：
+
+```text
+status=EXTERNAL_TIME_LIMIT
+wall_time=260.036938s
+```
+
+关键事件：
+
+```text
+160.171699s  node 1 普通 D 类 tail-action branch，child 3/4 lower_bound_exact=false
+214.124725s  node 3 no-column D 类 branch，RF(4,12)，pool max/total=111/202，guard=ok
+249.337568s  node 4 cg1 no-column D 类 branch，RF(1,9)，pool max/total=166/302，guard=ok
+249.375707s  node 5 starts
+260.036938s  external timeout
+```
+
+审计摘要：
+
+- `tail_action_early_branch_trigger_count=3`
+- `tail_action_no_column_early_branch_trigger_count=2`
+- `tail_action_queued_child_count=6`
+- `tail_action_nonexact_queued_child_count=6`
+- child activity:
+  - node 1 trigger subtree：`started=2/2` direct children，`subtree_nodes=6`，`pricing=11`，`negative_pricing=3`，`subtree_no_column=2`，observed span `90.093774s`
+  - node 3 no-column subtree：`started=1/2` direct children，`pricing=1`，`negative_pricing=0`，observed span `36.140748s`
+  - node 4 no-column subtree：`started=0/2` direct children，observed span `0.038115s`
+
+结论：
+
+- width guard 生效并保留了可审计字段；
+- cg1 no-column gate 确实跳过了 V11b 中 node 4 的 completion-bound retry；
+- 但 260s 仍没有 OPTIMAL，说明当前动作主要把 proof tail 从 node 3/4 下放到 node 5 及更深子树；
+- 因此该 gate 只能继续作为受控 opt-in，不能作为 20-scale 加速达标方案。下一步的 branch-impact/GAT 标签应直接使用 subtree pricing、negative-pricing、completion retry、no-column-chain、child-start/timeout 这些 proof-cost 指标，而不是只看当前 branch pair 的 pool width 或是否跳过一次 retry。
+
+## 2026-06-23 Tail-Impact Training Rows v2：接入 tail-action proof-cost
+
+已扩展 `BPC_future/scripts/build_journey_tail_impact_training_rows.py`，新增 `--tail-action-input`，可读取 Tail Action Controller 审计目录中的 `early_branch_trigger_rows.jsonl`，把 early branch 后的子树 proof-cost 转成统一训练行。
+
+V12 tail-action 输入：
+
+```text
+BPC_future/results/journey_tail_action_controller_audit_v12_no_column_cg1_widthguard_260_seed61000_20260623
+```
+
+输出：
+
+```text
+BPC_future/results/journey_tail_impact_training_rows_v12_tail_action_20260623
+BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_tail_impact_training_rows_v12_tail_action_zh.md
+```
+
+摘要：
+
+```text
+training_row_count = 3
+source_counts = {'tail_action_proof_cost': 3}
+tail_class_counts = {'tail_action_branch': 1, 'tail_action_no_column': 2}
+y_tail_risk positives = 3
+y_useful_tail_reduction positives = 0
+child_negative_pricing_events total = 3
+child_early_branch_triggers total = 2
+child_unstarted total = 3
+subtree_no_column_chain total = 2
+```
+
+结论：
+
+- 这一步仍不改变 solver，也不提供 certificate / official bound；
+- V12 tail-action row 可以作为 hard-negative / tail-risk 数据；
+- 由于 `y_useful_tail_reduction=0`，它不能单独训练“选它会加速”的 GAT head；
+- 下一批数据采集必须围绕同一 parent context 做 child ordering / branch candidate counterfactual，目标是找到 subtree proof-cost 真下降的正例。
+
+## 2026-06-23 V13：depth-scoped child-ordering counterfactual
+
+为采集 useful-tail-reduction 正例，新增 exact-safe child-ordering opt-in：
+
+```text
+journey_child_priority_mode=force_child_kind_depth:<depth>:same_vehicle|separate_vehicle
+```
+
+这个开关只改变 child 入队顺序：
+
+- 不改变 branch constraint；
+- 不改变 lower bound；
+- 不把 RMP objective 当 exact bound；
+- 不剪枝；
+- child 仍靠 exact pricing / completion-bound closure。
+
+同时扩展 `build_journey_branch_tail_positive_runbook.py`，可以从 V12 tail-impact rows 读取 `log_file`，反查该 node 的祖先 branch path，自动生成：
+
+```text
+journey_branch_candidate_priority=force_pair_depth:...
+journey_child_priority_mode=force_child_kind_depth:...
+```
+
+V13 runbook：
+
+```text
+BPC_future/results/journey_branch_tail_positive_runbook_v13_child_order_20260623
+BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_tail_positive_runbook_v13_child_order_zh.md
+```
+
+已执行两条 canonical random-TW 20 `seed61000` probe，均为 260s：
+
+| probe | status | 关键对比 |
+|---|---|---|
+| node3 `RF(4,12)` separate-first | `EXTERNAL_TIME_LIMIT` | node3 subtree 从 V12 的 `pricing=1, negative=0, span=36.14s` 变成 `pricing=3, negative=1, span=44.70s` |
+| node4 direction same-first | `EXTERNAL_TIME_LIMIT` | node1 subtree `pricing=17, negative=6, span=117.94s`；node3 subtree `pricing=7, negative=3, span=82.83s` |
+
+结论：
+
+- V13 验证了 counterfactual 采样闭环已经可执行：tail-action proof-cost row -> runbook -> forced replay -> audit -> training rows。
+- 但两条 child-ordering counterfactual 都不是正例，仍然是 hard negatives。
+- 当前证据说明“只换同一 branch 下的 child 顺序”不是 seed61000 的主杠杆；下一步要引入更强候选来源，例如 branch-impact score、incumbent/cut 变化、或更局部的 exact-safe completion relaxation。
+
+## 2026-06-23 V14/V15：branch-pair alt replay 与 path-aware 修正
+
+在 V13 hard negative 之后，runbook 继续扩展为可读取 tail-action row 对应 JSONL 中的 `journey_branch_candidates.priority_top`，自动生成目标节点的替代 Ryan-Foster pair replay。这个扩展仍是 opt-in 诊断：只改变分支候选选择，不改变 bound、certificate、pricing closure 或剪枝。
+
+V14 先暴露了一个重要控制问题：
+
+```text
+journey_branch_candidate_priority = force_pair_depth:...
+```
+
+该语法只按 depth 生效，不按祖先路径生效。因此当目标 depth 有 sibling node 时，同一 depth 的兄弟节点也会被一起强制同一个 pair。V14 entry 13 的 depth-only `[4,14]` replay 中，node3 和 node4 都被改成 `[4,14]`，所以它不能解释为单个 node 的反事实。
+
+已新增 path-aware replay 语法：
+
+```text
+journey_branch_candidate_priority = force_pair_path:0:i,j=kind;1:k,l=kind;2:target_i,target_j
+```
+
+语义：
+
+- 只有当前 node 的祖先 `BranchConstraint` 完整匹配前面的 path segment，才在目标 depth 强制 pair；
+- sibling node 的祖先路径不匹配时，`forced_pair=None`，回退默认 branch selection；
+- 这仍只是 replay / sampling 控制，不提供 official bound，不改变 exact pricing certificate。
+
+V15 runbook：
+
+```text
+BPC_future/results/journey_branch_tail_positive_runbook_v15_path_alt_pair_20260623
+BPC_future/logical_graph/run_reports/20260623_bpc_future_journey_branch_tail_positive_runbook_v15_path_alt_pair_zh.md
+```
+
+已执行 V15 entry 13：
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+time_limit = 260
+status = EXTERNAL_TIME_LIMIT
+wall_time = 260.042870s
+```
+
+path-aware 绑定检查：
+
+```text
+depth=1 node1: forced_pair=None, selected=(2,10)
+depth=2 target path: forced_pair=[4,14], forced_pair_matched=true, selected=(4,14)
+depth=2 sibling path: forced_pair=None, selected=(1,9)
+```
+
+同口径 proof-cost 对比：
+
+```text
+V12_base:                  pricing=12, neg=3, early=2, no_col=2, max_span=90.094
+V13_node4_same_depth_only: pricing=24, neg=9, early=2, no_col=2, max_span=117.941
+V14_alt_4_14_depth_only:   pricing=20, neg=7, early=2, no_col=2, max_span=112.413
+V15_alt_4_14_path_aware:   pricing=22, neg=9, early=2, no_col=2, max_span=114.697
+```
+
+结论：
+
+- `force_pair_path` 是后续 branch counterfactual 的必要控制方式；`force_pair_depth` 只能用于全 depth 策略测试，不能作为 node-specific 标签。
+- `[4,14]` path-aware 替代 pair 不是 useful-tail-reduction 正例；仍为 hard negative。
+- 当前 pool width / total width 下降并不等价于 proof tail 下降。branch-impact/GAT 标签必须继续看 subtree pricing、true negative、no-column chain、child start/timeout 等后验成本。
+
+## 2026-06-24 V16：late-negative tail 审计接入 tail-impact rows
+
+为回答“proof tail 到底是 weak false-negative 还是 true-RC 负列仍在拖尾”，新增只读审计：
+
+- `BPC_future/scripts/audit_journey_late_negative_tail.py`
+- `BPC_future/tests/test_journey_late_negative_tail_audit.py`
+
+它把 solver JSONL 中的 pricing event 与 column-addition event 绑定，区分 true negative active-support-changing、true negative inactive-only、未观察到 addition 的 true negative，以及 weak/profile filtered negative。该脚本不运行 BPC / pricing / RMP，不提供 certificate 或 official bound。
+
+V12 no-column seed61000，取 `time >= 150s`：
+
+```text
+tail_event_count = 4
+true_negative_event_count = 4
+weak_filtered_event_count = 0
+weak_false_negative_event_count = 0
+total_active_changed_task_sets = 2
+total_inactive_changed_task_sets = 5
+tail_class_counts = {'true_negative_active_support_changing': 2, 'true_negative_inactive_only': 2}
+```
+
+V15 path-aware `[4,14]` hard-negative replay，取 `time >= 150s`：
+
+```text
+tail_event_count = 5
+true_negative_event_count = 5
+weak_filtered_event_count = 0
+weak_false_negative_event_count = 0
+total_active_changed_task_sets = 2
+total_inactive_changed_task_sets = 25
+tail_class_counts = {'true_negative_active_support_changing': 2, 'true_negative_inactive_only': 3}
+```
+
+解释：
+
+- 这两条 tail 后段都不是 weak-only false-negative 主导，而是 exact true-negative tail；
+- V15 path-aware 替代 pair 没有减少 active-support-changing burden，反而显著增加 inactive-only changed task sets；
+- 所以单独扩大 weak materialization 或只做 weak-delay，不会解决 seed61000 这段 tail；
+- 下一步的 GAT/admission 使用点应区分 active-support-changing / new task-set true negative 与 inactive-only replacement pressure。
+
+`build_journey_tail_impact_training_rows.py` 已扩展 `--late-negative-input`，schema 升到 v3。V16 输出：
+
+```text
+output_dir = BPC_future/results/journey_tail_impact_training_rows_v16_late_negative_v12_after150_20260624
+training_row_count = 7
+source_counts = {'late_negative_tail': 4, 'tail_action_proof_cost': 3}
+y_late_true_negative = 4
+y_late_active_support_changing = 2
+y_late_inactive_only = 2
+y_late_weak_filtered = 0
+y_useful_tail_reduction = 0
+contrastive_tail_training_ready = false
+tail_label_training_ready = false
+```
+
+结论：
+
+- V16 没有让 20 规模变快，也不是 production training set；
+- 它把 tail 结构拆成可学习字段，当前仍是 hard-negative / tail-risk / active-vs-inactive 数据；
+- `y_useful_tail_reduction` 仍为 0，不能直接训练“选好分支/好候选”的 GAT；
+- 支持后续实现默认关闭的 support-aware admission/delay：优先 active-support-changing 和 new task-set，inactive-only 只能 delay/降权，certificate 前必须 deterministic fallback 释放，不能永久丢列。
+
+## 2026-06-24 V17：support-aware admission/delay 默认关闭实现
+
+已把 V16 的 active-vs-inactive 结论接入在线 GAT admission scheduler，但仍保持默认关闭。
+
+代码改动：
+
+- `GATAdmissionQueue` 支持 candidate metadata 触发 forced high-priority；
+- forced high-priority 只对 true-RC negative 生效，true-RC nonnegative 仍会被 `REJECT_NONNEGATIVE_ONLY` 拒绝；
+- `_journey_gat_target_mode_admission_schedule()` 新增 support-aware 上下文：
+  - 当前 active support task sets；
+  - 当前 pool dominant task-set costs；
+  - support overlap threshold；
+- scheduler 会把 candidate 分类为：
+  - `active_support_changing`
+  - `new_task_set`
+  - `inactive_only_replacement`
+  - `duplicate_or_other`
+- 默认 high-priority 类别为 `active_support_changing` 和 `new_task_set`；
+- inactive-only replacement 默认可 demote 到 delay queue，即使旧 safe ID 命中也可以延迟。
+
+新增配置：
+
+```text
+journey_gat_admission_support_aware_enabled
+journey_gat_admission_support_high_priority_kinds
+journey_gat_admission_support_demote_inactive_only
+journey_gat_admission_support_overlap_threshold
+```
+
+日志新增：
+
+```text
+support_aware_admission_enabled
+support_candidate_active_support_changing_journeys
+support_candidate_new_task_set_journeys
+support_candidate_inactive_only_journeys
+support_online_high_priority_journeys
+support_high_priority_journeys
+support_delayed_inactive_only_journeys
+support_demoted_safe_hit_journeys
+```
+
+精确性边界：
+
+- 只调度 true-RC verified candidate；
+- 不改变 pricing oracle；
+- 不提供 certificate；
+- 不剪枝；
+- 不把 delay queue 当 proof；
+- delayed true-negative 到期或 certificate 前仍由现有 finite-delay queue 释放，最终证明仍靠 exact pricing closure。
+
+当前状态：
+
+- 单元级 exact-safe 行为已验证；
+- 已跑一个 random-TW 20 seed61000 小预算 opt-in probe；
+- 因为仍为外部超时且没有 paired baseline 对照，不能声称 20 规模已经加速，只能说 support-aware admission/delay 的默认关闭实现和在线日志/release 行为已验证。
+
+V17b 130s opt-in probe：
+
+```text
+results = BPC_future/results/20260624_v17b_support_aware_admission_130_randomtw20_seed61000.csv
+logs    = BPC_future/results/logs_20260624_v17b_support_aware_admission_130_randomtw20_seed61000
+status  = EXTERNAL_TIME_LIMIT
+wall    = 130.026554s
+```
+
+admission 摘要：
+
+```text
+journey_gat_target_mode_admission events = 35
+scheduled = 11
+bypassed = 24
+support_enabled_rows = 11
+candidate_journeys = 109
+admitted_journeys = 108
+true_negative_journeys = 26
+high_priority_journeys = 24
+delay_queue_journeys = 2
+released_journeys = 1
+support_active = 19
+support_new = 23
+support_inactive = 2
+support_high = 24
+support_delayed_inactive = 2
+support_demoted_safe = 0
+```
+
+关键日志：
+
+```text
+cg_iter=31 heuristic: inactive-only true negative delayed,
+  delay_queue_size=1, certificate_blocked_by_delayed_negative=true
+
+cg_iter=32 heuristic: delayed negative released,
+  released_journeys=1, delay_queue_size=0,
+  certificate_blocked_by_delayed_negative=false
+```
+
+解释：V17 的 finite-delay / release 机制在线生效；但 130s 仍外部超时，这只是机制验证，不是 wall-time ROI 证据。
+
+## 2026-06-24 V18：root-safe support-aware delay
+
+V17b 和当前默认 baseline 做同 budget 对照后，暴露出 root 阶段 delay inactive-only 的负效应：
+
+```text
+baseline_default_130:
+  status = EXTERNAL_TIME_LIMIT
+  root_cb_retry_time = 90.987572s
+  root_branch_time = 105.531289s
+  max_depth = 1
+  added_journeys = 110
+  inactive_changed_task_sets = 105
+
+v17b_support_delay_root_130:
+  status = EXTERNAL_TIME_LIMIT
+  root_cb_retry_time = 114.484022s
+  root_branch_time = None
+  max_depth = 0
+  added_journeys = 108
+  inactive_changed_task_sets = 103
+  support_delayed_inactive = 2
+```
+
+结论：root 阶段延迟 2 个 inactive-only true negative 没有带来加速，反而把 root completion-bound retry 推迟约 23.5 秒，并导致 130s 内没有进入分支。因此不能把 root inactive-only delay 作为默认 opt-in 策略。
+
+V18 修正：
+
+- 新增 `journey_gat_admission_support_delay_min_depth`，默认 `1`；
+- 当 `depth < support_delay_min_depth` 时，inactive-only 不进 delay queue，而是 forced admit，并记录 `support_delay_depth_blocked_journeys`；
+- 当 `depth >= support_delay_min_depth` 时，才允许 inactive-only 进入 finite-delay queue；
+- active-support-changing / new task-set 仍可 high-priority；
+- certificate / exact pricing 边界不变。
+
+V18 同 budget opt-in probe：
+
+```text
+v18_support_root_safe_130:
+  status = EXTERNAL_TIME_LIMIT
+  root_cb_retry_time = 90.478242s
+  root_branch_time = 105.094511s
+  max_depth = 1
+  added_journeys = 110
+  inactive_changed_task_sets = 105
+  support_delayed_inactive = 0
+  support_delay_depth_blocked = 1
+```
+
+V18 基本恢复了 baseline 的 root 进度，但仍不是加速证据。下一步应在 depth>=1 的 branch tail 上做 paired probe，看 inactive-only delay 是否真的减少 child proof cost、CB retry 和 wall time。
+
+## 2026-06-24 V19：branch-tail support-aware paired probe
+
+继续使用 canonical random-TW 20 `seed61000`，220s 外部预算，跑当前默认 baseline、V18 root-safe support-aware，以及显式把 `exact` 加入 admission scheduler pricing kinds 的 opt-in：
+
+```text
+v19a_default_baseline_220:
+  status = EXTERNAL_TIME_LIMIT
+  wall = 220.018935s
+  root_branch_time = 104.760930s
+  node1_window = 104.761s -> 197.915s
+  node2_window = 197.916s -> 218.344s
+  depth1_pricing = 10
+  depth1_added_journeys = 3
+  depth1_inactive_changed_task_sets = 3
+
+v19b_support_root_safe_220:
+  status = EXTERNAL_TIME_LIMIT
+  wall = 220.019739s
+  root_branch_time = 105.825993s
+  node1_window = 105.826s -> 198.909s
+  node2_window = 198.909s -> 218.425s
+  depth1_added_journeys = 3
+  support_delayed_inactive = 0
+```
+
+V19b 没有真正调度 depth=1 的 negative exact columns：两条 depth=1 admission 事件都是 `pricing_kind_not_mutated`，因为默认 mutating pricing kinds 仍只包括 `heuristic` 和 hidden-negative worker。该配置因此只能说明 root-safe support-aware 不再伤害 baseline，不能证明 branch-tail delay 有效。
+
+为确认这个 gap，又跑了 `v19c_support_root_safe_exact_optin_220`：
+
+```text
+v19c_support_root_safe_exact_optin_220:
+  status = EXTERNAL_TIME_LIMIT
+  wall = 220.019074s
+  root_branch_time = 105.205676s
+  node1_window = 105.206s -> 197.764s
+  node2_window = 197.764s -> 218.228s
+  depth1_candidate_journeys = 3
+  depth1_true_negative_journeys = 3
+  depth1_support_active = 3
+  depth1_support_new = 2
+  depth1_support_inactive = 0
+  support_delayed_inactive = 0
+```
+
+结论：这条 seed61000 branch-tail 不是 inactive-only delay 的正例。把 exact 加入 opt-in 后，depth=1 的 3 个 true-negative 都是 active-support-changing / new task-set，没有 inactive-only 可以延迟，所以搜索轨迹与 baseline 基本一致，仍然 220s 外部超时。
+
+本轮还补了一个默认无扰动观测改动：即使 `exact` 默认不属于 mutating pricing kind，`journey_gat_target_mode_admission` 的 bypass 日志也会写 `support_candidate_active_support_changing_journeys` / `support_candidate_new_task_set_journeys` / `support_candidate_inactive_only_journeys`。这不改变列加入顺序、不影响证书，只是为后续 random-TW 20 60-instance 的 branch exact 负列构成统计提供数据。
+
+下一步不能继续只调 inactive-only delay。应先用默认无扰动日志扩到 random-TW 20 的 60-instance，判断 branch exact tail 中 inactive-only 到底占多少；同时把 GAT 目标转到 branch-impact / child proof-cost / incumbent-search 调度。
+
+## 2026-06-24 V20：branch exact support-aware shadow audit
+
+新增只读审计脚本：
+
+```text
+BPC_future/scripts/audit_journey_support_aware_branch_exact_tail.py
+```
+
+它读取 solver JSONL 中的 `journey_gat_target_mode_admission`，默认筛选 `depth>=1` 且 `pricing_kind` 以 `exact` 开头的 branch exact tail，统计 active-support-changing、new task-set、inactive-only、delayed inactive-only 以及 support-aware 是否启用。该脚本不运行 BPC / pricing / RMP，不产生 certificate 或 official bound；输出 `summary.json`、`support_aware_branch_exact_tail_rows.jsonl/csv` 和中文报告。
+
+用 V19b/V19c 旧日志验证后，又补跑了一个 160s shadow-only probe：
+
+```text
+results = BPC_future/results/20260624_v20_support_shadow_nomutate_160_randomtw20_seed61000.csv
+logs    = BPC_future/results/logs_20260624_v20_support_shadow_nomutate_160_randomtw20_seed61000
+audit   = BPC_future/results/journey_support_aware_branch_exact_tail_v20_shadow_seed61000_20260624
+report  = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_support_aware_branch_exact_tail_v20_shadow_seed61000_zh.md
+```
+
+V20 的运行配置：
+
+```text
+journey_gat_admission_scheduler_enabled=True
+journey_gat_admission_support_aware_enabled=True
+journey_gat_admission_allow_unsourced_delay=True
+journey_gat_admission_scheduler_pricing_kinds=[]
+```
+
+这表示 scheduler runtime 存在，但所有 pricing kind 都不 mutating；GAT 不改变任何列加入，只记录 support-aware 分类。
+
+V20 审计结果：
+
+```text
+admission_event_count = 2
+support_enabled_event_count = 2
+pricing_kind_counts = {"exact": 2}
+reason_counts = {"pricing_kind_not_mutated": 2}
+total_candidate_journeys = 3
+total_support_active_journeys = 3
+total_support_new_journeys = 2
+total_support_inactive_journeys = 0
+support_inactive_share = 0.0
+runs_bpc_or_pricing = false
+certificate_effect = false
+official_bound_effect = false
+```
+
+这确认 V20 可以作为 random-TW 20 60-instance 的无扰动统计入口。当前 seed61000 仍支持同一个判断：这条 branch exact tail 不是 inactive-only delay 正例，下一步应扩样本统计，而不是继续在该实例上调 delay 阈值。
+
+## 2026-06-24 V21：random-TW 20 60-instance shadow 统计
+
+使用 V20 shadow-only 配置扩到 canonical random-TW 20 的 60-instance：
+
+```text
+results = BPC_future/results/20260624_v21_support_shadow_nomutate_160_randomtw20_60instances.csv
+logs    = BPC_future/results/logs_20260624_v21_support_shadow_nomutate_160_randomtw20_60instances
+audit   = BPC_future/results/journey_support_aware_branch_exact_tail_v21_shadow_randomtw20_60instances_20260624
+report  = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_support_aware_branch_exact_tail_v21_shadow_randomtw20_60instances_zh.md
+```
+
+批跑配置仍为：
+
+```text
+journey_gat_admission_scheduler_enabled=True
+journey_gat_admission_support_aware_enabled=True
+journey_gat_admission_allow_unsourced_delay=True
+journey_gat_admission_scheduler_pricing_kinds=[]
+```
+
+也就是只记录 support-aware 分类，不让 GAT 改变任何列加入顺序。
+
+160s shadow-only 批跑终态：
+
+```text
+60 instances
+OPTIMAL = 17
+TIME_LIMIT = 2
+EXTERNAL_TIME_LIMIT = 41
+```
+
+这不是 200s official gate，也不是加速达标证据；它只用于采集 branch exact tail 构成。
+
+V21 审计结果：
+
+```text
+log_count = 60
+admission_event_count = 219
+support_enabled_event_count = 219
+pricing_kind_counts = {"exact": 219}
+reason_counts = {"pricing_kind_not_mutated": 171, "certificate_candidate_release": 48}
+depth_counts = {"1": 105, "2": 76, "3": 28, "4": 5, "5": 2, "6": 3}
+total_candidate_journeys = 1890
+total_support_active_journeys = 563
+total_support_new_journeys = 1684
+total_support_inactive_journeys = 132
+support_inactive_share = 0.055485
+support_tail_class_counts = {
+  "active_support_changing": 168,
+  "new_task_set": 47,
+  "inactive_only": 4
+}
+runs_bpc_or_pricing = false
+certificate_effect = false
+official_bound_effect = false
+```
+
+结论：branch exact tail 的主量不是 inactive-only。按 journey 计 inactive-only 只占约 `5.55%`；按事件主类，纯 inactive-only 只有 `4/219`。因此当前不应继续围绕 inactive-only delay 做 A/B 或调阈值。V21 把方向进一步收窄到：
+
+- branch-impact：预测哪个 branch pair 会减少后续 exact pricing events / completion-bound retry / subtree proof cost；
+- child proof-cost / ordering：优先处理更快 close 或更可能提高 safe bound 的 child；
+- incumbent-search / cuts / formulation：让节点进入可剪枝区间，而不是依赖更多负列提高 `z_RMP`。
+
+## 2026-06-24 V22：random-TW 20 60-instance branch-impact 只读审计
+
+为确认 V21 这批 canonical random-TW 20 60-instance shadow logs 能否直接生成 branch-impact 训练 row，运行：
+
+```text
+script = BPC_future/scripts/audit_journey_branch_impact.py
+input  = BPC_future/results/logs_20260624_v21_support_shadow_nomutate_160_randomtw20_60instances
+audit  = BPC_future/results/journey_branch_impact_audit_v22_shadow_randomtw20_60instances_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v22_shadow_randomtw20_60instances_zh.md
+```
+
+审计是只读的，不运行 BPC / pricing / RMP，不产生 certificate 或 official bound。脚本已补 `right_censored`、`label_observation_complete`、`usable_for_branch_impact_training`，防止把外部 160s 截断后的未处理 child 误当成稳定标签。
+
+V22 摘要：
+
+```text
+log_count = 60
+branch_count = 176
+branch_training_row_count = 176
+tail_class_counts = {
+  "completion_bound_tail": 110,
+  "negative_chain_continues": 10,
+  "unprocessed_children": 56
+}
+candidate_log_branch_count = 0
+right_censored_branch_count = 170
+complete_label_branch_count = 6
+usable_branch_impact_training_count = 0
+active_touch_branch_count = 27
+inactive_only_branch_count = 74
+total_child_negative_pricing_events = 647
+total_child_completion_bound_retries = 437
+total_child_early_branch_triggers = 0
+```
+
+结论：
+
+- 这批 V21 日志不能直接作为 GAT branch-impact 正例训练集：没有 branch-candidate 特征，且 170/176 个 branch row 右删失；
+- 它可以作为 proof-cost 诊断：child completion-bound tail 是主量，后续负列链仍存在；
+- 下一批 random-TW 20 600s 诊断必须打开 branch candidate logging，并把 right-censoring 作为训练 row 过滤条件；否则只会继续得到 hard-negative / tail-risk 数据。
+
+## 2026-06-24 V23：branch-candidate log 通路验证
+
+为确认 V22 的 `candidate_log_branch_count=0` 是配置问题而不是日志/审计代码问题，单独跑 canonical random-TW 20 `seed61000` 130s，只打开：
+
+```text
+journey_branch_candidate_log_top_n = 12
+```
+
+输出：
+
+```text
+CSV    = BPC_future/results/20260624_v23_branch_candidate_log_130_randomtw20_seed61000.csv
+logs   = BPC_future/results/logs_20260624_v23_branch_candidate_log_130_randomtw20_seed61000
+audit  = BPC_future/results/journey_branch_impact_audit_v23_branch_candidate_log_130_seed61000_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v23_branch_candidate_log_seed61000_zh.md
+```
+
+结果是 `EXTERNAL_TIME_LIMIT`，不是性能证据；但字段通路验证成功：
+
+```text
+branch_count = 1
+candidate_log_branch_count = 1
+selected_match_count = 1
+top_contains_branch_count = 1
+top_first_branch_count = 1
+priority_top_first_branch_count = 1
+right_censored_branch_count = 1
+usable_branch_impact_training_count = 0
+```
+
+结论：下一批 600s branch-impact 采样必须显式设置 `journey_branch_candidate_log_top_n=12` 或更高。V23 仍右删失，所以不能作为训练正例；它只证明下一批日志能够包含分支候选特征。
+
+## 2026-06-24 V24：600s 完整 branch-impact 标签小样本
+
+从 V21 的 random-TW 20 60-instance 结果中选了 3 个 160s 内 `OPTIMAL` 且有 branch 的实例，使用 600s 上限重跑并打开：
+
+```text
+journey_branch_candidate_log_top_n = 12
+```
+
+输出：
+
+```text
+CSV    = BPC_future/results/20260624_v24_branch_candidate_log_600_randomtw20_3opt_branch.csv
+logs   = BPC_future/results/logs_20260624_v24_branch_candidate_log_600_randomtw20_3opt_branch
+audit  = BPC_future/results/journey_branch_impact_audit_v24_branch_candidate_log_600_3opt_branch_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v24_branch_candidate_log_3opt_branch_zh.md
+```
+
+3 个实例全部 `OPTIMAL`，wall 约 `156.94s / 128.99s / 42.29s`。审计摘要：
+
+```text
+branch_count = 6
+candidate_log_branch_count = 6
+complete_label_branch_count = 6
+right_censored_branch_count = 0
+usable_branch_impact_training_count = 6
+tail_class_counts = {'completion_bound_tail': 6}
+active_touch_branch_count = 1
+inactive_only_branch_count = 5
+total_child_negative_pricing_events = 48
+total_child_completion_bound_retries = 28
+```
+
+结论：字段通路和完整标签通路已经可用；但 V24 仍只是当前 fractionality top-1 策略的结果标签，不能替代同节点 alternative 的反事实。
+
+## 2026-06-24 V25/V26：branch alternative replay 通路
+
+新增离线 runbook：
+
+```text
+script  = BPC_future/scripts/build_journey_branch_impact_alt_runbook.py
+test    = BPC_future/tests/test_journey_branch_impact_alt_runbook.py
+runbook = BPC_future/results/journey_branch_impact_alt_runbook_v25_from_v24_20260624
+report  = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_alt_runbook_v25_from_v24_zh.md
+```
+
+它从 V24 完整 branch-impact rows 的 `priority_top` 中生成 12 条同节点 alternative forced-pair replay 命令；depth>0 时保留祖先 branch path，例如：
+
+```text
+force_pair_path:0:2,5=same_vehicle;1:8,18
+```
+
+这些命令只改变 branch candidate 优先级；exact pricing closure、node bound 和 fathom 仍由原求解流程给出。
+
+已实际执行 V25 entry 08：把 `random-wave/tranquillitatis...seed61820` 的 root branch 从 V24 原始 `[1,2]` 强制改成 `[1,4]`。
+
+```text
+result = OPTIMAL
+wall = 53.77s
+audit = BPC_future/results/journey_branch_impact_audit_v25_alt08_randomtw20_20260624
+forced_pair_branch_count = 1
+forced_pair_matched_branch_count = 1
+candidate_log_branch_count = 2
+complete_label_branch_count = 2
+usable_branch_impact_training_count = 2
+```
+
+与 V24 原始同实例相比，root 局部 child negative pricing events 从 `10` 降到 `5`，但总 wall 从约 `42.29s` 增到约 `53.77s`，branch_count 从 `1` 增到 `2`。这说明 branch 排序不能只优化局部 child 负列事件或 pool width；必须看全子树 proof cost / wall-time / completion-bound retry。
+
+V26 合成 V24+V25 的 branch tail-impact rows：
+
+```text
+output = BPC_future/results/journey_tail_impact_training_rows_v26_branch_counterfactual_v24_v25_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_tail_impact_training_rows_v26_branch_counterfactual_zh.md
+training_row_count = 8
+branch_row_count = 8
+tail_class_counts = {'completion_bound_tail': 8}
+y_useful_tail_reduction = 0
+y_tail_risk = 8
+hard_negative_catalog_ready = true
+contrastive_tail_training_ready = false
+```
+
+当前判断：已经有完整 hard negatives 和一条可复用反事实 replay 通路，但还没有真正减少 proof tail / wall-time 的正例。因此下一步不是训练 branch-impact GAT 排序器，而是继续执行 V25 fast/medium alternatives，找到 `y_useful_tail_reduction>0` 或显著降低全子树 proof cost 的对照样本。
+
+## 2026-06-24 V27：branch counterfactual delta 标签
+
+V26 暴露出一个标签问题：单条 branch-impact row 的 absolute tail class 不能表达“这个 alternative 相对原始 branch 是否更快”。因此新增离线 delta audit：
+
+```text
+script = BPC_future/scripts/audit_journey_branch_counterfactual_delta.py
+test   = BPC_future/tests/test_journey_branch_counterfactual_delta_audit.py
+output = BPC_future/results/journey_branch_counterfactual_delta_v27_v24_v25_alt07_alt08_alt09_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v27_alt07_alt08_alt09_zh.md
+```
+
+它按 `instance/node/depth/baseline_pair/forced_pair` 对齐 V24 baseline 与 V25 replay，输出 run-level 和 branch-level delta：
+
+```text
+wall_time_delta
+solving_time_delta
+pricing_calls_delta
+exact_pricing_calls_delta
+node_count_delta
+child_negative_pricing_events_delta
+child_completion_bound_retries_delta
+```
+
+并生成相对标签：
+
+```text
+y_counterfactual_wall_improved
+y_counterfactual_proof_cost_improved
+y_counterfactual_regression
+```
+
+已纳入 V25 entry 07、08、09：
+
+```text
+matched_counterfactual_count = 3
+forced_pair_matched_count = 3
+status_pair_counts = {'OPTIMAL->OPTIMAL': 3}
+label_positive_counts = {
+  'y_counterfactual_regression': 2,
+  'y_counterfactual_wall_improved': 1
+}
+counterfactual_training_ready = true
+```
+
+具体 delta：
+
+```text
+entry 07: [1,2] -> [1,18], wall_time_delta = -4.178415s, y_counterfactual_wall_improved = 1
+entry 08: [1,2] -> [1,4],  wall_time_delta = +11.479765s, y_counterfactual_regression = 1
+entry 09: [5,6] -> [6,7],  wall_time_delta = +65.673870s, y_counterfactual_regression = 1
+```
+
+解释：
+
+- entry 07 的 child negative pricing events 没有减少，反而 `+1`，但全局 wall-time 更短；
+- entry 08/09 的 child negative pricing events 减少了，但 exact pricing calls、node_count 或 wall-time 增加，整体更慢；
+- 因此 branch-impact 不能用“局部负列少”或 pool width 作为主标签，必须用同节点 counterfactual wall/proof-cost delta。
+
+V28 继续执行 V25 entry 10 和 entry 01，delta 样本扩到 5 条：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_delta_v28_v24_v25_alt01_alt07_to_alt10_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v28_alt01_alt07_to_alt10_zh.md
+matched_counterfactual_count = 5
+forced_pair_matched_count = 5
+status_pair_counts = {'OPTIMAL->OPTIMAL': 5}
+label_positive_counts = {
+  'y_counterfactual_proof_cost_improved': 1,
+  'y_counterfactual_regression': 3,
+  'y_counterfactual_wall_improved': 2
+}
+```
+
+新增 delta：
+
+```text
+entry 10: [5,6] -> [7,11], wall_time_delta = +78.788880s, y_counterfactual_regression = 1
+entry 01: [2,5] -> [3,18], wall_time_delta = -89.781081s, exact_pricing_calls_delta = -18, node_count_delta = -4, y_counterfactual_wall_improved = 1, y_counterfactual_proof_cost_improved = 1
+```
+
+entry 01 是当前最强正例：absolute tail class 仍是 `completion_bound_tail`，但相对原始 branch 少了 18 次 exact pricing call、少了 4 个 node，wall-time 快约 89.8s。V28 仍不是上线条件，样本只有 5 条、覆盖 3 个实例；但它已经从“只有 hard negatives”推进到 2 正 / 3 负的最小 branch-ranking 信号。
+
+V29 继续补 V25 entry 02，delta 样本扩到 6 条：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_delta_v29_v24_v25_alt01_alt02_alt07_to_alt10_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v29_alt01_alt02_alt07_to_alt10_zh.md
+matched_counterfactual_count = 6
+forced_pair_matched_count = 6
+status_pair_counts = {'OPTIMAL->OPTIMAL': 6}
+label_positive_counts = {
+  'y_counterfactual_proof_cost_improved': 1,
+  'y_counterfactual_regression': 4,
+  'y_counterfactual_wall_improved': 2
+}
+counterfactual_training_ready = true
+```
+
+新增 delta：
+
+```text
+entry 02: [2,5] -> [5,8], wall_time_delta = +140.922309s, exact_pricing_calls_delta = +35, node_count_delta = +8, pricing_calls_delta = +49, child_negative_pricing_events_delta = -3, y_counterfactual_regression = 1
+```
+
+V29 的重点不是样本量，而是同一个 greedy root baseline `[2,5]` 下已经有一个强正和一个强负：
+
+```text
+[2,5] -> [3,18]: wall -89.781081s, exact pricing -18, node -4, 正例
+[2,5] -> [5,8] : wall +140.922309s, exact pricing +35, node +8, 负例
+```
+
+entry 02 的局部 child negative pricing events 少了 3，但全局 exact pricing、node 和 wall-time 都大幅变差。这再次确认 branch-impact GAT 不能用 child negative count、pool width 或 absolute tail class 当排序标签；必须使用同 parent context 的 counterfactual proof-cost / wall delta。
+
+V32 跑完 V25 runbook 全部 12 条 alternative，并生成完整 counterfactual delta：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_delta_v32_v24_v25_all12_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v32_all12_zh.md
+matched_counterfactual_count = 12
+forced_pair_matched_count = 12
+status_pair_counts = {'OPTIMAL->OPTIMAL': 12}
+label_positive_counts = {
+  'y_counterfactual_proof_cost_improved': 1,
+  'y_counterfactual_regression': 9,
+  'y_counterfactual_wall_improved': 2
+}
+counterfactual_training_ready = true
+```
+
+新增 depth-1 alternatives 的主要结果：
+
+```text
+entry 03: [2,17] -> [8,18], wall_time_delta = +77.206493s, exact_pricing_calls_delta = +21, node_count_delta = +4, child_negative_pricing_events_delta = -4, regression
+entry 04: [2,17] -> [8,17], wall_time_delta = +111.093631s, exact_pricing_calls_delta = +28, node_count_delta = +4, child_negative_pricing_events_delta = +2, regression
+entry 05: [3,17] -> [3,18], wall_time_delta = +1.015413s, exact_pricing_calls_delta = +2, pricing_calls_delta = +4, regression
+entry 06: [3,17] -> [13,18], wall_time_delta = +41.544674s, exact_pricing_calls_delta = +14, node_count_delta = +4, child_negative_pricing_events_delta = -2, regression
+entry 11: [5,7] -> [7,10], wall_time_delta = +1.666250s, regression
+entry 12: [5,7] -> [6,7], wall_time_delta = -0.255814s, below 1s improvement threshold
+```
+
+V32 的价值是把 V25 反事实闭环做完整，而不是证明可以上线：12 条里只有 entry 01 是强正例，entry 07 是弱 wall 正例，其余大多是 regression 或近似持平。当前 `priority_top` 候选源偏向产生 hard negatives；下一步 branch-impact/GAT 线需要扩大 canonical random-TW 20 的同 parent 采样，并引入更强候选生成方式寻找强正例。
+
+V33 在 V32 delta 之上新增离线 ranking 审计：
+
+```text
+script = BPC_future/scripts/audit_journey_branch_counterfactual_ranking.py
+test   = BPC_future/tests/test_journey_branch_counterfactual_ranking_audit.py
+output = BPC_future/results/journey_branch_counterfactual_ranking_v33_v32_all12_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v33_v32_all12_zh.md
+counterfactual_row_count = 12
+context_count = 6
+ranking_pair_count = 6
+label_counts = {'proof_cost_improved': 1, 'regression': 9, 'wall_improved': 2}
+context_counts = {'mixed_positive_negative_context': 2, 'regression_only_context': 4}
+proxy_contradiction_counts = {'fewer_child_negative_but_regressed': 6, 'more_child_negative_but_wall_improved': 1}
+ranking_training_ready = true
+```
+
+关键排序对：
+
+```text
+baseline [2,5]:  [3,18] 优于 [5,8]，wall gap = 230.703390s，exact pricing gap = 53
+baseline [1,2]:  [1,18] 优于 [1,4]，wall gap = 15.658180s，exact pricing gap = 6
+baseline [3,17]: [3,18] 优于 [13,18]，wall gap = 40.529261s，exact pricing gap = 12
+```
+
+这一步把 branch-impact GAT 的数据接口从单条 absolute label 推到同 parent pairwise ranking rows。它仍然只是训练/评估数据，不影响 official bound，也不运行 pricing；由于 mixed positive/negative context 只有 2 个，下一步需要继续扩大 canonical random-TW 20 的 counterfactual 采样，优先补强正例和 mixed context。
+
+V34 在 solver 侧新增默认关闭的 branch-score opt-in：
+
+```text
+journey_branch_candidate_priority=branch_score
+或
+journey_branch_candidate_priority=branch_score_horizon
+journey_branch_candidate_score_map={...}
+或
+journey_branch_candidate_score_path=...
+```
+
+它允许外部 branch-impact/GAT ranking 输出以 score map 形式影响 Ryan-Foster pair 的候选排序。`branch_score` 的排序范围仍受 `journey_branch_fractionality_tie_tolerance` 控制；`branch_score_horizon` 会在显式 opt-in 时对正分 scored candidate 自动打开最小 candidate horizon，默认上限为 `journey_branch_candidate_score_horizon_tie_tolerance=0.2`。负分 scored candidate 不触发扩展，也不参与 horizon 优先排序，只按原 deterministic fractionality fallback 处理。支持的 key 包括全局 pair、depth-specific pair、node+depth-specific pair，例如 `1,2`、`depth:0:1,2`、`node:9:depth:0:1,2`；日志会在 `journey_branch_candidates.selected/priority_top` 中记录 `branch_score` 和 `branch_score_source`，并记录 `effective_tie_tolerance` / `effective_eligible_count`。
+
+这个入口只改变 opt-in 的分支 pair 调度，不改变 RMP、pricing、official bound、fathom 或 certificate。缺少 score 时会回退到 deterministic fractionality 顺序；因此它是把 V33/GAT ranking 接入实际 solver 的安全调度口，不是证明口。当前只验证了接口和日志行为，尚未证明 20-scale wall-time 改善。
+
+V35 新增离线转换脚本，把 V33 ranking rows 变成 solver 可读的 branch-score map：
+
+```text
+script = BPC_future/scripts/build_journey_branch_score_map.py
+test   = BPC_future/tests/test_journey_branch_score_map.py
+input  = BPC_future/results/journey_branch_counterfactual_ranking_v33_v32_all12_20260624
+output = BPC_future/results/journey_branch_score_map_v35_v33_all12_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_map_v35_v33_all12_zh.md
+ranking_pair_row_count = 6
+branch_score_row_count = 12
+branch_score_map_entry_count = 12
+instance_count = 3
+key_scope = node_depth
+production_ready = false
+official_bound_effect = false
+```
+
+使用方式：
+
+```text
+journey_branch_candidate_priority=branch_score
+journey_branch_candidate_score_path=BPC_future/results/journey_branch_score_map_v35_v33_all12_20260624/journey_branch_score_rows.json
+```
+
+V35 的输出示例：
+
+```text
+node:0:depth:0:3,18 = +10.0
+node:0:depth:0:5,8  = -10.0
+node:2:depth:1:3,18 = +2.875487683
+node:2:depth:1:13,18 = -2.875487683
+```
+
+这一步仍然是 diagnostic-only：它只把离线反事实排序数据接到 solver 的 opt-in 调度入口，不运行 BPC / pricing / RMP，不改变 official bound，也没有证明 20-scale wall-time 改善。下一步才是用该 score map 做受控 A/B，并继续扩充 canonical random-TW 20 的 mixed positive/negative context。
+
+V36 用 V33/V35 中最强正例实例做了第一个 branch-score opt-in 真实求解 A/B：
+
+```text
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_v36_branch_score_optin_ab_seed61846_zh.md
+```
+
+结果：
+
+| 指标 | baseline | branch_score | delta |
+|---|---:|---:|---:|
+| status | `OPTIMAL` | `OPTIMAL` | - |
+| wall_time | `175.215707s` | `67.302853s` | `-107.912854s` |
+| solving_time | `144.360625s` | `65.120653s` | `-79.239972s` |
+| node_count | `7` | `3` | `-4` |
+| branch_nodes | `3` | `1` | `-2` |
+| rmp_solves | `35` | `24` | `-11` |
+| pricing_calls | `72` | `43` | `-29` |
+| exact_pricing_calls | `37` | `19` | `-18` |
+
+root branch 审计：
+
+```text
+baseline:     priority_mode=fractionality, selected=[2,5]
+branch_score: priority_mode=branch_score, selected=[3,18], branch_score=10.0, source=node:0:depth:0:3,18
+```
+
+V36 说明 V33 ranking rows -> V35 score map -> V34 solver opt-in 的链路已经在真实 run 中打通，并在该 in-sample 实例上复现了强正例收益。边界仍然严格：这是单个 in-sample A/B，不是 random-TW 20 全量结论，也不是 production GAT 泛化证据；`branch_score` 仍只改变 branch pair 调度，不改变 official bound / certificate。
+
+V37 把 V36 的人工日志解析固化成 A/B 审计脚本：
+
+```text
+script = BPC_future/scripts/audit_journey_branch_score_ab.py
+test   = BPC_future/tests/test_journey_branch_score_ab_audit.py
+output = BPC_future/results/journey_branch_score_ab_audit_v37_v36_seed61846_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_ab_audit_v37_seed61846_zh.md
+paired_instance_count = 1
+selected_pair_changed_count = 1
+branch_score_used_count = 1
+wall_time_delta_sum = -107.912854
+exact_pricing_calls_delta_sum = -18.0
+node_count_delta_sum = -4.0
+production_ready = false
+official_bound_effect = false
+```
+
+该脚本只读已完成 CSV / JSONL，不运行 BPC / pricing / RMP；后续多实例 branch-score A/B 都应统一用它汇总 selected pair、score source 和 proof-cost delta。
+
+V38/V40 做了第一个 leave-instance-out 负检验。目标仍是 seed61846，但 score map 排除了 seed61846 自身 ranking rows，并使用 pair-scope：
+
+```text
+score_map = BPC_future/results/journey_branch_score_map_v38_leave_seed61846_pair_20260624
+score_map_report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_map_v38_leave_seed61846_pair_zh.md
+optin_csv = BPC_future/results/20260624_v39_branch_score_leave_seed61846_pair_optin_220_seed61846.csv
+ab_audit = BPC_future/results/journey_branch_score_ab_audit_v40_v39_leave_seed61846_pair_20260624
+ab_report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_ab_audit_v40_leave_seed61846_pair_zh.md
+raw_ranking_pair_row_count = 6
+filtered_out_row_count = 3
+ranking_pair_row_count = 3
+branch_score_map_entry_count = 5
+selected_pair_changed_count = 0
+branch_score_used_count = 0
+exact_pricing_calls_delta_sum = 0.0
+node_count_delta_sum = 0.0
+```
+
+排除 seed61846 后剩余 score pairs 是 `[1,18]`、`[1,4]`、`[6,7]`、`[7,10]`、`[7,11]`，没有命中 seed61846 root 的 29 个 eligible branch candidates。于是 opt-in 虽然启用了 `priority_mode=branch_score`，但 selected 仍是 `[2,5]`，`branch_score_source=None`。V40 的结论是：当前 V33 数据太稀疏，pair-scope lookup 不能 out-of-sample 泛化；后续必须继续扩充跨实例 mixed positive/negative context，或者训练真正基于节点/实例特征泛化的 branch-impact ranking head。
+
+V41/V42 增加了 branch-score candidate coverage 审计，用来区分“score map 能命中候选但效果不好”和“score map 根本没有命中候选”：
+
+```text
+script = BPC_future/scripts/audit_journey_branch_score_candidate_coverage.py
+test   = BPC_future/tests/test_journey_branch_score_candidate_coverage.py
+diagnostic_only = true
+runs_bpc_or_pricing = false
+official_bound_effect = false
+```
+
+V41 用 V35 in-sample score map 审计 V36 baseline 的 `journey_branch_candidates` 日志：
+
+```text
+coverage_output = BPC_future/results/journey_branch_score_candidate_coverage_v41_v35_on_v36_baseline_20260624
+coverage_report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_candidate_coverage_v41_v35_on_v36_baseline_zh.md
+candidate_event_count = 3
+candidate_event_with_score_hit_count = 3
+candidate_event_with_selected_score_count = 0
+candidate_event_would_change_selected_count = 3
+full_logged_candidate_coverage_count = 0
+score_entry_count = 12
+scored_candidate_count_sum = 6
+selected_unscored_count = 3
+unscored_logged_candidate_count_sum = 30
+```
+
+三条 branch event 都命中了 scored candidate，并且 best scored pair 都会改变默认 selected pair：root 从 `[2,5]` 指向 `[3,18]`，两个 depth-1 节点也各有 scored alternative。这解释了 V36 为什么能在同一个 in-sample 实例上产生真实 branch action 和 proof-cost 降低。`full_logged_candidate_coverage_count=0` 的含义是 V36 baseline 只记录了 top 12，而 event 自身 candidate_count 为 29/17/17；它不是完整候选宇宙覆盖结论。
+
+V42 用 V38 leave-seed61846-out pair-scope score map 审计同一批 V36 baseline 候选日志：
+
+```text
+coverage_output = BPC_future/results/journey_branch_score_candidate_coverage_v42_v38_on_v36_baseline_20260624
+coverage_report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_candidate_coverage_v42_v38_on_v36_baseline_zh.md
+candidate_event_count = 3
+candidate_event_with_score_hit_count = 0
+candidate_event_with_selected_score_count = 0
+candidate_event_would_change_selected_count = 0
+full_logged_candidate_coverage_count = 0
+score_entry_count = 5
+scored_candidate_count_sum = 0
+selected_unscored_count = 3
+unscored_logged_candidate_count_sum = 36
+```
+
+这证明 V40 没动作的直接原因是 score map 对已记录候选 0 命中，不是 solver opt-in 接口失效。下一批 random-TW 20 采样必须把 `journey_branch_candidate_log_top_n` 提高到足以覆盖完整候选列表，例如 100，并围绕默认 selected pair、附近高 fractionality 候选和已知强正例补 counterfactual replay。当前 V33/V38 的 pair overlap 太少，pair lookup 只能作为诊断桥接，不能作为 production 泛化策略。
+
+V43 新增了从 candidate log 直接生成 forced-pair replay runbook 的工具：
+
+```text
+script = BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py
+test   = BPC_future/tests/test_journey_branch_candidate_replay_runbook.py
+input  = BPC_future/results/logs_20260624_v36_branch_score_ab_baseline_220_seed61846
+output = BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v43_seed61846_zh.md
+candidate_event_count_seen = 3
+entry_count = 12
+alt_pairs_per_event = 4
+candidate_log_top_n = 100
+diagnostic_only = true
+official_bound_effect = false
+```
+
+它直接读取 `journey_branch_candidates` 日志，从 `priority_top` / `top` 中挑 alternative pair，生成同 node path 的 `force_pair_path` 命令。V43 在 seed61846 的 3 个 branch candidate event 上生成 12 条 replay 命令，其中 depth-1 条目保留祖先约束方向，例如：
+
+```text
+force_pair_path:0:2,5=same_vehicle;1:8,18
+force_pair_path:0:2,5=separate_vehicle;1:3,18
+```
+
+这一步解决的是采样闭环的一个实际缺口：后续 canonical random-TW 20 的 60-instance 日志只要打开 `journey_branch_candidate_log_top_n=100`，就可以直接生成 path-bound forced-pair replay 清单，而不必先人工从日志里挑候选。它仍然不运行 BPC，不改变 RMP/pricing/official bound，也不是性能收益结论；真正的标签要等这些 replay 跑完，再用 branch-impact / counterfactual-delta 审计生成。
+
+V44 跑了第一批 canonical random-TW 20 balanced6 的 top100 候选日志采样：
+
+```text
+instances = 6
+time_limit = 220
+max_workers = 3
+journey_branch_candidate_log_top_n = 100
+csv = BPC_future/results/20260624_v44_candidate_log_top100_randomtw20_balanced6_220.csv
+log_dir = BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220
+status_count = {'EXTERNAL_TIME_LIMIT': 5, 'OPTIMAL': 1}
+wall_time_sum = 1124.466s
+candidate_event_files = 5
+candidate_event_count = 29
+candidate_count_sum = 816
+priority_top_count_minmax = 12..60
+```
+
+这不是性能改善：6 个实例里 5 个在 220s 外部时限触发，只有 `sector-wave/tranquillitatis_balmer_like_20km/...seed61002` 在 `24.337408s` 达到 `OPTIMAL`。因此当前 20-scale 200s 全量目标仍未达成。
+
+但它验证了采样路径：`top_n=100` 候选日志生效，5 个实例产生了 29 个 branch-candidate event，候选总数 816，`priority_top` 不再固定在 12；某些 event 最大只有 60 是因为自身候选数不足 100。
+
+随后用 V43 工具从 V44 日志生成了 V44 replay runbook：
+
+```text
+output = BPC_future/results/journey_branch_candidate_replay_runbook_v44_top100_balanced6_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v44_top100_balanced6_zh.md
+candidate_event_count_seen = 29
+candidate_event_count_with_replay_entries = 15
+entry_count = 60
+entry_limit_reached = true
+source_depth_counts = {0: 16, 1: 24, 2: 12, 3: 8}
+```
+
+`entry_limit_reached=true` 表示这批 balanced6 日志已经足够继续扩展 replay；当前只截取 60 条 path-bound forced-pair 命令，没有穷尽 29 个 candidate event。下一步应先跑 V44 runbook 的代表性子集，生成 branch-impact / counterfactual-delta rows，再判断是否找到了新的 mixed positive/negative context。
+
+V45 对 V44 baseline 日志做了 branch-impact audit：
+
+```text
+input = BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220
+output = BPC_future/results/journey_branch_impact_audit_v45_v44_top100_balanced6_baseline_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v45_v44_top100_balanced6_baseline_zh.md
+branch_count = 29
+candidate_log_branch_count = 29
+right_censored_branch_count = 29
+complete_label_branch_count = 0
+usable_branch_impact_training_count = 0
+tail_class_counts = {'completion_bound_tail': 19, 'negative_chain_continues': 1, 'unprocessed_children': 9}
+total_child_negative_pricing_events = 132
+total_child_completion_bound_retries = 89
+```
+
+这确认了 V44 的问题：候选覆盖够宽，但 220s 下所有 branch row 都是右删失。它们可以导航下一批采样，不能直接训练 branch-impact GAT。
+
+V46 从 V44 runbook 中取第一个 root context 的 4 个 alternative，用同样 220s 预算 replay：
+
+```text
+runbook = BPC_future/results/journey_branch_candidate_replay_runbook_v46_top100_balanced6_root4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v46_root4_220_zh.md
+instance = BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json
+baseline_pair = [3,7]
+forced_pairs = [3,10], [10,13], [9,10], [4,5]
+```
+
+4 个 replay 都触发外部时限：
+
+```text
+status_pairs = EXTERNAL_TIME_LIMIT -> EXTERNAL_TIME_LIMIT for all 4
+forced_pair_matched_count = 4
+```
+
+V47 对 V46 forced replay 日志做 branch-impact audit：
+
+```text
+output = BPC_future/results/journey_branch_impact_audit_v47_v46_root4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v47_v46_root4_220_zh.md
+branch_count = 7
+forced_pair_branch_count = 4
+forced_pair_matched_branch_count = 4
+right_censored_branch_count = 7
+complete_label_branch_count = 0
+usable_branch_impact_training_count = 0
+tail_class_counts = {'completion_bound_tail': 5, 'negative_chain_continues': 1, 'unprocessed_children': 1}
+```
+
+V48 修正了 counterfactual-delta 的右删失标签契约，并重算 V46 root4 delta：
+
+```text
+script = BPC_future/scripts/audit_journey_branch_counterfactual_delta.py
+test = BPC_future/tests/test_journey_branch_counterfactual_delta_audit.py
+schema_version = journey_branch_counterfactual_delta_audit_v2
+output = BPC_future/results/journey_branch_counterfactual_delta_v48_v46_root4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v48_root4_220_zh.md
+matched_counterfactual_count = 4
+forced_pair_matched_count = 4
+status_pair_counts = {'EXTERNAL_TIME_LIMIT->EXTERNAL_TIME_LIMIT': 4}
+right_censored_counterfactual_count = 4
+usable_counterfactual_training_count = 0
+label_positive_counts = {'y_counterfactual_proof_cost_proxy_improved': 1, 'y_counterfactual_right_censored': 4}
+counterfactual_training_ready = false
+```
+
+关键修正：`EXTERNAL_TIME_LIMIT -> EXTERNAL_TIME_LIMIT` 中局部 child retry / negative event 下降只记 `y_counterfactual_proof_cost_proxy_improved`，不再记正式 `y_counterfactual_proof_cost_improved`。这避免 GAT 把右删失 proxy 当成强正例。
+
+V49 ranking audit 也验证这批不能进入 ranking 训练：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_ranking_v49_v48_root4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v49_root4_220_zh.md
+counterfactual_row_count = 4
+context_count = 1
+ranking_pair_count = 0
+ranking_training_ready = false
+context_counts = {'neutral_only_context': 1}
+```
+
+结论：只按 root pool-width 排前的 alternative 没有把 timeout 实例救回 220s 内，也没有产生可训练正例。下一批 replay 应避开同一 root context 的继续盲试，改挑 V45 中 active-touch / completion-bound-retry 高的不同实例或 depth context，并继续保持同预算对照。
+
+V50 已把 V45 branch-impact audit 作为优先级输入接进 `build_journey_branch_candidate_replay_runbook.py`，不再按日志顺序从第一个 root context 盲取 replay。
+
+```text
+script = BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py
+test = BPC_future/tests/test_journey_branch_candidate_replay_runbook.py
+input = BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220
+branch_impact_input = BPC_future/results/journey_branch_impact_audit_v45_v44_top100_balanced6_baseline_20260624
+output = BPC_future/results/journey_branch_candidate_replay_runbook_v50_v45_prioritized_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v50_v45_prioritized_220_zh.md
+branch_impact_priority_context_count = 29
+candidate_event_count_seen = 29
+candidate_event_count_with_replay_entries = 3
+entry_count = 12
+entry_limit_reached = true
+```
+
+优先级公式当前为：
+
+```text
+10 * y_active_touch
++ 2 * y_child_completion_bound_retries
++ y_child_negative_pricing_events
++ 5 * (tail_class == unprocessed_children)
++ 2 * (tail_class == completion_bound_tail)
++ right_censored
+```
+
+V50 产出的 12 条 replay 来自 3 个高风险 context：
+
+- sector-wave/apollo15，node 2 depth 1，默认 `[5,8]`，priority `46.0`，替代 `[8,12]`、`[8,14]`、`[14,18]`、`[8,18]`；
+- greedy-anchor/tranquillitatis，node 0 depth 0，默认 `[2,18]`，priority `45.0`，替代 `[7,15]`、`[2,15]`、`[6,8]`、`[7,11]`；
+- random-wave/apollo15，node 0 depth 0，默认 `[8,18]`，priority `42.0`，替代 `[3,17]`、`[10,17]`、`[10,20]`、`[2,13]`。
+
+边界：V50 只是 prioritized runbook，不是 BPC replay 结果；没有产生 certificate、official bound 或 wall-time 改善结论。下一步应先跑前 4 条 sector-wave depth-1 replay，再用 V45/V47/V48/V49 同一审计链条判断是否得到可训练的同节点正/负排序样本。
+
+V51-V53 已跑完 V50 前 4 条 sector-wave depth-1 replay：
+
+```text
+runs = 001..004
+context = sector-wave/apollo15 node 2 depth 1
+baseline_pair = [5,8]
+forced_pairs = [8,12], [8,14], [14,18], [8,18]
+status_pairs = EXTERNAL_TIME_LIMIT -> EXTERNAL_TIME_LIMIT for all 4
+```
+
+V51 branch-impact audit：
+
+```text
+output = BPC_future/results/journey_branch_impact_audit_v51_v50_first4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v51_v50_first4_220_zh.md
+branch_count = 28
+forced_pair_branch_count = 4
+forced_pair_matched_branch_count = 4
+right_censored_branch_count = 28
+usable_branch_impact_training_count = 0
+tail_class_counts = {'completion_bound_tail': 15, 'negative_chain_continues': 1, 'unprocessed_children': 12}
+total_child_negative_pricing_events = 150
+total_child_completion_bound_retries = 51
+```
+
+V52 counterfactual delta：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_delta_v52_v50_first4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v52_v50_first4_220_zh.md
+matched_counterfactual_count = 4
+status_pair_counts = {'EXTERNAL_TIME_LIMIT->EXTERNAL_TIME_LIMIT': 4}
+right_censored_counterfactual_count = 4
+usable_counterfactual_training_count = 0
+label_positive_counts = {'y_counterfactual_proof_cost_proxy_improved': 4, 'y_counterfactual_right_censored': 4}
+```
+
+局部 proxy delta：
+
+```text
+[8,12]:  child_completion_bound_retries_delta=-4, child_negative_pricing_events_delta=-4
+[8,14]:  child_completion_bound_retries_delta=-4, child_negative_pricing_events_delta=-10
+[14,18]: child_completion_bound_retries_delta=-4, child_negative_pricing_events_delta=-9
+[8,18]:  child_completion_bound_retries_delta=-4, child_negative_pricing_events_delta=-9
+```
+
+V53 ranking audit：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_ranking_v53_v52_v50_first4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v53_v50_first4_220_zh.md
+context_count = 1
+ranking_pair_count = 0
+ranking_training_ready = false
+context_counts = {'neutral_only_context': 1}
+```
+
+结论：V50 priority 确实挑到了一个比 root4 更有局部 proof-cost 变化的 context，但 220s 下仍全部右删失。V52 的 proxy 改善不能转成正式 branch-ranking 正例；这批只能作为采样导航。后续要么对 `[8,14]` / `[14,18]` 这类 proxy 最强 pair 做 600s 诊断，看能否变成完整 delta；要么转向 V50 的第二、第三个高风险 context，继续寻找 `timeout_resolved`、`both_optimal` 或 complete proof-cost positive。
+
+V54-V57 对 V52 中 proxy 最强的 `[8,14]`、`[14,18]` 做了 600s 公平诊断，并补跑同 budget baseline `[5,8]`。
+
+三条 600s 结果：
+
+```text
+baseline [5,8]:  EXTERNAL_TIME_LIMIT, wall=600.016911s
+alt [8,14]:      EXTERNAL_TIME_LIMIT, wall=600.026557s
+alt [14,18]:     EXTERNAL_TIME_LIMIT, wall=600.021964s
+```
+
+V55 branch-impact audit：
+
+```text
+output = BPC_future/results/journey_branch_impact_audit_v55_v54_proxy_top2_600_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v55_v54_proxy_top2_600_zh.md
+branch_count = 78
+forced_pair_branch_count = 3
+forced_pair_matched_branch_count = 3
+right_censored_branch_count = 78
+usable_branch_impact_training_count = 0
+tail_class_counts = {'completion_bound_tail': 41, 'negative_chain_continues': 1, 'unprocessed_children': 36}
+total_child_negative_pricing_events = 300
+total_child_completion_bound_retries = 158
+```
+
+V56 fair 600s delta：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_delta_v56_v54_proxy_top2_600_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v56_v54_proxy_top2_600_zh.md
+matched_counterfactual_count = 2
+status_pair_counts = {'EXTERNAL_TIME_LIMIT->EXTERNAL_TIME_LIMIT': 2}
+right_censored_counterfactual_count = 2
+usable_counterfactual_training_count = 0
+label_positive_counts = {'y_counterfactual_proof_cost_proxy_improved': 2, 'y_counterfactual_right_censored': 2}
+```
+
+同 budget 下 proxy 仍存在，但没有转成正式信号：
+
+```text
+[8,14]:  child_completion_bound_retries_delta=-4, child_negative_pricing_events_delta=-10
+[14,18]: child_completion_bound_retries_delta=-4, child_negative_pricing_events_delta=-9
+```
+
+V57 ranking audit：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_ranking_v57_v56_proxy_top2_600_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v57_proxy_top2_600_zh.md
+context_count = 1
+ranking_pair_count = 0
+ranking_training_ready = false
+context_counts = {'neutral_only_context': 1}
+```
+
+结论：这个 context 的 branch pair 可以减少局部 completion-bound retry / negative-pricing 事件，但即使放宽到 600s 也不能形成 timeout resolved、both-optimal delta 或正式 ranking positive。继续在同一 context 上加预算硬试的边际价值低；下一步应转向 V50 的第二/第三高风险 context，或推进 incumbent/cuts/formulation/strong-branch-gain 这类能改变可剪枝区间的算法线。
+
+V58-V60 已转向 V50 第二个 high-risk context：canonical random-TW 20 `greedy-anchor/tranquillitatis_balmer_like_20km/...seed61001` 的 root node，baseline pair `[2,18]`，替代 `[7,15]`、`[2,15]`、`[6,8]`、`[7,11]`。
+
+四条 220s replay：
+
+```text
+[7,15]: EXTERNAL_TIME_LIMIT, wall=220.028613s
+[2,15]: OPTIMAL, wall=206.685515s
+[6,8]:  OPTIMAL, wall=171.802948s
+[7,11]: OPTIMAL, wall=171.793737s
+```
+
+V58 branch-impact audit：
+
+```text
+output = BPC_future/results/journey_branch_impact_audit_v58_v50_second4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v58_v50_second4_220_zh.md
+branch_count = 17
+forced_pair_branch_count = 4
+forced_pair_matched_branch_count = 4
+complete_label_branch_count = 10
+right_censored_branch_count = 7
+usable_branch_impact_training_count = 10
+tail_class_counts = {'completion_bound_tail': 14, 'unprocessed_children': 3}
+total_child_negative_pricing_events = 91
+total_child_completion_bound_retries = 83
+```
+
+V59 counterfactual delta：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_delta_v59_v58_second4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v59_v58_second4_220_zh.md
+matched_counterfactual_count = 4
+status_pair_counts = {'EXTERNAL_TIME_LIMIT->EXTERNAL_TIME_LIMIT': 1, 'EXTERNAL_TIME_LIMIT->OPTIMAL': 3}
+timeout_resolved_count = 3
+right_censored_counterfactual_count = 1
+usable_counterfactual_training_count = 3
+label_positive_counts = {'y_counterfactual_proof_cost_proxy_improved': 4, 'y_counterfactual_right_censored': 1, 'y_counterfactual_timeout_resolved': 3}
+```
+
+相对 baseline `[2,18]`：
+
+```text
+[7,15]: wall_delta=+0.001630, child_cb_retries_delta=-4, child_negative_delta=-1, still censored
+[2,15]: wall_delta=-13.341468, child_cb_retries_delta=-8, child_negative_delta=+1, timeout resolved
+[6,8]:  wall_delta=-48.224035, child_cb_retries_delta=-8, child_negative_delta=-1, timeout resolved
+[7,11]: wall_delta=-48.233246, child_cb_retries_delta=-4, child_negative_delta=0, timeout resolved
+```
+
+V60 ranking audit：
+
+```text
+output = BPC_future/results/journey_branch_counterfactual_ranking_v60_v59_second4_220_20260624
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v60_second4_220_zh.md
+context_count = 1
+ranking_pair_count = 6
+ranking_training_ready = true
+```
+
+V61-V64 把 V60 ranking rows 接入 solver opt-in：
+
+```text
+score_map = BPC_future/results/journey_branch_score_map_v61_v60_second4_20260624
+coverage = BPC_future/results/journey_branch_score_candidate_coverage_v62_v61_on_v44_baseline_20260624
+optin_csv = BPC_future/results/20260624_v63_branch_score_v61_tie02_optin_220_seed61001.csv
+ab_audit = BPC_future/results/journey_branch_score_ab_audit_v64_v63_seed61001_20260624
+```
+
+关键结果：
+
+```text
+V61 top score = [7,11], score=2.061865917
+V62 score hits = 1/29 candidate events
+V62 eligible score hits = 1/29 candidate events
+V62 would_change_selected = 1
+V62 tie_tolerance_override = 0.2
+V63 priority_mode = branch_score
+V63 tie_tolerance = 0.2
+V63 root selected = [7,11]
+V63 branch_score_source = node:0:depth:0:7,11
+V63 status = OPTIMAL
+V63 wall_time = 169.284521
+V63 solving_time = 167.230269
+V63 nodes = 7
+V63 exact_pricing_calls = 31
+V64 baseline_selected = [2,18]
+V64 optin_selected = [7,11]
+V64 wall_time_delta = -50.742462
+```
+
+解释：V61 的 scored pairs 在该 root context 中属于 fractionality `0.2`，而 V44 baseline 默认最高层是 `0.4` 并选 `[2,18]`。所以 V63 必须设置 `journey_branch_fractionality_tie_tolerance=0.2` 才能让 branch-score 实际生效。这个设置只放宽 branch candidate horizon，并改变 Ryan-Foster pair 排序；它不改变 official bound / certificate，所有 child 仍靠 exact pricing closure。
+
+V65-V67 已跑完 V50 第三个 high-risk context，即 canonical random-TW 20 `random-wave/apollo15 seed61000` root context：
+
+```text
+forced pairs = [3,17], [10,17], [10,20], [2,13]
+branch_impact = BPC_future/results/journey_branch_impact_audit_v65_v50_third4_220_20260624
+delta = BPC_future/results/journey_branch_counterfactual_delta_v66_v65_third4_220_20260624
+ranking = BPC_future/results/journey_branch_counterfactual_ranking_v67_v66_third4_220_20260624
+```
+
+机器结果：
+
+```text
+V65 branch_count = 24
+V65 forced_pair_branch_count = 4
+V65 forced_pair_matched_branch_count = 4
+V65 right_censored_branch_count = 24
+V65 complete_label_branch_count = 0
+V65 usable_branch_impact_training_count = 0
+V66 matched_counterfactual_count = 4
+V66 status_pair_counts = {'EXTERNAL_TIME_LIMIT->EXTERNAL_TIME_LIMIT': 4}
+V66 timeout_resolved_count = 0
+V66 usable_counterfactual_training_count = 0
+V67 ranking_pair_count = 0
+V67 ranking_training_ready = false
+```
+
+相对 baseline `[8,18]`：
+
+```text
+[3,17]:  wall_delta=-0.022767, child_cb_retries_delta=-4, child_negative_delta=+4, right_censored
+[10,17]: wall_delta=-0.020530, child_cb_retries_delta=-4, child_negative_delta=-3, right_censored
+[10,20]: wall_delta=-0.017246, child_cb_retries_delta=-4, child_negative_delta=-4, right_censored
+[2,13]:  wall_delta=-0.022012, child_cb_retries_delta=-4, child_negative_delta=+3, right_censored
+```
+
+解释：这四条 forced root pair 都来自低 fractionality `0.125` 的远端候选。proxy 上 completion-bound retry 少 4 次，但全部仍是 `EXTERNAL_TIME_LIMIT -> EXTERNAL_TIME_LIMIT`，wall delta 只有 0.02s 量级，实质是 timeout 抖动，不能作为正例或 ranking row。
+
+V68-V69 新增 `branch_score_horizon` opt-in，并在同一 `seed61001` context 上验证真实求解路径：
+
+```text
+mode = journey_branch_candidate_priority=branch_score_horizon
+score_map = BPC_future/results/journey_branch_score_map_v61_v60_second4_20260624/journey_branch_score_rows.json
+optin_csv = BPC_future/results/20260624_v68_branch_score_horizon_v61_optin_220_seed61001.csv
+ab_audit = BPC_future/results/journey_branch_score_ab_audit_v69_v68_horizon_seed61001_20260624
+```
+
+关键结果：
+
+```text
+V68 base tie_tolerance = 0.0
+V68 root effective_tie_tolerance = 0.2
+V68 root eligible_count = 12
+V68 root effective_eligible_count = 30
+V68 root selected = [7,11]
+V68 branch_score_source = node:0:depth:0:7,11
+V68 status = OPTIMAL
+V68 wall_time = 169.756047
+V68 solving_time = 167.701594
+V68 nodes = 7
+V68 exact_pricing_calls = 31
+V69 wall_time_delta = -50.270936
+```
+
+解释：`branch_score_horizon` 只在显式 opt-in 时启用；它不会全局固定 `tie_tolerance=0.2`，而是在当前候选中找正分 scored candidate，并把 `effective_tie_tolerance` 最小放宽到覆盖该 candidate。V68 因此在不手工设置全局 0.2 的情况下复现 V63 的 `[7,11]` 路径；后续节点没有 score 命中时，`effective_tie_tolerance` 回到 0。这个入口仍只改变 branch pair 调度，official bound / certificate 仍来自 exact pricing closure。
+
+V70-V71 把同一个 `branch_score_horizon` score map 放回 V44 的 canonical random-TW 20 balanced6 子集：
+
+```text
+optin_csv = BPC_future/results/20260624_v70_branch_score_horizon_v61_balanced6_220.csv
+ab_audit = BPC_future/results/journey_branch_score_ab_audit_v71_v70_horizon_balanced6_20260624
+ab_report = BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_ab_audit_v71_v70_horizon_balanced6_zh.md
+paired_instance_count = 6
+branch_score_used_count = 1
+selected_pair_changed_count = 1
+production_ready = false
+```
+
+实际结果：
+
+```text
+greedy-anchor/apollo15 seed61000:           timeout -> timeout, pair unchanged [3,7]
+greedy-anchor/tranquillitatis seed61001:   timeout -> OPTIMAL 168.915588s, pair [2,18] -> [7,11]
+random-wave/apollo15 seed61000:            timeout -> timeout, pair unchanged [8,18]
+random-wave/tranquillitatis seed61001:     timeout -> timeout, pair unchanged [8,13]
+sector-wave/apollo15 seed61000:            timeout -> timeout, pair unchanged [2,3]
+sector-wave/tranquillitatis seed61002:     OPTIMAL -> OPTIMAL, no branch event
+```
+
+解释：V70 证明 V68 的收益可以在 fixed balanced6 batch 中复现，但覆盖非常窄。真正使用 score 的只有 `greedy-anchor/tranquillitatis seed61001` 这一条；其余超时实例没有 score 命中，`branch_score_horizon` 回退到原 deterministic fractionality 顺序。V71 的 `wall_improved_count=6` 不能解释成泛化加速，其中 4 条是 220s 外部超时边界的毫秒级抖动，sector/tranquillitatis 本来就很快最优。当前结论应是：solver opt-in 链路是安全可用的，branch-impact 标签覆盖不足，不是 20-scale 200s overall gate 达标证据。
+
+V72-V78 继续从 V44 top100 balanced6 / V45 branch-impact priority 里采样，但用新增的 `--exclude-runbook` 跳过 V50 已经跑过的 12 条 forced-pair entry：
+
+```text
+runbook = BPC_future/results/journey_branch_candidate_replay_runbook_v72_v45_prioritized_excluding_v50_220_20260624
+excluded_entry_skip_count = 12
+entry_count = 12
+candidate_event_count_with_replay_entries = 3
+```
+
+先跑 V72 的前 8 条，覆盖两个后续 context：
+
+```text
+random-wave/apollo15 seed61000 depth=1 node=2, selected [2,3], 4 alternatives
+sector-wave/apollo15 seed61000 root node=0, selected [2,3], 4 alternatives
+```
+
+审计结果：
+
+```text
+V77 matched_counterfactual_count = 8
+V77 status_pair_counts = {'EXTERNAL_TIME_LIMIT->EXTERNAL_TIME_LIMIT': 8}
+V77 timeout_resolved_count = 0
+V77 usable_counterfactual_training_count = 0
+V78 context_count = 2
+V78 ranking_pair_count = 0
+V78 ranking_training_ready = false
+```
+
+解释：V72 前 8 条都 forced-pair matched，但全部仍是右删失 timeout，最多只有 proxy proof-cost 改善，不能形成 ranking row。这个负结果比 V65-V67 更明确：仅按 V45 的 completion-tail 风险 priority 往后扫，正例密度很低；继续扫同类候选大概率只会累积 hard-negative/right-censored 样本。后续采样应围绕已知 timeout-resolved 的 V58-V60 context 做局部邻域扩展，或者把实例类别、candidate horizon、fractionality band、pool width、child proof-cost proxy 合并为更强的采样策略。
+
+V80-V89 修正了 V72 的采样偏移：`--exclude-runbook` 现在会先跳过已跑 pair，再从同一 candidate event 继续补足后续 alternatives。随后只输入 V58-V60 的已知正例实例日志，围绕同一 root context `[2,18]` 扩邻域：
+
+```text
+runbook = BPC_future/results/journey_branch_candidate_replay_runbook_v80_v58_positive_context_next4_220_20260624
+forced_pairs = [6,7], [2,6], [7,18], [9,15]
+```
+
+V82/V83 结果：
+
+```text
+V82 matched_counterfactual_count = 4
+V82 status_pair_counts = {'EXTERNAL_TIME_LIMIT->OPTIMAL': 3, 'EXTERNAL_TIME_LIMIT->EXTERNAL_TIME_LIMIT': 1}
+V82 timeout_resolved_count = 3
+V82 usable_counterfactual_training_count = 3
+V83 ranking_pair_count = 6
+V83 ranking_training_ready = true
+```
+
+具体 delta：
+
+```text
+[2,6]:  EXTERNAL_TIME_LIMIT -> OPTIMAL, wall_delta=-124.575827, exact_delta=+20, node_delta=+5
+[6,7]:  EXTERNAL_TIME_LIMIT -> OPTIMAL, wall_delta=-78.492286,  exact_delta=+32, node_delta=+7
+[7,18]: EXTERNAL_TIME_LIMIT -> OPTIMAL, wall_delta=-21.022308,  exact_delta=+35, node_delta=+7
+[9,15]: EXTERNAL_TIME_LIMIT -> EXTERNAL_TIME_LIMIT, wall_delta=-0.009337, right_censored
+```
+
+V84 合并 V59 与 V82 后，同一 parent context 扩到 `8` 条 alternatives、`27` 条 ranking pairs；best pair 变成 `[2,6]`，worst 仍是 `[7,15]`，`wall_delta_spread=124.577457`。V85 用 V84 生成新 score map，`[2,6]` 得分最高 `3.692166045`，旧 `[7,11]` 降为 `0.709450217`。V86/V87 用 `branch_score_horizon` + V85 真实求解同一实例：
+
+```text
+V86 status = OPTIMAL
+V86 wall_time = 95.59s
+V87 selected_pair = [2,6]
+V87 root effective_tie_tolerance = 0.2
+V87 branch_score = 3.692166045
+V87 wall_time_delta_sum = -124.43789
+```
+
+V88/V89 的离线 coverage 审计说明 V85 仍只命中 balanced6 中 `1/29` 个 branch-candidate event；即使 horizon=0.2，命中事件数也仍是 1。结论是：局部邻域扩展非常有效，但当前仍是 in-context score map，不是 production 泛化模型。
+
+V90-V98 继续围绕 V58/V82 已经证实的 timeout-resolved root context 做聚焦扩展。新增 `--focus-delta-input` 后，runbook 只保留已有 positive delta context，`focus_context_count=1`、`focus_event_skip_count=28`，不再从 balanced6 的 29 个 event 里盲扫。V90 四个后续候选结果：
+
+```text
+[6,13]: EXTERNAL_TIME_LIMIT -> OPTIMAL, wall_delta=-75.315375, exact_delta=+32, node_delta=+7
+[2,11]: EXTERNAL_TIME_LIMIT -> EXTERNAL_TIME_LIMIT, right_censored
+[6,9]:  EXTERNAL_TIME_LIMIT -> TIME_LIMIT, right_censored
+[9,11]: EXTERNAL_TIME_LIMIT -> OPTIMAL, wall_delta=-33.071120, exact_delta=+39, node_delta=+9
+```
+
+V92 新增 `2/4` timeout-resolved 正例；V94 合并 V59/V82/V92 后，同一 parent context 扩到 `12` 条 alternatives、`63` 条 ranking pairs。V95 score map 仍把 `[2,6]` 排第一，score `3.751747162`，新增 `[6,13]` 为正分强候选。V96 用 `branch_score_horizon + V95` 真实求解同一 seed61001，`OPTIMAL`，wall `95.74s`；V97 A/B 审计确认 root selected pair 从 `[2,18]` 改到 `[2,6]`，`wall_time_delta_sum=-124.287061`。
+
+V99-V103 把 V95 放回 V44 balanced6 做 opt-in A/B，并修正了一个重要边界。V99/V100 暴露 `branch_score_horizon` 仍会让负分候选 `[9,11]` 在 sector-apollo 上压过无分 baseline `[2,3]`；这不符合“只让正分候选打开 horizon”的语义。代码已修正为：`score <= journey_branch_candidate_score_horizon_min_score` 的候选在 horizon 模式下视为 unscored，不触发扩展，也不参与 score 优先排序。V101/V102 复跑后，sector-apollo 回到 baseline `[2,3]`，`branch_score_used_count` 从 `3` 降到 `2`，`selected_pair_changed_count` 从 `3` 降到 `2`，`wall_regressed_count=0`；真正解决 timeout 的仍只有 seed61001。V103 coverage 用 `--min-score 0.0` 重算后，positive-only eligible score hit 为 `2/29`，不是旧 V98 的 `3/29`。
+
+V104 没有跑求解，只补 branch-tail positive runbook 的候选上下文字段：tail-action alternative pair 条目现在记录 `source_selected_fractionality`、`source_alt_fractionality`、`source_alt_fractionality_gap_to_selected`、`source_alt_required_tie_tolerance` 以及 selected/alt 的 pool width 对比。用 V14/V15 同一输入重生 `BPC_future/results/journey_branch_tail_positive_runbook_v104_horizon_fields_20260624`，共 `14` 个条目，其中 `8` 个 tail-action alternative pair，新字段完整；这批 alt pair 的 `source_alt_required_tie_tolerance` 全为 `0.0`，说明当前 seed61000 tail alt-pair 采样仍是同 fractionality 层内替换，不是 V61/V68 那类需要打开 0.2 horizon 的远端正例。这一步的价值是把后续 branch-impact/GAT 训练所需的 candidate horizon 标签落到样本闭环里，不是新的加速证据。
+
+V105 进一步把 `required_tie_tolerance` 接入 branch-score candidate coverage 审计。用 V103 同一输入和正分口径重跑 V95-on-V44：`candidate_event_count=29`、`candidate_event_with_score_hit_count=2`、`candidate_event_with_eligible_score_hit_count=2`、`candidate_event_would_change_selected_count=2`。新增 horizon 分布为：`best_scored_required_tie_tolerance_count=2`，其中 `<=0` 为 `1`，`<=0.2` 为 `2`，`>0.2` 为 `0`，最大值 `0.2`。两条命中分别是 seed61000 root `[6,13]`，required tolerance `0.0`；seed61001 root `[2,6]`，required tolerance `0.2`。这说明 V95 的主要瓶颈不是 horizon 阈值不够，而是 balanced6 里 positive score hit 只有 `2/29` event；继续扩大 horizon 本身不会自动带来覆盖，必须扩 mixed positive/negative context 和泛化特征。
+
+V106 把 V105 的 coverage-gap 行接入 `build_journey_branch_candidate_replay_runbook.py`。新增 `--coverage-input` / `--coverage-gap-only` 后，runbook 可以只保留无 score hit 或无 eligible score hit 的 branch-candidate event，并把 `coverage_gap_priority`、`coverage_gap_priority_reason`、coverage hit 状态和每个替代 pair 的 `source_alt_required_tie_tolerance` 写入条目。用 V44 top100 balanced6 日志、V105 coverage、并排除 V44/V50/V72/V80/V90 已采 forced pairs 后，生成 `BPC_future/results/journey_branch_candidate_replay_runbook_v106_v105_coverage_gap_20260624`：`entry_count=24`，覆盖 `12` 个无 score-hit event，`coverage_gap_skip_count=2`，`excluded_entry_skip_count=48`。24 条候选的 required tolerance 分布为 `{0.0, 0.2, 0.25, 0.375}`，其中 `<=0.2` 为 `18/24`。这一步仍不运行求解，只是把“覆盖不足”转成下一批可执行 counterfactual replay 命令。
+
+结论：V58-V60/V80-V106 是当前 branch-impact 线上最有价值的新信号。它证明在一个 canonical 20 实例的同一 root context 下，path-forced branch pair 能把 baseline 220s 超时稳定转成约 95s `OPTIMAL`，并形成 `63` 条合并 pairwise ranking rows；V61-V64/V68-V71/V80-V87/V90-V102 进一步证明这些 ranking rows 可以通过 `branch_score_horizon` 接入真实求解，且不改变 exact proof 边界。V65-V67 和 V72-V78 则是负结果：低 fractionality `0.125` 远端 root 候选、random-wave/apollo depth=1 替换、sector-wave/apollo root 后续替换都没有解决 timeout，也没有产出正式排序样本。V99-V103 进一步说明不能让负分/弱分 score map 改变分支；当前 positive-only coverage 只有 `2/29` event。V104/V105/V106 把 candidate horizon/tie-tolerance 标签写入后续 runbook 与 coverage 样本，并把 coverage-gap event 转成新的 replay 命令，但还没有产生新的正例或 20-scale gate 证据。边界也要写清楚：这些仍是 diagnostic-only / context-level 证据，不是 20-scale 200s overall gate 达标；后续 branch-impact/GAT 调度应记录 candidate horizon/tie-tolerance/fractionality band 和实例类别，并优先扩展 mixed positive/negative context，而不是只按 tail 风险或 completion-tail priority 盲目扩大候选 horizon。
+
 ## 验证
 
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220 --output-dir BPC_future/results/journey_branch_impact_audit_v45_v44_top100_balanced6_baseline_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v45_v44_top100_balanced6_baseline_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220 --output-dir BPC_future/results/journey_branch_candidate_replay_runbook_v46_top100_balanced6_root4_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v46_root4_220_zh.md --time-limit 220 --limit 4 --alt-pairs-per-event 4 --candidate-source priority_top --candidate-log-top-n 100`
+- `bash -lc 'while IFS= read -r cmd; do bash -lc "$cmd" & done < BPC_future/results/journey_branch_candidate_replay_runbook_v46_top100_balanced6_root4_220_20260624/commands.sh; wait'`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/journey_branch_candidate_replay_runbook_v46_top100_balanced6_root4_220_20260624/runs --output-dir BPC_future/results/journey_branch_impact_audit_v47_v46_root4_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v47_v46_root4_220_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_counterfactual_delta.py --runbook BPC_future/results/journey_branch_candidate_replay_runbook_v46_top100_balanced6_root4_220_20260624/runbook.json --baseline-result BPC_future/results/20260624_v44_candidate_log_top100_randomtw20_balanced6_220.csv --baseline-branch-input BPC_future/results/journey_branch_impact_audit_v45_v44_top100_balanced6_baseline_20260624 --alt-branch-input BPC_future/results/journey_branch_impact_audit_v47_v46_root4_220_20260624 --output-dir BPC_future/results/journey_branch_counterfactual_delta_v48_v46_root4_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v48_root4_220_zh.md --min-wall-improvement 1.0`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_counterfactual_ranking.py BPC_future/results/journey_branch_counterfactual_delta_v48_v46_root4_220_20260624 --output-dir BPC_future/results/journey_branch_counterfactual_ranking_v49_v48_root4_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v49_root4_220_zh.md --min-wall-gap 1.0 --min-exact-pricing-gap 1`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/scripts/audit_journey_branch_counterfactual_delta.py BPC_future/tests/test_journey_branch_counterfactual_delta_audit.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_journey_branch_counterfactual_delta_audit`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_01_seed61001_logical_graph.json BPC_future/logical_graph/tasks_020/random-wave/apollo15_20km/apollo15_20km_random-wave_randomtw_tasks020_01_seed61000_logical_graph.json BPC_future/logical_graph/tasks_020/random-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_random-wave_randomtw_tasks020_01_seed61001_logical_graph.json BPC_future/logical_graph/tasks_020/sector-wave/apollo15_20km/apollo15_20km_sector-wave_randomtw_tasks020_01_seed61000_logical_graph.json BPC_future/logical_graph/tasks_020/sector-wave/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_sector-wave_randomtw_tasks020_01_seed61002_logical_graph.json --time-limit 220 --results-csv BPC_future/results/20260624_v44_candidate_log_top100_randomtw20_balanced6_220.csv --log-dir BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220 --solution-dir BPC_future/results/solutions_20260624_v44_candidate_log_top100_randomtw20_balanced6_220 --run-log-dir BPC_future/results/run_logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220 --timeout-kill-after 30s --max-workers 3 --quiet --set journey_branch_candidate_log_top_n=100`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220 --output-dir BPC_future/results/journey_branch_candidate_replay_runbook_v44_top100_balanced6_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v44_top100_balanced6_zh.md --time-limit 600 --limit 60 --alt-pairs-per-event 4 --candidate-source priority_top --candidate-log-top-n 100`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py BPC_future/results/logs_20260624_v44_candidate_log_top100_randomtw20_balanced6_220 --branch-impact-input BPC_future/results/journey_branch_impact_audit_v45_v44_top100_balanced6_baseline_20260624 --output-dir BPC_future/results/journey_branch_candidate_replay_runbook_v50_v45_prioritized_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v50_v45_prioritized_220_zh.md --time-limit 220 --limit 12 --alt-pairs-per-event 4 --candidate-source priority_top --candidate-log-top-n 100`
+- `bash -lc 'i=0; while IFS= read -r cmd && [ "$i" -lt 4 ]; do i=$((i + 1)); bash -lc "$cmd" & done < BPC_future/results/journey_branch_candidate_replay_runbook_v50_v45_prioritized_220_20260624/commands.sh; wait'`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/journey_branch_candidate_replay_runbook_v50_v45_prioritized_220_20260624/runs --output-dir BPC_future/results/journey_branch_impact_audit_v51_v50_first4_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v51_v50_first4_220_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_counterfactual_delta.py --runbook BPC_future/results/journey_branch_candidate_replay_runbook_v50_v45_prioritized_220_20260624/runbook.json --baseline-result BPC_future/results/20260624_v44_candidate_log_top100_randomtw20_balanced6_220.csv --baseline-branch-input BPC_future/results/journey_branch_impact_audit_v45_v44_top100_balanced6_baseline_20260624 --alt-branch-input BPC_future/results/journey_branch_impact_audit_v51_v50_first4_220_20260624 --output-dir BPC_future/results/journey_branch_counterfactual_delta_v52_v50_first4_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v52_v50_first4_220_zh.md --min-wall-improvement 1.0`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_counterfactual_ranking.py BPC_future/results/journey_branch_counterfactual_delta_v52_v50_first4_220_20260624 --output-dir BPC_future/results/journey_branch_counterfactual_ranking_v53_v52_v50_first4_220_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v53_v50_first4_220_zh.md --min-wall-gap 1.0 --min-exact-pricing-gap 1`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/sector-wave/apollo15_20km/apollo15_20km_sector-wave_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_8_14/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_8_14/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_8_14/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_8_14/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,3=separate_vehicle;1:8,14' --set journey_branch_candidate_log_top_n=100`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/sector-wave/apollo15_20km/apollo15_20km_sector-wave_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_14_18/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_14_18/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_14_18/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/alt_14_18/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,3=separate_vehicle;1:14,18' --set journey_branch_candidate_log_top_n=100`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/sector-wave/apollo15_20km/apollo15_20km_sector-wave_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 600 --results-csv BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/baseline_5_8/results.csv --log-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/baseline_5_8/logs --solution-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/baseline_5_8/solutions --run-log-dir BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/baseline_5_8/run_logs --python /home/kai/miniconda3/bin/python --timeout-kill-after 30s --max-workers 1 --quiet --set 'journey_branch_candidate_priority=force_pair_path:0:2,3=separate_vehicle;1:5,8' --set journey_branch_candidate_log_top_n=100`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_impact.py BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624 --output-dir BPC_future/results/journey_branch_impact_audit_v55_v54_proxy_top2_600_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_v55_v54_proxy_top2_600_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_counterfactual_delta.py --runbook BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/runbook.json --baseline-result BPC_future/results/journey_branch_candidate_replay_v54_proxy_top2_600_20260624/baseline_5_8/results.csv --baseline-branch-input BPC_future/results/journey_branch_impact_audit_v55_v54_proxy_top2_600_20260624 --alt-branch-input BPC_future/results/journey_branch_impact_audit_v55_v54_proxy_top2_600_20260624 --output-dir BPC_future/results/journey_branch_counterfactual_delta_v56_v54_proxy_top2_600_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_delta_v56_v54_proxy_top2_600_zh.md --min-wall-improvement 1.0`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_counterfactual_ranking.py BPC_future/results/journey_branch_counterfactual_delta_v56_v54_proxy_top2_600_20260624 --output-dir BPC_future/results/journey_branch_counterfactual_ranking_v57_v56_proxy_top2_600_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_counterfactual_ranking_v57_proxy_top2_600_zh.md --min-wall-gap 1.0 --min-exact-pricing-gap 1`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py BPC_future/tests/test_journey_branch_candidate_replay_runbook.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_journey_branch_candidate_replay_runbook`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py BPC_future/results/logs_20260624_v36_branch_score_ab_baseline_220_seed61846 --output-dir BPC_future/results/journey_branch_candidate_replay_runbook_v43_v36_seed61846_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_candidate_replay_runbook_v43_seed61846_zh.md --time-limit 600 --limit 12 --alt-pairs-per-event 4 --candidate-source priority_top --candidate-log-top-n 100`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_score_candidate_coverage.py --score-path BPC_future/results/journey_branch_score_map_v35_v33_all12_20260624/journey_branch_score_rows.json BPC_future/results/logs_20260624_v36_branch_score_ab_baseline_220_seed61846 --output-dir BPC_future/results/journey_branch_score_candidate_coverage_v41_v35_on_v36_baseline_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_candidate_coverage_v41_v35_on_v36_baseline_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_score_candidate_coverage.py --score-path BPC_future/results/journey_branch_score_map_v38_leave_seed61846_pair_20260624/journey_branch_score_rows.json BPC_future/results/logs_20260624_v36_branch_score_ab_baseline_220_seed61846 --output-dir BPC_future/results/journey_branch_score_candidate_coverage_v42_v38_on_v36_baseline_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_candidate_coverage_v42_v38_on_v36_baseline_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/scripts/audit_journey_branch_score_candidate_coverage.py BPC_future/tests/test_journey_branch_score_candidate_coverage.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_journey_branch_score_candidate_coverage`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_branch_score_map.py BPC_future/results/journey_branch_counterfactual_ranking_v33_v32_all12_20260624 --output-dir BPC_future/results/journey_branch_score_map_v38_leave_seed61846_pair_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_map_v38_leave_seed61846_pair_zh.md --key-scope pair --exclude-instance-contains seed61846`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 220 --results-csv BPC_future/results/20260624_v39_branch_score_leave_seed61846_pair_optin_220_seed61846.csv --log-dir BPC_future/results/logs_20260624_v39_branch_score_leave_seed61846_pair_optin_220_seed61846 --solution-dir BPC_future/results/solutions_20260624_v39_branch_score_leave_seed61846_pair_optin_220_seed61846 --run-log-dir BPC_future/results/run_logs_20260624_v39_branch_score_leave_seed61846_pair_optin_220_seed61846 --timeout-kill-after 30s --quiet --set journey_branch_candidate_log_top_n=100 --set journey_branch_candidate_priority=branch_score --set journey_branch_candidate_score_path=BPC_future/results/journey_branch_score_map_v38_leave_seed61846_pair_20260624/journey_branch_score_rows.json`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_score_ab.py --baseline-csv BPC_future/results/20260624_v36_branch_score_ab_baseline_220_seed61846.csv --optin-csv BPC_future/results/20260624_v39_branch_score_leave_seed61846_pair_optin_220_seed61846.csv --baseline-log-dir BPC_future/results/logs_20260624_v36_branch_score_ab_baseline_220_seed61846 --optin-log-dir BPC_future/results/logs_20260624_v39_branch_score_leave_seed61846_pair_optin_220_seed61846 --output-dir BPC_future/results/journey_branch_score_ab_audit_v40_v39_leave_seed61846_pair_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_ab_audit_v40_leave_seed61846_pair_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/scripts/audit_journey_branch_score_ab.py BPC_future/tests/test_journey_branch_score_ab_audit.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_journey_branch_score_ab_audit`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_branch_score_ab.py --baseline-csv BPC_future/results/20260624_v36_branch_score_ab_baseline_220_seed61846.csv --optin-csv BPC_future/results/20260624_v36_branch_score_ab_optin_220_seed61846.csv --baseline-log-dir BPC_future/results/logs_20260624_v36_branch_score_ab_baseline_220_seed61846 --optin-log-dir BPC_future/results/logs_20260624_v36_branch_score_ab_optin_220_seed61846 --output-dir BPC_future/results/journey_branch_score_ab_audit_v37_v36_seed61846_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_ab_audit_v37_seed61846_zh.md`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/scripts/build_journey_branch_score_map.py BPC_future/tests/test_journey_branch_score_map.py BPC_future/solver/journey_driver.py BPC_future/tests/test_bpc_future.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_journey_branch_score_map BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_branch_can_prioritize_branch_score_opt_in BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_branch_candidate_log_records_branch_score_selection`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/build_journey_branch_score_map.py BPC_future/results/journey_branch_counterfactual_ranking_v33_v32_all12_20260624 --output-dir BPC_future/results/journey_branch_score_map_v35_v33_all12_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_score_map_v35_v33_all12_zh.md --key-scope node_depth`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 220 --results-csv BPC_future/results/20260624_v36_branch_score_ab_baseline_220_seed61846.csv --log-dir BPC_future/results/logs_20260624_v36_branch_score_ab_baseline_220_seed61846 --solution-dir BPC_future/results/solutions_20260624_v36_branch_score_ab_baseline_220_seed61846 --run-log-dir BPC_future/results/run_logs_20260624_v36_branch_score_ab_baseline_220_seed61846 --timeout-kill-after 30s --quiet --set journey_branch_candidate_log_top_n=12`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/tranquillitatis_balmer_like_20km_greedy-anchor_randomtw_tasks020_09_seed61846_logical_graph.json --time-limit 220 --results-csv BPC_future/results/20260624_v36_branch_score_ab_optin_220_seed61846.csv --log-dir BPC_future/results/logs_20260624_v36_branch_score_ab_optin_220_seed61846 --solution-dir BPC_future/results/solutions_20260624_v36_branch_score_ab_optin_220_seed61846 --run-log-dir BPC_future/results/run_logs_20260624_v36_branch_score_ab_optin_220_seed61846 --timeout-kill-after 30s --quiet --set journey_branch_candidate_log_top_n=12 --set journey_branch_candidate_priority=branch_score --set journey_branch_candidate_score_path=BPC_future/results/journey_branch_score_map_v35_v33_all12_20260624/journey_branch_score_rows.json`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/solver/gat_admission_queue.py BPC_future/solver/journey_driver.py BPC_future/tests/test_gat_target_mode_scheduler.py BPC_future/tests/test_gat_target_mode_certificate_safety.py BPC_future/tests/test_bpc_future.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_gat_target_mode_scheduler BPC_future.tests.test_gat_target_mode_certificate_safety BPC_future.tests.test_bpc_future.BPCFutureTests.test_tail_action_controller_classifies_sparse_broad_and_branch_tail BPC_future.tests.test_bpc_future.BPCFutureTests.test_frontier_refinement_target_requires_rmp_to_reach_incumbent_floor BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_branch_candidate_log_records_priority_selection BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_early_branch_after_incomplete_no_column_gate`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 130 --results-csv BPC_future/results/20260624_v17b_support_aware_admission_130_randomtw20_seed61000.csv --log-dir BPC_future/results/logs_20260624_v17b_support_aware_admission_130_randomtw20_seed61000 --solution-dir BPC_future/results/solutions_20260624_v17b_support_aware_admission_130_randomtw20_seed61000 --run-log-dir BPC_future/results/run_logs_20260624_v17b_support_aware_admission_130_randomtw20_seed61000 --timeout-kill-after 30s --quiet --set journey_gat_admission_scheduler_enabled=True --set journey_gat_admission_support_aware_enabled=True --set journey_gat_admission_allow_unsourced_delay=True --set journey_gat_admission_max_delay_rounds=1 --set journey_gat_admission_max_delay_queue_size=256 --set journey_gat_admission_support_demote_inactive_only=True --set journey_gat_admission_support_overlap_threshold=0.6`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 130 --results-csv BPC_future/results/20260624_v17c_default_baseline_130_randomtw20_seed61000.csv --log-dir BPC_future/results/logs_20260624_v17c_default_baseline_130_randomtw20_seed61000 --solution-dir BPC_future/results/solutions_20260624_v17c_default_baseline_130_randomtw20_seed61000 --run-log-dir BPC_future/results/run_logs_20260624_v17c_default_baseline_130_randomtw20_seed61000 --timeout-kill-after 30s --quiet`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 130 --results-csv BPC_future/results/20260624_v18_support_aware_root_safe_130_randomtw20_seed61000.csv --log-dir BPC_future/results/logs_20260624_v18_support_aware_root_safe_130_randomtw20_seed61000 --solution-dir BPC_future/results/solutions_20260624_v18_support_aware_root_safe_130_randomtw20_seed61000 --run-log-dir BPC_future/results/run_logs_20260624_v18_support_aware_root_safe_130_randomtw20_seed61000 --timeout-kill-after 30s --quiet --set journey_gat_admission_scheduler_enabled=True --set journey_gat_admission_support_aware_enabled=True --set journey_gat_admission_allow_unsourced_delay=True --set journey_gat_admission_max_delay_rounds=1 --set journey_gat_admission_max_delay_queue_size=256 --set journey_gat_admission_support_demote_inactive_only=True --set journey_gat_admission_support_overlap_threshold=0.6`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 220 --results-csv BPC_future/results/20260624_v19a_default_baseline_220_randomtw20_seed61000.csv --log-dir BPC_future/results/logs_20260624_v19a_default_baseline_220_randomtw20_seed61000 --solution-dir BPC_future/results/solutions_20260624_v19a_default_baseline_220_randomtw20_seed61000 --run-log-dir BPC_future/results/run_logs_20260624_v19a_default_baseline_220_randomtw20_seed61000 --timeout-kill-after 30s --quiet`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 220 --results-csv BPC_future/results/20260624_v19b_support_aware_depth1_220_randomtw20_seed61000.csv --log-dir BPC_future/results/logs_20260624_v19b_support_aware_depth1_220_randomtw20_seed61000 --solution-dir BPC_future/results/solutions_20260624_v19b_support_aware_depth1_220_randomtw20_seed61000 --run-log-dir BPC_future/results/run_logs_20260624_v19b_support_aware_depth1_220_randomtw20_seed61000 --timeout-kill-after 30s --quiet --set journey_gat_admission_scheduler_enabled=True --set journey_gat_admission_support_aware_enabled=True --set journey_gat_admission_allow_unsourced_delay=True --set journey_gat_admission_max_delay_rounds=1 --set journey_gat_admission_max_delay_queue_size=256 --set journey_gat_admission_support_demote_inactive_only=True --set journey_gat_admission_support_overlap_threshold=0.6`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 220 --results-csv BPC_future/results/20260624_v19c_support_aware_exact_depth1_220_randomtw20_seed61000.csv --log-dir BPC_future/results/logs_20260624_v19c_support_aware_exact_depth1_220_randomtw20_seed61000 --solution-dir BPC_future/results/solutions_20260624_v19c_support_aware_exact_depth1_220_randomtw20_seed61000 --run-log-dir BPC_future/results/run_logs_20260624_v19c_support_aware_exact_depth1_220_randomtw20_seed61000 --timeout-kill-after 30s --quiet --set journey_gat_admission_scheduler_enabled=True --set journey_gat_admission_support_aware_enabled=True --set journey_gat_admission_allow_unsourced_delay=True --set journey_gat_admission_max_delay_rounds=1 --set journey_gat_admission_max_delay_queue_size=256 --set journey_gat_admission_support_demote_inactive_only=True --set journey_gat_admission_support_overlap_threshold=0.6 --set \"journey_gat_admission_scheduler_pricing_kinds=['heuristic','sharded_pulse_hidden_negative_worker','exact']\"`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json --time-limit 160 --results-csv BPC_future/results/20260624_v20_support_shadow_nomutate_160_randomtw20_seed61000.csv --log-dir BPC_future/results/logs_20260624_v20_support_shadow_nomutate_160_randomtw20_seed61000 --solution-dir BPC_future/results/solutions_20260624_v20_support_shadow_nomutate_160_randomtw20_seed61000 --run-log-dir BPC_future/results/run_logs_20260624_v20_support_shadow_nomutate_160_randomtw20_seed61000 --timeout-kill-after 30s --quiet --set journey_gat_admission_scheduler_enabled=True --set journey_gat_admission_support_aware_enabled=True --set journey_gat_admission_allow_unsourced_delay=True --set \"journey_gat_admission_scheduler_pricing_kinds=[]\"`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_support_aware_branch_exact_tail.py BPC_future/results/logs_20260624_v20_support_shadow_nomutate_160_randomtw20_seed61000 --output-dir BPC_future/results/journey_support_aware_branch_exact_tail_v20_shadow_seed61000_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_support_aware_branch_exact_tail_v20_shadow_seed61000_zh.md --min-depth 1`
+- `find BPC_future/logical_graph/tasks_020 -name '*_logical_graph.json' | sort > /tmp/bpc_future_tasks020_60.txt`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/run_bpc_future_external_timeout_batch.py --config BPC_future/configs/moon_trek_20_smoke.yaml --instances $(cat /tmp/bpc_future_tasks020_60.txt) --time-limit 160 --results-csv BPC_future/results/20260624_v21_support_shadow_nomutate_160_randomtw20_60instances.csv --log-dir BPC_future/results/logs_20260624_v21_support_shadow_nomutate_160_randomtw20_60instances --solution-dir BPC_future/results/solutions_20260624_v21_support_shadow_nomutate_160_randomtw20_60instances --run-log-dir BPC_future/results/run_logs_20260624_v21_support_shadow_nomutate_160_randomtw20_60instances --timeout-kill-after 30s --max-workers 3 --quiet --set journey_gat_admission_scheduler_enabled=True --set journey_gat_admission_support_aware_enabled=True --set journey_gat_admission_allow_unsourced_delay=True --set "journey_gat_admission_scheduler_pricing_kinds=[]"`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python BPC_future/scripts/audit_journey_support_aware_branch_exact_tail.py BPC_future/results/logs_20260624_v21_support_shadow_nomutate_160_randomtw20_60instances --output-dir BPC_future/results/journey_support_aware_branch_exact_tail_v21_shadow_randomtw20_60instances_20260624 --report BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_support_aware_branch_exact_tail_v21_shadow_randomtw20_60instances_zh.md --min-depth 1`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/scripts/audit_journey_support_aware_branch_exact_tail.py BPC_future/tests/test_journey_support_aware_branch_exact_tail_audit.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_journey_support_aware_branch_exact_tail_audit`
+- `PYTHONDONTWRITEBYTECODE=1 /home/kai/miniconda3/bin/python -m py_compile BPC_future/scripts/audit_journey_late_negative_tail.py BPC_future/scripts/build_journey_tail_impact_training_rows.py BPC_future/scripts/build_journey_branch_tail_positive_runbook.py BPC_future/scripts/audit_journey_tail_action_controller.py BPC_future/solver/journey_driver.py BPC_future/tests/test_journey_late_negative_tail_audit.py BPC_future/tests/test_journey_tail_impact_training_rows.py BPC_future/tests/test_journey_branch_tail_positive_runbook.py BPC_future/tests/test_journey_tail_action_controller_audit.py BPC_future/tests/test_bpc_future.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_journey_late_negative_tail_audit BPC_future.tests.test_journey_tail_impact_training_rows BPC_future.tests.test_journey_branch_tail_positive_runbook BPC_future.tests.test_journey_tail_action_controller_audit BPC_future.tests.test_bpc_future.BPCFutureTests.test_tail_action_controller_classifies_sparse_broad_and_branch_tail BPC_future.tests.test_bpc_future.BPCFutureTests.test_frontier_refinement_target_requires_rmp_to_reach_incumbent_floor BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_branch_candidate_log_records_priority_selection BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_early_branch_after_incomplete_no_column_gate`
+- `git diff --check`
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m py_compile BPC_future/solver/journey_driver.py`
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m unittest BPC_future.tests.test_resource_pareto_completion`
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /home/kai/miniconda3/bin/python -m py_compile BPC_future/solver/journey_driver.py BPC_future/tests/test_bpc_future.py`
