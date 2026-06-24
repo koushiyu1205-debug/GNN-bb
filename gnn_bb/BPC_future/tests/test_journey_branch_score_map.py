@@ -133,6 +133,141 @@ class JourneyBranchScoreMapTests(unittest.TestCase):
             self.assertIn("2,5", score_map)
             self.assertNotIn("4,5", score_map)
 
+    def test_child_probe_rows_build_proof_cost_score_map(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            probe_dir = tmp_path / "probe"
+            probe_dir.mkdir()
+            rows = [
+                _child_probe_row(
+                    branch_node_id=0,
+                    branch_depth=0,
+                    pair=[2, 6],
+                    child_node_id=1,
+                    complete=True,
+                    right_censored=False,
+                    fathomed=True,
+                    corrected_gain=5.0,
+                    retries=2.0,
+                    proof_cpu=20.0,
+                ),
+                _child_probe_row(
+                    branch_node_id=0,
+                    branch_depth=0,
+                    pair=[2, 6],
+                    child_node_id=2,
+                    complete=True,
+                    right_censored=False,
+                    fathomed=False,
+                    corrected_gain=0.0,
+                    retries=0.0,
+                    proof_cpu=5.0,
+                ),
+                _child_probe_row(
+                    branch_node_id=0,
+                    branch_depth=0,
+                    pair=[2, 10],
+                    child_node_id=3,
+                    complete=False,
+                    right_censored=True,
+                    fathomed=False,
+                    corrected_gain=0.0,
+                    retries=3.0,
+                    proof_cpu=30.0,
+                ),
+            ]
+            (probe_dir / "child_probe_rows.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            summary = build_branch_score_map(
+                [probe_dir],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                key_scope="node_depth",
+                include_child_probe=True,
+            )
+
+            self.assertEqual(summary["raw_ranking_pair_row_count"], 0)
+            self.assertEqual(summary["raw_child_probe_row_count"], 3)
+            self.assertEqual(summary["child_probe_branch_row_count"], 2)
+            self.assertEqual(summary["branch_score_map_entry_count"], 2)
+            self.assertEqual(summary["solver_priority_mode"], "branch_score_horizon")
+
+            score_map = json.loads((tmp_path / "out" / "journey_branch_score_map.json").read_text())
+            self.assertGreater(score_map["node:0:depth:0:2,6"], 0.0)
+            self.assertLess(score_map["node:0:depth:0:2,10"], 0.0)
+
+            score_rows = json.loads((tmp_path / "out" / "journey_branch_score_rows.json").read_text())
+            positive = next(row for row in score_rows if row["key"] == "node:0:depth:0:2,6")
+            self.assertEqual(positive["score_source"], "child_probe_proof_cost")
+            self.assertEqual(positive["child_probe_branch_count"], 1)
+            self.assertEqual(positive["complete_child_probe_branch_count"], 1)
+            self.assertEqual(positive["right_censored_child_probe_branch_count"], 0)
+            self.assertAlmostEqual(positive["child_probe_fathom_sum"], 1.0)
+
+            negative = next(row for row in score_rows if row["key"] == "node:0:depth:0:2,10")
+            self.assertEqual(negative["right_censored_child_probe_branch_count"], 1)
+            self.assertIn("branch_score_horizon", (tmp_path / "report.md").read_text(encoding="utf-8"))
+
+    def test_child_probe_log_filters_support_context_safe_maps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            probe_dir = tmp_path / "probe"
+            probe_dir.mkdir()
+            rows = [
+                _child_probe_row(
+                    log_file="greedy-anchor_seed1.jsonl",
+                    branch_node_id=0,
+                    branch_depth=0,
+                    pair=[2, 6],
+                    child_node_id=1,
+                    complete=True,
+                    right_censored=False,
+                    fathomed=True,
+                    corrected_gain=5.0,
+                    retries=0.0,
+                    proof_cpu=10.0,
+                ),
+                _child_probe_row(
+                    log_file="random-wave_seed1.jsonl",
+                    branch_node_id=0,
+                    branch_depth=0,
+                    pair=[2, 10],
+                    child_node_id=2,
+                    complete=False,
+                    right_censored=True,
+                    fathomed=False,
+                    corrected_gain=0.0,
+                    retries=2.0,
+                    proof_cpu=20.0,
+                ),
+            ]
+            (probe_dir / "child_probe_rows.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            summary = build_branch_score_map(
+                [probe_dir],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                key_scope="node_depth",
+                include_child_probe=True,
+                include_child_probe_log_contains=("greedy-anchor",),
+            )
+
+            self.assertEqual(summary["raw_child_probe_row_count"], 2)
+            self.assertEqual(summary["child_probe_row_count"], 1)
+            self.assertEqual(summary["filtered_out_child_probe_row_count"], 1)
+            self.assertEqual(summary["include_child_probe_log_contains"], ["greedy-anchor"])
+            score_map = json.loads((tmp_path / "out" / "journey_branch_score_map.json").read_text())
+            self.assertIn("node:0:depth:0:2,6", score_map)
+            self.assertNotIn("node:0:depth:0:2,10", score_map)
+            report_text = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("include_child_probe_log_contains", report_text)
+
 
 def _ranking_row(
     *,
@@ -168,6 +303,68 @@ def _ranking_row(
         },
         "wall_delta_gap": float(wall_gap),
         "exact_pricing_calls_gap": float(exact_gap),
+    }
+
+
+def _child_probe_row(
+    *,
+    log_file: str = "demo.jsonl",
+    branch_node_id: int,
+    branch_depth: int,
+    pair: list[int],
+    child_node_id: int,
+    complete: bool,
+    right_censored: bool,
+    fathomed: bool,
+    corrected_gain: float,
+    retries: float,
+    proof_cpu: float,
+) -> dict[str, object]:
+    return {
+        "schema_version": "journey_branch_child_probe_row_v1",
+        "diagnostic_only": True,
+        "runs_bpc_or_pricing": False,
+        "production_ready": False,
+        "certificate_effect": False,
+        "official_bound_effect": False,
+        "log_file": log_file,
+        "run_status": "OPTIMAL" if complete else "NO_FINISH",
+        "right_censored": bool(right_censored),
+        "label_observation_complete": bool(complete),
+        "branch_node_id": branch_node_id,
+        "branch_depth": branch_depth,
+        "task_i": pair[0],
+        "task_j": pair[1],
+        "child_node_id": child_node_id,
+        "child_started": True,
+        "child_label_schema": [
+            "child_lower_bound_gain",
+            "child_max_corrected_node_lb",
+            "child_max_corrected_bound_gain",
+            "child_pricing_event_count",
+            "child_exact_pricing_event_count",
+            "child_negative_pricing_event_count",
+            "child_completion_bound_retry_count",
+            "child_early_branch_trigger_count",
+            "child_proof_cpu",
+            "child_time_to_first_certificate",
+            "child_time_to_fathom",
+            "child_fathomed",
+        ],
+        "child_labels": {
+            "child_lower_bound_gain": 0.0,
+            "child_max_corrected_node_lb": 0.0,
+            "child_max_corrected_bound_gain": float(corrected_gain),
+            "child_pricing_event_count": 1.0,
+            "child_exact_pricing_event_count": 1.0,
+            "child_negative_pricing_event_count": 0.0,
+            "child_completion_bound_retry_count": float(retries),
+            "child_early_branch_trigger_count": 0.0,
+            "child_proof_cpu": float(proof_cpu),
+            "child_time_to_first_certificate": float(proof_cpu) if fathomed else -1.0,
+            "child_time_to_fathom": float(proof_cpu) if fathomed else -1.0,
+            "child_fathomed": 1.0 if fathomed else 0.0,
+        },
     }
 
 

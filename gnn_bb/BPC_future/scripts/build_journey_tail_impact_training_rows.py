@@ -6,6 +6,7 @@ This script fuses diagnostic sources:
 * weak rough-negative pricing rows that were filtered by true-RC materialization;
 * branch-impact rows that describe whether a branch reduces or moves proof tail.
 * tail-action proof-cost rows;
+* tail-action counterfactual delta rows;
 * late true-negative / weak-filtered pricing tail rows.
 
 It is intentionally offline.  It reads existing audit artifacts only and does
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from datetime import date
 import json
 from pathlib import Path
 from typing import Any, Iterable
@@ -31,6 +33,7 @@ TAIL_IMPACT_FEATURE_SCHEMA: tuple[str, ...] = (
     "source_is_branch",
     "source_is_weak_negative",
     "source_is_tail_action",
+    "source_is_tail_action_counterfactual",
     "source_is_late_negative",
     "depth",
     "time",
@@ -68,6 +71,11 @@ TAIL_IMPACT_FEATURE_SCHEMA: tuple[str, ...] = (
     "tail_action_subtree_early_branch_triggers",
     "tail_action_subtree_no_column_triggers",
     "tail_action_subtree_observed_wall_span",
+    "tail_counterfactual_local_tail_cost_delta",
+    "tail_counterfactual_wall_time_delta",
+    "tail_counterfactual_negative_pricing_delta",
+    "tail_counterfactual_completion_retry_delta",
+    "tail_counterfactual_no_column_chain_delta",
     "late_has_true_negative",
     "late_has_weak_filtered",
     "late_active_changed_task_sets",
@@ -90,6 +98,13 @@ TAIL_IMPACT_LABEL_SCHEMA: tuple[str, ...] = (
     "y_child_completion_bound_retries",
     "y_child_early_branch_triggers",
     "y_tail_action_no_column",
+    "y_tail_action_counterfactual",
+    "y_local_tail_improved",
+    "y_whole_run_improved",
+    "y_local_improved_but_whole_run_not",
+    "y_timeout_resolved",
+    "y_timeout_regression",
+    "y_right_censored_counterfactual",
     "y_child_unstarted",
     "y_subtree_no_column_chain",
     "y_late_true_negative",
@@ -187,6 +202,28 @@ def _load_tail_action_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_tail_action_counterfactual_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        if path.is_dir():
+            rows.extend(_iter_jsonl(path / "tail_action_counterfactual_delta_rows.jsonl"))
+            continue
+        if path.name == "summary.json":
+            rows.extend(_iter_jsonl(path.parent / "tail_action_counterfactual_delta_rows.jsonl"))
+            raw_rows = _read_json(path).get("rows")
+            if isinstance(raw_rows, list):
+                rows.extend(row for row in raw_rows if isinstance(row, dict))
+            continue
+        if path.suffix == ".jsonl":
+            rows.extend(_iter_jsonl(path))
+            continue
+        payload = _read_json(path)
+        raw_rows = payload.get("rows")
+        if isinstance(raw_rows, list):
+            rows.extend(row for row in raw_rows if isinstance(row, dict))
+    return rows
+
+
 def _load_late_negative_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for path in paths:
@@ -228,6 +265,15 @@ def _int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return int(default)
+
+
+def _pair(value: Any) -> tuple[int | None, int | None]:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None, None
+    try:
+        return int(float(value[0])), int(float(value[1]))
+    except (TypeError, ValueError):
+        return None, None
 
 
 def _branch_feature_map(row: dict[str, Any]) -> dict[str, float]:
@@ -449,6 +495,110 @@ def _tail_action_training_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _tail_action_counterfactual_training_row(row: dict[str, Any]) -> dict[str, Any]:
+    labels_raw = row.get("labels") if isinstance(row.get("labels"), dict) else {}
+    deltas = row.get("deltas") if isinstance(row.get("deltas"), dict) else {}
+    baseline_tail = row.get("baseline_tail") if isinstance(row.get("baseline_tail"), dict) else {}
+    alternative_tail = row.get("alternative_tail") if isinstance(row.get("alternative_tail"), dict) else {}
+    local_improved = _float(labels_raw.get("y_local_tail_improved"))
+    whole_run_improved = _float(labels_raw.get("y_whole_run_improved"))
+    local_only = _float(labels_raw.get("y_local_improved_but_whole_run_not"))
+    timeout_resolved = _float(labels_raw.get("y_timeout_resolved"))
+    timeout_regression = _float(labels_raw.get("y_timeout_regression"))
+    right_censored = _float(labels_raw.get("y_right_censored_counterfactual"))
+    tail_risk = 1.0 if (
+        whole_run_improved < 0.5
+        or local_only > 0.5
+        or timeout_regression > 0.5
+        or right_censored > 0.5
+    ) else 0.0
+    alternative_i, alternative_j = _pair(row.get("alternative_pair"))
+    labels = _label_vector(
+        {
+            "y_useful_tail_reduction": whole_run_improved,
+            "y_tail_risk": tail_risk,
+            "y_tail_action_counterfactual": 1.0,
+            "y_local_tail_improved": local_improved,
+            "y_whole_run_improved": whole_run_improved,
+            "y_local_improved_but_whole_run_not": local_only,
+            "y_timeout_resolved": timeout_resolved,
+            "y_timeout_regression": timeout_regression,
+            "y_right_censored_counterfactual": right_censored,
+            "y_child_negative_pricing_events": max(
+                0.0,
+                _float(alternative_tail.get("negative_pricing_events")),
+            ),
+            "y_child_completion_bound_retries": max(
+                0.0,
+                _float(alternative_tail.get("completion_retries")),
+            ),
+            "y_subtree_no_column_chain": max(0.0, _float(alternative_tail.get("no_column_chain"))),
+        }
+    )
+    features = _feature_vector(
+        {
+            "source_is_tail_action_counterfactual": 1.0,
+            "depth": row.get("depth"),
+            "branch_child_negative_pricing_events": alternative_tail.get("negative_pricing_events"),
+            "branch_child_completion_bound_retries": alternative_tail.get("completion_retries"),
+            "tail_action_subtree_pricing_events": alternative_tail.get("pricing_events"),
+            "tail_action_subtree_negative_pricing_events": alternative_tail.get(
+                "negative_pricing_events"
+            ),
+            "tail_action_subtree_completion_retries": alternative_tail.get("completion_retries"),
+            "tail_action_subtree_no_column_triggers": alternative_tail.get("no_column_chain"),
+            "tail_action_subtree_observed_wall_span": alternative_tail.get("observed_wall_span"),
+            "tail_counterfactual_local_tail_cost_delta": deltas.get("local_tail_cost_delta"),
+            "tail_counterfactual_wall_time_delta": deltas.get("wall_time_delta"),
+            "tail_counterfactual_negative_pricing_delta": deltas.get(
+                "local_negative_pricing_events_delta"
+            ),
+            "tail_counterfactual_completion_retry_delta": deltas.get(
+                "local_completion_retries_delta"
+            ),
+            "tail_counterfactual_no_column_chain_delta": deltas.get(
+                "local_no_column_chain_delta"
+            ),
+        }
+    )
+    return {
+        "schema_version": "journey_tail_impact_training_row_v4",
+        "source_type": "tail_action_counterfactual_delta",
+        "diagnostic_only": True,
+        "runs_bpc_or_pricing": False,
+        "production_ready": False,
+        "certificate_effect": False,
+        "official_bound_effect": False,
+        "log_file": row.get("instance"),
+        "node_id": row.get("node_id"),
+        "depth": row.get("depth"),
+        "cg_iter": None,
+        "time": None,
+        "task_i": alternative_i,
+        "task_j": alternative_j,
+        "tail_class": (
+            "tail_action_whole_run_improved"
+            if whole_run_improved > 0.5
+            else "tail_action_local_only_hard_negative"
+            if local_only > 0.5
+            else "tail_action_counterfactual_right_censored"
+            if right_censored > 0.5
+            else "tail_action_counterfactual"
+        ),
+        "baseline_pair": row.get("baseline_pair"),
+        "alternative_pair": row.get("alternative_pair"),
+        "baseline_status": row.get("baseline_status"),
+        "alternative_status": row.get("alternative_status"),
+        "baseline_tail_cost": baseline_tail.get("tail_cost"),
+        "alternative_tail_cost": alternative_tail.get("tail_cost"),
+        "feature_schema": list(TAIL_IMPACT_FEATURE_SCHEMA),
+        "features": features,
+        "label_schema": list(TAIL_IMPACT_LABEL_SCHEMA),
+        "labels": labels,
+        "raw_source": row,
+    }
+
+
 def _late_negative_training_row(row: dict[str, Any]) -> dict[str, Any]:
     has_true_negative = bool(row.get("has_true_negative"))
     has_weak_filtered = bool(row.get("has_weak_filtered"))
@@ -528,15 +678,20 @@ def build_tail_impact(
     report: Path,
     *,
     tail_action_inputs: list[Path] | None = None,
+    tail_action_counterfactual_inputs: list[Path] | None = None,
     late_negative_inputs: list[Path] | None = None,
 ) -> dict[str, Any]:
     weak_rows = _load_weak_rows(weak_inputs)
     branch_rows = _load_branch_training_rows(branch_inputs)
     tail_action_rows = _load_tail_action_rows(tail_action_inputs or [])
+    tail_action_counterfactual_rows = _load_tail_action_counterfactual_rows(
+        tail_action_counterfactual_inputs or []
+    )
     late_negative_rows = _load_late_negative_rows(late_negative_inputs or [])
     rows = [_weak_training_row(row) for row in weak_rows]
     rows.extend(_branch_training_row(row) for row in branch_rows)
     rows.extend(_tail_action_training_row(row) for row in tail_action_rows)
+    rows.extend(_tail_action_counterfactual_training_row(row) for row in tail_action_counterfactual_rows)
     rows.extend(_late_negative_training_row(row) for row in late_negative_rows)
     raw_training_row_count = len(rows)
     rows = _dedupe_rows(rows)
@@ -576,9 +731,33 @@ def build_tail_impact(
         "late_weak_filtered": int(
             sum(_float(row.get("labels", {}).get("y_late_weak_filtered")) for row in rows)
         ),
+        "tail_action_counterfactual": int(
+            sum(
+                _float(row.get("labels", {}).get("y_tail_action_counterfactual"))
+                for row in rows
+            )
+        ),
+        "local_tail_improved": int(
+            sum(_float(row.get("labels", {}).get("y_local_tail_improved")) for row in rows)
+        ),
+        "whole_run_improved": int(
+            sum(_float(row.get("labels", {}).get("y_whole_run_improved")) for row in rows)
+        ),
+        "local_improved_but_whole_run_not": int(
+            sum(
+                _float(row.get("labels", {}).get("y_local_improved_but_whole_run_not"))
+                for row in rows
+            )
+        ),
+        "right_censored_counterfactual": int(
+            sum(
+                _float(row.get("labels", {}).get("y_right_censored_counterfactual"))
+                for row in rows
+            )
+        ),
     }
     summary = {
-        "schema_version": "journey_tail_impact_training_rows_v3",
+        "schema_version": "journey_tail_impact_training_rows_v4",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "production_ready": False,
@@ -588,6 +767,9 @@ def build_tail_impact(
         "weak_input_paths": [str(path) for path in weak_inputs],
         "branch_input_paths": [str(path) for path in branch_inputs],
         "tail_action_input_paths": [str(path) for path in (tail_action_inputs or [])],
+        "tail_action_counterfactual_input_paths": [
+            str(path) for path in (tail_action_counterfactual_inputs or [])
+        ],
         "late_negative_input_paths": [str(path) for path in (late_negative_inputs or [])],
         "feature_schema": list(TAIL_IMPACT_FEATURE_SCHEMA),
         "label_schema": list(TAIL_IMPACT_LABEL_SCHEMA),
@@ -597,6 +779,7 @@ def build_tail_impact(
         "weak_row_count": len(weak_rows),
         "branch_row_count": len(branch_rows),
         "tail_action_row_count": len(tail_action_rows),
+        "tail_action_counterfactual_row_count": len(tail_action_counterfactual_rows),
         "late_negative_row_count": len(late_negative_rows),
         "source_counts": dict(sorted(source_counts.items())),
         "tail_class_counts": dict(sorted(tail_class_counts.items())),
@@ -665,11 +848,11 @@ def _render_report(summary: dict[str, Any], output_dir: Path) -> str:
     lines = [
         "# Journey Tail-Impact Training Rows",
         "",
-        "日期：2026-06-23",
+        f"日期：{date.today().isoformat()}",
         "",
         "## 目的",
         "",
-        "合成 weak-negative tail、branch-impact、tail-action proof-cost 与 late-negative tail 离线审计 row，为后续 GAT 学习“哪些候选会制造 proof tail、哪些分支会缩短 proof tail、哪些 true-negative 真的改变 active support”提供统一训练接口。该脚本只读现有审计产物，不运行 BPC / pricing / RMP，不产生 certificate 或 official bound。",
+        "合成 weak-negative tail、branch-impact、tail-action proof-cost、tail-action counterfactual delta 与 late-negative tail 离线审计 row，为后续 GAT 学习“哪些候选会制造 proof tail、哪些分支会缩短 proof tail、哪些 true-negative 真的改变 active support”提供统一训练接口。该脚本只读现有审计产物，不运行 BPC / pricing / RMP，不产生 certificate 或 official bound。",
         "",
         "## 机器字段",
         "",
@@ -682,6 +865,8 @@ def _render_report(summary: dict[str, Any], output_dir: Path) -> str:
         f"weak_row_count = {summary.get('weak_row_count')}",
         f"branch_row_count = {summary.get('branch_row_count')}",
         f"tail_action_row_count = {summary.get('tail_action_row_count')}",
+        "tail_action_counterfactual_row_count = "
+        f"{summary.get('tail_action_counterfactual_row_count')}",
         f"late_negative_row_count = {summary.get('late_negative_row_count')}",
         f"source_counts = {summary.get('source_counts')}",
         f"tail_class_counts = {summary.get('tail_class_counts')}",
@@ -698,7 +883,7 @@ def _render_report(summary: dict[str, Any], output_dir: Path) -> str:
         "",
         "## 解释",
         "",
-        "这一步没有让 20 规模求解变快，也不改变 solver。它把当前失败机制转成统一监督信号：weak-negative row 是 rough/profile 负列信号失效的负例，branch-impact row 是分支后 active-support、negative-chain、completion-bound tail 的结果标签，tail-action row 记录 early branch 后子树的 proof-cost 和 no-column 链条，late-negative row 则区分 true negative 是 active-support-changing 还是 inactive-only。",
+        "这一步没有让 20 规模求解变快，也不改变 solver。它把当前失败机制转成统一监督信号：weak-negative row 是 rough/profile 负列信号失效的负例，branch-impact row 是分支后 active-support、negative-chain、completion-bound tail 的结果标签，tail-action row 记录 early branch 后子树的 proof-cost 和 no-column 链条，tail-action counterfactual delta row 区分 local-only improvement 与 whole-run improvement，late-negative row 则区分 true negative 是 active-support-changing 还是 inactive-only。",
         "",
         "如果 `contrastive_tail_training_ready=false`，这批数据只能作为 hard-negative catalog，不能单独训练“选好分支/好候选”的 GAT；下一步必须补能减少 tail 的正例。不能把这些 row 当作剪枝依据或 no-negative certificate。",
     ]
@@ -710,6 +895,7 @@ def main() -> None:
     parser.add_argument("--weak-input", nargs="*", type=Path, default=[])
     parser.add_argument("--branch-input", nargs="*", type=Path, default=[])
     parser.add_argument("--tail-action-input", nargs="*", type=Path, default=[])
+    parser.add_argument("--tail-action-counterfactual-input", nargs="*", type=Path, default=[])
     parser.add_argument("--late-negative-input", nargs="*", type=Path, default=[])
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
@@ -721,6 +907,7 @@ def main() -> None:
         args.output_dir,
         args.report,
         tail_action_inputs=args.tail_action_input,
+        tail_action_counterfactual_inputs=args.tail_action_counterfactual_input,
         late_negative_inputs=args.late_negative_input,
     )
     printable = dict(summary)

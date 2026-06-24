@@ -84,6 +84,25 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "no_column_branch_width_guard_reason": "ok",
                 },
                 {
+                    "event": "journey_tail_action_no_column_early_branch_gate",
+                    "time": 31.5,
+                    "node_id": 3,
+                    "depth": 1,
+                    "cg_iter": 2,
+                    "gate_passed": False,
+                    "gate_reason": "before_final_probe_disabled",
+                    "tail_action": "EARLY_BRANCH",
+                    "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
+                    "tail_action_before_final_probe": True,
+                    "rmp_to_incumbent_gap": 2.0,
+                    "recent_true_rc_productivity": 0,
+                    "previous_status": "OPTIMAL",
+                    "previous_reason": "no_negative_journey",
+                    "previous_pricing_state": "LOCAL_NO_COLUMN_UNCERTIFIED",
+                    "exact_bound_available": False,
+                    "child_lower_bound_exact": False,
+                },
+                {
                     "event": "journey_child_queued",
                     "time": 32.0,
                     "parent_node_id": 2,
@@ -177,6 +196,15 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             self.assertEqual(summary["tail_action_early_branch_trigger_count"], 1)
             self.assertEqual(summary["tail_action_no_column_early_branch_trigger_count"], 1)
             self.assertEqual(summary["nonexact_early_branch_trigger_count"], 1)
+            self.assertEqual(summary["no_column_gate_row_count"], 1)
+            self.assertEqual(summary["no_column_gate_before_final_probe_count"], 1)
+            self.assertEqual(summary["no_column_gate_before_final_probe_disabled_count"], 1)
+            self.assertEqual(summary["no_column_gate_d_early_branch_count"], 1)
+            self.assertEqual(summary["no_column_gate_before_final_probe_disabled_d_count"], 1)
+            self.assertEqual(
+                summary["no_column_gate_reason_counts"]["before_final_probe_disabled"],
+                1,
+            )
             self.assertEqual(summary["tail_action_queued_child_count"], 2)
             self.assertEqual(summary["tail_action_nonexact_queued_child_count"], 2)
             self.assertEqual(summary["tail_action_observed_child_audit_count"], 1)
@@ -186,6 +214,17 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             self.assertTrue((tmp_path / "out" / "tail_action_rows.jsonl").exists())
             self.assertTrue((tmp_path / "out" / "tail_action_rows.csv").exists())
             self.assertTrue((tmp_path / "out" / "early_branch_trigger_rows.jsonl").exists())
+            self.assertTrue((tmp_path / "out" / "no_column_gate_rows.jsonl").exists())
+            self.assertTrue((tmp_path / "out" / "no_column_gate_rows.csv").exists())
+            gate_rows = [
+                json.loads(line)
+                for line in (tmp_path / "out" / "no_column_gate_rows.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(gate_rows[0]["gate_reason"], "before_final_probe_disabled")
+            self.assertEqual(gate_rows[0]["tail_action"], "EARLY_BRANCH")
             trigger_rows = [
                 json.loads(line)
                 for line in (tmp_path / "out" / "early_branch_trigger_rows.jsonl")
@@ -219,6 +258,10 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             )
             self.assertIn(
                 "negative_pricing=1 cb_retry=1",
+                (tmp_path / "report.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "no-column before-final-probe disabled D rows: 1",
                 (tmp_path / "report.md").read_text(encoding="utf-8"),
             )
 

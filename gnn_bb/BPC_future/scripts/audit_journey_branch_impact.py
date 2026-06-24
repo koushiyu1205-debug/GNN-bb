@@ -52,8 +52,27 @@ BRANCH_IMPACT_LABEL_SCHEMA: tuple[str, ...] = (
     "y_active_touch",
     "y_inactive_only",
     "y_child_negative_pricing_events",
+    "y_child_exact_pricing_events",
     "y_child_completion_bound_retries",
     "y_child_early_branch_triggers",
+    "y_child_fathom_events",
+    "y_child_max_safe_bound_gain",
+    "y_child_max_corrected_bound_gain",
+)
+
+CHILD_PROBE_LABEL_SCHEMA: tuple[str, ...] = (
+    "child_lower_bound_gain",
+    "child_max_corrected_node_lb",
+    "child_max_corrected_bound_gain",
+    "child_pricing_event_count",
+    "child_exact_pricing_event_count",
+    "child_negative_pricing_event_count",
+    "child_completion_bound_retry_count",
+    "child_early_branch_trigger_count",
+    "child_proof_cpu",
+    "child_time_to_first_certificate",
+    "child_time_to_fathom",
+    "child_fathomed",
 )
 
 
@@ -213,14 +232,37 @@ def _is_completion_bound_retry(record: dict[str, Any]) -> bool:
     )
 
 
+def _is_exact_pricing(record: dict[str, Any]) -> bool:
+    pricing_kind = str(record.get("pricing_kind") or "")
+    return pricing_kind.startswith("exact")
+
+
+def _is_certificate_pricing(record: dict[str, Any]) -> bool:
+    return (
+        bool(record.get("global_certificate"))
+        or str(record.get("pricing_state") or "") == "CERTIFIED_NO_NEGATIVE"
+    )
+
+
 def _summarize_child(
     child: dict[str, Any],
     by_node: dict[int, list[dict[str, Any]]],
+    *,
+    parent_lower_bound: float | None = None,
+    bound_reference: float | None = None,
 ) -> dict[str, Any]:
     child_id = _int(child, "child_node_id", -1)
     node_events = by_node.get(child_id, [])
     node_start = next((record for record in node_events if record.get("event") == "journey_node_start"), None)
     pricing_events = [record for record in node_events if record.get("event") == "journey_pricing"]
+    corrected_events = [
+        record
+        for record in node_events
+        if record.get("event") == "journey_corrected_node_bound_audit"
+        and record.get("corrected_node_lb") is not None
+    ]
+    certificate_pricing_events = [record for record in pricing_events if _is_certificate_pricing(record)]
+    fathom_events = [record for record in node_events if record.get("event") == "journey_fathom"]
     addition_events = [record for record in node_events if record.get("event") == "journey_column_addition"]
     incomplete = next(
         (record for record in reversed(node_events) if record.get("event") == "journey_node_incomplete"),
@@ -233,6 +275,25 @@ def _summarize_child(
         for record in pricing_events
         if record.get("best_reduced_cost") is not None
     ]
+    corrected_values = [_float(record, "corrected_node_lb") for record in corrected_events]
+    child_lower_bound = None if child.get("lower_bound") is None else _float(child, "lower_bound")
+    lower_bound_gain = None
+    if child_lower_bound is not None and bound_reference is not None:
+        lower_bound_gain = child_lower_bound - float(bound_reference)
+    max_corrected_lb = None if not corrected_values else max(corrected_values)
+    max_corrected_gain = None
+    if max_corrected_lb is not None and child_lower_bound is not None:
+        max_corrected_gain = float(max_corrected_lb) - float(child_lower_bound)
+    first_certificate = min(
+        certificate_pricing_events,
+        key=lambda record: _float(record, "time", start_time),
+        default=None,
+    )
+    first_fathom = min(
+        fathom_events,
+        key=lambda record: _float(record, "time", start_time),
+        default=None,
+    )
     productivity_counts = Counter(
         str(record.get("addition_productivity_class") or "unknown")
         for record in addition_events
@@ -244,17 +305,34 @@ def _summarize_child(
         "branch_same_mass": child.get("branch_same_mass"),
         "depth": child.get("depth"),
         "allowed_current_journeys": child.get("allowed_current_journeys"),
+        "parent_lower_bound": None if parent_lower_bound is None else round(float(parent_lower_bound), 6),
+        "bound_reference": None if bound_reference is None else round(float(bound_reference), 6),
         "lower_bound": child.get("lower_bound"),
+        "lower_bound_gain": None if lower_bound_gain is None else round(float(lower_bound_gain), 9),
         "lower_bound_exact": child.get("lower_bound_exact"),
         "started": node_start is not None,
         "start_time": round(start_time, 6),
         "last_time": round(last_time, 6),
         "time_span": round(max(0.0, last_time - start_time), 6),
         "pricing_event_count": len(pricing_events),
+        "exact_pricing_event_count": sum(1 for record in pricing_events if _is_exact_pricing(record)),
+        "certificate_pricing_event_count": len(certificate_pricing_events),
         "negative_pricing_event_count": sum(1 for record in pricing_events if _is_negative_pricing(record)),
         "negative_journeys_total": int(sum(_int(record, "negative_journeys") for record in pricing_events)),
         "selected_trips_total": int(sum(_int(record, "selected_trips") for record in pricing_events)),
         "min_best_reduced_cost": None if not best_values else round(min(best_values), 9),
+        "max_corrected_node_lb": None if max_corrected_lb is None else round(float(max_corrected_lb), 9),
+        "max_corrected_bound_gain": None
+        if max_corrected_gain is None
+        else round(float(max_corrected_gain), 9),
+        "fathom_event_count": len(fathom_events),
+        "fathom_reason": None if first_fathom is None else first_fathom.get("reason"),
+        "time_to_first_certificate": None
+        if first_certificate is None
+        else round(max(0.0, _float(first_certificate, "time", start_time) - start_time), 6),
+        "time_to_fathom": None
+        if first_fathom is None
+        else round(max(0.0, _float(first_fathom, "time", start_time) - start_time), 6),
         "column_addition_count": len(addition_events),
         "added_journeys": int(sum(_int(record, "added_journeys") for record in addition_events)),
         "new_journeys": int(sum(_int(record, "new_journeys") for record in addition_events)),
@@ -309,9 +387,24 @@ def _summarize_branch(
 ) -> dict[str, Any]:
     branch_node_id = _int(branch, "node_id", -1)
     candidate_log = _find_candidate_log(events, branch_index, branch)
+    parent_start = next(
+        (
+            record
+            for record in reversed(events[:branch_index])
+            if record.get("event") == "journey_node_start" and record.get("node_id") == branch_node_id
+        ),
+        None,
+    )
     branch_time = _float(branch, "time", 0.0)
+    parent_lower_bound = (
+        None
+        if parent_start is None or parent_start.get("lower_bound") is None
+        else _float(parent_start, "lower_bound")
+    )
+    branch_bound = None if branch.get("bound") is None else _float(branch, "bound")
+    bound_reference = branch_bound if branch_bound is not None else parent_lower_bound
     children = [
-        _summarize_child(child, by_node)
+        _summarize_child(child, by_node, parent_lower_bound=parent_lower_bound, bound_reference=bound_reference)
         for child in children_by_parent.get(branch_node_id, [])
         if child.get("time", 0.0) >= branch_time
     ]
@@ -352,6 +445,9 @@ def _summarize_branch(
         "depth": branch.get("depth"),
         "branch_time": round(float(branch_time), 6),
         "branch_observation_window": round(max(0.0, float(run_end_time) - float(branch_time)), 6),
+        "parent_lower_bound": None if parent_lower_bound is None else round(float(parent_lower_bound), 6),
+        "branch_bound": None if branch_bound is None else round(float(branch_bound), 6),
+        "bound_reference": None if bound_reference is None else round(float(bound_reference), 6),
         "left": branch.get("left"),
         "right": branch.get("right"),
         "task_i": None if left is None else left["task_i"],
@@ -385,6 +481,12 @@ def _summarize_branch(
         "sum_child_negative_pricing_event_count": int(
             sum(int(child.get("negative_pricing_event_count") or 0) for child in children)
         ),
+        "sum_child_exact_pricing_event_count": int(
+            sum(int(child.get("exact_pricing_event_count") or 0) for child in children)
+        ),
+        "sum_child_certificate_pricing_event_count": int(
+            sum(int(child.get("certificate_pricing_event_count") or 0) for child in children)
+        ),
         "sum_child_column_additions": int(
             sum(int(child.get("column_addition_count") or 0) for child in children)
         ),
@@ -403,6 +505,13 @@ def _summarize_branch(
         ),
         "sum_child_early_branch_trigger_count": int(
             sum(int(child.get("early_branch_trigger_count") or 0) for child in children)
+        ),
+        "sum_child_fathom_event_count": int(
+            sum(int(child.get("fathom_event_count") or 0) for child in children)
+        ),
+        "max_child_lower_bound_gain": _max_optional(child.get("lower_bound_gain") for child in children),
+        "max_child_corrected_bound_gain": _max_optional(
+            child.get("max_corrected_bound_gain") for child in children
         ),
         "first_started_child_node_id": None if first_started_child is None else first_started_child["child_node_id"],
         "first_child_allowed_current_journeys": None
@@ -514,8 +623,12 @@ def _branch_labels(row: dict[str, Any]) -> dict[str, float]:
         "y_active_touch": 1.0 if active_touch_count > 0 else 0.0,
         "y_inactive_only": 1.0 if inactive_count > 0 and active_touch_count == 0 else 0.0,
         "y_child_negative_pricing_events": float(row.get("sum_child_negative_pricing_event_count") or 0),
+        "y_child_exact_pricing_events": float(row.get("sum_child_exact_pricing_event_count") or 0),
         "y_child_completion_bound_retries": float(row.get("sum_child_completion_bound_retry_count") or 0),
         "y_child_early_branch_triggers": float(row.get("sum_child_early_branch_trigger_count") or 0),
+        "y_child_fathom_events": float(row.get("sum_child_fathom_event_count") or 0),
+        "y_child_max_safe_bound_gain": _number(row.get("max_child_lower_bound_gain")),
+        "y_child_max_corrected_bound_gain": _number(row.get("max_child_corrected_bound_gain")),
     }
     return {name: float(labels[name]) for name in BRANCH_IMPACT_LABEL_SCHEMA}
 
@@ -548,6 +661,70 @@ def _training_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _child_probe_rows(row: dict[str, Any]) -> list[dict[str, Any]]:
+    children = row.get("children") or []
+    if not isinstance(children, list):
+        return []
+    observed_candidate = row.get("observed_branch_candidate")
+    rows: list[dict[str, Any]] = []
+    for child in children:
+        if not isinstance(child, dict):
+            continue
+        labels = {
+            "child_lower_bound_gain": _number(child.get("lower_bound_gain")),
+            "child_max_corrected_node_lb": _number(child.get("max_corrected_node_lb")),
+            "child_max_corrected_bound_gain": _number(child.get("max_corrected_bound_gain")),
+            "child_pricing_event_count": float(child.get("pricing_event_count") or 0),
+            "child_exact_pricing_event_count": float(child.get("exact_pricing_event_count") or 0),
+            "child_negative_pricing_event_count": float(child.get("negative_pricing_event_count") or 0),
+            "child_completion_bound_retry_count": float(child.get("completion_bound_retry_count") or 0),
+            "child_early_branch_trigger_count": float(child.get("early_branch_trigger_count") or 0),
+            "child_proof_cpu": _number(child.get("time_span")),
+            "child_time_to_first_certificate": _number(child.get("time_to_first_certificate"), -1.0),
+            "child_time_to_fathom": _number(child.get("time_to_fathom"), -1.0),
+            "child_fathomed": 1.0 if int(child.get("fathom_event_count") or 0) > 0 else 0.0,
+        }
+        rows.append(
+            {
+                "schema_version": "journey_branch_child_probe_row_v1",
+                "diagnostic_only": True,
+                "runs_bpc_or_pricing": False,
+                "production_ready": False,
+                "certificate_effect": False,
+                "official_bound_effect": False,
+                "log_file": row.get("log_file"),
+                "run_status": row.get("run_status"),
+                "right_censored": bool(row.get("right_censored")),
+                "label_observation_complete": bool(row.get("label_observation_complete")),
+                "branch_node_id": row.get("branch_node_id"),
+                "branch_depth": row.get("depth"),
+                "task_i": row.get("task_i"),
+                "task_j": row.get("task_j"),
+                "forced_pair": row.get("forced_pair"),
+                "forced_pair_matched": row.get("forced_pair_matched"),
+                "priority_mode": row.get("priority_mode"),
+                "branch_rank_in_priority_top": row.get("branch_rank_in_priority_top"),
+                "branch_rank_in_top": row.get("branch_rank_in_top"),
+                "selected_matches_branch": row.get("selected_matches_branch"),
+                "observed_branch_candidate": observed_candidate,
+                "child_node_id": child.get("child_node_id"),
+                "child_constraint": child.get("constraint"),
+                "child_constraint_kind": child.get("constraint_kind"),
+                "child_depth": child.get("depth"),
+                "child_started": bool(child.get("started")),
+                "child_bound_reference": child.get("bound_reference"),
+                "child_lower_bound": child.get("lower_bound"),
+                "child_lower_bound_exact": child.get("lower_bound_exact"),
+                "child_allowed_current_journeys": child.get("allowed_current_journeys"),
+                "child_fathom_reason": child.get("fathom_reason"),
+                "child_node_incomplete_reason": child.get("node_incomplete_reason"),
+                "child_label_schema": list(CHILD_PROBE_LABEL_SCHEMA),
+                "child_labels": {name: float(labels[name]) for name in CHILD_PROBE_LABEL_SCHEMA},
+            }
+        )
+    return rows
+
+
 def _number(value: Any, default: float = 0.0) -> float:
     if value is None or value == "":
         return float(default)
@@ -558,6 +735,13 @@ def _number(value: Any, default: float = 0.0) -> float:
     if result != result:
         return float(default)
     return float(result)
+
+
+def _max_optional(values: Iterable[Any]) -> float | None:
+    parsed = [_number(value) for value in values if value is not None and value != ""]
+    if not parsed:
+        return None
+    return round(float(max(parsed)), 9)
 
 
 def _rank_feature(value: Any) -> float:
@@ -658,6 +842,12 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "total_child_negative_pricing_events": int(
             sum(int(row.get("sum_child_negative_pricing_event_count") or 0) for row in rows)
         ),
+        "total_child_exact_pricing_events": int(
+            sum(int(row.get("sum_child_exact_pricing_event_count") or 0) for row in rows)
+        ),
+        "total_child_certificate_pricing_events": int(
+            sum(int(row.get("sum_child_certificate_pricing_event_count") or 0) for row in rows)
+        ),
         "total_child_column_additions": int(
             sum(int(row.get("sum_child_column_additions") or 0) for row in rows)
         ),
@@ -669,6 +859,13 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "total_child_early_branch_triggers": int(
             sum(int(row.get("sum_child_early_branch_trigger_count") or 0) for row in rows)
+        ),
+        "total_child_fathom_events": int(
+            sum(int(row.get("sum_child_fathom_event_count") or 0) for row in rows)
+        ),
+        "max_child_lower_bound_gain": _max_optional(row.get("max_child_lower_bound_gain") for row in rows),
+        "max_child_corrected_bound_gain": _max_optional(
+            row.get("max_child_corrected_bound_gain") for row in rows
         ),
         "interpretation": _interpret(rows),
     }
@@ -723,6 +920,7 @@ def build_branch_impact(paths: list[Path], output_dir: Path, report: Path) -> di
     for path in log_files:
         rows.extend(_summarize_log(path))
     training_rows = [_training_row(row) for row in rows]
+    child_probe_rows = [child_row for row in rows for child_row in _child_probe_rows(row)]
     summary = {
         "schema_version": "journey_branch_impact_audit_v1",
         "diagnostic_only": True,
@@ -731,10 +929,13 @@ def build_branch_impact(paths: list[Path], output_dir: Path, report: Path) -> di
         "log_count": len(log_files),
         "branch_feature_schema": list(BRANCH_IMPACT_FEATURE_SCHEMA),
         "branch_label_schema": list(BRANCH_IMPACT_LABEL_SCHEMA),
+        "child_probe_label_schema": list(CHILD_PROBE_LABEL_SCHEMA),
         "branch_training_row_count": len(training_rows),
+        "child_probe_row_count": len(child_probe_rows),
         "aggregate": _aggregate(rows),
         "records": rows,
         "branch_training_rows": training_rows,
+        "child_probe_rows": child_probe_rows,
         "production_ready": False,
         "certificate_effect": False,
         "official_bound_effect": False,
@@ -746,6 +947,10 @@ def build_branch_impact(paths: list[Path], output_dir: Path, report: Path) -> di
     )
     (output_dir / "branch_training_rows.jsonl").write_text(
         "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in training_rows),
+        encoding="utf-8",
+    )
+    (output_dir / "child_probe_rows.jsonl").write_text(
+        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in child_probe_rows),
         encoding="utf-8",
     )
     (output_dir / "summary.json").write_text(
@@ -775,6 +980,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"log_count = {summary['log_count']}",
         f"branch_count = {aggregate['branch_count']}",
         f"branch_training_row_count = {summary['branch_training_row_count']}",
+        f"child_probe_row_count = {summary['child_probe_row_count']}",
         f"tail_class_counts = {aggregate['tail_class_counts']}",
         f"priority_mode_counts = {aggregate['priority_mode_counts']}",
         f"selected_match_count = {aggregate['selected_match_count']}",
@@ -792,10 +998,15 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"inactive_only_branch_count = {aggregate['inactive_only_branch_count']}",
         f"unprocessed_child_count = {aggregate['unprocessed_child_count']}",
         f"total_child_negative_pricing_events = {aggregate['total_child_negative_pricing_events']}",
+        f"total_child_exact_pricing_events = {aggregate['total_child_exact_pricing_events']}",
+        f"total_child_certificate_pricing_events = {aggregate['total_child_certificate_pricing_events']}",
         f"total_child_column_additions = {aggregate['total_child_column_additions']}",
         f"total_child_added_journeys = {aggregate['total_child_added_journeys']}",
         f"total_child_completion_bound_retries = {aggregate['total_child_completion_bound_retries']}",
         f"total_child_early_branch_triggers = {aggregate['total_child_early_branch_triggers']}",
+        f"total_child_fathom_events = {aggregate['total_child_fathom_events']}",
+        f"max_child_lower_bound_gain = {aggregate['max_child_lower_bound_gain']}",
+        f"max_child_corrected_bound_gain = {aggregate['max_child_corrected_bound_gain']}",
         "production_ready = false",
         "certificate_effect = false",
         "official_bound_effect = false",
@@ -812,6 +1023,7 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
             {
                 "branch_feature_schema": summary["branch_feature_schema"],
                 "branch_label_schema": summary["branch_label_schema"],
+                "child_probe_label_schema": summary["child_probe_label_schema"],
             },
             ensure_ascii=False,
             indent=2,

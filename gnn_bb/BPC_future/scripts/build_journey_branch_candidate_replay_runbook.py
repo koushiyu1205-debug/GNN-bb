@@ -549,8 +549,11 @@ def _command(
     result_dir: Path,
     force_rule: str,
     candidate_log_top_n: int,
+    probe_mode: str = "full_replay",
+    probe_max_nodes: int | None = None,
+    probe_max_cg_iterations: int | None = None,
 ) -> list[str]:
-    return [
+    command = [
         "/home/kai/miniconda3/bin/python",
         "BPC_future/scripts/run_bpc_future_external_timeout_batch.py",
         "--config",
@@ -579,6 +582,19 @@ def _command(
         "--set",
         f"journey_branch_candidate_log_top_n={int(candidate_log_top_n)}",
     ]
+    if probe_mode == "child_probe":
+        if probe_max_nodes is not None:
+            command.extend(["--set", f"max_nodes={int(probe_max_nodes)}"])
+            command.extend(["--set", f"journey_max_nodes={int(probe_max_nodes)}"])
+        if probe_max_cg_iterations is not None:
+            command.extend(["--set", f"max_cg_iterations={int(probe_max_cg_iterations)}"])
+            command.extend(["--set", f"journey_max_cg_iterations={int(probe_max_cg_iterations)}"])
+        command.extend(["--set", "journey_tail_action_audit_enabled=True"])
+        command.extend(["--set", "journey_corrected_node_bound_audit_enabled=True"])
+        command.extend(["--set", "journey_corrected_node_bound_fathom_enabled=False"])
+        command.extend(["--set", "journey_tail_action_early_branch_enabled=False"])
+        command.extend(["--set", "journey_tail_action_no_column_early_branch_enabled=False"])
+    return command
 
 
 def build_runbook(
@@ -593,12 +609,27 @@ def build_runbook(
     alt_pairs_per_event: int = 3,
     candidate_source: str = "priority_top",
     candidate_log_top_n: int = 100,
+    min_source_depth: int | None = None,
+    max_source_depth: int | None = None,
+    max_source_event_time: float | None = None,
     branch_impact_inputs: list[Path] | None = None,
     exclude_runbooks: list[Path] | None = None,
     focus_delta_inputs: list[Path] | None = None,
     coverage_inputs: list[Path] | None = None,
     coverage_gap_only: bool = False,
+    probe_mode: str = "full_replay",
+    probe_max_nodes: int | None = None,
+    probe_extra_nodes_after_branch: int = 2,
+    probe_max_cg_iterations: int | None = None,
 ) -> dict[str, Any]:
+    if probe_mode not in {"full_replay", "child_probe"}:
+        raise ValueError(f"unsupported probe_mode: {probe_mode}")
+    if (
+        min_source_depth is not None
+        and max_source_depth is not None
+        and int(min_source_depth) > int(max_source_depth)
+    ):
+        raise ValueError("min_source_depth must be <= max_source_depth")
     run_root = output_dir / "runs"
     entries: list[dict[str, Any]] = []
     seen: set[tuple[str, int, int, int, int]] = set()
@@ -607,6 +638,8 @@ def build_runbook(
     focus_context_keys = _load_focus_context_keys(focus_delta_inputs or [])
     focus_event_skip_count = 0
     coverage_gap_skip_count = 0
+    depth_filter_skip_count = 0
+    source_event_time_filter_skip_count = 0
     event_count = 0
     event_with_entry_count = 0
     skipped_missing_instance = 0
@@ -631,6 +664,20 @@ def build_runbook(
             event_count += 1
             node_id = _int(record.get("node_id"), -1)
             depth = _int(record.get("depth"), -1)
+            source_event_time = _optional_float(record.get("time"))
+            if min_source_depth is not None and depth < int(min_source_depth):
+                depth_filter_skip_count += 1
+                continue
+            if max_source_depth is not None and depth > int(max_source_depth):
+                depth_filter_skip_count += 1
+                continue
+            if (
+                max_source_event_time is not None
+                and source_event_time is not None
+                and source_event_time > float(max_source_event_time)
+            ):
+                source_event_time_filter_skip_count += 1
+                continue
             selected_pair = _candidate_pair(record.get("selected"))
             focus_key = (instance, node_id, depth, _pair_text(selected_pair) or "")
             if focus_context_keys and focus_key not in focus_context_keys:
@@ -648,6 +695,7 @@ def build_runbook(
                     "events": events,
                     "instance": instance,
                     "record": record,
+                    "source_event_time": source_event_time,
                     "input_order": len(candidate_events),
                     "branch_impact_priority": float(impact.get("branch_impact_priority", 0.0)),
                     "branch_impact_context": impact,
@@ -704,6 +752,19 @@ def build_runbook(
                     f"{_safe_slug(Path(instance).stem)}"
                 )
                 result_dir = run_root / experiment
+                effective_probe_max_nodes = None
+                effective_probe_max_cg_iterations = None
+                if probe_mode == "child_probe":
+                    if probe_max_nodes is None:
+                        effective_probe_max_nodes = max(
+                            1,
+                            int(depth) + 1 + max(0, int(probe_extra_nodes_after_branch)),
+                        )
+                    else:
+                        effective_probe_max_nodes = max(1, int(probe_max_nodes))
+                    effective_probe_max_cg_iterations = (
+                        None if probe_max_cg_iterations is None else max(1, int(probe_max_cg_iterations))
+                    )
                 command = _command(
                     config=config,
                     instance=instance,
@@ -711,6 +772,9 @@ def build_runbook(
                     result_dir=result_dir,
                     force_rule=force_rule,
                     candidate_log_top_n=candidate_log_top_n,
+                    probe_mode=probe_mode,
+                    probe_max_nodes=effective_probe_max_nodes,
+                    probe_max_cg_iterations=effective_probe_max_cg_iterations,
                 )
                 entries.append(
                     {
@@ -721,6 +785,7 @@ def build_runbook(
                         "source_node_id": node_id,
                         "source_depth": depth,
                         "source_priority_mode": record.get("priority_mode"),
+                        "source_event_time": item.get("source_event_time"),
                         "source_candidate_count": record.get("candidate_count"),
                         "source_eligible_count": record.get("eligible_count"),
                         "source_logged_priority_count": len(record.get("priority_top") or []),
@@ -759,9 +824,14 @@ def build_runbook(
                         ),
                         "forced_pair": [alt_pair[0], alt_pair[1]],
                         "forced_pair_path_rule": force_rule,
+                        "probe_mode": probe_mode,
+                        "probe_max_nodes": effective_probe_max_nodes,
+                        "probe_max_cg_iterations": effective_probe_max_cg_iterations,
                         "command": command,
                         "shell_command": shlex.join(command),
-                        "expected_label_source": "rerun_then_audit_branch_impact_and_counterfactual_delta",
+                        "expected_label_source": "fixed_budget_child_probe_then_audit_child_probe_rows"
+                        if probe_mode == "child_probe"
+                        else "rerun_then_audit_branch_impact_and_counterfactual_delta",
                         **alt,
                     }
                 )
@@ -785,17 +855,30 @@ def build_runbook(
         "alt_pairs_per_event": int(alt_pairs_per_event),
         "candidate_source": candidate_source,
         "candidate_log_top_n": int(candidate_log_top_n),
+        "min_source_depth": None if min_source_depth is None else int(min_source_depth),
+        "max_source_depth": None if max_source_depth is None else int(max_source_depth),
+        "max_source_event_time": None
+        if max_source_event_time is None
+        else float(max_source_event_time),
         "branch_impact_input_paths": [str(path) for path in (branch_impact_inputs or [])],
         "exclude_runbook_paths": [str(path) for path in (exclude_runbooks or [])],
         "focus_delta_input_paths": [str(path) for path in (focus_delta_inputs or [])],
         "coverage_input_paths": [str(path) for path in (coverage_inputs or [])],
         "coverage_gap_only": bool(coverage_gap_only),
+        "probe_mode": probe_mode,
+        "probe_max_nodes": None if probe_max_nodes is None else int(probe_max_nodes),
+        "probe_extra_nodes_after_branch": int(probe_extra_nodes_after_branch),
+        "probe_max_cg_iterations": None
+        if probe_max_cg_iterations is None
+        else int(probe_max_cg_iterations),
         "excluded_entry_key_count": len(excluded_entry_keys),
         "excluded_entry_skip_count": int(excluded_entry_skip_count),
         "focus_context_count": len(focus_context_keys),
         "focus_event_skip_count": int(focus_event_skip_count),
         "coverage_priority_context_count": len(coverage_priority),
         "coverage_gap_skip_count": int(coverage_gap_skip_count),
+        "depth_filter_skip_count": int(depth_filter_skip_count),
+        "source_event_time_filter_skip_count": int(source_event_time_filter_skip_count),
         "branch_impact_priority_context_count": len(impact_priority),
         "candidate_event_count_seen": int(event_count),
         "candidate_event_count_with_replay_entries": int(event_with_entry_count),
@@ -808,7 +891,10 @@ def build_runbook(
             "along the logged ancestor branch path. If a forced pair is not "
             "currently legal in replay, solver candidate selection falls back "
             "under existing exact-safe logic. Official bounds and certificates "
-            "remain produced only by exact-safe pricing/proof code."
+            "remain produced only by exact-safe pricing/proof code. In "
+            "child_probe mode, commands intentionally use small node/CG budgets "
+            "for censored proof-cost labels rather than full-solve performance "
+            "claims."
         ),
     }
     write_outputs(runbook, output_dir, report)
@@ -851,17 +937,26 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"alt_pairs_per_event = {runbook.get('alt_pairs_per_event')}",
         f"candidate_source = {runbook.get('candidate_source')}",
         f"candidate_log_top_n = {runbook.get('candidate_log_top_n')}",
+        f"min_source_depth = {runbook.get('min_source_depth')}",
+        f"max_source_depth = {runbook.get('max_source_depth')}",
+        f"max_source_event_time = {runbook.get('max_source_event_time')}",
         f"branch_impact_input_paths = {runbook.get('branch_impact_input_paths')}",
         f"exclude_runbook_paths = {runbook.get('exclude_runbook_paths')}",
         f"focus_delta_input_paths = {runbook.get('focus_delta_input_paths')}",
         f"coverage_input_paths = {runbook.get('coverage_input_paths')}",
         f"coverage_gap_only = {runbook.get('coverage_gap_only')}",
+        f"probe_mode = {runbook.get('probe_mode')}",
+        f"probe_max_nodes = {runbook.get('probe_max_nodes')}",
+        f"probe_extra_nodes_after_branch = {runbook.get('probe_extra_nodes_after_branch')}",
+        f"probe_max_cg_iterations = {runbook.get('probe_max_cg_iterations')}",
         f"excluded_entry_key_count = {runbook.get('excluded_entry_key_count')}",
         f"excluded_entry_skip_count = {runbook.get('excluded_entry_skip_count')}",
         f"focus_context_count = {runbook.get('focus_context_count')}",
         f"focus_event_skip_count = {runbook.get('focus_event_skip_count')}",
         f"coverage_priority_context_count = {runbook.get('coverage_priority_context_count')}",
         f"coverage_gap_skip_count = {runbook.get('coverage_gap_skip_count')}",
+        f"depth_filter_skip_count = {runbook.get('depth_filter_skip_count')}",
+        f"source_event_time_filter_skip_count = {runbook.get('source_event_time_filter_skip_count')}",
         f"branch_impact_priority_context_count = {runbook.get('branch_impact_priority_context_count')}",
         "production_ready = false",
         "stage4_candidate_ready = false",
@@ -881,9 +976,13 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"instance = {entry['instance']}",
                 f"source_node_id = {entry.get('source_node_id')}",
                 f"source_depth = {entry.get('source_depth')}",
+                f"source_event_time = {entry.get('source_event_time')}",
                 f"source_selected_pair = {entry.get('source_selected_pair')}",
                 f"forced_pair = {entry.get('forced_pair')}",
                 f"forced_pair_path_rule = {entry.get('forced_pair_path_rule')}",
+                f"probe_mode = {entry.get('probe_mode')}",
+                f"probe_max_nodes = {entry.get('probe_max_nodes')}",
+                f"probe_max_cg_iterations = {entry.get('probe_max_cg_iterations')}",
                 f"source_alt_rank = {entry.get('source_alt_rank')}",
                 f"source_selected_fractionality = {entry.get('source_selected_fractionality')}",
                 f"source_alt_fractionality = {entry.get('source_alt_fractionality')}",
@@ -915,6 +1014,13 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
             "These commands only change branch candidate priority for counterfactual sampling. If replay cannot bind the forced pair, the solver falls back to existing exact-safe logic; final no-negative closure, node bounds, fathom, and certificates still come only from exact-safe pricing/proof.",
         ]
     )
+    if runbook.get("probe_mode") == "child_probe":
+        lines.extend(
+            [
+                "",
+                "In `child_probe` mode these commands are fixed-budget diagnostic probes. They are intended to be audited with `audit_journey_branch_impact.py` and its `child_probe_rows.jsonl`, not interpreted as full-solve A/B outcomes.",
+            ]
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -934,6 +1040,14 @@ def _parse_args() -> argparse.Namespace:
         default="priority_top",
     )
     parser.add_argument("--candidate-log-top-n", type=int, default=100)
+    parser.add_argument("--min-source-depth", type=int, default=None)
+    parser.add_argument("--max-source-depth", type=int, default=None)
+    parser.add_argument(
+        "--max-source-event-time",
+        type=float,
+        default=None,
+        help="Skip branch-candidate events whose logged event time is greater than this value.",
+    )
     parser.add_argument("--branch-impact-input", nargs="*", type=Path, default=[])
     parser.add_argument("--exclude-runbook", nargs="*", type=Path, default=[])
     parser.add_argument("--focus-delta-input", nargs="*", type=Path, default=[])
@@ -942,6 +1056,30 @@ def _parse_args() -> argparse.Namespace:
         "--coverage-gap-only",
         action="store_true",
         help="Keep only branch-candidate events marked as score coverage gaps by coverage input rows.",
+    )
+    parser.add_argument(
+        "--probe-mode",
+        choices=("full_replay", "child_probe"),
+        default="full_replay",
+        help="full_replay emits normal forced-pair runs; child_probe emits fixed-budget proof-cost probes.",
+    )
+    parser.add_argument(
+        "--probe-max-nodes",
+        type=int,
+        default=None,
+        help="Override max_nodes/journey_max_nodes for child_probe entries. Defaults to source_depth + 1 + probe_extra_nodes_after_branch.",
+    )
+    parser.add_argument(
+        "--probe-extra-nodes-after-branch",
+        type=int,
+        default=2,
+        help="Child-probe default node budget after reaching and branching the source node.",
+    )
+    parser.add_argument(
+        "--probe-max-cg-iterations",
+        type=int,
+        default=None,
+        help="Optional max_cg_iterations/journey_max_cg_iterations override for child_probe entries.",
     )
     return parser.parse_args()
 
@@ -959,11 +1097,18 @@ def main() -> None:
         alt_pairs_per_event=args.alt_pairs_per_event,
         candidate_source=args.candidate_source,
         candidate_log_top_n=args.candidate_log_top_n,
+        min_source_depth=args.min_source_depth,
+        max_source_depth=args.max_source_depth,
+        max_source_event_time=args.max_source_event_time,
         branch_impact_inputs=list(args.branch_impact_input),
         exclude_runbooks=list(args.exclude_runbook),
         focus_delta_inputs=list(args.focus_delta_input),
         coverage_inputs=list(args.coverage_input),
         coverage_gap_only=bool(args.coverage_gap_only),
+        probe_mode=str(args.probe_mode),
+        probe_max_nodes=args.probe_max_nodes,
+        probe_extra_nodes_after_branch=args.probe_extra_nodes_after_branch,
+        probe_max_cg_iterations=args.probe_max_cg_iterations,
     )
     print(json.dumps({key: value for key, value in runbook.items() if key != "entries"}, indent=2, sort_keys=True))
 

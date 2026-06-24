@@ -357,6 +357,57 @@ def _force_child_kind_depth_rule(
     return "force_child_kind_depth:" + ";".join(rules)
 
 
+def _set_args(settings: list[str]) -> list[str]:
+    args: list[str] = []
+    for setting in settings:
+        args.extend(["--set", str(setting)])
+    return args
+
+
+def _tail_action_replay_settings(profile: str, *, target_depth: int) -> list[str]:
+    if profile == "before_final_probe":
+        depth = max(0, int(target_depth))
+        return [
+            "journey_early_branching_enabled=False",
+            "journey_tail_action_audit_enabled=True",
+            "journey_tail_action_early_branch_enabled=False",
+            "journey_tail_action_child_priority_enabled=True",
+            "journey_tail_action_child_priority_width=-1",
+            "journey_tail_action_no_column_early_branch_enabled=True",
+            "journey_tail_action_no_column_early_branch_before_final_probe_enabled=True",
+            "journey_tail_action_no_column_early_branch_allow_incomplete_limit_before_final_probe=True",
+            "journey_tail_action_no_column_early_branch_min_tasks=20",
+            f"journey_tail_action_no_column_early_branch_min_depth={depth}",
+            f"journey_tail_action_no_column_early_branch_max_depth={depth}",
+            "journey_tail_action_no_column_early_branch_min_cg_iter=1",
+            "journey_tail_action_no_column_early_branch_child_min_cg_iter=1",
+            "journey_tail_action_no_column_early_branch_min_true_rc_productivity=0",
+            "journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False",
+            "journey_tail_action_no_column_early_branch_max_pool_child_width=180",
+            "journey_tail_action_no_column_early_branch_max_pool_total_child_width=360",
+            "journey_tail_action_no_column_early_branch_max_pool_balance_gap=180",
+        ]
+    return [
+        "journey_early_branching_enabled=False",
+        "journey_tail_action_early_branch_enabled=True",
+        "journey_tail_action_early_branch_min_cg_iter=35",
+        "journey_tail_action_early_branch_child_min_cg_iter=2",
+        "journey_tail_action_early_branch_max_depth=1",
+        "journey_tail_action_early_branch_min_true_rc_productivity=1",
+        "journey_tail_action_child_priority_enabled=True",
+        "journey_tail_action_child_priority_width=-1",
+        "journey_tail_action_no_column_early_branch_enabled=True",
+        "journey_tail_action_no_column_early_branch_min_depth=2",
+        "journey_tail_action_no_column_early_branch_max_depth=2",
+        "journey_tail_action_no_column_early_branch_child_min_cg_iter=1",
+        "journey_tail_action_no_column_early_branch_min_true_rc_productivity=0",
+        "journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False",
+        "journey_tail_action_no_column_early_branch_max_pool_child_width=180",
+        "journey_tail_action_no_column_early_branch_max_pool_total_child_width=360",
+        "journey_tail_action_no_column_early_branch_max_pool_balance_gap=180",
+    ]
+
+
 def _tail_action_child_order_candidates(rows: Iterable[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     seen: set[tuple[str, int, int, int]] = set()
@@ -406,6 +457,7 @@ def build_runbook(
     limit: int = 8,
     tail_impact_inputs: list[Path] | None = None,
     tail_alt_pairs_per_node: int = 0,
+    tail_action_profile: str = "legacy_v12",
 ) -> dict[str, Any]:
     summary = _read_json(positive_gap_summary)
     rows = summary.get("near_positive_rows")
@@ -521,49 +573,18 @@ def build_runbook(
             "--max-workers",
             "1",
             "--quiet",
-            "--set",
-            "journey_early_branching_enabled=False",
-            "--set",
-            "journey_tail_action_early_branch_enabled=True",
-            "--set",
-            "journey_tail_action_early_branch_min_cg_iter=35",
-            "--set",
-            "journey_tail_action_early_branch_child_min_cg_iter=2",
-            "--set",
-            "journey_tail_action_early_branch_max_depth=1",
-            "--set",
-            "journey_tail_action_early_branch_min_true_rc_productivity=1",
-            "--set",
-            "journey_tail_action_child_priority_enabled=True",
-            "--set",
-            "journey_tail_action_child_priority_width=-1",
-            "--set",
-            "journey_tail_action_no_column_early_branch_enabled=True",
-            "--set",
-            "journey_tail_action_no_column_early_branch_min_depth=2",
-            "--set",
-            "journey_tail_action_no_column_early_branch_max_depth=2",
-            "--set",
-            "journey_tail_action_no_column_early_branch_child_min_cg_iter=1",
-            "--set",
-            "journey_tail_action_no_column_early_branch_min_true_rc_productivity=0",
-            "--set",
-            "journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False",
-            "--set",
-            "journey_tail_action_no_column_early_branch_max_pool_child_width=180",
-            "--set",
-            "journey_tail_action_no_column_early_branch_max_pool_total_child_width=360",
-            "--set",
-            "journey_tail_action_no_column_early_branch_max_pool_balance_gap=180",
-            "--set",
-            "journey_branch_fractionality_tie_tolerance=0.05",
-            "--set",
-            f"journey_branch_candidate_priority={force_pair_rule}",
-            "--set",
-            f"journey_child_priority_mode={force_kind_rule}",
-            "--set",
-            "journey_branch_candidate_log_top_n=12",
         ]
+        command.extend(
+            _set_args(
+                [
+                    *_tail_action_replay_settings(tail_action_profile, target_depth=depth),
+                    "journey_branch_fractionality_tie_tolerance=0.05",
+                    f"journey_branch_candidate_priority={force_pair_rule}",
+                    f"journey_child_priority_mode={force_kind_rule}",
+                    "journey_branch_candidate_log_top_n=12",
+                ]
+            )
+        )
         entries.append(
             {
                 "experiment": experiment,
@@ -580,6 +601,7 @@ def build_runbook(
                 "source_tail_class": row.get("tail_class"),
                 "source_labels": row.get("labels"),
                 "source_path_edges": path_edges,
+                "tail_action_profile": tail_action_profile,
                 "command": command,
                 "shell_command": shlex.join(command),
                 "expected_label_source": "rerun_then_audit_tail_action_and_build_tail_impact",
@@ -626,49 +648,18 @@ def build_runbook(
                 "--max-workers",
                 "1",
                 "--quiet",
-                "--set",
-                "journey_early_branching_enabled=False",
-                "--set",
-                "journey_tail_action_early_branch_enabled=True",
-                "--set",
-                "journey_tail_action_early_branch_min_cg_iter=35",
-                "--set",
-                "journey_tail_action_early_branch_child_min_cg_iter=2",
-                "--set",
-                "journey_tail_action_early_branch_max_depth=1",
-                "--set",
-                "journey_tail_action_early_branch_min_true_rc_productivity=1",
-                "--set",
-                "journey_tail_action_child_priority_enabled=True",
-                "--set",
-                "journey_tail_action_child_priority_width=-1",
-                "--set",
-                "journey_tail_action_no_column_early_branch_enabled=True",
-                "--set",
-                "journey_tail_action_no_column_early_branch_min_depth=2",
-                "--set",
-                "journey_tail_action_no_column_early_branch_max_depth=2",
-                "--set",
-                "journey_tail_action_no_column_early_branch_child_min_cg_iter=1",
-                "--set",
-                "journey_tail_action_no_column_early_branch_min_true_rc_productivity=0",
-                "--set",
-                "journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False",
-                "--set",
-                "journey_tail_action_no_column_early_branch_max_pool_child_width=180",
-                "--set",
-                "journey_tail_action_no_column_early_branch_max_pool_total_child_width=360",
-                "--set",
-                "journey_tail_action_no_column_early_branch_max_pool_balance_gap=180",
-                "--set",
-                "journey_branch_fractionality_tie_tolerance=0.05",
-                "--set",
-                f"journey_branch_candidate_priority={alt_pair_rule}",
-                "--set",
-                f"journey_child_priority_mode={ancestor_kind_rule}",
-                "--set",
-                "journey_branch_candidate_log_top_n=12",
             ]
+            alt_command.extend(
+                _set_args(
+                    [
+                        *_tail_action_replay_settings(tail_action_profile, target_depth=depth),
+                        "journey_branch_fractionality_tie_tolerance=0.05",
+                        f"journey_branch_candidate_priority={alt_pair_rule}",
+                        f"journey_child_priority_mode={ancestor_kind_rule}",
+                        "journey_branch_candidate_log_top_n=12",
+                    ]
+                )
+            )
             entries.append(
                 {
                     "experiment": alt_experiment,
@@ -686,6 +677,7 @@ def build_runbook(
                     "source_tail_class": row.get("tail_class"),
                     "source_labels": row.get("labels"),
                     "source_path_edges": path_edges,
+                    "tail_action_profile": tail_action_profile,
                     "command": alt_command,
                     "shell_command": shlex.join(alt_command),
                     "expected_label_source": "rerun_then_audit_tail_action_alt_pair_and_build_tail_impact",
@@ -704,6 +696,7 @@ def build_runbook(
         "positive_gap_summary": str(positive_gap_summary),
         "tail_impact_input_paths": [str(path) for path in (tail_impact_inputs or [])],
         "tail_alt_pairs_per_node": int(tail_alt_pairs_per_node),
+        "tail_action_profile": str(tail_action_profile),
         "config": str(config),
         "time_limit": int(time_limit),
         "candidate_source": "root_level_near_positive_rows_tail_action_proof_cost_rows_and_optional_priority_top_alt_pairs",
@@ -759,6 +752,7 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"candidate_source = {runbook.get('candidate_source')}",
         f"tail_impact_input_paths = {runbook.get('tail_impact_input_paths')}",
         f"tail_alt_pairs_per_node = {runbook.get('tail_alt_pairs_per_node')}",
+        f"tail_action_profile = {runbook.get('tail_action_profile')}",
         "production_ready = false",
         "stage4_candidate_ready = false",
         "certificate_effect = false",
@@ -791,6 +785,7 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"source_alt_required_tie_tolerance = {entry.get('source_alt_required_tie_tolerance')}",
                 f"source_alt_pool_max_child_width = {entry.get('source_alt_pool_max_child_width')}",
                 f"source_alt_pool_total_child_width = {entry.get('source_alt_pool_total_child_width')}",
+                f"tail_action_profile = {entry.get('tail_action_profile')}",
                 "```",
                 "",
                 "```bash",
@@ -819,6 +814,16 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=8)
     parser.add_argument("--tail-impact-input", nargs="*", type=Path, default=[])
     parser.add_argument("--tail-alt-pairs-per-node", type=int, default=0)
+    parser.add_argument(
+        "--tail-action-profile",
+        choices=("legacy_v12", "before_final_probe"),
+        default="legacy_v12",
+        help=(
+            "Replay settings used for tail-action entries. legacy_v12 preserves older "
+            "depth-2 local no-column probes; before_final_probe matches V166-style "
+            "INCOMPLETE_LIMIT final-probe gate probes and scopes min/max depth to the source row."
+        ),
+    )
     args = parser.parse_args()
 
     runbook = build_runbook(
@@ -830,6 +835,7 @@ def main() -> None:
         limit=args.limit,
         tail_impact_inputs=args.tail_impact_input,
         tail_alt_pairs_per_node=args.tail_alt_pairs_per_node,
+        tail_action_profile=args.tail_action_profile,
     )
     print(json.dumps(runbook, ensure_ascii=False, indent=2, sort_keys=True))
 

@@ -116,6 +116,42 @@ EARLY_BRANCH_FIELDS = [
     "child_subtree_observed_wall_span",
 ]
 
+NO_COLUMN_GATE_FIELDS = [
+    "log_file",
+    "time",
+    "node_id",
+    "depth",
+    "cg_iter",
+    "gate_passed",
+    "gate_reason",
+    "tail_action",
+    "tail_action_reason",
+    "tail_action_before_final_probe",
+    "rmp_objective",
+    "inherited_lower_bound",
+    "rmp_to_incumbent_gap",
+    "fathom_possible_if_rc_zero",
+    "recent_active_support_additions",
+    "recent_rmp_objective_progress",
+    "recent_true_rc_productivity",
+    "previous_status",
+    "previous_reason",
+    "previous_pricing_state",
+    "previous_best_reduced_cost",
+    "remaining",
+    "certificate_candidate",
+    "no_column_branch_task_i",
+    "no_column_branch_task_j",
+    "no_column_branch_pool_same_allowed",
+    "no_column_branch_pool_separate_allowed",
+    "no_column_branch_pool_max_child_width",
+    "no_column_branch_pool_total_child_width",
+    "no_column_branch_pool_balance_gap",
+    "no_column_branch_width_guard_reason",
+    "exact_bound_available",
+    "child_lower_bound_exact",
+]
+
 
 def _iter_jsonl(paths: Iterable[Path]) -> Iterable[Path]:
     for path in paths:
@@ -159,6 +195,17 @@ def _early_branch_trigger_row(path: Path, record: dict[str, Any]) -> dict[str, A
     return row
 
 
+def _no_column_gate_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | None:
+    if record.get("event") != "journey_tail_action_no_column_early_branch_gate":
+        return None
+    row = {"log_file": str(path)}
+    for key in NO_COLUMN_GATE_FIELDS:
+        if key == "log_file":
+            continue
+        row[key] = record.get(key)
+    return row
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -184,6 +231,14 @@ def _write_early_branch_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow({field: row.get(field) for field in EARLY_BRANCH_FIELDS})
+
+
+def _write_no_column_gate_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=NO_COLUMN_GATE_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field) for field in NO_COLUMN_GATE_FIELDS})
 
 
 def _child_queue_summary(children: list[dict[str, Any]]) -> dict[str, Any]:
@@ -426,6 +481,7 @@ def audit_tail_actions(
     log_paths = list(_iter_jsonl(paths))
     rows: list[dict[str, Any]] = []
     early_branch_rows: list[dict[str, Any]] = []
+    no_column_gate_rows: list[dict[str, Any]] = []
     child_queued_by_parent: dict[tuple[str, int], list[dict[str, Any]]] = {}
     audit_rows_by_node: dict[tuple[str, int], list[dict[str, Any]]] = {}
     events_by_node: dict[tuple[str, int], list[dict[str, Any]]] = {}
@@ -448,6 +504,9 @@ def audit_tail_actions(
             branch_row = _early_branch_trigger_row(path, record)
             if branch_row is not None:
                 early_branch_rows.append(branch_row)
+            gate_row = _no_column_gate_row(path, record)
+            if gate_row is not None:
+                no_column_gate_rows.append(gate_row)
             if record.get("event") == "journey_child_queued":
                 parent_id = record.get("parent_node_id")
                 if parent_id is not None:
@@ -511,6 +570,25 @@ def audit_tail_actions(
         row for row in early_branch_rows
         if not bool(row.get("exact_bound_available")) and not bool(row.get("child_lower_bound_exact"))
     ]
+    gate_reason_counts = Counter(str(row.get("gate_reason") or "") for row in no_column_gate_rows)
+    gate_action_counts = Counter(str(row.get("tail_action") or "") for row in no_column_gate_rows)
+    gate_pricing_state_counts = Counter(
+        str(row.get("previous_pricing_state") or "") for row in no_column_gate_rows
+    )
+    before_final_probe_gate_rows = [
+        row for row in no_column_gate_rows if bool(row.get("tail_action_before_final_probe"))
+    ]
+    before_final_probe_disabled_gate_rows = [
+        row for row in before_final_probe_gate_rows
+        if row.get("gate_reason") == "before_final_probe_disabled"
+    ]
+    no_column_gate_d_rows = [
+        row for row in no_column_gate_rows if row.get("tail_action") == "EARLY_BRANCH"
+    ]
+    no_column_gate_before_final_probe_disabled_d_rows = [
+        row for row in before_final_probe_disabled_gate_rows
+        if row.get("tail_action") == "EARLY_BRANCH"
+    ]
     tail_action_child_count = sum(int(row.get("queued_child_count") or 0) for row in tail_action_early_branch_rows)
     tail_action_nonexact_child_count = sum(
         int(row.get("queued_child_nonexact_count") or 0)
@@ -554,6 +632,16 @@ def audit_tail_actions(
             tail_action_no_column_early_branch_rows
         ),
         "nonexact_early_branch_trigger_count": len(nonexact_branch_rows),
+        "no_column_gate_row_count": len(no_column_gate_rows),
+        "no_column_gate_reason_counts": dict(sorted(gate_reason_counts.items())),
+        "no_column_gate_tail_action_counts": dict(sorted(gate_action_counts.items())),
+        "no_column_gate_previous_pricing_state_counts": dict(sorted(gate_pricing_state_counts.items())),
+        "no_column_gate_before_final_probe_count": len(before_final_probe_gate_rows),
+        "no_column_gate_before_final_probe_disabled_count": len(before_final_probe_disabled_gate_rows),
+        "no_column_gate_d_early_branch_count": len(no_column_gate_d_rows),
+        "no_column_gate_before_final_probe_disabled_d_count": len(
+            no_column_gate_before_final_probe_disabled_d_rows
+        ),
         "tail_action_queued_child_count": int(tail_action_child_count),
         "tail_action_nonexact_queued_child_count": int(tail_action_nonexact_child_count),
         "tail_action_observed_child_audit_count": int(observed_tail_action_child_count),
@@ -567,8 +655,11 @@ def audit_tail_actions(
         "rows_csv": str(output_dir / "tail_action_rows.csv"),
         "early_branch_rows_jsonl": str(output_dir / "early_branch_trigger_rows.jsonl"),
         "early_branch_rows_csv": str(output_dir / "early_branch_trigger_rows.csv"),
+        "no_column_gate_rows_jsonl": str(output_dir / "no_column_gate_rows.jsonl"),
+        "no_column_gate_rows_csv": str(output_dir / "no_column_gate_rows.csv"),
         "sample_rows": rows[:sample_limit],
         "sample_early_branch_rows": early_branch_rows[:sample_limit],
+        "sample_no_column_gate_rows": no_column_gate_rows[:sample_limit],
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -577,6 +668,8 @@ def audit_tail_actions(
     _write_csv(output_dir / "tail_action_rows.csv", rows)
     _write_jsonl(output_dir / "early_branch_trigger_rows.jsonl", early_branch_rows)
     _write_early_branch_csv(output_dir / "early_branch_trigger_rows.csv", early_branch_rows)
+    _write_jsonl(output_dir / "no_column_gate_rows.jsonl", no_column_gate_rows)
+    _write_no_column_gate_csv(output_dir / "no_column_gate_rows.csv", no_column_gate_rows)
     _write_report(report, summary)
     return summary
 
@@ -618,6 +711,11 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
             f"- tail-action early branch triggers: {summary['tail_action_early_branch_trigger_count']}",
             f"- tail-action no-column early branch triggers: {summary['tail_action_no_column_early_branch_trigger_count']}",
             f"- non-exact early branch triggers: {summary['nonexact_early_branch_trigger_count']}",
+            f"- no-column gate rows: {summary['no_column_gate_row_count']}",
+            f"- no-column before-final-probe gate rows: {summary['no_column_gate_before_final_probe_count']}",
+            f"- no-column before-final-probe disabled rows: {summary['no_column_gate_before_final_probe_disabled_count']}",
+            f"- no-column gate D/early-branch rows: {summary['no_column_gate_d_early_branch_count']}",
+            f"- no-column before-final-probe disabled D rows: {summary['no_column_gate_before_final_probe_disabled_d_count']}",
             f"- tail-action queued children: {summary['tail_action_queued_child_count']}",
             f"- tail-action non-exact queued children: {summary['tail_action_nonexact_queued_child_count']}",
             f"- observed tail-action child audit rows: {summary['tail_action_observed_child_audit_count']}",
@@ -631,9 +729,21 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
             f"- rows csv: `{summary['rows_csv']}`",
             f"- early branch rows jsonl: `{summary['early_branch_rows_jsonl']}`",
             f"- early branch rows csv: `{summary['early_branch_rows_csv']}`",
+            f"- no-column gate rows jsonl: `{summary['no_column_gate_rows_jsonl']}`",
+            f"- no-column gate rows csv: `{summary['no_column_gate_rows_csv']}`",
             "",
         ]
     )
+    if summary.get("no_column_gate_reason_counts"):
+        lines.extend(["## No-column Gate Counts", ""])
+        lines.append("按 gate_reason:")
+        for reason, count in summary["no_column_gate_reason_counts"].items():
+            lines.append(f"- `{reason}`: {count}")
+        lines.append("")
+        lines.append("按 tail_action:")
+        for action, count in summary["no_column_gate_tail_action_counts"].items():
+            lines.append(f"- `{action}`: {count}")
+        lines.append("")
     if summary.get("sample_early_branch_rows"):
         lines.extend(
             [

@@ -69,6 +69,14 @@
 
 同时 canonical 20-task 配置已打开 `journey_branch_candidate_log_top_n=100`。这只记录 `journey_branch_candidates` top-N 特征，不改变实际 branch priority；下一轮 full600 会同时具备 tail-action 分类和 branch-impact 候选特征，并能支持 coverage-gap replay 采样。
 
+补充字段验证：对 canonical `tasks_020/greedy-anchor/tranquillitatis_balmer_like_20km/...seed61001` 跑了 140s 单实例诊断，结果为 `EXTERNAL_TIME_LIMIT`，不是性能改善证据；但日志已经写出 `journey_corrected_node_bound_audit=16`、`journey_branch_candidates=3`，branch-candidate 的 top/priority_top 长度为 `30/22/43`，selected pair 均能匹配 priority top-1。对应审计报告：
+
+- `BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_tail_action_controller_audit_diag_top100_seed61001_140_zh.md`
+- `BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_late_negative_tail_audit_diag_top100_seed61001_140_zh.md`
+- `BPC_future/logical_graph/run_reports/20260624_bpc_future_journey_branch_impact_diag_top100_seed61001_140_zh.md`
+
+这次 branch-impact 审计有 `branch_count=3`、`right_censored_branch_count=3`、`usable_branch_impact_training_count=0`。结论是：top100 日志已经可用，但自然短跑不会自动给出稳定 branch-impact 标签；后续必须通过 forced-pair replay / child probe / paired run 得到完整或 timeout-resolved 的相对正负样本。
+
 Late-negative tail 审计仍然有效。150 秒以后解析到：
 
 | 指标 | 数值 |

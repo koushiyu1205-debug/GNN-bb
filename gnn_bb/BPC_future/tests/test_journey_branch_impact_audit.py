@@ -14,7 +14,13 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             tmp_path = Path(tmp)
             log_path = tmp_path / "branch.jsonl"
             records = [
-                {"event": "journey_node_start", "node_id": 0, "depth": 0, "time": 0.0},
+                {
+                    "event": "journey_node_start",
+                    "node_id": 0,
+                    "depth": 0,
+                    "time": 0.0,
+                    "lower_bound": 5.0,
+                },
                 {
                     "event": "journey_branch_candidates",
                     "node_id": 0,
@@ -56,6 +62,7 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
                     "time": 1.2,
                     "constraint": "RF(1,2)=same_vehicle",
                     "allowed_current_journeys": 3,
+                    "lower_bound": 7.0,
                     "lower_bound_exact": False,
                 },
                 {
@@ -66,6 +73,7 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
                     "time": 1.3,
                     "constraint": "RF(1,2)=separate_vehicle",
                     "allowed_current_journeys": 5,
+                    "lower_bound": 7.0,
                     "lower_bound_exact": False,
                 },
                 {"event": "journey_node_start", "node_id": 1, "depth": 1, "time": 2.0},
@@ -93,12 +101,32 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
                     "inactive_changed_task_set_count": 0,
                 },
                 {
+                    "event": "journey_pricing",
+                    "node_id": 1,
+                    "depth": 1,
+                    "time": 3.5,
+                    "pricing_kind": "exact",
+                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                    "global_certificate": True,
+                    "best_reduced_cost": 0.0,
+                    "negative_journeys": 0,
+                    "selected_trips": 0,
+                },
+                {
+                    "event": "journey_corrected_node_bound_audit",
+                    "node_id": 1,
+                    "depth": 1,
+                    "time": 3.6,
+                    "corrected_node_lb": 11.0,
+                },
+                {
                     "event": "journey_early_branch_trigger",
                     "node_id": 1,
                     "depth": 1,
                     "time": 4.0,
                     "reason": "incomplete_no_column_tailing",
                 },
+                {"event": "journey_fathom", "node_id": 1, "depth": 1, "time": 5.0, "reason": "bound"},
             ]
             log_path.write_text(
                 "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
@@ -130,6 +158,11 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(row["first_child_early_branch_trigger_count"], 1)
             self.assertEqual(row["sum_child_added_journeys"], 2)
             self.assertEqual(row["sum_child_active_replacement_task_set_count"], 1)
+            self.assertEqual(row["sum_child_exact_pricing_event_count"], 1)
+            self.assertEqual(row["sum_child_certificate_pricing_event_count"], 1)
+            self.assertEqual(row["sum_child_fathom_event_count"], 1)
+            self.assertEqual(row["max_child_lower_bound_gain"], 2.0)
+            self.assertEqual(row["max_child_corrected_bound_gain"], 4.0)
             self.assertEqual(row["branch_feature_source"], "candidate_log")
             self.assertTrue(row["right_censored"])
             self.assertFalse(row["label_observation_complete"])
@@ -145,6 +178,21 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             )
             self.assertEqual(row["branch_labels"]["y_early_branch_continues"], 1.0)
             self.assertEqual(row["branch_labels"]["y_active_touch"], 1.0)
+            self.assertEqual(row["branch_labels"]["y_child_exact_pricing_events"], 1.0)
+            self.assertEqual(row["branch_labels"]["y_child_fathom_events"], 1.0)
+            self.assertEqual(row["branch_labels"]["y_child_max_safe_bound_gain"], 2.0)
+            self.assertEqual(row["branch_labels"]["y_child_max_corrected_bound_gain"], 4.0)
+            self.assertEqual(summary["child_probe_row_count"], 2)
+            child_rows = summary["child_probe_rows"]
+            self.assertEqual(child_rows[0]["child_node_id"], 1)
+            self.assertEqual(child_rows[0]["child_bound_reference"], 5.0)
+            self.assertEqual(child_rows[0]["child_labels"]["child_lower_bound_gain"], 2.0)
+            self.assertEqual(child_rows[0]["child_labels"]["child_max_corrected_node_lb"], 11.0)
+            self.assertEqual(child_rows[0]["child_labels"]["child_max_corrected_bound_gain"], 4.0)
+            self.assertEqual(child_rows[0]["child_labels"]["child_exact_pricing_event_count"], 1.0)
+            self.assertEqual(child_rows[0]["child_labels"]["child_time_to_first_certificate"], 1.5)
+            self.assertEqual(child_rows[0]["child_labels"]["child_time_to_fathom"], 3.0)
+            self.assertEqual(child_rows[0]["child_labels"]["child_fathomed"], 1.0)
             training_rows = summary["branch_training_rows"]
             self.assertEqual(len(training_rows), 1)
             self.assertEqual(training_rows[0]["branch_feature_schema"], summary["branch_feature_schema"])
@@ -156,6 +204,7 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertTrue((tmp_path / "out" / "summary.json").exists())
             self.assertTrue((tmp_path / "out" / "branch_impact_rows.jsonl").exists())
             self.assertTrue((tmp_path / "out" / "branch_training_rows.jsonl").exists())
+            self.assertTrue((tmp_path / "out" / "child_probe_rows.jsonl").exists())
             self.assertIn("production_ready = false", (tmp_path / "report.md").read_text(encoding="utf-8"))
 
     def test_build_branch_impact_marks_complete_candidate_rows_usable(self):
@@ -228,6 +277,10 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(summary["aggregate"]["complete_label_branch_count"], 1)
             self.assertEqual(summary["aggregate"]["usable_branch_impact_training_count"], 1)
             self.assertEqual(summary["branch_training_rows"][0]["usable_for_branch_impact_training"], True)
+            self.assertEqual(summary["child_probe_row_count"], 2)
+            first_child = summary["child_probe_rows"][0]
+            self.assertTrue(first_child["child_started"])
+            self.assertGreaterEqual(first_child["child_labels"]["child_proof_cpu"], 0.0)
 
 
 if __name__ == "__main__":

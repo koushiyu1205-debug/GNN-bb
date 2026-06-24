@@ -32,6 +32,14 @@ class _ScoreAccumulator:
     loss_count: int = 0
     wall_gap_sum: float = 0.0
     exact_gap_sum: float = 0.0
+    ranking_observation_count: int = 0
+    child_probe_branch_count: int = 0
+    complete_child_probe_branch_count: int = 0
+    right_censored_child_probe_branch_count: int = 0
+    child_probe_proof_cpu_sum: float = 0.0
+    child_probe_completion_bound_retry_sum: float = 0.0
+    child_probe_fathom_sum: float = 0.0
+    child_probe_max_corrected_bound_gain: float = 0.0
     instance: str = ""
     node_id: int | None = None
     depth: int | None = None
@@ -62,6 +70,20 @@ def _load_ranking_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
             rows.extend(_iter_jsonl(path.parent / "counterfactual_ranking_pair_rows.jsonl"))
             continue
         if path.suffix == ".jsonl":
+            rows.extend(_iter_jsonl(path))
+    return rows
+
+
+def _load_child_probe_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        if path.is_dir():
+            rows.extend(_iter_jsonl(path / "child_probe_rows.jsonl"))
+            continue
+        if path.name == "summary.json":
+            rows.extend(_iter_jsonl(path.parent / "child_probe_rows.jsonl"))
+            continue
+        if path.name == "child_probe_rows.jsonl":
             rows.extend(_iter_jsonl(path))
     return rows
 
@@ -148,6 +170,11 @@ def _score_key(
 def _row_from_accumulator(key: str, acc: _ScoreAccumulator) -> dict[str, Any]:
     score = acc.score_sum / max(1, acc.comparison_count)
     task_i, task_j = acc.pair
+    sources: list[str] = []
+    if acc.ranking_observation_count:
+        sources.append("counterfactual_ranking_pairs")
+    if acc.child_probe_branch_count:
+        sources.append("child_probe_proof_cost")
     return {
         "schema_version": "journey_branch_score_row_v1",
         "diagnostic_only": True,
@@ -169,8 +196,100 @@ def _row_from_accumulator(key: str, acc: _ScoreAccumulator) -> dict[str, Any]:
         "loss_count": int(acc.loss_count),
         "wall_delta_gap_sum": round(float(acc.wall_gap_sum), 9),
         "exact_pricing_calls_gap_sum": round(float(acc.exact_gap_sum), 9),
-        "score_source": "counterfactual_ranking_pairs",
+        "ranking_observation_count": int(acc.ranking_observation_count),
+        "child_probe_branch_count": int(acc.child_probe_branch_count),
+        "complete_child_probe_branch_count": int(acc.complete_child_probe_branch_count),
+        "right_censored_child_probe_branch_count": int(acc.right_censored_child_probe_branch_count),
+        "child_probe_proof_cpu_sum": round(float(acc.child_probe_proof_cpu_sum), 9),
+        "child_probe_completion_bound_retry_sum": round(float(acc.child_probe_completion_bound_retry_sum), 9),
+        "child_probe_fathom_sum": round(float(acc.child_probe_fathom_sum), 9),
+        "child_probe_max_corrected_bound_gain": round(float(acc.child_probe_max_corrected_bound_gain), 9),
+        "score_source": "+".join(sources) if sources else "unknown",
     }
+
+
+def _child_probe_group_key(row: dict[str, Any]) -> tuple[str, int | None, int | None, tuple[int, int]] | None:
+    pair = _pair_tuple([row.get("task_i"), row.get("task_j")])
+    if pair is None:
+        return None
+    return (
+        str(row.get("log_file") or ""),
+        _int_or_none(row.get("branch_node_id")),
+        _int_or_none(row.get("branch_depth")),
+        pair,
+    )
+
+
+def _group_child_probe_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, int | None, int | None, tuple[int, int]], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        key = _child_probe_group_key(row)
+        if key is None:
+            continue
+        grouped[key].append(row)
+    branch_rows: list[dict[str, Any]] = []
+    for (log_file, node_id, depth, pair), children in grouped.items():
+        labels = [child.get("child_labels") for child in children if isinstance(child.get("child_labels"), dict)]
+        child_count = len(children)
+        started_count = sum(1 for child in children if bool(child.get("child_started")))
+        unstarted_count = max(0, child_count - started_count)
+        right_censored = any(bool(child.get("right_censored")) for child in children)
+        label_complete = all(bool(child.get("label_observation_complete")) for child in children)
+        proof_cpu = sum(_float(label.get("child_proof_cpu")) for label in labels)
+        completion_retries = sum(_float(label.get("child_completion_bound_retry_count")) for label in labels)
+        exact_pricing_events = sum(_float(label.get("child_exact_pricing_event_count")) for label in labels)
+        negative_pricing_events = sum(_float(label.get("child_negative_pricing_event_count")) for label in labels)
+        fathom_count = sum(_float(label.get("child_fathomed")) for label in labels)
+        corrected_gains = [_float(label.get("child_max_corrected_bound_gain")) for label in labels]
+        max_corrected_gain = max(corrected_gains, default=0.0)
+        branch_rows.append(
+            {
+                "log_file": log_file,
+                "node_id": node_id,
+                "depth": depth,
+                "pair": pair,
+                "child_count": int(child_count),
+                "started_child_count": int(started_count),
+                "unstarted_child_count": int(unstarted_count),
+                "right_censored": bool(right_censored),
+                "label_observation_complete": bool(label_complete),
+                "proof_cpu": float(proof_cpu),
+                "completion_bound_retry_count": float(completion_retries),
+                "exact_pricing_event_count": float(exact_pricing_events),
+                "negative_pricing_event_count": float(negative_pricing_events),
+                "fathom_count": float(fathom_count),
+                "max_corrected_bound_gain": float(max_corrected_gain),
+            }
+        )
+    return branch_rows
+
+
+def _child_probe_score(
+    row: dict[str, Any],
+    *,
+    complete_bonus: float,
+    right_censored_penalty: float,
+    unstarted_child_penalty: float,
+    fathom_bonus: float,
+    corrected_gain_scale: float,
+    corrected_gain_cap: float,
+    completion_retry_penalty: float,
+    proof_cpu_scale: float,
+    negative_pricing_penalty: float,
+) -> float:
+    score = 0.0
+    if bool(row.get("label_observation_complete")):
+        score += float(complete_bonus)
+    if bool(row.get("right_censored")):
+        score -= float(right_censored_penalty)
+    score -= float(unstarted_child_penalty) * _float(row.get("unstarted_child_count"))
+    score += float(fathom_bonus) * _float(row.get("fathom_count"))
+    corrected_gain = min(max(0.0, _float(row.get("max_corrected_bound_gain"))), float(corrected_gain_cap))
+    score += corrected_gain / max(1.0e-9, float(corrected_gain_scale))
+    score -= float(completion_retry_penalty) * _float(row.get("completion_bound_retry_count"))
+    score -= _float(row.get("proof_cpu")) / max(1.0e-9, float(proof_cpu_scale))
+    score -= float(negative_pricing_penalty) * _float(row.get("negative_pricing_event_count"))
+    return float(score)
 
 
 def build_branch_score_map(
@@ -184,11 +303,24 @@ def build_branch_score_map(
     max_weight: float = 10.0,
     include_instance_contains: tuple[str, ...] = (),
     exclude_instance_contains: tuple[str, ...] = (),
+    include_child_probe: bool = False,
+    include_child_probe_log_contains: tuple[str, ...] = (),
+    exclude_child_probe_log_contains: tuple[str, ...] = (),
+    child_complete_bonus: float = 5.0,
+    child_right_censored_penalty: float = 8.0,
+    child_unstarted_child_penalty: float = 1.0,
+    child_fathom_bonus: float = 1.0,
+    child_corrected_gain_scale: float = 5.0,
+    child_corrected_gain_cap: float = 25.0,
+    child_completion_retry_penalty: float = 0.1,
+    child_proof_cpu_scale: float = 120.0,
+    child_negative_pricing_penalty: float = 0.0,
 ) -> dict[str, Any]:
     if key_scope not in {"node_depth", "depth", "pair"}:
         raise ValueError(f"unsupported key_scope: {key_scope}")
 
     raw_ranking_rows = _load_ranking_rows(inputs)
+    raw_child_probe_rows = _load_child_probe_rows(inputs) if include_child_probe else []
     ranking_rows = [
         row
         for row in raw_ranking_rows
@@ -198,8 +330,18 @@ def build_branch_score_map(
             exclude_contains=exclude_instance_contains,
         )
     ]
+    child_probe_rows = [
+        row
+        for row in raw_child_probe_rows
+        if _instance_filter_accepts(
+            str(row.get("log_file") or ""),
+            include_contains=include_child_probe_log_contains,
+            exclude_contains=exclude_child_probe_log_contains,
+        )
+    ]
     accumulators: dict[str, _ScoreAccumulator] = {}
     skipped_rows = 0
+    skipped_child_probe_branch_rows = 0
 
     for row in ranking_rows:
         if row.get("official_bound_effect") not in (False, None):
@@ -233,6 +375,7 @@ def build_branch_score_map(
             acc = accumulators[key]
             acc.score_sum += float(sign) * float(weight)
             acc.comparison_count += 1
+            acc.ranking_observation_count += 1
             acc.wall_gap_sum += wall_gap
             acc.exact_gap_sum += exact_gap
             if sign > 0:
@@ -240,13 +383,59 @@ def build_branch_score_map(
             else:
                 acc.loss_count += 1
 
+    child_probe_branch_rows = _group_child_probe_rows(child_probe_rows)
+    for row in child_probe_branch_rows:
+        pair = row.get("pair")
+        if not isinstance(pair, tuple):
+            skipped_child_probe_branch_rows += 1
+            continue
+        node_id = _int_or_none(row.get("node_id"))
+        depth = _int_or_none(row.get("depth"))
+        key = _score_key(pair, key_scope=key_scope, node_id=node_id, depth=depth)
+        score = _child_probe_score(
+            row,
+            complete_bonus=child_complete_bonus,
+            right_censored_penalty=child_right_censored_penalty,
+            unstarted_child_penalty=child_unstarted_child_penalty,
+            fathom_bonus=child_fathom_bonus,
+            corrected_gain_scale=child_corrected_gain_scale,
+            corrected_gain_cap=child_corrected_gain_cap,
+            completion_retry_penalty=child_completion_retry_penalty,
+            proof_cpu_scale=child_proof_cpu_scale,
+            negative_pricing_penalty=child_negative_pricing_penalty,
+        )
+        if key not in accumulators:
+            accumulators[key] = _ScoreAccumulator(
+                instance=str(row.get("log_file") or ""),
+                node_id=node_id,
+                depth=depth,
+                pair=pair,
+            )
+        acc = accumulators[key]
+        acc.score_sum += float(score)
+        acc.comparison_count += 1
+        acc.child_probe_branch_count += 1
+        acc.complete_child_probe_branch_count += 1 if bool(row.get("label_observation_complete")) else 0
+        acc.right_censored_child_probe_branch_count += 1 if bool(row.get("right_censored")) else 0
+        acc.child_probe_proof_cpu_sum += _float(row.get("proof_cpu"))
+        acc.child_probe_completion_bound_retry_sum += _float(row.get("completion_bound_retry_count"))
+        acc.child_probe_fathom_sum += _float(row.get("fathom_count"))
+        acc.child_probe_max_corrected_bound_gain = max(
+            float(acc.child_probe_max_corrected_bound_gain),
+            _float(row.get("max_corrected_bound_gain")),
+        )
+        if score > 0.0:
+            acc.win_count += 1
+        elif score < 0.0:
+            acc.loss_count += 1
+
     score_rows = [
         _row_from_accumulator(key, acc)
         for key, acc in sorted(
             accumulators.items(),
             key=lambda item: (
+                -(item[1].score_sum / max(1, item[1].comparison_count)),
                 item[1].instance,
-                -abs(item[1].score_sum / max(1, item[1].comparison_count)),
                 item[0],
             ),
         )
@@ -267,7 +456,9 @@ def build_branch_score_map(
         encoding="utf-8",
     )
 
-    instance_count = len({str(row.get("instance") or "") for row in ranking_rows if row.get("instance")})
+    instance_names = {str(row.get("instance") or "") for row in ranking_rows if row.get("instance")}
+    instance_names.update(str(row.get("log_file") or "") for row in child_probe_branch_rows if row.get("log_file"))
+    instance_count = len(instance_names)
     summary = {
         "schema_version": "journey_branch_score_map_summary_v1",
         "diagnostic_only": True,
@@ -280,6 +471,12 @@ def build_branch_score_map(
         "key_scope": key_scope,
         "raw_ranking_pair_row_count": len(raw_ranking_rows),
         "ranking_pair_row_count": len(ranking_rows),
+        "include_child_probe": bool(include_child_probe),
+        "raw_child_probe_row_count": len(raw_child_probe_rows),
+        "child_probe_row_count": len(child_probe_rows),
+        "child_probe_branch_row_count": len(child_probe_branch_rows),
+        "filtered_out_child_probe_row_count": len(raw_child_probe_rows) - len(child_probe_rows),
+        "skipped_child_probe_branch_row_count": int(skipped_child_probe_branch_rows),
         "filtered_out_row_count": len(raw_ranking_rows) - len(ranking_rows),
         "skipped_row_count": int(skipped_rows),
         "branch_score_row_count": len(score_rows),
@@ -288,9 +485,20 @@ def build_branch_score_map(
         "wall_gap_scale": float(wall_gap_scale),
         "exact_gap_scale": float(exact_gap_scale),
         "max_weight": float(max_weight),
+        "child_complete_bonus": float(child_complete_bonus),
+        "child_right_censored_penalty": float(child_right_censored_penalty),
+        "child_unstarted_child_penalty": float(child_unstarted_child_penalty),
+        "child_fathom_bonus": float(child_fathom_bonus),
+        "child_corrected_gain_scale": float(child_corrected_gain_scale),
+        "child_corrected_gain_cap": float(child_corrected_gain_cap),
+        "child_completion_retry_penalty": float(child_completion_retry_penalty),
+        "child_proof_cpu_scale": float(child_proof_cpu_scale),
+        "child_negative_pricing_penalty": float(child_negative_pricing_penalty),
         "include_instance_contains": list(include_instance_contains),
         "exclude_instance_contains": list(exclude_instance_contains),
-        "solver_priority_mode": "branch_score",
+        "include_child_probe_log_contains": list(include_child_probe_log_contains),
+        "exclude_child_probe_log_contains": list(exclude_child_probe_log_contains),
+        "solver_priority_mode": "branch_score_horizon" if include_child_probe else "branch_score",
         "solver_score_path": str(output_dir / "journey_branch_score_rows.json"),
         "solver_score_map_path": str(output_dir / "journey_branch_score_map.json"),
         "usable_as_certificate": False,
@@ -331,6 +539,11 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
     for key in [
         "ranking_pair_row_count",
         "raw_ranking_pair_row_count",
+        "include_child_probe",
+        "raw_child_probe_row_count",
+        "child_probe_row_count",
+        "child_probe_branch_row_count",
+        "filtered_out_child_probe_row_count",
         "filtered_out_row_count",
         "branch_score_row_count",
         "branch_score_map_entry_count",
@@ -338,6 +551,8 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
         "key_scope",
         "include_instance_contains",
         "exclude_instance_contains",
+        "include_child_probe_log_contains",
+        "exclude_child_probe_log_contains",
         "solver_priority_mode",
         "solver_score_path",
         "production_ready",
@@ -346,7 +561,7 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
     ]:
         lines.append(f"{key} = {summary.get(key)}")
     lines.extend(["```", "", "## Top Score Rows", ""])
-    for row in score_rows[:12]:
+    for row in sorted(score_rows, key=lambda item: float(item.get("score") or 0.0), reverse=True)[:12]:
         lines.append(
             "- "
             f"key={row['key']} pair={row['pair']} score={row['score']} "
@@ -357,6 +572,10 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
     lines.append(
         "使用方式：`journey_branch_candidate_priority=branch_score`，并把 `journey_branch_candidate_score_path` 指向 `journey_branch_score_rows.json`。"
     )
+    if summary.get("include_child_probe"):
+        lines.append(
+            "若使用 child-probe proof-cost 分数，更建议用 `journey_branch_candidate_priority=branch_score_horizon` 且设置正分阈值，只让正分候选打开 horizon。"
+        )
     lines.append(
         "`branch_score` 只改变 opt-in 的 Ryan-Foster pair 排序；排序范围仍由 `journey_branch_fractionality_tie_tolerance` 决定。"
     )
@@ -381,6 +600,18 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--max-weight", type=float, default=10.0)
     parser.add_argument("--include-instance-contains", action="append", default=[])
     parser.add_argument("--exclude-instance-contains", action="append", default=[])
+    parser.add_argument("--include-child-probe", action="store_true")
+    parser.add_argument("--include-child-probe-log-contains", action="append", default=[])
+    parser.add_argument("--exclude-child-probe-log-contains", action="append", default=[])
+    parser.add_argument("--child-complete-bonus", type=float, default=5.0)
+    parser.add_argument("--child-right-censored-penalty", type=float, default=8.0)
+    parser.add_argument("--child-unstarted-child-penalty", type=float, default=1.0)
+    parser.add_argument("--child-fathom-bonus", type=float, default=1.0)
+    parser.add_argument("--child-corrected-gain-scale", type=float, default=5.0)
+    parser.add_argument("--child-corrected-gain-cap", type=float, default=25.0)
+    parser.add_argument("--child-completion-retry-penalty", type=float, default=0.1)
+    parser.add_argument("--child-proof-cpu-scale", type=float, default=120.0)
+    parser.add_argument("--child-negative-pricing-penalty", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -396,6 +627,18 @@ def main() -> None:
         max_weight=args.max_weight,
         include_instance_contains=tuple(args.include_instance_contains or ()),
         exclude_instance_contains=tuple(args.exclude_instance_contains or ()),
+        include_child_probe=bool(args.include_child_probe),
+        include_child_probe_log_contains=tuple(args.include_child_probe_log_contains or ()),
+        exclude_child_probe_log_contains=tuple(args.exclude_child_probe_log_contains or ()),
+        child_complete_bonus=args.child_complete_bonus,
+        child_right_censored_penalty=args.child_right_censored_penalty,
+        child_unstarted_child_penalty=args.child_unstarted_child_penalty,
+        child_fathom_bonus=args.child_fathom_bonus,
+        child_corrected_gain_scale=args.child_corrected_gain_scale,
+        child_corrected_gain_cap=args.child_corrected_gain_cap,
+        child_completion_retry_penalty=args.child_completion_retry_penalty,
+        child_proof_cpu_scale=args.child_proof_cpu_scale,
+        child_negative_pricing_penalty=args.child_negative_pricing_penalty,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
 

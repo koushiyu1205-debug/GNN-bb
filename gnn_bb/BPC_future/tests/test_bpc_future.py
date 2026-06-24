@@ -230,7 +230,10 @@ from BPC_future.solver.journey_driver import (
     _price_new_task_set_sweep,
     _journey_static_cuts,
     _journey_static_subset_row_compactness_score,
+    _journey_child_constraint_score,
     _journey_child_queue_priority_width,
+    _journey_child_score_map_from_config,
+    _normalize_journey_child_score_map,
     _journey_skip_ordinary_retry_after_profile_materialization_failure,
     _journey_skip_ordinary_retry_after_weak_negative_filtered,
     _journey_learning_certificate_gate_disabled,
@@ -259,6 +262,7 @@ from BPC_future.solver.journey_driver import (
     _journey_tail_action_controller,
     _journey_should_early_branch_on_tail_action,
     _journey_should_early_branch_on_tail_action_no_column,
+    _journey_tail_action_no_column_early_branch_gate,
     _journey_pricing_is_global_certificate,
     _journey_pricing_state,
     _journey_pool_structure_diagnostics,
@@ -12063,6 +12067,114 @@ class BPCFutureTests(unittest.TestCase):
         self.assertAlmostEqual(record["selected"]["branch_score"], 0.91)
         self.assertEqual(record["selected"]["branch_score_source"], "node:0:depth:0:1,2")
 
+    def test_journey_branch_score_context_gate_disables_mismatched_map(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("branch-score-context-gate", jid, tasks),
+            )
+
+        values = [(journey(1, (1, 2)), 0.49), (journey(2, (2, 3)), 0.5)]
+        score_rows = [{"node_id": 0, "depth": 0, "task_i": 1, "task_j": 2, "score": 0.91}]
+
+        def logged_record(include_token: str) -> dict[str, Any]:
+            with tempfile.TemporaryDirectory() as tmp:
+                log_path = Path(tmp) / "branch_candidates.jsonl"
+                logger = FutureLogger(log_path, console=False)
+                try:
+                    _log_journey_branch_candidates(
+                        data,
+                        {
+                            "journey_branch_candidate_log_top_n": 4,
+                            "journey_branch_fractionality_tie_tolerance": 0.0,
+                            "journey_branch_candidate_priority": "branch_score_horizon",
+                            "journey_branch_candidate_score_horizon_tie_tolerance": 0.02,
+                            "journey_branch_candidate_score_map": json.dumps(score_rows),
+                            "journey_branch_candidate_score_context_include_contains": include_token,
+                        },
+                        logger,
+                        values,
+                        tuple(),
+                        1.0e-6,
+                        node_id=0,
+                        depth=0,
+                    )
+                finally:
+                    logger.close()
+                return json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
+
+        matched = logged_record("very_small")
+        self.assertEqual((matched["selected"]["task_i"], matched["selected"]["task_j"]), (1, 2))
+        self.assertAlmostEqual(matched["selected"]["branch_score"], 0.91)
+        self.assertEqual(matched["effective_eligible_count"], 2)
+
+        mismatched = logged_record("greedy-anchor")
+        self.assertEqual((mismatched["selected"]["task_i"], mismatched["selected"]["task_j"]), (2, 3))
+        self.assertIsNone(mismatched["selected"]["branch_score"])
+        self.assertEqual(mismatched["effective_eligible_count"], 1)
+
+    def test_journey_branch_score_context_gate_requires_all_tokens(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("branch-score-context-require", jid, tasks),
+            )
+
+        values = [(journey(1, (1, 2)), 0.49), (journey(2, (2, 3)), 0.5)]
+        score_rows = [{"node_id": 0, "depth": 0, "task_i": 1, "task_j": 2, "score": 0.91}]
+
+        def logged_record(required_tokens: str) -> dict[str, Any]:
+            with tempfile.TemporaryDirectory() as tmp:
+                log_path = Path(tmp) / "branch_candidates.jsonl"
+                logger = FutureLogger(log_path, console=False)
+                try:
+                    _log_journey_branch_candidates(
+                        data,
+                        {
+                            "journey_branch_candidate_log_top_n": 4,
+                            "journey_branch_fractionality_tie_tolerance": 0.0,
+                            "journey_branch_candidate_priority": "branch_score_horizon",
+                            "journey_branch_candidate_score_horizon_tie_tolerance": 0.02,
+                            "journey_branch_candidate_score_map": json.dumps(score_rows),
+                            "journey_branch_candidate_score_context_require_contains": required_tokens,
+                        },
+                        logger,
+                        values,
+                        tuple(),
+                        1.0e-6,
+                        node_id=0,
+                        depth=0,
+                    )
+                finally:
+                    logger.close()
+                return json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
+
+        matched = logged_record("very_small")
+        self.assertEqual((matched["selected"]["task_i"], matched["selected"]["task_j"]), (1, 2))
+        self.assertAlmostEqual(matched["selected"]["branch_score"], 0.91)
+
+        mismatched = logged_record("very_small,missing-token")
+        self.assertEqual((mismatched["selected"]["task_i"], mismatched["selected"]["task_j"]), (2, 3))
+        self.assertIsNone(mismatched["selected"]["branch_score"])
+
     def test_journey_branch_candidate_log_records_forced_pair_binding(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
 
@@ -13322,7 +13434,19 @@ class BPCFutureTests(unittest.TestCase):
             status="OPTIMAL",
             reason="no_negative_journey",
         )
+        incomplete_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=None,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="INCOMPLETE",
+            reason="weak_negative_journeys_filtered",
+        )
         self.assertEqual(local_no_column.pricing_state, PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED)
+        self.assertEqual(_journey_pricing_state(incomplete_no_column), PRICING_STATE_INCOMPLETE_LIMIT)
         payload = {
             "tail_action": "EARLY_BRANCH",
             "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
@@ -13365,6 +13489,54 @@ class BPCFutureTests(unittest.TestCase):
                 certificate_candidate=True,
             )
         )
+        gate_passed, gate_reason, _width_guard = _journey_tail_action_no_column_early_branch_gate(
+            enabled_config,
+            node,
+            4,
+            solution,
+            1.0e-6,
+            incomplete_no_column,
+            payload,
+            remaining=10.0,
+            certificate_candidate=True,
+            before_final_probe=True,
+        )
+        self.assertFalse(gate_passed)
+        self.assertEqual(gate_reason, "pricing_state_not_local_no_column")
+        self.assertTrue(
+            _journey_should_early_branch_on_tail_action_no_column(
+                dict(
+                    enabled_config,
+                    journey_tail_action_no_column_early_branch_allow_incomplete_limit_before_final_probe=True,
+                ),
+                node,
+                4,
+                solution,
+                1.0e-6,
+                incomplete_no_column,
+                payload,
+                remaining=10.0,
+                certificate_candidate=True,
+                before_final_probe=True,
+            )
+        )
+        self.assertFalse(
+            _journey_should_early_branch_on_tail_action_no_column(
+                dict(
+                    enabled_config,
+                    journey_tail_action_no_column_early_branch_allow_incomplete_limit_before_final_probe=True,
+                ),
+                node,
+                4,
+                solution,
+                1.0e-6,
+                incomplete_no_column,
+                payload,
+                remaining=10.0,
+                certificate_candidate=True,
+                before_final_probe=False,
+            )
+        )
         self.assertTrue(
             _journey_should_early_branch_on_tail_action_no_column(
                 dict(
@@ -13400,6 +13572,24 @@ class BPCFutureTests(unittest.TestCase):
                 journey_pool=pool,
             )
         )
+        gate_passed, gate_reason, width_guard = _journey_tail_action_no_column_early_branch_gate(
+            dict(enabled_config, journey_tail_action_no_column_early_branch_max_pool_child_width=0),
+            node,
+            4,
+            solution,
+            1.0e-6,
+            local_no_column,
+            payload,
+            remaining=10.0,
+            certificate_candidate=True,
+            data=data,
+            journey_pool=pool,
+        )
+        self.assertFalse(gate_passed)
+        self.assertEqual(gate_reason, "width_guard_pool_child_width_exceeds_cap")
+        self.assertEqual(width_guard["reason"], "pool_child_width_exceeds_cap")
+        self.assertEqual(width_guard["max_pool_child_width"], 0)
+        self.assertGreater(width_guard["pool_max_child_width"], 0)
         self.assertFalse(
             _journey_should_early_branch_on_tail_action_no_column(
                 dict(enabled_config, journey_tail_action_no_column_early_branch_max_pool_total_child_width=4),
@@ -13626,6 +13816,483 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(triggers[0]["exact_bound_available"])
         self.assertFalse(triggers[0]["child_lower_bound_exact"])
 
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_tail_action_no_column_branches_before_final_probe_when_opted_in(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=1.0,
+                fixed_vehicle_cost=0.0,
+                cost=1.0,
+                signature=("tail-action-before-final-probe", jid, tasks),
+            )
+
+        j12 = journey(0, (1, 2))
+        j1 = journey(1, (1,))
+        pool = JourneyPool()
+        for col in (j12, j1):
+            pool.add(col)
+        fake_solution = SimpleNamespace(
+            optimal=True,
+            objective=10.0,
+            duals=JourneyDuals(cover={1: 0.0, 2: 0.0, 3: 0.0}, fleet_limit=0.0),
+            journey_values=[(j12, 0.5), (j1, 0.5)],
+            status="OPTIMAL",
+            variable_count=2,
+        )
+        incomplete_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=None,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="TIME_LIMIT",
+            reason="time_limit",
+        )
+        local_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            logger = FutureLogger(Path(tmp) / "tail_action_no_column_before_final_probe.jsonl", console=False)
+            try:
+                with patch(
+                    "BPC_future.solver.journey_driver.solve_journey_rmp",
+                    return_value=fake_solution,
+                ), patch(
+                    "BPC_future.solver.journey_driver.price_journeys",
+                    side_effect=[
+                        incomplete_no_column,
+                        local_no_column,
+                        AssertionError("completion-bound final probe should be skipped"),
+                    ],
+                ) as price_mock:
+                    result = _process_journey_branch_node(
+                        data,
+                        {
+                            "journey_heuristic_pricing_enabled": False,
+                            "journey_dynamic_subset_row_cuts_enabled": False,
+                            "journey_max_cg_iterations": 5,
+                            "journey_retry_incomplete_no_column_enabled": True,
+                            "journey_retry_incomplete_no_column_min_time": 0.0,
+                            "journey_certificate_completion_bound_after_retry_enabled": True,
+                            "journey_certificate_completion_bound_after_retry_min_time": 0.0,
+                            "journey_certificate_completion_bound_after_retry_reserve_time": 0.0,
+                            "journey_early_branching_enabled": False,
+                            "journey_tail_action_no_column_early_branch_enabled": True,
+                            "journey_tail_action_no_column_early_branch_before_final_probe_enabled": True,
+                            "journey_tail_action_no_column_early_branch_min_depth": 0,
+                            "journey_tail_action_no_column_early_branch_max_depth": 0,
+                            "journey_tail_action_no_column_early_branch_min_cg_iter": 1,
+                            "journey_tail_action_no_column_early_branch_require_complete_productivity_signals": False,
+                        },
+                        pool,
+                        [],
+                        set(),
+                        JourneyNode(7.0, 0, 0, tuple()),
+                        15.0,
+                        {},
+                        len(data.vehicles),
+                        logger,
+                        JourneyBranchStats(),
+                        deadline=time.perf_counter() + 10.0,
+                        bucket=1.0,
+                        start_step=1.0,
+                        eps=1.0e-6,
+                    )
+            finally:
+                logger.close()
+            rows = [
+                json.loads(line)
+                for line in (Path(tmp) / "tail_action_no_column_before_final_probe.jsonl").read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(result["status"], "BRANCH")
+        self.assertEqual(result["bound"], 7.0)
+        self.assertFalse(result["exact_bound"])
+        self.assertEqual(price_mock.call_count, 2)
+        triggers = [row for row in rows if row.get("event") == "journey_early_branch_trigger"]
+        self.assertEqual(len(triggers), 1)
+        self.assertEqual(triggers[0]["trigger"], "tail_action_controller")
+        self.assertTrue(triggers[0]["tail_action_no_column"])
+        self.assertTrue(triggers[0]["tail_action_before_final_probe"])
+        self.assertEqual(triggers[0]["reason"], "rmp_below_incumbent_pricing_unproductive_for_fathom")
+        self.assertFalse(triggers[0]["exact_bound_available"])
+        self.assertFalse(triggers[0]["child_lower_bound_exact"])
+        self.assertFalse(
+            any(row.get("event") == "journey_exact_pricing_completion_bound_retry" for row in rows)
+        )
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_tail_action_no_column_audits_before_final_probe_when_behavior_disabled(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=1.0,
+                fixed_vehicle_cost=0.0,
+                cost=1.0,
+                signature=("tail-action-before-final-probe-audit", jid, tasks),
+            )
+
+        j12 = journey(0, (1, 2))
+        j1 = journey(1, (1,))
+        pool = JourneyPool()
+        for col in (j12, j1):
+            pool.add(col)
+        fake_solution = SimpleNamespace(
+            optimal=True,
+            objective=10.0,
+            duals=JourneyDuals(cover={1: 0.0, 2: 0.0, 3: 0.0}, fleet_limit=0.0),
+            journey_values=[(j12, 0.5), (j1, 0.5)],
+            status="OPTIMAL",
+            variable_count=2,
+        )
+        incomplete_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=False,
+            best_reduced_cost=None,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="TIME_LIMIT",
+            reason="time_limit",
+        )
+        local_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+        )
+        certified_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+            pricing_proof_kind=PRICING_PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+            global_certificate_capable=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            logger = FutureLogger(Path(tmp) / "tail_action_no_column_before_final_probe_audit.jsonl", console=False)
+            try:
+                with patch(
+                    "BPC_future.solver.journey_driver.solve_journey_rmp",
+                    return_value=fake_solution,
+                ), patch(
+                    "BPC_future.solver.journey_driver.price_journeys",
+                    side_effect=[
+                        incomplete_no_column,
+                        local_no_column,
+                        certified_no_column,
+                    ],
+                ) as price_mock:
+                    result = _process_journey_branch_node(
+                        data,
+                        {
+                            "journey_heuristic_pricing_enabled": False,
+                            "journey_dynamic_subset_row_cuts_enabled": False,
+                            "journey_max_cg_iterations": 5,
+                            "journey_retry_incomplete_no_column_enabled": True,
+                            "journey_retry_incomplete_no_column_min_time": 0.0,
+                            "journey_certificate_completion_bound_after_retry_enabled": True,
+                            "journey_certificate_completion_bound_after_retry_min_time": 0.0,
+                            "journey_certificate_completion_bound_after_retry_reserve_time": 0.0,
+                            "journey_early_branching_enabled": False,
+                            "journey_tail_action_audit_enabled": True,
+                            "journey_tail_action_no_column_early_branch_enabled": False,
+                            "journey_tail_action_no_column_early_branch_before_final_probe_enabled": False,
+                            "journey_tail_action_no_column_early_branch_min_depth": 0,
+                            "journey_tail_action_no_column_early_branch_max_depth": 0,
+                            "journey_tail_action_no_column_early_branch_min_cg_iter": 1,
+                            "journey_tail_action_no_column_early_branch_require_complete_productivity_signals": False,
+                        },
+                        pool,
+                        [],
+                        set(),
+                        JourneyNode(7.0, 0, 0, tuple()),
+                        15.0,
+                        {},
+                        len(data.vehicles),
+                        logger,
+                        JourneyBranchStats(),
+                        deadline=time.perf_counter() + 10.0,
+                        bucket=1.0,
+                        start_step=1.0,
+                        eps=1.0e-6,
+                    )
+            finally:
+                logger.close()
+            rows = [
+                json.loads(line)
+                for line in (Path(tmp) / "tail_action_no_column_before_final_probe_audit.jsonl").read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(result["status"], "PRICING_INCOMPLETE")
+        self.assertEqual(result["reason"], "completion_bound_final_probe_disabled")
+        self.assertEqual(price_mock.call_count, 2)
+        self.assertFalse(any(row.get("event") == "journey_early_branch_trigger" for row in rows))
+        gate_rows = [
+            row for row in rows if row.get("event") == "journey_tail_action_no_column_early_branch_gate"
+        ]
+        self.assertGreaterEqual(len(gate_rows), 1)
+        for row in gate_rows:
+            self.assertFalse(row["gate_passed"])
+            self.assertEqual(row["gate_reason"], "before_final_probe_disabled")
+            self.assertEqual(row["tail_action"], "EARLY_BRANCH")
+            self.assertEqual(
+                row["tail_action_reason"],
+                "rmp_below_incumbent_pricing_unproductive_for_fathom",
+            )
+            self.assertFalse(row["exact_bound_available"])
+            self.assertFalse(row["child_lower_bound_exact"])
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_tail_action_no_column_branches_before_duplicate_retry_when_opted_in(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=1.0,
+                fixed_vehicle_cost=0.0,
+                cost=1.0,
+                signature=("tail-action-local-no-column", jid, tasks),
+            )
+
+        j12 = journey(0, (1, 2))
+        j1 = journey(1, (1,))
+        pool = JourneyPool()
+        for col in (j12, j1):
+            pool.add(col)
+        fake_solution = SimpleNamespace(
+            optimal=True,
+            objective=10.0,
+            duals=JourneyDuals(cover={1: 0.0, 2: 0.0, 3: 0.0}, fleet_limit=0.0),
+            journey_values=[(j12, 0.5), (j1, 0.5)],
+            status="OPTIMAL",
+            variable_count=2,
+        )
+        local_no_column = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            logger = FutureLogger(Path(tmp) / "tail_action_local_no_column.jsonl", console=False)
+            try:
+                with patch(
+                    "BPC_future.solver.journey_driver.solve_journey_rmp",
+                    return_value=fake_solution,
+                ), patch(
+                    "BPC_future.solver.journey_driver.price_journeys",
+                    side_effect=[
+                        local_no_column,
+                        AssertionError("completion-bound retry should be skipped"),
+                    ],
+                ) as price_mock:
+                    result = _process_journey_branch_node(
+                        data,
+                        {
+                            "journey_heuristic_pricing_enabled": False,
+                            "journey_dynamic_subset_row_cuts_enabled": False,
+                            "journey_max_cg_iterations": 5,
+                            "journey_early_branching_enabled": False,
+                            "journey_tail_action_no_column_early_branch_enabled": True,
+                            "journey_tail_action_no_column_early_branch_min_depth": 1,
+                            "journey_tail_action_no_column_early_branch_max_depth": 1,
+                            "journey_tail_action_no_column_early_branch_min_cg_iter": 1,
+                            "journey_tail_action_no_column_early_branch_require_complete_productivity_signals": False,
+                            "journey_certificate_completion_bound_after_retry_enabled": True,
+                            "journey_certificate_completion_bound_after_retry_min_time": 0.0,
+                            "journey_certificate_completion_bound_after_retry_reserve_time": 0.0,
+                        },
+                        pool,
+                        [],
+                        set(),
+                        JourneyNode(7.0, 2, 1, tuple()),
+                        15.0,
+                        {},
+                        len(data.vehicles),
+                        logger,
+                        JourneyBranchStats(),
+                        deadline=time.perf_counter() + 10.0,
+                        bucket=1.0,
+                        start_step=1.0,
+                        eps=1.0e-6,
+                    )
+            finally:
+                logger.close()
+            rows = [
+                json.loads(line)
+                for line in (Path(tmp) / "tail_action_local_no_column.jsonl").read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(result["status"], "BRANCH")
+        self.assertEqual(result["bound"], 7.0)
+        self.assertFalse(result["exact_bound"])
+        self.assertEqual(price_mock.call_count, 1)
+        triggers = [row for row in rows if row.get("event") == "journey_early_branch_trigger"]
+        self.assertEqual(len(triggers), 1)
+        self.assertEqual(triggers[0]["trigger"], "tail_action_controller")
+        self.assertTrue(triggers[0]["tail_action_no_column"])
+        self.assertFalse(triggers[0].get("tail_action_before_final_probe", False))
+        self.assertEqual(triggers[0]["reason"], "rmp_below_incumbent_pricing_unproductive_for_fathom")
+        self.assertFalse(triggers[0]["exact_bound_available"])
+        self.assertFalse(triggers[0]["child_lower_bound_exact"])
+        self.assertFalse(
+            any(row.get("event") == "journey_exact_pricing_completion_bound_retry" for row in rows)
+        )
+
+    def test_journey_tail_action_no_column_respects_min_tasks_gate(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2))
+        pricing = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+        )
+        solution = SimpleNamespace(journey_values=[])
+        tail_action_payload = {
+            "tail_action": "EARLY_BRANCH",
+            "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
+            "fathom_possible_if_rc_zero": False,
+            "recent_active_support_additions": None,
+            "recent_rmp_objective_progress": None,
+            "recent_true_rc_productivity": 0,
+            "rmp_to_incumbent_gap": 1.0,
+        }
+
+        gate_passed, gate_reason, _width_guard = _journey_tail_action_no_column_early_branch_gate(
+            {
+                "journey_tail_action_no_column_early_branch_enabled": True,
+                "journey_tail_action_no_column_early_branch_require_complete_productivity_signals": False,
+                "journey_tail_action_no_column_early_branch_min_tasks": 20,
+                "journey_tail_action_no_column_early_branch_min_depth": 0,
+                "journey_tail_action_no_column_early_branch_max_depth": 1,
+            },
+            JourneyNode(7.0, 0, 0, tuple()),
+            1,
+            solution,
+            1.0e-6,
+            pricing,
+            tail_action_payload,
+            data=data,
+        )
+
+        self.assertFalse(gate_passed)
+        self.assertEqual(gate_reason, "task_count_below_min")
+
+    def test_journey_tail_action_no_column_respects_context_require_gate(self):
+        data = replace(
+            load_future_data("very_small"),
+            name="apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000",
+            instance_path=Path(
+                "BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/"
+                "apollo15_20km_greedy-anchor_randomtw_tasks020_01_seed61000_logical_graph.json"
+            ),
+            tasks=tuple(range(20)),
+            vehicles=tuple(range(4)),
+        )
+        pricing = JourneyPricingResult(
+            journeys=[],
+            exhausted=True,
+            best_reduced_cost=0.0,
+            generated_sequences=1,
+            evaluated_timed_trips=1,
+            candidate_trips=0,
+            selected_trips=0,
+            status="OPTIMAL",
+            reason="no_negative_journey",
+        )
+        solution = SimpleNamespace(journey_values=[])
+        tail_action_payload = {
+            "tail_action": "EARLY_BRANCH",
+            "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
+            "fathom_possible_if_rc_zero": False,
+            "recent_active_support_additions": None,
+            "recent_rmp_objective_progress": None,
+            "recent_true_rc_productivity": 0,
+            "rmp_to_incumbent_gap": 1.0,
+        }
+
+        gate_passed, gate_reason, _width_guard = _journey_tail_action_no_column_early_branch_gate(
+            {
+                "journey_tail_action_no_column_early_branch_enabled": True,
+                "journey_tail_action_no_column_early_branch_require_complete_productivity_signals": False,
+                "journey_tail_action_no_column_early_branch_min_tasks": 20,
+                "journey_tail_action_no_column_early_branch_context_require_contains": (
+                    "tasks020_01_seed61001,greedy-anchor,tranquillitatis_balmer_like_20km"
+                ),
+                "journey_tail_action_no_column_early_branch_min_depth": 0,
+                "journey_tail_action_no_column_early_branch_max_depth": 1,
+            },
+            JourneyNode(7.0, 0, 0, tuple()),
+            1,
+            solution,
+            1.0e-6,
+            pricing,
+            tail_action_payload,
+            data=data,
+        )
+
+        self.assertFalse(gate_passed)
+        self.assertEqual(gate_reason, "context_require_token_missing")
+
     def test_journey_early_branch_child_min_iter_and_child_order(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2))
 
@@ -13707,6 +14374,72 @@ class BPCFutureTests(unittest.TestCase):
             branch_depth=1,
         )
         self.assertEqual(depth_not_matched[0][0].kind, "same_vehicle")
+        child_score_map = _normalize_journey_child_score_map(
+            [
+                {
+                    "node_id": 1,
+                    "depth": 2,
+                    "task_i": 1,
+                    "task_j": 2,
+                    "child_constraint_kind": "separate_vehicle",
+                    "child_score": 2.5,
+                },
+                {
+                    "pair": [1, 2],
+                    "child_constraint_kind": "same_vehicle",
+                    "child_score": 0.5,
+                },
+            ]
+        )
+        self.assertEqual(
+            _journey_child_constraint_score(
+                separate,
+                child_score_map,
+                node_id=1,
+                depth=2,
+            ),
+            (2.5, "node:1:depth:2:1,2:separate_vehicle"),
+        )
+        score_order = _journey_child_constraint_order(
+            pool,
+            tuple(),
+            (same, separate),
+            by_width=False,
+            priority_mode="child_score",
+            node_id=1,
+            branch_depth=2,
+            child_score_map=child_score_map,
+        )
+        self.assertEqual(score_order[0][0].kind, "separate_vehicle")
+        score_threshold_fallback = _journey_child_constraint_order(
+            pool,
+            tuple(),
+            (same, separate),
+            by_width=False,
+            priority_mode="child_score",
+            node_id=1,
+            branch_depth=2,
+            child_score_map=child_score_map,
+            child_score_min_score=3.0,
+        )
+        self.assertEqual(score_threshold_fallback[0][0].kind, "same_vehicle")
+
+        matched_child_score = _journey_child_score_map_from_config(
+            {
+                "journey_child_priority_score_map": {"1,2:same_vehicle": 1.0},
+                "journey_child_priority_score_context_require_contains": "seed61000",
+            },
+            data=SimpleNamespace(name="demo_seed61000", instance_path="tasks_020/demo.json"),
+        )
+        self.assertEqual(matched_child_score["1,2:same_vehicle"], 1.0)
+        mismatched_child_score = _journey_child_score_map_from_config(
+            {
+                "journey_child_priority_score_map": {"1,2:same_vehicle": 1.0},
+                "journey_child_priority_score_context_require_contains": "seed61000",
+            },
+            data=SimpleNamespace(name="demo_seed61103", instance_path="tasks_020/demo.json"),
+        )
+        self.assertEqual(mismatched_child_score, {})
 
         fractional_solution = SimpleNamespace(
             journey_values=[(journey(4, (1, 2)), 0.5), (journey(5, (1,)), 0.5)]

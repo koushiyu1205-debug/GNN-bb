@@ -3238,7 +3238,10 @@ def _solve_bpc_future_journey_branch_price(
     integer_tol = float(config.get("integer_tol", 1.0e-6))
     eps = float(config.get("pricing_eps", 1.0e-6))
     max_nodes = int(config.get("journey_max_nodes", config.get("max_nodes", 1000)))
-    branch_score_map = _journey_branch_score_map_from_config(config)
+    branch_score_context_status = _journey_branch_score_context_status(config, data)
+    branch_score_map = _journey_branch_score_map_from_config(config, data=data)
+    child_score_context_status = _journey_child_score_context_status(config, data)
+    child_score_map = _journey_child_score_map_from_config(config, data=data)
 
     from BPC_future.core.columns import TripPool
 
@@ -3277,6 +3280,20 @@ def _solve_bpc_future_journey_branch_price(
         master="journey_branch_price",
         cuts_active=len(cuts),
         max_nodes=max_nodes,
+        branch_score_context_gate_enabled=bool(branch_score_context_status["enabled"]),
+        branch_score_context_gate_allowed=bool(branch_score_context_status["allowed"]),
+        branch_score_context_gate_reason=str(branch_score_context_status["reason"]),
+        branch_score_context_include_contains=list(branch_score_context_status["include_contains"]),
+        branch_score_context_require_contains=list(branch_score_context_status["require_contains"]),
+        branch_score_context_exclude_contains=list(branch_score_context_status["exclude_contains"]),
+        branch_score_entry_count=len(branch_score_map),
+        child_score_context_gate_enabled=bool(child_score_context_status["enabled"]),
+        child_score_context_gate_allowed=bool(child_score_context_status["allowed"]),
+        child_score_context_gate_reason=str(child_score_context_status["reason"]),
+        child_score_context_include_contains=list(child_score_context_status["include_contains"]),
+        child_score_context_require_contains=list(child_score_context_status["require_contains"]),
+        child_score_context_exclude_contains=list(child_score_context_status["exclude_contains"]),
+        child_score_entry_count=len(child_score_map),
     )
 
     incumbent = math.inf
@@ -3472,6 +3489,7 @@ def _solve_bpc_future_journey_branch_price(
             )
             by_width = bool(config.get("journey_child_priority_by_width_enabled", False))
             priority_mode = str(config.get("journey_child_priority_mode", "width" if by_width else "declared"))
+            child_score_min_score = _optional_float_config(config, "journey_child_priority_score_min_score")
             same_mass = _journey_branch_same_mass(solution.journey_values, branch)
             for constraint, allowed_count in _journey_child_constraint_order(
                 journey_pool,
@@ -3479,15 +3497,25 @@ def _solve_bpc_future_journey_branch_price(
                 (left, right),
                 by_width=by_width,
                 priority_mode=priority_mode,
+                node_id=node.id,
                 branch_depth=node.depth,
                 journey_values=solution.journey_values,
                 incumbent_solution=final_solution,
+                child_score_map=child_score_map,
+                child_score_min_score=child_score_min_score,
             ):
                 queue_width = _journey_child_queue_priority_width(
                     config,
                     allowed_count=int(allowed_count),
                     by_width=by_width,
                     tail_action_child_priority=tail_action_child_priority,
+                )
+                child_priority_score, child_priority_score_key = _journey_child_constraint_score(
+                    constraint,
+                    child_score_map,
+                    node_id=node.id,
+                    depth=node.depth,
+                    min_score=child_score_min_score,
                 )
                 logger.log(
                     "journey_child_queued",
@@ -3500,6 +3528,10 @@ def _solve_bpc_future_journey_branch_price(
                     queue_priority_width=int(queue_width),
                     tail_action_child_priority=tail_action_child_priority,
                     branch_same_mass=None if same_mass is None else round(float(same_mass), 9),
+                    child_priority_score=None
+                    if child_priority_score is None
+                    else round(float(child_priority_score), 9),
+                    child_priority_score_key=child_priority_score_key,
                     lower_bound=round(float(node.lower_bound), 6),
                     lower_bound_exact=False,
                 )
@@ -3598,6 +3630,7 @@ def _solve_bpc_future_journey_branch_price(
         )
         by_width = bool(config.get("journey_child_priority_by_width_enabled", False))
         priority_mode = str(config.get("journey_child_priority_mode", "width" if by_width else "declared"))
+        child_score_min_score = _optional_float_config(config, "journey_child_priority_score_min_score")
         same_mass = _journey_branch_same_mass(solution.journey_values, branch)
         for constraint, allowed_count in _journey_child_constraint_order(
             journey_pool,
@@ -3605,11 +3638,21 @@ def _solve_bpc_future_journey_branch_price(
             (left, right),
             by_width=by_width,
             priority_mode=priority_mode,
+            node_id=node.id,
             branch_depth=node.depth,
             journey_values=solution.journey_values,
             incumbent_solution=final_solution,
+            child_score_map=child_score_map,
+            child_score_min_score=child_score_min_score,
         ):
             queue_width = int(allowed_count) if by_width else 0
+            child_priority_score, child_priority_score_key = _journey_child_constraint_score(
+                constraint,
+                child_score_map,
+                node_id=node.id,
+                depth=node.depth,
+                min_score=child_score_min_score,
+            )
             logger.log(
                 "journey_child_queued",
                 parent_node_id=node.id,
@@ -3618,7 +3661,12 @@ def _solve_bpc_future_journey_branch_price(
                 constraint=constraint.name(),
                 allowed_current_journeys=int(allowed_count),
                 priority_mode=priority_mode,
+                queue_priority_width=int(queue_width),
                 branch_same_mass=None if same_mass is None else round(float(same_mass), 9),
+                child_priority_score=None
+                if child_priority_score is None
+                else round(float(child_priority_score), 9),
+                child_priority_score_key=child_priority_score_key,
                 lower_bound=round(float(bound), 6),
                 lower_bound_exact=True,
             )
@@ -3935,6 +3983,158 @@ def _process_journey_branch_node(
             integral=False,
             bound_kind=str(corrected.bound_kind),
             corrected_node_bound_fathom=True,
+        )
+
+    def tail_action_no_column_branch_payload(
+        pricing_result: Any,
+        *,
+        remaining: float | None,
+        certificate_candidate: bool,
+        before_final_probe: bool = False,
+    ) -> dict[str, Any] | None:
+        before_final_probe_behavior_enabled = bool(
+            config.get("journey_tail_action_no_column_early_branch_before_final_probe_enabled", False)
+        )
+        tail_action_payload = _journey_tail_action_controller(
+            pricing_result,
+            config,
+            rmp_objective=float(solution.objective),
+            incumbent=local_incumbent,
+            recent_active_support_additions=_journey_recent_active_support_additions(
+                recent_changed_task_sets,
+                active_task_sets,
+            ),
+            recent_rmp_objective_progress=_journey_recent_rmp_objective_progress(objective_delta),
+        )
+        before_final_probe_disabled_audit = bool(
+            before_final_probe
+            and not before_final_probe_behavior_enabled
+            and config.get("journey_tail_action_audit_enabled", False)
+        )
+        if before_final_probe and not before_final_probe_behavior_enabled:
+            gate_passed = False
+            gate_reason = "before_final_probe_disabled"
+            no_column_branch_width: dict[str, Any] = {}
+        else:
+            gate_passed, gate_reason, no_column_branch_width = (
+                _journey_tail_action_no_column_early_branch_gate(
+                    config,
+                    node,
+                    cg_iter,
+                    solution,
+                    integer_tol,
+                    pricing_result,
+                    tail_action_payload,
+                    remaining=remaining,
+                    certificate_candidate=certificate_candidate,
+                    data=data,
+                    incumbent_solution=local_solution,
+                    journey_pool=journey_pool,
+                    before_final_probe=before_final_probe,
+                )
+            )
+        if not gate_passed:
+            if before_final_probe and bool(
+                config.get("journey_tail_action_no_column_early_branch_gate_audit_enabled", True)
+            ) and (before_final_probe_behavior_enabled or before_final_probe_disabled_audit):
+                logger.log(
+                    "journey_tail_action_no_column_early_branch_gate",
+                    node_id=node.id,
+                    depth=node.depth,
+                    cg_iter=cg_iter,
+                    gate_passed=False,
+                    gate_reason=str(gate_reason),
+                    tail_action=str(tail_action_payload.get("tail_action", "")),
+                    tail_action_reason=str(tail_action_payload.get("tail_action_reason", "")),
+                    tail_action_before_final_probe=True,
+                    rmp_objective=round(float(solution.objective), 6),
+                    inherited_lower_bound=round(float(node.lower_bound), 6),
+                    rmp_to_incumbent_gap=None
+                    if tail_action_payload.get("rmp_to_incumbent_gap") is None
+                    else round(float(tail_action_payload["rmp_to_incumbent_gap"]), 9),
+                    fathom_possible_if_rc_zero=bool(
+                        tail_action_payload.get("fathom_possible_if_rc_zero", False)
+                    ),
+                    recent_active_support_additions=tail_action_payload.get(
+                        "recent_active_support_additions"
+                    ),
+                    recent_rmp_objective_progress=None
+                    if tail_action_payload.get("recent_rmp_objective_progress") is None
+                    else round(float(tail_action_payload["recent_rmp_objective_progress"]), 9),
+                    recent_true_rc_productivity=int(
+                        tail_action_payload.get("recent_true_rc_productivity", 0)
+                    ),
+                    previous_status=pricing_result.status,
+                    previous_reason=pricing_result.reason,
+                    previous_pricing_state=_journey_pricing_state(pricing_result),
+                    previous_best_reduced_cost=None
+                    if pricing_result.best_reduced_cost is None
+                    else round(float(pricing_result.best_reduced_cost), 9),
+                    remaining=None if remaining is None else round(float(remaining), 6),
+                    certificate_candidate=bool(certificate_candidate),
+                    no_column_branch_task_i=no_column_branch_width.get("task_i"),
+                    no_column_branch_task_j=no_column_branch_width.get("task_j"),
+                    no_column_branch_pool_same_allowed=no_column_branch_width.get("pool_same_allowed"),
+                    no_column_branch_pool_separate_allowed=no_column_branch_width.get(
+                        "pool_separate_allowed"
+                    ),
+                    no_column_branch_pool_max_child_width=no_column_branch_width.get(
+                        "pool_max_child_width"
+                    ),
+                    no_column_branch_pool_total_child_width=no_column_branch_width.get(
+                        "pool_total_child_width"
+                    ),
+                    no_column_branch_pool_balance_gap=no_column_branch_width.get("pool_balance_gap"),
+                    no_column_branch_width_guard_reason=no_column_branch_width.get("reason"),
+                    exact_bound_available=False,
+                    child_lower_bound_exact=False,
+                )
+            return None
+        logger.log(
+            "journey_early_branch_trigger",
+            node_id=node.id,
+            depth=node.depth,
+            cg_iter=cg_iter,
+            reason=str(tail_action_payload.get("tail_action_reason", "")),
+            trigger="tail_action_controller",
+            tail_action=str(tail_action_payload.get("tail_action", "")),
+            tail_action_no_column=True,
+            tail_action_before_final_probe=bool(before_final_probe),
+            inherited_lower_bound=round(float(node.lower_bound), 6),
+            rmp_objective=round(float(solution.objective), 6),
+            rmp_to_incumbent_gap=None
+            if tail_action_payload.get("rmp_to_incumbent_gap") is None
+            else round(float(tail_action_payload["rmp_to_incumbent_gap"]), 9),
+            recent_active_support_additions=tail_action_payload.get("recent_active_support_additions"),
+            recent_rmp_objective_progress=None
+            if tail_action_payload.get("recent_rmp_objective_progress") is None
+            else round(float(tail_action_payload["recent_rmp_objective_progress"]), 9),
+            recent_true_rc_productivity=int(tail_action_payload.get("recent_true_rc_productivity", 0)),
+            previous_status=pricing_result.status,
+            previous_reason=pricing_result.reason,
+            previous_pricing_state=_journey_pricing_state(pricing_result),
+            previous_best_reduced_cost=None
+            if pricing_result.best_reduced_cost is None
+            else round(float(pricing_result.best_reduced_cost), 9),
+            remaining=None if remaining is None else round(float(remaining), 6),
+            certificate_candidate=bool(certificate_candidate),
+            no_column_branch_task_i=no_column_branch_width.get("task_i"),
+            no_column_branch_task_j=no_column_branch_width.get("task_j"),
+            no_column_branch_pool_same_allowed=no_column_branch_width.get("pool_same_allowed"),
+            no_column_branch_pool_separate_allowed=no_column_branch_width.get("pool_separate_allowed"),
+            no_column_branch_pool_max_child_width=no_column_branch_width.get("pool_max_child_width"),
+            no_column_branch_pool_total_child_width=no_column_branch_width.get("pool_total_child_width"),
+            no_column_branch_pool_balance_gap=no_column_branch_width.get("pool_balance_gap"),
+            no_column_branch_width_guard_reason=no_column_branch_width.get("reason"),
+            exact_bound_available=False,
+            child_lower_bound_exact=False,
+        )
+        return payload(
+            "BRANCH",
+            solution=solution,
+            bound=float(node.lower_bound),
+            exact_bound=False,
+            branch_trigger="tail_action_controller",
         )
 
     def seed_and_reharvest_hidden_negative_pricing(
@@ -5793,12 +5993,28 @@ def _process_journey_branch_node(
                     stats.restarts += 1
                     restart_count += 1
                 continue
+            tail_branch = tail_action_no_column_branch_payload(
+                pricing,
+                remaining=max(0.0, deadline - time.perf_counter()),
+                certificate_candidate=certificate_candidate,
+                before_final_probe=False,
+            )
+            if tail_branch is not None:
+                return tail_branch
             duplicate_resolved_by_final_probe = False
             duplicate_pricing = pricing
             duplicate_duals = exact_duals
             duplicate_pricing_kind = exact_pricing_kind
             if _journey_completion_bound_final_probe_needed(config, pricing, added_columns=added):
                 final_remaining = max(0.0, deadline - time.perf_counter())
+                tail_branch = tail_action_no_column_branch_payload(
+                    pricing,
+                    remaining=final_remaining,
+                    certificate_candidate=certificate_candidate,
+                    before_final_probe=True,
+                )
+                if tail_branch is not None:
+                    return tail_branch
                 final_min_time = float(
                     config.get(
                         "journey_certificate_completion_bound_after_retry_min_time",
@@ -6245,6 +6461,14 @@ def _process_journey_branch_node(
                     return corrected_fathom
                 if _journey_completion_bound_final_probe_needed(config, pricing):
                     final_remaining = max(0.0, deadline - time.perf_counter())
+                    tail_branch = tail_action_no_column_branch_payload(
+                        pricing,
+                        remaining=final_remaining,
+                        certificate_candidate=certificate_candidate,
+                        before_final_probe=True,
+                    )
+                    if tail_branch is not None:
+                        return tail_branch
                     final_min_time = float(
                         config.get("journey_certificate_completion_bound_after_retry_min_time", retry_min_time)
                     )
@@ -7087,6 +7311,14 @@ def _process_journey_branch_node(
             else:
                 if _journey_completion_bound_final_probe_needed(config, pricing):
                     final_remaining = max(0.0, deadline - time.perf_counter())
+                    tail_branch = tail_action_no_column_branch_payload(
+                        pricing,
+                        remaining=final_remaining,
+                        certificate_candidate=certificate_candidate,
+                        before_final_probe=True,
+                    )
+                    if tail_branch is not None:
+                        return tail_branch
                     final_min_time = float(
                         config.get("journey_certificate_completion_bound_after_retry_min_time", retry_min_time)
                     )
@@ -8057,6 +8289,14 @@ def _process_journey_branch_node(
                         retry_negative_after_no_column_rounds += 1
                         continue
             final_remaining = max(0.0, deadline - time.perf_counter())
+            tail_branch = tail_action_no_column_branch_payload(
+                pricing,
+                remaining=final_remaining,
+                certificate_candidate=certificate_candidate,
+                before_final_probe=True,
+            )
+            if tail_branch is not None:
+                return tail_branch
             final_min_time = float(
                 config.get(
                     "journey_certificate_completion_bound_after_retry_min_time",
@@ -8723,9 +8963,12 @@ def _journey_child_constraint_order(
     *,
     by_width: bool,
     priority_mode: str | None = None,
+    node_id: int | None = None,
     branch_depth: int | None = None,
     journey_values: list[tuple[Any, float]] | None = None,
     incumbent_solution: dict[int, list[Any]] | None = None,
+    child_score_map: dict[str, float] | None = None,
+    child_score_min_score: float | None = None,
 ) -> list[tuple[BranchConstraint, int]]:
     ordered = _ordered_journey_child_constraints(journey_pool, parent_constraints, branch)
     mode = str(priority_mode or ("width" if by_width else "declared"))
@@ -8741,6 +8984,47 @@ def _journey_child_constraint_order(
                 int(order_index.get(_branch_constraint_key(item[0]), 0)),
             ),
         )
+    if mode in {"child_score", "child_score_width_tie"}:
+        allowed_by_key = {_branch_constraint_key(constraint): allowed for constraint, allowed in ordered}
+        declared = [(constraint, int(allowed_by_key.get(_branch_constraint_key(constraint), 0))) for constraint in branch]
+        order_index = {_branch_constraint_key(constraint): index for index, constraint in enumerate(branch)}
+
+        def child_score_rank(item: tuple[BranchConstraint, int]) -> tuple[int, float, int, int]:
+            constraint, allowed = item
+            score, _source = _journey_child_constraint_score(
+                constraint,
+                child_score_map,
+                node_id=node_id,
+                depth=branch_depth,
+                min_score=child_score_min_score,
+            )
+            if score is None:
+                return (
+                    1,
+                    0.0,
+                    int(allowed) if mode == "child_score_width_tie" else 0,
+                    int(order_index.get(_branch_constraint_key(constraint), 0)),
+                )
+            return (
+                0,
+                -float(score),
+                int(allowed) if mode == "child_score_width_tie" else 0,
+                int(order_index.get(_branch_constraint_key(constraint), 0)),
+            )
+
+        if any(
+            _journey_child_constraint_score(
+                constraint,
+                child_score_map,
+                node_id=node_id,
+                depth=branch_depth,
+                min_score=child_score_min_score,
+            )[0]
+            is not None
+            for constraint, _allowed in declared
+        ):
+            return sorted(declared, key=child_score_rank)
+        return declared
     if mode == "width" or (bool(by_width) and mode in {"", "declared"}):
         return ordered
     allowed_by_key = {_branch_constraint_key(constraint): allowed for constraint, allowed in ordered}
@@ -9141,6 +9425,205 @@ def _normalize_journey_branch_score_map(raw: Any) -> dict[str, float]:
     return score_map
 
 
+_JOURNEY_CHILD_SCORE_FIELDS = (
+    "child_score",
+    "score",
+    "proxy_score",
+    "impact_score",
+    "gat_score",
+    "predicted_score",
+)
+
+
+def _journey_child_score_value(raw: Any) -> float | None:
+    value = raw
+    if isinstance(raw, dict):
+        value = None
+        for key in _JOURNEY_CHILD_SCORE_FIELDS:
+            if raw.get(key) is not None:
+                value = raw.get(key)
+                break
+    if value is None:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(score):
+        return None
+    return score
+
+
+def _journey_child_score_kind_from_row(row: dict[str, Any]) -> str | None:
+    for key in ("child_constraint_kind", "constraint_kind", "child_kind", "kind", "branch_kind"):
+        value = row.get(key)
+        if value in {"same_vehicle", "separate_vehicle"}:
+            return str(value)
+    constraint = row.get("child_constraint") or row.get("constraint")
+    if constraint not in (None, ""):
+        match = re.search(r"=(same_vehicle|separate_vehicle)\b", str(constraint))
+        if match is not None:
+            return str(match.group(1))
+    return None
+
+
+def _journey_child_score_pair_from_row(row: dict[str, Any]) -> tuple[int, int] | None:
+    for key in ("pair", "branch_pair", "candidate_pair", "forced_pair"):
+        pair = row.get(key)
+        if isinstance(pair, str):
+            parsed = _parse_journey_forced_pair_payload(pair)
+            if parsed is not None:
+                return parsed
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            try:
+                i, j = int(pair[0]), int(pair[1])
+            except (TypeError, ValueError):
+                continue
+            if i != j:
+                return tuple(sorted((i, j)))
+    task_i = row.get("task_i")
+    task_j = row.get("task_j")
+    if task_i is None or task_j is None:
+        return None
+    try:
+        i, j = int(task_i), int(task_j)
+    except (TypeError, ValueError):
+        return None
+    if i == j:
+        return None
+    return tuple(sorted((i, j)))
+
+
+def _journey_child_score_specific_key(
+    pair: tuple[int, int],
+    kind: str,
+    *,
+    node_id: int | None = None,
+    depth: int | None = None,
+    separator: str = ":",
+) -> str:
+    i, j = tuple(sorted((int(pair[0]), int(pair[1]))))
+    pair_text = f"{i},{j}"
+    suffix = f"{pair_text}{separator}{kind}"
+    if node_id is not None and depth is not None:
+        return f"node:{int(node_id)}:depth:{int(depth)}:{suffix}"
+    if depth is not None:
+        return f"depth:{int(depth)}:{suffix}"
+    if node_id is not None:
+        return f"node:{int(node_id)}:{suffix}"
+    return suffix
+
+
+def _journey_child_score_lookup_keys(
+    constraint: BranchConstraint,
+    *,
+    node_id: int | None = None,
+    depth: int | None = None,
+) -> tuple[str, ...]:
+    if constraint.task_j is None or constraint.kind not in {"same_vehicle", "separate_vehicle"}:
+        return tuple()
+    pair = tuple(sorted((int(constraint.task_i), int(constraint.task_j))))
+    kind = str(constraint.kind)
+    keys: list[str] = []
+    for separator in (":", "="):
+        if node_id is not None and depth is not None:
+            keys.append(
+                _journey_child_score_specific_key(pair, kind, node_id=node_id, depth=depth, separator=separator)
+            )
+        if depth is not None:
+            keys.append(_journey_child_score_specific_key(pair, kind, depth=depth, separator=separator))
+        if node_id is not None:
+            keys.append(_journey_child_score_specific_key(pair, kind, node_id=node_id, separator=separator))
+        keys.append(_journey_child_score_specific_key(pair, kind, separator=separator))
+    return tuple(dict.fromkeys(keys))
+
+
+def _normalize_journey_child_score_map(raw: Any) -> dict[str, float]:
+    if raw in (None, ""):
+        return {}
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {}
+        parsed: Any | None = None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            candidate_path = Path(text).expanduser()
+            if candidate_path.exists() and candidate_path.is_file():
+                try:
+                    parsed = json.loads(candidate_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    return {}
+            else:
+                return {}
+        raw = parsed
+    score_map: dict[str, float] = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            if isinstance(value, dict):
+                score = _journey_child_score_value(value)
+                pair = _journey_child_score_pair_from_row(value)
+                kind = _journey_child_score_kind_from_row(value)
+                if score is not None and pair is not None and kind is not None:
+                    node = value.get("node_id")
+                    depth = value.get("depth")
+                    try:
+                        node_id = None if node is None else int(node)
+                        branch_depth = None if depth is None else int(depth)
+                    except (TypeError, ValueError):
+                        node_id = None
+                        branch_depth = None
+                    score_map[
+                        _journey_child_score_specific_key(pair, kind, node_id=node_id, depth=branch_depth)
+                    ] = score
+                    continue
+            score = _journey_child_score_value(value)
+            if score is None:
+                continue
+            score_map[str(key)] = score
+        return score_map
+    if isinstance(raw, list):
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+            score = _journey_child_score_value(row)
+            pair = _journey_child_score_pair_from_row(row)
+            kind = _journey_child_score_kind_from_row(row)
+            if score is None or pair is None or kind is None:
+                continue
+            node = row.get("node_id")
+            depth = row.get("depth")
+            try:
+                node_id = None if node is None else int(node)
+                branch_depth = None if depth is None else int(depth)
+            except (TypeError, ValueError):
+                node_id = None
+                branch_depth = None
+            score_map[_journey_child_score_specific_key(pair, kind, node_id=node_id, depth=branch_depth)] = score
+    return score_map
+
+
+def _journey_child_constraint_score(
+    constraint: BranchConstraint,
+    score_map: dict[str, float] | None,
+    *,
+    node_id: int | None = None,
+    depth: int | None = None,
+    min_score: float | None = None,
+) -> tuple[float | None, str | None]:
+    if not score_map:
+        return None, None
+    for key in _journey_child_score_lookup_keys(constraint, node_id=node_id, depth=depth):
+        score = score_map.get(key)
+        if score is None:
+            continue
+        if min_score is not None and float(score) < float(min_score):
+            return None, key
+        return float(score), key
+    return None, None
+
+
 def _optional_float_config(config: dict[str, Any], key: str) -> float | None:
     value = config.get(key)
     if value in (None, ""):
@@ -9154,11 +9637,133 @@ def _optional_float_config(config: dict[str, Any], key: str) -> float | None:
     return float(parsed)
 
 
-def _journey_branch_score_map_from_config(config: dict[str, Any]) -> dict[str, float]:
+def _string_list_config(config: dict[str, Any], key: str) -> tuple[str, ...]:
+    value = config.get(key)
+    if value in (None, ""):
+        return tuple()
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return tuple()
+        parsed: Any | None = None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, (list, tuple, set)):
+            return tuple(str(item) for item in parsed if str(item))
+        return tuple(piece.strip() for piece in text.replace(";", ",").split(",") if piece.strip())
+    if isinstance(value, (list, tuple, set)):
+        return tuple(str(item) for item in value if str(item))
+    return (str(value),)
+
+
+def _journey_branch_score_context_status(
+    config: dict[str, Any],
+    data: FutureData | None,
+) -> dict[str, Any]:
+    return _journey_context_gate_status(
+        config,
+        data,
+        include_key="journey_branch_candidate_score_context_include_contains",
+        require_key="journey_branch_candidate_score_context_require_contains",
+        exclude_key="journey_branch_candidate_score_context_exclude_contains",
+    )
+
+
+def _journey_child_score_context_status(
+    config: dict[str, Any],
+    data: FutureData | None,
+) -> dict[str, Any]:
+    return _journey_context_gate_status(
+        config,
+        data,
+        include_key="journey_child_priority_score_context_include_contains",
+        require_key="journey_child_priority_score_context_require_contains",
+        exclude_key="journey_child_priority_score_context_exclude_contains",
+    )
+
+
+def _journey_tail_action_no_column_context_status(
+    config: dict[str, Any],
+    data: FutureData | None,
+) -> dict[str, Any]:
+    return _journey_context_gate_status(
+        config,
+        data,
+        include_key="journey_tail_action_no_column_early_branch_context_include_contains",
+        require_key="journey_tail_action_no_column_early_branch_context_require_contains",
+        exclude_key="journey_tail_action_no_column_early_branch_context_exclude_contains",
+    )
+
+
+def _journey_context_gate_status(
+    config: dict[str, Any],
+    data: FutureData | None,
+    *,
+    include_key: str,
+    require_key: str,
+    exclude_key: str,
+) -> dict[str, Any]:
+    include_tokens = _string_list_config(config, include_key)
+    require_tokens = _string_list_config(config, require_key)
+    exclude_tokens = _string_list_config(config, exclude_key)
+    gate_enabled = bool(include_tokens or require_tokens or exclude_tokens)
+    context = ""
+    if data is not None:
+        context = f"{getattr(data, 'name', '')} {getattr(data, 'instance_path', '')}"
+    allowed = True
+    reason = "gate_disabled"
+    if gate_enabled:
+        reason = "matched"
+        if include_tokens and not any(token in context for token in include_tokens):
+            allowed = False
+            reason = "include_token_missing"
+        if allowed and require_tokens and not all(token in context for token in require_tokens):
+            allowed = False
+            reason = "require_token_missing"
+        if allowed and exclude_tokens and any(token in context for token in exclude_tokens):
+            allowed = False
+            reason = "exclude_token_matched"
+    return {
+        "enabled": bool(gate_enabled),
+        "allowed": bool(allowed),
+        "reason": reason,
+        "context": context,
+        "include_contains": include_tokens,
+        "require_contains": require_tokens,
+        "exclude_contains": exclude_tokens,
+    }
+
+
+def _journey_branch_score_map_from_config(
+    config: dict[str, Any],
+    *,
+    data: FutureData | None = None,
+) -> dict[str, float]:
+    context_status = _journey_branch_score_context_status(config, data)
+    if context_status["enabled"] and not context_status["allowed"]:
+        return {}
     score_map = _normalize_journey_branch_score_map(config.get("journey_branch_candidate_score_map"))
     path = config.get("journey_branch_candidate_score_path")
     if path not in (None, ""):
         score_map.update(_normalize_journey_branch_score_map(str(path)))
+    return score_map
+
+
+def _journey_child_score_map_from_config(
+    config: dict[str, Any],
+    *,
+    data: FutureData | None = None,
+) -> dict[str, float]:
+    context_status = _journey_child_score_context_status(config, data)
+    if context_status["enabled"] and not context_status["allowed"]:
+        return {}
+    score_map = _normalize_journey_child_score_map(config.get("journey_child_priority_score_map"))
+    for key in ("journey_child_priority_score_path", "journey_child_score_path"):
+        path = config.get(key)
+        if path not in (None, ""):
+            score_map.update(_normalize_journey_child_score_map(str(path)))
     return score_map
 
 
@@ -9569,7 +10174,7 @@ def _log_journey_branch_candidates(
     )
     tie_tolerance = float(config.get("journey_branch_fractionality_tie_tolerance", 0.0))
     priority_mode = str(config.get("journey_branch_candidate_priority", "fractionality"))
-    resolved_branch_score_map = branch_score_map or _journey_branch_score_map_from_config(config)
+    resolved_branch_score_map = branch_score_map or _journey_branch_score_map_from_config(config, data=data)
     branch_score_horizon_tie_tolerance = _optional_float_config(
         config, "journey_branch_candidate_score_horizon_tie_tolerance"
     )
@@ -9759,7 +10364,7 @@ def _journey_tail_action_no_column_branch_width_guard(
         priority_mode=str(config.get("journey_branch_candidate_priority", "fractionality")),
         node_id=node.id,
         branch_depth=node.depth,
-        branch_score_map=_journey_branch_score_map_from_config(config),
+        branch_score_map=_journey_branch_score_map_from_config(config, data=data),
         branch_score_horizon_tie_tolerance=_optional_float_config(
             config, "journey_branch_candidate_score_horizon_tie_tolerance"
         ),
@@ -20479,30 +21084,86 @@ def _journey_should_early_branch_on_tail_action_no_column(
     data: FutureData | None = None,
     incumbent_solution: dict[int, list[Any]] | None = None,
     journey_pool: JourneyPool | None = None,
+    before_final_probe: bool = False,
 ) -> bool:
+    gate_passed, _gate_reason, _width_guard = _journey_tail_action_no_column_early_branch_gate(
+        config,
+        node,
+        cg_iter,
+        solution,
+        integer_tol,
+        pricing,
+        tail_action_payload,
+        remaining=remaining,
+        certificate_candidate=certificate_candidate,
+        data=data,
+        incumbent_solution=incumbent_solution,
+        journey_pool=journey_pool,
+        before_final_probe=before_final_probe,
+    )
+    return bool(gate_passed)
+
+
+def _journey_tail_action_no_column_early_branch_gate(
+    config: dict[str, Any],
+    node: JourneyNode,
+    cg_iter: int,
+    solution: Any,
+    integer_tol: float,
+    pricing: Any,
+    tail_action_payload: dict[str, Any],
+    *,
+    remaining: float | None = None,
+    certificate_candidate: bool = False,
+    data: FutureData | None = None,
+    incumbent_solution: dict[int, list[Any]] | None = None,
+    journey_pool: JourneyPool | None = None,
+    before_final_probe: bool = False,
+) -> tuple[bool, str, dict[str, Any]]:
     """Return whether a local no-column D-class tail may branch before final probe.
 
     This is exact-safe only as a search scheduling rule. It does not certify
     the current node; children must inherit the existing non-exact lower bound.
     """
 
+    width_guard: dict[str, Any] = {}
     if not bool(config.get("journey_tail_action_no_column_early_branch_enabled", False)):
-        return False
+        return False, "disabled", width_guard
+    context_status = _journey_tail_action_no_column_context_status(config, data)
+    if bool(context_status["enabled"]) and not bool(context_status["allowed"]):
+        return False, f"context_{context_status['reason']}", width_guard
     if getattr(pricing, "journeys", None):
-        return False
+        return False, "pricing_has_negative_journeys", width_guard
+    pricing_state = _journey_pricing_state(pricing)
+    allow_incomplete_before_final_probe = (
+        bool(before_final_probe)
+        and bool(
+            config.get(
+                "journey_tail_action_no_column_early_branch_allow_incomplete_limit_before_final_probe",
+                False,
+            )
+        )
+        and pricing_state == PRICING_STATE_INCOMPLETE_LIMIT
+    )
     if bool(config.get("journey_tail_action_no_column_early_branch_require_local_no_column", True)):
-        if _journey_pricing_state(pricing) != PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED:
-            return False
-    elif not bool(getattr(pricing, "exhausted", False)):
-        return False
+        if pricing_state != PRICING_STATE_LOCAL_NO_COLUMN_UNCERTIFIED and not allow_incomplete_before_final_probe:
+            return False, "pricing_state_not_local_no_column", width_guard
+    elif not bool(getattr(pricing, "exhausted", False)) and not allow_incomplete_before_final_probe:
+        return False, "pricing_not_exhausted", width_guard
     if bool(certificate_candidate) and bool(
         config.get("journey_tail_action_no_column_early_branch_disable_on_certificate_candidate", False)
     ):
-        return False
+        return False, "certificate_candidate_disabled", width_guard
+    min_tasks = max(0, int(config.get("journey_tail_action_no_column_early_branch_min_tasks", 0)))
+    if min_tasks > 0:
+        if data is None:
+            return False, "missing_task_count_context", width_guard
+        if len(getattr(data, "tasks", tuple()) or tuple()) < min_tasks:
+            return False, "task_count_below_min", width_guard
     if str(tail_action_payload.get("tail_action", "")) != "EARLY_BRANCH":
-        return False
+        return False, "tail_action_not_early_branch", width_guard
     if bool(tail_action_payload.get("fathom_possible_if_rc_zero", False)):
-        return False
+        return False, "fathom_possible_if_rc_zero", width_guard
     if bool(
         config.get(
             "journey_tail_action_no_column_early_branch_require_complete_productivity_signals",
@@ -20510,9 +21171,9 @@ def _journey_should_early_branch_on_tail_action_no_column(
         )
     ):
         if tail_action_payload.get("recent_active_support_additions") is None:
-            return False
+            return False, "missing_recent_active_support_additions", width_guard
         if tail_action_payload.get("recent_rmp_objective_progress") is None:
-            return False
+            return False, "missing_recent_rmp_objective_progress", width_guard
 
     raw_reasons = config.get(
         "journey_tail_action_no_column_early_branch_reasons",
@@ -20524,37 +21185,37 @@ def _journey_should_early_branch_on_tail_action_no_column(
         allowed_reasons = {str(part) for part in (raw_reasons or tuple())}
     reason = str(tail_action_payload.get("tail_action_reason", ""))
     if allowed_reasons and reason not in allowed_reasons:
-        return False
+        return False, "tail_action_reason_not_allowed", width_guard
 
     min_true_rc = max(
         0,
         int(config.get("journey_tail_action_no_column_early_branch_min_true_rc_productivity", 0)),
     )
     if int(tail_action_payload.get("recent_true_rc_productivity") or 0) < min_true_rc:
-        return False
+        return False, "true_rc_productivity_below_min", width_guard
     min_gap = max(
         0.0,
         float(config.get("journey_tail_action_no_column_early_branch_min_rmp_to_incumbent_gap", 0.0)),
     )
     gap = tail_action_payload.get("rmp_to_incumbent_gap")
     if gap is None:
-        return False
+        return False, "missing_rmp_to_incumbent_gap", width_guard
     try:
         if float(gap) < min_gap:
-            return False
+            return False, "rmp_to_incumbent_gap_below_min", width_guard
     except (TypeError, ValueError):
-        return False
+        return False, "invalid_rmp_to_incumbent_gap", width_guard
     if remaining is not None:
         min_remaining = max(
             0.0,
             float(config.get("journey_tail_action_no_column_early_branch_min_remaining", 0.0)),
         )
         if float(remaining) < min_remaining:
-            return False
+            return False, "remaining_below_min", width_guard
 
     min_depth = max(0, int(config.get("journey_tail_action_no_column_early_branch_min_depth", 1)))
     if int(node.depth) < min_depth:
-        return False
+        return False, "depth_below_min", width_guard
     max_depth = int(
         config.get(
             "journey_tail_action_no_column_early_branch_max_depth",
@@ -20565,7 +21226,7 @@ def _journey_should_early_branch_on_tail_action_no_column(
         )
     )
     if int(node.depth) > max_depth:
-        return False
+        return False, "depth_above_max", width_guard
     if int(node.depth) > 0:
         min_cg_iter = int(
             config.get(
@@ -20587,12 +21248,12 @@ def _journey_should_early_branch_on_tail_action_no_column(
             )
         )
     if int(cg_iter) < max(1, min_cg_iter):
-        return False
+        return False, "cg_iter_below_min", width_guard
     if _journey_lp_integral(getattr(solution, "journey_values", []) or [], float(integer_tol)):
-        return False
+        return False, "lp_integral", width_guard
     if _choose_journey_branch_placeholder(solution, node.branch_constraints, float(integer_tol)) is None:
-        return False
-    width_guard_passes, _width_guard = _journey_tail_action_no_column_branch_width_guard(
+        return False, "no_fractional_branch_candidate", width_guard
+    width_guard_passes, width_guard = _journey_tail_action_no_column_branch_width_guard(
         config,
         data,
         node,
@@ -20602,8 +21263,8 @@ def _journey_should_early_branch_on_tail_action_no_column(
         journey_pool=journey_pool,
     )
     if not width_guard_passes:
-        return False
-    return True
+        return False, f"width_guard_{width_guard.get('reason', 'failed')}", width_guard
+    return True, "ok", width_guard
 
 
 def _journey_recent_active_support_additions(

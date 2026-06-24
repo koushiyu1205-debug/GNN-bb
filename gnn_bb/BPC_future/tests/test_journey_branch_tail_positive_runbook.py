@@ -182,6 +182,90 @@ class JourneyBranchTailPositiveRunbookTests(unittest.TestCase):
             )
             self.assertIn("tail_impact_input_paths", (tmp_path / "report.md").read_text(encoding="utf-8"))
 
+    def test_build_runbook_can_use_before_final_probe_tail_action_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            positive_gap = tmp_path / "positive_gap.json"
+            positive_gap.write_text(json.dumps({"near_positive_rows": []}) + "\n", encoding="utf-8")
+            log_path = (
+                tmp_path
+                / "probe"
+                / "logs"
+                / "BPC_future"
+                / "logical_graph"
+                / "tasks_020"
+                / "demo_instance.json.jsonl"
+            )
+            log_path.parent.mkdir(parents=True)
+            log_rows = [
+                {"event": "journey_node_start", "time": 1.0, "node_id": 0, "depth": 0},
+                {
+                    "event": "journey_child_queued",
+                    "time": 2.0,
+                    "parent_node_id": 0,
+                    "child_node_id": 1,
+                    "depth": 1,
+                    "constraint": "RF(2,10)=same_vehicle",
+                },
+                {"event": "journey_node_start", "time": 3.0, "node_id": 1, "depth": 1},
+                {
+                    "event": "journey_child_queued",
+                    "time": 4.0,
+                    "parent_node_id": 1,
+                    "child_node_id": 3,
+                    "depth": 2,
+                    "constraint": "RF(3,7)=separate_vehicle",
+                },
+                {"event": "journey_node_start", "time": 5.0, "node_id": 3, "depth": 2},
+            ]
+            log_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in log_rows),
+                encoding="utf-8",
+            )
+            tail_dir = tmp_path / "tail"
+            tail_dir.mkdir()
+            tail_row = {
+                "source_type": "tail_action_proof_cost",
+                "log_file": str(log_path),
+                "node_id": 3,
+                "depth": 2,
+                "task_i": 4,
+                "task_j": 12,
+                "tail_class": "tail_action_no_column",
+                "labels": {"y_tail_risk": 1.0},
+            }
+            (tail_dir / "tail_impact_training_rows.jsonl").write_text(
+                json.dumps(tail_row, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            runbook = build_runbook(
+                positive_gap,
+                tmp_path / "out",
+                tmp_path / "report.md",
+                tail_impact_inputs=[tail_dir],
+                tail_action_profile="before_final_probe",
+            )
+
+            self.assertEqual(runbook["tail_action_profile"], "before_final_probe")
+            entry = runbook["entries"][0]
+            self.assertEqual(entry["tail_action_profile"], "before_final_probe")
+            self.assertIn("journey_tail_action_audit_enabled=True", entry["command"])
+            self.assertIn("journey_tail_action_early_branch_enabled=False", entry["command"])
+            self.assertIn(
+                "journey_tail_action_no_column_early_branch_before_final_probe_enabled=True",
+                entry["command"],
+            )
+            self.assertIn(
+                "journey_tail_action_no_column_early_branch_allow_incomplete_limit_before_final_probe=True",
+                entry["command"],
+            )
+            self.assertIn("journey_tail_action_no_column_early_branch_min_tasks=20", entry["command"])
+            self.assertIn("journey_tail_action_no_column_early_branch_min_depth=2", entry["command"])
+            self.assertIn("journey_tail_action_no_column_early_branch_max_depth=2", entry["command"])
+            self.assertNotIn("journey_tail_action_early_branch_enabled=True", entry["command"])
+            self.assertIn("tail_action_profile = before_final_probe", (tmp_path / "report.md").read_text(encoding="utf-8"))
+
     def test_build_runbook_can_emit_tail_action_alternative_pairs(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
