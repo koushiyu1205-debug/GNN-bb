@@ -65,10 +65,10 @@ max_cg_iterations: 120
 journey_branching_enabled: True
 journey_max_nodes: 1000
 journey_max_cg_iterations: 80
-# Diagnostic only: capture branch candidate features for branch-impact /
-# child-proof-cost learning.  This does not change the selected branch unless a
-# separate journey_branch_candidate_priority opt-in is provided.
-journey_branch_candidate_log_top_n: 12
+# Diagnostic only: capture enough branch candidate features for branch-impact /
+# child-proof-cost coverage-gap sampling.  This does not change the selected
+# branch unless a separate journey_branch_candidate_priority opt-in is provided.
+journey_branch_candidate_log_top_n: 100
 journey_initial_source_trip_limit: 1800
 journey_initial_max_columns: 6000
 journey_pool_source_trip_limit: 1800

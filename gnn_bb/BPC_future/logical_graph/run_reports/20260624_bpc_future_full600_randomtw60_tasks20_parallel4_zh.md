@@ -67,7 +67,7 @@
 
 已补诊断修正：新增并在 canonical 20-task 配置中打开 `journey_tail_action_audit_enabled`。该开关只写 Tail Action Controller 分类日志，不开启 `journey_corrected_node_bound_fathom_enabled`，也不开启 tail-action early branch。
 
-同时 canonical 20-task 配置已打开 `journey_branch_candidate_log_top_n=12`。这只记录 `journey_branch_candidates` top-N 特征，不改变实际 branch priority；下一轮 full600 会同时具备 tail-action 分类和 branch-impact 候选特征。
+同时 canonical 20-task 配置已打开 `journey_branch_candidate_log_top_n=100`。这只记录 `journey_branch_candidates` top-N 特征，不改变实际 branch priority；下一轮 full600 会同时具备 tail-action 分类和 branch-impact 候选特征，并能支持 coverage-gap replay 采样。
 
 Late-negative tail 审计仍然有效。150 秒以后解析到：
 

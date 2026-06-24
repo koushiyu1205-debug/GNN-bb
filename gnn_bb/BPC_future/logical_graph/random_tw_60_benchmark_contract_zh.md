@@ -108,3 +108,29 @@ BPC_future/logical_graph/tasks_020/greedy-anchor/apollo15_20km/apollo15_20km_gre
 
 - 诊断/采样/尾部观察：允许 per-instance `600s`。
 - 正式达标 gate：必须 per-instance `200s`，且 `60/60 OPTIMAL`。
+
+## 2026-06-24 20规模当前水平
+
+canonical `tasks_020` 60-instance 已按 600s 单实例预算、4 并行完成一次全量测试：
+
+```text
+csv = BPC_future/results/20260624_full600_randomtw60_tasks20_parallel4.csv
+report = BPC_future/logical_graph/run_reports/20260624_bpc_future_full600_randomtw60_tasks20_parallel4_zh.md
+OPTIMAL = 26/60
+OPTIMAL <= 200s = 20/60
+OPTIMAL > 200s = 6/60
+EXTERNAL_TIME_LIMIT = 30/60
+TIME_LIMIT = 4/60
+```
+
+结论：当前版本没有达到 20 规模目标；即使把诊断预算放宽到 600s，也只有 26/60 证明最优。后续任何“20 规模已加速/已达标”声明都必须覆盖这 60 个 canonical 实例，并且最终以 200s gate 为准。
+
+## 20规模诊断日志最低口径
+
+下一轮 20 规模 600s 诊断/采样至少应保留以下只读诊断信号：
+
+- `journey_tail_action_audit_enabled=true`：写出 `journey_corrected_node_bound_audit`，用于 Tail Action Controller A/B/C/D 分类、水位和 productivity 统计。
+- `journey_branch_candidate_log_top_n=100`：写出 `journey_branch_candidates` top-N 特征，用于 branch-impact / child-proof-cost / coverage-gap replay 采样。
+- late-negative audit 输入所需的 `journey_pricing`、`journey_column_addition`、weak filtered 字段必须保留，用于区分 active-support-changing、inactive-only 和 weak/profile filtered tail。
+
+这些字段只用于诊断和训练数据构造，不能当 official bound、certificate 或剪枝依据。行为开关仍需单独 opt-in，例如 corrected-bound fathom、tail-action early branch、branch-score/horizon candidate priority。
