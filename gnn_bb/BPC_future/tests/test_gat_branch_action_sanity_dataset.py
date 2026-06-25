@@ -19,7 +19,7 @@ except Exception:
 
 @unittest.skipUnless(HAS_LEARNING_STACK, "learning stack is not installed")
 class GATBranchActionSanityDatasetTests(unittest.TestCase):
-    def test_builds_graph_samples_with_target_200_as_main_label(self) -> None:
+    def test_builds_graph_samples_with_walltime_gain_as_main_label(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             instance = tmp_path / "toy.json"
@@ -87,9 +87,15 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             self.assertEqual(
                 summary["branch_priority_label_counts"],
                 {
-                    "aux_only_weak_positive": 1,
-                    "not_target_200": 1,
-                    "target_200_positive": 1,
+                    "not_walltime_gain": 1,
+                    "walltime_gain_positive": 2,
+                },
+            )
+            self.assertEqual(
+                summary["target_wall_crossing_label_counts"],
+                {
+                    "not_target_wall_crossing": 2,
+                    "target_wall_crossing_positive": 1,
                 },
             )
             self.assertEqual(summary["row_kind_counts"]["local_only_hard_negative"], 1)
@@ -110,7 +116,7 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             self.assertEqual(tuple(sample.branch_pair_indices.shape), (1, 2))
             self.assertEqual(tuple(sample.branch_pair_features.shape), (1, len(BRANCH_IMPACT_FEATURE_SCHEMA)))
             self.assertEqual(tuple(sample.context_features.shape), (11,))
-            self.assertEqual(tuple(sample.branch_action_labels.shape), (1, 8))
+            self.assertEqual(tuple(sample.branch_action_labels.shape), (1, 12))
             self.assertTrue((tmp_path / "dataset" / "summary.json").exists())
             report = (tmp_path / "report.md").read_text(encoding="utf-8")
             self.assertIn("sanity_training_dataset_ready = true", report)

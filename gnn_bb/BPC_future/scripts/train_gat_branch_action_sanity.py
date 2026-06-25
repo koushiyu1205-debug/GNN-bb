@@ -2,8 +2,8 @@
 """Sanity-train the offline GAT branch/action model.
 
 This training entry is deliberately not production-ready. It verifies that the
-branch/action graph dataset can drive the branch-impact GAT heads without
-mixing target-200 positives with weak positives. The produced checkpoint is an
+branch/action graph dataset can drive the branch-impact GAT heads using
+wall-time gain as the main branch-priority label. The produced checkpoint is an
 offline study artifact only and is not loaded by the solver by default.
 """
 
@@ -63,7 +63,8 @@ class TrainBranchActionSanityArgs:
     validation_fraction: float = 0.25
     seed: int = 244
     min_samples: int = 10
-    min_target_positive: int = 3
+    min_walltime_positive: int = 3
+    min_target_positive: int | None = None
     min_hard_negative: int = 3
     tail_aux_loss_multiplier: float = 0.25
 
@@ -347,8 +348,8 @@ def train_branch_action_sanity(args: argparse.Namespace | TrainBranchActionSanit
             "production_ready": False,
             "solver_default_effect": False,
             "score_map_exported": False,
-            "target_label": "target_200_positive_vs_full_run_regression",
-            "weak_positive_main_loss_weight": 0.0,
+            "target_label": "walltime_gain_vs_full_run_regression",
+            "target_wall_is_acceptance_metric_only": True,
         },
     }
     checkpoint_path = Path(args.checkpoint_out)
@@ -400,9 +401,15 @@ def _assert_manifest(manifest: dict[str, Any], args: argparse.Namespace | TrainB
     label_counts = manifest.get("branch_priority_label_counts")
     if not isinstance(label_counts, dict):
         raise SystemExit("manifest missing branch_priority_label_counts")
-    if int(label_counts.get("target_200_positive") or 0) < int(args.min_target_positive):
-        raise SystemExit("not enough target-200 positives for sanity training")
-    if int(label_counts.get("not_target_200") or 0) < int(args.min_hard_negative):
+    legacy_min_target_positive = getattr(args, "min_target_positive", None)
+    min_walltime_positive = int(
+        legacy_min_target_positive
+        if legacy_min_target_positive is not None
+        else getattr(args, "min_walltime_positive", 3)
+    )
+    if int(label_counts.get("walltime_gain_positive") or 0) < min_walltime_positive:
+        raise SystemExit("not enough wall-time gain positives for sanity training")
+    if int(label_counts.get("not_walltime_gain") or 0) < int(args.min_hard_negative):
         raise SystemExit("not enough hard-negative regressions for sanity training")
 
 
@@ -442,7 +449,7 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
         "",
         "## 边界",
         "",
-        "这次训练只证明链路能跑通，不证明模型可泛化，也不证明能加速 20 规模。当前 target-200 正例和 hard negative 数量仍未达到正式训练门槛。",
+        "这次训练只证明链路能跑通，不证明模型可泛化，也不证明能加速 20 规模。当前 wall-time gain 正例和 hard negative 数量仍未达到正式训练门槛。",
     ]
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -469,7 +476,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-fraction", type=float, default=0.25)
     parser.add_argument("--seed", type=int, default=244)
     parser.add_argument("--min-samples", type=int, default=10)
-    parser.add_argument("--min-target-positive", type=int, default=3)
+    parser.add_argument("--min-walltime-positive", type=int, default=3)
     parser.add_argument("--min-hard-negative", type=int, default=3)
     parser.add_argument("--tail-aux-loss-multiplier", type=float, default=0.25)
     return parser.parse_args()
