@@ -26,6 +26,15 @@ DEFAULT_REPORT = Path(
 DEFAULT_CONFIG = Path("BPC_future/configs/moon_trek_20_smoke.yaml")
 DEFAULT_INSTANCE_ROOT = Path("BPC_future/logical_graph")
 _RF_RE = re.compile(r"RF\((?P<i>\d+),(?P<j>\d+)\)=(?P<kind>same_vehicle|separate_vehicle)")
+_POSITIVE_NEIGHBOR_ANCHOR = {
+    "fractionality": 0.25,
+    "same_mass": 0.75,
+    "support_count": 1.0,
+    "pool_balance_gap": 49.0,
+    "pool_max_child_width": 425.0,
+    "pool_total_child_width": 801.0,
+}
+_POSITIVE_NEIGHBOR_PRESELECT_COUNT = 2
 
 
 def _iter_jsonl_paths(paths: Iterable[Path]) -> Iterable[Path]:
@@ -241,32 +250,63 @@ def _impact_priority_by_context(
 def _load_excluded_entry_keys(paths: Iterable[Path]) -> set[tuple[str, int, int, int, int]]:
     excluded: set[tuple[str, int, int, int, int]] = set()
     for path in paths:
-        payload = _read_json(path / "runbook.json" if path.is_dir() else path)
-        entries = payload.get("entries")
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
+        for runbook_path in _runbook_json_files(path):
+            payload = _read_json(runbook_path)
+            entries = payload.get("entries")
+            if not isinstance(entries, list):
                 continue
-            pair = entry.get("forced_pair")
-            if not isinstance(pair, list) or len(pair) != 2:
-                continue
-            try:
-                i, j = int(pair[0]), int(pair[1])
-                node_id = int(entry.get("source_node_id"))
-                depth = int(entry.get("source_depth"))
-            except (TypeError, ValueError):
-                continue
-            instance = str(entry.get("instance") or "")
-            if not instance or i == j:
-                continue
-            a, b = sorted((i, j))
-            excluded.add((instance, node_id, depth, a, b))
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                pair = entry.get("forced_pair")
+                if not isinstance(pair, list) or len(pair) != 2:
+                    continue
+                try:
+                    i, j = int(pair[0]), int(pair[1])
+                    node_id = int(entry.get("source_node_id"))
+                    depth = int(entry.get("source_depth"))
+                except (TypeError, ValueError):
+                    continue
+                instance = str(entry.get("instance") or "")
+                if not instance or i == j:
+                    continue
+                a, b = sorted((i, j))
+                excluded.add((instance, node_id, depth, a, b))
     return excluded
 
 
-def _load_focus_context_keys(paths: Iterable[Path]) -> set[tuple[str, int, int, str]]:
+def _runbook_json_files(path: Path) -> list[Path]:
+    if not path.exists():
+        return []
+    if path.is_file():
+        return [path] if path.name == "runbook.json" else []
+    direct = path / "runbook.json"
+    files: list[Path] = []
+    if direct.exists():
+        files.append(direct)
+    files.extend(
+        candidate
+        for candidate in sorted(path.rglob("runbook.json"))
+        if candidate != direct
+    )
+    return files
+
+
+def _is_focus_delta_positive(row: dict[str, Any]) -> bool:
+    labels = row.get("labels")
+    labels = labels if isinstance(labels, dict) else {}
+    return bool(
+        str(row.get("counterfactual_label_type") or "") == "strong_positive"
+        or _float(labels.get("y_counterfactual_timeout_resolved"), default=0.0) > 0.0
+        or _float(labels.get("y_counterfactual_wall_improved"), default=0.0) > 0.0
+    )
+
+
+def _load_focus_contexts(
+    paths: Iterable[Path],
+) -> tuple[set[tuple[str, int, int, str]], dict[tuple[str, int, int, str], set[tuple[int, int]]]]:
     focus: set[tuple[str, int, int, str]] = set()
+    strong_positive_pairs: dict[tuple[str, int, int, str], set[tuple[int, int]]] = {}
     for path in paths:
         if path.is_dir():
             rows = list(_iter_jsonl(path / "branch_counterfactual_delta_rows.jsonl"))
@@ -277,18 +317,20 @@ def _load_focus_context_keys(paths: Iterable[Path]) -> set[tuple[str, int, int, 
         else:
             rows = []
         for row in rows:
-            labels = row.get("labels")
-            labels = labels if isinstance(labels, dict) else {}
-            if _float(labels.get("y_counterfactual_timeout_resolved"), default=0.0) <= 0.0:
+            if not _is_focus_delta_positive(row):
                 continue
             instance = str(row.get("instance") or "")
             baseline_pair = _pair_from_value(row.get("baseline_pair"))
+            alternative_pair = _pair_from_value(row.get("alternative_pair"))
             node_id = _int(row.get("node_id"), -1)
             depth = _int(row.get("depth"), -1)
             if not instance or baseline_pair is None or node_id < 0 or depth < 0:
                 continue
-            focus.add((instance, node_id, depth, _pair_text(baseline_pair) or ""))
-    return focus
+            key = (instance, node_id, depth, _pair_text(baseline_pair) or "")
+            focus.add(key)
+            if alternative_pair is not None:
+                strong_positive_pairs.setdefault(key, set()).add(alternative_pair)
+    return focus, strong_positive_pairs
 
 
 def _load_score_coverage_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
@@ -472,7 +514,186 @@ def _logged_candidates(record: dict[str, Any], candidate_source: str) -> list[di
     return candidates
 
 
-def _alternative_candidates(record: dict[str, Any], *, candidate_source: str) -> list[dict[str, Any]]:
+def _legacy_alternative_sort_key(item: dict[str, Any]) -> tuple[float, float, float, float, int]:
+    return (
+        _float(item.get("source_alt_pool_max_child_width")),
+        _float(item.get("source_alt_pool_total_child_width")),
+        _float(item.get("source_alt_pool_balance_gap")),
+        -_float(item.get("source_alt_branch_score"), default=-1.0e30),
+        int(item.get("source_alt_rank") or 0),
+    )
+
+
+def _with_selection_reason(item: dict[str, Any], reason: str) -> dict[str, Any]:
+    enriched = dict(item)
+    enriched["source_alt_selection_reason"] = reason
+    return enriched
+
+
+def _positive_neighbor_score(item: dict[str, Any]) -> float:
+    missing_penalty = 1.5
+    score = 0.0
+
+    def normalized_distance(field: str, anchor: float, scale: float) -> float:
+        value = _optional_float(item.get(field))
+        if value is None:
+            return missing_penalty
+        return abs(float(value) - float(anchor)) / max(float(scale), 1.0e-9)
+
+    score += normalized_distance("source_alt_fractionality", _POSITIVE_NEIGHBOR_ANCHOR["fractionality"], 0.25)
+    score += normalized_distance("source_alt_same_mass", _POSITIVE_NEIGHBOR_ANCHOR["same_mass"], 0.25)
+    score += 0.5 * normalized_distance("source_alt_support_count", _POSITIVE_NEIGHBOR_ANCHOR["support_count"], 2.0)
+    score += normalized_distance(
+        "source_alt_pool_balance_gap",
+        _POSITIVE_NEIGHBOR_ANCHOR["pool_balance_gap"],
+        120.0,
+    )
+    score += normalized_distance(
+        "source_alt_pool_max_child_width",
+        _POSITIVE_NEIGHBOR_ANCHOR["pool_max_child_width"],
+        500.0,
+    )
+    score += 0.5 * normalized_distance(
+        "source_alt_pool_total_child_width",
+        _POSITIVE_NEIGHBOR_ANCHOR["pool_total_child_width"],
+        900.0,
+    )
+    if item.get("source_alt_incumbent_relation") is not True:
+        score += 1.0
+    score += 0.002 * float(int(item.get("source_alt_rank") or 0))
+    return float(score)
+
+
+def _select_layered_alternatives(alternatives: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    used: set[tuple[int, int]] = set()
+
+    def add_best(reason: str, key: Any, candidates: list[dict[str, Any]] | None = None) -> None:
+        pool = candidates if candidates is not None else alternatives
+        available = [
+            item
+            for item in pool
+            if (int(item["task_i"]), int(item["task_j"])) not in used
+        ]
+        if not available:
+            return
+        best = min(available, key=key)
+        used.add((int(best["task_i"]), int(best["task_j"])))
+        selected.append(_with_selection_reason(best, reason))
+
+    add_best(
+        "highest_fractionality",
+        lambda item: (
+            -_float(item.get("source_alt_fractionality"), default=-1.0e30),
+            int(item.get("source_alt_rank") or 0),
+        ),
+    )
+    add_best(
+        "near_tie",
+        lambda item: (
+            _float(item.get("source_alt_required_tie_tolerance")),
+            _float(item.get("source_alt_fractionality_gap_to_selected")),
+            int(item.get("source_alt_rank") or 0),
+        ),
+    )
+    add_best("min_max_child_width", _legacy_alternative_sort_key)
+    add_best(
+        "balanced_child_width",
+        lambda item: (
+            _float(item.get("source_alt_pool_balance_gap")),
+            _float(item.get("source_alt_pool_max_child_width")),
+            _float(item.get("source_alt_pool_total_child_width")),
+            int(item.get("source_alt_rank") or 0),
+        ),
+    )
+    scored = [
+        item
+        for item in alternatives
+        if _optional_float(item.get("source_alt_branch_score")) is not None
+    ]
+    add_best(
+        "best_branch_score",
+        lambda item: (
+            -_float(item.get("source_alt_branch_score"), default=-1.0e30),
+            int(item.get("source_alt_rank") or 0),
+        ),
+        scored,
+    )
+    if alternatives:
+        selected_ranks = [int(item.get("source_alt_rank") or 0) for item in selected]
+
+        def diversity_key(item: dict[str, Any]) -> tuple[float, int]:
+            rank = int(item.get("source_alt_rank") or 0)
+            if selected_ranks:
+                distance = min(abs(rank - selected_rank) for selected_rank in selected_ranks)
+            else:
+                distance = rank
+            return (-float(distance), rank)
+
+        add_best("rank_diversity", diversity_key)
+    for item in sorted(alternatives, key=_legacy_alternative_sort_key):
+        pair = (int(item["task_i"]), int(item["task_j"]))
+        if pair in used:
+            continue
+        used.add(pair)
+        selected.append(_with_selection_reason(item, "legacy_fill"))
+    return selected
+
+
+def _select_positive_neighbor_alternatives(alternatives: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    used: set[tuple[int, int]] = set()
+
+    def add(item: dict[str, Any], reason: str) -> None:
+        pair = (int(item["task_i"]), int(item["task_j"]))
+        if pair in used:
+            return
+        enriched = _with_selection_reason(item, reason)
+        enriched["source_alt_positive_neighbor_score"] = round(_positive_neighbor_score(item), 9)
+        used.add(pair)
+        selected.append(enriched)
+
+    for item in sorted(
+        alternatives,
+        key=lambda candidate: (
+            _positive_neighbor_score(candidate),
+            int(candidate.get("source_alt_rank") or 0),
+        ),
+    )[:_POSITIVE_NEIGHBOR_PRESELECT_COUNT]:
+        add(item, "positive_neighbor")
+
+    for item in _select_layered_alternatives(alternatives):
+        add(item, str(item.get("source_alt_selection_reason") or "layered_fill"))
+    return selected
+
+
+def _prioritize_focus_strong_positive_alternatives(
+    alternatives: list[dict[str, Any]],
+    focus_pairs: set[tuple[int, int]],
+) -> tuple[list[dict[str, Any]], int, int]:
+    if not focus_pairs:
+        return alternatives, 0, 0
+    prioritized: list[dict[str, Any]] = []
+    remaining: list[dict[str, Any]] = []
+    matched: set[tuple[int, int]] = set()
+    for item in alternatives:
+        pair = (int(item["task_i"]), int(item["task_j"]))
+        if pair in focus_pairs:
+            enriched = _with_selection_reason(item, "focus_strong_positive")
+            enriched["source_alt_focus_strong_positive"] = True
+            prioritized.append(enriched)
+            matched.add(pair)
+        else:
+            remaining.append(item)
+    return prioritized + remaining, len(matched), len(focus_pairs - matched)
+
+
+def _alternative_candidates(
+    record: dict[str, Any],
+    *,
+    candidate_source: str,
+    candidate_selection: str = "legacy",
+) -> list[dict[str, Any]]:
     selected_pair = _candidate_pair(record.get("selected"))
     selected_payload = record.get("selected") if isinstance(record.get("selected"), dict) else {}
     selected_fractionality = _optional_float(selected_payload.get("fractionality"))
@@ -529,16 +750,12 @@ def _alternative_candidates(record: dict[str, Any], *, candidate_source: str) ->
                 "source_alt_branch_score_source": candidate.get("branch_score_source"),
             }
         )
-    alternatives.sort(
-        key=lambda item: (
-            _float(item.get("source_alt_pool_max_child_width")),
-            _float(item.get("source_alt_pool_total_child_width")),
-            _float(item.get("source_alt_pool_balance_gap")),
-            -_float(item.get("source_alt_branch_score"), default=-1.0e30),
-            int(item.get("source_alt_rank") or 0),
-        )
-    )
-    return alternatives
+    if candidate_selection == "positive_neighbor":
+        return _select_positive_neighbor_alternatives(alternatives)
+    if candidate_selection == "layered":
+        return _select_layered_alternatives(alternatives)
+    alternatives.sort(key=_legacy_alternative_sort_key)
+    return [_with_selection_reason(item, "legacy_width_order") for item in alternatives]
 
 
 def _command(
@@ -608,7 +825,8 @@ def build_runbook(
     limit: int = 60,
     alt_pairs_per_event: int = 3,
     candidate_source: str = "priority_top",
-    candidate_log_top_n: int = 100,
+    candidate_selection: str = "legacy",
+    candidate_log_top_n: int = 200,
     min_source_depth: int | None = None,
     max_source_depth: int | None = None,
     max_source_event_time: float | None = None,
@@ -624,6 +842,8 @@ def build_runbook(
 ) -> dict[str, Any]:
     if probe_mode not in {"full_replay", "child_probe"}:
         raise ValueError(f"unsupported probe_mode: {probe_mode}")
+    if candidate_selection not in {"legacy", "layered", "positive_neighbor"}:
+        raise ValueError(f"unsupported candidate_selection: {candidate_selection}")
     if (
         min_source_depth is not None
         and max_source_depth is not None
@@ -635,8 +855,16 @@ def build_runbook(
     seen: set[tuple[str, int, int, int, int]] = set()
     excluded_entry_keys = _load_excluded_entry_keys(exclude_runbooks or [])
     excluded_entry_skip_count = 0
-    focus_context_keys = _load_focus_context_keys(focus_delta_inputs or [])
+    focus_context_keys, focus_strong_positive_pairs = _load_focus_contexts(
+        focus_delta_inputs or []
+    )
     focus_event_skip_count = 0
+    focus_strong_positive_pair_count = sum(
+        len(pairs) for pairs in focus_strong_positive_pairs.values()
+    )
+    focus_strong_positive_pair_available_count = 0
+    focus_strong_positive_pair_missing_count = 0
+    focus_strong_positive_entry_count = 0
     coverage_gap_skip_count = 0
     depth_filter_skip_count = 0
     source_event_time_filter_skip_count = 0
@@ -729,10 +957,21 @@ def build_runbook(
             coverage_context = coverage_context if isinstance(coverage_context, dict) else {}
             event_added_entry = False
             accepted_for_event = 0
-            for alt in _alternative_candidates(
+            focus_key = (instance, node_id, depth, _pair_text(selected_pair) or "")
+            alternatives = _alternative_candidates(
                 record,
                 candidate_source=candidate_source,
-            ):
+                candidate_selection=candidate_selection,
+            )
+            alternatives, focus_available, focus_missing = (
+                _prioritize_focus_strong_positive_alternatives(
+                    alternatives,
+                    focus_strong_positive_pairs.get(focus_key, set()),
+                )
+            )
+            focus_strong_positive_pair_available_count += focus_available
+            focus_strong_positive_pair_missing_count += focus_missing
+            for alt in alternatives:
                 if accepted_for_event >= max(0, int(alt_pairs_per_event)):
                     break
                 if len(entries) >= int(limit):
@@ -745,6 +984,8 @@ def build_runbook(
                 if key in seen:
                     continue
                 seen.add(key)
+                if bool(alt.get("source_alt_focus_strong_positive")):
+                    focus_strong_positive_entry_count += 1
                 force_rule = _force_pair_path_rule(path_edges, depth, alt_pair)
                 experiment = (
                     f"{len(entries) + 1:03d}_candidate_alt_d{depth}_n{node_id}_"
@@ -854,6 +1095,7 @@ def build_runbook(
         "limit": int(limit),
         "alt_pairs_per_event": int(alt_pairs_per_event),
         "candidate_source": candidate_source,
+        "candidate_selection": candidate_selection,
         "candidate_log_top_n": int(candidate_log_top_n),
         "min_source_depth": None if min_source_depth is None else int(min_source_depth),
         "max_source_depth": None if max_source_depth is None else int(max_source_depth),
@@ -875,6 +1117,14 @@ def build_runbook(
         "excluded_entry_skip_count": int(excluded_entry_skip_count),
         "focus_context_count": len(focus_context_keys),
         "focus_event_skip_count": int(focus_event_skip_count),
+        "focus_strong_positive_pair_count": int(focus_strong_positive_pair_count),
+        "focus_strong_positive_pair_available_count": int(
+            focus_strong_positive_pair_available_count
+        ),
+        "focus_strong_positive_pair_missing_count": int(
+            focus_strong_positive_pair_missing_count
+        ),
+        "focus_strong_positive_entry_count": int(focus_strong_positive_entry_count),
         "coverage_priority_context_count": len(coverage_priority),
         "coverage_gap_skip_count": int(coverage_gap_skip_count),
         "depth_filter_skip_count": int(depth_filter_skip_count),
@@ -936,6 +1186,7 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"entry_limit_reached = {runbook.get('entry_limit_reached')}",
         f"alt_pairs_per_event = {runbook.get('alt_pairs_per_event')}",
         f"candidate_source = {runbook.get('candidate_source')}",
+        f"candidate_selection = {runbook.get('candidate_selection')}",
         f"candidate_log_top_n = {runbook.get('candidate_log_top_n')}",
         f"min_source_depth = {runbook.get('min_source_depth')}",
         f"max_source_depth = {runbook.get('max_source_depth')}",
@@ -953,6 +1204,12 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"excluded_entry_skip_count = {runbook.get('excluded_entry_skip_count')}",
         f"focus_context_count = {runbook.get('focus_context_count')}",
         f"focus_event_skip_count = {runbook.get('focus_event_skip_count')}",
+        f"focus_strong_positive_pair_count = {runbook.get('focus_strong_positive_pair_count')}",
+        "focus_strong_positive_pair_available_count = "
+        f"{runbook.get('focus_strong_positive_pair_available_count')}",
+        "focus_strong_positive_pair_missing_count = "
+        f"{runbook.get('focus_strong_positive_pair_missing_count')}",
+        f"focus_strong_positive_entry_count = {runbook.get('focus_strong_positive_entry_count')}",
         f"coverage_priority_context_count = {runbook.get('coverage_priority_context_count')}",
         f"coverage_gap_skip_count = {runbook.get('coverage_gap_skip_count')}",
         f"depth_filter_skip_count = {runbook.get('depth_filter_skip_count')}",
@@ -984,6 +1241,9 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"probe_max_nodes = {entry.get('probe_max_nodes')}",
                 f"probe_max_cg_iterations = {entry.get('probe_max_cg_iterations')}",
                 f"source_alt_rank = {entry.get('source_alt_rank')}",
+                f"source_alt_selection_reason = {entry.get('source_alt_selection_reason')}",
+                f"source_alt_focus_strong_positive = {entry.get('source_alt_focus_strong_positive')}",
+                f"source_alt_positive_neighbor_score = {entry.get('source_alt_positive_neighbor_score')}",
                 f"source_selected_fractionality = {entry.get('source_selected_fractionality')}",
                 f"source_alt_fractionality = {entry.get('source_alt_fractionality')}",
                 f"source_alt_required_tie_tolerance = {entry.get('source_alt_required_tie_tolerance')}",
@@ -1039,7 +1299,17 @@ def _parse_args() -> argparse.Namespace:
         choices=("priority_top", "top", "both"),
         default="priority_top",
     )
-    parser.add_argument("--candidate-log-top-n", type=int, default=100)
+    parser.add_argument(
+        "--candidate-selection",
+        choices=("legacy", "layered", "positive_neighbor"),
+        default="legacy",
+        help=(
+            "legacy preserves historical width-ordered alternatives; layered "
+            "samples fractionality, near-tie, width, balance, score, and rank-diverse strata; "
+            "positive_neighbor preselects V323-like candidates before layered fill."
+        ),
+    )
+    parser.add_argument("--candidate-log-top-n", type=int, default=200)
     parser.add_argument("--min-source-depth", type=int, default=None)
     parser.add_argument("--max-source-depth", type=int, default=None)
     parser.add_argument(
@@ -1096,6 +1366,7 @@ def main() -> None:
         limit=args.limit,
         alt_pairs_per_event=args.alt_pairs_per_event,
         candidate_source=args.candidate_source,
+        candidate_selection=args.candidate_selection,
         candidate_log_top_n=args.candidate_log_top_n,
         min_source_depth=args.min_source_depth,
         max_source_depth=args.max_source_depth,

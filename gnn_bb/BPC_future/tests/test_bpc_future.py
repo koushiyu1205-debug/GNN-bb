@@ -233,6 +233,8 @@ from BPC_future.solver.journey_driver import (
     _journey_child_constraint_score,
     _journey_child_queue_priority_width,
     _journey_child_score_map_from_config,
+    _journey_branch_score_map_from_config,
+    _normalize_journey_branch_score_map,
     _normalize_journey_child_score_map,
     _journey_skip_ordinary_retry_after_profile_materialization_failure,
     _journey_skip_ordinary_retry_after_weak_negative_filtered,
@@ -802,6 +804,14 @@ class BPCFutureTests(unittest.TestCase):
             )["tail_action"],
             "FRONTIER_REFINEMENT",
         )
+        sparse_payload = _journey_tail_action_controller(
+            sparse,
+            config,
+            rmp_objective=100.0,
+            incumbent=100.0,
+        )
+        self.assertEqual(sparse_payload["tail_action_class"], "A_FRONTIER_REFINEMENT")
+        self.assertEqual(sparse_payload["tail_action_productivity_class"], "pricing_no_negative_columns")
         self.assertEqual(
             _journey_tail_action_controller(
                 broad,
@@ -818,6 +828,7 @@ class BPCFutureTests(unittest.TestCase):
             incumbent=100.0,
         )
         self.assertEqual(missing_target_payload["tail_action"], "BROAD_PLATEAU_FALLBACK")
+        self.assertEqual(missing_target_payload["tail_action_class"], "B_BROAD_PLATEAU")
         self.assertEqual(
             missing_target_payload["tail_action_reason"],
             "fathom_possible_missing_refinement_target",
@@ -842,6 +853,11 @@ class BPCFutureTests(unittest.TestCase):
             recent_rmp_objective_progress=1.0e-3,
         )
         self.assertEqual(productive_at_incumbent["tail_action"], "CONTINUE_COLUMN_GENERATION")
+        self.assertEqual(productive_at_incumbent["tail_action_class"], "C_CONTINUE_CG")
+        self.assertEqual(
+            productive_at_incumbent["tail_action_productivity_class"],
+            "pricing_has_negative_columns",
+        )
         self.assertEqual(
             productive_at_incumbent["tail_action_reason"],
             "fathom_possible_but_negative_column_requires_lp_closure",
@@ -874,6 +890,10 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertEqual(incomplete_signal_payload["tail_action"], "CONTINUE_COLUMN_GENERATION")
         self.assertEqual(
+            incomplete_signal_payload["tail_action_productivity_class"],
+            "pricing_productivity_signals_incomplete",
+        )
+        self.assertEqual(
             incomplete_signal_payload["tail_action_reason"],
             "rmp_below_incumbent_pricing_productivity_signals_incomplete",
         )
@@ -886,6 +906,8 @@ class BPCFutureTests(unittest.TestCase):
             recent_rmp_objective_progress=0.0,
         )
         self.assertEqual(weak_payload["tail_action"], "EARLY_BRANCH")
+        self.assertEqual(weak_payload["tail_action_class"], "D_EARLY_BRANCH")
+        self.assertEqual(weak_payload["tail_action_productivity_class"], "pricing_weak_columns_tail")
         self.assertEqual(
             weak_payload["tail_action_reason"],
             "rmp_below_incumbent_weak_columns_no_active_or_objective_progress",
@@ -12175,6 +12197,105 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual((mismatched["selected"]["task_i"], mismatched["selected"]["task_j"]), (2, 3))
         self.assertIsNone(mismatched["selected"]["branch_score"])
 
+    def test_journey_branch_score_rows_filter_by_instance_context(self):
+        rows = [
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json",
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 2,
+                "score": 1.5,
+            },
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/sector-wave/demo_seed2.json",
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 3,
+                "score": 2.5,
+            },
+            {
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 4,
+                "score": 0.5,
+            },
+        ]
+        raw_map = _normalize_journey_branch_score_map(rows)
+        self.assertIn("node:0:depth:0:1,2", raw_map)
+        self.assertIn("node:0:depth:0:1,3", raw_map)
+        self.assertIn("node:0:depth:0:1,4", raw_map)
+
+        matched = _journey_branch_score_map_from_config(
+            {"journey_branch_candidate_score_map": json.dumps(rows)},
+            data=SimpleNamespace(
+                name="demo_seed1",
+                instance_path="BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json",
+            ),
+        )
+        self.assertIn("node:0:depth:0:1,2", matched)
+        self.assertIn("node:0:depth:0:1,4", matched)
+        self.assertNotIn("node:0:depth:0:1,3", matched)
+
+        other = _journey_branch_score_map_from_config(
+            {"journey_branch_candidate_score_map": json.dumps(rows)},
+            data=SimpleNamespace(
+                name="demo_seed2",
+                instance_path="BPC_future/logical_graph/tasks_020/sector-wave/demo_seed2.json",
+            ),
+        )
+        self.assertIn("node:0:depth:0:1,3", other)
+        self.assertIn("node:0:depth:0:1,4", other)
+        self.assertNotIn("node:0:depth:0:1,2", other)
+
+        path_variant_rows = [
+            {
+                "instance": (
+                    "/home/kai/work/gnn_bb/BPC_future/logical_graph/tasks_020/"
+                    "greedy-anchor/demo_seed1.json"
+                ),
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 5,
+                "score": 3.5,
+            },
+            {
+                "source_log_file": (
+                    "/tmp/logs/BPC_future/logical_graph/tasks_020/"
+                    "greedy-anchor/demo_seed1.json.jsonl"
+                ),
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 6,
+                "score": 4.5,
+            },
+            {
+                "source_log_file": (
+                    "/tmp/logs/BPC_future/logical_graph/tasks_020/"
+                    "sector-wave/demo_seed2.json.jsonl"
+                ),
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 7,
+                "score": 5.5,
+            },
+        ]
+        path_variant = _journey_branch_score_map_from_config(
+            {"journey_branch_candidate_score_map": json.dumps(path_variant_rows)},
+            data=SimpleNamespace(
+                name="demo_seed1",
+                instance_path="BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json",
+            ),
+        )
+        self.assertIn("node:0:depth:0:1,5", path_variant)
+        self.assertIn("node:0:depth:0:1,6", path_variant)
+        self.assertNotIn("node:0:depth:0:1,7", path_variant)
+
     def test_journey_branch_candidate_log_records_forced_pair_binding(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
 
@@ -14441,6 +14562,58 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertEqual(mismatched_child_score, {})
 
+        child_score_rows = [
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json",
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 2,
+                "child_constraint_kind": "same_vehicle",
+                "child_score": 1.5,
+            },
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/sector-wave/demo_seed2.json",
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 2,
+                "child_constraint_kind": "separate_vehicle",
+                "child_score": 2.5,
+            },
+            {
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 2,
+                "task_j": 3,
+                "child_constraint_kind": "same_vehicle",
+                "child_score": 0.5,
+            },
+            {
+                "source_log_file": (
+                    "/tmp/logs/BPC_future/logical_graph/tasks_020/"
+                    "greedy-anchor/demo_seed1.json.jsonl"
+                ),
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 3,
+                "task_j": 4,
+                "child_constraint_kind": "separate_vehicle",
+                "child_score": 3.5,
+            },
+        ]
+        matched_child_rows = _journey_child_score_map_from_config(
+            {"journey_child_priority_score_map": json.dumps(child_score_rows)},
+            data=SimpleNamespace(
+                name="demo_seed1",
+                instance_path="BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json",
+            ),
+        )
+        self.assertIn("node:0:depth:0:1,2:same_vehicle", matched_child_rows)
+        self.assertIn("node:0:depth:0:2,3:same_vehicle", matched_child_rows)
+        self.assertIn("node:0:depth:0:3,4:separate_vehicle", matched_child_rows)
+        self.assertNotIn("node:0:depth:0:1,2:separate_vehicle", matched_child_rows)
+
         fractional_solution = SimpleNamespace(
             journey_values=[(journey(4, (1, 2)), 0.5), (journey(5, (1,)), 0.5)]
         )
@@ -14872,6 +15045,96 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_min_new_task_sets"], 2)
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_soft_return_after_time"], 10.0)
         self.assertEqual(harvest_mode["completion_bound_diverse_harvest_duplicate_saturation_after_time"], 4.0)
+
+        tail_min_fill_config = {
+            "journey_certificate_completion_bound_enabled": True,
+            "journey_certificate_completion_bound_after_retry_enabled": True,
+            "journey_certificate_completion_bound_final_probe_only": True,
+            "journey_certificate_completion_bound_time_buckets": 6,
+            "journey_certificate_completion_bound_energy_buckets": 6,
+            "journey_certificate_completion_bound_diverse_harvest_enabled": True,
+            "journey_certificate_completion_bound_diverse_harvest_min_journeys": 10,
+            "journey_certificate_completion_bound_diverse_harvest_max_returned_journeys": 20,
+            "journey_certificate_completion_bound_diverse_harvest_min_fill": 10,
+            "journey_certificate_completion_bound_diverse_harvest_tail_min_fill_enabled": True,
+            "journey_certificate_completion_bound_diverse_harvest_tail_min_fill": 4,
+        }
+        audit_only_updated, audit_only_mode = _journey_certificate_pricing_config(
+            {
+                **tail_min_fill_config,
+                "journey_certificate_completion_bound_diverse_harvest_tail_min_fill_enabled": False,
+                "journey_certificate_completion_bound_diverse_harvest_tail_min_fill_audit_enabled": True,
+            },
+            base,
+            certificate_candidate=False,
+            certificate_flat_rounds=0,
+            certificate_no_column_rounds=1,
+            depth=0,
+            completion_bound_phase="after_retry",
+        )
+        self.assertEqual(audit_only_updated.direct_journey_label_diverse_harvest_min_fill, 10)
+        self.assertEqual(audit_only_mode["completion_bound_diverse_harvest_min_fill"], 10)
+        self.assertFalse(audit_only_mode["completion_bound_diverse_harvest_tail_min_fill_enabled"])
+        self.assertTrue(audit_only_mode["completion_bound_diverse_harvest_tail_min_fill_audit_enabled"])
+        self.assertTrue(audit_only_mode["completion_bound_diverse_harvest_tail_min_fill_candidate"])
+        self.assertFalse(audit_only_mode["completion_bound_diverse_harvest_tail_min_fill_applied"])
+        self.assertEqual(audit_only_mode["completion_bound_diverse_harvest_tail_min_fill_base"], 10)
+        self.assertEqual(audit_only_mode["completion_bound_diverse_harvest_tail_min_fill_target"], 4)
+        self.assertEqual(audit_only_mode["completion_bound_diverse_harvest_tail_min_fill_reason"], "optin_disabled")
+
+        non_final_audit_updated, non_final_audit_mode = _journey_certificate_pricing_config(
+            {
+                **tail_min_fill_config,
+                "journey_certificate_completion_bound_after_retry_enabled": False,
+                "journey_certificate_completion_bound_final_probe_only": False,
+                "journey_certificate_completion_bound_diverse_harvest_tail_min_fill_enabled": False,
+                "journey_certificate_completion_bound_diverse_harvest_tail_min_fill_audit_enabled": True,
+            },
+            base,
+            certificate_candidate=True,
+            certificate_flat_rounds=0,
+            certificate_no_column_rounds=1,
+            depth=0,
+            completion_bound_phase="standard",
+        )
+        self.assertEqual(non_final_audit_updated.direct_journey_label_diverse_harvest_min_fill, 10)
+        self.assertFalse(non_final_audit_mode["completion_bound_diverse_harvest_tail_min_fill_candidate"])
+        self.assertFalse(non_final_audit_mode["completion_bound_diverse_harvest_tail_min_fill_applied"])
+        self.assertEqual(non_final_audit_mode["completion_bound_diverse_harvest_tail_min_fill_reason"], "not_final_probe")
+
+        root_tail_updated, root_tail_mode = _journey_certificate_pricing_config(
+            tail_min_fill_config,
+            base,
+            certificate_candidate=False,
+            certificate_flat_rounds=0,
+            certificate_no_column_rounds=1,
+            depth=0,
+            completion_bound_phase="after_retry",
+        )
+        self.assertEqual(root_tail_updated.direct_journey_label_diverse_harvest_min_fill, 4)
+        self.assertEqual(root_tail_mode["completion_bound_diverse_harvest_min_fill"], 4)
+        self.assertTrue(root_tail_mode["completion_bound_diverse_harvest_tail_min_fill_enabled"])
+        self.assertTrue(root_tail_mode["completion_bound_diverse_harvest_tail_min_fill_candidate"])
+        self.assertTrue(root_tail_mode["completion_bound_diverse_harvest_tail_min_fill_applied"])
+        self.assertEqual(root_tail_mode["completion_bound_diverse_harvest_tail_min_fill_base"], 10)
+        self.assertEqual(root_tail_mode["completion_bound_diverse_harvest_tail_min_fill_target"], 4)
+        self.assertEqual(root_tail_mode["completion_bound_diverse_harvest_tail_min_fill_reason"], "applied")
+
+        branch_tail_updated, branch_tail_mode = _journey_certificate_pricing_config(
+            {
+                **tail_min_fill_config,
+                "journey_certificate_completion_bound_root_only": False,
+            },
+            base,
+            certificate_candidate=False,
+            certificate_flat_rounds=0,
+            certificate_no_column_rounds=1,
+            depth=1,
+            completion_bound_phase="after_retry",
+        )
+        self.assertEqual(branch_tail_updated.direct_journey_label_diverse_harvest_min_fill, 10)
+        self.assertFalse(branch_tail_mode["completion_bound_diverse_harvest_tail_min_fill_applied"])
+        self.assertEqual(branch_tail_mode["completion_bound_diverse_harvest_tail_min_fill_reason"], "depth_gt_max")
 
         alias_updated, alias_mode = _journey_certificate_pricing_config(
             {

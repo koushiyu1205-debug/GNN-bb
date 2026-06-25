@@ -18,6 +18,8 @@ class JourneyChildScoreMapTests(unittest.TestCase):
                 _child_probe_row(
                     pair=[2, 9],
                     kind="same_vehicle",
+                    complete=True,
+                    right_censored=False,
                     fathomed=True,
                     corrected_gain=3.0,
                     retries=4.0,
@@ -27,6 +29,8 @@ class JourneyChildScoreMapTests(unittest.TestCase):
                 _child_probe_row(
                     pair=[2, 9],
                     kind="separate_vehicle",
+                    complete=True,
+                    right_censored=False,
                     fathomed=False,
                     corrected_gain=0.0,
                     retries=1.0,
@@ -58,6 +62,7 @@ class JourneyChildScoreMapTests(unittest.TestCase):
             self.assertEqual(summary["raw_child_probe_row_count"], 3)
             self.assertEqual(summary["child_probe_row_count"], 2)
             self.assertEqual(summary["filtered_out_child_probe_row_count"], 1)
+            self.assertEqual(summary["right_censored_filter_skip_count"], 0)
             self.assertEqual(summary["child_score_map_entry_count"], 2)
             self.assertEqual(summary["solver_child_priority_mode"], "child_score")
 
@@ -76,8 +81,20 @@ class JourneyChildScoreMapTests(unittest.TestCase):
             tmp_path = Path(tmp)
             child_file = tmp_path / "child_probe_rows.jsonl"
             rows = [
-                _child_probe_row(pair=[1, 3], kind="same_vehicle", corrected_gain=1.0),
-                _child_probe_row(pair=[1, 3], kind="same_vehicle", corrected_gain=3.0),
+                _child_probe_row(
+                    pair=[1, 3],
+                    kind="same_vehicle",
+                    complete=True,
+                    right_censored=False,
+                    corrected_gain=1.0,
+                ),
+                _child_probe_row(
+                    pair=[1, 3],
+                    kind="same_vehicle",
+                    complete=True,
+                    right_censored=False,
+                    corrected_gain=3.0,
+                ),
             ]
             child_file.write_text(
                 "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
@@ -98,6 +115,39 @@ class JourneyChildScoreMapTests(unittest.TestCase):
             self.assertEqual(len(score_rows), 1)
             self.assertEqual(score_rows[0]["key"], "1,3:same_vehicle")
             self.assertEqual(score_rows[0]["observation_count"], 2)
+
+    def test_right_censored_child_probe_rows_are_blocked_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            child_file = tmp_path / "child_probe_rows.jsonl"
+            rows = [
+                _child_probe_row(
+                    pair=[1, 3],
+                    kind="same_vehicle",
+                    complete=False,
+                    right_censored=True,
+                    corrected_gain=3.0,
+                )
+            ]
+            child_file.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            summary = build_child_score_map(
+                [child_file],
+                tmp_path / "out",
+                tmp_path / "report.md",
+            )
+
+            self.assertEqual(summary["raw_child_probe_row_count"], 1)
+            self.assertEqual(summary["child_probe_row_count"], 0)
+            self.assertEqual(summary["right_censored_filter_skip_count"], 1)
+            self.assertEqual(summary["child_score_map_entry_count"], 0)
+            score_map = json.loads((tmp_path / "out" / "journey_child_score_map.json").read_text())
+            self.assertEqual(score_map, {})
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("include_right_censored = False", report)
 
 
 def _child_probe_row(

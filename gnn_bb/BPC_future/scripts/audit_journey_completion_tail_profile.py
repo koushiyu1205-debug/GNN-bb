@@ -61,6 +61,25 @@ PROFILE_MAX_FIELDS = (
     "direct_label_profile_partial_bucket_max_size",
 )
 
+CACHE_COUNT_FIELDS = (
+    "direct_next_sortie_cache_hits",
+    "direct_next_sortie_cache_misses",
+    "generated_next_sorties_before_bound",
+    "generated_next_sorties_after_bound",
+)
+
+TAIL_MIN_FILL_MODE_FIELDS = (
+    "completion_bound_diverse_harvest_tail_min_fill_enabled",
+    "completion_bound_diverse_harvest_tail_min_fill_audit_enabled",
+    "completion_bound_diverse_harvest_tail_min_fill_candidate",
+    "completion_bound_diverse_harvest_tail_min_fill_applied",
+    "completion_bound_diverse_harvest_tail_min_fill_base",
+    "completion_bound_diverse_harvest_tail_min_fill_target",
+    "completion_bound_diverse_harvest_tail_min_fill_max_depth",
+    "completion_bound_diverse_harvest_tail_min_fill_final_probe_only",
+    "completion_bound_diverse_harvest_tail_min_fill_reason",
+)
+
 
 def _iter_jsonl(paths: Iterable[Path]) -> Iterable[Path]:
     for path in paths:
@@ -170,6 +189,64 @@ def _top_float_fields(totals: dict[str, float], limit: int = 8) -> dict[str, flo
     )
 
 
+def _time_share_top(
+    totals: dict[str, float],
+    *,
+    denominator: float,
+    limit: int = 8,
+) -> dict[str, float]:
+    if float(denominator) <= 0.0:
+        return {}
+    shares = {
+        field: round(float(value) / float(denominator), 6)
+        for field, value in totals.items()
+        if abs(float(value)) > 0.0
+    }
+    return dict(sorted(shares.items(), key=lambda item: (-float(item[1]), item[0]))[:limit])
+
+
+def _completion_retry_mode_rows(trigger_events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for event in trigger_events:
+        mode = event.get("retry_mode")
+        if not isinstance(mode, dict):
+            continue
+        row = {
+            key: mode.get(key)
+            for key in TAIL_MIN_FILL_MODE_FIELDS
+            if key in mode
+        }
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _tail_min_fill_summary(mode_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    reason_counts = Counter(
+        str(row.get("completion_bound_diverse_harvest_tail_min_fill_reason") or "")
+        for row in mode_rows
+        if "completion_bound_diverse_harvest_tail_min_fill_reason" in row
+    )
+    return {
+        "completion_retry_tail_min_fill_mode_count": len(mode_rows),
+        "completion_retry_tail_min_fill_candidate_count": int(
+            sum(1 for row in mode_rows if bool(row.get("completion_bound_diverse_harvest_tail_min_fill_candidate")))
+        ),
+        "completion_retry_tail_min_fill_applied_count": int(
+            sum(1 for row in mode_rows if bool(row.get("completion_bound_diverse_harvest_tail_min_fill_applied")))
+        ),
+        "completion_retry_tail_min_fill_optin_disabled_count": int(
+            sum(
+                1
+                for row in mode_rows
+                if row.get("completion_bound_diverse_harvest_tail_min_fill_reason") == "optin_disabled"
+            )
+        ),
+        "completion_retry_tail_min_fill_reason_counts": dict(sorted(reason_counts.items())),
+        "completion_retry_tail_min_fill_last": mode_rows[-1] if mode_rows else None,
+    }
+
+
 def _summarize_log(path: Path) -> dict[str, Any]:
     events = _read_events(path)
     pricing_events = [record for record in events if record.get("event") == "journey_pricing"]
@@ -190,6 +267,11 @@ def _summarize_log(path: Path) -> dict[str, Any]:
     profile_time_totals = _sum_float_fields(completion_retries, PROFILE_TIME_FIELDS)
     profile_count_totals = _sum_int_fields(completion_retries, PROFILE_COUNT_FIELDS)
     profile_count_totals.update(_max_int_fields(completion_retries, PROFILE_MAX_FIELDS))
+    tail_min_fill_mode_rows = _completion_retry_mode_rows(trigger_events)
+    total_profile_generation_time = round(
+        _sum(completion_retries, "profile_generation_time"),
+        6,
+    )
     return {
         "log_file": str(path),
         "instance": None if finish is None else finish.get("instance"),
@@ -209,10 +291,7 @@ def _summarize_log(path: Path) -> dict[str, Any]:
         "completion_retry_class": _classify_completion_retry(last_retry),
         "pricing_kind_counts": dict(sorted(pricing_kind_counts.items())),
         "pricing_state_counts": dict(sorted(state_counts.items())),
-        "completion_retry_total_profile_generation_time": round(
-            _sum(completion_retries, "profile_generation_time"),
-            6,
-        ),
+        "completion_retry_total_profile_generation_time": total_profile_generation_time,
         "completion_retry_total_generated_sequences": int(
             sum(_int(record, "generated_sequences") for record in completion_retries)
         ),
@@ -247,7 +326,16 @@ def _summarize_log(path: Path) -> dict[str, Any]:
         ),
         "completion_retry_profile_time_totals": profile_time_totals,
         "completion_retry_profile_time_top": _top_float_fields(profile_time_totals),
+        "completion_retry_profile_time_share_top": _time_share_top(
+            profile_time_totals,
+            denominator=total_profile_generation_time,
+        ),
         "completion_retry_profile_count_totals": profile_count_totals,
+        "completion_retry_cache_count_totals": _sum_int_fields(
+            completion_retries,
+            CACHE_COUNT_FIELDS,
+        ),
+        **_tail_min_fill_summary(tail_min_fill_mode_rows),
         "completion_retry_last": _compact_completion_retry(last_retry),
         "addition_event_count": len(addition_events),
         "added_journeys": int(sum(_int(record, "added_journeys") for record in addition_events)),
@@ -307,9 +395,12 @@ def _compact_completion_retry(record: dict[str, Any] | None) -> dict[str, Any] |
     keys.extend(PROFILE_TIME_FIELDS)
     keys.extend(PROFILE_COUNT_FIELDS)
     keys.extend(PROFILE_MAX_FIELDS)
+    keys.extend(CACHE_COUNT_FIELDS)
     keys.extend(
         [
             "direct_label_profile_timing_enabled",
+            "direct_journey_label_next_sortie_cache_enabled",
+            "direct_label_harvest_min_fill",
             "direct_label_profile_partial_bucket_mean_size",
         ]
     )
@@ -356,6 +447,27 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
             for field in PROFILE_MAX_FIELDS
         }
     )
+    cache_count_totals = {
+        field: int(
+            sum(
+                int((row.get("completion_retry_cache_count_totals") or {}).get(field) or 0)
+                for row in rows
+            )
+        )
+        for field in CACHE_COUNT_FIELDS
+    }
+    total_profile_generation_time = round(
+        sum(float(row.get("completion_retry_total_profile_generation_time") or 0.0) for row in rows),
+        6,
+    )
+    tail_min_fill_reason_counts: Counter[str] = Counter()
+    for row in rows:
+        tail_min_fill_reason_counts.update(
+            {
+                str(key): int(value)
+                for key, value in (row.get("completion_retry_tail_min_fill_reason_counts") or {}).items()
+            }
+        )
     return {
         "log_count": len(rows),
         "completion_retry_class_counts": dict(sorted(class_counts.items())),
@@ -365,11 +477,13 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "completion_retry_profile_time_totals": profile_time_totals,
         "completion_retry_profile_time_top": _top_float_fields(profile_time_totals),
-        "completion_retry_profile_count_totals": profile_count_totals,
-        "completion_retry_total_profile_generation_time": round(
-            sum(float(row.get("completion_retry_total_profile_generation_time") or 0.0) for row in rows),
-            6,
+        "completion_retry_profile_time_share_top": _time_share_top(
+            profile_time_totals,
+            denominator=total_profile_generation_time,
         ),
+        "completion_retry_profile_count_totals": profile_count_totals,
+        "completion_retry_cache_count_totals": cache_count_totals,
+        "completion_retry_total_profile_generation_time": total_profile_generation_time,
         "completion_retry_total_generated_sequences": int(
             sum(int(row.get("completion_retry_total_generated_sequences") or 0) for row in rows)
         ),
@@ -382,6 +496,19 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "completion_retry_total_selected_trips": int(
             sum(int(row.get("completion_retry_total_selected_trips") or 0) for row in rows)
         ),
+        "completion_retry_tail_min_fill_mode_count": int(
+            sum(int(row.get("completion_retry_tail_min_fill_mode_count") or 0) for row in rows)
+        ),
+        "completion_retry_tail_min_fill_candidate_count": int(
+            sum(int(row.get("completion_retry_tail_min_fill_candidate_count") or 0) for row in rows)
+        ),
+        "completion_retry_tail_min_fill_applied_count": int(
+            sum(int(row.get("completion_retry_tail_min_fill_applied_count") or 0) for row in rows)
+        ),
+        "completion_retry_tail_min_fill_optin_disabled_count": int(
+            sum(int(row.get("completion_retry_tail_min_fill_optin_disabled_count") or 0) for row in rows)
+        ),
+        "completion_retry_tail_min_fill_reason_counts": dict(sorted(tail_min_fill_reason_counts.items())),
         "interpretation": _interpret(rows),
     }
 
@@ -456,6 +583,10 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"{aggregate['completion_retry_profile_timing_enabled_count']}",
         "completion_retry_profile_time_top = "
         f"{aggregate['completion_retry_profile_time_top']}",
+        "completion_retry_profile_time_share_top = "
+        f"{aggregate['completion_retry_profile_time_share_top']}",
+        "completion_retry_cache_count_totals = "
+        f"{aggregate['completion_retry_cache_count_totals']}",
         "completion_retry_total_generated_sequences = "
         f"{aggregate['completion_retry_total_generated_sequences']}",
         "completion_retry_total_evaluated_timed_trips = "
@@ -464,6 +595,16 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"{aggregate['completion_retry_total_negative_journeys']}",
         "completion_retry_total_selected_trips = "
         f"{aggregate['completion_retry_total_selected_trips']}",
+        "completion_retry_tail_min_fill_mode_count = "
+        f"{aggregate['completion_retry_tail_min_fill_mode_count']}",
+        "completion_retry_tail_min_fill_candidate_count = "
+        f"{aggregate['completion_retry_tail_min_fill_candidate_count']}",
+        "completion_retry_tail_min_fill_applied_count = "
+        f"{aggregate['completion_retry_tail_min_fill_applied_count']}",
+        "completion_retry_tail_min_fill_optin_disabled_count = "
+        f"{aggregate['completion_retry_tail_min_fill_optin_disabled_count']}",
+        "completion_retry_tail_min_fill_reason_counts = "
+        f"{aggregate['completion_retry_tail_min_fill_reason_counts']}",
         "production_ready = false",
         "certificate_effect = false",
         "official_bound_effect = false",

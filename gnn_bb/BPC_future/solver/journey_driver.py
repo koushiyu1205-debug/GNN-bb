@@ -4045,7 +4045,11 @@ def _process_journey_branch_node(
                     gate_passed=False,
                     gate_reason=str(gate_reason),
                     tail_action=str(tail_action_payload.get("tail_action", "")),
+                    tail_action_class=str(tail_action_payload.get("tail_action_class", "")),
                     tail_action_reason=str(tail_action_payload.get("tail_action_reason", "")),
+                    tail_action_productivity_class=str(
+                        tail_action_payload.get("tail_action_productivity_class", "")
+                    ),
                     tail_action_before_final_probe=True,
                     rmp_objective=round(float(solution.objective), 6),
                     inherited_lower_bound=round(float(node.lower_bound), 6),
@@ -4098,6 +4102,8 @@ def _process_journey_branch_node(
             reason=str(tail_action_payload.get("tail_action_reason", "")),
             trigger="tail_action_controller",
             tail_action=str(tail_action_payload.get("tail_action", "")),
+            tail_action_class=str(tail_action_payload.get("tail_action_class", "")),
+            tail_action_productivity_class=str(tail_action_payload.get("tail_action_productivity_class", "")),
             tail_action_no_column=True,
             tail_action_before_final_probe=bool(before_final_probe),
             inherited_lower_bound=round(float(node.lower_bound), 6),
@@ -5933,6 +5939,10 @@ def _process_journey_branch_node(
                         reason=str(tail_action_payload.get("tail_action_reason", "")),
                         trigger="tail_action_controller",
                         tail_action=str(tail_action_payload.get("tail_action", "")),
+                        tail_action_class=str(tail_action_payload.get("tail_action_class", "")),
+                        tail_action_productivity_class=str(
+                            tail_action_payload.get("tail_action_productivity_class", "")
+                        ),
                         added_journeys=added,
                         inherited_lower_bound=round(float(node.lower_bound), 6),
                         rmp_objective=round(float(solution.objective), 6),
@@ -7614,6 +7624,10 @@ def _process_journey_branch_node(
                     reason=str(tail_action_payload.get("tail_action_reason", "")),
                     trigger="tail_action_controller",
                     tail_action=str(tail_action_payload.get("tail_action", "")),
+                    tail_action_class=str(tail_action_payload.get("tail_action_class", "")),
+                    tail_action_productivity_class=str(
+                        tail_action_payload.get("tail_action_productivity_class", "")
+                    ),
                     tail_action_no_column=True,
                     inherited_lower_bound=round(float(node.lower_bound), 6),
                     rmp_objective=round(float(solution.objective), 6),
@@ -9353,7 +9367,30 @@ def _journey_branch_score_lookup_keys(
     return tuple(keys)
 
 
-def _normalize_journey_branch_score_map(raw: Any) -> dict[str, float]:
+def _journey_score_row_context_matches(row: dict[str, Any], context: str | None) -> bool:
+    if not context:
+        return True
+    context_text = str(context).replace("\\", "/")
+    context_parts = tuple(piece.replace("\\", "/") for piece in context_text.split() if piece)
+    row_contexts = [
+        str(row.get(key) or "").replace("\\", "/")
+        for key in ("instance", "instance_path", "log_file", "source_log_file")
+        if row.get(key) not in (None, "")
+    ]
+    if not row_contexts:
+        return True
+    for text in row_contexts:
+        if text in context_text:
+            return True
+        for part in context_parts:
+            if text == part or text.endswith(f"/{part}") or part.endswith(f"/{text}"):
+                return True
+            if "/" in text and "/" in part and (text in part or part in text):
+                return True
+    return False
+
+
+def _normalize_journey_branch_score_map(raw: Any, *, context: str | None = None) -> dict[str, float]:
     if raw in (None, ""):
         return {}
     if isinstance(raw, str):
@@ -9377,6 +9414,8 @@ def _normalize_journey_branch_score_map(raw: Any) -> dict[str, float]:
     if isinstance(raw, dict):
         for key, value in raw.items():
             if isinstance(value, dict) and _journey_branch_score_pair_from_row(value) is not None:
+                if not _journey_score_row_context_matches(value, context):
+                    continue
                 row_score = _journey_branch_score_value(value)
                 if row_score is None:
                     continue
@@ -9408,6 +9447,8 @@ def _normalize_journey_branch_score_map(raw: Any) -> dict[str, float]:
     if isinstance(raw, list):
         for row in raw:
             if not isinstance(row, dict):
+                continue
+            if not _journey_score_row_context_matches(row, context):
                 continue
             score = _journey_branch_score_value(row)
             pair = _journey_branch_score_pair_from_row(row)
@@ -9538,7 +9579,7 @@ def _journey_child_score_lookup_keys(
     return tuple(dict.fromkeys(keys))
 
 
-def _normalize_journey_child_score_map(raw: Any) -> dict[str, float]:
+def _normalize_journey_child_score_map(raw: Any, *, context: str | None = None) -> dict[str, float]:
     if raw in (None, ""):
         return {}
     if isinstance(raw, str):
@@ -9562,6 +9603,8 @@ def _normalize_journey_child_score_map(raw: Any) -> dict[str, float]:
     if isinstance(raw, dict):
         for key, value in raw.items():
             if isinstance(value, dict):
+                if not _journey_score_row_context_matches(value, context):
+                    continue
                 score = _journey_child_score_value(value)
                 pair = _journey_child_score_pair_from_row(value)
                 kind = _journey_child_score_kind_from_row(value)
@@ -9586,6 +9629,8 @@ def _normalize_journey_child_score_map(raw: Any) -> dict[str, float]:
     if isinstance(raw, list):
         for row in raw:
             if not isinstance(row, dict):
+                continue
+            if not _journey_score_row_context_matches(row, context):
                 continue
             score = _journey_child_score_value(row)
             pair = _journey_child_score_pair_from_row(row)
@@ -9744,10 +9789,14 @@ def _journey_branch_score_map_from_config(
     context_status = _journey_branch_score_context_status(config, data)
     if context_status["enabled"] and not context_status["allowed"]:
         return {}
-    score_map = _normalize_journey_branch_score_map(config.get("journey_branch_candidate_score_map"))
+    context = str(context_status.get("context") or "")
+    score_map = _normalize_journey_branch_score_map(
+        config.get("journey_branch_candidate_score_map"),
+        context=context,
+    )
     path = config.get("journey_branch_candidate_score_path")
     if path not in (None, ""):
-        score_map.update(_normalize_journey_branch_score_map(str(path)))
+        score_map.update(_normalize_journey_branch_score_map(str(path), context=context))
     return score_map
 
 
@@ -9759,11 +9808,15 @@ def _journey_child_score_map_from_config(
     context_status = _journey_child_score_context_status(config, data)
     if context_status["enabled"] and not context_status["allowed"]:
         return {}
-    score_map = _normalize_journey_child_score_map(config.get("journey_child_priority_score_map"))
+    context = str(context_status.get("context") or "")
+    score_map = _normalize_journey_child_score_map(
+        config.get("journey_child_priority_score_map"),
+        context=context,
+    )
     for key in ("journey_child_priority_score_path", "journey_child_score_path"):
         path = config.get(key)
         if path not in (None, ""):
-            score_map.update(_normalize_journey_child_score_map(str(path)))
+            score_map.update(_normalize_journey_child_score_map(str(path), context=context))
     return score_map
 
 
@@ -10755,6 +10808,30 @@ def _validate_journey_required_components(config: dict[str, Any]) -> None:
                     "journey_certificate_completion_bound_diverse_harvest_replacement_cap "
                     "must be nonnegative"
                 )
+            if bool(
+                config.get("journey_certificate_completion_bound_diverse_harvest_tail_min_fill_enabled", False)
+            ) or bool(
+                config.get("journey_certificate_completion_bound_diverse_harvest_tail_min_fill_audit_enabled", False)
+            ):
+                harvest_tail_min_fill = int(
+                    config.get("journey_certificate_completion_bound_diverse_harvest_tail_min_fill", 0)
+                )
+                if harvest_tail_min_fill < 0:
+                    raise ValueError(
+                        "journey_certificate_completion_bound_diverse_harvest_tail_min_fill "
+                        "must be nonnegative"
+                    )
+                harvest_tail_min_fill_max_depth = int(
+                    config.get(
+                        "journey_certificate_completion_bound_diverse_harvest_tail_min_fill_max_depth",
+                        0,
+                    )
+                )
+                if harvest_tail_min_fill_max_depth < 0:
+                    raise ValueError(
+                        "journey_certificate_completion_bound_diverse_harvest_tail_min_fill_max_depth "
+                        "must be nonnegative"
+                    )
             if bool(config.get("journey_certificate_completion_bound_mask_closure_enabled", False)):
                 mask_closure_max_masks = int(
                     config.get("journey_certificate_completion_bound_mask_closure_max_masks", 8)
@@ -16084,6 +16161,66 @@ def _journey_retry_force_ng_config(
     return replace(pricing_config, **_journey_ng_worker_updates(config)), True
 
 
+def _journey_completion_bound_tail_harvest_min_fill(
+    config: dict[str, Any],
+    *,
+    base_min_fill: int,
+    depth: int,
+    completion_bound_is_final_probe: bool,
+) -> tuple[int, dict[str, Any]]:
+    base = max(0, int(base_min_fill))
+    behavior_enabled = bool(
+        config.get("journey_certificate_completion_bound_diverse_harvest_tail_min_fill_enabled", False)
+    )
+    audit_enabled = bool(
+        config.get("journey_certificate_completion_bound_diverse_harvest_tail_min_fill_audit_enabled", False)
+    )
+    if not behavior_enabled and not audit_enabled:
+        return base, {}
+    target = max(
+        0,
+        int(
+            config.get(
+                "journey_certificate_completion_bound_diverse_harvest_tail_min_fill",
+                base,
+            )
+        ),
+    )
+    max_depth = max(
+        0,
+        int(config.get("journey_certificate_completion_bound_diverse_harvest_tail_min_fill_max_depth", 0)),
+    )
+    final_probe_only = bool(
+        config.get("journey_certificate_completion_bound_diverse_harvest_tail_min_fill_final_probe_only", True)
+    )
+    meta: dict[str, Any] = {
+        "completion_bound_diverse_harvest_tail_min_fill_enabled": behavior_enabled,
+        "completion_bound_diverse_harvest_tail_min_fill_audit_enabled": audit_enabled,
+        "completion_bound_diverse_harvest_tail_min_fill_candidate": False,
+        "completion_bound_diverse_harvest_tail_min_fill_applied": False,
+        "completion_bound_diverse_harvest_tail_min_fill_base": base,
+        "completion_bound_diverse_harvest_tail_min_fill_target": target,
+        "completion_bound_diverse_harvest_tail_min_fill_max_depth": max_depth,
+        "completion_bound_diverse_harvest_tail_min_fill_final_probe_only": final_probe_only,
+    }
+    if int(depth) > max_depth:
+        meta["completion_bound_diverse_harvest_tail_min_fill_reason"] = "depth_gt_max"
+        return base, meta
+    if final_probe_only and not bool(completion_bound_is_final_probe):
+        meta["completion_bound_diverse_harvest_tail_min_fill_reason"] = "not_final_probe"
+        return base, meta
+    if target >= base:
+        meta["completion_bound_diverse_harvest_tail_min_fill_reason"] = "target_not_smaller"
+        return base, meta
+    meta["completion_bound_diverse_harvest_tail_min_fill_candidate"] = True
+    if not behavior_enabled:
+        meta["completion_bound_diverse_harvest_tail_min_fill_reason"] = "optin_disabled"
+        return base, meta
+    meta["completion_bound_diverse_harvest_tail_min_fill_applied"] = True
+    meta["completion_bound_diverse_harvest_tail_min_fill_reason"] = "applied"
+    return target, meta
+
+
 def _journey_certificate_pricing_config(
     config: dict[str, Any],
     pricing_config: JourneyPricingConfig,
@@ -16555,6 +16692,7 @@ def _journey_certificate_pricing_config(
                 config.get("journey_certificate_completion_bound_diverse_harvest_enabled", False),
             )
         )
+        harvest_min_fill_mode: dict[str, Any] = {}
         if final_judge_harvest_enabled:
             final_judge_late_max_columns = config.get("journey_final_judge_harvesting_late_max_columns", None)
             final_judge_max_columns = config.get("journey_final_judge_harvesting_max_columns", None)
@@ -16605,6 +16743,21 @@ def _journey_certificate_pricing_config(
                 1,
                 min(harvest_max_returned, int(harvest_min_count_value)),
             )
+            harvest_min_fill_base = max(
+                0,
+                int(
+                    config.get(
+                        "journey_certificate_completion_bound_diverse_harvest_min_fill",
+                        harvest_min_count,
+                    )
+                ),
+            )
+            harvest_min_fill, harvest_min_fill_mode = _journey_completion_bound_tail_harvest_min_fill(
+                config,
+                base_min_fill=harvest_min_fill_base,
+                depth=depth,
+                completion_bound_is_final_probe=completion_bound_is_final_probe,
+            )
             harvest_grace_time = max(
                 float(updated.direct_journey_label_early_return_negative_grace_time),
                 max(
@@ -16637,12 +16790,7 @@ def _journey_certificate_pricing_config(
                 ),
                 direct_journey_label_diverse_harvest_min_fill=max(
                     0,
-                    int(
-                        config.get(
-                            "journey_certificate_completion_bound_diverse_harvest_min_fill",
-                            harvest_min_count,
-                        )
-                    ),
+                    int(harvest_min_fill),
                 ),
                 direct_journey_label_diverse_harvest_min_new_task_sets=max(
                     0, int(harvest_min_new_masks_value),
@@ -16834,6 +16982,7 @@ def _journey_certificate_pricing_config(
             mode["completion_bound_diverse_harvest_min_fill"] = int(
                 updated.direct_journey_label_diverse_harvest_min_fill
             )
+            mode.update(harvest_min_fill_mode)
             mode["completion_bound_diverse_harvest_min_new_task_sets"] = int(
                 updated.direct_journey_label_diverse_harvest_min_new_task_sets
             )
@@ -19600,6 +19749,9 @@ def _log_journey_pricing(
         direct_label_diverse_harvest_priority_overlap_threshold=None
         if config is None
         else round(float(getattr(config, "direct_journey_label_diverse_harvest_priority_overlap_threshold", 1.0)), 6),
+        direct_label_harvest_min_fill=None
+        if config is None
+        else int(getattr(config, "direct_journey_label_diverse_harvest_min_fill", 0)),
         direct_label_harvest_support_aware_enabled=bool(
             getattr(pricing, "direct_label_harvest_support_aware_enabled", False)
         ),
@@ -20833,6 +20985,32 @@ def _journey_tail_action_controller(
     recent_active_support_additions: int | None = None,
     recent_rmp_objective_progress: float | None = None,
 ) -> dict[str, Any]:
+    def _payload(
+        action: str,
+        reason: str,
+        *,
+        gap: float | None,
+        fathom_possible: bool,
+        productivity_class: str,
+    ) -> dict[str, Any]:
+        class_map = {
+            "FRONTIER_REFINEMENT": "A_FRONTIER_REFINEMENT",
+            "BROAD_PLATEAU_FALLBACK": "B_BROAD_PLATEAU",
+            "CONTINUE_COLUMN_GENERATION": "C_CONTINUE_CG",
+            "EARLY_BRANCH": "D_EARLY_BRANCH",
+        }
+        return {
+            "tail_action": action,
+            "tail_action_class": class_map.get(str(action), "UNKNOWN"),
+            "tail_action_reason": reason,
+            "tail_action_productivity_class": str(productivity_class),
+            "rmp_to_incumbent_gap": gap,
+            "fathom_possible_if_rc_zero": bool(fathom_possible),
+            "recent_active_support_additions": active_support_additions,
+            "recent_rmp_objective_progress": rmp_progress,
+            "recent_true_rc_productivity": int(true_rc_productivity),
+        }
+
     true_rc_productivity = len(getattr(pricing, "journeys", tuple()) or tuple())
     active_support_additions = None
     if recent_active_support_additions is not None:
@@ -20849,38 +21027,32 @@ def _journey_tail_action_controller(
         if rmp_progress is not None and not math.isfinite(rmp_progress):
             rmp_progress = None
     if rmp_objective is None or incumbent is None:
-        return {
-            "tail_action": "UNKNOWN",
-            "tail_action_reason": "missing_rmp_or_incumbent",
-            "rmp_to_incumbent_gap": None,
-            "fathom_possible_if_rc_zero": False,
-            "recent_active_support_additions": active_support_additions,
-            "recent_rmp_objective_progress": rmp_progress,
-            "recent_true_rc_productivity": int(true_rc_productivity),
-        }
+        return _payload(
+            "UNKNOWN",
+            "missing_rmp_or_incumbent",
+            gap=None,
+            fathom_possible=False,
+            productivity_class="missing_rmp_or_incumbent",
+        )
     try:
         rmp = float(rmp_objective)
         ub = float(incumbent)
     except (TypeError, ValueError):
-        return {
-            "tail_action": "UNKNOWN",
-            "tail_action_reason": "invalid_rmp_or_incumbent",
-            "rmp_to_incumbent_gap": None,
-            "fathom_possible_if_rc_zero": False,
-            "recent_active_support_additions": active_support_additions,
-            "recent_rmp_objective_progress": rmp_progress,
-            "recent_true_rc_productivity": int(true_rc_productivity),
-        }
+        return _payload(
+            "UNKNOWN",
+            "invalid_rmp_or_incumbent",
+            gap=None,
+            fathom_possible=False,
+            productivity_class="invalid_rmp_or_incumbent",
+        )
     if not math.isfinite(rmp) or not math.isfinite(ub):
-        return {
-            "tail_action": "UNKNOWN",
-            "tail_action_reason": "nonfinite_rmp_or_incumbent",
-            "rmp_to_incumbent_gap": None,
-            "fathom_possible_if_rc_zero": False,
-            "recent_active_support_additions": active_support_additions,
-            "recent_rmp_objective_progress": rmp_progress,
-            "recent_true_rc_productivity": int(true_rc_productivity),
-        }
+        return _payload(
+            "UNKNOWN",
+            "nonfinite_rmp_or_incumbent",
+            gap=None,
+            fathom_possible=False,
+            productivity_class="nonfinite_rmp_or_incumbent",
+        )
     integer_tol = float(config.get("integer_tol", 1.0e-6))
     refinement_cap = max(
         1,
@@ -20921,7 +21093,9 @@ def _journey_tail_action_controller(
     if int(true_rc_productivity) > 0 and fathom_possible:
         action = "CONTINUE_COLUMN_GENERATION"
         reason = "fathom_possible_but_negative_column_requires_lp_closure"
+        productivity_class = "pricing_has_negative_columns"
     elif fathom_possible:
+        productivity_class = "pricing_no_negative_columns"
         if frontier_target is None:
             action = "BROAD_PLATEAU_FALLBACK"
             reason = "fathom_possible_missing_refinement_target"
@@ -20949,27 +21123,30 @@ def _journey_tail_action_controller(
         if active_support_moving:
             action = "CONTINUE_COLUMN_GENERATION"
             reason = "rmp_below_incumbent_pricing_active_support_productive"
+            productivity_class = "pricing_active_support_productive"
         elif objective_moving:
             action = "CONTINUE_COLUMN_GENERATION"
             reason = "rmp_below_incumbent_pricing_objective_moving"
+            productivity_class = "pricing_objective_productive"
         elif missing_productivity_signals or active_support_additions is None or rmp_progress is None:
             action = "CONTINUE_COLUMN_GENERATION"
             reason = "rmp_below_incumbent_pricing_productivity_signals_incomplete"
+            productivity_class = "pricing_productivity_signals_incomplete"
         else:
             action = "EARLY_BRANCH"
             reason = "rmp_below_incumbent_weak_columns_no_active_or_objective_progress"
+            productivity_class = "pricing_weak_columns_tail"
     else:
         action = "EARLY_BRANCH"
         reason = "rmp_below_incumbent_pricing_unproductive_for_fathom"
-    return {
-        "tail_action": action,
-        "tail_action_reason": reason,
-        "rmp_to_incumbent_gap": float(ub) - float(rmp),
-        "fathom_possible_if_rc_zero": bool(fathom_possible),
-        "recent_active_support_additions": active_support_additions,
-        "recent_rmp_objective_progress": rmp_progress,
-        "recent_true_rc_productivity": int(true_rc_productivity),
-    }
+        productivity_class = "pricing_unproductive_no_negative_columns"
+    return _payload(
+        action,
+        reason,
+        gap=float(ub) - float(rmp),
+        fathom_possible=bool(fathom_possible),
+        productivity_class=productivity_class,
+    )
 
 
 def _journey_should_early_branch_on_tail_action(
@@ -21344,7 +21521,9 @@ def _log_journey_corrected_node_bound_audit(
             rmp_objective=None if rmp_objective is None else round(float(rmp_objective), 9),
             incumbent=None if incumbent is None else round(float(incumbent), 9),
             tail_action=str(tail_action_payload.get("tail_action", "UNKNOWN")),
+            tail_action_class=str(tail_action_payload.get("tail_action_class", "UNKNOWN")),
             tail_action_reason=str(tail_action_payload.get("tail_action_reason", "")),
+            tail_action_productivity_class=str(tail_action_payload.get("tail_action_productivity_class", "")),
             rmp_to_incumbent_gap=None
             if tail_action_payload.get("rmp_to_incumbent_gap") is None
             else round(float(tail_action_payload["rmp_to_incumbent_gap"]), 9),

@@ -66,9 +66,10 @@ journey_branching_enabled: True
 journey_max_nodes: 1000
 journey_max_cg_iterations: 80
 # Diagnostic only: capture enough branch candidate features for branch-impact /
-# child-proof-cost coverage-gap sampling.  This does not change the selected
-# branch unless a separate journey_branch_candidate_priority opt-in is provided.
-journey_branch_candidate_log_top_n: 100
+# child-proof-cost coverage-gap sampling.  Top-200 reduces missed lower-rank
+# near-tie candidates without changing the selected branch unless a separate
+# journey_branch_candidate_priority opt-in is provided.
+journey_branch_candidate_log_top_n: 200
 journey_initial_source_trip_limit: 1800
 journey_initial_max_columns: 6000
 journey_pool_source_trip_limit: 1800
@@ -181,7 +182,19 @@ journey_certificate_completion_bound_diverse_harvest_min_journeys: 10
 journey_certificate_completion_bound_diverse_harvest_max_returned_journeys: 20
 journey_certificate_completion_bound_diverse_harvest_overlap_threshold: 0.4
 journey_certificate_completion_bound_diverse_harvest_top_k_strongest: 5
+# Keep the canonical 20-task default conservative.  A smaller opt-in fill can
+# help root-only proof tails, but a near-threshold subset showed regression
+# when it was applied globally.
 journey_certificate_completion_bound_diverse_harvest_min_fill: 10
+# Default-off experiment hook: only use this for controlled root-tail A/B runs,
+# not for canonical full600/full200 gates until it passes no-regression.
+journey_certificate_completion_bound_diverse_harvest_tail_min_fill_enabled: False
+# Audit-only: emit whether the current completion-bound final probe would be a
+# low-min-fill candidate.  This does not change pricing behavior.
+journey_certificate_completion_bound_diverse_harvest_tail_min_fill_audit_enabled: True
+journey_certificate_completion_bound_diverse_harvest_tail_min_fill: 4
+journey_certificate_completion_bound_diverse_harvest_tail_min_fill_max_depth: 0
+journey_certificate_completion_bound_diverse_harvest_tail_min_fill_final_probe_only: True
 journey_certificate_completion_bound_diverse_harvest_min_new_task_sets: 0
 # In 20-task root tails, many expensive final-judge columns are inactive-only.
 # Reserve part of the harvest for exact-RC negative repairs of current LP

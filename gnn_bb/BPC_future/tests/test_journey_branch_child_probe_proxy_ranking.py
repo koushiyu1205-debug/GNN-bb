@@ -79,6 +79,12 @@ class JourneyBranchChildProbeProxyRankingTests(unittest.TestCase):
             self.assertEqual(summary["proxy_context_count"], 1)
             self.assertEqual(summary["proxy_ranking_pair_count"], 1)
             self.assertEqual(summary["right_censored_proxy_ranking_pair_count"], 1)
+            self.assertEqual(summary["promotion_ready_branch_count"], 0)
+            self.assertEqual(summary["promotion_blocked_branch_count"], 2)
+            self.assertEqual(
+                summary["promotion_blocked_reason_counts"],
+                {"proxy_score_below_promotion_threshold": 2},
+            )
 
             ranking_rows = _read_jsonl(tmp_path / "out" / "child_probe_proxy_ranking_pair_rows.jsonl")
             self.assertEqual(len(ranking_rows), 1)
@@ -86,6 +92,11 @@ class JourneyBranchChildProbeProxyRankingTests(unittest.TestCase):
             self.assertEqual(ranking_rows[0]["worse"]["alternative_pair"], [4, 5])
             self.assertEqual(ranking_rows[0]["preference_reason"], "child_fathom_then_proxy_score")
             self.assertTrue(ranking_rows[0]["right_censored_proxy"])
+            self.assertFalse(ranking_rows[0]["better"]["promotion_ready"])
+            self.assertEqual(
+                ranking_rows[0]["better"]["promotion_blocked_reasons"],
+                ["proxy_score_below_promotion_threshold"],
+            )
             self.assertIn("right-censored proxy", (tmp_path / "report.md").read_text(encoding="utf-8"))
 
     def test_min_proxy_score_gap_filters_near_ties(self) -> None:
@@ -115,6 +126,45 @@ class JourneyBranchChildProbeProxyRankingTests(unittest.TestCase):
             self.assertEqual(summary["proxy_context_count"], 1)
             self.assertEqual(summary["proxy_ranking_pair_count"], 0)
             self.assertFalse(summary["sampling_navigation_ready"])
+
+    def test_marks_complete_positive_proxy_as_promotion_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            probe_file = tmp_path / "child_probe_rows.jsonl"
+            rows = [
+                _child_probe_row(
+                    pair=[1, 2],
+                    child_node_id=1,
+                    complete=True,
+                    right_censored=False,
+                    fathomed=True,
+                    corrected_gain=25.0,
+                    retries=0.0,
+                    proof_cpu=10.0,
+                )
+            ]
+            probe_file.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            summary = build_proxy_ranking(
+                [probe_file],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                min_promotion_fathom_count=1.0,
+                min_promotion_corrected_bound_gain=10.0,
+                max_promotion_completion_bound_retry_count=1.0,
+                require_promotion_complete_label=True,
+            )
+
+            self.assertEqual(summary["promotion_ready_branch_count"], 1)
+            self.assertEqual(summary["promotion_blocked_branch_count"], 0)
+            branch_rows = _read_jsonl(tmp_path / "out" / "child_probe_proxy_branch_rows.jsonl")
+            self.assertTrue(branch_rows[0]["promotion_ready"])
+            self.assertEqual(branch_rows[0]["promotion_blocked_reasons"], [])
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("promotion_ready_branch_count = 1", report)
 
 
 def _child_probe_row(

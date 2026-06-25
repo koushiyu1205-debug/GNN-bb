@@ -192,6 +192,7 @@ def build_child_score_map(
     include_log_contains: tuple[str, ...] = (),
     exclude_log_contains: tuple[str, ...] = (),
     include_unstarted: bool = False,
+    include_right_censored: bool = False,
     complete_bonus: float = 5.0,
     right_censored_penalty: float = 8.0,
     fathom_bonus: float = 2.0,
@@ -206,6 +207,7 @@ def build_child_score_map(
     raw_rows = _load_child_probe_rows(inputs)
     rows: list[dict[str, Any]] = []
     skipped_rows = 0
+    right_censored_filter_skip_count = 0
     for row in raw_rows:
         log_file = str(row.get("log_file") or "")
         if include_log_contains and not any(token in log_file for token in include_log_contains):
@@ -213,6 +215,9 @@ def build_child_score_map(
         if exclude_log_contains and any(token in log_file for token in exclude_log_contains):
             continue
         if not include_unstarted and not bool(row.get("child_started")):
+            continue
+        if not include_right_censored and bool(row.get("right_censored")):
+            right_censored_filter_skip_count += 1
             continue
         pair = _pair_from_row(row)
         kind = _child_kind(row)
@@ -331,12 +336,14 @@ def build_child_score_map(
         "raw_child_probe_row_count": len(raw_rows),
         "child_probe_row_count": len(rows),
         "filtered_out_child_probe_row_count": len(raw_rows) - len(rows),
+        "right_censored_filter_skip_count": int(right_censored_filter_skip_count),
         "skipped_row_count": int(skipped_rows),
         "child_score_row_count": len(score_rows),
         "child_score_map_entry_count": len(score_map),
         "include_log_contains": list(include_log_contains),
         "exclude_log_contains": list(exclude_log_contains),
         "include_unstarted": bool(include_unstarted),
+        "include_right_censored": bool(include_right_censored),
         "complete_bonus": float(complete_bonus),
         "right_censored_penalty": float(right_censored_penalty),
         "fathom_bonus": float(fathom_bonus),
@@ -373,6 +380,7 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
         "raw_child_probe_row_count",
         "child_probe_row_count",
         "filtered_out_child_probe_row_count",
+        "right_censored_filter_skip_count",
         "skipped_row_count",
         "child_score_row_count",
         "child_score_map_entry_count",
@@ -380,6 +388,7 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
         "include_log_contains",
         "exclude_log_contains",
         "include_unstarted",
+        "include_right_censored",
         "solver_child_priority_mode",
         "solver_score_map_path",
         "production_ready",
@@ -403,7 +412,7 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
         "`child_score` 只改变同一个 Ryan-Foster branch 下 same/separate child 的入队顺序；它不改变 lower bound、分支约束、剪枝或 certificate。"
     )
     lines.append(
-        "当前输出仍是 diagnostic-only；right-censored 数据可用于采样导航和 shadow/opt-in，不应直接视为 production-ready 模型。"
+        "默认只接收完整 child 标签；right-censored 数据必须显式 `--include-right-censored` 才会进入 map，且只能用于采样导航和 shadow/opt-in，不应直接视为 production-ready 模型。"
     )
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -417,6 +426,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--include-log-contains", action="append", default=[])
     parser.add_argument("--exclude-log-contains", action="append", default=[])
     parser.add_argument("--include-unstarted", action="store_true")
+    parser.add_argument(
+        "--include-right-censored",
+        action="store_true",
+        help="Allow right-censored child-probe rows into the diagnostic map. Default fail-closed excludes them.",
+    )
     parser.add_argument("--complete-bonus", type=float, default=5.0)
     parser.add_argument("--right-censored-penalty", type=float, default=8.0)
     parser.add_argument("--fathom-bonus", type=float, default=2.0)
@@ -438,6 +452,7 @@ def main() -> None:
         include_log_contains=tuple(args.include_log_contains or ()),
         exclude_log_contains=tuple(args.exclude_log_contains or ()),
         include_unstarted=bool(args.include_unstarted),
+        include_right_censored=bool(args.include_right_censored),
         complete_bonus=args.complete_bonus,
         right_censored_penalty=args.right_censored_penalty,
         fathom_bonus=args.fathom_bonus,

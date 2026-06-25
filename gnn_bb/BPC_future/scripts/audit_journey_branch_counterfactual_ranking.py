@@ -87,6 +87,14 @@ def _context_key(row: dict[str, Any]) -> tuple[str, int, int, str]:
     )
 
 
+def _time_window_family(value: Any) -> str:
+    text = str(value or "")
+    for token in ("greedy-anchor", "random-wave", "sector-wave"):
+        if token in text:
+            return token
+    return ""
+
+
 def _metric(row: dict[str, Any], name: str) -> float:
     deltas = row.get("deltas")
     if not isinstance(deltas, dict):
@@ -151,6 +159,43 @@ def _compact_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_strong_positive(row: dict[str, Any]) -> bool:
+    if str(row.get("counterfactual_label_type") or "") == "strong_positive":
+        return True
+    return bool(
+        _label(row, "y_counterfactual_wall_improved") > 0
+        or _label(row, "y_counterfactual_timeout_resolved") > 0
+    )
+
+
+def _matches_holdout_filter(row: dict[str, Any], holdout_instance_contains: tuple[str, ...]) -> bool:
+    if not holdout_instance_contains:
+        return False
+    instance = str(row.get("instance") or "")
+    return any(token and token in instance for token in holdout_instance_contains)
+
+
+def _has_positive_holdout(
+    row: dict[str, Any],
+    holdout_instance_contains: tuple[str, ...] = (),
+) -> bool:
+    if not _is_strong_positive(row):
+        return False
+    baseline_raw = row.get("baseline_raw_row") if isinstance(row.get("baseline_raw_row"), dict) else {}
+    alt_raw = row.get("alternative_raw_row") if isinstance(row.get("alternative_raw_row"), dict) else {}
+    return bool(
+        row.get("holdout_context")
+        or row.get("is_holdout")
+        or row.get("positive_holdout_context")
+        or baseline_raw.get("holdout_context")
+        or baseline_raw.get("is_holdout")
+        or alt_raw.get("holdout_context")
+        or alt_raw.get("is_holdout")
+        or alt_raw.get("positive_holdout_context")
+        or _matches_holdout_filter(row, holdout_instance_contains)
+    )
+
+
 def build_ranking_audit(
     inputs: list[Path],
     output_dir: Path,
@@ -158,6 +203,7 @@ def build_ranking_audit(
     *,
     min_wall_gap: float = 1.0,
     min_exact_pricing_gap: int = 1,
+    positive_holdout_instance_contains: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     rows = _load_rows(inputs)
     groups: dict[tuple[str, int, int, str], list[dict[str, Any]]] = defaultdict(list)
@@ -171,6 +217,7 @@ def build_ranking_audit(
     proxy_counter: Counter[str] = Counter()
     label_counter: Counter[str] = Counter()
     context_counter: Counter[str] = Counter()
+    positive_context_keys: set[tuple[str, int, int, str]] = set()
 
     for row in rows:
         if _label(row, "y_counterfactual_wall_improved") > 0:
@@ -189,6 +236,8 @@ def build_ranking_audit(
             and _label(row, "y_counterfactual_wall_improved") > 0
         ):
             proxy_counter["more_child_negative_but_wall_improved"] += 1
+        if _is_strong_positive(row):
+            positive_context_keys.add(_context_key(row))
 
     for key, group in sorted(groups.items(), key=lambda item: item[0]):
         sorted_group = sorted(group, key=lambda row: (_metric(row, "wall_time_delta"), _entry_id(row)))
@@ -279,9 +328,79 @@ def build_ranking_audit(
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in ranking_rows),
         encoding="utf-8",
     )
+    strong_positive_rows = [row for row in rows if _is_strong_positive(row)]
+    strong_positive_count = len(strong_positive_rows)
+    strong_positive_context_count = len(positive_context_keys)
+    strong_positive_instance_count = len(
+        {str(row.get("instance") or "") for row in strong_positive_rows}
+    )
+    strong_positive_time_window_family_count = len(
+        {
+            family
+            for family in (
+                _time_window_family(row.get("instance")) for row in strong_positive_rows
+            )
+            if family
+        }
+    )
+    regression_count = int(label_counter.get("regression", 0))
+    positive_holdout_context_keys = {
+        _context_key(row)
+        for row in rows
+        if _has_positive_holdout(row, positive_holdout_instance_contains)
+    }
+    positive_holdout_context_count = len(positive_holdout_context_keys)
+    holdout_strong_positive_count = sum(
+        1
+        for row in strong_positive_rows
+        if _context_key(row) in positive_holdout_context_keys
+    )
+    training_strong_positive_rows = [
+        row for row in strong_positive_rows if _context_key(row) not in positive_holdout_context_keys
+    ]
+    training_strong_positive_count = len(training_strong_positive_rows)
+    training_strong_positive_context_count = len(
+        {_context_key(row) for row in training_strong_positive_rows}
+    )
+    training_strong_positive_instance_count = len(
+        {str(row.get("instance") or "") for row in training_strong_positive_rows}
+    )
+    training_strong_positive_time_window_family_count = len(
+        {
+            family
+            for family in (
+                _time_window_family(row.get("instance"))
+                for row in training_strong_positive_rows
+            )
+            if family
+        }
+    )
+    training_regression_count = regression_count
+    strict_training_requirements = {
+        "strong_positive_min": 5,
+        "distinct_parent_context_min": 3,
+        "distinct_instance_min": 3,
+        "distinct_time_window_family_min": 2,
+        "regression_at_least_positive": True,
+        "positive_holdout_context_min": 1,
+    }
+    minimal_ranking_signal_ready = bool(ranking_rows)
+    strict_ranking_training_ready = bool(
+        minimal_ranking_signal_ready
+        and strong_positive_count >= strict_training_requirements["strong_positive_min"]
+        and strong_positive_context_count
+        >= strict_training_requirements["distinct_parent_context_min"]
+        and strong_positive_instance_count
+        >= strict_training_requirements["distinct_instance_min"]
+        and strong_positive_time_window_family_count
+        >= strict_training_requirements["distinct_time_window_family_min"]
+        and regression_count >= strong_positive_count
+        and positive_holdout_context_count
+        >= strict_training_requirements["positive_holdout_context_min"]
+    )
 
     summary = {
-        "schema_version": "journey_branch_counterfactual_ranking_audit_v1",
+        "schema_version": "journey_branch_counterfactual_ranking_audit_v2",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "production_ready": False,
@@ -297,7 +416,33 @@ def build_ranking_audit(
         "label_counts": dict(sorted(label_counter.items())),
         "context_counts": dict(sorted(context_counter.items())),
         "proxy_contradiction_counts": dict(sorted(proxy_counter.items())),
-        "ranking_training_ready": bool(ranking_rows),
+        "minimal_ranking_signal_ready": minimal_ranking_signal_ready,
+        "strict_ranking_training_requirements": strict_training_requirements,
+        "strong_positive_count": strong_positive_count,
+        "strong_positive_context_count": strong_positive_context_count,
+        "strong_positive_instance_count": strong_positive_instance_count,
+        "strong_positive_time_window_family_count": (
+            strong_positive_time_window_family_count
+        ),
+        "positive_holdout_instance_contains": list(positive_holdout_instance_contains),
+        "positive_holdout_context_count": positive_holdout_context_count,
+        "holdout_strong_positive_count": holdout_strong_positive_count,
+        "training_strong_positive_count": training_strong_positive_count,
+        "training_strong_positive_context_count": (
+            training_strong_positive_context_count
+        ),
+        "training_strong_positive_instance_count": (
+            training_strong_positive_instance_count
+        ),
+        "training_strong_positive_time_window_family_count": (
+            training_strong_positive_time_window_family_count
+        ),
+        "training_regression_count": training_regression_count,
+        "training_regression_at_least_positive": (
+            training_regression_count >= training_strong_positive_count
+        ),
+        "strict_ranking_training_ready": strict_ranking_training_ready,
+        "ranking_training_ready": strict_ranking_training_ready,
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     _write_report(report, summary, context_rows, ranking_rows)
@@ -331,6 +476,21 @@ def _write_report(
         "label_counts",
         "context_counts",
         "proxy_contradiction_counts",
+        "minimal_ranking_signal_ready",
+        "strict_ranking_training_ready",
+        "strong_positive_count",
+        "strong_positive_context_count",
+        "strong_positive_instance_count",
+        "strong_positive_time_window_family_count",
+        "positive_holdout_instance_contains",
+        "positive_holdout_context_count",
+        "holdout_strong_positive_count",
+        "training_strong_positive_count",
+        "training_strong_positive_context_count",
+        "training_strong_positive_instance_count",
+        "training_strong_positive_time_window_family_count",
+        "training_regression_count",
+        "training_regression_at_least_positive",
         "ranking_training_ready",
         "production_ready",
         "certificate_effect",
@@ -368,6 +528,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--min-wall-gap", type=float, default=1.0)
     parser.add_argument("--min-exact-pricing-gap", type=int, default=1)
+    parser.add_argument(
+        "--positive-holdout-instance-contains",
+        action="append",
+        default=[],
+        help=(
+            "Mark strong-positive rows whose instance path contains this token as "
+            "positive holdout context for offline readiness diagnostics. May be repeated."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -379,6 +548,7 @@ def main() -> None:
         args.report,
         min_wall_gap=args.min_wall_gap,
         min_exact_pricing_gap=args.min_exact_pricing_gap,
+        positive_holdout_instance_contains=tuple(args.positive_holdout_instance_contains),
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
 

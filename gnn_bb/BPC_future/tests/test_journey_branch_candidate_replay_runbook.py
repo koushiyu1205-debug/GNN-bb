@@ -52,7 +52,7 @@ class JourneyBranchCandidateReplayRunbookTests(unittest.TestCase):
                 time_limit=200,
                 limit=4,
                 alt_pairs_per_event=2,
-                candidate_log_top_n=100,
+                candidate_log_top_n=200,
             )
 
             self.assertTrue(runbook["diagnostic_only"])
@@ -72,14 +72,197 @@ class JourneyBranchCandidateReplayRunbookTests(unittest.TestCase):
             self.assertEqual(first["source_selected_fractionality"], 0.5)
             self.assertEqual(first["source_alt_fractionality"], 0.45)
             self.assertAlmostEqual(first["source_alt_required_tie_tolerance"], 0.05)
+            self.assertEqual(first["source_alt_selection_reason"], "legacy_width_order")
             self.assertEqual(first["forced_pair_path_rule"], "force_pair_path:0:1,2=same_vehicle;1:3,18")
             self.assertIn(
-                "journey_branch_candidate_log_top_n=100",
+                "journey_branch_candidate_log_top_n=200",
                 (tmp_path / "out" / "commands.sh").read_text(encoding="utf-8"),
             )
             report = (tmp_path / "report.md").read_text(encoding="utf-8")
             self.assertIn("official_bound_effect = false", report)
             self.assertIn("source_alt_required_tie_tolerance = 0.05", report)
+
+    def test_layered_candidate_selection_samples_distinct_strata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            log_dir = tmp_path / "logs" / "BPC_future" / "logical_graph" / "tasks_020" / "case"
+            log_dir.mkdir(parents=True)
+            log_path = log_dir / "case_randomtw_tasks020_11_seed11_logical_graph.json.jsonl"
+            records = [
+                {
+                    "event": "journey_branch_candidates",
+                    "node_id": 0,
+                    "depth": 0,
+                    "priority_mode": "fractionality",
+                    "candidate_count": 7,
+                    "eligible_count": 7,
+                    "selected": {"task_i": 1, "task_j": 2, "fractionality": 0.5},
+                    "priority_top": [
+                        {"task_i": 1, "task_j": 2, "fractionality": 0.5, "pool_max_child_width": 10},
+                        {
+                            "task_i": 1,
+                            "task_j": 3,
+                            "fractionality": 0.49,
+                            "pool_max_child_width": 100,
+                            "pool_total_child_width": 190,
+                            "pool_balance_gap": 80,
+                        },
+                        {
+                            "task_i": 1,
+                            "task_j": 4,
+                            "fractionality": 0.48,
+                            "pool_max_child_width": 90,
+                            "pool_total_child_width": 170,
+                            "pool_balance_gap": 70,
+                        },
+                        {
+                            "task_i": 1,
+                            "task_j": 5,
+                            "fractionality": 0.20,
+                            "pool_max_child_width": 2,
+                            "pool_total_child_width": 150,
+                            "pool_balance_gap": 50,
+                        },
+                        {
+                            "task_i": 1,
+                            "task_j": 6,
+                            "fractionality": 0.20,
+                            "pool_max_child_width": 50,
+                            "pool_total_child_width": 100,
+                            "pool_balance_gap": 0,
+                        },
+                        {
+                            "task_i": 1,
+                            "task_j": 7,
+                            "fractionality": 0.20,
+                            "pool_max_child_width": 60,
+                            "pool_total_child_width": 120,
+                            "pool_balance_gap": 30,
+                            "branch_score": 3.0,
+                            "branch_score_source": "unit",
+                        },
+                        {
+                            "task_i": 1,
+                            "task_j": 8,
+                            "fractionality": 0.10,
+                            "pool_max_child_width": 70,
+                            "pool_total_child_width": 130,
+                            "pool_balance_gap": 40,
+                        },
+                    ],
+                },
+            ]
+            log_path.write_text(
+                "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+                encoding="utf-8",
+            )
+
+            runbook = build_runbook(
+                [log_path],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                limit=10,
+                alt_pairs_per_event=6,
+                candidate_selection="layered",
+            )
+
+            self.assertEqual(runbook["candidate_selection"], "layered")
+            self.assertEqual(runbook["entry_count"], 6)
+            self.assertEqual(
+                [entry["forced_pair"] for entry in runbook["entries"]],
+                [[1, 3], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8]],
+            )
+            self.assertEqual(
+                [entry["source_alt_selection_reason"] for entry in runbook["entries"]],
+                [
+                    "highest_fractionality",
+                    "near_tie",
+                    "min_max_child_width",
+                    "balanced_child_width",
+                    "best_branch_score",
+                    "rank_diversity",
+                ],
+            )
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("candidate_selection = layered", report)
+            self.assertIn("source_alt_selection_reason = best_branch_score", report)
+
+    def test_positive_neighbor_selection_samples_v323_like_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            log_dir = tmp_path / "logs" / "BPC_future" / "logical_graph" / "tasks_020" / "case"
+            log_dir.mkdir(parents=True)
+            log_path = log_dir / "case_randomtw_tasks020_14_seed14_logical_graph.json.jsonl"
+            records = [
+                {
+                    "event": "journey_branch_candidates",
+                    "node_id": 0,
+                    "depth": 0,
+                    "priority_mode": "fractionality",
+                    "candidate_count": 5,
+                    "eligible_count": 5,
+                    "selected": {"task_i": 13, "task_j": 16, "fractionality": 0.5},
+                    "priority_top": [
+                        {"task_i": 13, "task_j": 16, "fractionality": 0.5, "pool_max_child_width": 10},
+                        {
+                            "task_i": 2,
+                            "task_j": 6,
+                            "fractionality": 0.49,
+                            "same_mass": 0.51,
+                            "support_count": 3,
+                            "incumbent_relation": False,
+                            "pool_max_child_width": 30,
+                            "pool_total_child_width": 52,
+                            "pool_balance_gap": 8,
+                        },
+                        {
+                            "task_i": 4,
+                            "task_j": 9,
+                            "fractionality": 0.48,
+                            "same_mass": 0.52,
+                            "support_count": 2,
+                            "incumbent_relation": False,
+                            "pool_max_child_width": 45,
+                            "pool_total_child_width": 80,
+                            "pool_balance_gap": 11,
+                        },
+                        {
+                            "task_i": 6,
+                            "task_j": 20,
+                            "fractionality": 0.25,
+                            "same_mass": 0.75,
+                            "support_count": 1,
+                            "incumbent_relation": True,
+                            "pool_max_child_width": 425,
+                            "pool_total_child_width": 801,
+                            "pool_balance_gap": 49,
+                        },
+                    ],
+                },
+            ]
+            log_path.write_text(
+                "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+                encoding="utf-8",
+            )
+
+            runbook = build_runbook(
+                [log_path],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                limit=10,
+                alt_pairs_per_event=1,
+                candidate_selection="positive_neighbor",
+            )
+
+            self.assertEqual(runbook["candidate_selection"], "positive_neighbor")
+            self.assertEqual(runbook["entry_count"], 1)
+            entry = runbook["entries"][0]
+            self.assertEqual(entry["forced_pair"], [6, 20])
+            self.assertEqual(entry["source_alt_selection_reason"], "positive_neighbor")
+            self.assertLess(float(entry["source_alt_positive_neighbor_score"]), 0.01)
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("candidate_selection = positive_neighbor", report)
+            self.assertIn("source_alt_positive_neighbor_score =", report)
 
     def test_branch_impact_input_prioritizes_risky_contexts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -356,6 +539,71 @@ class JourneyBranchCandidateReplayRunbookTests(unittest.TestCase):
             report = (tmp_path / "report.md").read_text(encoding="utf-8")
             self.assertIn("excluded_entry_skip_count = 2", report)
 
+    def test_exclude_runbook_scans_nested_runbook_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            log_dir = tmp_path / "logs" / "BPC_future" / "logical_graph" / "tasks_020" / "case"
+            log_dir.mkdir(parents=True)
+            log_path = log_dir / "case_randomtw_tasks020_13_seed13_logical_graph.json.jsonl"
+            records = [
+                {
+                    "event": "journey_branch_candidates",
+                    "node_id": 0,
+                    "depth": 0,
+                    "priority_mode": "fractionality",
+                    "candidate_count": 4,
+                    "eligible_count": 4,
+                    "selected": {"task_i": 1, "task_j": 2, "fractionality": 0.5},
+                    "priority_top": [
+                        {"task_i": 1, "task_j": 2, "fractionality": 0.5, "pool_max_child_width": 2},
+                        {"task_i": 1, "task_j": 3, "fractionality": 0.5, "pool_max_child_width": 3},
+                        {"task_i": 1, "task_j": 4, "fractionality": 0.5, "pool_max_child_width": 4},
+                    ],
+                },
+            ]
+            log_path.write_text(
+                "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            exclude_root = tmp_path / "exclude_root"
+            nested = exclude_root / "child_probe_runbooks" / "case"
+            nested.mkdir(parents=True)
+            instance = (
+                "BPC_future/logical_graph/tasks_020/case/"
+                "case_randomtw_tasks020_13_seed13_logical_graph.json"
+            )
+            (nested / "runbook.json").write_text(
+                json.dumps(
+                    {
+                        "entries": [
+                            {
+                                "instance": instance,
+                                "source_node_id": 0,
+                                "source_depth": 0,
+                                "forced_pair": [1, 3],
+                            }
+                        ]
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            runbook = build_runbook(
+                [log_path],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                limit=2,
+                alt_pairs_per_event=2,
+                exclude_runbooks=[exclude_root],
+            )
+
+            self.assertEqual(runbook["excluded_entry_key_count"], 1)
+            self.assertEqual(runbook["excluded_entry_skip_count"], 1)
+            self.assertEqual(runbook["entry_count"], 1)
+            self.assertEqual(runbook["entries"][0]["forced_pair"], [1, 4])
+
     def test_focus_delta_input_keeps_timeout_resolved_contexts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -435,6 +683,86 @@ class JourneyBranchCandidateReplayRunbookTests(unittest.TestCase):
             self.assertEqual(entry["source_depth"], 1)
             self.assertEqual(entry["source_selected_pair"], [5, 6])
             self.assertEqual(entry["forced_pair"], [5, 8])
+
+    def test_focus_delta_input_prioritizes_logged_strong_positive_pairs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            log_dir = tmp_path / "logs" / "BPC_future" / "logical_graph" / "tasks_020" / "case"
+            log_dir.mkdir(parents=True)
+            log_path = log_dir / "case_randomtw_tasks020_12_seed12_logical_graph.json.jsonl"
+            records = [
+                {
+                    "event": "journey_branch_candidates",
+                    "node_id": 0,
+                    "depth": 0,
+                    "priority_mode": "fractionality",
+                    "selected": {"task_i": 1, "task_j": 2, "fractionality": 0.5},
+                    "priority_top": [
+                        {"task_i": 1, "task_j": 2, "fractionality": 0.5, "pool_max_child_width": 5},
+                        {"task_i": 1, "task_j": 3, "fractionality": 0.49, "pool_max_child_width": 4},
+                        {"task_i": 1, "task_j": 4, "fractionality": 0.48, "pool_max_child_width": 3},
+                        {"task_i": 1, "task_j": 7, "fractionality": 0.20, "pool_max_child_width": 40},
+                    ],
+                },
+            ]
+            log_path.write_text(
+                "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            delta_dir = tmp_path / "delta"
+            delta_dir.mkdir()
+            instance = (
+                "BPC_future/logical_graph/tasks_020/case/"
+                "case_randomtw_tasks020_12_seed12_logical_graph.json"
+            )
+            delta_rows = [
+                {
+                    "instance": instance,
+                    "node_id": 0,
+                    "depth": 0,
+                    "baseline_pair": [1, 2],
+                    "alternative_pair": [1, 7],
+                    "counterfactual_label_type": "strong_positive",
+                    "labels": {},
+                },
+                {
+                    "instance": instance,
+                    "node_id": 0,
+                    "depth": 0,
+                    "baseline_pair": [1, 2],
+                    "alternative_pair": [1, 9],
+                    "counterfactual_label_type": "strong_positive",
+                    "labels": {},
+                },
+            ]
+            (delta_dir / "branch_counterfactual_delta_rows.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in delta_rows),
+                encoding="utf-8",
+            )
+
+            runbook = build_runbook(
+                [log_path],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                limit=4,
+                alt_pairs_per_event=1,
+                candidate_selection="layered",
+                focus_delta_inputs=[delta_dir],
+            )
+
+            self.assertEqual(runbook["focus_context_count"], 1)
+            self.assertEqual(runbook["focus_strong_positive_pair_count"], 2)
+            self.assertEqual(runbook["focus_strong_positive_pair_available_count"], 1)
+            self.assertEqual(runbook["focus_strong_positive_pair_missing_count"], 1)
+            self.assertEqual(runbook["focus_strong_positive_entry_count"], 1)
+            self.assertEqual(runbook["entry_count"], 1)
+            entry = runbook["entries"][0]
+            self.assertEqual(entry["forced_pair"], [1, 7])
+            self.assertEqual(entry["source_alt_selection_reason"], "focus_strong_positive")
+            self.assertTrue(entry["source_alt_focus_strong_positive"])
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("focus_strong_positive_pair_missing_count = 1", report)
+            self.assertIn("source_alt_selection_reason = focus_strong_positive", report)
 
     def test_coverage_input_can_focus_score_gap_contexts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

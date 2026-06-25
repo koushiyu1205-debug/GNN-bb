@@ -158,6 +158,51 @@ def _proxy_score(
     return float(score)
 
 
+def _promotion_blocked_reasons(
+    row: dict[str, Any],
+    *,
+    min_promotion_proxy_score: float | None,
+    min_promotion_fathom_count: float | None,
+    min_promotion_corrected_bound_gain: float | None,
+    max_promotion_completion_bound_retry_count: float | None,
+    max_promotion_negative_pricing_event_count: float | None,
+    require_promotion_complete_label: bool,
+) -> list[str]:
+    reasons: list[str] = []
+    if (
+        min_promotion_proxy_score is not None
+        and _float(row.get("proxy_score"), default=float("-inf"))
+        < float(min_promotion_proxy_score)
+    ):
+        reasons.append("proxy_score_below_promotion_threshold")
+    if (
+        min_promotion_fathom_count is not None
+        and _float(row.get("fathom_count")) < float(min_promotion_fathom_count)
+    ):
+        reasons.append("fathom_count_below_promotion_threshold")
+    if (
+        min_promotion_corrected_bound_gain is not None
+        and _float(row.get("max_corrected_bound_gain"))
+        < float(min_promotion_corrected_bound_gain)
+    ):
+        reasons.append("corrected_bound_gain_below_promotion_threshold")
+    if (
+        max_promotion_completion_bound_retry_count is not None
+        and _float(row.get("completion_bound_retry_count"))
+        > float(max_promotion_completion_bound_retry_count)
+    ):
+        reasons.append("completion_bound_retry_above_promotion_threshold")
+    if (
+        max_promotion_negative_pricing_event_count is not None
+        and _float(row.get("negative_pricing_event_count"))
+        > float(max_promotion_negative_pricing_event_count)
+    ):
+        reasons.append("negative_pricing_above_promotion_threshold")
+    if require_promotion_complete_label and not bool(row.get("label_observation_complete")):
+        reasons.append("label_observation_incomplete")
+    return reasons
+
+
 def _build_branch_rows(
     child_rows: list[dict[str, Any]],
     *,
@@ -170,6 +215,12 @@ def _build_branch_rows(
     completion_retry_penalty: float,
     proof_cpu_scale: float,
     negative_pricing_penalty: float,
+    min_promotion_proxy_score: float | None,
+    min_promotion_fathom_count: float | None,
+    min_promotion_corrected_bound_gain: float | None,
+    max_promotion_completion_bound_retry_count: float | None,
+    max_promotion_negative_pricing_event_count: float | None,
+    require_promotion_complete_label: bool,
 ) -> tuple[list[dict[str, Any]], int]:
     grouped: dict[tuple[str, int, int, tuple[int, int]], list[dict[str, Any]]] = defaultdict(list)
     skipped = 0
@@ -238,6 +289,17 @@ def _build_branch_rows(
             ),
             9,
         )
+        blocked_reasons = _promotion_blocked_reasons(
+            row,
+            min_promotion_proxy_score=min_promotion_proxy_score,
+            min_promotion_fathom_count=min_promotion_fathom_count,
+            min_promotion_corrected_bound_gain=min_promotion_corrected_bound_gain,
+            max_promotion_completion_bound_retry_count=max_promotion_completion_bound_retry_count,
+            max_promotion_negative_pricing_event_count=max_promotion_negative_pricing_event_count,
+            require_promotion_complete_label=require_promotion_complete_label,
+        )
+        row["promotion_ready"] = not blocked_reasons
+        row["promotion_blocked_reasons"] = blocked_reasons
         branch_rows.append(row)
     return branch_rows, skipped
 
@@ -256,6 +318,8 @@ def _compact_branch(row: dict[str, Any]) -> dict[str, Any]:
         "exact_pricing_event_count": row.get("exact_pricing_event_count"),
         "child_count": row.get("child_count"),
         "started_child_count": row.get("started_child_count"),
+        "promotion_ready": row.get("promotion_ready"),
+        "promotion_blocked_reasons": row.get("promotion_blocked_reasons"),
     }
 
 
@@ -283,6 +347,12 @@ def build_proxy_ranking(
     completion_retry_penalty: float = 0.1,
     proof_cpu_scale: float = 120.0,
     negative_pricing_penalty: float = 0.0,
+    min_promotion_proxy_score: float | None = 0.0,
+    min_promotion_fathom_count: float | None = None,
+    min_promotion_corrected_bound_gain: float | None = None,
+    max_promotion_completion_bound_retry_count: float | None = None,
+    max_promotion_negative_pricing_event_count: float | None = None,
+    require_promotion_complete_label: bool = False,
 ) -> dict[str, Any]:
     child_rows = _load_child_probe_rows(inputs)
     branch_rows, skipped_child_rows = _build_branch_rows(
@@ -296,6 +366,12 @@ def build_proxy_ranking(
         completion_retry_penalty=completion_retry_penalty,
         proof_cpu_scale=proof_cpu_scale,
         negative_pricing_penalty=negative_pricing_penalty,
+        min_promotion_proxy_score=min_promotion_proxy_score,
+        min_promotion_fathom_count=min_promotion_fathom_count,
+        min_promotion_corrected_bound_gain=min_promotion_corrected_bound_gain,
+        max_promotion_completion_bound_retry_count=max_promotion_completion_bound_retry_count,
+        max_promotion_negative_pricing_event_count=max_promotion_negative_pricing_event_count,
+        require_promotion_complete_label=require_promotion_complete_label,
     )
 
     filtered_branch_rows = [
@@ -309,6 +385,10 @@ def build_proxy_ranking(
     context_rows: list[dict[str, Any]] = []
     ranking_rows: list[dict[str, Any]] = []
     context_counts: Counter[str] = Counter()
+    promotion_blocked_reason_counts: Counter[str] = Counter()
+    for row in filtered_branch_rows:
+        for reason in row.get("promotion_blocked_reasons") or []:
+            promotion_blocked_reason_counts[str(reason)] += 1
     for key, group in sorted(groups.items(), key=lambda item: item[0]):
         sorted_group = sorted(group, key=lambda row: (-_float(row.get("proxy_score")), row.get("pair")))
         if len(sorted_group) < 2:
@@ -422,6 +502,19 @@ def build_proxy_ranking(
         "completion_retry_penalty": float(completion_retry_penalty),
         "proof_cpu_scale": float(proof_cpu_scale),
         "negative_pricing_penalty": float(negative_pricing_penalty),
+        "min_promotion_proxy_score": min_promotion_proxy_score,
+        "min_promotion_fathom_count": min_promotion_fathom_count,
+        "min_promotion_corrected_bound_gain": min_promotion_corrected_bound_gain,
+        "max_promotion_completion_bound_retry_count": max_promotion_completion_bound_retry_count,
+        "max_promotion_negative_pricing_event_count": max_promotion_negative_pricing_event_count,
+        "require_promotion_complete_label": bool(require_promotion_complete_label),
+        "promotion_ready_branch_count": sum(
+            1 for row in filtered_branch_rows if bool(row.get("promotion_ready"))
+        ),
+        "promotion_blocked_branch_count": sum(
+            1 for row in filtered_branch_rows if not bool(row.get("promotion_ready"))
+        ),
+        "promotion_blocked_reason_counts": dict(sorted(promotion_blocked_reason_counts.items())),
         "ranking_training_ready": False,
         "sampling_navigation_ready": bool(ranking_rows),
     }
@@ -461,6 +554,15 @@ def _write_report(
         "min_proxy_score_gap",
         "min_started_child_count",
         "context_counts",
+        "min_promotion_proxy_score",
+        "min_promotion_fathom_count",
+        "min_promotion_corrected_bound_gain",
+        "max_promotion_completion_bound_retry_count",
+        "max_promotion_negative_pricing_event_count",
+        "require_promotion_complete_label",
+        "promotion_ready_branch_count",
+        "promotion_blocked_branch_count",
+        "promotion_blocked_reason_counts",
         "sampling_navigation_ready",
         "ranking_training_ready",
         "production_ready",
@@ -475,6 +577,7 @@ def _write_report(
             f"node={row['node_id']} depth={row['depth']} alts={row['alternative_count']} "
             f"spread={row['proxy_score_spread']} "
             f"best={row['best']['alternative_pair']} score={row['best']['proxy_score']} "
+            f"promote={row['best']['promotion_ready']} "
             f"worst={row['worst']['alternative_pair']} score={row['worst']['proxy_score']}"
         )
     lines.extend(["", "## Top Proxy Ranking Pairs", ""])
@@ -485,7 +588,8 @@ def _write_report(
             f"better={row['better']['alternative_pair']} "
             f"worse={row['worse']['alternative_pair']} "
             f"gap={row['proxy_score_gap']} reason={row['preference_reason']} "
-            f"right_censored={row['right_censored_proxy']}"
+            f"right_censored={row['right_censored_proxy']} "
+            f"better_promote={row['better']['promotion_ready']}"
         )
     lines.extend(["", "## 使用边界", ""])
     lines.append(
@@ -520,6 +624,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--completion-retry-penalty", type=float, default=0.1)
     parser.add_argument("--proof-cpu-scale", type=float, default=120.0)
     parser.add_argument("--negative-pricing-penalty", type=float, default=0.0)
+    parser.add_argument("--min-promotion-proxy-score", type=float, default=0.0)
+    parser.add_argument("--min-promotion-fathom-count", type=float, default=None)
+    parser.add_argument("--min-promotion-corrected-bound-gain", type=float, default=None)
+    parser.add_argument("--max-promotion-completion-bound-retry-count", type=float, default=None)
+    parser.add_argument("--max-promotion-negative-pricing-event-count", type=float, default=None)
+    parser.add_argument("--require-promotion-complete-label", action="store_true")
     return parser.parse_args()
 
 
@@ -540,6 +650,12 @@ def main() -> None:
         completion_retry_penalty=args.completion_retry_penalty,
         proof_cpu_scale=args.proof_cpu_scale,
         negative_pricing_penalty=args.negative_pricing_penalty,
+        min_promotion_proxy_score=args.min_promotion_proxy_score,
+        min_promotion_fathom_count=args.min_promotion_fathom_count,
+        min_promotion_corrected_bound_gain=args.min_promotion_corrected_bound_gain,
+        max_promotion_completion_bound_retry_count=args.max_promotion_completion_bound_retry_count,
+        max_promotion_negative_pricing_event_count=args.max_promotion_negative_pricing_event_count,
+        require_promotion_complete_label=args.require_promotion_complete_label,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
 

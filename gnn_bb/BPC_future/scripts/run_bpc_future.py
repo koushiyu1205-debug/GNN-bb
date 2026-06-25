@@ -7,6 +7,7 @@ import argparse
 import ast
 import csv
 import gc
+import os
 from pathlib import Path
 import sys
 
@@ -32,10 +33,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--solution-dir")
     parser.add_argument("--set", dest="overrides", action="append", default=[], help="Override config as key=value.")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument(
+        "--force-exit-after-run",
+        action="store_true",
+        help=(
+            "Flush outputs and call os._exit(0) after all rows are written. "
+            "Use for isolated benchmark subprocesses that can otherwise stay "
+            "alive in third-party interpreter shutdown."
+        ),
+    )
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> bool:
     args = parse_args()
     config = load_config(args.config)
     for override in args.overrides:
@@ -110,6 +120,7 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows)
     print(f"BPC_future CSV written: {results_csv}")
+    return bool(args.force_exit_after_run)
 
 
 def load_config(path: str | Path) -> dict:
@@ -144,4 +155,8 @@ def parse_value(text: str):
 
 
 if __name__ == "__main__":
-    main()
+    _force_exit = main()
+    if _force_exit:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)

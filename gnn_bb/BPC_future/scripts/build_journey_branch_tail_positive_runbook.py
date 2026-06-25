@@ -102,9 +102,14 @@ def _load_tail_impact_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     for path in paths:
         if path.is_dir():
             rows.extend(_iter_jsonl(path / "tail_impact_training_rows.jsonl"))
+            rows.extend(_tail_action_gate_rows_to_tail_impact_rows(path / "no_column_gate_rows.jsonl"))
             continue
         if path.name == "summary.json":
             rows.extend(_iter_jsonl(path.parent / "tail_impact_training_rows.jsonl"))
+            rows.extend(_tail_action_gate_rows_to_tail_impact_rows(path.parent / "no_column_gate_rows.jsonl"))
+            continue
+        if path.name == "no_column_gate_rows.jsonl":
+            rows.extend(_tail_action_gate_rows_to_tail_impact_rows(path))
             continue
         if path.suffix == ".jsonl":
             rows.extend(_iter_jsonl(path))
@@ -113,6 +118,109 @@ def _load_tail_impact_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
         raw_rows = payload.get("rows")
         if isinstance(raw_rows, list):
             rows.extend(row for row in raw_rows if isinstance(row, dict))
+    return rows
+
+
+def _selected_branch_pair_for_node(
+    events: list[dict[str, Any]],
+    *,
+    node_id: int,
+    depth: int,
+) -> dict[str, Any] | None:
+    record = _branch_candidate_event_for_node(events, node_id=node_id, depth=depth)
+    if record is None:
+        return None
+    selected = record.get("selected") if isinstance(record.get("selected"), dict) else {}
+    task_i = selected.get("task_i")
+    task_j = selected.get("task_j")
+    if task_i is None or task_j is None:
+        priority_top = record.get("priority_top")
+        if isinstance(priority_top, list) and priority_top:
+            first = priority_top[0] if isinstance(priority_top[0], dict) else {}
+            task_i = first.get("task_i")
+            task_j = first.get("task_j")
+            selected = first
+    if task_i is None or task_j is None:
+        return None
+    try:
+        pair = tuple(sorted((int(task_i), int(task_j))))
+    except (TypeError, ValueError):
+        return None
+    return {
+        "task_i": pair[0],
+        "task_j": pair[1],
+        "source_branch_selected": selected,
+        "source_branch_candidate_count": record.get("candidate_count"),
+        "source_branch_eligible_count": record.get("eligible_count"),
+        "source_branch_priority_mode": record.get("priority_mode"),
+        "source_selected_pool_max_child_width": selected.get("pool_max_child_width"),
+        "source_selected_pool_total_child_width": selected.get("pool_total_child_width"),
+        "source_selected_pool_balance_gap": selected.get("pool_balance_gap"),
+    }
+
+
+def _tail_action_gate_rows_to_tail_impact_rows(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not path.exists():
+        return rows
+    events_by_log_file: dict[str, list[dict[str, Any]]] = {}
+    seen: set[tuple[str, int, int, int, int]] = set()
+    for row in _iter_jsonl(path):
+        if str(row.get("tail_action") or "") != "EARLY_BRANCH":
+            continue
+        if not bool(row.get("tail_action_before_final_probe")):
+            continue
+        if str(row.get("gate_reason") or "") != "before_final_probe_disabled":
+            continue
+        if row.get("node_id") is None or row.get("depth") is None:
+            continue
+        log_file = str(row.get("log_file") or "")
+        if not log_file:
+            continue
+        try:
+            node_id = int(row["node_id"])
+            depth = int(row["depth"])
+        except (TypeError, ValueError):
+            continue
+        events = events_by_log_file.get(log_file)
+        if events is None:
+            events = _read_log_events(log_file)
+            events_by_log_file[log_file] = events
+        selected = _selected_branch_pair_for_node(events, node_id=node_id, depth=depth)
+        if selected is None:
+            continue
+        key = (log_file, node_id, depth, int(selected["task_i"]), int(selected["task_j"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(
+            {
+                "source_type": "tail_action_gate_opportunity",
+                "log_file": log_file,
+                "node_id": node_id,
+                "depth": depth,
+                "cg_iter": row.get("cg_iter"),
+                "time": row.get("time"),
+                "task_i": int(selected["task_i"]),
+                "task_j": int(selected["task_j"]),
+                "tail_class": "tail_action_before_final_probe_d_gate",
+                "tail_action_profile": "before_final_probe",
+                "tail_action_class": row.get("tail_action_class"),
+                "tail_action_productivity_class": row.get("tail_action_productivity_class"),
+                "gate_reason": row.get("gate_reason"),
+                "tail_action_reason": row.get("tail_action_reason"),
+                "rmp_to_incumbent_gap": row.get("rmp_to_incumbent_gap"),
+                "recent_active_support_additions": row.get("recent_active_support_additions"),
+                "recent_rmp_objective_progress": row.get("recent_rmp_objective_progress"),
+                "recent_true_rc_productivity": row.get("recent_true_rc_productivity"),
+                "labels": {
+                    "y_tail_risk": 1.0,
+                    "y_tail_action_no_column": 1.0,
+                    "y_tail_action_gate_opportunity": 1.0,
+                },
+                **selected,
+            }
+        )
     return rows
 
 
@@ -364,9 +472,46 @@ def _set_args(settings: list[str]) -> list[str]:
     return args
 
 
-def _tail_action_replay_settings(profile: str, *, target_depth: int) -> list[str]:
+def _guard_cap(value: Any, *, base: int, ceiling: int) -> int:
+    parsed = _finite_float(value, default=float(base))
+    if parsed == 1.0e30:
+        return int(base)
+    return max(int(base), min(int(ceiling), int(parsed)))
+
+
+def _tail_action_replay_settings(
+    profile: str,
+    *,
+    target_depth: int,
+    source_pool: dict[str, Any] | None = None,
+) -> list[str]:
     if profile == "before_final_probe":
         depth = max(0, int(target_depth))
+        source_pool = source_pool or {}
+        max_child_width = _guard_cap(
+            source_pool.get(
+                "source_selected_pool_max_child_width",
+                source_pool.get("source_alt_pool_max_child_width"),
+            ),
+            base=180,
+            ceiling=400,
+        )
+        max_total_width = _guard_cap(
+            source_pool.get(
+                "source_selected_pool_total_child_width",
+                source_pool.get("source_alt_pool_total_child_width"),
+            ),
+            base=360,
+            ceiling=800,
+        )
+        max_balance_gap = _guard_cap(
+            source_pool.get(
+                "source_selected_pool_balance_gap",
+                source_pool.get("source_alt_pool_balance_gap"),
+            ),
+            base=180,
+            ceiling=400,
+        )
         return [
             "journey_early_branching_enabled=False",
             "journey_tail_action_audit_enabled=True",
@@ -383,9 +528,9 @@ def _tail_action_replay_settings(profile: str, *, target_depth: int) -> list[str
             "journey_tail_action_no_column_early_branch_child_min_cg_iter=1",
             "journey_tail_action_no_column_early_branch_min_true_rc_productivity=0",
             "journey_tail_action_no_column_early_branch_require_complete_productivity_signals=False",
-            "journey_tail_action_no_column_early_branch_max_pool_child_width=180",
-            "journey_tail_action_no_column_early_branch_max_pool_total_child_width=360",
-            "journey_tail_action_no_column_early_branch_max_pool_balance_gap=180",
+            f"journey_tail_action_no_column_early_branch_max_pool_child_width={max_child_width}",
+            f"journey_tail_action_no_column_early_branch_max_pool_total_child_width={max_total_width}",
+            f"journey_tail_action_no_column_early_branch_max_pool_balance_gap={max_balance_gap}",
         ]
     return [
         "journey_early_branching_enabled=False",
@@ -408,12 +553,25 @@ def _tail_action_replay_settings(profile: str, *, target_depth: int) -> list[str
     ]
 
 
-def _tail_action_child_order_candidates(rows: Iterable[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+def _tail_action_child_order_candidates(
+    rows: Iterable[dict[str, Any]],
+    limit: int,
+    *,
+    require_tail_action_productivity_class: set[str] | None = None,
+) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     seen: set[tuple[str, int, int, int]] = set()
+    required_productivity = {
+        str(value) for value in (require_tail_action_productivity_class or set()) if str(value)
+    }
     for row in rows:
-        if str(row.get("source_type") or "") != "tail_action_proof_cost":
+        source_type = str(row.get("source_type") or "")
+        if source_type not in {"tail_action_proof_cost", "tail_action_gate_opportunity"}:
             continue
+        if required_productivity:
+            productivity_class = str(row.get("tail_action_productivity_class") or "unknown")
+            if productivity_class not in required_productivity:
+                continue
         labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
         if float(labels.get("y_tail_risk") or 0.0) <= 0.5:
             continue
@@ -458,12 +616,18 @@ def build_runbook(
     tail_impact_inputs: list[Path] | None = None,
     tail_alt_pairs_per_node: int = 0,
     tail_action_profile: str = "legacy_v12",
+    require_tail_action_productivity_class: tuple[str, ...] = tuple(),
+    include_root_near_positive: bool = True,
 ) -> dict[str, Any]:
     summary = _read_json(positive_gap_summary)
     rows = summary.get("near_positive_rows")
     if not isinstance(rows, list):
         rows = []
-    root_rows = _unique_root_pairs((row for row in rows if isinstance(row, dict)), limit)
+    root_rows = (
+        _unique_root_pairs((row for row in rows if isinstance(row, dict)), limit)
+        if include_root_near_positive
+        else []
+    )
     run_root = output_dir / "runs"
     entries: list[dict[str, Any]] = []
     for index, row in enumerate(root_rows, start=1):
@@ -532,7 +696,14 @@ def build_runbook(
             }
         )
     tail_rows = _load_tail_impact_rows(tail_impact_inputs or [])
-    for row in _tail_action_child_order_candidates(tail_rows, limit):
+    required_tail_action_productivity = {
+        str(value) for value in require_tail_action_productivity_class if str(value)
+    }
+    for row in _tail_action_child_order_candidates(
+        tail_rows,
+        limit,
+        require_tail_action_productivity_class=required_tail_action_productivity,
+    ):
         instance = str(row["instance"])
         task_i = int(row["task_i"])
         task_j = int(row["task_j"])
@@ -577,7 +748,11 @@ def build_runbook(
         command.extend(
             _set_args(
                 [
-                    *_tail_action_replay_settings(tail_action_profile, target_depth=depth),
+                    *_tail_action_replay_settings(
+                        tail_action_profile,
+                        target_depth=depth,
+                        source_pool=row,
+                    ),
                     "journey_branch_fractionality_tie_tolerance=0.05",
                     f"journey_branch_candidate_priority={force_pair_rule}",
                     f"journey_child_priority_mode={force_kind_rule}",
@@ -594,11 +769,13 @@ def build_runbook(
                 "forced_pair_path_rule": force_pair_rule,
                 "forced_child_kind_depth_rule": force_kind_rule,
                 "preferred_target_child_kind": preferred_kind,
-                "source_type": "tail_action_proof_cost",
+                "source_type": row.get("source_type") or "tail_action_proof_cost",
+                "source_input_type": row.get("source_type"),
                 "source_log_file": row.get("log_file"),
                 "source_node_id": node_id,
                 "source_depth": depth,
                 "source_tail_class": row.get("tail_class"),
+                "source_tail_action_productivity_class": row.get("tail_action_productivity_class"),
                 "source_labels": row.get("labels"),
                 "source_path_edges": path_edges,
                 "tail_action_profile": tail_action_profile,
@@ -652,7 +829,11 @@ def build_runbook(
             alt_command.extend(
                 _set_args(
                     [
-                        *_tail_action_replay_settings(tail_action_profile, target_depth=depth),
+                        *_tail_action_replay_settings(
+                            tail_action_profile,
+                            target_depth=depth,
+                            source_pool=alt,
+                        ),
                         "journey_branch_fractionality_tie_tolerance=0.05",
                         f"journey_branch_candidate_priority={alt_pair_rule}",
                         f"journey_child_priority_mode={ancestor_kind_rule}",
@@ -670,11 +851,13 @@ def build_runbook(
                     "forced_child_kind_depth_rule": ancestor_kind_rule,
                     "preferred_target_child_kind": None,
                     "source_type": "tail_action_alt_pair",
+                    "source_input_type": row.get("source_type"),
                     "source_log_file": row.get("log_file"),
                     "source_node_id": node_id,
                     "source_depth": depth,
                     "source_original_forced_pair": [task_i, task_j],
                     "source_tail_class": row.get("tail_class"),
+                    "source_tail_action_productivity_class": row.get("tail_action_productivity_class"),
                     "source_labels": row.get("labels"),
                     "source_path_edges": path_edges,
                     "tail_action_profile": tail_action_profile,
@@ -694,9 +877,11 @@ def build_runbook(
         "official_bound_effect": False,
         "base_sample_strategy": "extend_existing_5000_with_branch_tail_interventions",
         "positive_gap_summary": str(positive_gap_summary),
+        "include_root_near_positive": bool(include_root_near_positive),
         "tail_impact_input_paths": [str(path) for path in (tail_impact_inputs or [])],
         "tail_alt_pairs_per_node": int(tail_alt_pairs_per_node),
         "tail_action_profile": str(tail_action_profile),
+        "tail_action_productivity_filter": sorted(required_tail_action_productivity),
         "config": str(config),
         "time_limit": int(time_limit),
         "candidate_source": "root_level_near_positive_rows_tail_action_proof_cost_rows_and_optional_priority_top_alt_pairs",
@@ -750,9 +935,11 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"entry_count = {runbook.get('entry_count')}",
         f"base_sample_strategy = {runbook.get('base_sample_strategy')}",
         f"candidate_source = {runbook.get('candidate_source')}",
+        f"include_root_near_positive = {runbook.get('include_root_near_positive')}",
         f"tail_impact_input_paths = {runbook.get('tail_impact_input_paths')}",
         f"tail_alt_pairs_per_node = {runbook.get('tail_alt_pairs_per_node')}",
         f"tail_action_profile = {runbook.get('tail_action_profile')}",
+        f"tail_action_productivity_filter = {runbook.get('tail_action_productivity_filter')}",
         "production_ready = false",
         "stage4_candidate_ready = false",
         "certificate_effect = false",
@@ -775,6 +962,7 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"forced_child_kind_depth_rule = {entry.get('forced_child_kind_depth_rule')}",
                 f"preferred_target_child_kind = {entry.get('preferred_target_child_kind')}",
                 f"source_tail_class = {entry.get('source_tail_class')}",
+                f"source_tail_action_productivity_class = {entry.get('source_tail_action_productivity_class')}",
                 f"source_tail_badness_score = {entry.get('source_tail_badness_score')}",
                 f"source_type = {entry.get('source_type')}",
                 f"source_original_forced_pair = {entry.get('source_original_forced_pair')}",
@@ -812,8 +1000,23 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--time-limit", type=int, default=200)
     parser.add_argument("--limit", type=int, default=8)
+    parser.add_argument(
+        "--include-root-near-positive",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include root-level near-positive force-pair entries from positive_gap_summary.",
+    )
     parser.add_argument("--tail-impact-input", nargs="*", type=Path, default=[])
     parser.add_argument("--tail-alt-pairs-per-node", type=int, default=0)
+    parser.add_argument(
+        "--require-tail-action-productivity-class",
+        action="append",
+        default=[],
+        help=(
+            "Optional filter for tail-action rows, for example "
+            "pricing_unproductive_no_negative_columns. Repeat to allow multiple classes."
+        ),
+    )
     parser.add_argument(
         "--tail-action-profile",
         choices=("legacy_v12", "before_final_probe"),
@@ -836,6 +1039,10 @@ def main() -> None:
         tail_impact_inputs=args.tail_impact_input,
         tail_alt_pairs_per_node=args.tail_alt_pairs_per_node,
         tail_action_profile=args.tail_action_profile,
+        require_tail_action_productivity_class=tuple(
+            args.require_tail_action_productivity_class or ()
+        ),
+        include_root_near_positive=bool(args.include_root_near_positive),
     )
     print(json.dumps(runbook, ensure_ascii=False, indent=2, sort_keys=True))
 

@@ -132,7 +132,7 @@ TIME_LIMIT = 4/60
 下一轮 20 规模 600s 诊断/采样至少应保留以下只读诊断信号：
 
 - `journey_tail_action_audit_enabled=true`：写出 `journey_corrected_node_bound_audit`，用于 Tail Action Controller A/B/C/D 分类、水位和 productivity 统计。
-- `journey_branch_candidate_log_top_n=100`：写出 `journey_branch_candidates` top-N 特征，用于 branch-impact / child-proof-cost / coverage-gap replay 采样。
+- `journey_branch_candidate_log_top_n=200`：写出 `journey_branch_candidates` top-N 特征，用于 branch-impact / child-proof-cost / coverage-gap replay 采样。top-200 是后续新诊断的最低口径；旧 top100 结果只按历史诊断引用。
 - late-negative audit 输入所需的 `journey_pricing`、`journey_column_addition`、weak filtered 字段必须保留，用于区分 active-support-changing、inactive-only 和 weak/profile filtered tail。
 
 这些字段只用于诊断和训练数据构造，不能当 official bound、certificate 或剪枝依据。行为开关仍需单独 opt-in，例如 corrected-bound fathom、tail-action early branch、branch-score/horizon candidate priority。

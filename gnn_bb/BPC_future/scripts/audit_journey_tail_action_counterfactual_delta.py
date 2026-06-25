@@ -71,6 +71,12 @@ def _load_results(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
             for row in csv.DictReader(handle):
                 instance = str(row.get("instance") or "")
                 if instance:
+                    if instance in by_instance:
+                        raise ValueError(
+                            "duplicate baseline result row for instance "
+                            f"{instance!r}; pass one baseline result per "
+                            "instance/config/time-limit"
+                        )
                     by_instance[instance] = dict(row)
     return by_instance
 
@@ -78,11 +84,17 @@ def _load_results(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
 def _load_result_row(path: Path | None, instance: str) -> dict[str, Any] | None:
     if path is None or not path.exists():
         return None
+    matches: list[dict[str, Any]] = []
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             if str(row.get("instance") or "") == str(instance):
-                return dict(row)
-    return None
+                matches.append(dict(row))
+    if len(matches) > 1:
+        raise ValueError(
+            "duplicate alternative result row for instance "
+            f"{instance!r}; replay result CSV must contain at most one row per instance"
+        )
+    return matches[0] if matches else None
 
 
 def _float(value: Any, default: float = 0.0) -> float:
@@ -94,6 +106,18 @@ def _float(value: Any, default: float = 0.0) -> float:
         return float(default)
     if parsed != parsed:
         return float(default)
+    return float(parsed)
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed != parsed:
+        return None
     return float(parsed)
 
 
@@ -166,6 +190,102 @@ def _result_path_for_entry(entry: dict[str, Any]) -> Path | None:
     return None if value is None else Path(value)
 
 
+def _log_path_for_tail_row(row: dict[str, Any]) -> Path | None:
+    value = row.get("log_file")
+    if value is None or value == "":
+        return None
+    return Path(str(value))
+
+
+def _is_pricing_event(record: dict[str, Any]) -> bool:
+    return record.get("event") == "journey_pricing"
+
+
+def _is_exact_pricing_event(record: dict[str, Any]) -> bool:
+    if not _is_pricing_event(record):
+        return False
+    return str(record.get("pricing_kind") or "") in {"exact", "exact_completion_bound_retry"}
+
+
+def _is_completion_retry_trigger(record: dict[str, Any]) -> bool:
+    return record.get("event") == "journey_exact_pricing_completion_bound_retry"
+
+
+def _is_completion_retry_pricing(record: dict[str, Any]) -> bool:
+    return _is_pricing_event(record) and str(record.get("pricing_kind") or "") == (
+        "exact_completion_bound_retry"
+    )
+
+
+def _log_proof_work_summary(path: Path | None) -> dict[str, Any]:
+    """Summarize full-run proof-work counters from a finished JSONL log.
+
+    The result is diagnostic-only.  Missing logs stay fail-closed for label
+    strengthening by exposing ``available=false`` instead of fabricating zeros.
+    """
+
+    if path is None or not path.exists():
+        return {
+            "available": False,
+            "log_file": None if path is None else str(path),
+        }
+    pricing_count = 0
+    exact_pricing_count = 0
+    retry_trigger_count = 0
+    retry_pricing_count = 0
+    retry_profile_generation_time = 0.0
+    retry_profile_dp_time = 0.0
+    retry_bound_build_time = 0.0
+    retry_two_cycle_build_time = 0.0
+    retry_generated_sequences = 0
+    retry_evaluated_timed_trips = 0
+    for record in _iter_jsonl(path):
+        if _is_pricing_event(record):
+            pricing_count += 1
+        if _is_exact_pricing_event(record):
+            exact_pricing_count += 1
+        if _is_completion_retry_trigger(record):
+            retry_trigger_count += 1
+        if _is_completion_retry_pricing(record):
+            retry_pricing_count += 1
+            retry_profile_generation_time += _float(record.get("profile_generation_time"))
+            retry_profile_dp_time += _float(record.get("profile_dp_time"))
+            retry_bound_build_time += _float(record.get("bound_build_time"))
+            retry_two_cycle_build_time += _float(record.get("two_cycle_build_time"))
+            retry_generated_sequences += _int(record.get("generated_sequences"))
+            retry_evaluated_timed_trips += _int(record.get("evaluated_timed_trips"))
+    retry_work_time_proxy = (
+        retry_profile_generation_time
+        + retry_profile_dp_time
+        + retry_bound_build_time
+        + retry_two_cycle_build_time
+    )
+    return {
+        "available": True,
+        "log_file": str(path),
+        "pricing_event_count": int(pricing_count),
+        "exact_pricing_event_count": int(exact_pricing_count),
+        "completion_retry_trigger_count": int(retry_trigger_count),
+        "completion_retry_pricing_count": int(retry_pricing_count),
+        "completion_retry_profile_generation_time": round(
+            retry_profile_generation_time,
+            9,
+        ),
+        "completion_retry_profile_dp_time": round(retry_profile_dp_time, 9),
+        "completion_retry_bound_build_time": round(retry_bound_build_time, 9),
+        "completion_retry_two_cycle_build_time": round(retry_two_cycle_build_time, 9),
+        "completion_retry_work_time_proxy": round(retry_work_time_proxy, 9),
+        "completion_retry_generated_sequences": int(retry_generated_sequences),
+        "completion_retry_evaluated_timed_trips": int(retry_evaluated_timed_trips),
+    }
+
+
+def _proof_work_metric(summary: dict[str, Any], key: str) -> float | None:
+    if not bool(summary.get("available")):
+        return None
+    return _optional_float(summary.get(key))
+
+
 def _find_tail_row(
     rows: list[dict[str, Any]],
     *,
@@ -174,6 +294,7 @@ def _find_tail_row(
     depth: int,
     pair: tuple[int, int],
 ) -> dict[str, Any] | None:
+    matches: list[dict[str, Any]] = []
     for row in rows:
         if str(row.get("source_type") or "") != "tail_action_proof_cost":
             continue
@@ -185,8 +306,14 @@ def _find_tail_row(
             continue
         if _row_pair(row) != pair:
             continue
-        return row
-    return None
+        matches.append(row)
+    if len(matches) > 1:
+        raise ValueError(
+            "ambiguous tail-action row match for "
+            f"instance={instance!r}, node_id={node_id}, depth={depth}, pair={pair}; "
+            "include branch-path/trigger-disambiguated inputs before building labels"
+        )
+    return matches[0] if matches else None
 
 
 def _raw(row: dict[str, Any]) -> dict[str, Any]:
@@ -206,6 +333,41 @@ def _metric(row: dict[str, Any], raw_key: str, label_key: str | None = None) -> 
     if label_key is not None:
         return _float(_labels(row).get(label_key))
     return 0.0
+
+
+def _result_metric(row: dict[str, Any], key: str) -> float | None:
+    return _optional_float(row.get(key))
+
+
+def _delta_optional(after: float | None, before: float | None) -> float | None:
+    if after is None or before is None:
+        return None
+    return float(after) - float(before)
+
+
+def _round_optional(value: float | None) -> float | None:
+    return None if value is None else round(float(value), 9)
+
+
+def _counterfactual_label_type(
+    *,
+    whole_run_improved: bool,
+    budget_dominant_improvement: bool,
+    local_only: bool,
+    timeout_regression: bool,
+    right_censored: bool,
+) -> str:
+    if whole_run_improved:
+        return "strong_positive"
+    if budget_dominant_improvement:
+        return "budget_dominant_improvement"
+    if local_only:
+        return "local_only_hard_negative"
+    if timeout_regression:
+        return "regression"
+    if right_censored:
+        return "unknown_right_censored"
+    return "observed_neutral"
 
 
 def _tail_cost(row: dict[str, Any]) -> float:
@@ -259,6 +421,9 @@ def _counterfactual_row(
     baseline_results: dict[str, dict[str, Any]],
     min_wall_improvement: float,
     min_local_cost_improvement: float,
+    min_budget_dominant_pricing_improvement: float,
+    min_budget_dominant_exact_pricing_improvement: float,
+    max_budget_dominant_gap_regression: float,
 ) -> dict[str, Any] | None:
     if str(entry.get("source_type") or "") != "tail_action_alt_pair":
         return None
@@ -290,6 +455,8 @@ def _counterfactual_row(
     alternative_result = _load_result_row(_result_path_for_entry(entry), instance)
     if baseline_tail is None or alternative_tail is None or baseline_result is None or alternative_result is None:
         return None
+    baseline_proof_work = _log_proof_work_summary(_log_path_for_tail_row(baseline_tail))
+    alternative_proof_work = _log_proof_work_summary(_log_path_for_tail_row(alternative_tail))
 
     baseline_tail_cost = _tail_cost(baseline_tail)
     alternative_tail_cost = _tail_cost(alternative_tail)
@@ -308,6 +475,81 @@ def _counterfactual_row(
     whole_run_improved = bool(timeout_resolved or wall_improved)
     right_censored = bool(both_nonoptimal)
     local_only = bool(local_improved and not whole_run_improved)
+
+    baseline_pricing_calls = _result_metric(baseline_result, "pricing_calls")
+    alternative_pricing_calls = _result_metric(alternative_result, "pricing_calls")
+    baseline_exact_pricing_calls = _result_metric(baseline_result, "exact_pricing_calls")
+    alternative_exact_pricing_calls = _result_metric(alternative_result, "exact_pricing_calls")
+    baseline_node_count = _result_metric(baseline_result, "node_count")
+    alternative_node_count = _result_metric(alternative_result, "node_count")
+    baseline_solving_time = _result_metric(baseline_result, "solving_time")
+    alternative_solving_time = _result_metric(alternative_result, "solving_time")
+    baseline_primal_bound = _result_metric(baseline_result, "primal_bound")
+    alternative_primal_bound = _result_metric(alternative_result, "primal_bound")
+    baseline_dual_bound = _result_metric(baseline_result, "dual_bound")
+    alternative_dual_bound = _result_metric(alternative_result, "dual_bound")
+    baseline_gap = _result_metric(baseline_result, "gap")
+    alternative_gap = _result_metric(alternative_result, "gap")
+    pricing_calls_delta = _delta_optional(alternative_pricing_calls, baseline_pricing_calls)
+    exact_pricing_calls_delta = _delta_optional(
+        alternative_exact_pricing_calls,
+        baseline_exact_pricing_calls,
+    )
+    node_count_delta = _delta_optional(alternative_node_count, baseline_node_count)
+    solving_time_delta = _delta_optional(alternative_solving_time, baseline_solving_time)
+    primal_bound_delta = _delta_optional(alternative_primal_bound, baseline_primal_bound)
+    dual_bound_delta = _delta_optional(alternative_dual_bound, baseline_dual_bound)
+    gap_delta = _delta_optional(alternative_gap, baseline_gap)
+    retry_trigger_count_delta = _delta_optional(
+        _proof_work_metric(alternative_proof_work, "completion_retry_trigger_count"),
+        _proof_work_metric(baseline_proof_work, "completion_retry_trigger_count"),
+    )
+    retry_pricing_count_delta = _delta_optional(
+        _proof_work_metric(alternative_proof_work, "completion_retry_pricing_count"),
+        _proof_work_metric(baseline_proof_work, "completion_retry_pricing_count"),
+    )
+    retry_work_time_proxy_delta = _delta_optional(
+        _proof_work_metric(alternative_proof_work, "completion_retry_work_time_proxy"),
+        _proof_work_metric(baseline_proof_work, "completion_retry_work_time_proxy"),
+    )
+    retry_generated_sequences_delta = _delta_optional(
+        _proof_work_metric(alternative_proof_work, "completion_retry_generated_sequences"),
+        _proof_work_metric(baseline_proof_work, "completion_retry_generated_sequences"),
+    )
+    retry_evaluated_timed_trips_delta = _delta_optional(
+        _proof_work_metric(alternative_proof_work, "completion_retry_evaluated_timed_trips"),
+        _proof_work_metric(baseline_proof_work, "completion_retry_evaluated_timed_trips"),
+    )
+    retry_payback_absent = bool(
+        retry_pricing_count_delta is None
+        or (
+            retry_pricing_count_delta <= 0.0
+            and (
+                retry_work_time_proxy_delta is None
+                or retry_work_time_proxy_delta <= 0.0
+            )
+        )
+    )
+    budget_dominant_improvement = bool(
+        right_censored
+        and pricing_calls_delta is not None
+        and exact_pricing_calls_delta is not None
+        and node_count_delta is not None
+        and gap_delta is not None
+        and pricing_calls_delta <= -float(min_budget_dominant_pricing_improvement)
+        and exact_pricing_calls_delta
+        <= -float(min_budget_dominant_exact_pricing_improvement)
+        and node_count_delta <= 0.0
+        and gap_delta <= float(max_budget_dominant_gap_regression)
+        and retry_payback_absent
+    )
+    label_type = _counterfactual_label_type(
+        whole_run_improved=whole_run_improved,
+        budget_dominant_improvement=budget_dominant_improvement,
+        local_only=local_only,
+        timeout_regression=timeout_regression,
+        right_censored=right_censored,
+    )
 
     deltas = {
         "local_tail_cost_delta": local_tail_cost_delta,
@@ -344,9 +586,23 @@ def _counterfactual_row(
             "y_subtree_no_column_chain",
         ),
         "wall_time_delta": alternative_wall - baseline_wall,
+        "pricing_calls_delta": pricing_calls_delta,
+        "exact_pricing_calls_delta": exact_pricing_calls_delta,
+        "node_count_delta": node_count_delta,
+        "solving_time_delta": solving_time_delta,
+        "primal_bound_delta": primal_bound_delta,
+        "dual_bound_delta": dual_bound_delta,
+        "gap_delta": gap_delta,
+        "completion_retry_trigger_count_delta": retry_trigger_count_delta,
+        "completion_retry_pricing_count_delta": retry_pricing_count_delta,
+        "completion_retry_work_time_proxy_delta": retry_work_time_proxy_delta,
+        "completion_retry_generated_sequences_delta": retry_generated_sequences_delta,
+        "completion_retry_evaluated_timed_trips_delta": (
+            retry_evaluated_timed_trips_delta
+        ),
     }
     return {
-        "schema_version": "journey_tail_action_counterfactual_delta_v1",
+        "schema_version": "journey_tail_action_counterfactual_delta_v4",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "production_ready": False,
@@ -367,12 +623,39 @@ def _counterfactual_row(
         "timeout_resolved": timeout_resolved,
         "timeout_regression": timeout_regression,
         "right_censored_counterfactual": right_censored,
+        "budget_dominant_improvement": budget_dominant_improvement,
+        "counterfactual_label_type": label_type,
+        "baseline_result_metrics": {
+            "pricing_calls": _round_optional(baseline_pricing_calls),
+            "exact_pricing_calls": _round_optional(baseline_exact_pricing_calls),
+            "node_count": _round_optional(baseline_node_count),
+            "solving_time": _round_optional(baseline_solving_time),
+            "primal_bound": _round_optional(baseline_primal_bound),
+            "dual_bound": _round_optional(baseline_dual_bound),
+            "gap": _round_optional(baseline_gap),
+        },
+        "alternative_result_metrics": {
+            "pricing_calls": _round_optional(alternative_pricing_calls),
+            "exact_pricing_calls": _round_optional(alternative_exact_pricing_calls),
+            "node_count": _round_optional(alternative_node_count),
+            "solving_time": _round_optional(alternative_solving_time),
+            "primal_bound": _round_optional(alternative_primal_bound),
+            "dual_bound": _round_optional(alternative_dual_bound),
+            "gap": _round_optional(alternative_gap),
+        },
+        "proof_work_metrics_available": bool(
+            baseline_proof_work.get("available") and alternative_proof_work.get("available")
+        ),
+        "retry_payback_absent": retry_payback_absent,
+        "baseline_proof_work": baseline_proof_work,
+        "alternative_proof_work": alternative_proof_work,
         "baseline_tail": _compact_tail(baseline_tail),
         "alternative_tail": _compact_tail(alternative_tail),
-        "deltas": {key: round(float(value), 9) for key, value in deltas.items()},
+        "deltas": {key: _round_optional(value) for key, value in deltas.items()},
         "labels": {
             "y_local_tail_improved": 1.0 if local_improved else 0.0,
             "y_whole_run_improved": 1.0 if whole_run_improved else 0.0,
+            "y_budget_dominant_improvement": 1.0 if budget_dominant_improvement else 0.0,
             "y_local_improved_but_whole_run_not": 1.0 if local_only else 0.0,
             "y_timeout_resolved": 1.0 if timeout_resolved else 0.0,
             "y_timeout_regression": 1.0 if timeout_regression else 0.0,
@@ -391,6 +674,9 @@ def audit_tail_action_counterfactual_delta(
     *,
     min_wall_improvement: float = 1.0,
     min_local_cost_improvement: float = 1.0,
+    min_budget_dominant_pricing_improvement: float = 1.0,
+    min_budget_dominant_exact_pricing_improvement: float = 1.0,
+    max_budget_dominant_gap_regression: float = 1.0e-9,
 ) -> dict[str, Any]:
     runbook = _read_json(runbook_path)
     entries = runbook.get("entries") if isinstance(runbook.get("entries"), list) else []
@@ -409,6 +695,13 @@ def audit_tail_action_counterfactual_delta(
                 baseline_results=baseline_results,
                 min_wall_improvement=min_wall_improvement,
                 min_local_cost_improvement=min_local_cost_improvement,
+                min_budget_dominant_pricing_improvement=(
+                    min_budget_dominant_pricing_improvement
+                ),
+                min_budget_dominant_exact_pricing_improvement=(
+                    min_budget_dominant_exact_pricing_improvement
+                ),
+                max_budget_dominant_gap_regression=max_budget_dominant_gap_regression,
             )
         ]
         if row is not None
@@ -421,9 +714,12 @@ def audit_tail_action_counterfactual_delta(
             if _float(value) > 0.5:
                 label_counts[str(key)] += 1
         status_pairs[f"{row.get('baseline_status')}->{row.get('alternative_status')}"] += 1
+    label_type_counts = Counter(
+        str(row.get("counterfactual_label_type") or "") for row in rows
+    )
 
     summary = {
-        "schema_version": "journey_tail_action_counterfactual_delta_audit_v1",
+        "schema_version": "journey_tail_action_counterfactual_delta_audit_v3",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "production_ready": False,
@@ -438,17 +734,41 @@ def audit_tail_action_counterfactual_delta(
         "matched_counterfactual_count": len(rows),
         "min_wall_improvement": float(min_wall_improvement),
         "min_local_cost_improvement": float(min_local_cost_improvement),
+        "min_budget_dominant_pricing_improvement": float(
+            min_budget_dominant_pricing_improvement
+        ),
+        "min_budget_dominant_exact_pricing_improvement": float(
+            min_budget_dominant_exact_pricing_improvement
+        ),
+        "max_budget_dominant_gap_regression": float(max_budget_dominant_gap_regression),
         "label_positive_counts": dict(sorted(label_counts.items())),
+        "counterfactual_label_type_counts": dict(sorted(label_type_counts.items())),
         "status_pair_counts": dict(sorted(status_pairs.items())),
         "local_tail_improved_count": int(label_counts.get("y_local_tail_improved", 0)),
         "whole_run_improved_count": int(label_counts.get("y_whole_run_improved", 0)),
+        "budget_dominant_improvement_count": int(
+            label_counts.get("y_budget_dominant_improvement", 0)
+        ),
         "local_improved_but_whole_run_not_count": int(
             label_counts.get("y_local_improved_but_whole_run_not", 0)
         ),
         "right_censored_counterfactual_count": int(
             label_counts.get("y_right_censored_counterfactual", 0)
         ),
+        "proof_work_metrics_available_count": int(
+            sum(1 for row in rows if bool(row.get("proof_work_metrics_available")))
+        ),
+        "retry_payback_observed_count": int(
+            sum(
+                1
+                for row in rows
+                if row.get("retry_payback_absent") is False
+            )
+        ),
         "whole_run_training_ready": bool(label_counts.get("y_whole_run_improved", 0) > 0),
+        "budget_dominant_catalog_ready": bool(
+            label_counts.get("y_budget_dominant_improvement", 0) > 0
+        ),
         "hard_negative_catalog_ready": bool(rows),
         "rows": rows,
     }
@@ -479,6 +799,12 @@ def _render_report(summary: dict[str, Any]) -> str:
         f"matched_counterfactual_count = {summary.get('matched_counterfactual_count')}",
         f"local_tail_improved_count = {summary.get('local_tail_improved_count')}",
         f"whole_run_improved_count = {summary.get('whole_run_improved_count')}",
+        "budget_dominant_improvement_count = "
+        f"{summary.get('budget_dominant_improvement_count')}",
+        f"counterfactual_label_type_counts = {summary.get('counterfactual_label_type_counts')}",
+        "proof_work_metrics_available_count = "
+        f"{summary.get('proof_work_metrics_available_count')}",
+        f"retry_payback_observed_count = {summary.get('retry_payback_observed_count')}",
         "production_ready = false",
         "certificate_effect = false",
         "official_bound_effect = false",
@@ -497,6 +823,11 @@ def _render_report(summary: dict[str, Any]) -> str:
             f"status {row.get('baseline_status')} -> {row.get('alternative_status')}, "
             f"local_delta={row.get('deltas', {}).get('local_tail_cost_delta')}, "
             f"wall_delta={row.get('deltas', {}).get('wall_time_delta')}, "
+            f"exact_delta={row.get('deltas', {}).get('exact_pricing_calls_delta')}, "
+            f"gap_delta={row.get('deltas', {}).get('gap_delta')}, "
+            "retry_work_delta="
+            f"{row.get('deltas', {}).get('completion_retry_work_time_proxy_delta')}, "
+            f"label_type={row.get('counterfactual_label_type')}, "
             f"labels={row.get('labels')}"
         )
     lines.extend(
@@ -520,6 +851,9 @@ def main() -> None:
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--min-wall-improvement", type=float, default=1.0)
     parser.add_argument("--min-local-cost-improvement", type=float, default=1.0)
+    parser.add_argument("--min-budget-dominant-pricing-improvement", type=float, default=1.0)
+    parser.add_argument("--min-budget-dominant-exact-pricing-improvement", type=float, default=1.0)
+    parser.add_argument("--max-budget-dominant-gap-regression", type=float, default=1.0e-9)
     args = parser.parse_args()
     summary = audit_tail_action_counterfactual_delta(
         args.runbook,
@@ -530,6 +864,13 @@ def main() -> None:
         args.report,
         min_wall_improvement=args.min_wall_improvement,
         min_local_cost_improvement=args.min_local_cost_improvement,
+        min_budget_dominant_pricing_improvement=(
+            args.min_budget_dominant_pricing_improvement
+        ),
+        min_budget_dominant_exact_pricing_improvement=(
+            args.min_budget_dominant_exact_pricing_improvement
+        ),
+        max_budget_dominant_gap_regression=args.max_budget_dominant_gap_regression,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
 

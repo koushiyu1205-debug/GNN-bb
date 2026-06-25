@@ -59,6 +59,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-kill-after", default="30s")
     parser.add_argument("--max-workers", type=int, default=1)
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument(
+        "--force-child-exit-after-run",
+        action="store_true",
+        help="Pass --force-exit-after-run to each isolated run_bpc_future.py child.",
+    )
     return parser.parse_args()
 
 
@@ -154,6 +159,8 @@ def run_instance(
         ]
         if args.quiet:
             cmd.append("--quiet")
+        if args.force_child_exit_after_run:
+            cmd.append("--force-exit-after-run")
         for override in args.overrides:
             cmd.extend(["--set", override])
         print(f"[{index}/{total}] run {instance}", flush=True)

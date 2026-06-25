@@ -33,7 +33,9 @@ ROW_FIELDS = [
     "incumbent",
     "rmp_to_incumbent_gap",
     "tail_action",
+    "tail_action_class",
     "tail_action_reason",
+    "tail_action_productivity_class",
     "fathom_possible_if_rc_zero",
     "recent_active_support_additions",
     "recent_rmp_objective_progress",
@@ -64,6 +66,8 @@ EARLY_BRANCH_FIELDS = [
     "cg_iter",
     "trigger",
     "tail_action",
+    "tail_action_class",
+    "tail_action_productivity_class",
     "tail_action_no_column",
     "reason",
     "added_journeys",
@@ -109,6 +113,14 @@ EARLY_BRANCH_FIELDS = [
     "child_subtree_pricing_event_count",
     "child_subtree_negative_pricing_event_count",
     "child_subtree_completion_retry_count",
+    "child_subtree_completion_retry_pricing_event_count",
+    "child_subtree_completion_retry_low_min_fill_count",
+    "child_subtree_completion_retry_min_harvest_min_fill",
+    "child_subtree_completion_retry_max_harvest_min_fill",
+    "child_subtree_completion_retry_harvest_min_fill_values",
+    "child_subtree_completion_retry_found_negative_count",
+    "child_subtree_completion_retry_certified_no_negative_count",
+    "child_subtree_completion_retry_incomplete_count",
     "child_subtree_early_branch_trigger_count",
     "child_subtree_no_column_early_branch_trigger_count",
     "child_subtree_tail_action_audit_count",
@@ -125,7 +137,9 @@ NO_COLUMN_GATE_FIELDS = [
     "gate_passed",
     "gate_reason",
     "tail_action",
+    "tail_action_class",
     "tail_action_reason",
+    "tail_action_productivity_class",
     "tail_action_before_final_probe",
     "rmp_objective",
     "inherited_lower_bound",
@@ -173,6 +187,23 @@ def _read_events(path: Path) -> Iterable[dict[str, Any]]:
             yield record
 
 
+def _tail_action_class_from_action(action: Any) -> str:
+    return {
+        "FRONTIER_REFINEMENT": "A_FRONTIER_REFINEMENT",
+        "BROAD_PLATEAU_FALLBACK": "B_BROAD_PLATEAU",
+        "CONTINUE_COLUMN_GENERATION": "C_CONTINUE_CG",
+        "EARLY_BRANCH": "D_EARLY_BRANCH",
+    }.get(str(action or ""), "UNKNOWN")
+
+
+def _fill_tail_action_derived_fields(row: dict[str, Any]) -> dict[str, Any]:
+    if not row.get("tail_action_class"):
+        row["tail_action_class"] = _tail_action_class_from_action(row.get("tail_action"))
+    if not row.get("tail_action_productivity_class"):
+        row["tail_action_productivity_class"] = "unknown"
+    return row
+
+
 def _tail_action_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | None:
     if record.get("event") != "journey_corrected_node_bound_audit":
         return None
@@ -181,7 +212,7 @@ def _tail_action_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | Non
         if key == "log_file":
             continue
         row[key] = record.get(key)
-    return row
+    return _fill_tail_action_derived_fields(row)
 
 
 def _early_branch_trigger_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | None:
@@ -192,7 +223,7 @@ def _early_branch_trigger_row(path: Path, record: dict[str, Any]) -> dict[str, A
         if key == "log_file":
             continue
         row[key] = record.get(key)
-    return row
+    return _fill_tail_action_derived_fields(row)
 
 
 def _no_column_gate_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | None:
@@ -203,7 +234,7 @@ def _no_column_gate_row(path: Path, record: dict[str, Any]) -> dict[str, Any] | 
         if key == "log_file":
             continue
         row[key] = record.get(key)
-    return row
+    return _fill_tail_action_derived_fields(row)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -336,6 +367,62 @@ def _pricing_event_has_negative_signal(event: dict[str, Any]) -> bool:
     return "negative_journey" in reason or "weak_negative" in reason
 
 
+def _is_completion_retry_pricing_event(event: dict[str, Any]) -> bool:
+    return (
+        event.get("event") == "journey_pricing"
+        and str(event.get("pricing_kind") or "").startswith("exact_completion_bound")
+    )
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _completion_retry_min_fill_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    values = [
+        int(value)
+        for value in (_int_or_none(event.get("direct_label_harvest_min_fill")) for event in events)
+        if value is not None
+    ]
+    value_counts = Counter(values)
+    pricing_events = [event for event in events if _is_completion_retry_pricing_event(event)]
+    found_negative = 0
+    certified_no_negative = 0
+    incomplete = 0
+    for event in pricing_events:
+        state = str(event.get("pricing_state") or event.get("status") or "")
+        reason = str(event.get("reason") or "")
+        negative_journeys = _int_or_none(event.get("negative_journeys")) or 0
+        selected_trips = _int_or_none(event.get("selected_trips")) or 0
+        if state == "FOUND_NEGATIVE" or negative_journeys > 0 or selected_trips > 0:
+            found_negative += 1
+        elif (
+            state in {"OPTIMAL", "CERTIFIED_NO_NEGATIVE"}
+            and bool(event.get("global_certificate") or event.get("global_certificate_capable"))
+            and bool(event.get("exhausted"))
+        ):
+            certified_no_negative += 1
+        elif state in {"INCOMPLETE", "INCOMPLETE_LIMIT"} or reason == "time_limit":
+            incomplete += 1
+    return {
+        "child_subtree_completion_retry_pricing_event_count": len(pricing_events),
+        "child_subtree_completion_retry_low_min_fill_count": sum(1 for value in values if value < 10),
+        "child_subtree_completion_retry_min_harvest_min_fill": min(values) if values else None,
+        "child_subtree_completion_retry_max_harvest_min_fill": max(values) if values else None,
+        "child_subtree_completion_retry_harvest_min_fill_values": ",".join(
+            f"{value}:{count}" for value, count in sorted(value_counts.items())
+        ),
+        "child_subtree_completion_retry_found_negative_count": int(found_negative),
+        "child_subtree_completion_retry_certified_no_negative_count": int(certified_no_negative),
+        "child_subtree_completion_retry_incomplete_count": int(incomplete),
+    }
+
+
 def _descendant_node_ids(
     log_file: str,
     roots: list[int],
@@ -463,6 +550,7 @@ def _subtree_activity_summary(
         "child_subtree_pricing_event_count": len(pricing_events),
         "child_subtree_negative_pricing_event_count": len(negative_pricing_events),
         "child_subtree_completion_retry_count": len(completion_retry_events),
+        **_completion_retry_min_fill_summary(completion_retry_events),
         "child_subtree_early_branch_trigger_count": len(subtree_early_branch_events),
         "child_subtree_no_column_early_branch_trigger_count": len(no_column_subtree_early_branch_events),
         "child_subtree_tail_action_audit_count": int(audit_count),
@@ -537,7 +625,11 @@ def audit_tail_actions(
         )
 
     action_counts = Counter(str(row.get("tail_action") or "") for row in rows)
+    action_class_counts = Counter(str(row.get("tail_action_class") or "") for row in rows)
     reason_counts = Counter(str(row.get("tail_action_reason") or "") for row in rows)
+    productivity_class_counts = Counter(
+        str(row.get("tail_action_productivity_class") or "") for row in rows
+    )
     pricing_kind_counts = Counter(str(row.get("pricing_kind") or "") for row in rows)
     node_counts = Counter(f"depth={row.get('depth')}|node={row.get('node_id')}" for row in rows)
     fathom_possible_count = sum(1 for row in rows if bool(row.get("fathom_possible_if_rc_zero")))
@@ -572,6 +664,10 @@ def audit_tail_actions(
     ]
     gate_reason_counts = Counter(str(row.get("gate_reason") or "") for row in no_column_gate_rows)
     gate_action_counts = Counter(str(row.get("tail_action") or "") for row in no_column_gate_rows)
+    gate_action_class_counts = Counter(str(row.get("tail_action_class") or "") for row in no_column_gate_rows)
+    gate_productivity_class_counts = Counter(
+        str(row.get("tail_action_productivity_class") or "") for row in no_column_gate_rows
+    )
     gate_pricing_state_counts = Counter(
         str(row.get("previous_pricing_state") or "") for row in no_column_gate_rows
     )
@@ -598,6 +694,22 @@ def audit_tail_actions(
         int(row.get("observed_child_audit_count") or 0)
         for row in tail_action_early_branch_rows
     )
+    tail_action_completion_retry_low_min_fill_count = sum(
+        int(row.get("child_subtree_completion_retry_low_min_fill_count") or 0)
+        for row in tail_action_early_branch_rows
+    )
+    tail_action_completion_retry_found_negative_count = sum(
+        int(row.get("child_subtree_completion_retry_found_negative_count") or 0)
+        for row in tail_action_early_branch_rows
+    )
+    tail_action_completion_retry_certified_no_negative_count = sum(
+        int(row.get("child_subtree_completion_retry_certified_no_negative_count") or 0)
+        for row in tail_action_early_branch_rows
+    )
+    tail_action_completion_retry_incomplete_count = sum(
+        int(row.get("child_subtree_completion_retry_incomplete_count") or 0)
+        for row in tail_action_early_branch_rows
+    )
     tail_action_queue_priorities = [
         int(row.get(field))
         for row in tail_action_early_branch_rows
@@ -605,7 +717,7 @@ def audit_tail_actions(
         if row.get(field) is not None
     ]
     summary = {
-        "schema_version": "journey_tail_action_controller_audit_v1",
+        "schema_version": "journey_tail_action_controller_audit_v2",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "certificate_effect": False,
@@ -614,7 +726,9 @@ def audit_tail_actions(
         "log_file_count": len(log_paths),
         "row_count": len(rows),
         "tail_action_counts": dict(sorted(action_counts.items())),
+        "tail_action_class_counts": dict(sorted(action_class_counts.items())),
         "tail_action_reason_counts": dict(sorted(reason_counts.items())),
+        "tail_action_productivity_class_counts": dict(sorted(productivity_class_counts.items())),
         "pricing_kind_counts": dict(sorted(pricing_kind_counts.items())),
         "node_counts": dict(sorted(node_counts.items())),
         "fathom_possible_if_rc_zero_count": int(fathom_possible_count),
@@ -635,6 +749,10 @@ def audit_tail_actions(
         "no_column_gate_row_count": len(no_column_gate_rows),
         "no_column_gate_reason_counts": dict(sorted(gate_reason_counts.items())),
         "no_column_gate_tail_action_counts": dict(sorted(gate_action_counts.items())),
+        "no_column_gate_tail_action_class_counts": dict(sorted(gate_action_class_counts.items())),
+        "no_column_gate_tail_action_productivity_class_counts": dict(
+            sorted(gate_productivity_class_counts.items())
+        ),
         "no_column_gate_previous_pricing_state_counts": dict(sorted(gate_pricing_state_counts.items())),
         "no_column_gate_before_final_probe_count": len(before_final_probe_gate_rows),
         "no_column_gate_before_final_probe_disabled_count": len(before_final_probe_disabled_gate_rows),
@@ -645,6 +763,18 @@ def audit_tail_actions(
         "tail_action_queued_child_count": int(tail_action_child_count),
         "tail_action_nonexact_queued_child_count": int(tail_action_nonexact_child_count),
         "tail_action_observed_child_audit_count": int(observed_tail_action_child_count),
+        "tail_action_completion_retry_low_min_fill_count": int(
+            tail_action_completion_retry_low_min_fill_count
+        ),
+        "tail_action_completion_retry_found_negative_count": int(
+            tail_action_completion_retry_found_negative_count
+        ),
+        "tail_action_completion_retry_certified_no_negative_count": int(
+            tail_action_completion_retry_certified_no_negative_count
+        ),
+        "tail_action_completion_retry_incomplete_count": int(
+            tail_action_completion_retry_incomplete_count
+        ),
         "tail_action_child_min_queue_priority_width": (
             min(tail_action_queue_priorities) if tail_action_queue_priorities else None
         ),
@@ -693,6 +823,14 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
     ]
     for action, count in summary["tail_action_counts"].items():
         lines.append(f"- `{action}`: {count}")
+    if summary.get("tail_action_class_counts"):
+        lines.extend(["", "## Tail Action Classes", ""])
+        for action_class, count in summary["tail_action_class_counts"].items():
+            lines.append(f"- `{action_class}`: {count}")
+    if summary.get("tail_action_productivity_class_counts"):
+        lines.extend(["", "## Tail Action Productivity Classes", ""])
+        for productivity_class, count in summary["tail_action_productivity_class_counts"].items():
+            lines.append(f"- `{productivity_class}`: {count}")
     lines.extend(
         [
             "",
@@ -719,6 +857,10 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
             f"- tail-action queued children: {summary['tail_action_queued_child_count']}",
             f"- tail-action non-exact queued children: {summary['tail_action_nonexact_queued_child_count']}",
             f"- observed tail-action child audit rows: {summary['tail_action_observed_child_audit_count']}",
+            f"- tail-action low min-fill completion retries: {summary['tail_action_completion_retry_low_min_fill_count']}",
+            f"- tail-action completion retry found-negative rows: {summary['tail_action_completion_retry_found_negative_count']}",
+            f"- tail-action completion retry certified no-negative rows: {summary['tail_action_completion_retry_certified_no_negative_count']}",
+            f"- tail-action completion retry incomplete rows: {summary['tail_action_completion_retry_incomplete_count']}",
             f"- tail-action child min queue priority width: {summary['tail_action_child_min_queue_priority_width']}",
             f"- tail-action child max queue priority width: {summary['tail_action_child_max_queue_priority_width']}",
             "",
@@ -744,6 +886,18 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
         for action, count in summary["no_column_gate_tail_action_counts"].items():
             lines.append(f"- `{action}`: {count}")
         lines.append("")
+        if summary.get("no_column_gate_tail_action_class_counts"):
+            lines.append("按 tail_action_class:")
+            for action_class, count in summary["no_column_gate_tail_action_class_counts"].items():
+                lines.append(f"- `{action_class}`: {count}")
+            lines.append("")
+        if summary.get("no_column_gate_tail_action_productivity_class_counts"):
+            lines.append("按 tail_action_productivity_class:")
+            for productivity_class, count in summary[
+                "no_column_gate_tail_action_productivity_class_counts"
+            ].items():
+                lines.append(f"- `{productivity_class}`: {count}")
+            lines.append("")
     if summary.get("sample_early_branch_rows"):
         lines.extend(
             [
@@ -763,6 +917,8 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
                 f"pricing={row.get('child_subtree_pricing_event_count')} "
                 f"negative_pricing={row.get('child_subtree_negative_pricing_event_count')} "
                 f"cb_retry={row.get('child_subtree_completion_retry_count')} "
+                f"cb_low_min_fill={row.get('child_subtree_completion_retry_low_min_fill_count')} "
+                f"cb_min_fill_values=`{row.get('child_subtree_completion_retry_harvest_min_fill_values') or ''}` "
                 f"subtree_early_branch={row.get('child_subtree_early_branch_trigger_count')} "
                 f"subtree_no_column={row.get('child_subtree_no_column_early_branch_trigger_count')} "
                 f"span={row.get('child_subtree_observed_wall_span')}"

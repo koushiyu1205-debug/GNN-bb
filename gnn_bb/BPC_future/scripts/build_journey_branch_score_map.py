@@ -88,6 +88,62 @@ def _load_child_probe_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_child_probe_calibration_summaries(paths: Iterable[Path]) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    for path in paths:
+        summary_path = path / "summary.json" if path.is_dir() else path
+        if summary_path.name != "summary.json" or not summary_path.exists():
+            continue
+        try:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            summaries.append(payload)
+    return summaries
+
+
+def _child_probe_calibration_status(
+    summaries: list[dict[str, Any]],
+) -> tuple[bool, str, dict[str, Any]]:
+    if not summaries:
+        return False, "missing_child_probe_proxy_calibration", {
+            "child_probe_calibration_summary_count": 0,
+            "child_probe_calibration_matched_pair_count": 0,
+            "child_probe_calibration_top_pair_mismatch_count": 0,
+            "child_probe_calibration_discordant_pair_count": 0,
+        }
+    matched_pair_count = sum(_int(summary.get("matched_pair_count"), 0) for summary in summaries)
+    top_mismatch_count = sum(
+        _int(summary.get("top_pair_mismatch_count"), 0) for summary in summaries
+    )
+    discordant_pair_count = sum(
+        _int(summary.get("discordant_pair_count"), 0) for summary in summaries
+    )
+    invalid_count = sum(
+        1
+        for summary in summaries
+        if str(summary.get("schema_version") or "")
+        != "journey_branch_child_probe_proxy_calibration_summary_v1"
+    )
+    fields = {
+        "child_probe_calibration_summary_count": len(summaries),
+        "child_probe_calibration_matched_pair_count": int(matched_pair_count),
+        "child_probe_calibration_top_pair_mismatch_count": int(top_mismatch_count),
+        "child_probe_calibration_discordant_pair_count": int(discordant_pair_count),
+        "child_probe_calibration_invalid_summary_count": int(invalid_count),
+    }
+    if invalid_count > 0:
+        return False, "invalid_child_probe_proxy_calibration_schema", fields
+    if matched_pair_count <= 0:
+        return False, "empty_child_probe_proxy_calibration", fields
+    if top_mismatch_count > 0:
+        return False, "child_probe_proxy_top_pair_mismatch", fields
+    if discordant_pair_count > 0:
+        return False, "child_probe_proxy_pairwise_discordance", fields
+    return True, "child_probe_proxy_calibration_passed", fields
+
+
 def _float(value: Any, default: float = 0.0) -> float:
     if value is None or value == "":
         return float(default)
@@ -107,6 +163,15 @@ def _int_or_none(value: Any) -> int | None:
         return int(float(value))
     except (TypeError, ValueError):
         return None
+
+
+def _int(value: Any, default: int = 0) -> int:
+    if value is None or value == "":
+        return int(default)
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return int(default)
 
 
 def _pair_tuple(value: Any) -> tuple[int, int] | None:
@@ -304,6 +369,7 @@ def build_branch_score_map(
     include_instance_contains: tuple[str, ...] = (),
     exclude_instance_contains: tuple[str, ...] = (),
     include_child_probe: bool = False,
+    child_probe_calibration_inputs: tuple[Path, ...] = (),
     include_child_probe_log_contains: tuple[str, ...] = (),
     exclude_child_probe_log_contains: tuple[str, ...] = (),
     child_complete_bonus: float = 5.0,
@@ -321,6 +387,17 @@ def build_branch_score_map(
 
     raw_ranking_rows = _load_ranking_rows(inputs)
     raw_child_probe_rows = _load_child_probe_rows(inputs) if include_child_probe else []
+    child_probe_calibration_summaries = _load_child_probe_calibration_summaries(
+        child_probe_calibration_inputs
+    )
+    (
+        child_probe_calibration_passed,
+        child_probe_calibration_reason,
+        child_probe_calibration_fields,
+    ) = _child_probe_calibration_status(child_probe_calibration_summaries)
+    child_probe_score_map_blocked = bool(
+        include_child_probe and not child_probe_calibration_passed
+    )
     ranking_rows = [
         row
         for row in raw_ranking_rows
@@ -338,7 +415,7 @@ def build_branch_score_map(
             include_contains=include_child_probe_log_contains,
             exclude_contains=exclude_child_probe_log_contains,
         )
-    ]
+    ] if not child_probe_score_map_blocked else []
     accumulators: dict[str, _ScoreAccumulator] = {}
     skipped_rows = 0
     skipped_child_probe_branch_rows = 0
@@ -472,6 +549,12 @@ def build_branch_score_map(
         "raw_ranking_pair_row_count": len(raw_ranking_rows),
         "ranking_pair_row_count": len(ranking_rows),
         "include_child_probe": bool(include_child_probe),
+        "child_probe_score_map_blocked": bool(child_probe_score_map_blocked),
+        "child_probe_score_map_block_reason": child_probe_calibration_reason,
+        "child_probe_calibration_input_paths": [
+            str(path) for path in child_probe_calibration_inputs
+        ],
+        **child_probe_calibration_fields,
         "raw_child_probe_row_count": len(raw_child_probe_rows),
         "child_probe_row_count": len(child_probe_rows),
         "child_probe_branch_row_count": len(child_probe_branch_rows),
@@ -540,6 +623,12 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
         "ranking_pair_row_count",
         "raw_ranking_pair_row_count",
         "include_child_probe",
+        "child_probe_score_map_blocked",
+        "child_probe_score_map_block_reason",
+        "child_probe_calibration_input_paths",
+        "child_probe_calibration_matched_pair_count",
+        "child_probe_calibration_top_pair_mismatch_count",
+        "child_probe_calibration_discordant_pair_count",
         "raw_child_probe_row_count",
         "child_probe_row_count",
         "child_probe_branch_row_count",
@@ -574,7 +663,7 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
     )
     if summary.get("include_child_probe"):
         lines.append(
-            "若使用 child-probe proof-cost 分数，更建议用 `journey_branch_candidate_priority=branch_score_horizon` 且设置正分阈值，只让正分候选打开 horizon。"
+            "child-probe proof-cost 分数只有在提供 proxy-vs-full 校准且校准通过时才会进入 score map；未校准或校准出现 top mismatch / pairwise discordance 时必须 fail-closed。"
         )
     lines.append(
         "`branch_score` 只改变 opt-in 的 Ryan-Foster pair 排序；排序范围仍由 `journey_branch_fractionality_tie_tolerance` 决定。"
@@ -601,6 +690,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--include-instance-contains", action="append", default=[])
     parser.add_argument("--exclude-instance-contains", action="append", default=[])
     parser.add_argument("--include-child-probe", action="store_true")
+    parser.add_argument(
+        "--child-probe-calibration-input",
+        action="append",
+        type=Path,
+        default=[],
+        help=(
+            "Required when --include-child-probe should contribute scores. "
+            "Accepts proxy-vs-full calibration output directories or summary.json files."
+        ),
+    )
     parser.add_argument("--include-child-probe-log-contains", action="append", default=[])
     parser.add_argument("--exclude-child-probe-log-contains", action="append", default=[])
     parser.add_argument("--child-complete-bonus", type=float, default=5.0)
@@ -628,6 +727,7 @@ def main() -> None:
         include_instance_contains=tuple(args.include_instance_contains or ()),
         exclude_instance_contains=tuple(args.exclude_instance_contains or ()),
         include_child_probe=bool(args.include_child_probe),
+        child_probe_calibration_inputs=tuple(args.child_probe_calibration_input or ()),
         include_child_probe_log_contains=tuple(args.include_child_probe_log_contains or ()),
         exclude_child_probe_log_contains=tuple(args.exclude_child_probe_log_contains or ()),
         child_complete_bonus=args.child_complete_bonus,

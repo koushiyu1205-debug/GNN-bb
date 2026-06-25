@@ -9,6 +9,47 @@ from BPC_future.scripts.audit_journey_tail_action_controller import audit_tail_a
 
 
 class JourneyTailActionControllerAuditTests(unittest.TestCase):
+    def test_audit_tail_actions_backfills_class_for_legacy_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            log_dir = tmp_path / "logs"
+            log_dir.mkdir()
+            rows = [
+                {
+                    "event": "journey_corrected_node_bound_audit",
+                    "node_id": 0,
+                    "depth": 0,
+                    "cg_iter": 1,
+                    "tail_action": "EARLY_BRANCH",
+                    "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
+                },
+                {
+                    "event": "journey_tail_action_no_column_early_branch_gate",
+                    "node_id": 0,
+                    "depth": 0,
+                    "cg_iter": 1,
+                    "gate_passed": False,
+                    "gate_reason": "before_final_probe_disabled",
+                    "tail_action": "EARLY_BRANCH",
+                    "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
+                    "tail_action_before_final_probe": True,
+                },
+            ]
+            (log_dir / "legacy.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            summary = audit_tail_actions([log_dir], tmp_path / "out", tmp_path / "report.md")
+
+            self.assertEqual(summary["tail_action_class_counts"]["D_EARLY_BRANCH"], 1)
+            self.assertEqual(summary["tail_action_productivity_class_counts"]["unknown"], 1)
+            self.assertEqual(summary["no_column_gate_tail_action_class_counts"]["D_EARLY_BRANCH"], 1)
+            self.assertEqual(
+                summary["no_column_gate_tail_action_productivity_class_counts"]["unknown"],
+                1,
+            )
+
     def test_audit_tail_actions_summarizes_controller_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -23,7 +64,9 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "cg_iter": 5,
                     "pricing_kind": "exact_completion_bound_retry",
                     "tail_action": "FRONTIER_REFINEMENT",
+                    "tail_action_class": "A_FRONTIER_REFINEMENT",
                     "tail_action_reason": "fathom_possible_sparse_low_waterline",
+                    "tail_action_productivity_class": "pricing_no_negative_columns",
                     "fathom_possible_if_rc_zero": True,
                     "recent_active_support_additions": 1,
                     "recent_rmp_objective_progress": 0.25,
@@ -39,7 +82,9 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "cg_iter": 3,
                     "pricing_kind": "exact_completion_bound_retry",
                     "tail_action": "BROAD_PLATEAU_FALLBACK",
+                    "tail_action_class": "B_BROAD_PLATEAU",
                     "tail_action_reason": "fathom_possible_broad_low_waterline",
+                    "tail_action_productivity_class": "pricing_no_negative_columns",
                     "fathom_possible_if_rc_zero": True,
                     "recent_active_support_additions": 0,
                     "recent_rmp_objective_progress": 0.0,
@@ -55,7 +100,9 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "cg_iter": 1,
                     "pricing_kind": "exact_completion_bound_retry",
                     "tail_action": "EARLY_BRANCH",
+                    "tail_action_class": "D_EARLY_BRANCH",
                     "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
+                    "tail_action_productivity_class": "pricing_unproductive_no_negative_columns",
                     "fathom_possible_if_rc_zero": False,
                     "recent_true_rc_productivity": 0,
                 },
@@ -67,6 +114,8 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "cg_iter": 2,
                     "trigger": "tail_action_controller",
                     "tail_action": "EARLY_BRANCH",
+                    "tail_action_class": "D_EARLY_BRANCH",
+                    "tail_action_productivity_class": "pricing_weak_columns_tail",
                     "tail_action_no_column": True,
                     "reason": "rmp_below_incumbent_weak_columns_no_active_or_objective_progress",
                     "exact_bound_available": False,
@@ -92,7 +141,9 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "gate_passed": False,
                     "gate_reason": "before_final_probe_disabled",
                     "tail_action": "EARLY_BRANCH",
+                    "tail_action_class": "D_EARLY_BRANCH",
                     "tail_action_reason": "rmp_below_incumbent_pricing_unproductive_for_fathom",
+                    "tail_action_productivity_class": "pricing_unproductive_no_negative_columns",
                     "tail_action_before_final_probe": True,
                     "rmp_to_incumbent_gap": 2.0,
                     "recent_true_rc_productivity": 0,
@@ -149,6 +200,21 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "trigger": "profile_exhausted_no_column",
                 },
                 {
+                    "event": "journey_pricing",
+                    "time": 37.0,
+                    "node_id": 4,
+                    "depth": 2,
+                    "cg_iter": 1,
+                    "pricing_kind": "exact_completion_bound_retry",
+                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                    "reason": "no_negative_journey",
+                    "direct_label_harvest_min_fill": 4,
+                    "negative_journeys": 0,
+                    "selected_trips": 0,
+                    "global_certificate": True,
+                    "exhausted": True,
+                },
+                {
                     "event": "journey_corrected_node_bound_audit",
                     "time": 40.0,
                     "node_id": 4,
@@ -156,7 +222,9 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                     "cg_iter": 1,
                     "pricing_kind": "exact",
                     "tail_action": "CONTINUE_COLUMN_GENERATION",
+                    "tail_action_class": "C_CONTINUE_CG",
                     "tail_action_reason": "rmp_below_incumbent_pricing_active_support_productive",
+                    "tail_action_productivity_class": "pricing_active_support_productive",
                     "fathom_possible_if_rc_zero": False,
                     "recent_active_support_additions": 1,
                     "recent_rmp_objective_progress": 0.5,
@@ -183,6 +251,24 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             self.assertFalse(summary["certificate_effect"])
             self.assertEqual(summary["log_file_count"], 1)
             self.assertEqual(summary["row_count"], 4)
+            self.assertEqual(summary["tail_action_class_counts"]["A_FRONTIER_REFINEMENT"], 1)
+            self.assertEqual(summary["tail_action_class_counts"]["B_BROAD_PLATEAU"], 1)
+            self.assertEqual(summary["tail_action_class_counts"]["C_CONTINUE_CG"], 1)
+            self.assertEqual(summary["tail_action_class_counts"]["D_EARLY_BRANCH"], 1)
+            self.assertEqual(
+                summary["tail_action_productivity_class_counts"]["pricing_no_negative_columns"],
+                2,
+            )
+            self.assertEqual(
+                summary["tail_action_productivity_class_counts"][
+                    "pricing_unproductive_no_negative_columns"
+                ],
+                1,
+            )
+            self.assertEqual(
+                summary["tail_action_productivity_class_counts"]["pricing_active_support_productive"],
+                1,
+            )
             self.assertEqual(summary["a_frontier_refinement_count"], 1)
             self.assertEqual(summary["b_broad_plateau_count"], 1)
             self.assertEqual(summary["d_early_branch_count"], 1)
@@ -201,6 +287,13 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             self.assertEqual(summary["no_column_gate_before_final_probe_disabled_count"], 1)
             self.assertEqual(summary["no_column_gate_d_early_branch_count"], 1)
             self.assertEqual(summary["no_column_gate_before_final_probe_disabled_d_count"], 1)
+            self.assertEqual(summary["no_column_gate_tail_action_class_counts"]["D_EARLY_BRANCH"], 1)
+            self.assertEqual(
+                summary["no_column_gate_tail_action_productivity_class_counts"][
+                    "pricing_unproductive_no_negative_columns"
+                ],
+                1,
+            )
             self.assertEqual(
                 summary["no_column_gate_reason_counts"]["before_final_probe_disabled"],
                 1,
@@ -208,6 +301,10 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             self.assertEqual(summary["tail_action_queued_child_count"], 2)
             self.assertEqual(summary["tail_action_nonexact_queued_child_count"], 2)
             self.assertEqual(summary["tail_action_observed_child_audit_count"], 1)
+            self.assertEqual(summary["tail_action_completion_retry_low_min_fill_count"], 1)
+            self.assertEqual(summary["tail_action_completion_retry_found_negative_count"], 0)
+            self.assertEqual(summary["tail_action_completion_retry_certified_no_negative_count"], 1)
+            self.assertEqual(summary["tail_action_completion_retry_incomplete_count"], 0)
             self.assertEqual(summary["tail_action_child_min_queue_priority_width"], -1)
             self.assertEqual(summary["tail_action_child_max_queue_priority_width"], -1)
             self.assertTrue((tmp_path / "out" / "summary.json").exists())
@@ -225,6 +322,7 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             ]
             self.assertEqual(gate_rows[0]["gate_reason"], "before_final_probe_disabled")
             self.assertEqual(gate_rows[0]["tail_action"], "EARLY_BRANCH")
+            self.assertEqual(gate_rows[0]["tail_action_class"], "D_EARLY_BRANCH")
             trigger_rows = [
                 json.loads(line)
                 for line in (tmp_path / "out" / "early_branch_trigger_rows.jsonl")
@@ -233,6 +331,8 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                 if line.strip()
             ]
             self.assertTrue(trigger_rows[0]["tail_action_no_column"])
+            self.assertEqual(trigger_rows[0]["tail_action_class"], "D_EARLY_BRANCH")
+            self.assertEqual(trigger_rows[0]["tail_action_productivity_class"], "pricing_weak_columns_tail")
             self.assertEqual(trigger_rows[0]["previous_pricing_state"], "LOCAL_NO_COLUMN_UNCERTIFIED")
             self.assertEqual(trigger_rows[0]["no_column_branch_task_i"], 1)
             self.assertEqual(trigger_rows[0]["no_column_branch_pool_max_child_width"], 3)
@@ -246,9 +346,17 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
             self.assertEqual(trigger_rows[0]["child_direct_unstarted_count"], 1)
             self.assertEqual(trigger_rows[0]["child_subtree_node_count"], 2)
             self.assertEqual(trigger_rows[0]["child_subtree_node_start_count"], 1)
-            self.assertEqual(trigger_rows[0]["child_subtree_pricing_event_count"], 1)
+            self.assertEqual(trigger_rows[0]["child_subtree_pricing_event_count"], 2)
             self.assertEqual(trigger_rows[0]["child_subtree_negative_pricing_event_count"], 1)
-            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_count"], 1)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_count"], 2)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_pricing_event_count"], 1)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_low_min_fill_count"], 1)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_min_harvest_min_fill"], 4)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_max_harvest_min_fill"], 4)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_harvest_min_fill_values"], "4:1")
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_found_negative_count"], 0)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_certified_no_negative_count"], 1)
+            self.assertEqual(trigger_rows[0]["child_subtree_completion_retry_incomplete_count"], 0)
             self.assertEqual(trigger_rows[0]["child_subtree_tail_action_audit_count"], 1)
             self.assertIn("D/early branch: 1", (tmp_path / "report.md").read_text(encoding="utf-8"))
             self.assertIn("tail-action early branch triggers: 1", (tmp_path / "report.md").read_text(encoding="utf-8"))
@@ -257,7 +365,11 @@ class JourneyTailActionControllerAuditTests(unittest.TestCase):
                 (tmp_path / "report.md").read_text(encoding="utf-8"),
             )
             self.assertIn(
-                "negative_pricing=1 cb_retry=1",
+                "negative_pricing=1 cb_retry=2",
+                (tmp_path / "report.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "cb_low_min_fill=1",
                 (tmp_path / "report.md").read_text(encoding="utf-8"),
             )
             self.assertIn(
