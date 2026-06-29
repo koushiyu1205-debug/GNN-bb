@@ -25,8 +25,8 @@ try:
 except Exception:
     HAS_SCIP = False
 
-from BPC_future.core.branching import BranchConstraint, trip_allowed_by_branch
-from BPC_future.core.columns import TripPool, candidate_start_times_for_trip, evaluate_timed_trip
+from BPC_future.core.branching import BranchConstraint, partial_sequence_allowed, trip_allowed_by_branch
+from BPC_future.core.columns import TimedTrip, TripPool, candidate_start_times_for_trip, evaluate_timed_trip
 from BPC_future.core.cuts import (
     FleetLowerBoundCut,
     SortieLowerBoundCut,
@@ -112,7 +112,9 @@ from BPC_future.pricing.journey_pricing import (
     _profile_cut_penalty_pruning_safe,
     _journey_cut_dual_value,
     _journey_pricing_cut_supported,
+    _journey_mask_branch_allowed,
     _profile_mask_diagnostic_kwargs,
+    _journey_column_branch_allowed,
     _journey_task_set_branch_allowed,
     _profile_candidate_return_limit,
     _journey_same_completion_possible,
@@ -227,6 +229,7 @@ from BPC_future.solver.journey_driver import (
     _journey_allowed_by_branch,
     _journey_branch_selection_metadata,
     _journey_branch_same_mass,
+    _journey_same_route_order_partition_constraints,
     _journey_child_constraint_order,
     _journey_cut_hash,
     _journey_exact_pricing_budget,
@@ -248,6 +251,7 @@ from BPC_future.solver.journey_driver import (
     _price_new_task_set_sweep,
     _log_journey_cut_dual_diagnostics,
     _audit_journey_weighted_rank1_cuts,
+    _audit_journey_route_resource_cuts,
     _journey_parse_positive_int_tuple,
     _separate_journey_subset_row_cuts,
     _journey_static_cuts,
@@ -315,6 +319,8 @@ from BPC_future.solver.journey_driver import (
     _journey_promote_duplicate_only_final_judge_certificate,
     _journey_reduced_cost_components,
     _hidden_negative_miss_diagnostics,
+    _audit_journey_route_order_regions,
+    _audit_journey_route_order_partitions,
     _log_hidden_negative_audit,
     _log_journey_addition,
     _log_journey_branch_candidates,
@@ -403,6 +409,45 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(_journey_task_set_branch_allowed(frozenset({1, 2}), (separate,)))
         self.assertTrue(_journey_task_set_branch_allowed(frozenset({1, 3}), (separate,)))
 
+    def test_journey_column_branch_allowed_supports_route_order_after_materialization(self):
+        def journey(jid: int, route: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(route),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=0.0,
+                signature=((tuple(route), tuple(), 0.0),),
+            )
+
+        forward = journey(1, (1, 2))
+        reverse = journey(2, (2, 1))
+        before = BranchConstraint("same_route_order_before_strict", 1, 2)
+        after = BranchConstraint("same_route_order_after_strict", 1, 2)
+        not_same_route = BranchConstraint("not_same_route", 1, 2)
+
+        self.assertTrue(_journey_column_branch_allowed(forward, (before,)))
+        self.assertFalse(_journey_column_branch_allowed(reverse, (before,)))
+        self.assertTrue(_journey_column_branch_allowed(reverse, (after,)))
+        self.assertFalse(_journey_column_branch_allowed(forward, (after,)))
+        self.assertFalse(_journey_column_branch_allowed(forward, (not_same_route,)))
+        self.assertFalse(_journey_task_set_branch_allowed(forward.task_set, (before,)))
+
+    def test_journey_mask_branch_allowed_fail_open_for_route_order_until_materialized(self):
+        task_to_bit = {1: 0, 2: 1}
+        before = BranchConstraint("same_route_order_before_strict", 1, 2)
+        not_same_route = BranchConstraint("not_same_route", 1, 2)
+        same = BranchConstraint("same_vehicle", 1, 2)
+
+        self.assertTrue(_journey_mask_branch_allowed(1 << 0, (before,), task_to_bit, final=False))
+        self.assertFalse(_journey_mask_branch_allowed(1 << 0, (before,), task_to_bit, final=True))
+        self.assertTrue(_journey_mask_branch_allowed((1 << 0) | (1 << 1), (before,), task_to_bit, final=True))
+        self.assertTrue(_journey_mask_branch_allowed((1 << 0) | (1 << 1), (not_same_route,), task_to_bit, final=True))
+        self.assertFalse(_journey_mask_branch_allowed(1 << 0, (same,), task_to_bit, final=True))
+
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_journey_pricing_respects_ryan_foster_branch_constraints(self):
         data = load_future_data("very_small")
@@ -429,6 +474,53 @@ class BPCFutureTests(unittest.TestCase):
             self.assertTrue(
                 _journey_task_set_branch_allowed(journey.task_set, (BranchConstraint("separate_vehicle", 1, 2),))
             )
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_profile_pricing_supports_route_order_after_materialization(self):
+        data = load_future_data("very_small")
+        constraint = BranchConstraint("same_route_order_before_strict", 1, 2)
+        result = price_journeys(
+            data,
+            duals=JourneyDuals(cover={int(task): 200.0 for task in data.tasks}, fleet_limit=0.0),
+            branch_constraints=(constraint,),
+            config=JourneyPricingConfig(
+                time_bucket_size=5.0,
+                start_time_step=10.0,
+                max_tasks_per_trip=2,
+                time_limit=5.0,
+                max_dp_states=2000,
+                max_returned_journeys=10,
+                early_return_negative=True,
+                early_return_negative_min_count=1,
+                profile_labeling_enabled=True,
+                profile_pricing_enabled=True,
+            ),
+        )
+
+        self.assertNotEqual(result.status, "UNSUPPORTED")
+        for journey in result.journeys:
+            self.assertTrue(_journey_column_branch_allowed(journey, (constraint,)))
+
+    def test_route_order_branch_direct_pricing_remains_fail_closed(self):
+        data = load_future_data("very_small")
+        result = price_journeys(
+            data,
+            duals=JourneyDuals(cover={int(task): 200.0 for task in data.tasks}, fleet_limit=0.0),
+            branch_constraints=(BranchConstraint("same_route_order_before_strict", 1, 2),),
+            config=JourneyPricingConfig(
+                profile_pricing_enabled=False,
+                direct_journey_label_pricing_enabled=True,
+                direct_journey_label_completion_bound_enabled=True,
+                time_bucket_size=5.0,
+                start_time_step=10.0,
+                max_tasks_per_trip=2,
+                max_returned_journeys=10,
+                time_limit=5.0,
+            ),
+        )
+
+        self.assertEqual(result.status, "UNSUPPORTED")
+        self.assertEqual(result.reason, "branch_or_cut_not_supported")
 
     def test_direct_label_same_branch_filtered_negative_is_not_duplicate_only(self):
         data = _with_task_waiting_allowed(
@@ -11593,6 +11685,133 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual((branch[0].kind, branch[1].kind), ("same_vehicle", "separate_vehicle"))
         self.assertEqual((branch[0].task_i, branch[0].task_j), (1, 2))
 
+    def test_journey_same_route_order_branch_filter_is_exact_safe_prototype(self):
+        def journey(jid: int, routes: tuple[tuple[int, ...], ...]) -> JourneyColumn:
+            task_set = frozenset(int(task) for route in routes for task in route)
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=task_set,
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=0.0,
+                signature=tuple((tuple(route), tuple(), float(index)) for index, route in enumerate(routes)),
+            )
+
+        forward = journey(1, ((1, 2),))
+        reverse = journey(2, ((2, 1),))
+        separate_sorties = journey(3, ((1,), (2,)))
+        unrelated = journey(4, ((3,),))
+        before = BranchConstraint("same_route_order_before", 1, 2)
+        after = BranchConstraint("same_route_order_after", 1, 2)
+
+        self.assertEqual(before.name(), "route_order(1,2)=before")
+        self.assertTrue(_journey_allowed_by_branch(forward, (before,)))
+        self.assertFalse(_journey_allowed_by_branch(reverse, (before,)))
+        self.assertTrue(_journey_allowed_by_branch(separate_sorties, (before,)))
+        self.assertTrue(_journey_allowed_by_branch(unrelated, (before,)))
+        self.assertTrue(_journey_allowed_by_branch(reverse, (after,)))
+        self.assertFalse(_journey_allowed_by_branch(forward, (after,)))
+        self.assertEqual(
+            _filter_journeys_by_branch([forward, reverse, separate_sorties, unrelated], (before,)),
+            [forward, separate_sorties, unrelated],
+        )
+        self.assertFalse(_journey_task_set_dominance_safe(tuple(), (before,)))
+        self.assertFalse(_direct_ng_branch_certificate_safe((before,)))
+
+    def test_journey_same_route_order_partition_is_disjoint_for_branch_relevant_columns(self):
+        def journey(jid: int, routes: tuple[tuple[int, ...], ...]) -> JourneyColumn:
+            task_set = frozenset(int(task) for route in routes for task in route)
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=task_set,
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=0.0,
+                signature=tuple((tuple(route), tuple(), float(index)) for index, route in enumerate(routes)),
+            )
+
+        columns = [
+            journey(1, ((1, 2),)),
+            journey(2, ((2, 1),)),
+            journey(3, ((1,), (2,))),
+            journey(4, ((1,),)),
+            journey(5, ((2,),)),
+            journey(6, ((3,),)),
+        ]
+        before, after, not_same_route = _journey_same_route_order_partition_constraints(1, 2)
+
+        self.assertEqual(before.name(), "route_order(1,2)=same_route_before")
+        self.assertEqual(after.name(), "route_order(1,2)=same_route_after")
+        self.assertEqual(not_same_route.name(), "route_order(1,2)=not_same_route")
+        memberships = {
+            int(column.id): [
+                constraint.kind
+                for constraint in (before, after, not_same_route)
+                if _journey_allowed_by_branch(column, (constraint,))
+            ]
+            for column in columns
+        }
+        self.assertEqual(memberships[1], ["same_route_order_before_strict"])
+        self.assertEqual(memberships[2], ["same_route_order_after_strict"])
+        self.assertEqual(memberships[3], ["not_same_route"])
+        self.assertEqual(memberships[4], ["not_same_route"])
+        self.assertEqual(memberships[5], ["not_same_route"])
+        self.assertEqual(
+            memberships[6],
+            [
+                "same_route_order_before_strict",
+                "same_route_order_after_strict",
+                "not_same_route",
+            ],
+        )
+        branch_relevant = [column for column in columns if {1, 2}.intersection(column.task_set)]
+        self.assertTrue(all(len(memberships[int(column.id)]) == 1 for column in branch_relevant))
+        self.assertFalse(_journey_task_set_dominance_safe(tuple(), (before,)))
+        self.assertFalse(_direct_ng_branch_certificate_safe((before,)))
+
+    def test_core_trip_order_branch_filters_single_sortie_sequence(self):
+        trip = TimedTrip(
+            id=1,
+            tasks=(2, 1),
+            task_set=frozenset((1, 2)),
+            start_time=0.0,
+            end_time=1.0,
+            load=0.0,
+            travel_time=1.0,
+            energy=0.0,
+            distance=0.0,
+            risk=0.0,
+            cost=0.0,
+            recharge_time=0.0,
+            survival_energy=0.0,
+            arc_option_ids=tuple(),
+            service_start={},
+            occupancy={},
+            physical_paths=tuple(),
+        )
+        before = BranchConstraint("same_route_order_before", 1, 2)
+        after = BranchConstraint("same_route_order_after", 1, 2)
+        before_strict = BranchConstraint("same_route_order_before_strict", 1, 2)
+        after_strict = BranchConstraint("same_route_order_after_strict", 1, 2)
+        not_same_route = BranchConstraint("not_same_route", 1, 2)
+
+        self.assertFalse(trip_allowed_by_branch(trip, 0, (before,)))
+        self.assertTrue(trip_allowed_by_branch(trip, 0, (after,)))
+        self.assertFalse(trip_allowed_by_branch(trip, 0, (before_strict,)))
+        self.assertTrue(trip_allowed_by_branch(trip, 0, (after_strict,)))
+        self.assertFalse(trip_allowed_by_branch(trip, 0, (not_same_route,)))
+        self.assertFalse(partial_sequence_allowed((2, 1), 0, (before,)))
+        self.assertTrue(partial_sequence_allowed((2, 1), 0, (after,)))
+        self.assertTrue(partial_sequence_allowed((1,), 0, (before,)))
+        self.assertFalse(partial_sequence_allowed((1,), 0, (before_strict,)))
+        self.assertTrue(partial_sequence_allowed((1,), 0, (not_same_route,)))
+
     def test_forbidden_signatures_are_scoped_to_branch_node_pool(self):
         def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
             return JourneyColumn(
@@ -12300,6 +12519,74 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(metadata["phase1_official_bound_effect"])
         self.assertFalse(metadata["phase1_certificate_effect"])
 
+    def test_journey_branch_routeopt_bkf_logs_candidate_route_order_conflict(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2))
+
+        def journey(jid: int, ordered_tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(ordered_tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=((tuple(ordered_tasks), tuple(), 0.0),),
+            )
+
+        values = [
+            (journey(12, (1, 2)), 0.25),
+            (journey(21, (2, 1)), 0.25),
+        ]
+        config = {
+            "journey_branch_candidate_log_top_n": 4,
+            "journey_branch_fractionality_tie_tolerance": 0.0,
+            "journey_branch_candidate_priority": "routeopt_bkf_staged",
+            "journey_branch_candidate_phased_testing_enabled": True,
+            "journey_branch_candidate_phased_testing_base_priority": "fractionality",
+            "journey_branch_candidate_phased_testing_bkf_score_order_enabled": True,
+            "journey_branch_candidate_phased_testing_bkf_route_order_direction_conflict_penalty": 1.25,
+            "journey_branch_candidate_phased_testing_bkf_route_order_adjacent_conflict_penalty": 2.5,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    config,
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertEqual(record["route_order_candidate_direction_conflict_count"], 1)
+        self.assertEqual(record["route_order_candidate_adjacent_conflict_count"], 1)
+        self.assertAlmostEqual(record["route_order_candidate_max_direction_conflict_mass"], 0.5)
+        self.assertAlmostEqual(record["route_order_candidate_max_adjacent_conflict_mass"], 0.5)
+        selected = record["selected"]
+        self.assertEqual(selected["task_i"], 1)
+        self.assertEqual(selected["task_j"], 2)
+        self.assertAlmostEqual(selected["route_order_i_before_j_mass"], 0.25)
+        self.assertAlmostEqual(selected["route_order_j_before_i_mass"], 0.25)
+        self.assertAlmostEqual(selected["route_order_direction_conflict_mass"], 0.5)
+        self.assertAlmostEqual(selected["route_order_direction_balance_ratio"], 1.0)
+        self.assertAlmostEqual(selected["route_order_adjacent_conflict_mass"], 0.5)
+        self.assertAlmostEqual(selected["route_order_adjacent_balance_ratio"], 1.0)
+        self.assertIn("route_order_direction_conflict_mass=0.5", selected["phased_testing_bkf_reason"])
+        self.assertIn("route_order_adjacent_conflict_mass=0.5", selected["phased_testing_bkf_reason"])
+
     def test_journey_branch_routeopt_bkf_phase1_cut_snapshot_is_diagnostic(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2, 3))
 
@@ -12509,6 +12796,9 @@ class BPCFutureTests(unittest.TestCase):
         self.assertGreaterEqual(record["phased_testing_phase2_total_wall_time"], 0.0)
         self.assertGreaterEqual(record["phased_testing_phase2_negative_child_count_total"], 0)
         self.assertGreaterEqual(record["phased_testing_phase2_negative_journey_count_total"], 0)
+        self.assertIn("phased_testing_phase2_negative_severity_sum_total", record)
+        self.assertIn("phased_testing_phase2_negative_severity_gap_max", record)
+        self.assertIn("phased_testing_phase2_negative_severity_balance_ratio_min", record)
         self.assertFalse(record["phased_testing_phase2_official_bound_effect_any"])
         self.assertFalse(record["phased_testing_phase2_certificate_effect_any"])
         self.assertFalse(record["phased_testing_official_bound_effect_any"])
@@ -12531,6 +12821,12 @@ class BPCFutureTests(unittest.TestCase):
         self.assertGreater(selected["phase2_separate_child_budget"], 0.0)
         self.assertGreaterEqual(selected["phase2_negative_child_count"], 0)
         self.assertIn("phase2_negative_journey_balance_gap", selected)
+        self.assertIn("phase2_same_child_negative_severity", selected)
+        self.assertIn("phase2_separate_child_negative_severity", selected)
+        self.assertIn("phase2_negative_severity_sum", selected)
+        self.assertIn("phase2_negative_severity_gap", selected)
+        self.assertIn("phase2_negative_severity_balance_ratio", selected)
+        self.assertIn("phase2_negative_child_presence_balance_gap", selected)
         self.assertIn("phase2_child_wall_time_balance_gap", selected)
         self.assertIn("phase2_child_status_mismatch", selected)
         self.assertGreaterEqual(selected["phase2_wall_time"], 0.0)
@@ -12554,6 +12850,12 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIn("phase2_same_child_budget", metadata)
         self.assertIn("phase2_separate_child_budget", metadata)
         self.assertIn("phase2_negative_journey_balance_gap", metadata)
+        self.assertIn("phase2_same_child_negative_severity", metadata)
+        self.assertIn("phase2_separate_child_negative_severity", metadata)
+        self.assertIn("phase2_negative_severity_sum", metadata)
+        self.assertIn("phase2_negative_severity_gap", metadata)
+        self.assertIn("phase2_negative_severity_balance_ratio", metadata)
+        self.assertIn("phase2_negative_child_presence_balance_gap", metadata)
         self.assertIn("phase2_child_wall_time_balance_gap", metadata)
         self.assertIn("phase2_child_status_mismatch", metadata)
         self.assertFalse(metadata["phase2_official_bound_effect"])
@@ -12730,6 +13032,41 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(override["dynamic_k_min_candidates"], 4)
         self.assertFalse(override["dynamic_k_diverse_pool_enabled"])
 
+    def test_journey_branch_routeopt_bkf_v762_preset_adds_route_order_penalty_only(self):
+        phased = _journey_branch_candidate_phased_testing_from_config(
+            {
+                "journey_branch_candidate_phased_testing_preset": "routeopt_bkf_v762",
+                "journey_branch_candidate_phased_testing_enabled": True,
+                "journey_branch_candidate_phased_testing_phase1_lp_enabled": True,
+                "journey_branch_candidate_phased_testing_phase2_heuristic_enabled": True,
+                "journey_branch_candidate_phased_testing_dynamic_k_enabled": True,
+            }
+        )
+
+        self.assertEqual(phased["preset"], "routeopt_bkf_v762")
+        self.assertEqual(phased["base_priority_mode"], "fractionality")
+        self.assertAlmostEqual(phased["phase0_min_fractionality"], 0.45)
+        self.assertEqual(phased["phase1_max_candidates"], 12)
+        self.assertEqual(phased["phase2_max_candidates"], 3)
+        self.assertAlmostEqual(phased["phase2_time_limit"], 0.08)
+        self.assertEqual(phased["dynamic_k_min_candidates"], 9)
+        self.assertEqual(phased["dynamic_k_phase1_max_candidates"], 12)
+        self.assertEqual(phased["dynamic_k_phase2_max_candidates"], 3)
+        self.assertTrue(phased["dynamic_k_diverse_pool_enabled"])
+        self.assertEqual(phased["dynamic_k_diverse_pool_extra_candidates"], 2)
+        self.assertAlmostEqual(phased["bkf_route_order_direction_conflict_penalty"], 0.25)
+        self.assertAlmostEqual(phased["bkf_route_order_adjacent_conflict_penalty"], 0.50)
+
+        override = _journey_branch_candidate_phased_testing_from_config(
+            {
+                "journey_branch_candidate_phased_testing_preset": "routeopt_bkf_v762",
+                "journey_branch_candidate_phased_testing_bkf_route_order_direction_conflict_penalty": 0.0,
+                "journey_branch_candidate_phased_testing_bkf_route_order_adjacent_conflict_penalty": 0.0,
+            }
+        )
+        self.assertAlmostEqual(override["bkf_route_order_direction_conflict_penalty"], 0.0)
+        self.assertAlmostEqual(override["bkf_route_order_adjacent_conflict_penalty"], 0.0)
+
     def test_journey_branch_routeopt_bkf_dynamic_k_uses_sqrt_cap(self):
         fixed = _journey_branch_candidate_dynamic_k_limit(
             9,
@@ -12883,6 +13220,9 @@ class BPCFutureTests(unittest.TestCase):
                 "negative_child_count": 1,
                 "negative_journey_count": 1,
                 "worst_negative_severity": 0.574961,
+                "negative_severity_sum": 0.574961,
+                "negative_severity_gap": 0.574961,
+                "negative_child_presence_balance_gap": 1,
                 "wall_time": 0.0,
                 "official_bound_effect": False,
                 "certificate_effect": False,
@@ -12894,6 +13234,9 @@ class BPCFutureTests(unittest.TestCase):
             "bkf_phase2_negative_child_penalty": 0.75,
             "bkf_phase2_negative_journey_penalty": 0.005,
             "bkf_phase2_worst_negative_penalty": 0.25,
+            "bkf_phase2_negative_severity_sum_penalty": 0.02,
+            "bkf_phase2_negative_severity_gap_penalty": 0.05,
+            "bkf_phase2_negative_child_balance_penalty": 0.25,
             "bkf_child_width_balance_penalty": 0.0015,
             "bkf_child_max_width_penalty": 0.0002,
             "bkf_phase_wall_time_penalty": 0.01,
@@ -12909,6 +13252,9 @@ class BPCFutureTests(unittest.TestCase):
         self.assertGreater(balanced_score, zero_score)
         self.assertIn("fractionality=0.466667", balanced_reason)
         self.assertIn("phase2_negative_child_count=1", balanced_reason)
+        self.assertIn("phase2_negative_severity_sum=0.574961", balanced_reason)
+        self.assertIn("phase2_negative_severity_gap=0.574961", balanced_reason)
+        self.assertIn("phase2_negative_child_presence_balance_gap=1", balanced_reason)
         self.assertIn("dynamic_k_excluded_count=0", balanced_reason)
         self.assertIn("phase1_child_lp_gain_product=59.0055", balanced_reason)
         self.assertIn("phase1_child_lp_gain_gap=4.2", balanced_reason)
@@ -12931,6 +13277,29 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertLess(skipped_score, balanced_score)
         self.assertIn("dynamic_k_excluded_count=1", skipped_reason)
+
+        severe_unbalanced_pressure = {
+            **balanced_with_one_negative,
+            "_phase2_heuristic_probe": {
+                "complete": True,
+                "negative_child_count": 1,
+                "negative_journey_count": 1,
+                "worst_negative_severity": 20.0,
+                "negative_severity_sum": 20.0,
+                "negative_severity_gap": 20.0,
+                "negative_child_presence_balance_gap": 1,
+                "wall_time": 0.0,
+                "official_bound_effect": False,
+                "certificate_effect": False,
+            },
+        }
+        severe_score, severe_reason = _journey_branch_candidate_phased_bkf_score(
+            severe_unbalanced_pressure,
+            config,
+        )
+        self.assertLess(severe_score, balanced_score)
+        self.assertIn("phase2_negative_severity_sum=20", severe_reason)
+        self.assertIn("phase2_negative_severity_gap=20", severe_reason)
 
     def test_journey_branch_routeopt_bkf_dynamic_k_is_logged_for_phase1(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3, 4), vehicles=(1, 2, 3, 4))
@@ -26547,6 +26916,39 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(_direct_completion_bound_cut_safe(duals.cuts or {}, cuts))
         self.assertFalse(_profile_cut_penalty_pruning_safe({0: -11.0}, cuts))
         self.assertFalse(_profile_cut_penalty_pruning_safe({0: 11.0}, cuts))
+        self.assertTrue(_journey_task_set_dominance_safe(cuts, tuple()))
+
+    def test_weighted_subset_row_is_valid_for_integer_task_partitions(self):
+        data = load_future_data("very_small")
+        tasks = tuple(int(task) for task in data.tasks[:4])
+        cut = WeightedSubsetRowCut(tasks, (2, 1, 2, 1), 3)
+
+        def partitions(items: tuple[int, ...]) -> list[tuple[tuple[int, ...], ...]]:
+            if not items:
+                return [tuple()]
+            head, *tail = items
+            result: list[tuple[tuple[int, ...], ...]] = []
+            for partition in partitions(tuple(tail)):
+                result.append(((int(head),), *partition))
+                for index, block in enumerate(partition):
+                    new_block = tuple(sorted((int(head), *block)))
+                    result.append(tuple(partition[:index]) + (new_block,) + tuple(partition[index + 1 :]))
+            canonical = {
+                tuple(sorted((tuple(block) for block in partition), key=lambda block: (len(block), block)))
+                for partition in result
+            }
+            return sorted(canonical)
+
+        for partition in partitions(tasks):
+            lhs = 0
+            for block in partition:
+                weighted_overlap = sum(
+                    int(weight)
+                    for task, weight in zip(cut.tasks, cut.weights)
+                    if int(task) in set(block)
+                )
+                lhs += int(weighted_overlap) // int(cut.denominator)
+            self.assertLessEqual(lhs, int(cut.rhs), partition)
 
     def test_journey_weighted_rank1_cut_audit_logs_candidates_without_bound_effect(self):
         data = load_future_data("very_small")
@@ -26706,6 +27108,300 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual(len(added_events), added)
         self.assertEqual(added_events[0]["kind"], "weighted_subset_row")
         self.assertEqual(added_events[0]["source"], "weighted_rank1")
+
+    def test_journey_route_order_region_audit_logs_direction_conflicts_without_bound_effect(self):
+        data = load_future_data("very_small")
+        first, second = (int(task) for task in data.tasks[:2])
+        forward = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), ("arc-forward",), 0.0),),
+        )
+        reverse = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, first), ("arc-reverse",), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(forward, 0.5), (reverse, 0.5)])
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "route_order.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _audit_journey_route_order_regions(
+                    {
+                        "journey_route_order_region_audit_enabled": True,
+                        "journey_route_order_region_audit_max_depth": 2,
+                    },
+                    logger,
+                    solution,
+                    node_id=7,
+                    depth=1,
+                    cg_iter=3,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+        audit = next(record for record in records if record["event"] == "journey_route_order_region_audit")
+        self.assertTrue(audit["audit_only"])
+        self.assertFalse(audit["official_bound_effect"])
+        self.assertFalse(audit["certificate_effect"])
+        self.assertEqual(audit["active_task_set_count"], 1)
+        self.assertEqual(audit["active_route_signature_count"], 2)
+        self.assertEqual(audit["multi_route_task_set_count"], 1)
+        self.assertEqual(audit["route_order_conflict_count"], 1)
+        self.assertEqual(audit["top_order_conflicts"][0]["tasks"], [first, second])
+        self.assertAlmostEqual(audit["top_order_conflicts"][0]["balance_ratio"], 1.0)
+        self.assertEqual(
+            {row["arc_option"] for row in audit["top_arc_options"]},
+            {"arc-forward", "arc-reverse"},
+        )
+
+    def test_journey_route_resource_cut_audit_classifies_order_rows_as_not_live_cuts(self):
+        data = load_future_data("very_small")
+        first, second = (int(task) for task in data.tasks[:2])
+        forward = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), ("arc-forward",), 0.0),),
+        )
+        reverse = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, first), ("arc-reverse",), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(forward, 0.5), (reverse, 0.5)])
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "route_resource_cut_audit.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _audit_journey_route_resource_cuts(
+                    {
+                        "journey_route_resource_cut_audit_enabled": True,
+                        "journey_route_resource_cut_audit_max_depth": 2,
+                    },
+                    logger,
+                    solution,
+                    node_id=8,
+                    depth=1,
+                    cg_iter=4,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+        audit = next(record for record in records if record["event"] == "journey_route_resource_cut_audit")
+        self.assertTrue(audit["audit_only"])
+        self.assertFalse(audit["add_enabled"])
+        self.assertFalse(audit["production_ready"])
+        self.assertFalse(audit["official_bound_effect"])
+        self.assertFalse(audit["certificate_effect"])
+        self.assertFalse(audit["exact_pricing_supported"])
+        self.assertTrue(audit["completion_bound_fail_closed"])
+        self.assertEqual(audit["route_resource_global_valid_candidate_count"], 0)
+        self.assertEqual(audit["route_resource_pricing_supported_candidate_count"], 0)
+        self.assertEqual(audit["order_direction_candidate_count"], 1)
+        self.assertEqual(audit["adjacent_direction_candidate_count"], 1)
+        self.assertEqual(audit["same_task_set_multi_route_candidate_count"], 1)
+        row = audit["top_order_direction_rows"][0]
+        self.assertEqual(row["tasks"], [first, second])
+        self.assertFalse(row["global_valid_candidate"])
+        self.assertTrue(row["requires_branch_state"])
+        self.assertFalse(row["pricing_supported"])
+        self.assertEqual(row["reason"], "direction_disjunction_not_global_cut")
+        self.assertEqual(
+            {row["arc_option"] for row in audit["top_arc_options"]},
+            {"arc-forward", "arc-reverse"},
+        )
+
+    def test_journey_route_order_partition_audit_reports_child_width_and_coverage(self):
+        data = load_future_data("very_small")
+        first, second = 1, 2
+
+        def journey(jid: int, routes: tuple[tuple[int, ...], ...]) -> JourneyColumn:
+            task_set = frozenset(int(task) for route in routes for task in route)
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=task_set,
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=tuple((tuple(route), tuple(), float(index)) for index, route in enumerate(routes)),
+            )
+
+        forward = journey(1, ((first, second),))
+        reverse = journey(2, ((second, first),))
+        separate_sorties = journey(3, ((first,), (second,)))
+        only_first = journey(4, ((first,),))
+        only_second = journey(5, ((second,),))
+        neutral = journey(6, ((3,),))
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        for column in (forward, reverse, separate_sorties, only_first, only_second, neutral):
+            pool.add(column)
+        solution = SimpleNamespace(journey_values=[(forward, 0.5), (reverse, 0.5)])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "route_order_partition.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _audit_journey_route_order_partitions(
+                    data,
+                    {
+                        "journey_route_order_partition_audit_enabled": True,
+                        "journey_route_order_partition_audit_max_depth": 1,
+                    },
+                    logger,
+                    solution,
+                    pool,
+                    tuple(),
+                    tuple(),
+                    len(data.vehicles),
+                    node_id=9,
+                    depth=0,
+                    cg_iter=5,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        audit = next(record for record in records if record["event"] == "journey_route_order_partition_audit")
+        self.assertTrue(audit["audit_only"])
+        self.assertFalse(audit["live_branch_enabled"])
+        self.assertFalse(audit["official_bound_effect"])
+        self.assertFalse(audit["certificate_effect"])
+        self.assertFalse(audit["exact_pricing_supported"])
+        self.assertTrue(audit["completion_bound_fail_closed"])
+        self.assertEqual(audit["parent_allowed_count"], 6)
+        row = audit["top_partition_rows"][0]
+        self.assertEqual(row["tasks"], [first, second])
+        self.assertEqual(row["branch_relevant_column_count"], 5)
+        self.assertEqual(row["neutral_column_count"], 1)
+        self.assertEqual(row["branch_relevant_partition_violation_count"], 0)
+        self.assertEqual(row["neutral_shared_violation_count"], 0)
+        self.assertTrue(row["branch_relevant_partition_complete"])
+        self.assertTrue(row["neutral_columns_shared"])
+        self.assertTrue(row["exact_safe_partition_contract_holds"])
+        self.assertEqual(
+            row["child_widths"],
+            {
+                "same_route_order_before_strict": 2,
+                "same_route_order_after_strict": 2,
+                "not_same_route": 4,
+            },
+        )
+        self.assertEqual(
+            row["child_branch_relevant_widths"],
+            {
+                "same_route_order_before_strict": 1,
+                "same_route_order_after_strict": 1,
+                "not_same_route": 3,
+            },
+        )
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_journey_route_order_partition_audit_child_rmp_probe_is_diagnostic(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2, 3))
+        first, second = 1, 2
+
+        def journey(jid: int, routes: tuple[tuple[int, ...], ...], cost: float) -> JourneyColumn:
+            task_set = frozenset(int(task) for route in routes for task in route)
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=task_set,
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=tuple((tuple(route), tuple(), float(index)) for index, route in enumerate(routes)),
+            )
+
+        forward = journey(1, ((first, second),), 10.0)
+        reverse = journey(2, ((second, first),), 12.0)
+        separate_sorties = journey(3, ((first,), (second,)), 11.0)
+        neutral = journey(4, ((3,),), 1.0)
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        for column in (forward, reverse, separate_sorties, neutral):
+            pool.add(column)
+        solution = SimpleNamespace(objective=11.0, journey_values=[(forward, 0.5), (reverse, 0.5)])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "route_order_partition_child_rmp.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _audit_journey_route_order_partitions(
+                    data,
+                    {
+                        "journey_route_order_partition_audit_enabled": True,
+                        "journey_route_order_partition_audit_max_depth": 1,
+                        "journey_route_order_partition_audit_child_rmp_enabled": True,
+                        "journey_route_order_partition_audit_child_rmp_top_n": 1,
+                        "journey_route_order_partition_audit_child_pricing_enabled": True,
+                        "journey_route_order_partition_audit_child_pricing_top_n": 1,
+                        "journey_route_order_partition_audit_child_pricing_time_limit": 0.5,
+                        "journey_route_order_partition_audit_child_pricing_max_dp_states": 2000,
+                        "journey_route_order_partition_audit_child_pricing_max_returned_journeys": 2,
+                    },
+                    logger,
+                    solution,
+                    pool,
+                    tuple(),
+                    tuple(),
+                    len(data.vehicles),
+                    node_id=10,
+                    depth=0,
+                    cg_iter=6,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        audit = next(record for record in records if record["event"] == "journey_route_order_partition_audit")
+        self.assertTrue(audit["child_rmp_probe_enabled"])
+        row = audit["top_partition_rows"][0]
+        self.assertTrue(row["child_rmp_probe_enabled"])
+        self.assertEqual(len(row["child_rmp_probe_rows"]), 3)
+        statuses = {entry["kind"]: entry for entry in row["child_rmp_probe_rows"]}
+        self.assertEqual(statuses["same_route_order_before_strict"]["status"], "OPTIMAL")
+        self.assertEqual(statuses["same_route_order_after_strict"]["status"], "OPTIMAL")
+        self.assertEqual(statuses["not_same_route"]["status"], "OPTIMAL")
+        self.assertFalse(statuses["same_route_order_before_strict"]["official_bound_effect"])
+        self.assertFalse(statuses["same_route_order_before_strict"]["certificate_effect"])
+        self.assertTrue(audit["child_pricing_probe_enabled"])
+        self.assertTrue(row["child_pricing_probe_enabled"])
+        self.assertEqual(len(row["child_pricing_probe_rows"]), 3)
+        pricing_statuses = {entry["kind"]: entry for entry in row["child_pricing_probe_rows"]}
+        self.assertNotEqual(pricing_statuses["same_route_order_before_strict"]["status"], "UNSUPPORTED")
+        self.assertNotEqual(pricing_statuses["same_route_order_after_strict"]["status"], "UNSUPPORTED")
+        self.assertNotEqual(pricing_statuses["not_same_route"]["status"], "UNSUPPORTED")
+        self.assertFalse(pricing_statuses["same_route_order_before_strict"]["official_bound_effect"])
+        self.assertFalse(pricing_statuses["same_route_order_before_strict"]["certificate_effect"])
 
     def test_journey_static_cuts_exclude_sortie_lower_bound(self):
         data = load_future_data("very_small")

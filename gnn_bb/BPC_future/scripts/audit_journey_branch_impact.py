@@ -131,8 +131,17 @@ BRANCH_PHASED_CANDIDATE_FIELDS: tuple[str, ...] = (
     "phase2_separate_child_wall_time",
     "phase2_negative_child_count",
     "phase2_negative_journey_count",
+    "phase2_negative_journey_balance_gap",
     "phase2_best_reduced_cost",
     "phase2_worst_negative_severity",
+    "phase2_same_child_negative_severity",
+    "phase2_separate_child_negative_severity",
+    "phase2_negative_severity_sum",
+    "phase2_negative_severity_gap",
+    "phase2_negative_severity_balance_ratio",
+    "phase2_negative_child_presence_balance_gap",
+    "phase2_child_wall_time_balance_gap",
+    "phase2_child_status_mismatch",
     "phase2_generated_sequences",
     "phase2_evaluated_timed_trips",
     "phase2_wall_time",
@@ -172,6 +181,9 @@ BRANCH_PHASED_NODE_FIELDS: tuple[str, ...] = (
     "phased_testing_phase2_generated_sequences_total",
     "phased_testing_phase2_evaluated_timed_trips_total",
     "phased_testing_phase2_worst_negative_severity_max",
+    "phased_testing_phase2_negative_severity_sum_total",
+    "phased_testing_phase2_negative_severity_gap_max",
+    "phased_testing_phase2_negative_severity_balance_ratio_min",
     "phased_testing_phase2_official_bound_effect_any",
     "phased_testing_phase2_certificate_effect_any",
     "phased_testing_official_bound_effect_any",
@@ -541,6 +553,7 @@ def _summarize_branch(
     )
     right_censored = not bool(label_observation_complete)
     row = {
+        "schema_version": "journey_branch_impact_row_v2",
         "log_file": str(path),
         "run_status": str(run_status),
         "log_has_finish": bool(log_has_finish),
@@ -748,7 +761,7 @@ def _branch_labels(row: dict[str, Any]) -> dict[str, float]:
 
 def _training_row(row: dict[str, Any]) -> dict[str, Any]:
     payload = {
-        "schema_version": "journey_branch_impact_training_row_v1",
+        "schema_version": "journey_branch_impact_training_row_v2",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "production_ready": False,
@@ -1056,7 +1069,7 @@ def build_branch_impact(paths: list[Path], output_dir: Path, report: Path) -> di
     training_rows = [_training_row(row) for row in rows]
     child_probe_rows = [child_row for row in rows for child_row in _child_probe_rows(row)]
     summary = {
-        "schema_version": "journey_branch_impact_audit_v1",
+        "schema_version": "journey_branch_impact_audit_v2",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
         "input_paths": [str(path) for path in paths],

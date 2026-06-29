@@ -38,7 +38,7 @@ class JourneyPairedProbeDeltaRowsTests(unittest.TestCase):
                         wall_gain=3.0,
                         gap_improvement=0.0,
                     ),
-                    {"pair_role": "selected_baseline", "paired_label_type": "baseline"},
+                    _baseline_row(instance),
                 ],
             )
 
@@ -59,6 +59,8 @@ class JourneyPairedProbeDeltaRowsTests(unittest.TestCase):
                 {"paired_probe_hard_negative_proxy": 1},
             )
             self.assertEqual(summary["skipped_counts"]["neutral_proxy_excluded"], 1)
+            self.assertEqual(summary["nonconvertible_label_counts"], {"baseline": 1})
+            self.assertEqual(summary["nonconvertible_target_replay_reason_counts"], {})
 
             rows = _read_jsonl(tmp_path / "out" / "branch_counterfactual_delta_rows.jsonl")
             self.assertEqual(len(rows), 1)
@@ -80,7 +82,64 @@ class JourneyPairedProbeDeltaRowsTests(unittest.TestCase):
             self.assertEqual(row["alternative_raw_row"]["source_alt_routeopt_bkf_stage"], "accepted")
             self.assertEqual(row["alternative_raw_row"]["phase1_min_child_lp_gain"], 2.0)
             self.assertEqual(row["alternative_raw_row"]["phase2_negative_child_count"], 1.0)
+            self.assertEqual(row["alternative_raw_row"]["phase2_negative_severity_sum"], 0.25)
+            self.assertEqual(row["alternative_raw_row"]["phase2_negative_severity_gap"], 0.25)
+            self.assertEqual(row["alternative_raw_row"]["phase2_negative_child_presence_balance_gap"], 1)
+            self.assertEqual(row["baseline_raw_row"]["phase2_same_child_negative_severity"], 0.1)
+            self.assertEqual(row["baseline_raw_row"]["phase2_separate_child_negative_severity"], 0.2)
+            self.assertEqual(row["baseline_raw_row"]["phase2_negative_severity_sum"], 0.3)
+            self.assertEqual(row["baseline_raw_row"]["phase2_negative_severity_gap"], 0.1)
+            self.assertEqual(row["baseline_raw_row"]["phase2_negative_child_presence_balance_gap"], 0)
             self.assertIn("production_ready = false", (tmp_path / "report.md").read_text(encoding="utf-8"))
+
+    def test_keeps_reachability_reasons_for_nonconvertible_target_miss_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            input_dir = tmp_path / "paired"
+            input_dir.mkdir()
+            instance = "BPC_future/logical_graph/tasks_020/sector-wave/case.json"
+            target_miss = _paired_row(
+                instance,
+                experiment="alt_miss",
+                label_type="target_not_replayed",
+                forced_pair=[5, 18],
+                selected_pair=[4, 8],
+                wall=102.90111,
+                wall_gain=0.0,
+                gap_improvement=0.0,
+            )
+            target_miss["target_replay_reason"] = "ancestor_forced_but_target_child_no_branch"
+            target_miss["target_node_path_stable"] = True
+            _write_jsonl(
+                input_dir / "paired_probe_rows.jsonl",
+                [
+                    target_miss,
+                    _baseline_row(instance),
+                ],
+            )
+
+            summary = build_delta_rows(
+                [input_dir],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                include_neutral=True,
+            )
+
+            self.assertEqual(summary["output_row_count"], 0)
+            self.assertEqual(summary["skipped_counts"], {"not_convertible": 2})
+            self.assertEqual(
+                summary["nonconvertible_label_counts"],
+                {"baseline": 1, "target_not_replayed": 1},
+            )
+            self.assertEqual(
+                summary["nonconvertible_target_replay_reason_counts"],
+                {"ancestor_forced_but_target_child_no_branch": 1},
+            )
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn(
+                "nonconvertible_target_replay_reason_counts = {'ancestor_forced_but_target_child_no_branch': 1}",
+                report,
+            )
 
 
 def _paired_row(
@@ -133,6 +192,37 @@ def _paired_row(
         "phase1_min_child_lp_gain": 2.0,
         "phase1_child_lp_gain_product": 8.0,
         "phase2_negative_child_count": 1.0,
+        "phase2_same_child_negative_severity": 0.25,
+        "phase2_separate_child_negative_severity": 0.0,
+        "phase2_negative_severity_sum": 0.25,
+        "phase2_negative_severity_gap": 0.25,
+        "phase2_negative_severity_balance_ratio": 0.0,
+        "phase2_negative_child_presence_balance_gap": 1,
+    }
+
+
+def _baseline_row(instance: str) -> dict[str, object]:
+    return {
+        "schema_version": "journey_paired_probe_entry_v1",
+        "diagnostic_only": True,
+        "production_ready": False,
+        "pair_role": "selected_baseline",
+        "pair_group_id": "case__d0__n0__sel_4,8",
+        "paired_label_type": "baseline",
+        "experiment": "baseline",
+        "instance": instance,
+        "source_node_id": 0,
+        "source_depth": 0,
+        "forced_pair": [4, 8],
+        "phase1_min_child_lp_gain": 1.0,
+        "phase1_child_lp_gain_product": 4.0,
+        "phase2_negative_child_count": 2.0,
+        "phase2_same_child_negative_severity": 0.1,
+        "phase2_separate_child_negative_severity": 0.2,
+        "phase2_negative_severity_sum": 0.3,
+        "phase2_negative_severity_gap": 0.1,
+        "phase2_negative_severity_balance_ratio": 0.5,
+        "phase2_negative_child_presence_balance_gap": 0,
     }
 
 

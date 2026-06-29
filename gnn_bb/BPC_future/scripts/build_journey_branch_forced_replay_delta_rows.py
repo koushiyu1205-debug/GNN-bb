@@ -248,6 +248,72 @@ def _branch_labels(result_row: dict[str, str], candidate: dict[str, Any]) -> dic
     }
 
 
+def _candidate_raw_row(
+    *,
+    event: dict[str, Any] | None,
+    candidate: dict[str, Any] | None,
+    rank_in_top: int | None = None,
+    rank_in_priority_top: int | None = None,
+    feature_vector: list[float] | None = None,
+) -> dict[str, Any]:
+    event_payload = event if isinstance(event, dict) else {}
+    candidate_payload = candidate if isinstance(candidate, dict) else {}
+    return {
+        "branch_feature_vector": feature_vector,
+        "branch_time": _float(event_payload.get("time")),
+        "candidate_count": event_payload.get("candidate_count"),
+        "eligible_count": event_payload.get("eligible_count"),
+        "branch_rank_in_top": rank_in_top,
+        "branch_rank_in_priority_top": rank_in_priority_top,
+        "selected_score": candidate_payload.get("branch_score"),
+        "selected_score_source": candidate_payload.get("branch_score_source"),
+        "branch_score_selection_gate_reason": event_payload.get("branch_score_selection_gate_reason"),
+        "branch_score_selection_gate_passed": event_payload.get("branch_score_selection_gate_passed"),
+        "phased_testing_stage": candidate_payload.get("phased_testing_stage"),
+        "phased_testing_decision": candidate_payload.get("phased_testing_decision"),
+        "phased_testing_reason": candidate_payload.get("phased_testing_reason"),
+        "phased_testing_elimination_reason": candidate_payload.get("phased_testing_elimination_reason"),
+        "phased_testing_phase0_passed": candidate_payload.get("phased_testing_phase0_passed"),
+        "phased_testing_phase1_lp_complete": candidate_payload.get("phased_testing_phase1_lp_complete"),
+        "phased_testing_phase2_heuristic_complete": candidate_payload.get(
+            "phased_testing_phase2_heuristic_complete"
+        ),
+        "phase1_min_child_lp_gain": candidate_payload.get("phase1_min_child_lp_gain"),
+        "phase1_child_lp_gain_product": candidate_payload.get("phase1_child_lp_gain_product"),
+        "phase1_child_width_balance": candidate_payload.get("phase1_child_width_balance"),
+        "phase1_wall_time": candidate_payload.get("phase1_wall_time"),
+        "phase1_dynamic_k_probe_count": candidate_payload.get("phase1_dynamic_k_probe_count"),
+        "phase2_negative_child_count": candidate_payload.get("phase2_negative_child_count"),
+        "phase2_negative_journey_count": candidate_payload.get("phase2_negative_journey_count"),
+        "phase2_negative_journey_balance_gap": candidate_payload.get(
+            "phase2_negative_journey_balance_gap"
+        ),
+        "phase2_best_reduced_cost": candidate_payload.get("phase2_best_reduced_cost"),
+        "phase2_worst_negative_severity": candidate_payload.get("phase2_worst_negative_severity"),
+        "phase2_same_child_negative_severity": candidate_payload.get(
+            "phase2_same_child_negative_severity"
+        ),
+        "phase2_separate_child_negative_severity": candidate_payload.get(
+            "phase2_separate_child_negative_severity"
+        ),
+        "phase2_negative_severity_sum": candidate_payload.get("phase2_negative_severity_sum"),
+        "phase2_negative_severity_gap": candidate_payload.get("phase2_negative_severity_gap"),
+        "phase2_negative_severity_balance_ratio": candidate_payload.get(
+            "phase2_negative_severity_balance_ratio"
+        ),
+        "phase2_negative_child_presence_balance_gap": candidate_payload.get(
+            "phase2_negative_child_presence_balance_gap"
+        ),
+        "phase2_child_wall_time_balance_gap": candidate_payload.get("phase2_child_wall_time_balance_gap"),
+        "phase2_child_status_mismatch": candidate_payload.get("phase2_child_status_mismatch"),
+        "phase2_wall_time": candidate_payload.get("phase2_wall_time"),
+        "phase2_dynamic_k_probe_count": candidate_payload.get("phase2_dynamic_k_probe_count"),
+        "pool_total_child_width": candidate_payload.get("pool_total_child_width"),
+        "pool_balance_gap": candidate_payload.get("pool_balance_gap"),
+        "pool_max_child_width": candidate_payload.get("pool_max_child_width"),
+    }
+
+
 def _delta_row(
     *,
     entry: dict[str, Any],
@@ -298,6 +364,46 @@ def _delta_row(
         rank_in_priority_top=rank_in_priority_top,
     )
     branch_labels = _branch_labels(result_row, candidate)
+    source_selected = entry.get("source_selected")
+    baseline_candidate = source_selected if isinstance(source_selected, dict) else {}
+    baseline_raw_row = _candidate_raw_row(
+        event=None,
+        candidate=baseline_candidate,
+        rank_in_top=0,
+        rank_in_priority_top=0,
+        feature_vector=None,
+    )
+    baseline_raw_row.update(
+        {
+            "status": baseline_status,
+            "wall_time": baseline_wall,
+            "solving_time": min(
+                _float(baseline_row.get("solving_time"), default=baseline_wall),
+                float(wall_cap),
+            ),
+            "node_count": _int(baseline_row.get("node_count")),
+            "exact_pricing_calls": _int(baseline_row.get("exact_pricing_calls")),
+        }
+    )
+    alternative_raw_row = _candidate_raw_row(
+        event=alt_event,
+        candidate=candidate,
+        rank_in_top=rank_in_top,
+        rank_in_priority_top=rank_in_priority_top,
+        feature_vector=feature_vector,
+    )
+    alternative_raw_row.update(
+        {
+            "status": alternative_status,
+            "wall_time": alternative_wall,
+            "solving_time": min(
+                _float(result_row.get("solving_time"), default=alternative_wall),
+                float(wall_cap),
+            ),
+            "node_count": _int(result_row.get("node_count")),
+            "exact_pricing_calls": _int(result_row.get("exact_pricing_calls")),
+        }
+    )
     return {
         "schema_version": "journey_branch_counterfactual_delta_forced_replay_v1",
         "diagnostic_only": True,
@@ -340,39 +446,8 @@ def _delta_row(
         },
         "labels": labels,
         "alternative_branch_labels": branch_labels,
-        "alternative_raw_row": {
-            "branch_feature_vector": feature_vector,
-            "branch_time": _float(alt_event.get("time")),
-            "candidate_count": alt_event.get("candidate_count"),
-            "eligible_count": alt_event.get("eligible_count"),
-            "branch_rank_in_top": rank_in_top,
-            "branch_rank_in_priority_top": rank_in_priority_top,
-            "selected_score": candidate.get("branch_score"),
-            "selected_score_source": candidate.get("branch_score_source"),
-            "branch_score_selection_gate_reason": alt_event.get("branch_score_selection_gate_reason"),
-            "branch_score_selection_gate_passed": alt_event.get("branch_score_selection_gate_passed"),
-            "phased_testing_stage": candidate.get("phased_testing_stage"),
-            "phased_testing_decision": candidate.get("phased_testing_decision"),
-            "phased_testing_reason": candidate.get("phased_testing_reason"),
-            "phased_testing_elimination_reason": candidate.get("phased_testing_elimination_reason"),
-            "phased_testing_phase0_passed": candidate.get("phased_testing_phase0_passed"),
-            "phased_testing_phase1_lp_complete": candidate.get("phased_testing_phase1_lp_complete"),
-            "phased_testing_phase2_heuristic_complete": candidate.get("phased_testing_phase2_heuristic_complete"),
-            "phase1_min_child_lp_gain": candidate.get("phase1_min_child_lp_gain"),
-            "phase1_child_lp_gain_product": candidate.get("phase1_child_lp_gain_product"),
-            "phase1_child_width_balance": candidate.get("phase1_child_width_balance"),
-            "phase1_wall_time": candidate.get("phase1_wall_time"),
-            "phase1_dynamic_k_probe_count": candidate.get("phase1_dynamic_k_probe_count"),
-            "phase2_negative_child_count": candidate.get("phase2_negative_child_count"),
-            "phase2_negative_journey_count": candidate.get("phase2_negative_journey_count"),
-            "phase2_best_reduced_cost": candidate.get("phase2_best_reduced_cost"),
-            "phase2_worst_negative_severity": candidate.get("phase2_worst_negative_severity"),
-            "phase2_wall_time": candidate.get("phase2_wall_time"),
-            "phase2_dynamic_k_probe_count": candidate.get("phase2_dynamic_k_probe_count"),
-            "pool_total_child_width": candidate.get("pool_total_child_width"),
-            "pool_balance_gap": candidate.get("pool_balance_gap"),
-            "pool_max_child_width": candidate.get("pool_max_child_width"),
-        },
+        "baseline_raw_row": baseline_raw_row,
+        "alternative_raw_row": alternative_raw_row,
         "source": {
             "runbook": str(entry.get("runbook_path") or ""),
             "source_log_file": str(entry.get("source_log_file") or ""),

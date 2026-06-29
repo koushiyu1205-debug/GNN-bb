@@ -57,6 +57,9 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
                     "phased_testing_phase2_generated_sequences_total": 40,
                     "phased_testing_phase2_evaluated_timed_trips_total": 12,
                     "phased_testing_phase2_worst_negative_severity_max": 1.5,
+                    "phased_testing_phase2_negative_severity_sum_total": 2.0,
+                    "phased_testing_phase2_negative_severity_gap_max": 1.0,
+                    "phased_testing_phase2_negative_severity_balance_ratio_min": 0.5,
                     "phased_testing_phase2_official_bound_effect_any": False,
                     "phased_testing_phase2_certificate_effect_any": False,
                     "phased_testing_official_bound_effect_any": False,
@@ -76,7 +79,17 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
                         "phase1_child_width_balance": 2,
                         "phase2_negative_child_count": 1,
                         "phase2_negative_journey_count": 3,
+                        "phase2_negative_journey_balance_gap": 2,
                         "phase2_best_reduced_cost": -1.5,
+                        "phase2_worst_negative_severity": 1.5,
+                        "phase2_same_child_negative_severity": 1.5,
+                        "phase2_separate_child_negative_severity": 0.5,
+                        "phase2_negative_severity_sum": 2.0,
+                        "phase2_negative_severity_gap": 1.0,
+                        "phase2_negative_severity_balance_ratio": 0.5,
+                        "phase2_negative_child_presence_balance_gap": 0,
+                        "phase2_child_wall_time_balance_gap": 0.015,
+                        "phase2_child_status_mismatch": True,
                     },
                     "top": [
                         {"task_i": 2, "task_j": 3, "fractionality": 0.5},
@@ -185,7 +198,9 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(summary["aggregate"]["branch_count"], 1)
             self.assertEqual(summary["aggregate"]["tail_class_counts"], {"early_branch_continues": 1})
             self.assertEqual(summary["aggregate"]["unprocessed_child_count"], 1)
+            self.assertEqual(summary["schema_version"], "journey_branch_impact_audit_v2")
             row = summary["records"][0]
+            self.assertEqual(row["schema_version"], "journey_branch_impact_row_v2")
             self.assertTrue(row["selected_matches_branch"])
             self.assertEqual(row["priority_mode"], "pool_split")
             self.assertEqual(row["forced_pair"], [1, 2])
@@ -215,13 +230,25 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(row["phase1_child_width_balance"], 2)
             self.assertEqual(row["phase2_negative_child_count"], 1)
             self.assertEqual(row["phase2_negative_journey_count"], 3)
+            self.assertEqual(row["phase2_negative_journey_balance_gap"], 2)
             self.assertEqual(row["phase2_best_reduced_cost"], -1.5)
+            self.assertEqual(row["phase2_same_child_negative_severity"], 1.5)
+            self.assertEqual(row["phase2_separate_child_negative_severity"], 0.5)
+            self.assertEqual(row["phase2_negative_severity_sum"], 2.0)
+            self.assertEqual(row["phase2_negative_severity_gap"], 1.0)
+            self.assertEqual(row["phase2_negative_severity_balance_ratio"], 0.5)
+            self.assertEqual(row["phase2_negative_child_presence_balance_gap"], 0)
+            self.assertEqual(row["phase2_child_wall_time_balance_gap"], 0.015)
+            self.assertTrue(row["phase2_child_status_mismatch"])
             self.assertTrue(row["phased_testing_controller_active"])
             self.assertEqual(row["phased_testing_controller_input_count"], 2)
             self.assertEqual(row["phased_testing_phase1_probe_count"], 2)
             self.assertEqual(row["phased_testing_phase2_probe_count"], 1)
             self.assertEqual(row["phased_testing_phase2_dynamic_k_excluded_count"], 1)
             self.assertEqual(row["phased_testing_phase2_negative_journey_count_total"], 3)
+            self.assertEqual(row["phased_testing_phase2_negative_severity_sum_total"], 2.0)
+            self.assertEqual(row["phased_testing_phase2_negative_severity_gap_max"], 1.0)
+            self.assertEqual(row["phased_testing_phase2_negative_severity_balance_ratio_min"], 0.5)
             self.assertEqual(row["phased_testing_decision_counts"], {"probed_complete": 1, "skipped_by_dynamic_k": 1})
             self.assertFalse(row["phased_testing_official_bound_effect_any"])
             self.assertFalse(row["phased_testing_certificate_effect_any"])
@@ -268,8 +295,13 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
                 child_rows[0]["observed_branch_candidate"]["phase2_negative_journey_count"],
                 3,
             )
+            self.assertEqual(
+                child_rows[0]["observed_branch_candidate"]["phase2_negative_severity_sum"],
+                2.0,
+            )
             training_rows = summary["branch_training_rows"]
             self.assertEqual(len(training_rows), 1)
+            self.assertEqual(training_rows[0]["schema_version"], "journey_branch_impact_training_row_v2")
             self.assertEqual(training_rows[0]["branch_feature_schema"], summary["branch_feature_schema"])
             self.assertEqual(training_rows[0]["branch_label_schema"], summary["branch_label_schema"])
             self.assertTrue(training_rows[0]["right_censored"])
@@ -279,8 +311,10 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(training_rows[0]["phased_testing_stage"], "phase2_heuristic")
             self.assertEqual(training_rows[0]["phase1_min_child_lp_gain"], 2.25)
             self.assertEqual(training_rows[0]["phase2_negative_child_count"], 1)
+            self.assertEqual(training_rows[0]["phase2_negative_severity_sum"], 2.0)
             self.assertEqual(training_rows[0]["phased_testing_phase1_probe_count"], 2)
             self.assertEqual(training_rows[0]["phased_testing_phase2_probe_count"], 1)
+            self.assertEqual(training_rows[0]["phased_testing_phase2_negative_severity_gap_max"], 1.0)
             self.assertEqual(training_rows[0]["phased_testing_phase2_reason_counts"], {"dynamic_k_excluded": 1, "ok": 1})
             self.assertFalse(training_rows[0]["phased_testing_official_bound_effect_any"])
             self.assertFalse(training_rows[0]["phased_testing_certificate_effect_any"])

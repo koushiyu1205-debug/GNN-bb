@@ -1,4 +1,4 @@
-# V758-V759 Weighted Rank-1 Cut Audit
+# V758-V760 Weighted Rank-1 Cut Audit / Opt-In Live Probe
 
 日期：2026-06-29
 
@@ -63,7 +63,31 @@ journey_weighted_rank1_cut_audit_include_uniform_src=True
   - `_cut_masks()` 对 weighted row 记录 `(denominator, weighted_bits)`。
   - completion-bound / profile pruning 对 nonzero weighted cut dual 仍 fail-closed，不把 weighted cut 用进 optimistic pruning。
 
+- `BPC_future/solver/journey_driver.py`
+  - `_journey_task_set_dominance_safe()` 将 `weighted_subset_row` 视为 safe，因为 coefficient 只依赖 task set。
+
 这一步只是把“如果未来 opt-in 添加 weighted cuts，true reduced cost 不会算错”的底座补上；当前没有 separator 会把它们加入 RMP，也没有 production 配置默认打开。
+
+V760 进一步增加了默认关闭的 opt-in separator：
+
+- `journey_weighted_rank1_cuts_enabled=False` 默认关闭；
+- 显式开启后在 RMP optimal 后、普通 dynamic SRC 前尝试添加 violated weighted rows；
+- 事件：
+
+```text
+journey_weighted_rank1_cut_separation
+journey_weighted_rank1_cut_added
+```
+
+- 添加事件明确记录：
+
+```text
+production_ready=False
+exact_pricing_supported=True
+completion_bound_fail_closed=True
+```
+
+也就是说，weighted row 可以进入 RMP / true reduced cost，但 completion-bound / profile pruning 对 nonzero weighted cut dual 仍保持保守关闭。
 
 ## 验证
 
@@ -84,7 +108,9 @@ python -m py_compile \
 MPLCONFIGDIR=/tmp/bpc_future_mpl python -m unittest \
   BPC_future.tests.test_bpc_future.BPCFutureTests.test_pricing_compatible_cut_coefficients_and_duplicates \
   BPC_future.tests.test_bpc_future.BPCFutureTests.test_weighted_subset_row_live_pricing_is_rc_consistent_and_fail_closed_for_bounds \
+  BPC_future.tests.test_bpc_future.BPCFutureTests.test_weighted_subset_row_is_valid_for_integer_task_partitions \
   BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_weighted_rank1_cut_audit_logs_candidates_without_bound_effect \
+  BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_weighted_rank1_separator_is_opt_in_and_deduplicates \
   BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_dynamic_subset_row_audit_logs_violations_without_adding_cuts \
   BPC_future.tests.test_bpc_future.BPCFutureTests.test_journey_cut_dual_diagnostics_logs_binding_subset_row_dual
 ```
@@ -92,7 +118,7 @@ MPLCONFIGDIR=/tmp/bpc_future_mpl python -m unittest \
 结果：
 
 ```text
-Ran 5 tests
+Ran 7 tests
 OK
 ```
 
@@ -176,6 +202,117 @@ nonzero_events = 12
 max_cut_dual_abs_sum = 6.960402857
 ```
 
+## V760 Live Opt-In 45s 诊断
+
+在 V759 基础上只额外开启：
+
+```text
+journey_weighted_rank1_cuts_enabled=True
+journey_weighted_rank1_cut_denominators=3,4
+journey_weighted_rank1_cut_candidate_budget=600
+journey_weighted_rank1_cut_max_depth=1
+journey_weighted_rank1_cut_max_rounds=2
+journey_weighted_rank1_cut_max_subset_size=8
+journey_weighted_rank1_cut_max_added=12
+journey_weighted_rank1_cut_gate_enabled=True
+journey_weighted_rank1_cut_gate_min_violated=1
+journey_weighted_rank1_cut_gate_min_best_violation=0.25
+```
+
+输出：
+
+```text
+BPC_future/results/20260629_v760_weighted_rank1_live_seed61635_45/
+```
+
+求解结果：
+
+```text
+status = TIME_LIMIT
+primal = 561.030445
+dual = 526.651393
+gap = 0.061278
+nodes = 3
+rmp_solves = 36
+columns = 389
+cuts_added = 12
+subset_row_cuts_added = 8
+```
+
+对照 V759：
+
+```text
+V759: dual = 526.651393, columns = 388, cuts_added = 10, subset_row_cuts_added = 9
+V760: dual = 526.651393, columns = 389, cuts_added = 12, subset_row_cuts_added = 8
+```
+
+weighted separator 诊断：
+
+```text
+weighted_sep_events = 6
+weighted_added_events = 3
+weighted_added_total = 3
+weighted_best_violation_max = 0.25
+weighted_nonzero_dual_events = 5
+weighted_binding_events = 6
+weighted_dual_abs_sum_max = 3.757514
+max_nonzero_cut_dual_count = 3
+max_cut_dual_abs_sum = 3.757514
+```
+
+典型 added rows：
+
+```text
+node1 depth1 cg1:
+tasks=[2,10,13,19]
+weights=[2,1,1,1]
+denominator=3
+rhs=1
+activity=1.25
+violation=0.25
+
+node1 depth1 cg1:
+tasks=[1,2,4,9,10,13,19]
+weights=[1,2,1,1,1,1,1]
+denominator=3
+rhs=2
+activity=2.25
+violation=0.25
+```
+
+典型 nonzero weighted dual：
+
+```text
+kind = weighted_subset_row
+tasks = [1,2,4,9,10,13,19]
+weights = [1,2,1,1,1,1,1]
+denominator = 3
+activity = 2.0
+rhs = 2.0
+binding = true
+dual = -3.130013
+```
+
+## V760 解释
+
+这次不是“weighted cut 没发挥作用”。它已经：
+
+1. 被 separator 找到并加入 RMP；
+2. 在后续 RMP 中 binding；
+3. 拿到 nonzero cut dual；
+4. 进入 pricing true reduced cost 口径；
+5. 没有进入 optimistic completion-bound pruning。
+
+但 seed61635 的 45s best dual 仍然完全停在 `526.651393`。
+
+所以更准确的判断是：
+
+```text
+task-subset 形态的 rank-1-like row 仍不足以移动 seed61635 的全局 lower-bound 瓶颈。
+```
+
+这比 V759 更强，因为 V759 只能说明“存在 violated weighted row”；V760 说明“即使把一小批 violated weighted row exact-safe 地加进去并产生 nonzero dual，短预算 dual 仍不动”。
+
 ## 解释
 
 这轮结果说明：
@@ -189,7 +326,7 @@ max_cut_dual_abs_sum = 6.960402857
 
 ## Exact-Safe 边界
 
-当前没有改变：
+默认配置仍没有改变：
 
 - RMP constraints；
 - 默认 pricing / RMP 行为；
@@ -204,16 +341,18 @@ max_cut_dual_abs_sum = 6.960402857
 
 - weighted cut 在 RMP / manual RC / pricing cut dual value 中的一致 coefficient；
 - nonzero weighted cut dual 下的 completion-bound / profile-pruning fail-closed。
+- opt-in weighted separator，可用于 hard-node 诊断。
 
 ## 下一步
 
 下一步不能直接把 weighted cut 加进默认 RMP。应按以下顺序推进：
 
-1. 小规模穷举验证：所有 feasible integer journeys 满足 weighted rank-1 inequality；
-2. 做一个显式 opt-in 的 weighted separator，默认仍关闭；
-3. live separator 只在 root / 指定 hard-node 上试跑，记录 cut dual、RMP dual、true pricing closure；
-4. 对 task-set dominance，只有确认 weighted coefficient 仍只依赖 task mask 后才允许；
-5. seed61635 with-cut opt-in 对照，看 best dual 是否从 `526.651393` 移动；
-6. 若 dual 移动，再评估是否纳入 RouteOpt/BKF preset；若不移动，继续往 route/order/resource-aware formulation 或 incumbent/cuts 联动推进。
+1. 扩一轮 seed61635 / seed61311 / 其它 hard nodes 的 120s opt-in 对照，判断是否只是 45s 太短；
+2. 如果 weighted rows 仍不能移动 dual，停止扩大这一族 task-subset rows；
+3. 转向 route/order/resource-aware formulation，例如：
+   - route-region cut，而不是纯 task-set cut；
+   - resource/time-window aware rounded rows；
+   - branch-state scoped child cut generation；
+   - incumbent heuristic + branch score 联动，优先把 `z_RMP < UB` 的节点推向可剪枝区间。
 
-如果 with-cut 后 dual 仍不动，说明问题不是 rank-1-like task cut，而要继续往 route/order/resource-aware formulation 或 incumbent/cuts 联动推进。
+V760 当前倾向于第 4/5 条：seed61635 的瓶颈不是“没有一两条 violated task weighted rows”，而是基础 relaxation / formulation 的缺口更结构化。

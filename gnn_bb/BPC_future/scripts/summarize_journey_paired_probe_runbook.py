@@ -42,7 +42,16 @@ RUNBOOK_ENTRY_PASSTHROUGH_FIELDS = (
     "source_alt_phase1_wall_time",
     "source_alt_phase2_negative_child_count",
     "source_alt_phase2_negative_journey_count",
+    "source_alt_phase2_negative_journey_balance_gap",
     "source_alt_phase2_worst_negative_severity",
+    "source_alt_phase2_same_child_negative_severity",
+    "source_alt_phase2_separate_child_negative_severity",
+    "source_alt_phase2_negative_severity_sum",
+    "source_alt_phase2_negative_severity_gap",
+    "source_alt_phase2_negative_severity_balance_ratio",
+    "source_alt_phase2_negative_child_presence_balance_gap",
+    "source_alt_phase2_child_wall_time_balance_gap",
+    "source_alt_phase2_child_status_mismatch",
     "source_alt_phase2_wall_time",
     "phased_testing_priority",
     "phased_testing_priority_reason",
@@ -52,6 +61,9 @@ RUNBOOK_ENTRY_PASSTHROUGH_FIELDS = (
     "phased_testing_phase2_negative_child_count_total",
     "phased_testing_phase2_negative_journey_count_total",
     "phased_testing_phase2_worst_negative_severity_max",
+    "phased_testing_phase2_negative_severity_sum_total",
+    "phased_testing_phase2_negative_severity_gap_max",
+    "phased_testing_phase2_negative_severity_balance_ratio_min",
     "phased_testing_official_bound_effect_any",
     "phased_testing_certificate_effect_any",
 )
@@ -113,6 +125,45 @@ def _pair_tuple(value: Any) -> tuple[int, int] | None:
     except (TypeError, ValueError):
         return None
     return (min(first, second), max(first, second))
+
+
+def _parse_rf_constraint(text: Any) -> tuple[tuple[int, int], str] | None:
+    raw = str(text or "")
+    if "RF(" not in raw or ")=" not in raw:
+        return None
+    try:
+        payload = raw.split("RF(", 1)[1].split(")", 1)[0]
+        kind = raw.split(")=", 1)[1].strip()
+        first, second = payload.split(",", 1)
+        pair = (int(first), int(second))
+    except (IndexError, TypeError, ValueError):
+        return None
+    if kind not in {"same_vehicle", "separate_vehicle"}:
+        return None
+    return (min(pair[0], pair[1]), max(pair[0], pair[1])), kind
+
+
+def _source_path_edges(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    edges = entry.get("source_path_edges")
+    if not isinstance(edges, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        pair = _pair_tuple([edge.get("task_i"), edge.get("task_j")])
+        kind = str(edge.get("kind") or "")
+        if pair is None or kind not in {"same_vehicle", "separate_vehicle"}:
+            continue
+        out.append(
+            {
+                "parent_depth": _int(edge.get("parent_depth"), len(out)),
+                "task_i": int(pair[0]),
+                "task_j": int(pair[1]),
+                "kind": kind,
+            }
+        )
+    return out
 
 
 def _experiment_from_path(value: Any) -> str | None:
@@ -202,6 +253,7 @@ def _target_replay_audit(run_root: Path, entry: dict[str, Any]) -> dict[str, Any
         return {
             "target_replay_audited": False,
             "target_replay_status": "missing_source_context",
+            "target_replay_reason": "missing_source_context",
             "target_candidate_event_seen": False,
             "target_branch_event_seen": False,
             "target_pair_selected": False,
@@ -214,11 +266,78 @@ def _target_replay_audit(run_root: Path, entry: dict[str, Any]) -> dict[str, Any
         return {
             "target_replay_audited": False,
             "target_replay_status": "not_audited",
+            "target_replay_reason": "log_missing",
             "target_candidate_event_seen": False,
             "target_branch_event_seen": False,
             "target_pair_selected": False,
             "target_selected_pair": None,
         }
+
+    records: list[dict[str, Any]] = []
+    for path in log_paths:
+        records.extend(_iter_jsonl(path))
+
+    replay_target_node = int(source_node)
+    replay_target_depth = int(source_depth)
+    path_edges = _source_path_edges(entry)
+    path_stable: bool | None = None
+    path_reason = "source_node_id"
+    if path_edges:
+        current_node = 0
+        path_stable = True
+        path_reason = "path_replayed"
+        for edge in path_edges:
+            pair = _pair_tuple([edge["task_i"], edge["task_j"]])
+            kind = str(edge["kind"])
+            parent_depth = int(edge["parent_depth"])
+            parent_candidate_events = [
+                record
+                for record in records
+                if record.get("event") == "journey_branch_candidates"
+                and _int(record.get("node_id"), -1) == int(current_node)
+                and _int(record.get("depth"), -1) == int(parent_depth)
+            ]
+            parent_branch_events = [
+                record
+                for record in records
+                if record.get("event") == "journey_branch"
+                and _int(record.get("node_id"), -1) == int(current_node)
+                and _int(record.get("depth"), -1) == int(parent_depth)
+            ]
+            parent_events = parent_branch_events or parent_candidate_events
+            if not parent_events:
+                path_stable = False
+                path_reason = "root_not_reached" if parent_depth == 0 else "ancestor_branch_not_replayed"
+                break
+            selected_pairs = [
+                _pair_tuple(record.get("selected_pair") or record.get("branch_pair") or record.get("pair"))
+                for record in parent_events
+            ]
+            if pair not in selected_pairs:
+                path_stable = False
+                path_reason = "ancestor_pair_not_selected"
+                break
+            child_node: int | None = None
+            for record in records:
+                if record.get("event") != "journey_child_queued":
+                    continue
+                if _int(record.get("parent_node_id"), -1) != int(current_node):
+                    continue
+                parsed = _parse_rf_constraint(record.get("constraint"))
+                if parsed is None:
+                    continue
+                child_pair, child_kind = parsed
+                if child_pair == pair and child_kind == kind:
+                    child_node = _int(record.get("child_node_id"), -1)
+                    break
+            if child_node is None or child_node < 0:
+                path_stable = False
+                path_reason = "ancestor_child_not_queued"
+                break
+            current_node = int(child_node)
+        if path_stable:
+            replay_target_node = int(current_node)
+            replay_target_depth = int(source_depth)
 
     candidate_event_seen = False
     branch_event_seen = False
@@ -226,37 +345,57 @@ def _target_replay_audit(run_root: Path, entry: dict[str, Any]) -> dict[str, Any
     target_selected_pair: list[int] | None = None
     target_event_count = 0
     forced_pair_payload = [forced_pair[0], forced_pair[1]]
-    for path in log_paths:
-        for record in _iter_jsonl(path):
-            if record.get("event") not in {"journey_branch_candidates", "journey_branch"}:
-                continue
-            node_id = _float(record.get("node_id"))
-            depth = _float(record.get("depth"))
-            if node_id is None or depth is None:
-                continue
-            if int(node_id) != int(source_node) or int(depth) != int(source_depth):
-                continue
-            event = str(record.get("event") or "")
-            target_event_count += 1
-            if event == "journey_branch_candidates":
-                candidate_event_seen = True
-            if event == "journey_branch":
-                branch_event_seen = True
-            selected_pair = _pair_tuple(record.get("selected_pair") or record.get("branch_pair") or record.get("pair"))
-            if selected_pair is not None:
-                target_selected_pair = [selected_pair[0], selected_pair[1]]
-                if selected_pair == forced_pair:
-                    target_pair_selected = True
+    target_node_started = any(
+        record.get("event") == "journey_node_start"
+        and _int(record.get("node_id"), -1) == int(replay_target_node)
+        and _int(record.get("depth"), -1) == int(replay_target_depth)
+        for record in records
+    )
+    for record in records:
+        if record.get("event") not in {"journey_branch_candidates", "journey_branch"}:
+            continue
+        node_id = _float(record.get("node_id"))
+        depth = _float(record.get("depth"))
+        if node_id is None or depth is None:
+            continue
+        if int(node_id) != int(replay_target_node) or int(depth) != int(replay_target_depth):
+            continue
+        event = str(record.get("event") or "")
+        target_event_count += 1
+        if event == "journey_branch_candidates":
+            candidate_event_seen = True
+        if event == "journey_branch":
+            branch_event_seen = True
+        selected_pair = _pair_tuple(record.get("selected_pair") or record.get("branch_pair") or record.get("pair"))
+        if selected_pair is not None:
+            target_selected_pair = [selected_pair[0], selected_pair[1]]
+            if selected_pair == forced_pair:
+                target_pair_selected = True
 
     if target_pair_selected:
         status = "target_pair_selected"
+        reason = "target_pair_selected"
     elif branch_event_seen or candidate_event_seen:
         status = "target_pair_not_selected"
+        reason = "target_pair_not_selected"
     else:
         status = "target_not_replayed"
+        if path_stable is False:
+            reason = path_reason
+        elif path_stable is True and target_node_started:
+            reason = "ancestor_forced_but_target_child_no_branch"
+        elif path_stable is True:
+            reason = "ancestor_forced_but_target_child_not_started"
+        else:
+            reason = "source_node_not_replayed"
     return {
         "target_replay_audited": True,
         "target_replay_status": status,
+        "target_replay_reason": reason,
+        "target_node_path_stable": path_stable,
+        "replay_target_node_id": int(replay_target_node),
+        "replay_target_depth": int(replay_target_depth),
+        "source_path_edge_count": len(path_edges),
         "target_candidate_event_seen": candidate_event_seen,
         "target_branch_event_seen": branch_event_seen,
         "target_pair_selected": target_pair_selected,
@@ -371,6 +510,16 @@ def summarize_paired_probe(
         for field in RUNBOOK_ENTRY_PASSTHROUGH_FIELDS:
             if field in entry:
                 row[field] = entry.get(field)
+        if row.get("pair_role") == "selected_baseline":
+            selected_payload = (
+                entry.get("source_selected") if isinstance(entry.get("source_selected"), dict) else {}
+            )
+            for field in RUNBOOK_ENTRY_PASSTHROUGH_FIELDS:
+                if field in row or not field.startswith("source_alt_"):
+                    continue
+                selected_key = field.removeprefix("source_alt_")
+                if selected_key in selected_payload:
+                    row[field] = selected_payload.get(selected_key)
         if "source_alt_phase1_min_child_lp_gain" in row:
             row["phase1_min_child_lp_gain"] = row.get("source_alt_phase1_min_child_lp_gain")
         if "source_alt_phase1_child_lp_gain_product" in row:
@@ -383,8 +532,38 @@ def summarize_paired_probe(
             row["phase2_negative_child_count"] = row.get("source_alt_phase2_negative_child_count")
         if "source_alt_phase2_negative_journey_count" in row:
             row["phase2_negative_journey_count"] = row.get("source_alt_phase2_negative_journey_count")
+        if "source_alt_phase2_negative_journey_balance_gap" in row:
+            row["phase2_negative_journey_balance_gap"] = row.get(
+                "source_alt_phase2_negative_journey_balance_gap"
+            )
         if "source_alt_phase2_worst_negative_severity" in row:
             row["phase2_worst_negative_severity"] = row.get("source_alt_phase2_worst_negative_severity")
+        if "source_alt_phase2_same_child_negative_severity" in row:
+            row["phase2_same_child_negative_severity"] = row.get(
+                "source_alt_phase2_same_child_negative_severity"
+            )
+        if "source_alt_phase2_separate_child_negative_severity" in row:
+            row["phase2_separate_child_negative_severity"] = row.get(
+                "source_alt_phase2_separate_child_negative_severity"
+            )
+        if "source_alt_phase2_negative_severity_sum" in row:
+            row["phase2_negative_severity_sum"] = row.get("source_alt_phase2_negative_severity_sum")
+        if "source_alt_phase2_negative_severity_gap" in row:
+            row["phase2_negative_severity_gap"] = row.get("source_alt_phase2_negative_severity_gap")
+        if "source_alt_phase2_negative_severity_balance_ratio" in row:
+            row["phase2_negative_severity_balance_ratio"] = row.get(
+                "source_alt_phase2_negative_severity_balance_ratio"
+            )
+        if "source_alt_phase2_negative_child_presence_balance_gap" in row:
+            row["phase2_negative_child_presence_balance_gap"] = row.get(
+                "source_alt_phase2_negative_child_presence_balance_gap"
+            )
+        if "source_alt_phase2_child_wall_time_balance_gap" in row:
+            row["phase2_child_wall_time_balance_gap"] = row.get(
+                "source_alt_phase2_child_wall_time_balance_gap"
+            )
+        if "source_alt_phase2_child_status_mismatch" in row:
+            row["phase2_child_status_mismatch"] = row.get("source_alt_phase2_child_status_mismatch")
         if "source_alt_phase2_wall_time" in row:
             row["phase2_wall_time"] = row.get("source_alt_phase2_wall_time")
         rows.append(row)
@@ -529,10 +708,16 @@ def summarize_paired_probe(
         "target_pair_not_selected_entry_count": sum(
             1 for row in rows if row.get("target_replay_status") == "target_pair_not_selected"
         ),
+        "target_replay_reason_counts": {},
         "label_counts": {},
         "groups": group_rows,
     }
     for row in rows:
+        reason = str(row.get("target_replay_reason") or "")
+        if reason:
+            summary["target_replay_reason_counts"][reason] = int(
+                summary["target_replay_reason_counts"].get(reason, 0)
+            ) + 1
         if row.get("pair_role") != "alternative":
             continue
         label = str(row.get("paired_label_type") or "")
@@ -589,6 +774,7 @@ def _render_report(summary: dict[str, Any]) -> str:
         f"valid_observed_alternative_entry_count = {summary.get('valid_observed_alternative_entry_count')}",
         f"target_not_replayed_entry_count = {summary.get('target_not_replayed_entry_count')}",
         f"target_pair_not_selected_entry_count = {summary.get('target_pair_not_selected_entry_count')}",
+        f"target_replay_reason_counts = {summary.get('target_replay_reason_counts')}",
         f"label_counts = {summary.get('label_counts')}",
         "production_ready = false",
         "certificate_effect = false",

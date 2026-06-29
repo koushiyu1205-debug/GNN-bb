@@ -184,6 +184,48 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             self.assertIn("phase1_diagnostic_wall_time", manifest["context_feature_schema"])
             self.assertIn("phase2_negative_child_count", manifest["context_feature_schema"])
             self.assertIn("phase2_negative_journey_balance_gap", manifest["context_feature_schema"])
+            self.assertIn("phase2_negative_severity_sum", manifest["context_feature_schema"])
+            self.assertIn("phase2_negative_severity_gap", manifest["context_feature_schema"])
+            self.assertIn("phase2_negative_severity_balance_ratio", manifest["context_feature_schema"])
+            self.assertIn(
+                "phase2_negative_child_presence_balance_gap",
+                manifest["context_feature_schema"],
+            )
+            self.assertEqual(
+                manifest["phase2_pressure_context_features"],
+                [
+                    "phase2_same_child_negative_severity",
+                    "phase2_separate_child_negative_severity",
+                    "phase2_negative_severity_sum",
+                    "phase2_negative_severity_gap",
+                    "phase2_negative_severity_balance_ratio",
+                    "phase2_negative_child_presence_balance_gap",
+                ],
+            )
+            self.assertEqual(
+                manifest["phase2_pressure_observed_counts"],
+                {
+                    "phase2_same_child_negative_severity": 8,
+                    "phase2_separate_child_negative_severity": 8,
+                    "phase2_negative_severity_sum": 8,
+                    "phase2_negative_severity_gap": 8,
+                    "phase2_negative_severity_balance_ratio": 8,
+                    "phase2_negative_child_presence_balance_gap": 8,
+                },
+            )
+            self.assertEqual(
+                manifest["phase2_pressure_nonzero_counts"],
+                {
+                    "phase2_same_child_negative_severity": 8,
+                    "phase2_separate_child_negative_severity": 0,
+                    "phase2_negative_severity_sum": 8,
+                    "phase2_negative_severity_gap": 8,
+                    "phase2_negative_severity_balance_ratio": 0,
+                    "phase2_negative_child_presence_balance_gap": 8,
+                },
+            )
+            self.assertEqual(manifest["phase2_pressure_nonzero_sample_count"], 8)
+            self.assertTrue(manifest["phase2_pressure_coverage_ready"])
             self.assertIn("phase2_child_wall_time_balance_gap", manifest["context_feature_schema"])
             self.assertIn("phase2_child_status_mismatch", manifest["context_feature_schema"])
             self.assertIn("phase2_wall_time", manifest["context_feature_schema"])
@@ -192,7 +234,24 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             self.assertIn("phased_testing_elimination_reason_code", manifest["context_feature_schema"])
             self.assertIn("cut_context_dynamic_subset_row_regime_code", manifest["context_feature_schema"])
             self.assertIn("cut_context_subset_row_count", manifest["context_feature_schema"])
+            self.assertIn("route_order_active_journey_count", manifest["context_feature_schema"])
+            self.assertIn("route_order_active_route_signature_count", manifest["context_feature_schema"])
+            self.assertIn("route_order_conflict_count", manifest["context_feature_schema"])
+            self.assertIn("route_order_conflict_mass", manifest["context_feature_schema"])
+            self.assertIn("route_order_top_conflict_balance_ratio", manifest["context_feature_schema"])
+            self.assertIn("route_order_candidate_direction_conflict_mass", manifest["context_feature_schema"])
+            self.assertIn("route_order_candidate_adjacent_conflict_mass", manifest["context_feature_schema"])
             self.assertEqual(manifest["exactness_contract"]["certificate_source"], False)
+            self.assertEqual(
+                manifest["exactness_contract"]["missing_phase2_pressure_is_not_low_pressure"],
+                True,
+            )
+            summary_payload = json.loads((tmp_path / "dataset" / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary_payload["phase2_pressure_observed_counts"], manifest["phase2_pressure_observed_counts"])
+            self.assertEqual(summary_payload["phase2_pressure_nonzero_counts"], manifest["phase2_pressure_nonzero_counts"])
+            self.assertEqual(summary_payload["phase2_pressure_nonzero_sample_count"], 8)
+            self.assertTrue(summary_payload["phase2_pressure_coverage_ready"])
+            self.assertFalse(summary_payload["pressure_aware_training_dataset_ready"])
             sample = torch.load(
                 tmp_path / "dataset" / manifest["samples"][0]["path"],
                 map_location="cpu",
@@ -224,6 +283,18 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             phase2_gap_index = manifest["context_feature_schema"].index(
                 "phase2_negative_journey_balance_gap"
             )
+            phase2_severity_sum_index = manifest["context_feature_schema"].index(
+                "phase2_negative_severity_sum"
+            )
+            phase2_severity_gap_index = manifest["context_feature_schema"].index(
+                "phase2_negative_severity_gap"
+            )
+            phase2_severity_ratio_index = manifest["context_feature_schema"].index(
+                "phase2_negative_severity_balance_ratio"
+            )
+            phase2_presence_gap_index = manifest["context_feature_schema"].index(
+                "phase2_negative_child_presence_balance_gap"
+            )
             phase2_wall_gap_index = manifest["context_feature_schema"].index(
                 "phase2_child_wall_time_balance_gap"
             )
@@ -242,6 +313,25 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             cut_min_add_depth_index = manifest["context_feature_schema"].index(
                 "cut_context_dynamic_subset_row_min_add_depth"
             )
+            route_active_journey_index = manifest["context_feature_schema"].index(
+                "route_order_active_journey_count"
+            )
+            route_signature_index = manifest["context_feature_schema"].index(
+                "route_order_active_route_signature_count"
+            )
+            route_conflict_index = manifest["context_feature_schema"].index("route_order_conflict_count")
+            route_conflict_mass_index = manifest["context_feature_schema"].index(
+                "route_order_conflict_mass"
+            )
+            route_conflict_ratio_index = manifest["context_feature_schema"].index(
+                "route_order_top_conflict_balance_ratio"
+            )
+            route_candidate_conflict_index = manifest["context_feature_schema"].index(
+                "route_order_candidate_direction_conflict_mass"
+            )
+            route_candidate_adjacent_conflict_index = manifest["context_feature_schema"].index(
+                "route_order_candidate_adjacent_conflict_mass"
+            )
             self.assertAlmostEqual(float(sample.context_features[phase1_min_index]), 3.5)
             self.assertAlmostEqual(float(sample.context_features[phase1_product_index]), 42.0)
             self.assertAlmostEqual(float(sample.context_features[phase1_gap_index]), 1.0)
@@ -253,6 +343,10 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             self.assertAlmostEqual(float(sample.context_features[phase1_cut_wall_index]), 0.02)
             self.assertAlmostEqual(float(sample.context_features[phase1_diag_wall_index]), 0.032)
             self.assertAlmostEqual(float(sample.context_features[phase2_gap_index]), 2.0)
+            self.assertAlmostEqual(float(sample.context_features[phase2_severity_sum_index]), 0.25)
+            self.assertAlmostEqual(float(sample.context_features[phase2_severity_gap_index]), 0.25)
+            self.assertAlmostEqual(float(sample.context_features[phase2_severity_ratio_index]), 0.0)
+            self.assertAlmostEqual(float(sample.context_features[phase2_presence_gap_index]), 1.0)
             self.assertAlmostEqual(float(sample.context_features[phase2_wall_gap_index]), 0.015)
             self.assertAlmostEqual(float(sample.context_features[phase2_status_mismatch_index]), 1.0)
             self.assertAlmostEqual(float(sample.context_features[phased_stage_index]), 4.0)
@@ -261,6 +355,13 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             self.assertAlmostEqual(float(sample.context_features[cut_regime_index]), 4.0)
             self.assertAlmostEqual(float(sample.context_features[cut_subset_index]), 3.0)
             self.assertAlmostEqual(float(sample.context_features[cut_min_add_depth_index]), 1.0)
+            self.assertAlmostEqual(float(sample.context_features[route_active_journey_index]), 19.0)
+            self.assertAlmostEqual(float(sample.context_features[route_signature_index]), 18.0)
+            self.assertAlmostEqual(float(sample.context_features[route_conflict_index]), 2.0)
+            self.assertAlmostEqual(float(sample.context_features[route_conflict_mass_index]), 1.25)
+            self.assertAlmostEqual(float(sample.context_features[route_conflict_ratio_index]), 0.5)
+            self.assertAlmostEqual(float(sample.context_features[route_candidate_conflict_index]), 1.0)
+            self.assertAlmostEqual(float(sample.context_features[route_candidate_adjacent_conflict_index]), 0.75)
             self.assertIn("y_gap_improvement", manifest["label_schema"])
             self.assertIn("y_fathom_gain", manifest["label_schema"])
             self.assertIn("y_branch_count_delta", manifest["label_schema"])
@@ -381,6 +482,12 @@ def _delta_row(
             "phase2_negative_journey_balance_gap": 2,
             "phase2_best_reduced_cost": -0.25,
             "phase2_worst_negative_severity": 0.25,
+            "phase2_same_child_negative_severity": 0.25,
+            "phase2_separate_child_negative_severity": 0.0,
+            "phase2_negative_severity_sum": 0.25,
+            "phase2_negative_severity_gap": 0.25,
+            "phase2_negative_severity_balance_ratio": 0.0,
+            "phase2_negative_child_presence_balance_gap": 1,
             "phase2_child_wall_time_balance_gap": 0.015,
             "phase2_child_status_mismatch": True,
             "phase2_wall_time": 0.04,
@@ -394,6 +501,22 @@ def _delta_row(
             "cut_context_dynamic_subset_row_min_add_depth": 1,
             "cut_context_dynamic_subset_row_max_depth": 2,
             "cut_context_dynamic_subset_row_gate_min_best_violation": 0.25,
+            "route_order_active_journey_count": 19,
+            "route_order_active_task_set_count": 17,
+            "route_order_active_route_signature_count": 18,
+            "route_order_multi_route_task_set_count": 1,
+            "route_order_conflict_count": 2,
+            "route_order_conflict_mass": 1.25,
+            "route_order_top_conflict_balance_ratio": 0.5,
+            "route_order_top_transition_count": 6,
+            "route_order_top_arc_option_count": 5,
+            "route_order_same_route_mass": 1.25,
+            "route_order_i_before_j_mass": 0.5,
+            "route_order_j_before_i_mass": 0.5,
+            "route_order_direction_conflict_mass": 1.0,
+            "route_order_direction_balance_ratio": 1.0,
+            "route_order_adjacent_conflict_mass": 0.75,
+            "route_order_adjacent_balance_ratio": 0.5,
         },
     }
 

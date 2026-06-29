@@ -62,6 +62,10 @@ class JourneyBranchFullReplayGapDeltaRowsTest(unittest.TestCase):
             self.assertAlmostEqual(row["deltas"]["primal_improvement"], 3.0)
             self.assertEqual(row["deltas"]["fathom_gain"], 3.0)
             self.assertEqual(row["deltas"]["completion_bound_final_judge_retry_gain"], -1.0)
+            self.assertEqual(row["baseline_raw_row"]["phase2_negative_severity_sum"], 0.45)
+            self.assertEqual(row["alternative_raw_row"]["phase2_negative_severity_sum"], 0.45)
+            self.assertEqual(row["baseline_raw_row"]["phase2_negative_child_presence_balance_gap"], 0)
+            self.assertEqual(row["alternative_raw_row"]["phase2_negative_child_presence_balance_gap"], 0)
 
     def test_forced_pair_mismatch_is_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -272,6 +276,12 @@ def _candidate(task_i: int, task_j: int) -> dict[str, object]:
         "pool_max_child_width": 350,
         "pool_total_child_width": 650,
         "pool_balance_gap": 50,
+        "phase2_same_child_negative_severity": 0.35,
+        "phase2_separate_child_negative_severity": 0.1,
+        "phase2_negative_severity_sum": 0.45,
+        "phase2_negative_severity_gap": 0.25,
+        "phase2_negative_severity_balance_ratio": 0.285714286,
+        "phase2_negative_child_presence_balance_gap": 0,
     }
 
 

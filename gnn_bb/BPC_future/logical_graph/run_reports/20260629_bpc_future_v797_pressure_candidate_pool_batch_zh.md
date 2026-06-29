@@ -1,0 +1,39 @@
+# Journey Pressure Candidate Pool
+
+Date: 2026-06-29
+
+## Boundary
+
+This artifact is diagnostic only. It scans existing branch-candidate logs and writes a replay queue; it does not run BPC/pricing/RMP and does not create official lower bounds, certificates, pruning rules, or fathoming decisions.
+
+## Machine Fields
+
+```text
+output_dir = BPC_future/results/journey_pressure_candidate_pool_v797_20260629_batch
+candidate_pool_path = BPC_future/results/journey_pressure_candidate_pool_v797_20260629_batch/candidate_pool.jsonl
+replay_queue_path = BPC_future/results/journey_pressure_candidate_pool_v797_20260629_batch/replay_queue.jsonl
+source_event_count = 147
+candidate_row_count = 6
+queue_row_count = 0
+coverage_key_count = 73
+coverage_status_counts = {'delta_observed': 5, 'runbook_queued': 1}
+candidate_depth_counts = {'0': 3, '1': 2, '2': 1}
+queue_depth_counts = {}
+low_pressure_skip_count = 4811
+duplicate_candidate_count = 4
+skipped_missing_instance_event_count = 0
+depth_filter_skip_count = 43
+source_event_time_filter_skip_count = 0
+runs_bpc_or_pricing = false
+official_bound_effect = false
+certificate_effect = false
+```
+
+## Recommended Runbook Command
+
+```bash
+python BPC_future/scripts/build_journey_branch_candidate_replay_runbook.py BPC_future/results/20260629_v745_cut_snapshot_diagnostic_only_seed61311_240/logs BPC_future/results/20260629_v746_no_snapshot_current_seed61311_240/logs BPC_future/results/20260629_v747_v736_params_no_snapshot_seed61311_240/logs BPC_future/results/20260629_v748_v736_params_snapshot_diag_seed61311_240/logs BPC_future/results/20260629_v749_routeopt_v736_preset_seed61311_180/logs BPC_future/results/20260629_v750_routeopt_v736_preset_snapshot_diag_hard2_600/logs BPC_future/results/20260629_v753_route_region_audit_seed61635_180/logs BPC_future/results/20260629_v754_route_region_guided_src_seed61635_180/logs BPC_future/results/20260629_v755_cut_dual_diag_seed61635_180/logs BPC_future/results/20260629_v756_guided_src_max8_seed61635_180/logs BPC_future/results/20260629_v757_guided_src_multik_seed61635_180/logs BPC_future/results/20260629_v758_weighted_rank1_audit_seed61635_120/logs BPC_future/results/20260629_v758_weighted_rank1_audit_seed61635_45_direct/logs BPC_future/results/20260629_v759_weighted_rank1_nonuniform_audit_seed61635_45/logs BPC_future/results/20260629_v760_weighted_rank1_live_seed61635_45/logs BPC_future/results/20260629_v761_route_order_audit_seed61635_45/logs BPC_future/results/20260629_v763_routeopt_bkf_v762_seed61635_45/logs BPC_future/results/20260629_v764_routeopt_bkf_v762_seed61635_45/logs BPC_future/results/20260629_v765_route_resource_cut_audit_seed61635_45/logs BPC_future/results/20260629_v768_route_order_partition_audit_seed61635_45/logs BPC_future/results/20260629_v771_route_order_child_rmp_seed61635_45/logs BPC_future/results/20260629_v772_route_order_child_pricing_seed61635_45/logs BPC_future/results/20260629_v775_v773_aware_seed61635_45/logs BPC_future/results/20260629_v776_v773_phase2_seed61635_45/logs BPC_future/results/20260629_v777_v773_phase2_seed61635_45/logs BPC_future/results/20260629_v778_v773_phase2_seed61311_150/logs BPC_future/results/20260629_v780_v736_seed61311_150/logs BPC_future/results/20260629_v781_v750_equiv_seed61311_180/logs BPC_future/results/20260629_v782_v762_v750_equiv_seed61311_180/logs BPC_future/results/20260629_v785_v762_v750_equiv_seed61308_180/logs BPC_future/results/20260629_v786_v762_v750_equiv_seed61744_180/logs BPC_future/results/20260629_v787_v762_only_seed61744_180/logs --focus-candidate-input BPC_future/results/journey_pressure_candidate_pool_v797_20260629_batch/replay_queue.jsonl --candidate-source both --candidate-selection layered --paired-probe
+```
+
+## Top Queue Rows
+

@@ -14,7 +14,7 @@ import re
 import time
 from typing import Any, Iterable
 
-from BPC_future.core.branching import BranchConstraint
+from BPC_future.core.branching import BranchConstraint, journey_allowed_by_branch
 from BPC_future.core.cuts import (
     FutureCut,
     FleetLowerBoundCut,
@@ -339,6 +339,36 @@ def solve_bpc_future_journey(data: FutureData, config: dict[str, Any], *, logger
             node_id=0,
             depth=0,
             cg_iter=cg_iter,
+        )
+        _audit_journey_route_order_regions(
+            config,
+            logger,
+            solution,
+            node_id=0,
+            depth=0,
+            cg_iter=cg_iter,
+        )
+        _audit_journey_route_resource_cuts(
+            config,
+            logger,
+            solution,
+            node_id=0,
+            depth=0,
+            cg_iter=cg_iter,
+        )
+        _audit_journey_route_order_partitions(
+            data,
+            config,
+            logger,
+            solution,
+            journey_pool,
+            tuple(),
+            tuple(cuts),
+            active_fleet_limit,
+            node_id=0,
+            depth=0,
+            cg_iter=cg_iter,
+            remaining=max(0.0, float(time_limit) - float(time.perf_counter() - started)),
         )
         _audit_journey_weighted_rank1_cuts(
             data,
@@ -4667,6 +4697,36 @@ def _process_journey_branch_node(
             node_id=node.id,
             depth=node.depth,
             cg_iter=cg_iter,
+        )
+        _audit_journey_route_order_regions(
+            config,
+            logger,
+            solution,
+            node_id=node.id,
+            depth=node.depth,
+            cg_iter=cg_iter,
+        )
+        _audit_journey_route_resource_cuts(
+            config,
+            logger,
+            solution,
+            node_id=node.id,
+            depth=node.depth,
+            cg_iter=cg_iter,
+        )
+        _audit_journey_route_order_partitions(
+            data,
+            config,
+            logger,
+            solution,
+            journey_pool,
+            node.branch_constraints,
+            tuple(cuts),
+            active_fleet_limit,
+            node_id=node.id,
+            depth=node.depth,
+            cg_iter=cg_iter,
+            remaining=max(0.0, float(deadline) - float(time.perf_counter())),
         )
         _audit_journey_weighted_rank1_cuts(
             data,
@@ -9554,20 +9614,32 @@ def _trim_journey_branch_pricing_cache(
     resource_cache.clear()
 
 
+_JOURNEY_ROUTE_ORDER_BRANCH_KINDS = {
+    "same_route_order_before",
+    "same_route_order_after",
+    "same_route_order_before_strict",
+    "same_route_order_after_strict",
+    "not_same_route",
+}
+
+
+def _journey_same_route_order_partition_constraints(task_i: int, task_j: int) -> tuple[BranchConstraint, ...]:
+    i, j = tuple(sorted((int(task_i), int(task_j))))
+    return (
+        BranchConstraint("same_route_order_before_strict", i, j),
+        BranchConstraint("same_route_order_after_strict", i, j),
+        BranchConstraint("not_same_route", i, j),
+    )
+
+
+def _journey_same_route_order_relation(journey: Any, task_i: int, task_j: int) -> int:
+    from BPC_future.core.branching import journey_same_route_order_relation
+
+    return int(journey_same_route_order_relation(journey, int(task_i), int(task_j)))
+
+
 def _journey_allowed_by_branch(journey: Any, constraints: tuple[BranchConstraint, ...]) -> bool:
-    task_set = {int(task) for task in getattr(journey, "task_set", frozenset())}
-    for constraint in constraints:
-        if constraint.task_j is None:
-            return False
-        left = int(constraint.task_i) in task_set
-        right = int(constraint.task_j) in task_set
-        if constraint.kind == "same_vehicle" and left != right:
-            return False
-        if constraint.kind == "separate_vehicle" and left and right:
-            return False
-        if constraint.kind not in {"same_vehicle", "separate_vehicle"}:
-            return False
-    return True
+    return bool(journey_allowed_by_branch(journey, constraints))
 
 
 def _filter_journeys_by_branch(journeys: list[Any], constraints: tuple[BranchConstraint, ...]) -> list[Any]:
@@ -10730,7 +10802,7 @@ def _journey_branch_candidate_phased_testing_from_config(config: dict[str, Any])
     def preset_default(key: str, default: Any) -> Any:
         if key in config:
             return config[key]
-        if preset in {"routeopt_bkf_v736", "v736", "v736_gated_src"}:
+        if preset in {"routeopt_bkf_v736", "v736", "v736_gated_src", "routeopt_bkf_v762", "v762"}:
             routeopt_v736_defaults: dict[str, Any] = {
                 "journey_branch_candidate_phased_testing_base_priority": "fractionality",
                 "journey_branch_candidate_phased_testing_phase0_min_fractionality": 0.45,
@@ -10743,6 +10815,13 @@ def _journey_branch_candidate_phased_testing_from_config(config: dict[str, Any])
                 "journey_branch_candidate_phased_testing_dynamic_k_diverse_pool_enabled": True,
                 "journey_branch_candidate_phased_testing_dynamic_k_diverse_pool_extra_candidates": 2,
             }
+            if preset in {"routeopt_bkf_v762", "v762"}:
+                routeopt_v736_defaults.update(
+                    {
+                        "journey_branch_candidate_phased_testing_bkf_route_order_direction_conflict_penalty": 0.25,
+                        "journey_branch_candidate_phased_testing_bkf_route_order_adjacent_conflict_penalty": 0.50,
+                    }
+                )
             return routeopt_v736_defaults.get(key, default)
         return default
 
@@ -10886,6 +10965,15 @@ def _journey_branch_candidate_phased_testing_from_config(config: dict[str, Any])
         "bkf_phase2_worst_negative_penalty": float(
             config.get("journey_branch_candidate_phased_testing_bkf_phase2_worst_negative_penalty", 0.25)
         ),
+        "bkf_phase2_negative_severity_sum_penalty": float(
+            config.get("journey_branch_candidate_phased_testing_bkf_phase2_negative_severity_sum_penalty", 0.02)
+        ),
+        "bkf_phase2_negative_severity_gap_penalty": float(
+            config.get("journey_branch_candidate_phased_testing_bkf_phase2_negative_severity_gap_penalty", 0.05)
+        ),
+        "bkf_phase2_negative_child_balance_penalty": float(
+            config.get("journey_branch_candidate_phased_testing_bkf_phase2_negative_child_balance_penalty", 0.25)
+        ),
         "bkf_child_width_balance_penalty": float(
             config.get("journey_branch_candidate_phased_testing_bkf_child_width_balance_penalty", 0.0015)
         ),
@@ -10894,6 +10982,18 @@ def _journey_branch_candidate_phased_testing_from_config(config: dict[str, Any])
         ),
         "bkf_phase_wall_time_penalty": float(
             config.get("journey_branch_candidate_phased_testing_bkf_phase_wall_time_penalty", 0.01)
+        ),
+        "bkf_route_order_direction_conflict_penalty": float(
+            preset_default(
+                "journey_branch_candidate_phased_testing_bkf_route_order_direction_conflict_penalty",
+                0.0,
+            )
+        ),
+        "bkf_route_order_adjacent_conflict_penalty": float(
+            preset_default(
+                "journey_branch_candidate_phased_testing_bkf_route_order_adjacent_conflict_penalty",
+                0.0,
+            )
         ),
         "bkf_incomplete_probe_penalty": float(
             config.get("journey_branch_candidate_phased_testing_bkf_incomplete_probe_penalty", 100.0)
@@ -11140,6 +11240,9 @@ def _journey_branch_candidate_phased_testing_controller_summary(
             "phased_testing_phase2_generated_sequences_total": 0,
             "phased_testing_phase2_evaluated_timed_trips_total": 0,
             "phased_testing_phase2_worst_negative_severity_max": 0.0,
+            "phased_testing_phase2_negative_severity_sum_total": 0.0,
+            "phased_testing_phase2_negative_severity_gap_max": 0.0,
+            "phased_testing_phase2_negative_severity_balance_ratio_min": 0.0,
             "phased_testing_phase2_official_bound_effect_any": False,
             "phased_testing_phase2_certificate_effect_any": False,
             "phased_testing_official_bound_effect_any": False,
@@ -11213,6 +11316,23 @@ def _journey_branch_candidate_phased_testing_controller_summary(
         [float(probe.get("worst_negative_severity", 0.0) or 0.0) for probe in phase2_probes],
         default=0.0,
     )
+    phase2_negative_severity_sum_total = sum(
+        float(probe.get("negative_severity_sum", 0.0) or 0.0) for probe in phase2_probes
+    )
+    phase2_negative_severity_gap_max = max(
+        [float(probe.get("negative_severity_gap", 0.0) or 0.0) for probe in phase2_probes],
+        default=0.0,
+    )
+    phase2_negative_severity_balance_ratios = [
+        float(probe.get("negative_severity_balance_ratio", 0.0) or 0.0)
+        for probe in phase2_probes
+        if str(probe.get("reason", "")) != "dynamic_k_excluded"
+    ]
+    phase2_negative_severity_balance_ratio_min = (
+        min(phase2_negative_severity_balance_ratios)
+        if phase2_negative_severity_balance_ratios
+        else 0.0
+    )
     phase1_bound_effect = any(bool(probe.get("official_bound_effect", False)) for probe in phase1_probes)
     phase1_certificate_effect = any(bool(probe.get("certificate_effect", False)) for probe in phase1_probes)
     phase2_bound_effect = any(bool(probe.get("official_bound_effect", False)) for probe in phase2_probes)
@@ -11265,6 +11385,18 @@ def _journey_branch_candidate_phased_testing_controller_summary(
             sum(int(probe.get("evaluated_timed_trips", 0) or 0) for probe in phase2_probes)
         ),
         "phased_testing_phase2_worst_negative_severity_max": round(float(phase2_worst_negative), 9),
+        "phased_testing_phase2_negative_severity_sum_total": round(
+            float(phase2_negative_severity_sum_total),
+            9,
+        ),
+        "phased_testing_phase2_negative_severity_gap_max": round(
+            float(phase2_negative_severity_gap_max),
+            9,
+        ),
+        "phased_testing_phase2_negative_severity_balance_ratio_min": round(
+            float(phase2_negative_severity_balance_ratio_min),
+            9,
+        ),
         "phased_testing_phase2_official_bound_effect_any": bool(phase2_bound_effect),
         "phased_testing_phase2_certificate_effect_any": bool(phase2_certificate_effect),
         "phased_testing_official_bound_effect_any": bool(phase1_bound_effect or phase2_bound_effect),
@@ -11832,9 +11964,37 @@ def _journey_branch_candidate_phased_bkf_score(
     phase2_negative_child = max(0.0, float(phase2.get("negative_child_count", 0.0) or 0.0))
     phase2_negative_journey = max(0.0, float(phase2.get("negative_journey_count", 0.0) or 0.0))
     phase2_worst_negative = max(0.0, float(phase2.get("worst_negative_severity", 0.0) or 0.0))
+    phase2_negative_severity_sum = max(
+        0.0,
+        float(phase2.get("negative_severity_sum", phase2_worst_negative) or 0.0),
+    )
+    phase2_negative_severity_gap = max(
+        0.0,
+        float(phase2.get("negative_severity_gap", 0.0) or 0.0),
+    )
+    phase2_negative_child_balance_gap = max(
+        0.0,
+        float(phase2.get("negative_child_presence_balance_gap", 0.0) or 0.0),
+    )
     phase_wall = max(0.0, float(phase1.get("wall_time", 0.0) or 0.0)) + max(
         0.0,
         float(phase2.get("wall_time", 0.0) or 0.0),
+    )
+    route_order_direction_conflict = max(
+        0.0,
+        float(candidate.get("route_order_direction_conflict_mass", 0.0) or 0.0),
+    )
+    route_order_direction_balance = max(
+        0.0,
+        float(candidate.get("route_order_direction_balance_ratio", 0.0) or 0.0),
+    )
+    route_order_adjacent_conflict = max(
+        0.0,
+        float(candidate.get("route_order_adjacent_conflict_mass", 0.0) or 0.0),
+    )
+    route_order_adjacent_balance = max(
+        0.0,
+        float(candidate.get("route_order_adjacent_balance_ratio", 0.0) or 0.0),
     )
     incomplete_count = 0
     if phase1_present and not phase1_complete and not phase1_dynamic_excluded:
@@ -11860,9 +12020,19 @@ def _journey_branch_candidate_phased_bkf_score(
         - float(config.get("bkf_phase2_negative_child_penalty", 0.75)) * phase2_negative_child
         - float(config.get("bkf_phase2_negative_journey_penalty", 0.005)) * phase2_negative_journey
         - float(config.get("bkf_phase2_worst_negative_penalty", 0.25)) * phase2_worst_negative
+        - float(config.get("bkf_phase2_negative_severity_sum_penalty", 0.02))
+        * phase2_negative_severity_sum
+        - float(config.get("bkf_phase2_negative_severity_gap_penalty", 0.05))
+        * phase2_negative_severity_gap
+        - float(config.get("bkf_phase2_negative_child_balance_penalty", 0.25))
+        * phase2_negative_child_balance_gap
         - float(config.get("bkf_child_width_balance_penalty", 0.0015)) * width_balance
         - float(config.get("bkf_child_max_width_penalty", 0.0002)) * max_width
         - float(config.get("bkf_phase_wall_time_penalty", 0.01)) * phase_wall
+        - float(config.get("bkf_route_order_direction_conflict_penalty", 0.0))
+        * route_order_direction_conflict
+        - float(config.get("bkf_route_order_adjacent_conflict_penalty", 0.0))
+        * route_order_adjacent_conflict
         - float(config.get("bkf_incomplete_probe_penalty", 100.0)) * incomplete_count
         - float(config.get("bkf_dynamic_k_excluded_penalty", 30.0)) * dynamic_k_excluded_count
         - (1000.0 if exact_effect else 0.0)
@@ -11879,7 +12049,14 @@ def _journey_branch_candidate_phased_bkf_score(
         f"phase2_negative_child_count={phase2_negative_child:g};"
         f"phase2_negative_journey_count={phase2_negative_journey:g};"
         f"phase2_worst_negative_severity={phase2_worst_negative:g};"
+        f"phase2_negative_severity_sum={phase2_negative_severity_sum:g};"
+        f"phase2_negative_severity_gap={phase2_negative_severity_gap:g};"
+        f"phase2_negative_child_presence_balance_gap={phase2_negative_child_balance_gap:g};"
         f"child_width_balance={width_balance:g};child_max_width={max_width:g};"
+        f"route_order_direction_conflict_mass={route_order_direction_conflict:g};"
+        f"route_order_direction_balance_ratio={route_order_direction_balance:g};"
+        f"route_order_adjacent_conflict_mass={route_order_adjacent_conflict:g};"
+        f"route_order_adjacent_balance_ratio={route_order_adjacent_balance:g};"
         f"phase_wall={phase_wall:g};incomplete_probe_count={incomplete_count};"
         f"dynamic_k_excluded_count={dynamic_k_excluded_count};"
         f"exact_effect={exact_effect}"
@@ -12079,6 +12256,32 @@ def _journey_branch_candidate_phase2_heuristic_probe(
     ]
     best_rc = min(best_rcs) if best_rcs else None
     worst_negative_severity = max(0.0, -float(best_rc)) if best_rc is not None else 0.0
+    child_negative_severities = [
+        max(
+            0.0,
+            -float(item["best_reduced_cost"])
+            if item.get("best_reduced_cost") is not None
+            else 0.0,
+        )
+        for item in child_metrics
+    ]
+    negative_severity_sum = sum(child_negative_severities)
+    negative_severity_gap = (
+        abs(float(child_negative_severities[0]) - float(child_negative_severities[1]))
+        if len(child_negative_severities) >= 2
+        else 0.0
+    )
+    negative_severity_balance_ratio = (
+        _journey_pair_balance_ratio(child_negative_severities[0], child_negative_severities[1])
+        if len(child_negative_severities) >= 2
+        else 0.0
+    )
+    negative_presence = [1 if float(severity) > 0.0 else 0 for severity in child_negative_severities]
+    negative_child_presence_balance_gap = (
+        abs(int(negative_presence[0]) - int(negative_presence[1]))
+        if len(negative_presence) >= 2
+        else 0
+    )
     return {
         "enabled": True,
         "complete": bool(complete),
@@ -12091,6 +12294,10 @@ def _journey_branch_candidate_phase2_heuristic_probe(
         "separate_child_negative_journeys": int(child_metrics[1].get("negative_journeys", 0)),
         "same_child_best_reduced_cost": child_metrics[0].get("best_reduced_cost"),
         "separate_child_best_reduced_cost": child_metrics[1].get("best_reduced_cost"),
+        "same_child_negative_severity": float(child_negative_severities[0] if len(child_negative_severities) >= 1 else 0.0),
+        "separate_child_negative_severity": float(
+            child_negative_severities[1] if len(child_negative_severities) >= 2 else 0.0
+        ),
         "same_child_budget": float(child_metrics[0].get("budget", 0.0)),
         "separate_child_budget": float(child_metrics[1].get("budget", 0.0)),
         "same_child_wall_time": float(child_metrics[0].get("wall_time", 0.0)),
@@ -12102,6 +12309,10 @@ def _journey_branch_candidate_phase2_heuristic_probe(
         "child_status_mismatch": bool(child_status_mismatch),
         "best_reduced_cost": None if best_rc is None else float(best_rc),
         "worst_negative_severity": float(worst_negative_severity),
+        "negative_severity_sum": float(negative_severity_sum),
+        "negative_severity_gap": float(negative_severity_gap),
+        "negative_severity_balance_ratio": float(negative_severity_balance_ratio),
+        "negative_child_presence_balance_gap": int(negative_child_presence_balance_gap),
         "generated_sequences": int(sum(int(item.get("generated_sequences", 0)) for item in child_metrics)),
         "evaluated_timed_trips": int(sum(int(item.get("evaluated_timed_trips", 0)) for item in child_metrics)),
         "wall_time": round(float(time.perf_counter() - started), 9),
@@ -13013,6 +13224,12 @@ def _journey_branch_candidates(
                 incumbent_disagreement = max(0.0, 1.0 - float(same_mass))
             else:
                 incumbent_disagreement = max(0.0, float(same_mass))
+            route_order_metrics = _journey_route_order_pair_metrics(
+                journey_values,
+                int(i),
+                int(j),
+                mass_tol=max(1.0e-9, float(tol)),
+            )
             pool_same_allowed: int | None = None
             pool_separate_allowed: int | None = None
             pool_max_child_width: int | None = None
@@ -13046,6 +13263,7 @@ def _journey_branch_candidates(
                     "pool_max_child_width": pool_max_child_width,
                     "pool_total_child_width": pool_total_child_width,
                     "pool_balance_gap": pool_balance_gap,
+                    **route_order_metrics,
                 }
             )
     candidates.sort(
@@ -13339,6 +13557,17 @@ def _log_journey_branch_candidates(
         for candidate in candidates
     ]
     score_available_count = sum(1 for score in score_availability if score is not None)
+    route_order_direction_conflict_masses = [
+        max(0.0, float(candidate.get("route_order_direction_conflict_mass", 0.0) or 0.0))
+        for candidate in candidates
+    ]
+    route_order_adjacent_conflict_masses = [
+        max(0.0, float(candidate.get("route_order_adjacent_conflict_mass", 0.0) or 0.0))
+        for candidate in candidates
+    ]
+    route_order_candidate_conflict_tol = float(
+        config.get("journey_branch_candidate_route_order_conflict_mass_tol", 1.0e-9)
+    )
     selected_score, selected_score_source = (
         (None, None)
         if selected is None
@@ -13398,6 +13627,34 @@ def _log_journey_branch_candidates(
             "pool_max_child_width": candidate.get("pool_max_child_width"),
             "pool_total_child_width": candidate.get("pool_total_child_width"),
             "pool_balance_gap": candidate.get("pool_balance_gap"),
+            "route_order_same_route_mass": round(
+                float(candidate.get("route_order_same_route_mass", 0.0)),
+                9,
+            ),
+            "route_order_i_before_j_mass": round(
+                float(candidate.get("route_order_i_before_j_mass", 0.0)),
+                9,
+            ),
+            "route_order_j_before_i_mass": round(
+                float(candidate.get("route_order_j_before_i_mass", 0.0)),
+                9,
+            ),
+            "route_order_direction_conflict_mass": round(
+                float(candidate.get("route_order_direction_conflict_mass", 0.0)),
+                9,
+            ),
+            "route_order_direction_balance_ratio": round(
+                float(candidate.get("route_order_direction_balance_ratio", 0.0)),
+                9,
+            ),
+            "route_order_adjacent_conflict_mass": round(
+                float(candidate.get("route_order_adjacent_conflict_mass", 0.0)),
+                9,
+            ),
+            "route_order_adjacent_balance_ratio": round(
+                float(candidate.get("route_order_adjacent_balance_ratio", 0.0)),
+                9,
+            ),
             "branch_score": None if branch_score is None else round(float(branch_score), 9),
             "branch_score_source": branch_score_source,
         }
@@ -13615,6 +13872,14 @@ def _log_journey_branch_candidates(
                     "phase2_separate_child_best_reduced_cost": None
                     if phase2_probe.get("separate_child_best_reduced_cost") is None
                     else round(float(phase2_probe["separate_child_best_reduced_cost"]), 9),
+                    "phase2_same_child_negative_severity": round(
+                        float(phase2_probe.get("same_child_negative_severity", 0.0)),
+                        9,
+                    ),
+                    "phase2_separate_child_negative_severity": round(
+                        float(phase2_probe.get("separate_child_negative_severity", 0.0)),
+                        9,
+                    ),
                     "phase2_same_child_budget": round(float(phase2_probe.get("same_child_budget", 0.0)), 9),
                     "phase2_separate_child_budget": round(
                         float(phase2_probe.get("separate_child_budget", 0.0)),
@@ -13643,6 +13908,21 @@ def _log_journey_branch_candidates(
                     "phase2_worst_negative_severity": round(
                         float(phase2_probe.get("worst_negative_severity", 0.0)),
                         9,
+                    ),
+                    "phase2_negative_severity_sum": round(
+                        float(phase2_probe.get("negative_severity_sum", 0.0)),
+                        9,
+                    ),
+                    "phase2_negative_severity_gap": round(
+                        float(phase2_probe.get("negative_severity_gap", 0.0)),
+                        9,
+                    ),
+                    "phase2_negative_severity_balance_ratio": round(
+                        float(phase2_probe.get("negative_severity_balance_ratio", 0.0)),
+                        9,
+                    ),
+                    "phase2_negative_child_presence_balance_gap": int(
+                        phase2_probe.get("negative_child_presence_balance_gap", 0)
                     ),
                     "phase2_generated_sequences": int(phase2_probe.get("generated_sequences", 0)),
                     "phase2_evaluated_timed_trips": int(phase2_probe.get("evaluated_timed_trips", 0)),
@@ -13817,6 +14097,26 @@ def _log_journey_branch_candidates(
             float(branch_phased_testing.get("bkf_phase2_worst_negative_penalty", 0.0)),
             9,
         ),
+        phased_testing_bkf_phase2_negative_severity_sum_penalty=round(
+            float(branch_phased_testing.get("bkf_phase2_negative_severity_sum_penalty", 0.0)),
+            9,
+        ),
+        phased_testing_bkf_phase2_negative_severity_gap_penalty=round(
+            float(branch_phased_testing.get("bkf_phase2_negative_severity_gap_penalty", 0.0)),
+            9,
+        ),
+        phased_testing_bkf_phase2_negative_child_balance_penalty=round(
+            float(branch_phased_testing.get("bkf_phase2_negative_child_balance_penalty", 0.0)),
+            9,
+        ),
+        phased_testing_bkf_route_order_direction_conflict_penalty=round(
+            float(branch_phased_testing.get("bkf_route_order_direction_conflict_penalty", 0.0)),
+            9,
+        ),
+        phased_testing_bkf_route_order_adjacent_conflict_penalty=round(
+            float(branch_phased_testing.get("bkf_route_order_adjacent_conflict_penalty", 0.0)),
+            9,
+        ),
         phased_testing_preserve_score_gate_winner_enabled=bool(
             branch_phased_testing.get("preserve_score_gate_winner_enabled", False)
         ),
@@ -13860,6 +14160,25 @@ def _log_journey_branch_candidates(
         score_missing_count=max(0, len(candidates) - int(score_available_count)),
         score_map_context_allowed=bool(context_status.get("allowed", True)),
         score_map_context_reason=str(context_status.get("reason", "")),
+        route_order_candidate_direction_conflict_count=sum(
+            1
+            for mass in route_order_direction_conflict_masses
+            if float(mass) > float(route_order_candidate_conflict_tol)
+        ),
+        route_order_candidate_adjacent_conflict_count=sum(
+            1
+            for mass in route_order_adjacent_conflict_masses
+            if float(mass) > float(route_order_candidate_conflict_tol)
+        ),
+        route_order_candidate_max_direction_conflict_mass=round(
+            max(route_order_direction_conflict_masses, default=0.0),
+            9,
+        ),
+        route_order_candidate_max_adjacent_conflict_mass=round(
+            max(route_order_adjacent_conflict_masses, default=0.0),
+            9,
+        ),
+        route_order_candidate_conflict_mass_tol=round(float(route_order_candidate_conflict_tol), 12),
         eligible_count=len(_eligible_journey_branch_candidates(candidates, tie_tolerance=tie_tolerance)),
         effective_eligible_count=len(
             _eligible_journey_branch_candidates(candidates, tie_tolerance=effective_tie_tolerance)
@@ -14254,6 +14573,39 @@ def _journey_branch_selection_metadata(
         "candidate_count": len(candidates),
         **cut_context,
     }
+    if isinstance(selected, dict):
+        metadata.update(
+            {
+                "route_order_same_route_mass": round(
+                    float(selected.get("route_order_same_route_mass", 0.0)),
+                    9,
+                ),
+                "route_order_i_before_j_mass": round(
+                    float(selected.get("route_order_i_before_j_mass", 0.0)),
+                    9,
+                ),
+                "route_order_j_before_i_mass": round(
+                    float(selected.get("route_order_j_before_i_mass", 0.0)),
+                    9,
+                ),
+                "route_order_direction_conflict_mass": round(
+                    float(selected.get("route_order_direction_conflict_mass", 0.0)),
+                    9,
+                ),
+                "route_order_direction_balance_ratio": round(
+                    float(selected.get("route_order_direction_balance_ratio", 0.0)),
+                    9,
+                ),
+                "route_order_adjacent_conflict_mass": round(
+                    float(selected.get("route_order_adjacent_conflict_mass", 0.0)),
+                    9,
+                ),
+                "route_order_adjacent_balance_ratio": round(
+                    float(selected.get("route_order_adjacent_balance_ratio", 0.0)),
+                    9,
+                ),
+            }
+        )
     if isinstance(phase1_probe, dict):
         metadata.update(
             {
@@ -14400,6 +14752,14 @@ def _journey_branch_selection_metadata(
                 "phase2_separate_child_best_reduced_cost": None
                 if phase2_probe.get("separate_child_best_reduced_cost") is None
                 else round(float(phase2_probe["separate_child_best_reduced_cost"]), 9),
+                "phase2_same_child_negative_severity": round(
+                    float(phase2_probe.get("same_child_negative_severity", 0.0)),
+                    9,
+                ),
+                "phase2_separate_child_negative_severity": round(
+                    float(phase2_probe.get("separate_child_negative_severity", 0.0)),
+                    9,
+                ),
                 "phase2_same_child_budget": round(float(phase2_probe.get("same_child_budget", 0.0)), 9),
                 "phase2_separate_child_budget": round(
                     float(phase2_probe.get("separate_child_budget", 0.0)),
@@ -14428,6 +14788,21 @@ def _journey_branch_selection_metadata(
                 "phase2_worst_negative_severity": round(
                     float(phase2_probe.get("worst_negative_severity", 0.0)),
                     9,
+                ),
+                "phase2_negative_severity_sum": round(
+                    float(phase2_probe.get("negative_severity_sum", 0.0)),
+                    9,
+                ),
+                "phase2_negative_severity_gap": round(
+                    float(phase2_probe.get("negative_severity_gap", 0.0)),
+                    9,
+                ),
+                "phase2_negative_severity_balance_ratio": round(
+                    float(phase2_probe.get("negative_severity_balance_ratio", 0.0)),
+                    9,
+                ),
+                "phase2_negative_child_presence_balance_gap": int(
+                    phase2_probe.get("negative_child_presence_balance_gap", 0)
                 ),
                 "phase2_generated_sequences": int(phase2_probe.get("generated_sequences", 0)),
                 "phase2_evaluated_timed_trips": int(phase2_probe.get("evaluated_timed_trips", 0)),
@@ -22137,6 +22512,736 @@ def _journey_cut_payload_for_log(cut: FutureCut) -> dict[str, Any]:
     if kind == "fleet_upper_bound":
         return {"ub": int(getattr(cut, "ub", 0))}
     return {}
+
+
+def _journey_route_order_signature(journey: Any) -> tuple[tuple[int, ...], ...]:
+    trips = tuple(getattr(journey, "trips", tuple()) or tuple())
+    if trips:
+        signatures: list[tuple[int, ...]] = []
+        for trip in trips:
+            sequence = tuple(int(task) for task in getattr(trip, "tasks", tuple()) or tuple())
+            if sequence:
+                signatures.append(sequence)
+        if signatures:
+            return tuple(signatures)
+    raw_signature = tuple(getattr(journey, "signature", tuple()) or tuple())
+    signatures = []
+    for part in raw_signature:
+        if isinstance(part, (tuple, list)) and part:
+            sequence = part[0]
+            if isinstance(sequence, (tuple, list)):
+                seq_tuple = tuple(int(task) for task in sequence)
+                if seq_tuple:
+                    signatures.append(seq_tuple)
+    if signatures:
+        return tuple(signatures)
+    task_tuple = tuple(sorted(int(task) for task in getattr(journey, "task_set", frozenset())))
+    return (task_tuple,) if task_tuple else tuple()
+
+
+def _journey_route_arc_options(journey: Any) -> tuple[str, ...]:
+    trips = tuple(getattr(journey, "trips", tuple()) or tuple())
+    if trips:
+        options: list[str] = []
+        for trip in trips:
+            options.extend(str(option) for option in getattr(trip, "arc_option_ids", tuple()) or tuple())
+        return tuple(options)
+    raw_signature = tuple(getattr(journey, "signature", tuple()) or tuple())
+    options = []
+    for part in raw_signature:
+        if isinstance(part, (tuple, list)) and len(part) >= 2 and isinstance(part[1], (tuple, list)):
+            options.extend(str(option) for option in part[1])
+    return tuple(options)
+
+
+def _journey_route_order_pair_metrics(
+    journey_values: Iterable[tuple[Any, float]],
+    task_i: int,
+    task_j: int,
+    *,
+    mass_tol: float = 1.0e-9,
+) -> dict[str, float]:
+    """Return diagnostic route-order pressure for a candidate task pair.
+
+    These values describe the current active RMP support only.  They are not
+    bounds, certificates, or cut coefficients.
+    """
+
+    i = int(task_i)
+    j = int(task_j)
+    i_before_j = 0.0
+    j_before_i = 0.0
+    adjacent_i_before_j = 0.0
+    adjacent_j_before_i = 0.0
+    same_route_mass = 0.0
+    for journey, value_raw in journey_values:
+        value = float(value_raw)
+        if value <= float(mass_tol):
+            continue
+        route_signature = _journey_route_order_signature(journey)
+        for sequence in route_signature:
+            positions = {int(task): index for index, task in enumerate(sequence)}
+            if i not in positions or j not in positions:
+                continue
+            same_route_mass += value
+            left_pos = int(positions[i])
+            right_pos = int(positions[j])
+            if left_pos < right_pos:
+                i_before_j += value
+                if right_pos - left_pos == 1:
+                    adjacent_i_before_j += value
+            else:
+                j_before_i += value
+                if left_pos - right_pos == 1:
+                    adjacent_j_before_i += value
+            break
+    direction_conflict_mass = (
+        i_before_j + j_before_i
+        if i_before_j > float(mass_tol) and j_before_i > float(mass_tol)
+        else 0.0
+    )
+    adjacent_conflict_mass = (
+        adjacent_i_before_j + adjacent_j_before_i
+        if adjacent_i_before_j > float(mass_tol) and adjacent_j_before_i > float(mass_tol)
+        else 0.0
+    )
+    return {
+        "route_order_same_route_mass": float(same_route_mass),
+        "route_order_i_before_j_mass": float(i_before_j),
+        "route_order_j_before_i_mass": float(j_before_i),
+        "route_order_direction_conflict_mass": float(direction_conflict_mass),
+        "route_order_direction_balance_ratio": float(_journey_pair_balance_ratio(i_before_j, j_before_i)),
+        "route_order_adjacent_i_before_j_mass": float(adjacent_i_before_j),
+        "route_order_adjacent_j_before_i_mass": float(adjacent_j_before_i),
+        "route_order_adjacent_conflict_mass": float(adjacent_conflict_mass),
+        "route_order_adjacent_balance_ratio": float(
+            _journey_pair_balance_ratio(adjacent_i_before_j, adjacent_j_before_i)
+        ),
+    }
+
+
+def _audit_journey_route_order_regions(
+    config: dict[str, Any],
+    logger: FutureLogger,
+    solution: Any,
+    *,
+    node_id: int,
+    depth: int,
+    cg_iter: int,
+) -> None:
+    if not bool(config.get("journey_route_order_region_audit_enabled", False)):
+        return
+    if int(depth) > int(config.get("journey_route_order_region_audit_max_depth", 0)):
+        return
+    active = [
+        (journey, float(value))
+        for journey, value in getattr(solution, "journey_values", tuple())
+        if float(value) > 1.0e-9
+    ]
+    if not active:
+        return
+    top_n = max(0, int(config.get("journey_route_order_region_audit_top_n", 8)))
+    mass_tol = float(config.get("journey_route_order_region_audit_mass_tol", 1.0e-9))
+    route_signature_mass: Counter[tuple[tuple[int, ...], ...]] = Counter()
+    task_set_route_mass: dict[tuple[int, ...], Counter[tuple[tuple[int, ...], ...]]] = defaultdict(Counter)
+    transition_mass: Counter[tuple[int, int]] = Counter()
+    unordered_direction_mass: dict[tuple[int, int], Counter[str]] = defaultdict(Counter)
+    arc_option_mass: Counter[str] = Counter()
+    sortie_count_mass: Counter[int] = Counter()
+    route_ordered_task_count_mass: Counter[int] = Counter()
+    for journey, value in active:
+        route_signature = _journey_route_order_signature(journey)
+        task_tuple = tuple(sorted(int(task) for task in getattr(journey, "task_set", frozenset())))
+        route_signature_mass[route_signature] += float(value)
+        task_set_route_mass[task_tuple][route_signature] += float(value)
+        sortie_count_mass[len(route_signature)] += float(value)
+        route_ordered_task_count_mass[sum(len(sequence) for sequence in route_signature)] += float(value)
+        for sequence in route_signature:
+            for left, right in zip(sequence, sequence[1:]):
+                left_i = int(left)
+                right_i = int(right)
+                transition_mass[(left_i, right_i)] += float(value)
+                pair = (min(left_i, right_i), max(left_i, right_i))
+                direction = "ascending" if left_i <= right_i else "descending"
+                unordered_direction_mass[pair][direction] += float(value)
+        for option in _journey_route_arc_options(journey):
+            arc_option_mass[str(option)] += float(value)
+    conflict_rows: list[dict[str, Any]] = []
+    for pair, direction_counter in unordered_direction_mass.items():
+        ascending = float(direction_counter.get("ascending", 0.0))
+        descending = float(direction_counter.get("descending", 0.0))
+        if ascending <= mass_tol or descending <= mass_tol:
+            continue
+        total = ascending + descending
+        balance = min(ascending, descending) / max(ascending, descending)
+        conflict_rows.append(
+            {
+                "tasks": [int(pair[0]), int(pair[1])],
+                "ascending_mass": round(float(ascending), 9),
+                "descending_mass": round(float(descending), 9),
+                "total_mass": round(float(total), 9),
+                "balance_ratio": round(float(balance), 9),
+            }
+        )
+    conflict_rows.sort(key=lambda row: (-float(row["total_mass"]), -float(row["balance_ratio"]), row["tasks"]))
+    multi_route_task_sets = [
+        {
+            "tasks": list(task_tuple),
+            "route_signature_count": int(len(counter)),
+            "mass": round(float(sum(counter.values())), 9),
+            "top_route_signatures": [
+                {"route": [list(sequence) for sequence in route], "mass": round(float(mass), 9)}
+                for route, mass in sorted(counter.items(), key=lambda item: (-float(item[1]), item[0]))[: min(top_n, 3)]
+            ],
+        }
+        for task_tuple, counter in task_set_route_mass.items()
+        if len(counter) > 1
+    ]
+    multi_route_task_sets.sort(key=lambda row: (-float(row["mass"]), -int(row["route_signature_count"]), row["tasks"]))
+    logger.log(
+        "journey_route_order_region_audit",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        audit_only=True,
+        production_ready=False,
+        official_bound_effect=False,
+        certificate_effect=False,
+        active_journey_count=int(len(active)),
+        active_task_set_count=int(len(task_set_route_mass)),
+        active_route_signature_count=int(len(route_signature_mass)),
+        multi_route_task_set_count=int(len(multi_route_task_sets)),
+        route_order_conflict_count=int(len(conflict_rows)),
+        route_order_conflict_mass=round(float(sum(float(row["total_mass"]) for row in conflict_rows)), 9),
+        sortie_count_hist=[
+            {"sorties": int(count), "mass": round(float(mass), 9)}
+            for count, mass in sorted(sortie_count_mass.items(), key=lambda item: (int(item[0]), -float(item[1])))
+        ],
+        route_ordered_task_count_hist=[
+            {"tasks": int(count), "mass": round(float(mass), 9)}
+            for count, mass in sorted(route_ordered_task_count_mass.items(), key=lambda item: (int(item[0]), -float(item[1])))
+        ],
+        top_transitions=[
+            {"from": int(pair[0]), "to": int(pair[1]), "mass": round(float(mass), 9)}
+            for pair, mass in sorted(transition_mass.items(), key=lambda item: (-float(item[1]), item[0]))[:top_n]
+        ],
+        top_arc_options=[
+            {"arc_option": str(option), "mass": round(float(mass), 9)}
+            for option, mass in sorted(arc_option_mass.items(), key=lambda item: (-float(item[1]), item[0]))[:top_n]
+        ],
+        top_route_signatures=[
+            {"route": [list(sequence) for sequence in route], "mass": round(float(mass), 9)}
+            for route, mass in sorted(route_signature_mass.items(), key=lambda item: (-float(item[1]), item[0]))[:top_n]
+        ],
+        top_order_conflicts=conflict_rows[:top_n],
+        top_multi_route_task_sets=multi_route_task_sets[:top_n],
+    )
+
+
+def _audit_journey_route_resource_cuts(
+    config: dict[str, Any],
+    logger: FutureLogger,
+    solution: Any,
+    *,
+    node_id: int,
+    depth: int,
+    cg_iter: int,
+) -> None:
+    """Audit route/resource row opportunities without adding cuts.
+
+    Route/order rows are not automatically globally valid.  This event is
+    deliberately conservative: it records candidate row shapes and exactness
+    gates, but always reports no official-bound/certificate effect.
+    """
+
+    if not bool(config.get("journey_route_resource_cut_audit_enabled", False)):
+        return
+    if int(depth) > int(config.get("journey_route_resource_cut_audit_max_depth", 0)):
+        return
+    active = [
+        (journey, float(value))
+        for journey, value in getattr(solution, "journey_values", tuple())
+        if float(value) > 1.0e-9
+    ]
+    if not active:
+        return
+    top_n = max(0, int(config.get("journey_route_resource_cut_audit_top_n", 8)))
+    mass_tol = float(config.get("journey_route_resource_cut_audit_mass_tol", 1.0e-9))
+    min_conflict_mass = float(config.get("journey_route_resource_cut_audit_min_conflict_mass", mass_tol))
+
+    unordered_direction_mass: dict[tuple[int, int], Counter[str]] = defaultdict(Counter)
+    adjacent_direction_mass: dict[tuple[int, int], Counter[str]] = defaultdict(Counter)
+    task_set_route_mass: dict[tuple[int, ...], Counter[tuple[tuple[int, ...], ...]]] = defaultdict(Counter)
+    arc_option_mass: Counter[str] = Counter()
+    for journey, value in active:
+        route_signature = _journey_route_order_signature(journey)
+        task_tuple = tuple(sorted(int(task) for task in getattr(journey, "task_set", frozenset())))
+        task_set_route_mass[task_tuple][route_signature] += float(value)
+        for sequence in route_signature:
+            for left_index, left in enumerate(sequence):
+                for right in sequence[left_index + 1 :]:
+                    left_i = int(left)
+                    right_i = int(right)
+                    pair = (min(left_i, right_i), max(left_i, right_i))
+                    direction = "ascending" if left_i <= right_i else "descending"
+                    unordered_direction_mass[pair][direction] += float(value)
+            for left, right in zip(sequence, sequence[1:]):
+                left_i = int(left)
+                right_i = int(right)
+                pair = (min(left_i, right_i), max(left_i, right_i))
+                direction = "ascending" if left_i <= right_i else "descending"
+                adjacent_direction_mass[pair][direction] += float(value)
+        for option in _journey_route_arc_options(journey):
+            arc_option_mass[str(option)] += float(value)
+
+    def conflict_rows(
+        masses: dict[tuple[int, int], Counter[str]],
+        *,
+        row_type: str,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for pair, counter in masses.items():
+            ascending = float(counter.get("ascending", 0.0))
+            descending = float(counter.get("descending", 0.0))
+            if ascending <= mass_tol or descending <= mass_tol:
+                continue
+            total = ascending + descending
+            if total < min_conflict_mass:
+                continue
+            rows.append(
+                {
+                    "row_type": row_type,
+                    "tasks": [int(pair[0]), int(pair[1])],
+                    "ascending_mass": round(float(ascending), 9),
+                    "descending_mass": round(float(descending), 9),
+                    "total_mass": round(float(total), 9),
+                    "balance_ratio": round(float(_journey_pair_balance_ratio(ascending, descending)), 9),
+                    "candidate_coefficient": "route_order_direction_indicator",
+                    "global_valid_candidate": False,
+                    "requires_branch_state": True,
+                    "pricing_supported": False,
+                    "reason": "direction_disjunction_not_global_cut",
+                    "recommended_next": "branch_state_scoped_order_branch_or_route_resource_formulation",
+                }
+            )
+        rows.sort(key=lambda row: (-float(row["total_mass"]), -float(row["balance_ratio"]), row["tasks"]))
+        return rows
+
+    order_rows = conflict_rows(unordered_direction_mass, row_type="order_direction_disjunction")
+    adjacent_rows = conflict_rows(adjacent_direction_mass, row_type="adjacent_direction_disjunction")
+    multi_route_rows = [
+        {
+            "row_type": "same_task_set_multi_route_region",
+            "tasks": list(task_tuple),
+            "route_signature_count": int(len(counter)),
+            "mass": round(float(sum(counter.values())), 9),
+            "candidate_coefficient": "route_signature_indicator",
+            "global_valid_candidate": False,
+            "requires_branch_state": True,
+            "pricing_supported": False,
+            "reason": "same_task_set_route_variants_need_dominance_or_state_scoped_formulation",
+            "recommended_next": "route_signature_dominance_audit_or_state_scoped_resource_row",
+        }
+        for task_tuple, counter in task_set_route_mass.items()
+        if len(counter) > 1
+    ]
+    multi_route_rows.sort(key=lambda row: (-float(row["mass"]), -int(row["route_signature_count"]), row["tasks"]))
+    logger.log(
+        "journey_route_resource_cut_audit",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        audit_only=True,
+        add_enabled=False,
+        production_ready=False,
+        official_bound_effect=False,
+        certificate_effect=False,
+        exact_pricing_supported=False,
+        completion_bound_fail_closed=True,
+        active_journey_count=int(len(active)),
+        order_direction_candidate_count=int(len(order_rows)),
+        adjacent_direction_candidate_count=int(len(adjacent_rows)),
+        same_task_set_multi_route_candidate_count=int(len(multi_route_rows)),
+        route_resource_global_valid_candidate_count=0,
+        route_resource_pricing_supported_candidate_count=0,
+        top_order_direction_rows=order_rows[:top_n],
+        top_adjacent_direction_rows=adjacent_rows[:top_n],
+        top_same_task_set_multi_route_rows=multi_route_rows[:top_n],
+        top_arc_options=[
+            {"arc_option": str(option), "mass": round(float(mass), 9)}
+            for option, mass in sorted(arc_option_mass.items(), key=lambda item: (-float(item[1]), item[0]))[:top_n]
+        ],
+    )
+
+
+def _journey_route_order_partition_child_pricing_config(
+    config: dict[str, Any],
+    *,
+    remaining: float | None,
+) -> JourneyPricingConfig | None:
+    budget = max(
+        0.0,
+        float(config.get("journey_route_order_partition_audit_child_pricing_time_limit", 0.0)),
+    )
+    if budget <= 0.0:
+        return None
+    if remaining is not None:
+        budget = min(float(budget), max(0.0, float(remaining)))
+    if budget <= 1.0e-9:
+        return None
+    bucket = float(config.get("time_bucket_size", 10.0))
+    start_step = float(config.get("start_time_step", bucket))
+    return JourneyPricingConfig(
+        time_bucket_size=bucket,
+        start_time_step=start_step,
+        max_tasks_per_trip=int(config.get("max_tasks_per_trip", 6)),
+        max_sequences=int(
+            config.get(
+                "journey_route_order_partition_audit_child_pricing_max_sequences",
+                config.get("journey_heuristic_max_sequences", config.get("exact_max_sequences", 0)),
+            )
+        ),
+        max_timed_evaluations=int(
+            config.get(
+                "journey_route_order_partition_audit_child_pricing_max_timed_evaluations",
+                config.get("journey_heuristic_max_timed_evaluations", config.get("exact_max_timed_evaluations", 0)),
+            )
+        ),
+        time_limit=budget,
+        absolute_deadline=time.perf_counter() + budget,
+        profile_pricing_enabled=True,
+        profile_labeling_enabled=True,
+        direct_journey_label_pricing_enabled=False,
+        direct_journey_label_completion_bound_enabled=False,
+        sharded_final_judge_enabled=False,
+        final_judge_engine="",
+        max_candidate_trips=int(
+            config.get(
+                "journey_route_order_partition_audit_child_pricing_max_candidate_trips",
+                config.get("journey_heuristic_max_candidate_trips", config.get("journey_pricing_max_candidate_trips", 3000)),
+            )
+        ),
+        max_dp_states=int(
+            config.get(
+                "journey_route_order_partition_audit_child_pricing_max_dp_states",
+                config.get("journey_heuristic_max_dp_states", config.get("journey_pricing_max_dp_states", 50000)),
+            )
+        ),
+        max_returned_journeys=max(
+            1,
+            int(config.get("journey_route_order_partition_audit_child_pricing_max_returned_journeys", 3)),
+        ),
+        early_return_negative=True,
+        early_return_negative_min_count=max(
+            1,
+            int(config.get("journey_route_order_partition_audit_child_pricing_early_return_min_count", 1)),
+        ),
+        duplicate_scan_limit=int(config.get("journey_route_order_partition_audit_child_pricing_duplicate_scan_limit", 10000)),
+    )
+
+
+def _audit_journey_route_order_partitions(
+    data: FutureData,
+    config: dict[str, Any],
+    logger: FutureLogger,
+    solution: Any,
+    journey_pool: JourneyPool,
+    branch_constraints: tuple[BranchConstraint, ...],
+    cuts: tuple[FutureCut, ...],
+    active_fleet_limit: int,
+    *,
+    node_id: int,
+    depth: int,
+    cg_iter: int,
+    remaining: float | None = None,
+) -> None:
+    if not bool(config.get("journey_route_order_partition_audit_enabled", False)):
+        return
+    if int(depth) > int(config.get("journey_route_order_partition_audit_max_depth", 0)):
+        return
+    active = [
+        (journey, float(value))
+        for journey, value in getattr(solution, "journey_values", tuple())
+        if float(value) > 1.0e-9
+    ]
+    if not active:
+        return
+    top_n = max(0, int(config.get("journey_route_order_partition_audit_top_n", 8)))
+    mass_tol = float(config.get("journey_route_order_partition_audit_mass_tol", 1.0e-9))
+    min_conflict_mass = float(config.get("journey_route_order_partition_audit_min_conflict_mass", mass_tol))
+    child_rmp_enabled = bool(config.get("journey_route_order_partition_audit_child_rmp_enabled", False))
+    child_rmp_top_n = max(0, int(config.get("journey_route_order_partition_audit_child_rmp_top_n", 3)))
+    child_rmp_min_mass = float(config.get("journey_route_order_partition_audit_child_rmp_min_mass", min_conflict_mass))
+    child_pricing_enabled = bool(config.get("journey_route_order_partition_audit_child_pricing_enabled", False))
+    child_pricing_top_n = max(0, int(config.get("journey_route_order_partition_audit_child_pricing_top_n", child_rmp_top_n)))
+    child_pricing_min_mass = float(
+        config.get("journey_route_order_partition_audit_child_pricing_min_mass", child_rmp_min_mass)
+    )
+    parent_objective = None if getattr(solution, "objective", None) is None else float(solution.objective)
+    unordered_direction_mass: dict[tuple[int, int], Counter[str]] = defaultdict(Counter)
+    for journey, value in active:
+        for sequence in _journey_route_order_signature(journey):
+            for left_index, left in enumerate(sequence):
+                for right in sequence[left_index + 1 :]:
+                    left_i = int(left)
+                    right_i = int(right)
+                    pair = (min(left_i, right_i), max(left_i, right_i))
+                    direction = "ascending" if left_i <= right_i else "descending"
+                    unordered_direction_mass[pair][direction] += float(value)
+
+    conflict_pairs: list[dict[str, Any]] = []
+    for pair, counter in unordered_direction_mass.items():
+        ascending = float(counter.get("ascending", 0.0))
+        descending = float(counter.get("descending", 0.0))
+        if ascending <= mass_tol or descending <= mass_tol:
+            continue
+        total = ascending + descending
+        if total < min_conflict_mass:
+            continue
+        conflict_pairs.append(
+            {
+                "pair": (int(pair[0]), int(pair[1])),
+                "ascending_mass": float(ascending),
+                "descending_mass": float(descending),
+                "total_mass": float(total),
+                "balance_ratio": float(_journey_pair_balance_ratio(ascending, descending)),
+            }
+        )
+    conflict_pairs.sort(key=lambda row: (-float(row["total_mass"]), -float(row["balance_ratio"]), row["pair"]))
+    parent_journeys = _filter_journeys_by_branch(journey_pool.journeys, branch_constraints)
+    rows: list[dict[str, Any]] = []
+    for row_index, row in enumerate(conflict_pairs[:top_n]):
+        pair = tuple(int(task) for task in row["pair"])
+        child_constraints = _journey_same_route_order_partition_constraints(pair[0], pair[1])
+        child_widths = {}
+        child_relevant_widths = {}
+        child_rmp_rows: list[dict[str, Any]] = []
+        child_pricing_rows: list[dict[str, Any]] = []
+        for child in child_constraints:
+            combined = (*branch_constraints, child)
+            allowed = [
+                journey
+                for journey in parent_journeys
+                if _journey_allowed_by_branch(journey, combined)
+            ]
+            child_widths[child.kind] = int(len(allowed))
+            child_relevant_widths[child.kind] = int(
+                sum(1 for journey in allowed if {pair[0], pair[1]}.intersection(getattr(journey, "task_set", frozenset())))
+            )
+            run_child_rmp = bool(child_rmp_enabled) and int(row_index) < int(child_rmp_top_n) and float(
+                row["total_mass"]
+            ) >= float(child_rmp_min_mass)
+            run_child_pricing = bool(child_pricing_enabled) and int(row_index) < int(child_pricing_top_n) and float(
+                row["total_mass"]
+            ) >= float(child_pricing_min_mass)
+            child_solution = None
+            if run_child_rmp or run_child_pricing:
+                started = time.perf_counter()
+                if allowed:
+                    child_solution = solve_journey_rmp(
+                        data,
+                        allowed,
+                        cuts=tuple(cuts),
+                        fleet_limit=int(active_fleet_limit),
+                    )
+                    objective = None if child_solution.objective is None else float(child_solution.objective)
+                    if run_child_rmp:
+                        child_rmp_rows.append(
+                            {
+                                "kind": str(child.kind),
+                                "status": str(child_solution.status),
+                                "optimal": bool(child_solution.optimal),
+                                "objective": None if objective is None else round(float(objective), 9),
+                                "objective_gain": (
+                                    None
+                                    if objective is None or parent_objective is None
+                                    else round(float(objective) - float(parent_objective), 9)
+                                ),
+                                "variables": int(child_solution.variable_count),
+                                "allowed_count": int(len(allowed)),
+                                "wall_time": round(float(time.perf_counter() - started), 9),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                            }
+                        )
+                else:
+                    if run_child_rmp:
+                        child_rmp_rows.append(
+                            {
+                                "kind": str(child.kind),
+                                "status": "EMPTY",
+                                "optimal": False,
+                                "objective": None,
+                                "objective_gain": None,
+                                "variables": 0,
+                                "allowed_count": 0,
+                                "wall_time": round(float(time.perf_counter() - started), 9),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                            }
+                        )
+                if run_child_pricing:
+                    pricing_started = time.perf_counter()
+                    pricing_config = _journey_route_order_partition_child_pricing_config(
+                        config,
+                        remaining=remaining,
+                    )
+                    if not allowed:
+                        child_pricing_rows.append(
+                            {
+                                "kind": str(child.kind),
+                                "status": "EMPTY",
+                                "reason": "empty_child_pool",
+                                "best_reduced_cost": None,
+                                "negative_journey_count": 0,
+                                "generated_sequences": 0,
+                                "evaluated_timed_trips": 0,
+                                "branch_infeasible_journeys_filtered": 0,
+                                "wall_time": round(float(time.perf_counter() - pricing_started), 9),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                            }
+                        )
+                    elif pricing_config is None:
+                        child_pricing_rows.append(
+                            {
+                                "kind": str(child.kind),
+                                "status": "SKIPPED",
+                                "reason": "no_child_pricing_budget",
+                                "best_reduced_cost": None,
+                                "negative_journey_count": 0,
+                                "generated_sequences": 0,
+                                "evaluated_timed_trips": 0,
+                                "branch_infeasible_journeys_filtered": 0,
+                                "wall_time": round(float(time.perf_counter() - pricing_started), 9),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                            }
+                        )
+                    elif child_solution is None or not bool(child_solution.optimal) or getattr(child_solution, "duals", None) is None:
+                        child_pricing_rows.append(
+                            {
+                                "kind": str(child.kind),
+                                "status": "SKIPPED",
+                                "reason": "child_rmp_duals_unavailable",
+                                "best_reduced_cost": None,
+                                "negative_journey_count": 0,
+                                "generated_sequences": 0,
+                                "evaluated_timed_trips": 0,
+                                "branch_infeasible_journeys_filtered": 0,
+                                "wall_time": round(float(time.perf_counter() - pricing_started), 9),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                            }
+                        )
+                    else:
+                        pricing = price_journeys(
+                            data,
+                            child_solution.duals,
+                            combined,
+                            config=pricing_config,
+                            cuts=tuple(cuts),
+                            forbidden_journey_signatures=_journey_forbidden_signatures_for_node(
+                                journey_pool,
+                                combined,
+                            ),
+                            dominant_task_set_costs={},
+                        )
+                        child_pricing_rows.append(
+                            {
+                                "kind": str(child.kind),
+                                "status": str(pricing.status),
+                                "reason": str(getattr(pricing, "reason", "")),
+                                "pricing_state": _journey_pricing_state(pricing),
+                                "pricing_proof_kind": str(getattr(pricing, "pricing_proof_kind", "") or ""),
+                                "best_reduced_cost": None
+                                if pricing.best_reduced_cost is None
+                                else round(float(pricing.best_reduced_cost), 9),
+                                "negative_journey_count": int(len(getattr(pricing, "journeys", []) or [])),
+                                "generated_sequences": int(getattr(pricing, "generated_sequences", 0)),
+                                "evaluated_timed_trips": int(getattr(pricing, "evaluated_timed_trips", 0)),
+                                "branch_infeasible_journeys_filtered": int(
+                                    getattr(pricing, "branch_infeasible_journeys_filtered", 0)
+                                ),
+                                "wall_time": round(float(time.perf_counter() - pricing_started), 9),
+                                "official_bound_effect": False,
+                                "certificate_effect": False,
+                            }
+                        )
+
+        branch_relevant_count = 0
+        branch_relevant_violation_count = 0
+        neutral_count = 0
+        neutral_violation_count = 0
+        for journey in parent_journeys:
+            task_set = {int(task) for task in getattr(journey, "task_set", frozenset())}
+            memberships = [
+                child.kind
+                for child in child_constraints
+                if _journey_allowed_by_branch(journey, (*branch_constraints, child))
+            ]
+            if {pair[0], pair[1]}.intersection(task_set):
+                branch_relevant_count += 1
+                if len(memberships) != 1:
+                    branch_relevant_violation_count += 1
+            else:
+                neutral_count += 1
+                if len(memberships) != len(child_constraints):
+                    neutral_violation_count += 1
+        rows.append(
+            {
+                "tasks": [int(pair[0]), int(pair[1])],
+                "ascending_mass": round(float(row["ascending_mass"]), 9),
+                "descending_mass": round(float(row["descending_mass"]), 9),
+                "total_mass": round(float(row["total_mass"]), 9),
+                "balance_ratio": round(float(row["balance_ratio"]), 9),
+                "parent_allowed_count": int(len(parent_journeys)),
+                "branch_relevant_column_count": int(branch_relevant_count),
+                "neutral_column_count": int(neutral_count),
+                "child_widths": child_widths,
+                "child_branch_relevant_widths": child_relevant_widths,
+                "child_rmp_probe_enabled": bool(child_rmp_enabled),
+                "child_rmp_probe_rows": child_rmp_rows,
+                "child_pricing_probe_enabled": bool(child_pricing_enabled),
+                "child_pricing_probe_rows": child_pricing_rows,
+                "branch_relevant_partition_violation_count": int(branch_relevant_violation_count),
+                "neutral_shared_violation_count": int(neutral_violation_count),
+                "branch_relevant_partition_complete": bool(branch_relevant_violation_count == 0),
+                "neutral_columns_shared": bool(neutral_violation_count == 0),
+                "exact_safe_partition_contract_holds": bool(
+                    branch_relevant_violation_count == 0 and neutral_violation_count == 0
+                ),
+            }
+        )
+    if not rows:
+        return
+    logger.log(
+        "journey_route_order_partition_audit",
+        node_id=int(node_id),
+        depth=int(depth),
+        cg_iter=int(cg_iter),
+        audit_only=True,
+        production_ready=False,
+        live_branch_enabled=False,
+        official_bound_effect=False,
+        certificate_effect=False,
+        exact_pricing_supported=False,
+        completion_bound_fail_closed=True,
+        child_rmp_probe_enabled=bool(child_rmp_enabled),
+        child_rmp_probe_top_n=int(child_rmp_top_n),
+        child_rmp_probe_min_mass=round(float(child_rmp_min_mass), 9),
+        child_pricing_probe_enabled=bool(child_pricing_enabled),
+        child_pricing_probe_top_n=int(child_pricing_top_n),
+        child_pricing_probe_min_mass=round(float(child_pricing_min_mass), 9),
+        child_pricing_probe_time_limit=round(
+            float(config.get("journey_route_order_partition_audit_child_pricing_time_limit", 0.0)),
+            9,
+        ),
+        branch_constraints=[constraint.name() for constraint in branch_constraints],
+        parent_allowed_count=int(len(parent_journeys)),
+        conflict_pair_count=int(len(conflict_pairs)),
+        top_partition_rows=rows,
+    )
 
 
 def _log_journey_cut_dual_diagnostics(
@@ -31317,7 +32422,7 @@ def _journey_task_set_dominance_safe(
     cuts: list[FutureCut] | tuple[FutureCut, ...],
     branch_constraints: tuple[BranchConstraint, ...],
 ) -> bool:
-    safe_cut_kinds = {"subset_row", "fleet_lower_bound", "fleet_upper_bound"}
+    safe_cut_kinds = {"subset_row", "weighted_subset_row", "fleet_lower_bound", "fleet_upper_bound"}
     for cut in cuts:
         if getattr(cut, "kind", "") not in safe_cut_kinds:
             return False

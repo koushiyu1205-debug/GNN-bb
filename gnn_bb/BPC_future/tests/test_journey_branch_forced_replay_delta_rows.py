@@ -64,6 +64,16 @@ class JourneyBranchForcedReplayDeltaRowsTest(unittest.TestCase):
             by_experiment = {row["experiment"]: row for row in rows}
             self.assertTrue(by_experiment["pos"]["timeout_resolved"])
             self.assertEqual(by_experiment["pos"]["deltas"]["wall_time_gain"], 259.0)
+            self.assertIn("baseline_raw_row", by_experiment["pos"])
+            self.assertIn("alternative_raw_row", by_experiment["pos"])
+            self.assertEqual(
+                by_experiment["pos"]["baseline_raw_row"]["phase2_same_child_negative_severity"],
+                0.35,
+            )
+            self.assertEqual(
+                by_experiment["pos"]["alternative_raw_row"]["phase2_negative_severity_sum"],
+                0.45,
+            )
             self.assertEqual(
                 by_experiment["neg"]["counterfactual_label_type"],
                 "changed_timeout_no_effect_hard_negative",
@@ -120,6 +130,7 @@ def _entry(
         "source_depth": 0,
         "source_node_id": 0,
         "source_selected_pair": source_selected_pair,
+        "source_selected": _candidate(*source_selected_pair),
         "command": [
             "python",
             "BPC_future/scripts/run_bpc_future_external_timeout_batch.py",
@@ -205,6 +216,12 @@ def _candidate(task_i: int, task_j: int) -> dict[str, object]:
         "pool_max_child_width": 350,
         "pool_total_child_width": 650,
         "pool_balance_gap": 50,
+        "phase2_same_child_negative_severity": 0.35,
+        "phase2_separate_child_negative_severity": 0.1,
+        "phase2_negative_severity_sum": 0.45,
+        "phase2_negative_severity_gap": 0.25,
+        "phase2_negative_severity_balance_ratio": 0.285714286,
+        "phase2_negative_child_presence_balance_gap": 0,
     }
 
 

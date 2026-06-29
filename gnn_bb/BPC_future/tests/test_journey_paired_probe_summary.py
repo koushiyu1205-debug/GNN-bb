@@ -84,6 +84,12 @@ class JourneyPairedProbeSummaryTests(unittest.TestCase):
             self.assertAlmostEqual(by_experiment["fast_alt"]["phase1_min_child_lp_gain"], 2.0)
             self.assertAlmostEqual(by_experiment["fast_alt"]["phase1_child_lp_gain_product"], 8.0)
             self.assertAlmostEqual(by_experiment["fast_alt"]["phase2_negative_child_count"], 0.0)
+            self.assertAlmostEqual(by_experiment["fast_alt"]["phase2_negative_severity_sum"], 0.25)
+            self.assertAlmostEqual(by_experiment["fast_alt"]["phase2_negative_severity_gap"], 0.25)
+            self.assertAlmostEqual(
+                by_experiment["fast_alt"]["phase2_negative_child_presence_balance_gap"],
+                1.0,
+            )
             self.assertEqual(by_experiment["slow_alt"]["paired_label_type"], "hard_negative_proxy")
             self.assertIn("label_counts", (root / "report.md").read_text(encoding="utf-8"))
 
@@ -124,6 +130,106 @@ class JourneyPairedProbeSummaryTests(unittest.TestCase):
             self.assertFalse(missed["target_pair_selected"])
             self.assertEqual(missed["paired_label_type"], "target_not_replayed")
 
+    def test_reports_target_child_no_branch_when_forced_ancestor_path_is_replayed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runbook_dir = root / "runbook"
+            runs = runbook_dir / "runs"
+            runs.mkdir(parents=True)
+            entries = [
+                _entry("baseline", "selected_baseline", [2, 11]),
+                _entry("missed_alt", "alternative", [2, 17]),
+            ]
+            for entry in entries:
+                entry["source_node_id"] = 1
+                entry["source_depth"] = 1
+                entry["source_selected_pair"] = [2, 11]
+                entry["source_path_edges"] = [
+                    {"parent_depth": 0, "task_i": 3, "task_j": 6, "kind": "same_vehicle"}
+                ]
+            (runbook_dir / "runbook.json").write_text(
+                json.dumps({"entries": entries}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            _write_result(runs / "baseline" / "results.csv", status="TIME_LIMIT", wall=250.0, gap=0.10)
+            _write_result(runs / "missed_alt" / "results.csv", status="TIME_LIMIT", wall=250.0, gap=0.10)
+            _write_path_log_without_target_branch(
+                runs / "baseline" / "logs" / "instance.jsonl",
+                branch_pair=[3, 6],
+                child_constraint="RF(3,6)=same_vehicle",
+                child_node=1,
+            )
+            _write_path_log_without_target_branch(
+                runs / "missed_alt" / "logs" / "instance.jsonl",
+                branch_pair=[3, 6],
+                child_constraint="RF(3,6)=same_vehicle",
+                child_node=1,
+            )
+
+            summary = summarize_paired_probe(
+                runbook_dir / "runbook.json",
+                root / "out",
+                root / "report.md",
+            )
+
+            self.assertEqual(
+                summary["target_replay_reason_counts"],
+                {"ancestor_forced_but_target_child_no_branch": 2},
+            )
+            rows = [
+                json.loads(line)
+                for line in (root / "out" / "paired_probe_rows.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            missed = {row["experiment"]: row for row in rows}["missed_alt"]
+            self.assertEqual(missed["target_replay_status"], "target_not_replayed")
+            self.assertEqual(missed["target_replay_reason"], "ancestor_forced_but_target_child_no_branch")
+            self.assertTrue(missed["target_node_path_stable"])
+            self.assertEqual(missed["replay_target_node_id"], 1)
+            self.assertIn(
+                "target_replay_reason_counts = {'ancestor_forced_but_target_child_no_branch': 2}",
+                (root / "report.md").read_text(encoding="utf-8"),
+            )
+
+    def test_reports_root_not_reached_when_ancestor_path_never_branches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runbook_dir = root / "runbook"
+            runs = runbook_dir / "runs"
+            runs.mkdir(parents=True)
+            entries = [
+                _entry("baseline", "selected_baseline", [2, 11]),
+                _entry("missed_alt", "alternative", [2, 17]),
+            ]
+            for entry in entries:
+                entry["source_node_id"] = 1
+                entry["source_depth"] = 1
+                entry["source_path_edges"] = [
+                    {"parent_depth": 0, "task_i": 3, "task_j": 6, "kind": "same_vehicle"}
+                ]
+            (runbook_dir / "runbook.json").write_text(
+                json.dumps({"entries": entries}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            _write_result(runs / "baseline" / "results.csv", status="TIME_LIMIT", wall=100.0, gap=0.10)
+            _write_result(runs / "missed_alt" / "results.csv", status="TIME_LIMIT", wall=100.0, gap=0.10)
+            _write_node_only_log(runs / "baseline" / "logs" / "instance.jsonl", node=0, depth=0)
+            _write_node_only_log(runs / "missed_alt" / "logs" / "instance.jsonl", node=0, depth=0)
+
+            summary = summarize_paired_probe(
+                runbook_dir / "runbook.json",
+                root / "out",
+                root / "report.md",
+            )
+
+            self.assertEqual(summary["target_replay_reason_counts"], {"root_not_reached": 2})
+            rows = [
+                json.loads(line)
+                for line in (root / "out" / "paired_probe_rows.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            missed = {row["experiment"]: row for row in rows}["missed_alt"]
+            self.assertEqual(missed["target_replay_reason"], "root_not_reached")
+            self.assertFalse(missed["target_node_path_stable"])
+
 
 def _entry(experiment: str, role: str, pair: list[int]) -> dict[str, object]:
     entry: dict[str, object] = {
@@ -145,6 +251,20 @@ def _entry(experiment: str, role: str, pair: list[int]) -> dict[str, object]:
                 "source_alt_phase1_min_child_lp_gain": 2.0 if experiment == "fast_alt" else 0.1,
                 "source_alt_phase1_child_lp_gain_product": 8.0 if experiment == "fast_alt" else 0.1,
                 "source_alt_phase2_negative_child_count": 0.0 if experiment == "fast_alt" else 3.0,
+                "source_alt_phase2_same_child_negative_severity": 0.25
+                if experiment == "fast_alt"
+                else 6.0,
+                "source_alt_phase2_separate_child_negative_severity": 0.0
+                if experiment == "fast_alt"
+                else 2.0,
+                "source_alt_phase2_negative_severity_sum": 0.25 if experiment == "fast_alt" else 8.0,
+                "source_alt_phase2_negative_severity_gap": 0.25 if experiment == "fast_alt" else 4.0,
+                "source_alt_phase2_negative_severity_balance_ratio": 0.0
+                if experiment == "fast_alt"
+                else 0.333333333,
+                "source_alt_phase2_negative_child_presence_balance_gap": 1
+                if experiment == "fast_alt"
+                else 0,
             }
         )
     return entry
@@ -189,6 +309,41 @@ def _write_branch_log(path: Path, *, node: int, depth: int, pair: list[int]) -> 
     ]
     path.write_text(
         "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+
+def _write_path_log_without_target_branch(
+    path: Path,
+    *,
+    branch_pair: list[int],
+    child_constraint: str,
+    child_node: int,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {"event": "journey_node_start", "node_id": 0, "depth": 0},
+        {"event": "journey_branch_candidates", "node_id": 0, "depth": 0, "selected_pair": branch_pair},
+        {"event": "journey_branch", "node_id": 0, "depth": 0, "selected_pair": branch_pair},
+        {
+            "event": "journey_child_queued",
+            "parent_node_id": 0,
+            "child_node_id": child_node,
+            "depth": 1,
+            "constraint": child_constraint,
+        },
+        {"event": "journey_node_start", "node_id": child_node, "depth": 1},
+    ]
+    path.write_text(
+        "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+
+def _write_node_only_log(path: Path, *, node: int, depth: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"event": "journey_node_start", "node_id": node, "depth": depth}, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 

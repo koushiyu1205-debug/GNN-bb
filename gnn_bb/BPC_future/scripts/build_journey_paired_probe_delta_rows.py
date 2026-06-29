@@ -110,6 +110,75 @@ def _loss_weight(row: dict[str, Any], *, max_weight: float) -> float:
     return min(float(max_weight), max(0.5, float(weight)))
 
 
+def _probe_raw_row(row: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        return {}
+    return {
+        "branch_time": row.get("branch_time", 0.0),
+        "candidate_count": row.get("candidate_count", 0),
+        "eligible_count": row.get("eligible_count", 0),
+        "branch_rank_in_top": row.get("branch_rank_in_top", 0),
+        "branch_rank_in_priority_top": row.get("branch_rank_in_priority_top", 0),
+        "source_alt_routeopt_bkf_score": row.get("source_alt_routeopt_bkf_score"),
+        "source_alt_routeopt_bkf_reason": row.get("source_alt_routeopt_bkf_reason"),
+        "source_alt_routeopt_bkf_stage": row.get("source_alt_routeopt_bkf_stage"),
+        "source_alt_routeopt_bkf_dynamic_k": row.get("source_alt_routeopt_bkf_dynamic_k"),
+        "source_alt_routeopt_bkf_stage_rank": row.get("source_alt_routeopt_bkf_stage_rank"),
+        "source_alt_routeopt_bkf_filtered_count": row.get("source_alt_routeopt_bkf_filtered_count"),
+        "source_alt_phase2_same_child_negative_severity": row.get(
+            "source_alt_phase2_same_child_negative_severity"
+        ),
+        "source_alt_phase2_separate_child_negative_severity": row.get(
+            "source_alt_phase2_separate_child_negative_severity"
+        ),
+        "source_alt_phase2_negative_severity_sum": row.get(
+            "source_alt_phase2_negative_severity_sum"
+        ),
+        "source_alt_phase2_negative_severity_gap": row.get(
+            "source_alt_phase2_negative_severity_gap"
+        ),
+        "source_alt_phase2_negative_severity_balance_ratio": row.get(
+            "source_alt_phase2_negative_severity_balance_ratio"
+        ),
+        "source_alt_phase2_negative_child_presence_balance_gap": row.get(
+            "source_alt_phase2_negative_child_presence_balance_gap"
+        ),
+        "phased_testing_stage": row.get("phased_testing_stage"),
+        "phased_testing_decision": row.get("phased_testing_decision"),
+        "phased_testing_reason": row.get("phased_testing_reason"),
+        "phased_testing_elimination_reason": row.get("phased_testing_elimination_reason"),
+        "phased_testing_phase0_passed": row.get("phased_testing_phase0_passed"),
+        "phased_testing_phase1_lp_complete": row.get("phased_testing_phase1_lp_complete"),
+        "phased_testing_phase2_heuristic_complete": row.get("phased_testing_phase2_heuristic_complete"),
+        "phase1_min_child_lp_gain": row.get("phase1_min_child_lp_gain"),
+        "phase1_child_lp_gain_product": row.get("phase1_child_lp_gain_product"),
+        "phase1_child_width_balance": row.get("phase1_child_width_balance"),
+        "phase1_wall_time": row.get("phase1_wall_time"),
+        "phase1_dynamic_k_probe_count": row.get("phase1_dynamic_k_probe_count"),
+        "phase2_negative_child_count": row.get("phase2_negative_child_count"),
+        "phase2_negative_journey_count": row.get("phase2_negative_journey_count"),
+        "phase2_negative_journey_balance_gap": row.get("phase2_negative_journey_balance_gap"),
+        "phase2_best_reduced_cost": row.get("phase2_best_reduced_cost"),
+        "phase2_worst_negative_severity": row.get("phase2_worst_negative_severity"),
+        "phase2_same_child_negative_severity": row.get("phase2_same_child_negative_severity"),
+        "phase2_separate_child_negative_severity": row.get(
+            "phase2_separate_child_negative_severity"
+        ),
+        "phase2_negative_severity_sum": row.get("phase2_negative_severity_sum"),
+        "phase2_negative_severity_gap": row.get("phase2_negative_severity_gap"),
+        "phase2_negative_severity_balance_ratio": row.get(
+            "phase2_negative_severity_balance_ratio"
+        ),
+        "phase2_negative_child_presence_balance_gap": row.get(
+            "phase2_negative_child_presence_balance_gap"
+        ),
+        "phase2_child_wall_time_balance_gap": row.get("phase2_child_wall_time_balance_gap"),
+        "phase2_child_status_mismatch": row.get("phase2_child_status_mismatch"),
+        "phase2_wall_time": row.get("phase2_wall_time"),
+        "phase2_dynamic_k_probe_count": row.get("phase2_dynamic_k_probe_count"),
+    }
+
+
 def _counterfactual_type(label_type: str) -> str | None:
     if label_type == "hard_negative_proxy":
         return "paired_probe_hard_negative_proxy"
@@ -120,7 +189,12 @@ def _counterfactual_type(label_type: str) -> str | None:
     return None
 
 
-def _convert_row(row: dict[str, Any], *, max_hard_negative_weight: float) -> dict[str, Any] | None:
+def _convert_row(
+    row: dict[str, Any],
+    *,
+    max_hard_negative_weight: float,
+    baseline_row: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     if str(row.get("pair_role") or "") != "alternative":
         return None
     label_type = str(row.get("paired_label_type") or "")
@@ -206,37 +280,8 @@ def _convert_row(row: dict[str, Any], *, max_hard_negative_weight: float) -> dic
         },
         "labels": labels,
         "alternative_branch_labels": branch_labels,
-        "alternative_raw_row": {
-            "branch_time": 0.0,
-            "candidate_count": 0,
-            "eligible_count": 0,
-            "branch_rank_in_top": 0,
-            "branch_rank_in_priority_top": 0,
-            "source_alt_routeopt_bkf_score": row.get("source_alt_routeopt_bkf_score"),
-            "source_alt_routeopt_bkf_reason": row.get("source_alt_routeopt_bkf_reason"),
-            "source_alt_routeopt_bkf_stage": row.get("source_alt_routeopt_bkf_stage"),
-            "source_alt_routeopt_bkf_dynamic_k": row.get("source_alt_routeopt_bkf_dynamic_k"),
-            "source_alt_routeopt_bkf_stage_rank": row.get("source_alt_routeopt_bkf_stage_rank"),
-            "source_alt_routeopt_bkf_filtered_count": row.get("source_alt_routeopt_bkf_filtered_count"),
-            "phased_testing_stage": row.get("phased_testing_stage"),
-            "phased_testing_decision": row.get("phased_testing_decision"),
-            "phased_testing_reason": row.get("phased_testing_reason"),
-            "phased_testing_elimination_reason": row.get("phased_testing_elimination_reason"),
-            "phased_testing_phase0_passed": row.get("phased_testing_phase0_passed"),
-            "phased_testing_phase1_lp_complete": row.get("phased_testing_phase1_lp_complete"),
-            "phased_testing_phase2_heuristic_complete": row.get("phased_testing_phase2_heuristic_complete"),
-            "phase1_min_child_lp_gain": row.get("phase1_min_child_lp_gain"),
-            "phase1_child_lp_gain_product": row.get("phase1_child_lp_gain_product"),
-            "phase1_child_width_balance": row.get("phase1_child_width_balance"),
-            "phase1_wall_time": row.get("phase1_wall_time"),
-            "phase1_dynamic_k_probe_count": row.get("phase1_dynamic_k_probe_count"),
-            "phase2_negative_child_count": row.get("phase2_negative_child_count"),
-            "phase2_negative_journey_count": row.get("phase2_negative_journey_count"),
-            "phase2_best_reduced_cost": row.get("phase2_best_reduced_cost"),
-            "phase2_worst_negative_severity": row.get("phase2_worst_negative_severity"),
-            "phase2_wall_time": row.get("phase2_wall_time"),
-            "phase2_dynamic_k_probe_count": row.get("phase2_dynamic_k_probe_count"),
-        },
+        "baseline_raw_row": _probe_raw_row(baseline_row),
+        "alternative_raw_row": _probe_raw_row(row),
     }
 
 
@@ -249,17 +294,36 @@ def build_delta_rows(
     max_hard_negative_weight: float = 4.0,
 ) -> dict[str, Any]:
     rows, resolved = _load_rows(inputs)
+    baseline_by_group: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if str(row.get("pair_role") or "") != "selected_baseline":
+            continue
+        group_id = str(row.get("pair_group_id") or "")
+        if group_id and group_id not in baseline_by_group:
+            baseline_by_group[group_id] = row
     converted: list[dict[str, Any]] = []
     skipped: Counter[str] = Counter()
     input_label_counts: Counter[str] = Counter()
+    nonconvertible_label_counts: Counter[str] = Counter()
+    nonconvertible_target_replay_reason_counts: Counter[str] = Counter()
     output_label_counts: Counter[str] = Counter()
     instance_counts: Counter[str] = Counter()
     for row in rows:
         if str(row.get("pair_role") or "") == "alternative":
             input_label_counts[str(row.get("paired_label_type") or "")] += 1
-        converted_row = _convert_row(row, max_hard_negative_weight=max_hard_negative_weight)
+        converted_row = _convert_row(
+            row,
+            max_hard_negative_weight=max_hard_negative_weight,
+            baseline_row=baseline_by_group.get(str(row.get("pair_group_id") or "")),
+        )
         if converted_row is None:
             skipped["not_convertible"] += 1
+            label_type = str(row.get("paired_label_type") or "")
+            if label_type:
+                nonconvertible_label_counts[label_type] += 1
+            reason = str(row.get("target_replay_reason") or "")
+            if reason:
+                nonconvertible_target_replay_reason_counts[reason] += 1
             continue
         if (
             converted_row.get("counterfactual_label_type") == "paired_probe_neutral_proxy"
@@ -296,6 +360,10 @@ def build_delta_rows(
         "input_paired_label_counts": dict(sorted(input_label_counts.items())),
         "output_counterfactual_label_counts": dict(sorted(output_label_counts.items())),
         "skipped_counts": dict(sorted(skipped.items())),
+        "nonconvertible_label_counts": dict(sorted(nonconvertible_label_counts.items())),
+        "nonconvertible_target_replay_reason_counts": dict(
+            sorted(nonconvertible_target_replay_reason_counts.items())
+        ),
         "instance_count": len([key for key in instance_counts if key]),
         "instance_counts": dict(sorted(instance_counts.items())),
         "exactness_contract": {
@@ -336,6 +404,8 @@ def _write_report(report: Path, summary: dict[str, Any], rows: list[dict[str, An
         f"input_paired_label_counts = {summary['input_paired_label_counts']}",
         f"output_counterfactual_label_counts = {summary['output_counterfactual_label_counts']}",
         f"skipped_counts = {summary['skipped_counts']}",
+        f"nonconvertible_label_counts = {summary['nonconvertible_label_counts']}",
+        f"nonconvertible_target_replay_reason_counts = {summary['nonconvertible_target_replay_reason_counts']}",
         f"rows_path = {summary['rows_path']}",
         "production_ready = false",
         "official_bound_effect = false",

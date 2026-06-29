@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from datetime import date
 import json
+import math
 from pathlib import Path
 import re
 import shlex
@@ -62,6 +63,9 @@ _PHASED_NODE_FIELDS = (
     "phased_testing_phase2_generated_sequences_total",
     "phased_testing_phase2_evaluated_timed_trips_total",
     "phased_testing_phase2_worst_negative_severity_max",
+    "phased_testing_phase2_negative_severity_sum_total",
+    "phased_testing_phase2_negative_severity_gap_max",
+    "phased_testing_phase2_negative_severity_balance_ratio_min",
     "phased_testing_phase2_official_bound_effect_any",
     "phased_testing_phase2_certificate_effect_any",
     "phased_testing_official_bound_effect_any",
@@ -83,8 +87,17 @@ _PHASED_CANDIDATE_FIELDS = (
     "phase1_certificate_effect",
     "phase2_negative_child_count",
     "phase2_negative_journey_count",
+    "phase2_negative_journey_balance_gap",
     "phase2_best_reduced_cost",
     "phase2_worst_negative_severity",
+    "phase2_same_child_negative_severity",
+    "phase2_separate_child_negative_severity",
+    "phase2_negative_severity_sum",
+    "phase2_negative_severity_gap",
+    "phase2_negative_severity_balance_ratio",
+    "phase2_negative_child_presence_balance_gap",
+    "phase2_child_wall_time_balance_gap",
+    "phase2_child_status_mismatch",
     "phase2_generated_sequences",
     "phase2_evaluated_timed_trips",
     "phase2_wall_time",
@@ -599,6 +612,58 @@ def _load_focus_contexts(
     return focus, strong_positive_pairs
 
 
+def _focus_candidate_row_files(path: Path) -> list[Path]:
+    if not path.exists():
+        return []
+    if path.is_dir():
+        files: list[Path] = []
+        for name in ("replay_queue.jsonl", "candidate_pool.jsonl", "branch_counterfactual_delta_rows.jsonl"):
+            candidate = path / name
+            if candidate.exists():
+                files.append(candidate)
+        return files
+    if path.name == "summary.json":
+        return _focus_candidate_row_files(path.parent)
+    if path.suffix == ".jsonl":
+        return [path]
+    return []
+
+
+def _load_focus_candidate_contexts(
+    paths: Iterable[Path],
+) -> tuple[set[tuple[str, int, int, str]], dict[tuple[str, int, int, str], set[tuple[int, int]]]]:
+    focus: set[tuple[str, int, int, str]] = set()
+    candidate_pairs: dict[tuple[str, int, int, str], set[tuple[int, int]]] = {}
+    for path in paths:
+        for row_file in _focus_candidate_row_files(path):
+            for row in _iter_jsonl(row_file):
+                instance = str(row.get("instance") or "")
+                selected_pair = _pair_from_value(
+                    row.get("source_selected_pair")
+                    or row.get("baseline_pair")
+                    or row.get("selected_pair")
+                )
+                candidate_pair = _pair_from_value(
+                    row.get("candidate_pair")
+                    or row.get("alternative_pair")
+                    or row.get("forced_pair")
+                )
+                node_id = _int(row.get("source_node_id", row.get("node_id")), -1)
+                depth = _int(row.get("source_depth", row.get("depth")), -1)
+                if (
+                    not instance
+                    or selected_pair is None
+                    or candidate_pair is None
+                    or node_id < 0
+                    or depth < 0
+                ):
+                    continue
+                key = (instance, node_id, depth, _pair_text(selected_pair) or "")
+                focus.add(key)
+                candidate_pairs.setdefault(key, set()).add(candidate_pair)
+    return focus, candidate_pairs
+
+
 def _load_score_coverage_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for path in paths:
@@ -939,6 +1004,26 @@ def _routeopt_bkf_test_score(item: dict[str, Any]) -> tuple[float, str]:
     phase2_negative_child = max(0.0, _float(item.get("source_alt_phase2_negative_child_count"), default=0.0))
     phase2_negative_journey = max(0.0, _float(item.get("source_alt_phase2_negative_journey_count"), default=0.0))
     phase2_worst_negative = max(0.0, _float(item.get("source_alt_phase2_worst_negative_severity"), default=0.0))
+    phase2_negative_severity_sum = max(
+        phase2_worst_negative,
+        _float(item.get("source_alt_phase2_negative_severity_sum"), default=phase2_worst_negative),
+    )
+    phase2_negative_severity_gap = max(
+        0.0,
+        _float(item.get("source_alt_phase2_negative_severity_gap"), default=0.0),
+    )
+    phase2_negative_child_presence_gap = max(
+        0.0,
+        _float(item.get("source_alt_phase2_negative_child_presence_balance_gap"), default=0.0),
+    )
+    route_order_direction_conflict = max(
+        0.0,
+        _float(item.get("source_alt_route_order_direction_conflict_mass"), default=0.0),
+    )
+    route_order_adjacent_conflict = max(
+        0.0,
+        _float(item.get("source_alt_route_order_adjacent_conflict_mass"), default=0.0),
+    )
     phase_wall = max(0.0, _float(item.get("source_alt_phase1_wall_time"), default=0.0)) + max(
         0.0,
         _float(item.get("source_alt_phase2_wall_time"), default=0.0),
@@ -963,6 +1048,11 @@ def _routeopt_bkf_test_score(item: dict[str, Any]) -> tuple[float, str]:
         - 2.0 * phase2_negative_child
         - 0.02 * phase2_negative_journey
         - 1.0 * phase2_worst_negative
+        - 0.02 * phase2_negative_severity_sum
+        - 0.05 * phase2_negative_severity_gap
+        - 0.25 * phase2_negative_child_presence_gap
+        - 0.25 * route_order_direction_conflict
+        - 0.50 * route_order_adjacent_conflict
         - 0.01 * phase_wall
         - (1000.0 if phased_exact_effect else 0.0)
         - 0.01 * rank
@@ -978,6 +1068,11 @@ def _routeopt_bkf_test_score(item: dict[str, Any]) -> tuple[float, str]:
         f"phase2_negative_child_count={phase2_negative_child:g};"
         f"phase2_negative_journey_count={phase2_negative_journey:g};"
         f"phase2_worst_negative_severity={phase2_worst_negative:g};"
+        f"phase2_negative_severity_sum={phase2_negative_severity_sum:g};"
+        f"phase2_negative_severity_gap={phase2_negative_severity_gap:g};"
+        f"phase2_negative_child_presence_balance_gap={phase2_negative_child_presence_gap:g};"
+        f"route_order_direction_conflict_mass={route_order_direction_conflict:g};"
+        f"route_order_adjacent_conflict_mass={route_order_adjacent_conflict:g};"
         f"phase_wall={phase_wall:g};phased_exact_effect={phased_exact_effect};"
         f"rank={rank}"
     )
@@ -1159,9 +1254,12 @@ def _select_positive_neighbor_alternatives(alternatives: list[dict[str, Any]]) -
     return selected
 
 
-def _prioritize_focus_strong_positive_alternatives(
+def _prioritize_focus_alternatives(
     alternatives: list[dict[str, Any]],
     focus_pairs: set[tuple[int, int]],
+    *,
+    reason: str,
+    flag_field: str,
 ) -> tuple[list[dict[str, Any]], int, int]:
     if not focus_pairs:
         return alternatives, 0, 0
@@ -1171,13 +1269,37 @@ def _prioritize_focus_strong_positive_alternatives(
     for item in alternatives:
         pair = (int(item["task_i"]), int(item["task_j"]))
         if pair in focus_pairs:
-            enriched = _with_selection_reason(item, "focus_strong_positive")
-            enriched["source_alt_focus_strong_positive"] = True
+            enriched = _with_selection_reason(item, reason)
+            enriched[flag_field] = True
             prioritized.append(enriched)
             matched.add(pair)
         else:
             remaining.append(item)
     return prioritized + remaining, len(matched), len(focus_pairs - matched)
+
+
+def _prioritize_focus_strong_positive_alternatives(
+    alternatives: list[dict[str, Any]],
+    focus_pairs: set[tuple[int, int]],
+) -> tuple[list[dict[str, Any]], int, int]:
+    return _prioritize_focus_alternatives(
+        alternatives,
+        focus_pairs,
+        reason="focus_strong_positive",
+        flag_field="source_alt_focus_strong_positive",
+    )
+
+
+def _prioritize_focus_candidate_alternatives(
+    alternatives: list[dict[str, Any]],
+    focus_pairs: set[tuple[int, int]],
+) -> tuple[list[dict[str, Any]], int, int]:
+    return _prioritize_focus_alternatives(
+        alternatives,
+        focus_pairs,
+        reason="focus_candidate_pool",
+        flag_field="source_alt_focus_candidate_pool",
+    )
 
 
 def _alternative_candidates(
@@ -1251,6 +1373,21 @@ def _alternative_candidates(
                 "source_alt_pool_max_child_width": candidate.get("pool_max_child_width"),
                 "source_alt_pool_total_child_width": candidate.get("pool_total_child_width"),
                 "source_alt_pool_balance_gap": candidate.get("pool_balance_gap"),
+                "source_alt_route_order_same_route_mass": candidate.get("route_order_same_route_mass"),
+                "source_alt_route_order_i_before_j_mass": candidate.get("route_order_i_before_j_mass"),
+                "source_alt_route_order_j_before_i_mass": candidate.get("route_order_j_before_i_mass"),
+                "source_alt_route_order_direction_conflict_mass": candidate.get(
+                    "route_order_direction_conflict_mass"
+                ),
+                "source_alt_route_order_direction_balance_ratio": candidate.get(
+                    "route_order_direction_balance_ratio"
+                ),
+                "source_alt_route_order_adjacent_conflict_mass": candidate.get(
+                    "route_order_adjacent_conflict_mass"
+                ),
+                "source_alt_route_order_adjacent_balance_ratio": candidate.get(
+                    "route_order_adjacent_balance_ratio"
+                ),
                 "source_alt_branch_score": candidate.get("branch_score"),
                 "source_alt_branch_score_source": candidate.get("branch_score_source"),
                 **{
@@ -1309,6 +1446,7 @@ def _command(
     probe_mode: str = "full_replay",
     probe_max_nodes: int | None = None,
     probe_max_cg_iterations: int | None = None,
+    replay_overrides: list[str] | None = None,
 ) -> list[str]:
     command = [
         "/home/kai/miniconda3/bin/python",
@@ -1351,7 +1489,23 @@ def _command(
         command.extend(["--set", "journey_corrected_node_bound_fathom_enabled=False"])
         command.extend(["--set", "journey_tail_action_early_branch_enabled=False"])
         command.extend(["--set", "journey_tail_action_no_column_early_branch_enabled=False"])
+    for override in replay_overrides or []:
+        command.extend(["--set", str(override)])
     return command
+
+
+def _effective_replay_time_limit(
+    *,
+    base_time_limit: int,
+    source_event_time: Any,
+    probe_time_margin_after_source_event: float | None,
+) -> int:
+    if probe_time_margin_after_source_event is None or float(probe_time_margin_after_source_event) <= 0.0:
+        return int(base_time_limit)
+    event_time = _optional_float(source_event_time)
+    if event_time is None:
+        return int(base_time_limit)
+    return int(math.ceil(max(float(base_time_limit), event_time + float(probe_time_margin_after_source_event))))
 
 
 def build_runbook(
@@ -1373,13 +1527,16 @@ def build_runbook(
     branch_impact_inputs: list[Path] | None = None,
     exclude_runbooks: list[Path] | None = None,
     focus_delta_inputs: list[Path] | None = None,
+    focus_candidate_inputs: list[Path] | None = None,
     coverage_inputs: list[Path] | None = None,
     branch_score_inputs: list[Path] | None = None,
     coverage_gap_only: bool = False,
     probe_mode: str = "full_replay",
     probe_max_nodes: int | None = None,
     probe_extra_nodes_after_branch: int = 2,
+    probe_time_margin_after_source_event: float | None = None,
     probe_max_cg_iterations: int | None = None,
+    replay_overrides: list[str] | None = None,
     max_events_per_instance: int | None = None,
     paired_probe: bool = False,
     staged_bkf_min_alternatives: int = 1,
@@ -1409,6 +1566,10 @@ def build_runbook(
         and int(min_source_depth) > int(max_source_depth)
     ):
         raise ValueError("min_source_depth must be <= max_source_depth")
+    replay_overrides = [str(item) for item in (replay_overrides or [])]
+    for override in replay_overrides:
+        if "=" not in override:
+            raise ValueError(f"replay override must be key=value, got {override!r}")
     run_root = output_dir / "runs"
     entries: list[dict[str, Any]] = []
     seen: set[tuple[str, int, int, int, int]] = set()
@@ -1417,6 +1578,10 @@ def build_runbook(
     focus_context_keys, focus_strong_positive_pairs = _load_focus_contexts(
         focus_delta_inputs or []
     )
+    focus_candidate_context_keys, focus_candidate_pairs = _load_focus_candidate_contexts(
+        focus_candidate_inputs or []
+    )
+    focus_context_keys = set(focus_context_keys) | set(focus_candidate_context_keys)
     focus_event_skip_count = 0
     focus_strong_positive_pair_count = sum(
         len(pairs) for pairs in focus_strong_positive_pairs.values()
@@ -1424,6 +1589,10 @@ def build_runbook(
     focus_strong_positive_pair_available_count = 0
     focus_strong_positive_pair_missing_count = 0
     focus_strong_positive_entry_count = 0
+    focus_candidate_pair_count = sum(len(pairs) for pairs in focus_candidate_pairs.values())
+    focus_candidate_pair_available_count = 0
+    focus_candidate_pair_missing_count = 0
+    focus_candidate_entry_count = 0
     coverage_gap_skip_count = 0
     depth_filter_skip_count = 0
     source_event_time_filter_skip_count = 0
@@ -1578,6 +1747,15 @@ def build_runbook(
                 "phased_testing_phase2_worst_negative_severity_max": phased_context.get(
                     "phased_testing_phase2_worst_negative_severity_max"
                 ),
+                "phased_testing_phase2_negative_severity_sum_total": phased_context.get(
+                    "phased_testing_phase2_negative_severity_sum_total"
+                ),
+                "phased_testing_phase2_negative_severity_gap_max": phased_context.get(
+                    "phased_testing_phase2_negative_severity_gap_max"
+                ),
+                "phased_testing_phase2_negative_severity_balance_ratio_min": phased_context.get(
+                    "phased_testing_phase2_negative_severity_balance_ratio_min"
+                ),
                 "phased_testing_official_bound_effect_any": phased_context.get(
                     "phased_testing_official_bound_effect_any"
                 ),
@@ -1614,6 +1792,14 @@ def build_runbook(
             )
             focus_strong_positive_pair_available_count += focus_available
             focus_strong_positive_pair_missing_count += focus_missing
+            alternatives, focus_candidate_available, focus_candidate_missing = (
+                _prioritize_focus_candidate_alternatives(
+                    alternatives,
+                    focus_candidate_pairs.get(focus_key, set()),
+                )
+            )
+            focus_candidate_pair_available_count += focus_candidate_available
+            focus_candidate_pair_missing_count += focus_candidate_missing
             if bool(paired_probe):
                 if selected_pair is None:
                     paired_selected_missing_skip_count += 1
@@ -1652,35 +1838,56 @@ def build_runbook(
                 if selected_pair is None:
                     paired_selected_missing_skip_count += 1
                 elif len(entries) < int(limit):
+                    selected_payload = (
+                        record.get("selected") if isinstance(record.get("selected"), dict) else {}
+                    )
                     baseline_alt = {
                         "task_i": int(selected_pair[0]),
                         "task_j": int(selected_pair[1]),
                         "source_alt_rank": -1,
-                        "source_alt_fractionality": (
-                            record.get("selected", {}).get("fractionality")
-                            if isinstance(record.get("selected"), dict)
-                            else None
-                        ),
-                        "source_selected_fractionality": (
-                            record.get("selected", {}).get("fractionality")
-                            if isinstance(record.get("selected"), dict)
-                            else None
-                        ),
+                        "source_alt_fractionality": selected_payload.get("fractionality"),
+                        "source_selected_fractionality": selected_payload.get("fractionality"),
                         "source_max_logged_fractionality": None,
                         "source_alt_fractionality_gap_to_selected": 0.0,
                         "source_alt_required_tie_tolerance": 0.0,
-                        "source_alt_same_mass": None,
-                        "source_alt_support_count": None,
-                        "source_alt_incumbent_relation": None,
-                        "source_alt_incumbent_disagreement": None,
-                        "source_alt_pool_same_allowed": None,
-                        "source_alt_pool_separate_allowed": None,
-                        "source_alt_pool_max_child_width": None,
-                        "source_alt_pool_total_child_width": None,
-                        "source_alt_pool_balance_gap": None,
-                        "source_alt_branch_score": None,
-                        "source_alt_branch_score_source": None,
+                        "source_alt_same_mass": selected_payload.get("same_mass"),
+                        "source_alt_support_count": selected_payload.get("support_count"),
+                        "source_alt_incumbent_relation": selected_payload.get("incumbent_relation"),
+                        "source_alt_incumbent_disagreement": selected_payload.get("incumbent_disagreement"),
+                        "source_alt_pool_same_allowed": selected_payload.get("pool_same_allowed"),
+                        "source_alt_pool_separate_allowed": selected_payload.get("pool_separate_allowed"),
+                        "source_alt_pool_max_child_width": selected_payload.get("pool_max_child_width"),
+                        "source_alt_pool_total_child_width": selected_payload.get("pool_total_child_width"),
+                        "source_alt_pool_balance_gap": selected_payload.get("pool_balance_gap"),
+                        "source_alt_route_order_same_route_mass": selected_payload.get(
+                            "route_order_same_route_mass"
+                        ),
+                        "source_alt_route_order_i_before_j_mass": selected_payload.get(
+                            "route_order_i_before_j_mass"
+                        ),
+                        "source_alt_route_order_j_before_i_mass": selected_payload.get(
+                            "route_order_j_before_i_mass"
+                        ),
+                        "source_alt_route_order_direction_conflict_mass": selected_payload.get(
+                            "route_order_direction_conflict_mass"
+                        ),
+                        "source_alt_route_order_direction_balance_ratio": selected_payload.get(
+                            "route_order_direction_balance_ratio"
+                        ),
+                        "source_alt_route_order_adjacent_conflict_mass": selected_payload.get(
+                            "route_order_adjacent_conflict_mass"
+                        ),
+                        "source_alt_route_order_adjacent_balance_ratio": selected_payload.get(
+                            "route_order_adjacent_balance_ratio"
+                        ),
+                        "source_alt_branch_score": selected_payload.get("branch_score"),
+                        "source_alt_branch_score_source": selected_payload.get("branch_score_source"),
                         "source_alt_selection_reason": "selected_baseline",
+                        **{
+                            f"source_alt_{field}": selected_payload.get(field)
+                            for field in _PHASED_CANDIDATE_FIELDS
+                            if field in selected_payload
+                        },
                     }
                     selected_key = (
                         instance,
@@ -1713,16 +1920,24 @@ def build_runbook(
                                 if probe_max_cg_iterations is None
                                 else max(1, int(probe_max_cg_iterations))
                             )
+                        effective_time_limit = _effective_replay_time_limit(
+                            base_time_limit=int(time_limit),
+                            source_event_time=item.get("source_event_time"),
+                            probe_time_margin_after_source_event=probe_time_margin_after_source_event
+                            if probe_mode == "child_probe"
+                            else None,
+                        )
                         command = _command(
                             config=config,
                             instance=instance,
-                            time_limit=time_limit,
+                            time_limit=effective_time_limit,
                             result_dir=result_dir,
                             force_rule=force_rule,
                             candidate_log_top_n=candidate_log_top_n,
                             probe_mode=probe_mode,
                             probe_max_nodes=effective_probe_max_nodes,
                             probe_max_cg_iterations=effective_probe_max_cg_iterations,
+                            replay_overrides=replay_overrides,
                         )
                         entries.append(
                             {
@@ -1794,8 +2009,10 @@ def build_runbook(
                                 "forced_pair": [int(selected_pair[0]), int(selected_pair[1])],
                                 "forced_pair_path_rule": force_rule,
                                 "probe_mode": probe_mode,
+                                "effective_time_limit": int(effective_time_limit),
                                 "probe_max_nodes": effective_probe_max_nodes,
                                 "probe_max_cg_iterations": effective_probe_max_cg_iterations,
+                                "replay_overrides": replay_overrides,
                                 "command": command,
                                 "shell_command": shlex.join(command),
                                 "expected_label_source": "paired_fixed_budget_child_probe_then_compare_group_rows"
@@ -1829,6 +2046,8 @@ def build_runbook(
                 seen.add(key)
                 if bool(alt.get("source_alt_focus_strong_positive")):
                     focus_strong_positive_entry_count += 1
+                if bool(alt.get("source_alt_focus_candidate_pool")):
+                    focus_candidate_entry_count += 1
                 force_rule = _force_pair_path_rule(path_edges, depth, alt_pair)
                 experiment = (
                     f"{len(entries) + 1:03d}_candidate_alt_d{depth}_n{node_id}_"
@@ -1849,16 +2068,24 @@ def build_runbook(
                     effective_probe_max_cg_iterations = (
                         None if probe_max_cg_iterations is None else max(1, int(probe_max_cg_iterations))
                     )
+                effective_time_limit = _effective_replay_time_limit(
+                    base_time_limit=int(time_limit),
+                    source_event_time=item.get("source_event_time"),
+                    probe_time_margin_after_source_event=probe_time_margin_after_source_event
+                    if probe_mode == "child_probe"
+                    else None,
+                )
                 command = _command(
                     config=config,
                     instance=instance,
-                    time_limit=time_limit,
+                    time_limit=effective_time_limit,
                     result_dir=result_dir,
                     force_rule=force_rule,
                     candidate_log_top_n=candidate_log_top_n,
                     probe_mode=probe_mode,
                     probe_max_nodes=effective_probe_max_nodes,
                     probe_max_cg_iterations=effective_probe_max_cg_iterations,
+                    replay_overrides=replay_overrides,
                 )
                 entries.append(
                     {
@@ -1924,8 +2151,10 @@ def build_runbook(
                         "forced_pair": [alt_pair[0], alt_pair[1]],
                         "forced_pair_path_rule": force_rule,
                         "probe_mode": probe_mode,
+                        "effective_time_limit": int(effective_time_limit),
                         "probe_max_nodes": effective_probe_max_nodes,
                         "probe_max_cg_iterations": effective_probe_max_cg_iterations,
+                        "replay_overrides": replay_overrides,
                         "command": command,
                         "shell_command": shlex.join(command),
                         "expected_label_source": "fixed_budget_child_probe_then_audit_child_probe_rows"
@@ -1968,17 +2197,22 @@ def build_runbook(
         "branch_impact_input_paths": [str(path) for path in (branch_impact_inputs or [])],
         "exclude_runbook_paths": [str(path) for path in (exclude_runbooks or [])],
         "focus_delta_input_paths": [str(path) for path in (focus_delta_inputs or [])],
+        "focus_candidate_input_paths": [str(path) for path in (focus_candidate_inputs or [])],
         "coverage_input_paths": [str(path) for path in (coverage_inputs or [])],
         "branch_score_input_paths": [str(path) for path in (branch_score_inputs or [])],
         "external_branch_score_context_count": len(external_branch_scores),
         "external_branch_score_event_count": int(external_branch_score_event_count),
         "coverage_gap_only": bool(coverage_gap_only),
         "probe_mode": probe_mode,
+        "probe_time_margin_after_source_event": None
+        if probe_time_margin_after_source_event is None
+        else float(probe_time_margin_after_source_event),
         "probe_max_nodes": None if probe_max_nodes is None else int(probe_max_nodes),
         "probe_extra_nodes_after_branch": int(probe_extra_nodes_after_branch),
         "probe_max_cg_iterations": None
         if probe_max_cg_iterations is None
         else int(probe_max_cg_iterations),
+        "replay_overrides": replay_overrides,
         "max_events_per_instance": None
         if max_events_per_instance is None
         else int(max_events_per_instance),
@@ -2018,6 +2252,11 @@ def build_runbook(
             focus_strong_positive_pair_missing_count
         ),
         "focus_strong_positive_entry_count": int(focus_strong_positive_entry_count),
+        "focus_candidate_context_count": len(focus_candidate_context_keys),
+        "focus_candidate_pair_count": int(focus_candidate_pair_count),
+        "focus_candidate_pair_available_count": int(focus_candidate_pair_available_count),
+        "focus_candidate_pair_missing_count": int(focus_candidate_pair_missing_count),
+        "focus_candidate_entry_count": int(focus_candidate_entry_count),
         "coverage_priority_context_count": len(coverage_priority),
         "coverage_gap_skip_count": int(coverage_gap_skip_count),
         "depth_filter_skip_count": int(depth_filter_skip_count),
@@ -2098,15 +2337,18 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"branch_impact_input_paths = {runbook.get('branch_impact_input_paths')}",
         f"exclude_runbook_paths = {runbook.get('exclude_runbook_paths')}",
         f"focus_delta_input_paths = {runbook.get('focus_delta_input_paths')}",
+        f"focus_candidate_input_paths = {runbook.get('focus_candidate_input_paths')}",
         f"coverage_input_paths = {runbook.get('coverage_input_paths')}",
         f"branch_score_input_paths = {runbook.get('branch_score_input_paths')}",
         f"external_branch_score_context_count = {runbook.get('external_branch_score_context_count')}",
         f"external_branch_score_event_count = {runbook.get('external_branch_score_event_count')}",
         f"coverage_gap_only = {runbook.get('coverage_gap_only')}",
         f"probe_mode = {runbook.get('probe_mode')}",
+        f"probe_time_margin_after_source_event = {runbook.get('probe_time_margin_after_source_event')}",
         f"probe_max_nodes = {runbook.get('probe_max_nodes')}",
         f"probe_extra_nodes_after_branch = {runbook.get('probe_extra_nodes_after_branch')}",
         f"probe_max_cg_iterations = {runbook.get('probe_max_cg_iterations')}",
+        f"replay_overrides = {runbook.get('replay_overrides')}",
         f"max_events_per_instance = {runbook.get('max_events_per_instance')}",
         f"paired_probe = {runbook.get('paired_probe')}",
         f"paired_group_count = {runbook.get('paired_group_count')}",
@@ -2125,6 +2367,13 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         "focus_strong_positive_pair_missing_count = "
         f"{runbook.get('focus_strong_positive_pair_missing_count')}",
         f"focus_strong_positive_entry_count = {runbook.get('focus_strong_positive_entry_count')}",
+        f"focus_candidate_context_count = {runbook.get('focus_candidate_context_count')}",
+        f"focus_candidate_pair_count = {runbook.get('focus_candidate_pair_count')}",
+        "focus_candidate_pair_available_count = "
+        f"{runbook.get('focus_candidate_pair_available_count')}",
+        "focus_candidate_pair_missing_count = "
+        f"{runbook.get('focus_candidate_pair_missing_count')}",
+        f"focus_candidate_entry_count = {runbook.get('focus_candidate_entry_count')}",
         f"coverage_priority_context_count = {runbook.get('coverage_priority_context_count')}",
         f"coverage_gap_skip_count = {runbook.get('coverage_gap_skip_count')}",
         f"depth_filter_skip_count = {runbook.get('depth_filter_skip_count')}",
@@ -2157,8 +2406,10 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"forced_pair = {entry.get('forced_pair')}",
                 f"forced_pair_path_rule = {entry.get('forced_pair_path_rule')}",
                 f"probe_mode = {entry.get('probe_mode')}",
+                f"effective_time_limit = {entry.get('effective_time_limit')}",
                 f"probe_max_nodes = {entry.get('probe_max_nodes')}",
                 f"probe_max_cg_iterations = {entry.get('probe_max_cg_iterations')}",
+                f"replay_overrides = {entry.get('replay_overrides')}",
                 f"source_alt_rank = {entry.get('source_alt_rank')}",
                 f"source_alt_selection_reason = {entry.get('source_alt_selection_reason')}",
                 f"source_alt_focus_strong_positive = {entry.get('source_alt_focus_strong_positive')}",
@@ -2271,6 +2522,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--branch-impact-input", nargs="*", type=Path, default=[])
     parser.add_argument("--exclude-runbook", nargs="*", type=Path, default=[])
     parser.add_argument("--focus-delta-input", nargs="*", type=Path, default=[])
+    parser.add_argument(
+        "--focus-candidate-input",
+        nargs="*",
+        type=Path,
+        default=[],
+        help=(
+            "Optional replay_queue.jsonl/candidate_pool.jsonl source(s) used "
+            "to keep and prioritize specific pressure candidate pairs."
+        ),
+    )
     parser.add_argument("--coverage-input", nargs="*", type=Path, default=[])
     parser.add_argument(
         "--branch-score-input",
@@ -2306,10 +2567,30 @@ def _parse_args() -> argparse.Namespace:
         help="Child-probe default node budget after reaching and branching the source node.",
     )
     parser.add_argument(
+        "--probe-time-margin-after-source-event",
+        type=float,
+        default=None,
+        help=(
+            "For child_probe entries, raise each command time-limit to at least "
+            "source_event_time + this margin. This keeps late source contexts "
+            "from being replayed with a budget too short to reach the target branch."
+        ),
+    )
+    parser.add_argument(
         "--probe-max-cg-iterations",
         type=int,
         default=None,
         help="Optional max_cg_iterations/journey_max_cg_iterations override for child_probe entries.",
+    )
+    parser.add_argument(
+        "--replay-set",
+        dest="replay_overrides",
+        action="append",
+        default=[],
+        help=(
+            "Append an explicit key=value config override to every replay command. "
+            "Use this to preserve the source run's opt-in branch-score/probe template."
+        ),
     )
     parser.add_argument(
         "--max-events-per-instance",
@@ -2376,13 +2657,16 @@ def main() -> None:
         branch_impact_inputs=list(args.branch_impact_input),
         exclude_runbooks=list(args.exclude_runbook),
         focus_delta_inputs=list(args.focus_delta_input),
+        focus_candidate_inputs=list(args.focus_candidate_input),
         coverage_inputs=list(args.coverage_input),
         branch_score_inputs=list(args.branch_score_input),
         coverage_gap_only=bool(args.coverage_gap_only),
         probe_mode=str(args.probe_mode),
         probe_max_nodes=args.probe_max_nodes,
         probe_extra_nodes_after_branch=args.probe_extra_nodes_after_branch,
+        probe_time_margin_after_source_event=args.probe_time_margin_after_source_event,
         probe_max_cg_iterations=args.probe_max_cg_iterations,
+        replay_overrides=list(args.replay_overrides),
         max_events_per_instance=args.max_events_per_instance,
         paired_probe=bool(args.paired_probe),
         staged_bkf_min_alternatives=int(args.staged_bkf_min_alternatives),

@@ -76,6 +76,12 @@ BRANCH_ACTION_CONTEXT_FEATURE_SCHEMA: tuple[str, ...] = (
     "phase2_negative_journey_balance_gap",
     "phase2_best_reduced_cost",
     "phase2_worst_negative_severity",
+    "phase2_same_child_negative_severity",
+    "phase2_separate_child_negative_severity",
+    "phase2_negative_severity_sum",
+    "phase2_negative_severity_gap",
+    "phase2_negative_severity_balance_ratio",
+    "phase2_negative_child_presence_balance_gap",
     "phase2_child_wall_time_balance_gap",
     "phase2_child_status_mismatch",
     "phase2_wall_time",
@@ -89,6 +95,31 @@ BRANCH_ACTION_CONTEXT_FEATURE_SCHEMA: tuple[str, ...] = (
     "cut_context_dynamic_subset_row_min_add_depth",
     "cut_context_dynamic_subset_row_max_depth",
     "cut_context_dynamic_subset_row_gate_min_best_violation",
+    "route_order_active_journey_count",
+    "route_order_active_task_set_count",
+    "route_order_active_route_signature_count",
+    "route_order_multi_route_task_set_count",
+    "route_order_conflict_count",
+    "route_order_conflict_mass",
+    "route_order_top_conflict_balance_ratio",
+    "route_order_top_transition_count",
+    "route_order_top_arc_option_count",
+    "route_order_candidate_same_route_mass",
+    "route_order_candidate_i_before_j_mass",
+    "route_order_candidate_j_before_i_mass",
+    "route_order_candidate_direction_conflict_mass",
+    "route_order_candidate_direction_balance_ratio",
+    "route_order_candidate_adjacent_conflict_mass",
+    "route_order_candidate_adjacent_balance_ratio",
+)
+
+PHASE2_PRESSURE_CONTEXT_FEATURES: tuple[str, ...] = (
+    "phase2_same_child_negative_severity",
+    "phase2_separate_child_negative_severity",
+    "phase2_negative_severity_sum",
+    "phase2_negative_severity_gap",
+    "phase2_negative_severity_balance_ratio",
+    "phase2_negative_child_presence_balance_gap",
 )
 
 PHASED_TESTING_STAGE_CODES: dict[str, int] = {
@@ -453,6 +484,12 @@ def _context_feature_vector(row: dict[str, Any]) -> list[float]:
         _float(alt_raw.get("phase2_negative_journey_balance_gap")),
         phase2_best_rc,
         _float(alt_raw.get("phase2_worst_negative_severity")),
+        _float(alt_raw.get("phase2_same_child_negative_severity")),
+        _float(alt_raw.get("phase2_separate_child_negative_severity")),
+        _float(alt_raw.get("phase2_negative_severity_sum")),
+        _float(alt_raw.get("phase2_negative_severity_gap")),
+        _float(alt_raw.get("phase2_negative_severity_balance_ratio")),
+        _float(alt_raw.get("phase2_negative_child_presence_balance_gap")),
         _float(alt_raw.get("phase2_child_wall_time_balance_gap")),
         _bool_feature(alt_raw.get("phase2_child_status_mismatch")),
         _float(alt_raw.get("phase2_wall_time")),
@@ -469,6 +506,22 @@ def _context_feature_vector(row: dict[str, Any]) -> list[float]:
         _float(alt_raw.get("cut_context_dynamic_subset_row_min_add_depth")),
         _float(alt_raw.get("cut_context_dynamic_subset_row_max_depth")),
         _float(alt_raw.get("cut_context_dynamic_subset_row_gate_min_best_violation")),
+        _float(alt_raw.get("route_order_active_journey_count")),
+        _float(alt_raw.get("route_order_active_task_set_count")),
+        _float(alt_raw.get("route_order_active_route_signature_count")),
+        _float(alt_raw.get("route_order_multi_route_task_set_count")),
+        _float(alt_raw.get("route_order_conflict_count")),
+        _float(alt_raw.get("route_order_conflict_mass")),
+        _float(alt_raw.get("route_order_top_conflict_balance_ratio")),
+        _float(alt_raw.get("route_order_top_transition_count")),
+        _float(alt_raw.get("route_order_top_arc_option_count")),
+        _float(alt_raw.get("route_order_same_route_mass")),
+        _float(alt_raw.get("route_order_i_before_j_mass")),
+        _float(alt_raw.get("route_order_j_before_i_mass")),
+        _float(alt_raw.get("route_order_direction_conflict_mass")),
+        _float(alt_raw.get("route_order_direction_balance_ratio")),
+        _float(alt_raw.get("route_order_adjacent_conflict_mass")),
+        _float(alt_raw.get("route_order_adjacent_balance_ratio")),
     ]
 
 
@@ -698,6 +751,9 @@ def build_dataset(
     aux_label_counts: Counter[str] = Counter()
     family_counts: Counter[str] = Counter()
     instance_counts: Counter[str] = Counter()
+    context_feature_observed_counts: Counter[str] = Counter()
+    context_feature_nonzero_counts: Counter[str] = Counter()
+    pressure_nonzero_sample_count = 0
 
     for row_index, row in enumerate(rows):
         row_kind = _row_kind(
@@ -727,6 +783,17 @@ def build_dataset(
         if alternative_pair is None:
             skipped["invalid_alternative_pair"] += 1
             continue
+        alt_raw = _raw(row, "alternative_raw_row")
+        has_nonzero_pressure = False
+        for feature_name in PHASE2_PRESSURE_CONTEXT_FEATURES:
+            if feature_name in alt_raw and alt_raw.get(feature_name) not in (None, ""):
+                context_feature_observed_counts[feature_name] += 1
+                value = _float(alt_raw.get(feature_name))
+                if abs(float(value)) > 1.0e-12:
+                    context_feature_nonzero_counts[feature_name] += 1
+                    has_nonzero_pressure = True
+        if has_nonzero_pressure:
+            pressure_nonzero_sample_count += 1
         graph = graph_cache.get(str(instance_path))
         if graph is None:
             try:
@@ -905,6 +972,19 @@ def build_dataset(
 
     branch_feature_mean, branch_feature_std = _feature_stats(sample_dir, "branch_pair_features")
     context_feature_mean, context_feature_std = _feature_stats(sample_dir, "branch_action_context_features")
+    pressure_observed_counts = {
+        name: int(context_feature_observed_counts.get(name, 0))
+        for name in PHASE2_PRESSURE_CONTEXT_FEATURES
+    }
+    pressure_nonzero_counts = {
+        name: int(context_feature_nonzero_counts.get(name, 0))
+        for name in PHASE2_PRESSURE_CONTEXT_FEATURES
+    }
+    pressure_coverage_ready = bool(
+        len(samples) > 0
+        and all(count > 0 for count in pressure_observed_counts.values())
+        and int(pressure_nonzero_sample_count) > 0
+    )
     manifest = {
         "schema_version": "gat_branch_action_sanity_dataset_manifest_v1",
         "diagnostic_only": True,
@@ -932,6 +1012,11 @@ def build_dataset(
         "branch_feature_schema": list(BRANCH_IMPACT_FEATURE_SCHEMA),
         "context_feature_schema": list(BRANCH_ACTION_CONTEXT_FEATURE_SCHEMA),
         "label_schema": list(BRANCH_ACTION_LABEL_SCHEMA),
+        "phase2_pressure_context_features": list(PHASE2_PRESSURE_CONTEXT_FEATURES),
+        "phase2_pressure_observed_counts": pressure_observed_counts,
+        "phase2_pressure_nonzero_counts": pressure_nonzero_counts,
+        "phase2_pressure_nonzero_sample_count": int(pressure_nonzero_sample_count),
+        "phase2_pressure_coverage_ready": pressure_coverage_ready,
         "branch_feature_mean": branch_feature_mean,
         "branch_feature_std": branch_feature_std,
         "context_feature_mean": context_feature_mean,
@@ -976,6 +1061,7 @@ def build_dataset(
             "can_prune_branch_candidates": False,
             "can_permanently_discard_true_rc_negative": False,
             "default_solver_effect": False,
+            "missing_phase2_pressure_is_not_low_pressure": True,
         },
         "samples": samples,
     }
@@ -1006,11 +1092,17 @@ def build_dataset(
         "branch_feature_schema": list(BRANCH_IMPACT_FEATURE_SCHEMA),
         "context_feature_schema": list(BRANCH_ACTION_CONTEXT_FEATURE_SCHEMA),
         "label_schema": list(BRANCH_ACTION_LABEL_SCHEMA),
+        "phase2_pressure_context_features": list(PHASE2_PRESSURE_CONTEXT_FEATURES),
+        "phase2_pressure_observed_counts": pressure_observed_counts,
+        "phase2_pressure_nonzero_counts": pressure_nonzero_counts,
+        "phase2_pressure_nonzero_sample_count": int(pressure_nonzero_sample_count),
+        "phase2_pressure_coverage_ready": pressure_coverage_ready,
         "sanity_training_dataset_ready": bool(
             main_label_counts.get("walltime_gain_positive", 0) > 0
             and main_label_counts.get("not_walltime_gain", 0) > 0
         ),
         "serious_training_dataset_ready": False,
+        "pressure_aware_training_dataset_ready": False,
         "optin_training_dataset_ready": False,
     }
     _write_json(output_dir / "summary.json", summary)
@@ -1054,8 +1146,13 @@ def _write_report(report: Path, summary: dict[str, Any], manifest: dict[str, Any
         f"skipped_counts = {summary['skipped_counts']}",
         f"instance_count = {summary['instance_count']}",
         f"family_count = {summary['family_count']}",
+        f"phase2_pressure_observed_counts = {summary['phase2_pressure_observed_counts']}",
+        f"phase2_pressure_nonzero_counts = {summary['phase2_pressure_nonzero_counts']}",
+        f"phase2_pressure_nonzero_sample_count = {summary['phase2_pressure_nonzero_sample_count']}",
+        f"phase2_pressure_coverage_ready = {str(summary['phase2_pressure_coverage_ready']).lower()}",
         f"sanity_training_dataset_ready = {str(summary['sanity_training_dataset_ready']).lower()}",
         f"serious_training_dataset_ready = {str(summary['serious_training_dataset_ready']).lower()}",
+        f"pressure_aware_training_dataset_ready = {str(summary['pressure_aware_training_dataset_ready']).lower()}",
         f"optin_training_dataset_ready = {str(summary['optin_training_dataset_ready']).lower()}",
         "runs_bpc_or_pricing = false",
         "official_bound_effect = false",

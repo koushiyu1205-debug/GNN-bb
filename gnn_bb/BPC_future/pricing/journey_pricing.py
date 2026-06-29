@@ -11,7 +11,7 @@ import os
 import time
 from typing import Any, Callable
 
-from BPC_future.core.branching import BranchConstraint, partial_sequence_allowed
+from BPC_future.core.branching import BranchConstraint, journey_allowed_by_branch, partial_sequence_allowed
 from BPC_future.core.columns import TimedTrip, evaluate_timed_trip, rounded
 from BPC_future.core.cuts import FutureCut
 from BPC_future.core.data import ArcOption, FutureData
@@ -51,6 +51,33 @@ PRICING_PROOF_KIND_NONE = "NONE"
 PRICING_PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE = "EXHAUSTIVE_NO_NEGATIVE"
 PRICING_PROOF_KIND_FRONTIER_BOUND_NO_NEGATIVE = "FRONTIER_BOUND_NO_NEGATIVE"
 PRICING_PROOF_KIND_FRONTIER_BOUND_INCOMPLETE = "FRONTIER_BOUND_INCOMPLETE"
+
+_TASK_SET_BRANCH_KINDS = {"same_vehicle", "separate_vehicle"}
+_ROUTE_ORDER_BRANCH_KINDS = {
+    "same_route_order_before",
+    "same_route_order_after",
+    "same_route_order_before_strict",
+    "same_route_order_after_strict",
+    "not_same_route",
+}
+_SUPPORTED_MATERIALIZED_JOURNEY_BRANCH_KINDS = _TASK_SET_BRANCH_KINDS | _ROUTE_ORDER_BRANCH_KINDS
+
+
+def _journey_pricing_branch_supported(
+    branch_constraints: tuple[BranchConstraint, ...],
+    config: "JourneyPricingConfig",
+) -> bool:
+    kinds = {str(constraint.kind) for constraint in branch_constraints}
+    if not kinds:
+        return True
+    if any(kind not in _SUPPORTED_MATERIALIZED_JOURNEY_BRANCH_KINDS for kind in kinds):
+        return False
+    if kinds.issubset(_TASK_SET_BRANCH_KINDS):
+        return True
+    # Route/order constraints are only safe in pricing workers that materialize
+    # full journeys before acceptance.  Direct exact certificate paths remain
+    # fail-closed for these constraints.
+    return bool(config.profile_pricing_enabled)
 
 
 def _iter_bits(mask: int) -> tuple[int, ...]:
@@ -4289,7 +4316,7 @@ def _price_journeys_by_sharded_pulse_guarded(
             if signature in forbidden:
                 duplicate_negative_seen = True
                 continue
-            if not _journey_task_set_branch_allowed(journey.task_set, branch_constraints):
+            if not _journey_column_branch_allowed(journey, branch_constraints):
                 continue
             true_rc = float(manual_journey_reduced_cost(journey, duals, cuts=cuts))
             if true_rc >= -1.0e-6:
@@ -4560,7 +4587,7 @@ def price_journeys(
 ) -> JourneyPricingResult:
     """Return at most one most-negative journey or an exact no-negative certificate."""
 
-    if any(constraint.kind not in {"same_vehicle", "separate_vehicle"} for constraint in branch_constraints):
+    if not _journey_pricing_branch_supported(branch_constraints, config):
         return JourneyPricingResult([], False, None, 0, 0, 0, 0, "UNSUPPORTED", "branch_or_cut_not_supported")
     if any(not _journey_pricing_cut_supported(cut) for cut in cuts):
         return JourneyPricingResult([], False, None, 0, 0, 0, 0, "UNSUPPORTED", "branch_or_cut_not_supported")
@@ -4773,6 +4800,19 @@ def price_journeys(
             len(selected),
             "INCOMPLETE",
             "selected_trips_not_a_valid_journey",
+        )
+    if not _journey_column_branch_allowed(journey, branch_constraints):
+        return JourneyPricingResult(
+            [],
+            False,
+            objective,
+            trip_result.generated_sequences,
+            trip_result.evaluated_timed_trips,
+            len(trip_result.trips),
+            len(selected),
+            "INCOMPLETE",
+            "selected_journey_branch_infeasible",
+            branch_infeasible_journeys_filtered=1,
         )
     add_threshold = max(float(config.eps), float(config.min_add_reduced_cost))
     if objective >= -add_threshold:
@@ -5984,7 +6024,7 @@ def _direct_ng_relaxed_iteration(
                     if (
                         journey is not None
                         and journey.signature not in forbidden
-                        and _journey_task_set_branch_allowed(journey.task_set, branch_constraints)
+                        and _journey_column_branch_allowed(journey, branch_constraints)
                         and not _journey_task_set_cost_dominated(journey, dominant_task_set_costs)
                     ):
                         add_threshold = max(float(config.eps), float(config.min_add_reduced_cost))
@@ -6806,7 +6846,7 @@ def _price_journeys_by_direct_labels(
         if journey.signature in forbidden:
             duplicate_filtered += 1
             return False
-        if not _journey_task_set_branch_allowed(journey.task_set, branch_constraints):
+        if not _journey_column_branch_allowed(journey, branch_constraints):
             branch_infeasible_filtered += 1
             return False
         if _journey_task_set_cost_dominated(journey, dominant_task_set_costs):
@@ -14034,6 +14074,11 @@ def _journey_mask_branch_allowed(
         elif constraint.kind == "same_vehicle":
             if bool(final) and left != right:
                 return False
+        elif constraint.kind in {"same_route_order_before", "same_route_order_after", "not_same_route"}:
+            continue
+        elif constraint.kind in {"same_route_order_before_strict", "same_route_order_after_strict"}:
+            if bool(final) and left != right:
+                return False
         else:
             return False
     return True
@@ -15503,7 +15548,7 @@ def _instantiate_profile_journey_candidates(
             record_weak_materialized(selected, float(objective), true_objective)
             record_sample(selected_weak_filtered_samples, selected)
             continue
-        if not _journey_task_set_branch_allowed(journey.task_set, branch_constraints):
+        if not _journey_column_branch_allowed(journey, branch_constraints):
             existing_filtered += 1
             selected_branch_filtered_count += 1
             record_sample(selected_filtered_samples, selected)
@@ -15561,7 +15606,18 @@ def _instantiate_profile_journey_candidates(
     return journeys, existing_filtered, weak_negative_filtered
 
 
+def _journey_column_branch_allowed(journey: JourneyColumn, constraints: tuple[BranchConstraint, ...]) -> bool:
+    return bool(journey_allowed_by_branch(journey, constraints))
+
+
 def _journey_task_set_branch_allowed(task_set: frozenset[int] | set[int], constraints: tuple[BranchConstraint, ...]) -> bool:
+    """Mask/task-set branch filter.
+
+    This is intentionally conservative and only supports Ryan-Foster rows.  It
+    must not be used as a certificate for route-order constraints, because
+    same-route order requires a materialized journey signature.
+    """
+
     tasks = {int(task) for task in task_set}
     for constraint in constraints:
         if constraint.task_j is None:
