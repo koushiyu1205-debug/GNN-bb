@@ -14,6 +14,7 @@ import argparse
 from collections import Counter
 from datetime import date
 import json
+import math
 from pathlib import Path
 import sys
 from typing import Any, Iterable
@@ -29,10 +30,10 @@ from BPC_future.learning.graph_builder import FutureGraphBuilder
 from BPC_future.scripts.audit_journey_branch_impact import BRANCH_IMPACT_FEATURE_SCHEMA
 
 
-DEFAULT_OUTPUT_DIR = Path("BPC_future/data/gat_branch_action_sanity/v244_20260624")
+DEFAULT_OUTPUT_DIR = Path("BPC_future/data/gat_branch_action_sanity/v430_randomtw60_branch_replay_20260626")
 DEFAULT_REPORT = Path(
     "BPC_future/logical_graph/run_reports/"
-    "20260624_bpc_future_gat_branch_action_sanity_dataset_v244_zh.md"
+    "20260626_bpc_future_gat_branch_action_v430_randomtw60_dataset_zh.md"
 )
 
 ROW_FILENAME = "branch_counterfactual_delta_rows.jsonl"
@@ -45,11 +46,106 @@ BRANCH_ACTION_CONTEXT_FEATURE_SCHEMA: tuple[str, ...] = (
     "eligible_count",
     "branch_rank_in_top",
     "branch_rank_in_priority_top",
+    "phased_testing_stage_code",
+    "phased_testing_decision_code",
+    "phased_testing_elimination_reason_code",
+    "phased_testing_phase0_passed",
+    "phased_testing_phase1_lp_complete",
+    "phased_testing_phase2_heuristic_complete",
     "baseline_task_i",
     "baseline_task_j",
     "alternative_task_i",
     "alternative_task_j",
+    "phase1_min_child_lp_gain",
+    "phase1_child_lp_gain_product",
+    "phase1_child_lp_gain_gap",
+    "phase1_child_lp_gain_balance_ratio",
+    "phase1_child_width_balance",
+    "phase1_wall_time",
+    "phase1_dynamic_k_probe_count",
+    "phase1_cut_snapshot_complete",
+    "phase1_cut_snapshot_added_total",
+    "phase1_cut_snapshot_min_child_lp_gain",
+    "phase1_cut_snapshot_child_lp_gain_product",
+    "phase1_cut_snapshot_child_lp_gain_gap",
+    "phase1_cut_snapshot_child_lp_gain_balance_ratio",
+    "phase1_cut_snapshot_wall_time",
+    "phase1_diagnostic_wall_time",
+    "phase2_negative_child_count",
+    "phase2_negative_journey_count",
+    "phase2_negative_journey_balance_gap",
+    "phase2_best_reduced_cost",
+    "phase2_worst_negative_severity",
+    "phase2_child_wall_time_balance_gap",
+    "phase2_child_status_mismatch",
+    "phase2_wall_time",
+    "phase2_dynamic_k_probe_count",
+    "cut_context_active_count",
+    "cut_context_subset_row_count",
+    "cut_context_fleet_lb_count",
+    "cut_context_dynamic_subset_row_regime_code",
+    "cut_context_dynamic_subset_row_cuts_enabled",
+    "cut_context_dynamic_subset_row_cut_gate_enabled",
+    "cut_context_dynamic_subset_row_min_add_depth",
+    "cut_context_dynamic_subset_row_max_depth",
+    "cut_context_dynamic_subset_row_gate_min_best_violation",
 )
+
+PHASED_TESTING_STAGE_CODES: dict[str, int] = {
+    "": 0,
+    "disabled": 0,
+    "depth_gate": 1,
+    "score_gate_preserve": 2,
+    "phase0_cheap_screen": 3,
+    "phase1_lp": 4,
+    "phase2_heuristic": 5,
+}
+
+PHASED_TESTING_DECISION_CODES: dict[str, int] = {
+    "": 0,
+    "disabled": 0,
+    "depth_gate_fallback": 1,
+    "preserved_score_gate_winner": 2,
+    "skipped_by_score_gate_winner_preserve": 3,
+    "filtered": 4,
+    "passed": 5,
+    "skipped_by_dynamic_k": 6,
+    "probed_incomplete": 7,
+    "probed_complete": 8,
+}
+
+PHASED_TESTING_ELIMINATION_REASON_CODES: dict[str, int] = {
+    "": 0,
+    "disabled": 0,
+    "depth_exceeds_max": 1,
+    "root_score_gate_subtree_depth_exceeds_max": 2,
+    "score_gate_winner_preserved": 3,
+    "fractionality_below_min": 4,
+    "missing_score_source": 5,
+    "missing_score": 6,
+    "score_below_min": 7,
+    "dynamic_k_excluded": 8,
+    "missing_pool_width": 9,
+    "pool_total_width_exceeds_cap": 10,
+    "pool_balance_gap_exceeds_cap": 11,
+    "pool_child_width_exceeds_cap": 12,
+    "missing_phase1_context": 13,
+    "invalid_pair": 14,
+    "incomplete_child_lp_probe": 15,
+    "missing_phase2_context": 16,
+    "missing_time_budget": 17,
+    "phase1_lp_incomplete": 18,
+    "incomplete_heuristic_probe": 19,
+}
+
+CUT_CONTEXT_DYNAMIC_SRC_REGIME_CODES: dict[str, int] = {
+    "": 0,
+    "dynamic_src_off": 0,
+    "dynamic_src_audit_only": 1,
+    "dynamic_src_on": 2,
+    "dynamic_src_gated": 3,
+    "dynamic_src_child_or_deeper": 4,
+}
 
 BRANCH_ACTION_LABEL_SCHEMA: tuple[str, ...] = (
     "y_branch_priority_walltime_gain",
@@ -64,6 +160,24 @@ BRANCH_ACTION_LABEL_SCHEMA: tuple[str, ...] = (
     "y_timeout_resolved",
     "y_tail_improved_aux",
     "tail_improved_loss_weight",
+    "y_walltime_gain",
+    "walltime_gain_loss_weight",
+    "y_child_proof_cpu",
+    "child_proof_cpu_loss_weight",
+    "y_time_to_certificate",
+    "time_to_certificate_loss_weight",
+    "y_gap_improvement",
+    "gap_improvement_loss_weight",
+    "y_primal_improvement",
+    "primal_improvement_loss_weight",
+    "y_dual_bound_gain",
+    "dual_bound_gain_loss_weight",
+    "y_fathom_gain",
+    "fathom_gain_loss_weight",
+    "y_branch_count_delta",
+    "branch_count_delta_loss_weight",
+    "y_completion_bound_retry_gain",
+    "completion_bound_retry_gain_loss_weight",
 )
 
 
@@ -91,6 +205,29 @@ def _label(row: dict[str, Any], name: str) -> float:
     if not isinstance(labels, dict):
         return 0.0
     return _float(labels.get(name))
+
+
+def _delta(row: dict[str, Any], name: str) -> float:
+    deltas = row.get("deltas")
+    if not isinstance(deltas, dict):
+        return 0.0
+    return _float(deltas.get(name))
+
+
+def _code(mapping: dict[str, int], value: Any) -> float:
+    text = str(value or "")
+    return float(mapping.get(text, mapping.get("", 0)))
+
+
+def _bool_feature(value: Any) -> float:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "yes", "y"}:
+        return 1.0
+    if text in {"0", "false", "no", "n"}:
+        return 0.0
+    return 0.0
 
 
 def _iter_row_files(paths: Iterable[Path]) -> Iterable[Path]:
@@ -173,8 +310,6 @@ def _effective_wall(row: dict[str, Any], prefix: str, *, wall_cap: float) -> flo
     wall = _float(row.get(f"{prefix}_wall_time"), default=float(wall_cap))
     if wall <= 0.0:
         wall = float(wall_cap)
-    if _status(row, prefix) != "OPTIMAL":
-        wall = max(wall, float(wall_cap))
     return min(float(wall), float(wall_cap))
 
 
@@ -195,8 +330,6 @@ def _is_walltime_gain_positive(
     if bool(row.get("right_censored_counterfactual")):
         return False
     if row.get("alternative_forced_pair_matched") is False:
-        return False
-    if _status(row, "alternative") != "OPTIMAL":
         return False
     return _wall_time_delta(row, wall_cap=wall_cap) <= -float(min_wall_improvement)
 
@@ -222,6 +355,28 @@ def _is_walltime_regression(
     if _is_regression(row):
         return True
     return _wall_time_delta(row, wall_cap=wall_cap) >= float(min_wall_regression)
+
+
+def _is_no_effect_hard_negative(row: dict[str, Any]) -> bool:
+    label_type = str(row.get("counterfactual_label_type") or "")
+    if label_type not in {
+        "changed_timeout_no_effect_hard_negative",
+        "changed_nonoptimal_no_effect_hard_negative",
+        "guarded_width_hard_negative",
+        "paired_probe_hard_negative_proxy",
+    }:
+        return False
+    if row.get("alternative_forced_pair_matched") is False:
+        return False
+    return True
+
+
+def _is_paired_probe_positive_proxy(row: dict[str, Any]) -> bool:
+    if str(row.get("counterfactual_label_type") or "") != "paired_probe_positive_proxy":
+        return False
+    if row.get("alternative_forced_pair_matched") is False:
+        return False
+    return True
 
 
 def _branch_feature_vector(row: dict[str, Any]) -> list[float]:
@@ -256,6 +411,7 @@ def _context_feature_vector(row: dict[str, Any]) -> list[float]:
     alt_raw = _raw(row, "alternative_raw_row")
     baseline_pair = _pair(row.get("baseline_pair")) or (0, 0)
     alternative_pair = _pair(row.get("alternative_pair")) or (0, 0)
+    phase2_best_rc = _float(alt_raw.get("phase2_best_reduced_cost"))
     return [
         _float(row.get("node_id")),
         _float(row.get("depth")),
@@ -264,10 +420,55 @@ def _context_feature_vector(row: dict[str, Any]) -> list[float]:
         _float(alt_raw.get("eligible_count")),
         _float(alt_raw.get("branch_rank_in_top")),
         _float(alt_raw.get("branch_rank_in_priority_top")),
+        _code(PHASED_TESTING_STAGE_CODES, alt_raw.get("phased_testing_stage")),
+        _code(PHASED_TESTING_DECISION_CODES, alt_raw.get("phased_testing_decision")),
+        _code(
+            PHASED_TESTING_ELIMINATION_REASON_CODES,
+            alt_raw.get("phased_testing_elimination_reason"),
+        ),
+        _bool_feature(alt_raw.get("phased_testing_phase0_passed")),
+        _bool_feature(alt_raw.get("phased_testing_phase1_lp_complete")),
+        _bool_feature(alt_raw.get("phased_testing_phase2_heuristic_complete")),
         float(baseline_pair[0]),
         float(baseline_pair[1]),
         float(alternative_pair[0]),
         float(alternative_pair[1]),
+        _float(alt_raw.get("phase1_min_child_lp_gain")),
+        _float(alt_raw.get("phase1_child_lp_gain_product")),
+        _float(alt_raw.get("phase1_child_lp_gain_gap")),
+        _float(alt_raw.get("phase1_child_lp_gain_balance_ratio")),
+        _float(alt_raw.get("phase1_child_width_balance")),
+        _float(alt_raw.get("phase1_wall_time")),
+        _float(alt_raw.get("phase1_dynamic_k_probe_count")),
+        _bool_feature(alt_raw.get("phase1_cut_snapshot_complete")),
+        _float(alt_raw.get("phase1_cut_snapshot_added_total")),
+        _float(alt_raw.get("phase1_cut_snapshot_min_child_lp_gain")),
+        _float(alt_raw.get("phase1_cut_snapshot_child_lp_gain_product")),
+        _float(alt_raw.get("phase1_cut_snapshot_child_lp_gain_gap")),
+        _float(alt_raw.get("phase1_cut_snapshot_child_lp_gain_balance_ratio")),
+        _float(alt_raw.get("phase1_cut_snapshot_wall_time")),
+        _float(alt_raw.get("phase1_diagnostic_wall_time")),
+        _float(alt_raw.get("phase2_negative_child_count")),
+        _float(alt_raw.get("phase2_negative_journey_count")),
+        _float(alt_raw.get("phase2_negative_journey_balance_gap")),
+        phase2_best_rc,
+        _float(alt_raw.get("phase2_worst_negative_severity")),
+        _float(alt_raw.get("phase2_child_wall_time_balance_gap")),
+        _bool_feature(alt_raw.get("phase2_child_status_mismatch")),
+        _float(alt_raw.get("phase2_wall_time")),
+        _float(alt_raw.get("phase2_dynamic_k_probe_count")),
+        _float(alt_raw.get("cut_context_active_count")),
+        _float(alt_raw.get("cut_context_subset_row_count")),
+        _float(alt_raw.get("cut_context_fleet_lb_count")),
+        _code(
+            CUT_CONTEXT_DYNAMIC_SRC_REGIME_CODES,
+            alt_raw.get("cut_context_dynamic_subset_row_regime"),
+        ),
+        _bool_feature(alt_raw.get("cut_context_dynamic_subset_row_cuts_enabled")),
+        _bool_feature(alt_raw.get("cut_context_dynamic_subset_row_cut_gate_enabled")),
+        _float(alt_raw.get("cut_context_dynamic_subset_row_min_add_depth")),
+        _float(alt_raw.get("cut_context_dynamic_subset_row_max_depth")),
+        _float(alt_raw.get("cut_context_dynamic_subset_row_gate_min_best_violation")),
     ]
 
 
@@ -301,6 +502,10 @@ def _row_kind(
         return "weak_positive_not_target"
     if regression:
         return "hard_negative_regression"
+    if _is_no_effect_hard_negative(row):
+        return str(row.get("counterfactual_label_type") or "no_effect_hard_negative")
+    if _is_paired_probe_positive_proxy(row):
+        return "paired_probe_positive_proxy"
     if str(row.get("counterfactual_label_type") or "") == "local_only_hard_negative":
         return "local_only_hard_negative"
     return str(row.get("counterfactual_label_type") or "unsupported")
@@ -329,13 +534,53 @@ def _labels(
         wall_cap=wall_cap,
         min_wall_regression=min_wall_regression,
     )
+    no_effect_hard_negative = _is_no_effect_hard_negative(row)
+    paired_probe_positive = _is_paired_probe_positive_proxy(row)
     weak_positive = bool(strict_positive and not target_positive)
     magnitude_weight = min(
         float(max_delta_weight),
         max(1.0, abs(delta) / max(float(min_wall_improvement), 1.0)),
     )
+    no_effect_weight = min(
+        float(max_delta_weight),
+        max(0.5, _float(row.get("hard_negative_loss_weight"), default=1.0)),
+    )
     main_weight = magnitude_weight if wall_positive or regression else 0.0
-    tail_weight = 1.0 if strict_positive or regression else 0.0
+    if no_effect_hard_negative:
+        main_weight = no_effect_weight
+    tail_weight = 1.0 if strict_positive or regression or paired_probe_positive else 0.0
+    walltime_gain = -float(delta)
+    child_proof_cpu = _float(
+        row.get(
+            "child_proof_cpu",
+            row.get("sum_child_proof_cpu", row.get("alternative_wall_time", wall_cap)),
+        ),
+        default=float(wall_cap),
+    )
+    time_to_certificate = _float(
+        row.get(
+            "child_time_to_certificate",
+            row.get("child_time_to_first_certificate", row.get("alternative_wall_time", wall_cap)),
+        ),
+        default=float(wall_cap),
+    )
+    proof_weight = 1.0 if child_proof_cpu >= 0.0 and math.isfinite(float(child_proof_cpu)) else 0.0
+    certificate_weight = 1.0 if time_to_certificate >= 0.0 and math.isfinite(float(time_to_certificate)) else 0.0
+    gap_improvement = _label(row, "y_gap_improvement")
+    primal_improvement = _label(row, "y_primal_improvement")
+    dual_bound_gain = _label(row, "y_dual_bound_gain")
+    fathom_gain = _label(row, "y_fathom_gain")
+    completion_retry_gain = _label(row, "y_completion_bound_final_judge_retry_gain")
+    branch_count_delta = _delta(row, "branch_count_delta")
+    gap_aux_positive = str(row.get("counterfactual_label_type") or "") in {
+        "weak_gap_positive",
+        "weak_gap_fathom_positive",
+        "weak_gap_regression",
+    }
+    structural_aux_weight = 1.0 if gap_aux_positive or strict_positive or regression else 0.0
+    fathom_weight = 1.0 if abs(float(fathom_gain)) > 0.0 or structural_aux_weight > 0.0 else 0.0
+    retry_weight = 1.0 if abs(float(completion_retry_gain)) > 0.0 or structural_aux_weight > 0.0 else 0.0
+    branch_count_weight = 1.0 if abs(float(branch_count_delta)) > 0.0 or structural_aux_weight > 0.0 else 0.0
     return {
         "y_branch_priority_walltime_gain": 1.0 if wall_positive else 0.0,
         "branch_priority_loss_weight": main_weight,
@@ -347,8 +592,26 @@ def _labels(
         "y_counterfactual_regression": 1.0 if regression else 0.0,
         "y_timeout_regression": 1.0 if bool(row.get("timeout_regression")) else 0.0,
         "y_timeout_resolved": 1.0 if bool(row.get("timeout_resolved")) else 0.0,
-        "y_tail_improved_aux": 1.0 if strict_positive else 0.0,
+        "y_tail_improved_aux": 1.0 if strict_positive or paired_probe_positive else 0.0,
         "tail_improved_loss_weight": tail_weight,
+        "y_walltime_gain": float(walltime_gain),
+        "walltime_gain_loss_weight": main_weight,
+        "y_child_proof_cpu": max(0.0, float(child_proof_cpu)),
+        "child_proof_cpu_loss_weight": float(proof_weight),
+        "y_time_to_certificate": max(0.0, float(time_to_certificate)),
+        "time_to_certificate_loss_weight": float(certificate_weight),
+        "y_gap_improvement": float(gap_improvement),
+        "gap_improvement_loss_weight": float(structural_aux_weight),
+        "y_primal_improvement": float(primal_improvement),
+        "primal_improvement_loss_weight": float(structural_aux_weight),
+        "y_dual_bound_gain": float(dual_bound_gain),
+        "dual_bound_gain_loss_weight": float(structural_aux_weight),
+        "y_fathom_gain": float(fathom_gain),
+        "fathom_gain_loss_weight": float(fathom_weight),
+        "y_branch_count_delta": float(branch_count_delta),
+        "branch_count_delta_loss_weight": float(branch_count_weight),
+        "y_completion_bound_retry_gain": float(completion_retry_gain),
+        "completion_bound_retry_gain_loss_weight": float(retry_weight),
     }
 
 
@@ -359,6 +622,12 @@ def _sample_allowed(
     min_wall_improvement: float,
     min_wall_regression: float,
 ) -> bool:
+    label_type = str(row.get("counterfactual_label_type") or "")
+    gap_aux_training = bool(row.get("usable_for_gap_aux_training")) or label_type in {
+        "weak_gap_positive",
+        "weak_gap_fathom_positive",
+        "weak_gap_regression",
+    }
     return bool(
         _is_strict_full_replay_positive(row)
         or _is_walltime_gain_positive(
@@ -375,6 +644,9 @@ def _sample_allowed(
             and not bool(row.get("right_censored_counterfactual"))
             and row.get("alternative_forced_pair_matched") is not False
         )
+        or _is_no_effect_hard_negative(row)
+        or _is_paired_probe_positive_proxy(row)
+        or gap_aux_training
     )
 
 
@@ -401,8 +673,8 @@ def build_dataset(
     *,
     target_wall: float = 200.0,
     wall_cap: float = 600.0,
-    min_wall_improvement: float = 5.0,
-    min_wall_regression: float = 5.0,
+    min_wall_improvement: float = 30.0,
+    min_wall_regression: float = 30.0,
     max_delta_weight: float = 4.0,
     max_rows: int = 0,
 ) -> dict[str, Any]:
@@ -507,6 +779,78 @@ def build_dataset(
             [label_values["tail_improved_loss_weight"]],
             dtype=torch.float32,
         )
+        sample.y_walltime_gain = torch.tensor(
+            [label_values["y_walltime_gain"]],
+            dtype=torch.float32,
+        )
+        sample.walltime_gain_loss_weight = torch.tensor(
+            [label_values["walltime_gain_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_child_proof_cpu = torch.tensor(
+            [label_values["y_child_proof_cpu"]],
+            dtype=torch.float32,
+        )
+        sample.child_proof_cpu_loss_weight = torch.tensor(
+            [label_values["child_proof_cpu_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_time_to_certificate = torch.tensor(
+            [label_values["y_time_to_certificate"]],
+            dtype=torch.float32,
+        )
+        sample.time_to_certificate_loss_weight = torch.tensor(
+            [label_values["time_to_certificate_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_gap_improvement = torch.tensor(
+            [label_values["y_gap_improvement"]],
+            dtype=torch.float32,
+        )
+        sample.gap_improvement_loss_weight = torch.tensor(
+            [label_values["gap_improvement_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_primal_improvement = torch.tensor(
+            [label_values["y_primal_improvement"]],
+            dtype=torch.float32,
+        )
+        sample.primal_improvement_loss_weight = torch.tensor(
+            [label_values["primal_improvement_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_dual_bound_gain = torch.tensor(
+            [label_values["y_dual_bound_gain"]],
+            dtype=torch.float32,
+        )
+        sample.dual_bound_gain_loss_weight = torch.tensor(
+            [label_values["dual_bound_gain_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_fathom_gain = torch.tensor(
+            [label_values["y_fathom_gain"]],
+            dtype=torch.float32,
+        )
+        sample.fathom_gain_loss_weight = torch.tensor(
+            [label_values["fathom_gain_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_branch_count_delta = torch.tensor(
+            [label_values["y_branch_count_delta"]],
+            dtype=torch.float32,
+        )
+        sample.branch_count_delta_loss_weight = torch.tensor(
+            [label_values["branch_count_delta_loss_weight"]],
+            dtype=torch.float32,
+        )
+        sample.y_completion_bound_retry_gain = torch.tensor(
+            [label_values["y_completion_bound_retry_gain"]],
+            dtype=torch.float32,
+        )
+        sample.completion_bound_retry_gain_loss_weight = torch.tensor(
+            [label_values["completion_bound_retry_gain_loss_weight"]],
+            dtype=torch.float32,
+        )
         sample.branch_action_labels = torch.tensor(
             [[label_values[name] for name in BRANCH_ACTION_LABEL_SCHEMA]],
             dtype=torch.float32,
@@ -553,6 +897,7 @@ def build_dataset(
                 "branch_priority_label": main_label,
                 "branch_priority_loss_weight": label_values["branch_priority_loss_weight"],
                 "capped_wall_time_delta": label_values["capped_wall_time_delta"],
+                "walltime_gain": label_values["y_walltime_gain"],
                 "target_wall_crossing_positive": label_values["y_target_wall_crossing_positive"] > 0.5,
                 "tail_improved_aux": label_values["y_tail_improved_aux"],
             }
@@ -609,6 +954,18 @@ def build_dataset(
                 "strict full-replay improvement that did not reach target_wall"
             ),
             "y_counterfactual_regression": "full-run regression / timeout regression label",
+            "y_walltime_gain": "continuous capped wall-time gain: baseline_capped_wall - alternative_capped_wall",
+            "y_child_proof_cpu": "auxiliary child proof CPU target when present, otherwise alternative wall time proxy",
+            "y_time_to_certificate": "auxiliary time-to-certificate target when present, otherwise alternative wall time proxy",
+            "y_gap_improvement": "auxiliary non-certificate gap improvement: baseline_gap - alternative_gap",
+            "y_primal_improvement": "auxiliary incumbent/primal improvement: baseline_best_primal - alternative_best_primal",
+            "y_dual_bound_gain": "auxiliary dual-bound gain: alternative_best_dual - baseline_best_dual",
+            "y_fathom_gain": "auxiliary fathom event gain under the same replay budget",
+            "y_branch_count_delta": "auxiliary branch-count delta: alternative_branch_count - baseline_branch_count",
+            "y_completion_bound_retry_gain": (
+                "auxiliary completion-bound final-judge retry gain: "
+                "baseline_retry_count - alternative_retry_count"
+            ),
         },
         "exactness_contract": {
             "scheduler_only": True,
@@ -710,7 +1067,8 @@ def _write_report(report: Path, summary: dict[str, Any], manifest: dict[str, Any
         "- 主 `branch_priority` 标签使用 capped wall-time gain，不把 200 秒作为训练硬断点。",
         "- `target_wall_crossing_positive` 只作为验收/报告字段；`199s -> 201s` 这类小变化不会成为强负例，`500s -> 300s` 会成为高权重正例。",
         "- `weak_positive_not_target` 样本保留在数据集中；只要有足够 wall-time gain，也会进入主标签，否则仅作为 `tail_improved` 辅助标签。",
-        "- `local_only_hard_negative` 和右删失 proxy 不进入主训练样本，避免把局部证据当 full-run 反例。",
+        "- `local_only_hard_negative` 和未校准右删失 proxy 不进入主训练样本；`paired_probe_hard_negative_proxy` 只作为 proof-risk hard-negative calibration 进入，不能当 full-run 反例。",
+        "- `paired_probe_positive_proxy` 只进入 auxiliary weak-positive / proof-cost 训练头，主 wall-time gain loss 权重保持 0，不能当 full-run 正例或 production score 依据。",
         "",
         "## Schema",
         "",
@@ -737,8 +1095,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--target-wall", type=float, default=200.0)
     parser.add_argument("--wall-cap", type=float, default=600.0)
-    parser.add_argument("--min-wall-improvement", type=float, default=5.0)
-    parser.add_argument("--min-wall-regression", type=float, default=5.0)
+    parser.add_argument("--min-wall-improvement", type=float, default=30.0)
+    parser.add_argument("--min-wall-regression", type=float, default=30.0)
     parser.add_argument("--max-delta-weight", type=float, default=4.0)
     parser.add_argument("--max-rows", type=int, default=0)
     return parser.parse_args()

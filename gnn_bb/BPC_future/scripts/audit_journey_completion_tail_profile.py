@@ -68,6 +68,22 @@ CACHE_COUNT_FIELDS = (
     "generated_next_sorties_after_bound",
 )
 
+HARVEST_COUNT_FIELDS = (
+    "harvest_candidate_negative_count",
+    "harvest_selected_count",
+    "harvest_candidate_new_task_set_count",
+    "harvest_selected_new_task_set_count",
+    "harvest_selected_replacement_task_set_count",
+    "harvest_candidate_priority_task_set_count",
+    "harvest_selected_priority_task_set_count",
+    "harvest_candidate_support_changing_count",
+    "harvest_selected_support_changing_count",
+    "harvest_fallback_fill_count",
+    "harvest_fallback_fill_new_mask_count",
+    "harvest_fallback_fill_replacement_count",
+    "harvest_selected_weak_replacement_count",
+)
+
 TAIL_MIN_FILL_MODE_FIELDS = (
     "completion_bound_diverse_harvest_tail_min_fill_enabled",
     "completion_bound_diverse_harvest_tail_min_fill_audit_enabled",
@@ -172,6 +188,20 @@ def _sum_int_fields(records: Iterable[dict[str, Any]], fields: Iterable[str]) ->
     }
 
 
+def _sum_harvest_count_fields(records: Iterable[dict[str, Any]]) -> dict[str, int]:
+    materialized = list(records)
+    totals: dict[str, int] = {}
+    for field in HARVEST_COUNT_FIELDS:
+        direct_field = f"direct_label_{field}"
+        totals[field] = int(
+            sum(
+                max(_int(record, field), _int(record, direct_field))
+                for record in materialized
+            )
+        )
+    return totals
+
+
 def _max_int_fields(records: Iterable[dict[str, Any]], fields: Iterable[str]) -> dict[str, int]:
     materialized = list(records)
     return {
@@ -247,6 +277,37 @@ def _tail_min_fill_summary(mode_rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _classify_harvest_tail(
+    completion_retries: list[dict[str, Any]],
+    *,
+    total_profile_generation_time: float,
+) -> str:
+    if not completion_retries:
+        return "no_completion_bound_retry"
+    totals = _sum_harvest_count_fields(completion_retries)
+    candidate = int(totals.get("harvest_candidate_negative_count", 0))
+    selected = int(totals.get("harvest_selected_count", 0))
+    candidate_new = int(totals.get("harvest_candidate_new_task_set_count", 0))
+    selected_new = int(totals.get("harvest_selected_new_task_set_count", 0))
+    selected_replacement = int(totals.get("harvest_selected_replacement_task_set_count", 0))
+    support_changing = int(totals.get("harvest_selected_support_changing_count", 0))
+    if selected_new > 0:
+        return "harvest_returned_new_task_set"
+    if support_changing > 0:
+        return "harvest_returned_support_changing"
+    if selected_replacement > 0:
+        return "harvest_replacement_only_selected"
+    if candidate_new > 0 and selected <= 0:
+        return "harvest_new_task_set_candidate_not_returned"
+    if candidate > 0 and candidate_new <= 0:
+        return "harvest_replacement_only_candidates"
+    if candidate > 0:
+        return "harvest_candidate_not_returned"
+    if float(total_profile_generation_time) >= 30.0:
+        return "expensive_no_harvest_candidate"
+    return "no_harvest_candidate"
+
+
 def _summarize_log(path: Path) -> dict[str, Any]:
     events = _read_events(path)
     pricing_events = [record for record in events if record.get("event") == "journey_pricing"]
@@ -271,6 +332,12 @@ def _summarize_log(path: Path) -> dict[str, Any]:
     total_profile_generation_time = round(
         _sum(completion_retries, "profile_generation_time"),
         6,
+    )
+    harvest_count_totals = _sum_harvest_count_fields(completion_retries)
+    cache_disabled_reason_counts = Counter(
+        str(record.get("direct_next_sortie_cache_disabled_reason") or "")
+        for record in completion_retries
+        if str(record.get("direct_next_sortie_cache_disabled_reason") or "")
     )
     return {
         "log_file": str(path),
@@ -335,6 +402,18 @@ def _summarize_log(path: Path) -> dict[str, Any]:
             completion_retries,
             CACHE_COUNT_FIELDS,
         ),
+        "completion_retry_cache_requested_count": int(
+            sum(1 for record in completion_retries if bool(record.get("direct_next_sortie_cache_requested")))
+        ),
+        "completion_retry_cache_effective_count": int(
+            sum(1 for record in completion_retries if bool(record.get("direct_next_sortie_cache_effective_enabled")))
+        ),
+        "completion_retry_cache_disabled_reason_counts": dict(sorted(cache_disabled_reason_counts.items())),
+        "completion_retry_harvest_count_totals": harvest_count_totals,
+        "completion_retry_harvest_tail_class": _classify_harvest_tail(
+            completion_retries,
+            total_profile_generation_time=total_profile_generation_time,
+        ),
         **_tail_min_fill_summary(tail_min_fill_mode_rows),
         "completion_retry_last": _compact_completion_retry(last_retry),
         "addition_event_count": len(addition_events),
@@ -386,8 +465,17 @@ def _compact_completion_retry(record: dict[str, Any] | None) -> dict[str, Any] |
         "direct_label_harvest_selected_replacement_task_set_count",
         "harvest_candidate_negative_count",
         "harvest_selected_count",
+        "harvest_candidate_new_task_set_count",
         "harvest_selected_new_task_set_count",
         "harvest_selected_replacement_task_set_count",
+        "harvest_candidate_priority_task_set_count",
+        "harvest_selected_priority_task_set_count",
+        "harvest_candidate_support_changing_count",
+        "harvest_selected_support_changing_count",
+        "harvest_fallback_fill_count",
+        "harvest_fallback_fill_new_mask_count",
+        "harvest_fallback_fill_replacement_count",
+        "harvest_selected_weak_replacement_count",
         "global_certificate",
         "global_certificate_capable",
         "exhausted",
@@ -398,6 +486,9 @@ def _compact_completion_retry(record: dict[str, Any] | None) -> dict[str, Any] |
     keys.extend(CACHE_COUNT_FIELDS)
     keys.extend(
         [
+            "direct_next_sortie_cache_requested",
+            "direct_next_sortie_cache_effective_enabled",
+            "direct_next_sortie_cache_disabled_reason",
             "direct_label_profile_timing_enabled",
             "direct_journey_label_next_sortie_cache_enabled",
             "direct_label_harvest_min_fill",
@@ -409,6 +500,9 @@ def _compact_completion_retry(record: dict[str, Any] | None) -> dict[str, Any] |
 
 def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     class_counts = Counter(str(row.get("completion_retry_class") or "") for row in rows)
+    harvest_tail_class_counts = Counter(
+        str(row.get("completion_retry_harvest_tail_class") or "") for row in rows
+    )
     incomplete_tail_rows = [
         row
         for row in rows
@@ -456,6 +550,23 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         )
         for field in CACHE_COUNT_FIELDS
     }
+    cache_disabled_reason_counts: Counter[str] = Counter()
+    for row in rows:
+        cache_disabled_reason_counts.update(
+            {
+                str(key): int(value)
+                for key, value in (row.get("completion_retry_cache_disabled_reason_counts") or {}).items()
+            }
+        )
+    harvest_count_totals = {
+        field: int(
+            sum(
+                int((row.get("completion_retry_harvest_count_totals") or {}).get(field) or 0)
+                for row in rows
+            )
+        )
+        for field in HARVEST_COUNT_FIELDS
+    }
     total_profile_generation_time = round(
         sum(float(row.get("completion_retry_total_profile_generation_time") or 0.0) for row in rows),
         6,
@@ -483,6 +594,16 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "completion_retry_profile_count_totals": profile_count_totals,
         "completion_retry_cache_count_totals": cache_count_totals,
+        "completion_retry_cache_requested_count": int(
+            sum(int(row.get("completion_retry_cache_requested_count") or 0) for row in rows)
+        ),
+        "completion_retry_cache_effective_count": int(
+            sum(int(row.get("completion_retry_cache_effective_count") or 0) for row in rows)
+        ),
+        "completion_retry_cache_disabled_reason_counts": dict(sorted(cache_disabled_reason_counts.items())),
+        "completion_retry_harvest_count_totals": harvest_count_totals,
+        "completion_retry_harvest_tail_class_counts": dict(sorted(harvest_tail_class_counts.items())),
+        "completion_retry_harvest_top_profile_records": _top_harvest_profile_records(rows),
         "completion_retry_total_profile_generation_time": total_profile_generation_time,
         "completion_retry_total_generated_sequences": int(
             sum(int(row.get("completion_retry_total_generated_sequences") or 0) for row in rows)
@@ -513,6 +634,42 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _top_harvest_profile_records(rows: list[dict[str, Any]], limit: int = 12) -> list[dict[str, Any]]:
+    selected = sorted(
+        rows,
+        key=lambda row: float(row.get("completion_retry_total_profile_generation_time") or 0.0),
+        reverse=True,
+    )[:limit]
+    compact: list[dict[str, Any]] = []
+    for row in selected:
+        harvest = row.get("completion_retry_harvest_count_totals") or {}
+        compact.append(
+            {
+                "instance": row.get("instance"),
+                "log_file": row.get("log_file"),
+                "finish_status": row.get("finish_status"),
+                "completion_retry_class": row.get("completion_retry_class"),
+                "harvest_tail_class": row.get("completion_retry_harvest_tail_class"),
+                "profile_generation_time": row.get("completion_retry_total_profile_generation_time"),
+                "harvest_candidate_negative_count": harvest.get("harvest_candidate_negative_count", 0),
+                "harvest_selected_count": harvest.get("harvest_selected_count", 0),
+                "harvest_candidate_new_task_set_count": harvest.get(
+                    "harvest_candidate_new_task_set_count",
+                    0,
+                ),
+                "harvest_selected_new_task_set_count": harvest.get(
+                    "harvest_selected_new_task_set_count",
+                    0,
+                ),
+                "harvest_selected_replacement_task_set_count": harvest.get(
+                    "harvest_selected_replacement_task_set_count",
+                    0,
+                ),
+            }
+        )
+    return compact
+
+
 def _interpret(rows: list[dict[str, Any]]) -> str:
     if not rows:
         return "没有找到可审计日志。"
@@ -520,6 +677,20 @@ def _interpret(rows: list[dict[str, Any]]) -> str:
     no_column_timeouts = class_counts.get("completion_bound_time_limit_no_column_uncertified", 0)
     found_negative = class_counts.get("completion_bound_found_negative", 0)
     certified = class_counts.get("completion_bound_certified_no_negative", 0)
+    harvest_tail_counts = Counter(str(row.get("completion_retry_harvest_tail_class") or "") for row in rows)
+    expensive_no_candidate = harvest_tail_counts.get("expensive_no_harvest_candidate", 0)
+    new_candidate_not_returned = harvest_tail_counts.get("harvest_new_task_set_candidate_not_returned", 0)
+    if expensive_no_candidate > 0 and expensive_no_candidate >= new_candidate_not_returned:
+        return (
+            "completion-bound tail 主要表现为高 profile-generation 时间但没有可 harvest 的 "
+            "true-RC 负列候选。下一步优先看 direct-label proof loop / completion-bound "
+            "剪枝成本，而不是降低返回门槛。"
+        )
+    if new_candidate_not_returned > 0:
+        return (
+            "日志中存在新 task-set 候选但没有被返回的 harvest tail。下一步优先检查 "
+            "diverse-harvest selection、min-fill 与 priority/support 约束。"
+        )
     if no_column_timeouts and no_column_timeouts >= found_negative + certified:
         return (
             "主要瓶颈是 completion-bound final judge 在无负列尾部耗尽时间，"
@@ -587,6 +758,16 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"{aggregate['completion_retry_profile_time_share_top']}",
         "completion_retry_cache_count_totals = "
         f"{aggregate['completion_retry_cache_count_totals']}",
+        "completion_retry_cache_requested_count = "
+        f"{aggregate['completion_retry_cache_requested_count']}",
+        "completion_retry_cache_effective_count = "
+        f"{aggregate['completion_retry_cache_effective_count']}",
+        "completion_retry_cache_disabled_reason_counts = "
+        f"{aggregate['completion_retry_cache_disabled_reason_counts']}",
+        "completion_retry_harvest_count_totals = "
+        f"{aggregate['completion_retry_harvest_count_totals']}",
+        "completion_retry_harvest_tail_class_counts = "
+        f"{aggregate['completion_retry_harvest_tail_class_counts']}",
         "completion_retry_total_generated_sequences = "
         f"{aggregate['completion_retry_total_generated_sequences']}",
         "completion_retry_total_evaluated_timed_trips = "
@@ -605,6 +786,8 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
         f"{aggregate['completion_retry_tail_min_fill_optin_disabled_count']}",
         "completion_retry_tail_min_fill_reason_counts = "
         f"{aggregate['completion_retry_tail_min_fill_reason_counts']}",
+        "completion_retry_harvest_top_profile_records = "
+        f"{json.dumps(aggregate['completion_retry_harvest_top_profile_records'], ensure_ascii=False)}",
         "production_ready = false",
         "certificate_effect = false",
         "official_bound_effect = false",

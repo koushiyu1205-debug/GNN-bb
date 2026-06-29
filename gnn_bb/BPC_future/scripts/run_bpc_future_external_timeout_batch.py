@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
+import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -42,6 +44,11 @@ EXTRA_FIELDS = [
     "return_code",
     "wall_time",
     "run_log",
+    "gap_available",
+    "gap_source",
+    "gap_unavailable_reason",
+    "best_primal_bound",
+    "best_dual_bound",
 ]
 
 
@@ -93,6 +100,162 @@ def read_single_result(path: Path) -> dict[str, str] | None:
     return dict(rows[0]) if rows else None
 
 
+def _finite_float(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return float(parsed)
+
+
+def _format_float(value: float | None) -> str:
+    if value is None:
+        return ""
+    return str(round(float(value), 6))
+
+
+def _gap_from_bounds(primal: float | None, dual: float | None) -> float | None:
+    if primal is None or dual is None:
+        return None
+    return max(0.0, (float(primal) - float(dual)) / max(1.0, abs(float(primal))))
+
+
+def _log_path_for_instance(log_dir: Path, instance: str) -> Path:
+    return log_dir / f"{instance}.jsonl"
+
+
+def _iter_jsonl(path: Path):
+    if not path.exists():
+        return
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict):
+                    yield payload
+    except OSError:
+        return
+
+
+def _best_known_bound_diagnostics(row: dict[str, object], log_path: Path) -> dict[str, str]:
+    """Extract exact-safe result-gap fields for completed or timed-out rows.
+
+    The official `gap` remains populated only when both a feasible incumbent
+    and a legal lower bound are available.  RMP objectives from unfinished
+    column generation are intentionally not used as lower bounds here.
+    """
+
+    primal = _finite_float(row.get("primal_bound"))
+    dual = _finite_float(row.get("dual_bound"))
+    gap = _finite_float(row.get("gap"))
+    source = "solver_result" if gap is not None else ""
+    saw_finish = False
+    saw_branch = False
+    saw_corrected_bound = False
+    saw_invalid_corrected_bound = False
+
+    for payload in _iter_jsonl(log_path) or ():
+        event = str(payload.get("event") or "")
+        if event == "journey_branch":
+            saw_branch = True
+        if event == "finish":
+            saw_finish = True
+            finish_primal = _finite_float(payload.get("primal_bound"))
+            finish_dual = _finite_float(payload.get("dual_bound"))
+            finish_gap = _finite_float(payload.get("gap"))
+            if finish_primal is not None:
+                primal = finish_primal if primal is None else min(float(primal), float(finish_primal))
+            if finish_dual is not None:
+                dual = finish_dual
+            if finish_gap is not None:
+                gap = finish_gap
+                source = "finish_event"
+            continue
+        if event == "incumbent":
+            incumbent_objective = _finite_float(payload.get("objective"))
+            if incumbent_objective is not None:
+                primal = incumbent_objective if primal is None else min(float(primal), float(incumbent_objective))
+        incumbent = _finite_float(payload.get("incumbent"))
+        if incumbent is not None:
+            primal = incumbent if primal is None else min(float(primal), float(incumbent))
+        if event in {"journey_pool_integer", "journey_pool_integer_probe"}:
+            mip_objective = _finite_float(payload.get("mip_objective"))
+            if mip_objective is not None:
+                primal = mip_objective if primal is None else min(float(primal), float(mip_objective))
+        if event == "journey_corrected_node_bound_audit":
+            corrected = _finite_float(payload.get("corrected_node_lb"))
+            if corrected is not None:
+                if bool(payload.get("valid")):
+                    saw_corrected_bound = True
+                    # A valid corrected node LB is a global bound only before
+                    # branching.  After branch events, reconstructing the global
+                    # open-node minimum requires full tree state, so fail closed.
+                    if not saw_branch and dual is None:
+                        dual = corrected
+                        source = "root_corrected_node_bound"
+                else:
+                    saw_invalid_corrected_bound = True
+
+    if gap is None:
+        gap = _gap_from_bounds(primal, dual)
+        if gap is not None and not source:
+            source = "derived_from_exact_bounds"
+
+    if gap is not None and primal is not None and dual is not None:
+        return {
+            "gap_available": "true",
+            "gap_source": source or "derived_from_exact_bounds",
+            "gap_unavailable_reason": "",
+            "best_primal_bound": _format_float(primal),
+            "best_dual_bound": _format_float(dual),
+            "primal_bound": row.get("primal_bound") or _format_float(primal),
+            "dual_bound": row.get("dual_bound") or _format_float(dual),
+            "gap": row.get("gap") or _format_float(gap),
+        }
+
+    if primal is None:
+        reason = "no_feasible_incumbent"
+    elif dual is None:
+        if saw_invalid_corrected_bound:
+            reason = "no_exact_dual_bound_invalid_corrected_bound"
+        elif not saw_finish:
+            reason = "no_exact_dual_bound_external_timeout_no_finish"
+        else:
+            reason = "no_exact_dual_bound"
+    elif saw_branch and saw_corrected_bound:
+        reason = "global_tree_bound_reconstruction_unavailable"
+    else:
+        reason = "gap_unavailable"
+    return {
+        "gap_available": "false",
+        "gap_source": "",
+        "gap_unavailable_reason": reason,
+        "best_primal_bound": _format_float(primal),
+        "best_dual_bound": _format_float(dual),
+    }
+
+
+def augment_gap_fields(row: dict[str, object], *, log_dir: Path, instance: str) -> dict[str, object]:
+    augmented = dict(row)
+    diagnostics = _best_known_bound_diagnostics(augmented, _log_path_for_instance(log_dir, instance))
+    for key, value in diagnostics.items():
+        if key in {"primal_bound", "dual_bound", "gap"}:
+            if not augmented.get(key):
+                augmented[key] = value
+        else:
+            augmented[key] = value
+    return augmented
+
+
 def timeout_row(instance: str, elapsed: float, return_code: int, run_log: Path) -> dict[str, object]:
     return {
         "instance": instance,
@@ -119,6 +282,11 @@ def timeout_row(instance: str, elapsed: float, return_code: int, run_log: Path) 
         "return_code": return_code,
         "wall_time": round(float(elapsed), 6),
         "run_log": str(run_log),
+        "gap_available": "false",
+        "gap_source": "",
+        "gap_unavailable_reason": "no_solver_result",
+        "best_primal_bound": "",
+        "best_dual_bound": "",
     }
 
 
@@ -176,6 +344,7 @@ def run_instance(
             row["run_log"] = str(run_log)
         else:
             row = timeout_row(instance, elapsed, completed.returncode, run_log)
+        row = augment_gap_fields(row, log_dir=log_dir, instance=instance)
         return index, row, completed.returncode, elapsed
 
 
@@ -189,6 +358,12 @@ def main() -> None:
     run_log_dir = Path(args.run_log_dir)
     run_log_dir.mkdir(parents=True, exist_ok=True)
     rows, done = read_done(results_csv)
+    rows = [
+        augment_gap_fields(row, log_dir=log_dir, instance=str(row.get("instance", "")))
+        if row.get("instance")
+        else row
+        for row in rows
+    ]
     write_rows(results_csv, rows)
 
     env = dict(os.environ)

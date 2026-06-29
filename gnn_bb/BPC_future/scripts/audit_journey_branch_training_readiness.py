@@ -175,6 +175,21 @@ def _is_local_only_hard_negative(row: dict[str, Any]) -> bool:
     return str(row.get("counterfactual_label_type") or "") == "local_only_hard_negative"
 
 
+def _is_weak_gap_aux_positive(row: dict[str, Any]) -> bool:
+    if not bool(row.get("usable_for_gap_aux_training")):
+        return False
+    return str(row.get("counterfactual_label_type") or "") in {
+        "weak_gap_positive",
+        "weak_gap_fathom_positive",
+    }
+
+
+def _is_weak_gap_aux_regression(row: dict[str, Any]) -> bool:
+    if not bool(row.get("usable_for_gap_aux_training")):
+        return False
+    return str(row.get("counterfactual_label_type") or "") == "weak_gap_regression"
+
+
 def _marked_holdout(row: dict[str, Any]) -> bool:
     baseline_raw = row.get("baseline_raw_row") if isinstance(row.get("baseline_raw_row"), dict) else {}
     alternative_raw = (
@@ -225,6 +240,9 @@ def _normalized_row(row: dict[str, Any], *, target_wall: float) -> dict[str, Any
     target_positive = _is_target_wall_positive(row, target_wall=target_wall)
     regression = _is_regression(row)
     local_only = _is_local_only_hard_negative(row)
+    weak_gap_aux_positive = _is_weak_gap_aux_positive(row)
+    weak_gap_aux_regression = _is_weak_gap_aux_regression(row)
+    deltas = row.get("deltas") if isinstance(row.get("deltas"), dict) else {}
     return {
         "schema_version": "journey_branch_training_readiness_row_v1",
         "experiment": row.get("experiment"),
@@ -243,9 +261,18 @@ def _normalized_row(row: dict[str, Any], *, target_wall: float) -> dict[str, Any
         "strict_full_replay_positive": strict_positive,
         "target_200_positive": target_positive,
         "weak_positive_not_target": bool(strict_positive and not target_positive),
+        "weak_gap_aux_positive": weak_gap_aux_positive,
+        "weak_gap_aux_regression": weak_gap_aux_regression,
+        "weak_gap_fathom_aux_positive": bool(
+            str(row.get("counterfactual_label_type") or "") == "weak_gap_fathom_positive"
+        ),
+        "gap_improvement": _float(deltas.get("gap_improvement")),
+        "primal_improvement": _float(deltas.get("primal_improvement")),
+        "fathom_gain": _float(deltas.get("fathom_gain")),
         "regression": regression,
         "local_only_hard_negative": local_only,
         "usable_for_counterfactual_training": bool(row.get("usable_for_counterfactual_training")),
+        "usable_for_gap_aux_training": bool(row.get("usable_for_gap_aux_training")),
         "right_censored_counterfactual": bool(row.get("right_censored_counterfactual")),
         "timeout_resolved": bool(row.get("timeout_resolved")),
         "timeout_regression": bool(row.get("timeout_regression")),
@@ -266,6 +293,11 @@ def build_training_readiness(
     strict_positive_rows = [row for row in normalized_rows if row["strict_full_replay_positive"]]
     target_positive_rows = [row for row in normalized_rows if row["target_200_positive"]]
     weak_positive_rows = [row for row in normalized_rows if row["weak_positive_not_target"]]
+    weak_gap_aux_positive_rows = [row for row in normalized_rows if row["weak_gap_aux_positive"]]
+    weak_gap_fathom_aux_positive_rows = [
+        row for row in normalized_rows if row["weak_gap_fathom_aux_positive"]
+    ]
+    weak_gap_aux_regression_rows = [row for row in normalized_rows if row["weak_gap_aux_regression"]]
     regression_rows = [row for row in normalized_rows if row["regression"]]
     local_only_rows = [row for row in normalized_rows if row["local_only_hard_negative"]]
     hard_negative_rows = regression_rows
@@ -329,6 +361,21 @@ def build_training_readiness(
             "family",
         ),
         "weak_positive_not_target_count": len(weak_positive_rows),
+        "weak_gap_aux_positive_count": len(weak_gap_aux_positive_rows),
+        "weak_gap_fathom_aux_positive_count": len(weak_gap_fathom_aux_positive_rows),
+        "weak_gap_aux_regression_count": len(weak_gap_aux_regression_rows),
+        "weak_gap_aux_positive_context_count": _count_distinct(
+            weak_gap_aux_positive_rows,
+            "context",
+        ),
+        "weak_gap_aux_positive_instance_count": _count_distinct(
+            weak_gap_aux_positive_rows,
+            "instance",
+        ),
+        "weak_gap_aux_positive_time_window_family_count": _count_distinct(
+            weak_gap_aux_positive_rows,
+            "family",
+        ),
         "regression_count": len(regression_rows),
         "local_only_hard_negative_count": len(local_only_rows),
         "hard_negative_count": len(hard_negative_rows),
@@ -421,6 +468,13 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
         "target_200_positive_time_window_family_count = "
         f"{summary['target_200_positive_time_window_family_count']}",
         f"weak_positive_not_target_count = {summary['weak_positive_not_target_count']}",
+        f"weak_gap_aux_positive_count = {summary['weak_gap_aux_positive_count']}",
+        f"weak_gap_fathom_aux_positive_count = {summary['weak_gap_fathom_aux_positive_count']}",
+        f"weak_gap_aux_regression_count = {summary['weak_gap_aux_regression_count']}",
+        "weak_gap_aux_positive_context_count = "
+        f"{summary['weak_gap_aux_positive_context_count']}",
+        "weak_gap_aux_positive_instance_count = "
+        f"{summary['weak_gap_aux_positive_instance_count']}",
         f"regression_count = {summary['regression_count']}",
         f"local_only_hard_negative_count = {summary['local_only_hard_negative_count']}",
         f"hard_negative_count = {summary['hard_negative_count']}",
@@ -459,6 +513,7 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
         "- `strict_full_replay_positive` 表示 forced branch 闭环跑完且相对 baseline 改善；它可以用于试训练和排序信号，但不等价于 20 规模达标。",
         "- `target_200_positive` 表示 baseline 超过目标墙钟、alternative 在目标墙钟内 OPTIMAL；这是 20 规模 200 秒目标的高权重标签。",
         "- `hard_negative_count` 当前只计入 full-run regression；`local_only_hard_negative` 作为弱负例单列，避免把右删失局部 proxy 当成严格反例。",
+        "- `weak_gap_aux_positive` 表示 600 秒右删失下 gap/incumbent/fathom 结构变好；它不是 strict 正例，只能作为 gap/proof-cost/ranking 辅助信号。",
         "- `pipeline_debug_training_ready=true` 只表示可以调通数据加载、图构造、loss 和 checkpoint，不表示模型已有足够跨 context 泛化证据。",
         "- `sanity_training_ready=true` 只说明可以试训模型管线；`serious_training_ready=true` 才表示数据量接近可以认真训练 branch/action head；`optin_training_ready=true` 才接近上线 opt-in 评估门槛。",
         "- `remaining_for_*` 是距离对应 requirements 还差多少；`missing_for_*` 是保留给旧下游的同义字段，不是最低门槛本身。",
@@ -481,6 +536,10 @@ def _write_report(report: Path, summary: dict[str, Any]) -> None:
     if int(summary["weak_positive_not_target_count"]) > 0:
         lines.append(
             "存在相对变快但仍未进入 200 秒的弱正例，训练时应降权或单独作为 proof-cost/ranking 辅助标签。"
+        )
+    if int(summary["weak_gap_aux_positive_count"]) > 0:
+        lines.append(
+            "存在右删失 gap/fathom 弱正例，适合用于诊断 branch pair 对 proof tree 的结构影响，但不能作为完整求解正例。"
         )
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

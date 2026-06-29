@@ -154,6 +154,47 @@ class JourneyBranchTrainingReadinessTests(unittest.TestCase):
             self.assertFalse(by_experiment["nonoptimal_fast_wall"]["target_200_positive"])
             self.assertTrue(by_experiment["crossed"]["target_200_positive"])
 
+    def test_gap_aux_positive_is_counted_but_not_strict_positive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            rows = [
+                _row(
+                    "gap_aux",
+                    label_type="weak_gap_fathom_positive",
+                    baseline_status="EXTERNAL_TIME_LIMIT",
+                    alternative_status="EXTERNAL_TIME_LIMIT",
+                    baseline_wall=600.0,
+                    alternative_wall=600.0,
+                    right_censored=True,
+                    usable_for_gap_aux_training=True,
+                    deltas={
+                        "gap_improvement": 0.004,
+                        "primal_improvement": 2.5,
+                        "fathom_gain": 9.0,
+                    },
+                )
+            ]
+            delta_file = tmp_path / "rows.jsonl"
+            _write_jsonl(delta_file, rows)
+
+            summary = build_training_readiness(
+                [delta_file],
+                tmp_path / "out",
+                tmp_path / "report.md",
+            )
+
+            self.assertEqual(summary["strict_full_replay_positive_count"], 0)
+            self.assertEqual(summary["target_200_positive_count"], 0)
+            self.assertEqual(summary["weak_gap_aux_positive_count"], 1)
+            self.assertEqual(summary["weak_gap_fathom_aux_positive_count"], 1)
+            self.assertEqual(summary["hard_negative_count"], 0)
+            self.assertFalse(summary["pipeline_debug_training_ready"])
+            normalized = _read_jsonl(tmp_path / "out" / "branch_training_readiness_rows.jsonl")
+            self.assertTrue(normalized[0]["weak_gap_aux_positive"])
+            self.assertAlmostEqual(normalized[0]["gap_improvement"], 0.004)
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("weak_gap_aux_positive_count = 1", report)
+
 
 def _row(
     experiment: str,
@@ -170,6 +211,8 @@ def _row(
     regression: bool = False,
     local_only: bool = False,
     right_censored: bool = False,
+    usable_for_gap_aux_training: bool = False,
+    deltas: dict[str, float] | None = None,
 ) -> dict[str, object]:
     labels = {
         "y_counterfactual_wall_improved": 1.0 if wall_improved else 0.0,
@@ -194,7 +237,9 @@ def _row(
         "timeout_resolved": False,
         "timeout_regression": bool(regression and alternative_status != "OPTIMAL"),
         "usable_for_counterfactual_training": not right_censored,
+        "usable_for_gap_aux_training": usable_for_gap_aux_training,
         "counterfactual_label_type": label_type,
+        "deltas": deltas or {},
         "labels": labels,
     }
 

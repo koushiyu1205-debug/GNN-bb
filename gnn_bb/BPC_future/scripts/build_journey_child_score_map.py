@@ -40,6 +40,7 @@ class _ChildScoreAccumulator:
     depth: int | None = None
     pair: tuple[int, int] = (0, 0)
     kind: str = ""
+    source_context: str = ""
 
 
 def _iter_jsonl(path: Path) -> Iterable[dict[str, Any]]:
@@ -129,6 +130,14 @@ def _child_kind(row: dict[str, Any]) -> str | None:
     return None
 
 
+def _row_source_context(row: dict[str, Any]) -> str:
+    for key in ("instance", "instance_path", "log_file", "source_log_file"):
+        value = row.get(key)
+        if value not in (None, ""):
+            return str(value).replace("\\", "/")
+    return ""
+
+
 def _score_key(
     pair: tuple[int, int],
     kind: str,
@@ -183,6 +192,11 @@ def _child_score(
     return float(score)
 
 
+def _child_fathomed(row: dict[str, Any]) -> bool:
+    labels = row.get("child_labels") if isinstance(row.get("child_labels"), dict) else {}
+    return _float(labels.get("child_fathomed")) > 0.0
+
+
 def build_child_score_map(
     inputs: list[Path],
     output_dir: Path,
@@ -193,6 +207,7 @@ def build_child_score_map(
     exclude_log_contains: tuple[str, ...] = (),
     include_unstarted: bool = False,
     include_right_censored: bool = False,
+    include_fathomed_right_censored: bool = False,
     complete_bonus: float = 5.0,
     right_censored_penalty: float = 8.0,
     fathom_bonus: float = 2.0,
@@ -208,6 +223,7 @@ def build_child_score_map(
     rows: list[dict[str, Any]] = []
     skipped_rows = 0
     right_censored_filter_skip_count = 0
+    fathomed_right_censored_included_count = 0
     for row in raw_rows:
         log_file = str(row.get("log_file") or "")
         if include_log_contains and not any(token in log_file for token in include_log_contains):
@@ -216,9 +232,14 @@ def build_child_score_map(
             continue
         if not include_unstarted and not bool(row.get("child_started")):
             continue
-        if not include_right_censored and bool(row.get("right_censored")):
-            right_censored_filter_skip_count += 1
-            continue
+        if bool(row.get("right_censored")):
+            if include_right_censored:
+                pass
+            elif include_fathomed_right_censored and _child_fathomed(row):
+                fathomed_right_censored_included_count += 1
+            else:
+                right_censored_filter_skip_count += 1
+                continue
         pair = _pair_from_row(row)
         kind = _child_kind(row)
         node_id = _int_or_none(row.get("branch_node_id"))
@@ -233,7 +254,7 @@ def build_child_score_map(
             continue
         rows.append(row)
 
-    accumulators: dict[str, _ChildScoreAccumulator] = {}
+    accumulators: dict[tuple[str, str], _ChildScoreAccumulator] = {}
     for row in rows:
         pair = _pair_from_row(row)
         kind = _child_kind(row)
@@ -254,14 +275,16 @@ def build_child_score_map(
             proof_cpu_scale=proof_cpu_scale,
             negative_pricing_penalty=negative_pricing_penalty,
         )
+        source_context = _row_source_context(row)
         acc = accumulators.setdefault(
-            key,
+            (source_context, key),
             _ChildScoreAccumulator(
                 instance=str(row.get("log_file") or ""),
                 node_id=node_id,
                 depth=depth,
                 pair=pair,
                 kind=str(kind),
+                source_context=source_context,
             ),
         )
         acc.score_sum += float(score)
@@ -278,35 +301,43 @@ def build_child_score_map(
         acc.negative_pricing_sum += _float(labels.get("child_negative_pricing_event_count"))
 
     score_rows = []
-    for key, acc in sorted(accumulators.items()):
+    duplicate_unscoped_keys = 0
+    key_counts: dict[str, int] = defaultdict(int)
+    for _source_context, key in accumulators:
+        key_counts[key] += 1
+    duplicate_unscoped_keys = sum(1 for count in key_counts.values() if count > 1)
+
+    for (_source_context, key), acc in sorted(accumulators.items()):
         score = float(acc.score_sum) / float(max(1, acc.observation_count))
-        score_rows.append(
-            {
-                "schema_version": "journey_child_score_row_v1",
-                "diagnostic_only": True,
-                "runs_bpc_or_pricing": False,
-                "production_ready": False,
-                "certificate_effect": False,
-                "official_bound_effect": False,
-                "key": key,
-                "child_score": round(score, 9),
-                "score": round(score, 9),
-                "node_id": acc.node_id,
-                "depth": acc.depth,
-                "pair": [int(acc.pair[0]), int(acc.pair[1])],
-                "task_i": int(acc.pair[0]),
-                "task_j": int(acc.pair[1]),
-                "child_constraint_kind": acc.kind,
-                "observation_count": int(acc.observation_count),
-                "complete_count": int(acc.complete_count),
-                "right_censored_count": int(acc.right_censored_count),
-                "fathom_sum": round(float(acc.fathom_sum), 9),
-                "max_corrected_bound_gain": round(float(acc.corrected_gain_max), 9),
-                "proof_cpu_sum": round(float(acc.proof_cpu_sum), 9),
-                "completion_bound_retry_sum": round(float(acc.completion_retry_sum), 9),
-                "negative_pricing_sum": round(float(acc.negative_pricing_sum), 9),
-            }
-        )
+        row = {
+            "schema_version": "journey_child_score_row_v1",
+            "diagnostic_only": True,
+            "runs_bpc_or_pricing": False,
+            "production_ready": False,
+            "certificate_effect": False,
+            "official_bound_effect": False,
+            "key": key,
+            "child_score": round(score, 9),
+            "score": round(score, 9),
+            "node_id": acc.node_id,
+            "depth": acc.depth,
+            "pair": [int(acc.pair[0]), int(acc.pair[1])],
+            "task_i": int(acc.pair[0]),
+            "task_j": int(acc.pair[1]),
+            "child_constraint_kind": acc.kind,
+            "observation_count": int(acc.observation_count),
+            "complete_count": int(acc.complete_count),
+            "right_censored_count": int(acc.right_censored_count),
+            "fathom_sum": round(float(acc.fathom_sum), 9),
+            "max_corrected_bound_gain": round(float(acc.corrected_gain_max), 9),
+            "proof_cpu_sum": round(float(acc.proof_cpu_sum), 9),
+            "completion_bound_retry_sum": round(float(acc.completion_retry_sum), 9),
+            "negative_pricing_sum": round(float(acc.negative_pricing_sum), 9),
+        }
+        if acc.source_context:
+            row["source_log_file"] = acc.source_context
+            row["scoped_key"] = f"{acc.source_context}|{key}"
+        score_rows.append(row)
     score_rows.sort(key=lambda row: (-float(row["score"]), str(row["key"])))
     score_map = {str(row["key"]): float(row["score"]) for row in score_rows}
 
@@ -323,6 +354,8 @@ def build_child_score_map(
         json.dumps(score_map, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    rows_path = output_dir / "journey_child_score_rows.json"
+    map_path = output_dir / "journey_child_score_map.json"
     summary = {
         "schema_version": "journey_child_score_map_summary_v1",
         "diagnostic_only": True,
@@ -340,10 +373,14 @@ def build_child_score_map(
         "skipped_row_count": int(skipped_rows),
         "child_score_row_count": len(score_rows),
         "child_score_map_entry_count": len(score_map),
+        "duplicate_unscoped_key_count": int(duplicate_unscoped_keys),
+        "context_scoped_rows": bool(any(row.get("source_log_file") for row in score_rows)),
         "include_log_contains": list(include_log_contains),
         "exclude_log_contains": list(exclude_log_contains),
         "include_unstarted": bool(include_unstarted),
         "include_right_censored": bool(include_right_censored),
+        "include_fathomed_right_censored": bool(include_fathomed_right_censored),
+        "fathomed_right_censored_included_count": int(fathomed_right_censored_included_count),
         "complete_bonus": float(complete_bonus),
         "right_censored_penalty": float(right_censored_penalty),
         "fathom_bonus": float(fathom_bonus),
@@ -353,7 +390,9 @@ def build_child_score_map(
         "proof_cpu_scale": float(proof_cpu_scale),
         "negative_pricing_penalty": float(negative_pricing_penalty),
         "solver_child_priority_mode": "child_score",
-        "solver_score_map_path": str(output_dir / "journey_child_score_map.json"),
+        "solver_score_rows_path": str(rows_path),
+        "solver_score_map_path": str(rows_path),
+        "legacy_unscoped_score_map_path": str(map_path),
         "usable_as_certificate": False,
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
@@ -384,13 +423,19 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
         "skipped_row_count",
         "child_score_row_count",
         "child_score_map_entry_count",
+        "duplicate_unscoped_key_count",
+        "context_scoped_rows",
         "key_scope",
         "include_log_contains",
         "exclude_log_contains",
         "include_unstarted",
         "include_right_censored",
+        "include_fathomed_right_censored",
+        "fathomed_right_censored_included_count",
         "solver_child_priority_mode",
+        "solver_score_rows_path",
         "solver_score_map_path",
+        "legacy_unscoped_score_map_path",
         "production_ready",
         "certificate_effect",
         "official_bound_effect",
@@ -406,13 +451,16 @@ def _write_report(report: Path, summary: dict[str, Any], score_rows: list[dict[s
         )
     lines.extend(["", "## 使用边界", ""])
     lines.append(
-        "使用方式：`journey_child_priority_mode=child_score`，并把 `journey_child_priority_score_path` 指向 `journey_child_score_map.json`。"
+        "使用方式：`journey_child_priority_mode=child_score`，并把 `journey_child_priority_score_path` 指向 `journey_child_score_rows.json`。"
     )
     lines.append(
         "`child_score` 只改变同一个 Ryan-Foster branch 下 same/separate child 的入队顺序；它不改变 lower bound、分支约束、剪枝或 certificate。"
     )
     lines.append(
         "默认只接收完整 child 标签；right-censored 数据必须显式 `--include-right-censored` 才会进入 map，且只能用于采样导航和 shadow/opt-in，不应直接视为 production-ready 模型。"
+    )
+    lines.append(
+        "`--include-fathomed-right-censored` 只允许已启动且本 child 已被 exact-safe fathom 的右删失 child 进入局部诊断 map；它仍不是完整 branch-pair 标签。"
     )
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -430,6 +478,15 @@ def _parse_args() -> argparse.Namespace:
         "--include-right-censored",
         action="store_true",
         help="Allow right-censored child-probe rows into the diagnostic map. Default fail-closed excludes them.",
+    )
+    parser.add_argument(
+        "--include-fathomed-right-censored",
+        action="store_true",
+        help=(
+            "Allow right-censored rows only when the individual child has an observed "
+            "exact-safe fathom event. This is a local child-ordering diagnostic, not a "
+            "complete branch-impact label."
+        ),
     )
     parser.add_argument("--complete-bonus", type=float, default=5.0)
     parser.add_argument("--right-censored-penalty", type=float, default=8.0)
@@ -453,6 +510,7 @@ def main() -> None:
         exclude_log_contains=tuple(args.exclude_log_contains or ()),
         include_unstarted=bool(args.include_unstarted),
         include_right_censored=bool(args.include_right_censored),
+        include_fathomed_right_censored=bool(args.include_fathomed_right_censored),
         complete_bonus=args.complete_bonus,
         right_censored_penalty=args.right_censored_penalty,
         fathom_bonus=args.fathom_bonus,

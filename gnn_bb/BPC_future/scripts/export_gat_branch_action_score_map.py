@@ -33,13 +33,16 @@ from BPC_future.learning.graph_builder import FutureGraphBuilder
 from BPC_future.scripts.audit_journey_branch_impact import BRANCH_IMPACT_FEATURE_SCHEMA
 from BPC_future.scripts.build_gat_branch_action_sanity_dataset import (
     BRANCH_ACTION_CONTEXT_FEATURE_SCHEMA,
+    PHASED_TESTING_DECISION_CODES,
+    PHASED_TESTING_ELIMINATION_REASON_CODES,
+    PHASED_TESTING_STAGE_CODES,
 )
 
 
-DEFAULT_OUTPUT_DIR = Path("BPC_future/results/gat_branch_action_score_map_20260625")
+DEFAULT_OUTPUT_DIR = Path("BPC_future/results/gat_branch_action_v430_randomtw60_20260626/score_map")
 DEFAULT_REPORT = Path(
     "BPC_future/logical_graph/run_reports/"
-    "20260625_bpc_future_gat_branch_action_score_map_zh.md"
+    "20260626_bpc_future_gat_branch_action_v430_score_map_zh.md"
 )
 
 
@@ -73,6 +76,22 @@ def _number(value: Any, default: float = 0.0) -> float:
     if parsed != parsed:
         return float(default)
     return float(parsed)
+
+
+def _code(mapping: dict[str, int], value: Any) -> float:
+    text = str(value or "")
+    return float(mapping.get(text, mapping.get("", 0)))
+
+
+def _bool_feature(value: Any) -> float:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "yes", "y"}:
+        return 1.0
+    if text in {"0", "false", "no", "n"}:
+        return 0.0
+    return 0.0
 
 
 def _rank(value: int | None) -> float:
@@ -189,6 +208,7 @@ def _context_feature_vector(
     selected = event.get("selected") if isinstance(event.get("selected"), dict) else {}
     selected_pair = _pair(selected) if isinstance(selected, dict) else None
     baseline_pair = selected_pair or pair
+    phase2_best_rc = _number(candidate.get("phase2_best_reduced_cost"))
     return [
         _number(event.get("node_id")),
         _number(event.get("depth")),
@@ -197,10 +217,30 @@ def _context_feature_vector(
         _number(event.get("eligible_count")),
         _rank(rank_in_top),
         _rank(rank_in_priority_top),
+        _code(PHASED_TESTING_STAGE_CODES, candidate.get("phased_testing_stage")),
+        _code(PHASED_TESTING_DECISION_CODES, candidate.get("phased_testing_decision")),
+        _code(
+            PHASED_TESTING_ELIMINATION_REASON_CODES,
+            candidate.get("phased_testing_elimination_reason"),
+        ),
+        _bool_feature(candidate.get("phased_testing_phase0_passed")),
+        _bool_feature(candidate.get("phased_testing_phase1_lp_complete")),
+        _bool_feature(candidate.get("phased_testing_phase2_heuristic_complete")),
         float(baseline_pair[0]),
         float(baseline_pair[1]),
         float(pair[0]),
         float(pair[1]),
+        _number(candidate.get("phase1_min_child_lp_gain")),
+        _number(candidate.get("phase1_child_lp_gain_product")),
+        _number(candidate.get("phase1_child_width_balance")),
+        _number(candidate.get("phase1_wall_time")),
+        _number(candidate.get("phase1_dynamic_k_probe_count")),
+        _number(candidate.get("phase2_negative_child_count")),
+        _number(candidate.get("phase2_negative_journey_count")),
+        phase2_best_rc,
+        _number(candidate.get("phase2_worst_negative_severity")),
+        _number(candidate.get("phase2_wall_time")),
+        _number(candidate.get("phase2_dynamic_k_probe_count")),
     ]
 
 
@@ -215,14 +255,91 @@ def _score_key(pair: tuple[int, int], *, node_id: int | None, depth: int | None)
     return pair_text
 
 
+def _scoped_score_key(instance: Path, key: str) -> str:
+    return f"{str(instance).replace(chr(92), '/')}|{key}"
+
+
+def _branch_constraints_from_event(event: dict[str, Any]) -> list[str] | None:
+    constraints = event.get("branch_constraints")
+    if constraints is None:
+        return None
+    if isinstance(constraints, str):
+        text = constraints.strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return [text]
+        constraints = parsed
+    if isinstance(constraints, (list, tuple)):
+        return [str(item) for item in constraints if str(item)]
+    return [str(constraints)]
+
+
+def _branch_state_key_from_event(event: dict[str, Any]) -> str | None:
+    value = event.get("branch_state_key")
+    if value not in (None, ""):
+        return str(value)
+    constraints = _branch_constraints_from_event(event)
+    if constraints is not None:
+        return ";".join(constraints) if constraints else "root"
+    try:
+        depth = int(event.get("depth"))
+    except (TypeError, ValueError):
+        return None
+    return "root" if depth == 0 else None
+
+
+def _state_score_key(branch_state_key: str | None, key: str) -> str | None:
+    if not branch_state_key:
+        return None
+    return f"state:{branch_state_key}::{key}"
+
+
 def _load_model(checkpoint_path: Path, device: torch.device) -> GATBranchImpactModel:
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     config = dict(checkpoint.get("model_config") or {})
     model = GATBranchImpactModel(**config)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    state_dict = checkpoint["model_state_dict"]
+    model.load_state_dict(state_dict, strict=False)
+    setattr(
+        model,
+        "_branch_action_has_walltime_head",
+        any(str(key).startswith("walltime_gain_head.") for key in state_dict),
+    )
+    setattr(
+        model,
+        "_branch_action_has_tree_policy_head",
+        any(str(key).startswith("tree_policy_head.") for key in state_dict),
+    )
     model.to(device)
     model.eval()
     return model
+
+
+def _walltime_score(predicted_walltime_gain: float) -> float:
+    return float(torch.sigmoid(torch.tensor(float(predicted_walltime_gain) / 100.0)).item())
+
+
+def _branch_score_from_output(
+    *,
+    probability: float,
+    predicted_walltime_gain: float | None,
+    tree_policy_probability: float | None,
+    score_mode: str,
+) -> float:
+    mode = str(score_mode or "branch_probability")
+    if mode == "tree_policy" and tree_policy_probability is not None:
+        return float(tree_policy_probability)
+    if predicted_walltime_gain is None:
+        return float(probability)
+    gain_score = _walltime_score(float(predicted_walltime_gain))
+    if mode == "walltime_gain":
+        return float(gain_score)
+    if mode == "hybrid":
+        return float(0.7 * float(probability) + 0.3 * float(gain_score))
+    return float(probability)
 
 
 def export_score_map(
@@ -233,7 +350,9 @@ def export_score_map(
     report: Path,
     device_name: str,
     max_events_per_log: int = 0,
+    max_candidates_per_event: int = 0,
     min_probability: float = 0.0,
+    score_mode: str = "branch_probability",
 ) -> dict[str, Any]:
     device = torch.device(device_name)
     model = _load_model(checkpoint, device)
@@ -279,6 +398,21 @@ def export_score_map(
                 key = f"{pair[0]},{pair[1]}"
                 rank_in_top = top_rank.get(key)
                 rank_in_priority_top = priority_rank.get(key)
+                if str(score_mode or "") == "tree_policy":
+                    feature_rank_in_top = 0
+                    feature_rank_in_priority_top = 0
+                else:
+                    feature_rank_in_top = rank_in_top
+                    feature_rank_in_priority_top = rank_in_priority_top
+                if int(max_candidates_per_event) > 0:
+                    ranks = [
+                        int(rank)
+                        for rank in (rank_in_top, rank_in_priority_top)
+                        if rank is not None
+                    ]
+                    if not ranks or min(ranks) >= int(max_candidates_per_event):
+                        skipped["candidate_rank_above_cap"] += 1
+                        continue
                 sample = graph.clone()
                 sample.branch_pair_indices = torch.tensor(
                     [[task_to_index[pair[0]], task_to_index[pair[1]]]],
@@ -289,8 +423,8 @@ def export_score_map(
                         _branch_feature_vector(
                             event,
                             candidate,
-                            rank_in_top=rank_in_top,
-                            rank_in_priority_top=rank_in_priority_top,
+                            rank_in_top=feature_rank_in_top,
+                            rank_in_priority_top=feature_rank_in_priority_top,
                         )
                     ],
                     dtype=torch.float32,
@@ -299,8 +433,8 @@ def export_score_map(
                     _context_feature_vector(
                         event,
                         candidate,
-                        rank_in_top=rank_in_top,
-                        rank_in_priority_top=rank_in_priority_top,
+                        rank_in_top=feature_rank_in_top,
+                        rank_in_priority_top=feature_rank_in_priority_top,
                     ),
                     dtype=torch.float32,
                 )
@@ -315,11 +449,41 @@ def export_score_map(
                 probability = float(output["branch_priority_probability"].view(-1)[0].detach().cpu())
                 logit = float(output["branch_priority_logit"].view(-1)[0].detach().cpu())
                 tail_probability = float(output["tail_improved_probability"].view(-1)[0].detach().cpu())
+                predicted_walltime_gain = (
+                    float(output["predicted_walltime_gain"].view(-1)[0].detach().cpu())
+                    if bool(getattr(model, "_branch_action_has_walltime_head", False))
+                    else None
+                )
+                predicted_child_proof_cpu = (
+                    float(output["predicted_child_proof_cpu"].view(-1)[0].detach().cpu())
+                    if bool(getattr(model, "_branch_action_has_walltime_head", False))
+                    else None
+                )
+                predicted_time_to_certificate = (
+                    float(output["predicted_time_to_certificate"].view(-1)[0].detach().cpu())
+                    if bool(getattr(model, "_branch_action_has_walltime_head", False))
+                    else None
+                )
+                tree_policy_probability = (
+                    float(output["tree_policy_probability"].view(-1)[0].detach().cpu())
+                    if bool(getattr(model, "_branch_action_has_tree_policy_head", False))
+                    else None
+                )
                 if probability < float(min_probability):
                     skipped["below_min_probability"] += 1
                     continue
+                final_score = _branch_score_from_output(
+                    probability=probability,
+                    predicted_walltime_gain=predicted_walltime_gain,
+                    tree_policy_probability=tree_policy_probability,
+                    score_mode=score_mode,
+                )
                 node_id = None if event.get("node_id") is None else int(event.get("node_id"))
                 depth = None if event.get("depth") is None else int(event.get("depth"))
+                row_key = _score_key(pair, node_id=node_id, depth=depth)
+                branch_constraints = _branch_constraints_from_event(event)
+                branch_state_key = _branch_state_key_from_event(event)
+                state_key = _state_score_key(branch_state_key, row_key)
                 score_rows.append(
                     {
                         "schema_version": "gat_branch_action_score_row_v1",
@@ -331,20 +495,33 @@ def export_score_map(
                         "branching_oracle": False,
                         "instance": str(instance_path),
                         "source_log_file": str(log_path),
+                        "instance_key": str(instance_path).replace("\\", "/"),
                         "event_index": int(event_index),
                         "node_id": node_id,
                         "depth": depth,
                         "pair": [int(pair[0]), int(pair[1])],
                         "task_i": int(pair[0]),
                         "task_j": int(pair[1]),
-                        "key": _score_key(pair, node_id=node_id, depth=depth),
-                        "score": probability,
-                        "gat_score": probability,
-                        "predicted_score": probability,
-                        "branch_score": probability,
+                        "key": row_key,
+                        "scoped_key": _scoped_score_key(instance_path, row_key),
+                        "state_key": state_key,
+                        "state_scoped_key": (
+                            None if state_key is None else _scoped_score_key(instance_path, state_key)
+                        ),
+                        "branch_constraints": branch_constraints,
+                        "branch_state_key": branch_state_key,
+                        "score": final_score,
+                        "gat_score": final_score,
+                        "predicted_score": final_score,
+                        "branch_score": final_score,
+                        "score_mode": str(score_mode),
                         "branch_priority_probability": probability,
                         "branch_priority_logit": logit,
                         "tail_improved_probability": tail_probability,
+                        "predicted_walltime_gain": predicted_walltime_gain,
+                        "predicted_child_proof_cpu": predicted_child_proof_cpu,
+                        "predicted_time_to_certificate": predicted_time_to_certificate,
+                        "tree_policy_probability": tree_policy_probability,
                         "candidate_count": event.get("candidate_count"),
                         "eligible_count": event.get("eligible_count"),
                         "effective_eligible_count": event.get("effective_eligible_count"),
@@ -374,10 +551,11 @@ def export_score_map(
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in score_rows),
         encoding="utf-8",
     )
-    audit_map = {
-        f"{row['instance']}|{row['key']}": float(row["score"])
-        for row in score_rows
-    }
+    audit_map: dict[str, float] = {}
+    for row in score_rows:
+        audit_map[f"{row['instance']}|{row['key']}"] = float(row["score"])
+        if row.get("state_key"):
+            audit_map[f"{row['instance']}|{row['state_key']}"] = float(row["score"])
     (output_dir / "journey_branch_score_map.json").write_text(
         json.dumps(audit_map, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -400,7 +578,11 @@ def export_score_map(
         "score_row_count": len(score_rows),
         "score_instance_count": int(instance_count),
         "min_probability": float(min_probability),
+        "score_mode": str(score_mode),
+        "has_walltime_regression_head": bool(getattr(model, "_branch_action_has_walltime_head", False)),
+        "has_tree_policy_head": bool(getattr(model, "_branch_action_has_tree_policy_head", False)),
         "max_events_per_log": int(max_events_per_log),
+        "max_candidates_per_event": int(max_candidates_per_event),
         "skipped_counts": dict(sorted(skipped.items())),
         "branch_feature_schema": list(BRANCH_IMPACT_FEATURE_SCHEMA),
         "context_feature_schema": list(BRANCH_ACTION_CONTEXT_FEATURE_SCHEMA),
@@ -411,6 +593,8 @@ def export_score_map(
             if score_rows
             else None
         ),
+        "state_key_row_count": sum(1 for row in score_rows if row.get("state_key")),
+        "branch_state_count": len({str(row.get("branch_state_key")) for row in score_rows if row.get("branch_state_key")}),
     }
     (output_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
@@ -441,6 +625,12 @@ def _write_report(report: Path, summary: dict[str, Any], rows: list[dict[str, An
         "score_row_count",
         "score_instance_count",
         "solver_score_path",
+        "score_mode",
+        "has_walltime_regression_head",
+        "has_tree_policy_head",
+        "max_candidates_per_event",
+        "state_key_row_count",
+        "branch_state_count",
         "score_min",
         "score_max",
         "score_mean",
@@ -458,7 +648,8 @@ def _write_report(report: Path, summary: dict[str, Any], rows: list[dict[str, An
         lines.append(
             "- "
             f"instance={Path(str(row['instance'])).name} node={row.get('node_id')} "
-            f"depth={row.get('depth')} pair={row.get('pair')} score={row.get('score'):.6f}"
+            f"depth={row.get('depth')} state={row.get('branch_state_key')} "
+            f"pair={row.get('pair')} score={row.get('score'):.6f}"
         )
     lines.extend(
         [
@@ -480,7 +671,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--max-events-per-log", type=int, default=0)
+    parser.add_argument("--max-candidates-per-event", type=int, default=0)
     parser.add_argument("--min-probability", type=float, default=0.0)
+    parser.add_argument(
+        "--score-mode",
+        choices=("branch_probability", "walltime_gain", "hybrid", "tree_policy"),
+        default="branch_probability",
+    )
     return parser.parse_args()
 
 
@@ -493,7 +690,9 @@ def main() -> int:
         report=args.report,
         device_name=str(args.device),
         max_events_per_log=max(0, int(args.max_events_per_log)),
+        max_candidates_per_event=max(0, int(args.max_candidates_per_event)),
         min_probability=float(args.min_probability),
+        score_mode=str(args.score_mode),
     )
     print(json.dumps(summary, sort_keys=True))
     return 0 if summary["score_row_count"] > 0 else 1

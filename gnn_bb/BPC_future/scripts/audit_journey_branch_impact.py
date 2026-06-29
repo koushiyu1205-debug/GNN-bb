@@ -75,6 +75,109 @@ CHILD_PROBE_LABEL_SCHEMA: tuple[str, ...] = (
     "child_fathomed",
 )
 
+BRANCH_PHASED_CANDIDATE_FIELDS: tuple[str, ...] = (
+    "phased_testing_phase0_rank",
+    "phased_testing_phase0_passed",
+    "phased_testing_phase0_reason",
+    "phased_testing_stage",
+    "phased_testing_decision",
+    "phased_testing_reason",
+    "phased_testing_elimination_reason",
+    "phased_testing_depth_gate_enabled",
+    "phased_testing_depth_gate_passed",
+    "phased_testing_depth_gate_reason",
+    "phased_testing_preserve_score_gate_winner_enabled",
+    "phased_testing_preserve_score_gate_winner_preserved",
+    "phased_testing_preserve_score_gate_winner_reason",
+    "phased_testing_phase1_lp_enabled",
+    "phased_testing_phase1_lp_complete",
+    "phased_testing_phase1_lp_reason",
+    "phase1_same_child_status",
+    "phase1_separate_child_status",
+    "phase1_same_child_objective",
+    "phase1_separate_child_objective",
+    "phase1_same_child_wall_time",
+    "phase1_separate_child_wall_time",
+    "phase1_same_child_lp_gain",
+    "phase1_separate_child_lp_gain",
+    "phase1_min_child_lp_gain",
+    "phase1_sum_child_lp_gain",
+    "phase1_child_lp_gain_product",
+    "phase1_child_width_balance",
+    "phase1_child_max_width",
+    "phase1_child_total_width",
+    "phase1_wall_time",
+    "phase1_dynamic_k_enabled",
+    "phase1_dynamic_k_reason",
+    "phase1_dynamic_k_actual_limit",
+    "phase1_dynamic_k_candidate_count",
+    "phase1_dynamic_k_probe_count",
+    "phase1_official_bound_effect",
+    "phase1_certificate_effect",
+    "phased_testing_phase2_heuristic_enabled",
+    "phased_testing_phase2_heuristic_complete",
+    "phased_testing_phase2_heuristic_reason",
+    "phase2_same_child_status",
+    "phase2_separate_child_status",
+    "phase2_same_child_found_negative",
+    "phase2_separate_child_found_negative",
+    "phase2_same_child_negative_journeys",
+    "phase2_separate_child_negative_journeys",
+    "phase2_same_child_best_reduced_cost",
+    "phase2_separate_child_best_reduced_cost",
+    "phase2_same_child_budget",
+    "phase2_separate_child_budget",
+    "phase2_same_child_wall_time",
+    "phase2_separate_child_wall_time",
+    "phase2_negative_child_count",
+    "phase2_negative_journey_count",
+    "phase2_best_reduced_cost",
+    "phase2_worst_negative_severity",
+    "phase2_generated_sequences",
+    "phase2_evaluated_timed_trips",
+    "phase2_wall_time",
+    "phase2_dynamic_k_enabled",
+    "phase2_dynamic_k_reason",
+    "phase2_dynamic_k_actual_limit",
+    "phase2_dynamic_k_candidate_count",
+    "phase2_dynamic_k_probe_count",
+    "phase2_official_bound_effect",
+    "phase2_certificate_effect",
+)
+
+BRANCH_PHASED_NODE_FIELDS: tuple[str, ...] = (
+    "phased_testing_controller_active",
+    "phased_testing_controller_input_count",
+    "phased_testing_stage_counts",
+    "phased_testing_decision_counts",
+    "phased_testing_phase0_fail_reason_counts",
+    "phased_testing_phase1_candidate_count",
+    "phased_testing_phase1_probe_count",
+    "phased_testing_phase1_complete_count",
+    "phased_testing_phase1_dynamic_k_excluded_count",
+    "phased_testing_phase1_reason_counts",
+    "phased_testing_phase1_total_wall_time",
+    "phased_testing_phase1_best_min_child_lp_gain",
+    "phased_testing_phase1_best_child_lp_gain_product",
+    "phased_testing_phase1_official_bound_effect_any",
+    "phased_testing_phase1_certificate_effect_any",
+    "phased_testing_phase2_candidate_count",
+    "phased_testing_phase2_probe_count",
+    "phased_testing_phase2_complete_count",
+    "phased_testing_phase2_dynamic_k_excluded_count",
+    "phased_testing_phase2_reason_counts",
+    "phased_testing_phase2_total_wall_time",
+    "phased_testing_phase2_negative_child_count_total",
+    "phased_testing_phase2_negative_journey_count_total",
+    "phased_testing_phase2_generated_sequences_total",
+    "phased_testing_phase2_evaluated_timed_trips_total",
+    "phased_testing_phase2_worst_negative_severity_max",
+    "phased_testing_phase2_official_bound_effect_any",
+    "phased_testing_phase2_certificate_effect_any",
+    "phased_testing_official_bound_effect_any",
+    "phased_testing_certificate_effect_any",
+)
+
 
 def _iter_jsonl(paths: Iterable[Path]) -> Iterable[Path]:
     for path in paths:
@@ -154,6 +257,7 @@ def _candidate_payload(candidate: Any) -> dict[str, Any] | None:
         "pool_max_child_width",
         "pool_total_child_width",
         "pool_balance_gap",
+        *BRANCH_PHASED_CANDIDATE_FIELDS,
     ]
     return {key: candidate.get(key) for key in keys if key in candidate}
 
@@ -227,7 +331,7 @@ def _is_completion_bound_retry(record: dict[str, Any]) -> bool:
     event = str(record.get("event") or "")
     pricing_kind = str(record.get("pricing_kind") or "")
     return (
-        event in {"journey_exact_pricing_completion_bound_retry", "journey_exact_pricing_retry"}
+        event == "journey_exact_pricing_completion_bound_retry"
         or pricing_kind.startswith("exact_completion_bound")
     )
 
@@ -534,6 +638,15 @@ def _summarize_branch(
         "children": children,
         "right_kind": None if right is None else right["kind"],
     }
+    row["branch_selected_pair"] = branch.get("selected_pair")
+    row["branch_priority_selected_pair"] = branch.get("priority_selected_pair")
+    row["branch_selected_pair_from_branch_override"] = bool(
+        branch.get("selected_pair_from_branch_override", False)
+    )
+    for field in BRANCH_PHASED_CANDIDATE_FIELDS:
+        row[field] = None if observed_candidate is None else observed_candidate.get(field)
+    for field in BRANCH_PHASED_NODE_FIELDS:
+        row[field] = None if candidate_log is None else candidate_log.get(field)
     feature_source = "candidate_log" if observed_candidate is not None else "child_width_fallback"
     row["branch_feature_source"] = feature_source
     row["usable_for_branch_impact_training"] = bool(
@@ -634,7 +747,7 @@ def _branch_labels(row: dict[str, Any]) -> dict[str, float]:
 
 
 def _training_row(row: dict[str, Any]) -> dict[str, Any]:
-    return {
+    payload = {
         "schema_version": "journey_branch_impact_training_row_v1",
         "diagnostic_only": True,
         "runs_bpc_or_pricing": False,
@@ -659,6 +772,11 @@ def _training_row(row: dict[str, Any]) -> dict[str, Any]:
         "branch_labels": row.get("branch_labels"),
         "tail_class": row.get("tail_class"),
     }
+    for field in BRANCH_PHASED_CANDIDATE_FIELDS:
+        payload[field] = row.get(field)
+    for field in BRANCH_PHASED_NODE_FIELDS:
+        payload[field] = row.get(field)
+    return payload
 
 
 def _child_probe_rows(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -666,6 +784,7 @@ def _child_probe_rows(row: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(children, list):
         return []
     observed_candidate = row.get("observed_branch_candidate")
+    log_file = row.get("log_file")
     rows: list[dict[str, Any]] = []
     for child in children:
         if not isinstance(child, dict):
@@ -684,45 +803,60 @@ def _child_probe_rows(row: dict[str, Any]) -> list[dict[str, Any]]:
             "child_time_to_fathom": _number(child.get("time_to_fathom"), -1.0),
             "child_fathomed": 1.0 if int(child.get("fathom_event_count") or 0) > 0 else 0.0,
         }
+        child_row = {
+            "schema_version": "journey_branch_child_probe_row_v2",
+            "diagnostic_only": True,
+            "runs_bpc_or_pricing": False,
+            "production_ready": False,
+            "certificate_effect": False,
+            "official_bound_effect": False,
+            "log_file": log_file,
+            "source_log_file": log_file,
+            "instance_id": _instance_id_from_log_file(log_file),
+            "run_status": row.get("run_status"),
+            "right_censored": bool(row.get("right_censored")),
+            "label_observation_complete": bool(row.get("label_observation_complete")),
+            "branch_node_id": row.get("branch_node_id"),
+            "branch_depth": row.get("depth"),
+            "task_i": row.get("task_i"),
+            "task_j": row.get("task_j"),
+            "forced_pair": row.get("forced_pair"),
+            "forced_pair_matched": row.get("forced_pair_matched"),
+            "priority_mode": row.get("priority_mode"),
+            "branch_rank_in_priority_top": row.get("branch_rank_in_priority_top"),
+            "branch_rank_in_top": row.get("branch_rank_in_top"),
+            "selected_matches_branch": row.get("selected_matches_branch"),
+            "observed_branch_candidate": observed_candidate,
+            "child_node_id": child.get("child_node_id"),
+            "child_constraint": child.get("constraint"),
+            "child_constraint_kind": child.get("constraint_kind"),
+            "child_depth": child.get("depth"),
+            "child_started": bool(child.get("started")),
+            "child_bound_reference": child.get("bound_reference"),
+            "child_lower_bound": child.get("lower_bound"),
+            "child_lower_bound_exact": child.get("lower_bound_exact"),
+            "child_allowed_current_journeys": child.get("allowed_current_journeys"),
+            "child_fathom_reason": child.get("fathom_reason"),
+            "child_node_incomplete_reason": child.get("node_incomplete_reason"),
+            "child_label_schema": list(CHILD_PROBE_LABEL_SCHEMA),
+            "child_labels": {name: float(labels[name]) for name in CHILD_PROBE_LABEL_SCHEMA},
+        }
+        for name in CHILD_PROBE_LABEL_SCHEMA:
+            child_row[name] = float(labels[name])
         rows.append(
-            {
-                "schema_version": "journey_branch_child_probe_row_v1",
-                "diagnostic_only": True,
-                "runs_bpc_or_pricing": False,
-                "production_ready": False,
-                "certificate_effect": False,
-                "official_bound_effect": False,
-                "log_file": row.get("log_file"),
-                "run_status": row.get("run_status"),
-                "right_censored": bool(row.get("right_censored")),
-                "label_observation_complete": bool(row.get("label_observation_complete")),
-                "branch_node_id": row.get("branch_node_id"),
-                "branch_depth": row.get("depth"),
-                "task_i": row.get("task_i"),
-                "task_j": row.get("task_j"),
-                "forced_pair": row.get("forced_pair"),
-                "forced_pair_matched": row.get("forced_pair_matched"),
-                "priority_mode": row.get("priority_mode"),
-                "branch_rank_in_priority_top": row.get("branch_rank_in_priority_top"),
-                "branch_rank_in_top": row.get("branch_rank_in_top"),
-                "selected_matches_branch": row.get("selected_matches_branch"),
-                "observed_branch_candidate": observed_candidate,
-                "child_node_id": child.get("child_node_id"),
-                "child_constraint": child.get("constraint"),
-                "child_constraint_kind": child.get("constraint_kind"),
-                "child_depth": child.get("depth"),
-                "child_started": bool(child.get("started")),
-                "child_bound_reference": child.get("bound_reference"),
-                "child_lower_bound": child.get("lower_bound"),
-                "child_lower_bound_exact": child.get("lower_bound_exact"),
-                "child_allowed_current_journeys": child.get("allowed_current_journeys"),
-                "child_fathom_reason": child.get("fathom_reason"),
-                "child_node_incomplete_reason": child.get("node_incomplete_reason"),
-                "child_label_schema": list(CHILD_PROBE_LABEL_SCHEMA),
-                "child_labels": {name: float(labels[name]) for name in CHILD_PROBE_LABEL_SCHEMA},
-            }
+            child_row
         )
     return rows
+
+
+def _instance_id_from_log_file(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    name = Path(str(value).replace("\\", "/")).name
+    for suffix in (".json.jsonl", ".jsonl", ".json"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return Path(name).stem or None
 
 
 def _number(value: Any, default: float = 0.0) -> float:

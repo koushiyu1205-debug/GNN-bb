@@ -149,11 +149,103 @@ class JourneyChildScoreMapTests(unittest.TestCase):
             report = (tmp_path / "report.md").read_text(encoding="utf-8")
             self.assertIn("include_right_censored = False", report)
 
+    def test_fathomed_right_censored_rows_are_opt_in_local_signals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            child_file = tmp_path / "child_probe_rows.jsonl"
+            rows = [
+                _child_probe_row(
+                    pair=[1, 3],
+                    kind="same_vehicle",
+                    complete=False,
+                    right_censored=True,
+                    fathomed=True,
+                    corrected_gain=2.0,
+                ),
+                _child_probe_row(
+                    pair=[1, 3],
+                    kind="separate_vehicle",
+                    complete=False,
+                    right_censored=True,
+                    fathomed=False,
+                    corrected_gain=9.0,
+                ),
+            ]
+            child_file.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            summary = build_child_score_map(
+                [child_file],
+                tmp_path / "out",
+                tmp_path / "report.md",
+                include_fathomed_right_censored=True,
+            )
+
+            self.assertEqual(summary["raw_child_probe_row_count"], 2)
+            self.assertEqual(summary["child_probe_row_count"], 1)
+            self.assertEqual(summary["right_censored_filter_skip_count"], 1)
+            self.assertEqual(summary["fathomed_right_censored_included_count"], 1)
+            self.assertTrue(summary["include_fathomed_right_censored"])
+            self.assertFalse(summary["include_right_censored"])
+            self.assertFalse(summary["production_ready"])
+            score_map = json.loads((tmp_path / "out" / "journey_child_score_map.json").read_text())
+            self.assertIn("node:0:depth:0:1,3:same_vehicle", score_map)
+            self.assertNotIn("node:0:depth:0:1,3:separate_vehicle", score_map)
+            report = (tmp_path / "report.md").read_text(encoding="utf-8")
+            self.assertIn("include_fathomed_right_censored = True", report)
+
+    def test_same_child_key_from_different_contexts_is_not_collapsed_in_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            child_file = tmp_path / "child_probe_rows.jsonl"
+            rows = [
+                _child_probe_row(
+                    pair=[1, 3],
+                    kind="same_vehicle",
+                    log_file="logs/BPC_future/logical_graph/tasks_020/a/seed1.json.jsonl",
+                    complete=True,
+                    right_censored=False,
+                    corrected_gain=1.0,
+                ),
+                _child_probe_row(
+                    pair=[1, 3],
+                    kind="same_vehicle",
+                    log_file="logs/BPC_future/logical_graph/tasks_020/b/seed2.json.jsonl",
+                    complete=True,
+                    right_censored=False,
+                    corrected_gain=8.0,
+                ),
+            ]
+            child_file.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+
+            summary = build_child_score_map(
+                [child_file],
+                tmp_path / "out",
+                tmp_path / "report.md",
+            )
+
+            self.assertTrue(summary["context_scoped_rows"])
+            self.assertEqual(summary["duplicate_unscoped_key_count"], 1)
+            self.assertEqual(summary["child_score_row_count"], 2)
+            self.assertEqual(summary["child_score_map_entry_count"], 1)
+            self.assertEqual(summary["solver_score_map_path"], summary["solver_score_rows_path"])
+            self.assertTrue(summary["solver_score_map_path"].endswith("journey_child_score_rows.json"))
+            score_rows = json.loads((tmp_path / "out" / "journey_child_score_rows.json").read_text())
+            self.assertEqual(len(score_rows), 2)
+            self.assertEqual({row["source_log_file"] for row in score_rows}, {rows[0]["log_file"], rows[1]["log_file"]})
+            self.assertEqual(len({row["scoped_key"] for row in score_rows}), 2)
+
 
 def _child_probe_row(
     *,
     pair: list[int],
     kind: str,
+    log_file: str = "logs/BPC_future/logical_graph/tasks_020/demo/demo.json.jsonl",
     branch_node_id: int = 0,
     branch_depth: int = 0,
     child_started: bool = True,
@@ -172,7 +264,7 @@ def _child_probe_row(
         "production_ready": False,
         "certificate_effect": False,
         "official_bound_effect": False,
-        "log_file": "logs/BPC_future/logical_graph/tasks_020/demo/demo.json.jsonl",
+        "log_file": log_file,
         "right_censored": bool(right_censored),
         "label_observation_complete": bool(complete),
         "branch_node_id": int(branch_node_id),

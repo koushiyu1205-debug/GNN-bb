@@ -23,6 +23,30 @@ from BPC_future.solver.journey_driver import solve_bpc_future_journey
 from BPC_future.solver.logger import FutureLogger
 
 
+def _gap_metadata(primal_bound, dual_bound, gap) -> dict[str, object]:
+    if gap is not None and primal_bound is not None and dual_bound is not None:
+        return {
+            "gap_available": True,
+            "gap_source": "solver_result",
+            "gap_unavailable_reason": "",
+            "best_primal_bound": primal_bound,
+            "best_dual_bound": dual_bound,
+        }
+    if primal_bound is None:
+        reason = "no_feasible_incumbent"
+    elif dual_bound is None:
+        reason = "no_exact_dual_bound"
+    else:
+        reason = "gap_unavailable"
+    return {
+        "gap_available": False,
+        "gap_source": "",
+        "gap_unavailable_reason": reason,
+        "best_primal_bound": primal_bound,
+        "best_dual_bound": dual_bound,
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run BPC_future trip-time BPC.")
     parser.add_argument("--config", default="BPC_future/configs/very_small.yaml")
@@ -98,6 +122,7 @@ def main() -> bool:
             "subset_row_cuts_added": result.subset_row_cuts_added,
             "sortie_lb_cut_added": result.sortie_lb_cut_added,
             "fleet_lb_cut_added": result.fleet_lb_cut_added,
+            **_gap_metadata(result.primal_bound, result.dual_bound, result.gap),
         }
         rows.append(row)
         print(

@@ -358,6 +358,9 @@ class JourneyPricingResult:
     duplicate_scan_limited: bool = False
     direct_next_sortie_cache_hits: int = 0
     direct_next_sortie_cache_misses: int = 0
+    direct_next_sortie_cache_requested: bool = False
+    direct_next_sortie_cache_effective_enabled: bool = False
+    direct_next_sortie_cache_disabled_reason: str = ""
     direct_label_max_labels_per_node: int = 0
     direct_label_cross_count_pruned_labels: int = 0
     direct_label_existing_task_set_repair_only: bool = False
@@ -6206,7 +6209,9 @@ def _price_journeys_by_direct_labels(
     next_sortie_cache: dict[int, tuple[list[_SortieProfile], int, int, str]] = {}
     next_sortie_cache_hits = 0
     next_sortie_cache_misses = 0
-    use_next_sortie_cache = bool(config.direct_journey_label_next_sortie_cache_enabled)
+    next_sortie_cache_requested = bool(config.direct_journey_label_next_sortie_cache_enabled)
+    use_next_sortie_cache = bool(next_sortie_cache_requested)
+    next_sortie_cache_disabled_reason = "" if use_next_sortie_cache else "disabled_by_config"
     direct_label_max_labels_per_node = max(0, int(config.direct_journey_label_max_labels_per_node))
     direct_label_beam_mode = direct_label_max_labels_per_node > 0
     direct_label_cross_count_pruned = 0
@@ -6422,6 +6427,8 @@ def _price_journeys_by_direct_labels(
             # pruning is disabled.
             if bool(config.direct_journey_label_completion_bound_partial_pruning_enabled):
                 use_next_sortie_cache = False
+                if next_sortie_cache_requested:
+                    next_sortie_cache_disabled_reason = "completion_bound_partial_pruning_enabled"
     if (
         completion_bound is None
         and rpce_bound is None
@@ -6461,6 +6468,8 @@ def _price_journeys_by_direct_labels(
             )
         if bool(config.direct_journey_label_completion_bound_partial_pruning_enabled):
             use_next_sortie_cache = False
+            if next_sortie_cache_requested:
+                next_sortie_cache_disabled_reason = "completion_bound_partial_pruning_enabled"
 
     def _repair_prefix_allowed(mask: int) -> bool:
         """Worker-only filter for existing task-set physical repairs.
@@ -8055,6 +8064,15 @@ def _price_journeys_by_direct_labels(
         # journey through `_record_negative_label`, which applies true RC.
         return _record_negative_label(new_label, float(new_label_objective))
 
+    def _next_sortie_cache_kwargs() -> dict[str, Any]:
+        return {
+            "direct_next_sortie_cache_hits": int(next_sortie_cache_hits),
+            "direct_next_sortie_cache_misses": int(next_sortie_cache_misses),
+            "direct_next_sortie_cache_requested": bool(next_sortie_cache_requested),
+            "direct_next_sortie_cache_effective_enabled": bool(use_next_sortie_cache),
+            "direct_next_sortie_cache_disabled_reason": str(next_sortie_cache_disabled_reason or ""),
+        }
+
     while heap:
         now = time.perf_counter()
         if _frontier_refinement_ready_for_reserve(now):
@@ -8080,8 +8098,7 @@ def _price_journeys_by_direct_labels(
                 weak_negative_journeys_filtered=weak_filtered,
                 dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                 profile_generation_time=time.perf_counter() - started,
-                direct_next_sortie_cache_hits=next_sortie_cache_hits,
-                direct_next_sortie_cache_misses=next_sortie_cache_misses,
+                **_next_sortie_cache_kwargs(),
                 dominated_task_set_journeys_filtered=dominated_task_set_filtered,
                 **_completion_bound_kwargs(),
                 **_direct_label_mask_diagnostic_kwargs(selected),
@@ -8109,8 +8126,7 @@ def _price_journeys_by_direct_labels(
                 weak_negative_journeys_filtered=weak_filtered,
                 dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                 profile_generation_time=time.perf_counter() - started,
-                direct_next_sortie_cache_hits=next_sortie_cache_hits,
-                direct_next_sortie_cache_misses=next_sortie_cache_misses,
+                **_next_sortie_cache_kwargs(),
                 dominated_task_set_journeys_filtered=dominated_task_set_filtered,
                 **_completion_bound_kwargs(),
                 **_direct_label_mask_diagnostic_kwargs(selected),
@@ -8262,8 +8278,7 @@ def _price_journeys_by_direct_labels(
                 weak_negative_journeys_filtered=weak_filtered,
                 dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                 profile_generation_time=time.perf_counter() - started,
-                direct_next_sortie_cache_hits=next_sortie_cache_hits,
-                direct_next_sortie_cache_misses=next_sortie_cache_misses,
+                **_next_sortie_cache_kwargs(),
                 dominated_task_set_journeys_filtered=dominated_task_set_filtered,
                 **_completion_bound_kwargs(),
                 **_direct_label_mask_diagnostic_kwargs(selected),
@@ -8378,8 +8393,7 @@ def _price_journeys_by_direct_labels(
                     weak_negative_journeys_filtered=weak_filtered,
                     dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
                     profile_generation_time=time.perf_counter() - started,
-                    direct_next_sortie_cache_hits=next_sortie_cache_hits,
-                    direct_next_sortie_cache_misses=next_sortie_cache_misses,
+                    **_next_sortie_cache_kwargs(),
                     dominated_task_set_journeys_filtered=dominated_task_set_filtered,
                     **_completion_bound_kwargs(),
                     **_direct_label_mask_diagnostic_kwargs(selected),
@@ -8516,8 +8530,7 @@ def _price_journeys_by_direct_labels(
             weak_negative_journeys_filtered=weak_filtered,
             dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
             profile_generation_time=time.perf_counter() - started,
-            direct_next_sortie_cache_hits=next_sortie_cache_hits,
-            direct_next_sortie_cache_misses=next_sortie_cache_misses,
+            **_next_sortie_cache_kwargs(),
             dominated_task_set_journeys_filtered=dominated_task_set_filtered,
             **_completion_bound_kwargs(),
             **_direct_label_mask_diagnostic_kwargs(selected),
@@ -8591,8 +8604,7 @@ def _price_journeys_by_direct_labels(
         weak_negative_journeys_filtered=weak_filtered,
         dp_bound_pruned_labels=direct_bound_pruned + completion_lb_pruned,
         profile_generation_time=time.perf_counter() - started,
-        direct_next_sortie_cache_hits=next_sortie_cache_hits,
-        direct_next_sortie_cache_misses=next_sortie_cache_misses,
+        **_next_sortie_cache_kwargs(),
         dominated_task_set_journeys_filtered=dominated_task_set_filtered,
         **_completion_bound_kwargs(),
         **_direct_label_mask_diagnostic_kwargs(),
@@ -15015,6 +15027,10 @@ def _journey_cut_dual_value(mask: int, cut_duals: dict[int, float], cuts: tuple[
                 value += float(cut_duals.get(int(cut_index), 0.0))
             continue
         if kind != "subset_row":
+            if kind == "weighted_subset_row" and cut_index < len(cut_masks):
+                value += float(cut_duals.get(int(cut_index), 0.0)) * float(
+                    _weighted_subset_row_mask_coefficient(int(mask), cut_masks[cut_index])
+                )
             continue
         k = int(getattr(cut, "k", 2))
         if cut_index >= len(cut_masks):
@@ -15025,24 +15041,45 @@ def _journey_cut_dual_value(mask: int, cut_duals: dict[int, float], cuts: tuple[
 
 
 def _journey_pricing_cut_supported(cut: FutureCut) -> bool:
-    return getattr(cut, "kind", "") in {"subset_row", "fleet_lower_bound", "fleet_upper_bound"}
+    return getattr(cut, "kind", "") in {"subset_row", "weighted_subset_row", "fleet_lower_bound", "fleet_upper_bound"}
 
 
-def _cut_masks(data: FutureData, cuts: tuple[FutureCut, ...]) -> tuple[int, ...]:
+def _cut_masks(data: FutureData, cuts: tuple[FutureCut, ...]) -> tuple[Any, ...]:
     task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
     return _cut_masks_from_task_bits(cuts, task_to_bit)
 
 
-def _cut_masks_from_task_bits(cuts: tuple[FutureCut, ...], task_to_bit: dict[int, int]) -> tuple[int, ...]:
-    masks: list[int] = []
+def _cut_masks_from_task_bits(cuts: tuple[FutureCut, ...], task_to_bit: dict[int, int]) -> tuple[Any, ...]:
+    masks: list[Any] = []
     for cut in cuts:
         mask = 0
         if getattr(cut, "kind", "") == "subset_row":
             for task in getattr(cut, "tasks", tuple()):
                 if int(task) in task_to_bit:
                     mask |= 1 << task_to_bit[int(task)]
+        elif getattr(cut, "kind", "") == "weighted_subset_row":
+            denominator = max(1, int(getattr(cut, "denominator", 1)))
+            weighted_bits = []
+            for task, weight in zip(getattr(cut, "tasks", tuple()), getattr(cut, "weights", tuple())):
+                if int(task) in task_to_bit:
+                    weighted_bits.append((int(task_to_bit[int(task)]), int(weight)))
+            masks.append((int(denominator), tuple(weighted_bits)))
+            continue
         masks.append(mask)
     return tuple(masks)
+
+
+def _weighted_subset_row_mask_coefficient(mask: int, cut_mask_entry: Any) -> int:
+    try:
+        denominator, weighted_bits = cut_mask_entry
+    except (TypeError, ValueError):
+        return 0
+    denominator = max(1, int(denominator))
+    weighted_overlap = 0
+    for bit, weight in weighted_bits:
+        if int(mask) & (1 << int(bit)):
+            weighted_overlap += int(weight)
+    return int(weighted_overlap) // int(denominator)
 
 
 def _add_profile_label(

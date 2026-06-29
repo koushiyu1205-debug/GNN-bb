@@ -31,11 +31,52 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
                     "priority_mode": "pool_split",
                     "forced_pair": [1, 2],
                     "forced_pair_matched": True,
+                    "phased_testing_controller_active": True,
+                    "phased_testing_controller_input_count": 2,
+                    "phased_testing_stage_counts": {"phase2_heuristic": 1, "phase1_lp": 1},
+                    "phased_testing_decision_counts": {"probed_complete": 1, "skipped_by_dynamic_k": 1},
+                    "phased_testing_phase0_fail_reason_counts": {},
+                    "phased_testing_phase1_candidate_count": 2,
+                    "phased_testing_phase1_probe_count": 2,
+                    "phased_testing_phase1_complete_count": 2,
+                    "phased_testing_phase1_dynamic_k_excluded_count": 0,
+                    "phased_testing_phase1_reason_counts": {"ok": 2},
+                    "phased_testing_phase1_total_wall_time": 0.25,
+                    "phased_testing_phase1_best_min_child_lp_gain": 2.25,
+                    "phased_testing_phase1_best_child_lp_gain_product": 5.0,
+                    "phased_testing_phase1_official_bound_effect_any": False,
+                    "phased_testing_phase1_certificate_effect_any": False,
+                    "phased_testing_phase2_candidate_count": 2,
+                    "phased_testing_phase2_probe_count": 1,
+                    "phased_testing_phase2_complete_count": 1,
+                    "phased_testing_phase2_dynamic_k_excluded_count": 1,
+                    "phased_testing_phase2_reason_counts": {"dynamic_k_excluded": 1, "ok": 1},
+                    "phased_testing_phase2_total_wall_time": 0.05,
+                    "phased_testing_phase2_negative_child_count_total": 1,
+                    "phased_testing_phase2_negative_journey_count_total": 3,
+                    "phased_testing_phase2_generated_sequences_total": 40,
+                    "phased_testing_phase2_evaluated_timed_trips_total": 12,
+                    "phased_testing_phase2_worst_negative_severity_max": 1.5,
+                    "phased_testing_phase2_official_bound_effect_any": False,
+                    "phased_testing_phase2_certificate_effect_any": False,
+                    "phased_testing_official_bound_effect_any": False,
+                    "phased_testing_certificate_effect_any": False,
                     "selected": {
                         "task_i": 1,
                         "task_j": 2,
                         "fractionality": 0.49,
                         "pool_max_child_width": 3,
+                        "phased_testing_stage": "phase2_heuristic",
+                        "phased_testing_decision": "probed_complete",
+                        "phased_testing_phase0_passed": True,
+                        "phased_testing_phase1_lp_complete": True,
+                        "phased_testing_phase2_heuristic_complete": True,
+                        "phase1_min_child_lp_gain": 2.25,
+                        "phase1_child_lp_gain_product": 5.0,
+                        "phase1_child_width_balance": 2,
+                        "phase2_negative_child_count": 1,
+                        "phase2_negative_journey_count": 3,
+                        "phase2_best_reduced_cost": -1.5,
                     },
                     "top": [
                         {"task_i": 2, "task_j": 3, "fractionality": 0.5},
@@ -164,6 +205,26 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(row["max_child_lower_bound_gain"], 2.0)
             self.assertEqual(row["max_child_corrected_bound_gain"], 4.0)
             self.assertEqual(row["branch_feature_source"], "candidate_log")
+            self.assertEqual(row["phased_testing_stage"], "phase2_heuristic")
+            self.assertEqual(row["phased_testing_decision"], "probed_complete")
+            self.assertTrue(row["phased_testing_phase0_passed"])
+            self.assertTrue(row["phased_testing_phase1_lp_complete"])
+            self.assertTrue(row["phased_testing_phase2_heuristic_complete"])
+            self.assertEqual(row["phase1_min_child_lp_gain"], 2.25)
+            self.assertEqual(row["phase1_child_lp_gain_product"], 5.0)
+            self.assertEqual(row["phase1_child_width_balance"], 2)
+            self.assertEqual(row["phase2_negative_child_count"], 1)
+            self.assertEqual(row["phase2_negative_journey_count"], 3)
+            self.assertEqual(row["phase2_best_reduced_cost"], -1.5)
+            self.assertTrue(row["phased_testing_controller_active"])
+            self.assertEqual(row["phased_testing_controller_input_count"], 2)
+            self.assertEqual(row["phased_testing_phase1_probe_count"], 2)
+            self.assertEqual(row["phased_testing_phase2_probe_count"], 1)
+            self.assertEqual(row["phased_testing_phase2_dynamic_k_excluded_count"], 1)
+            self.assertEqual(row["phased_testing_phase2_negative_journey_count_total"], 3)
+            self.assertEqual(row["phased_testing_decision_counts"], {"probed_complete": 1, "skipped_by_dynamic_k": 1})
+            self.assertFalse(row["phased_testing_official_bound_effect_any"])
+            self.assertFalse(row["phased_testing_certificate_effect_any"])
             self.assertTrue(row["right_censored"])
             self.assertFalse(row["label_observation_complete"])
             self.assertFalse(row["usable_for_branch_impact_training"])
@@ -184,8 +245,14 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(row["branch_labels"]["y_child_max_corrected_bound_gain"], 4.0)
             self.assertEqual(summary["child_probe_row_count"], 2)
             child_rows = summary["child_probe_rows"]
+            self.assertEqual(child_rows[0]["schema_version"], "journey_branch_child_probe_row_v2")
+            self.assertEqual(child_rows[0]["instance_id"], "branch")
+            self.assertEqual(child_rows[0]["source_log_file"], str(log_path))
             self.assertEqual(child_rows[0]["child_node_id"], 1)
             self.assertEqual(child_rows[0]["child_bound_reference"], 5.0)
+            self.assertEqual(child_rows[0]["child_lower_bound_gain"], 2.0)
+            self.assertEqual(child_rows[0]["child_max_corrected_bound_gain"], 4.0)
+            self.assertEqual(child_rows[0]["child_exact_pricing_event_count"], 1.0)
             self.assertEqual(child_rows[0]["child_labels"]["child_lower_bound_gain"], 2.0)
             self.assertEqual(child_rows[0]["child_labels"]["child_max_corrected_node_lb"], 11.0)
             self.assertEqual(child_rows[0]["child_labels"]["child_max_corrected_bound_gain"], 4.0)
@@ -193,6 +260,14 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(child_rows[0]["child_labels"]["child_time_to_first_certificate"], 1.5)
             self.assertEqual(child_rows[0]["child_labels"]["child_time_to_fathom"], 3.0)
             self.assertEqual(child_rows[0]["child_labels"]["child_fathomed"], 1.0)
+            self.assertEqual(
+                child_rows[0]["observed_branch_candidate"]["phased_testing_stage"],
+                "phase2_heuristic",
+            )
+            self.assertEqual(
+                child_rows[0]["observed_branch_candidate"]["phase2_negative_journey_count"],
+                3,
+            )
             training_rows = summary["branch_training_rows"]
             self.assertEqual(len(training_rows), 1)
             self.assertEqual(training_rows[0]["branch_feature_schema"], summary["branch_feature_schema"])
@@ -201,6 +276,14 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             self.assertEqual(training_rows[0]["forced_pair"], [1, 2])
             self.assertTrue(training_rows[0]["forced_pair_matched"])
             self.assertFalse(training_rows[0]["usable_for_branch_impact_training"])
+            self.assertEqual(training_rows[0]["phased_testing_stage"], "phase2_heuristic")
+            self.assertEqual(training_rows[0]["phase1_min_child_lp_gain"], 2.25)
+            self.assertEqual(training_rows[0]["phase2_negative_child_count"], 1)
+            self.assertEqual(training_rows[0]["phased_testing_phase1_probe_count"], 2)
+            self.assertEqual(training_rows[0]["phased_testing_phase2_probe_count"], 1)
+            self.assertEqual(training_rows[0]["phased_testing_phase2_reason_counts"], {"dynamic_k_excluded": 1, "ok": 1})
+            self.assertFalse(training_rows[0]["phased_testing_official_bound_effect_any"])
+            self.assertFalse(training_rows[0]["phased_testing_certificate_effect_any"])
             self.assertTrue((tmp_path / "out" / "summary.json").exists())
             self.assertTrue((tmp_path / "out" / "branch_impact_rows.jsonl").exists())
             self.assertTrue((tmp_path / "out" / "branch_training_rows.jsonl").exists())
@@ -281,6 +364,88 @@ class JourneyBranchImpactAuditTests(unittest.TestCase):
             first_child = summary["child_probe_rows"][0]
             self.assertTrue(first_child["child_started"])
             self.assertGreaterEqual(first_child["child_labels"]["child_proof_cpu"], 0.0)
+
+    def test_completion_bound_retry_count_excludes_ordinary_no_column_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            log_path = tmp_path / "retry_kinds.jsonl"
+            records = [
+                {"event": "journey_node_start", "node_id": 0, "depth": 0, "time": 0.0},
+                {
+                    "event": "journey_branch_candidates",
+                    "node_id": 0,
+                    "depth": 0,
+                    "time": 0.1,
+                    "candidate_count": 1,
+                    "eligible_count": 1,
+                    "selected": {"task_i": 1, "task_j": 2, "fractionality": 0.5},
+                    "top": [{"task_i": 1, "task_j": 2, "fractionality": 0.5}],
+                    "priority_top": [{"task_i": 1, "task_j": 2, "fractionality": 0.5}],
+                },
+                {
+                    "event": "journey_branch",
+                    "node_id": 0,
+                    "depth": 0,
+                    "time": 0.2,
+                    "left": "RF(1,2)=same_vehicle",
+                    "right": "RF(1,2)=separate_vehicle",
+                },
+                {
+                    "event": "journey_child_queued",
+                    "parent_node_id": 0,
+                    "child_node_id": 1,
+                    "depth": 1,
+                    "time": 0.3,
+                    "constraint": "RF(1,2)=same_vehicle",
+                    "lower_bound": 0.0,
+                    "lower_bound_exact": True,
+                },
+                {
+                    "event": "journey_child_queued",
+                    "parent_node_id": 0,
+                    "child_node_id": 2,
+                    "depth": 1,
+                    "time": 0.4,
+                    "constraint": "RF(1,2)=separate_vehicle",
+                    "lower_bound": 0.0,
+                    "lower_bound_exact": True,
+                },
+                {"event": "journey_node_start", "node_id": 1, "depth": 1, "time": 1.0},
+                {
+                    "event": "journey_exact_pricing_retry",
+                    "node_id": 1,
+                    "depth": 1,
+                    "time": 1.1,
+                    "previous_status": "INCOMPLETE",
+                    "previous_reason": "profile_exhausted_no_column",
+                },
+                {
+                    "event": "journey_exact_pricing_completion_bound_retry",
+                    "node_id": 1,
+                    "depth": 1,
+                    "time": 1.2,
+                    "pricing_kind": "exact_completion_bound_retry",
+                    "previous_status": "INCOMPLETE",
+                    "previous_reason": "profile_exhausted_no_column",
+                },
+                {"event": "journey_finish", "status": "TIME_LIMIT", "time": 2.0},
+            ]
+            log_path.write_text(
+                "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+                encoding="utf-8",
+            )
+
+            summary = build_branch_impact([log_path], tmp_path / "out", tmp_path / "report.md")
+
+            row = summary["records"][0]
+            self.assertEqual(row["sum_child_completion_bound_retry_count"], 1)
+            self.assertEqual(row["children"][0]["completion_bound_retry_count"], 1)
+            self.assertEqual(row["children"][1]["completion_bound_retry_count"], 0)
+            self.assertEqual(summary["aggregate"]["total_child_completion_bound_retries"], 1)
+            self.assertEqual(
+                summary["child_probe_rows"][0]["child_completion_bound_retry_count"],
+                1.0,
+            )
 
 
 if __name__ == "__main__":

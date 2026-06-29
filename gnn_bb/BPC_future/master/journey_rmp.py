@@ -435,13 +435,21 @@ def _journey_cut_coefficient(cut: FutureCut, journey: JourneyColumn) -> float:
         tasks = set(getattr(cut, "tasks", tuple()))
         k = int(getattr(cut, "k", 2))
         return float(len(tasks.intersection(journey.task_set)) // k)
+    if kind == "weighted_subset_row":
+        task_set = set(int(task) for task in journey.task_set)
+        weighted_overlap = sum(
+            int(weight)
+            for task, weight in zip(getattr(cut, "tasks", tuple()), getattr(cut, "weights", tuple()))
+            if int(task) in task_set
+        )
+        return float(int(weighted_overlap) // int(getattr(cut, "denominator", 2)))
     if kind in {"fleet_lower_bound", "fleet_upper_bound"}:
         return 1.0
     return 0.0
 
 
 def _journey_cut_supported(cut: FutureCut) -> bool:
-    return getattr(cut, "kind", "") in {"subset_row", "fleet_lower_bound", "fleet_upper_bound"}
+    return getattr(cut, "kind", "") in {"subset_row", "weighted_subset_row", "fleet_lower_bound", "fleet_upper_bound"}
 
 
 def _journey_dual_bounds_for_sense(sense: str, infinity: float) -> tuple[float, float]:

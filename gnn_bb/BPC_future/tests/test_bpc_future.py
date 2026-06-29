@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import copy
 import heapq
 import hashlib
 import itertools
@@ -26,7 +27,14 @@ except Exception:
 
 from BPC_future.core.branching import BranchConstraint, trip_allowed_by_branch
 from BPC_future.core.columns import TripPool, candidate_start_times_for_trip, evaluate_timed_trip
-from BPC_future.core.cuts import FleetLowerBoundCut, SortieLowerBoundCut, SubsetRowCut, TimePointCapacityCut, add_cut_unique
+from BPC_future.core.cuts import (
+    FleetLowerBoundCut,
+    SortieLowerBoundCut,
+    SubsetRowCut,
+    TimePointCapacityCut,
+    WeightedSubsetRowCut,
+    add_cut_unique,
+)
 from BPC_future.core.data import ArcOption, _pareto_filter_arc_options, load_future_data
 from BPC_future.core.fleet_bound import (
     _hungarian_min_cost,
@@ -44,6 +52,7 @@ from BPC_future.master.journey_rmp import (
     solve_journey_stabilized_dual,
 )
 from BPC_future.master.rmp import FutureDuals, FutureRMPSolution, manual_reduced_cost, solve_trip_time_rmp
+from BPC_future.scripts.summarize_journey_dynamic_src_audit import summarize_dynamic_src
 from BPC_future.pricing.journey_pricing import (
     JourneyPricingConfig,
     _CompatibleProfileCache,
@@ -78,6 +87,7 @@ from BPC_future.pricing.journey_pricing import (
     _direct_ng_partial_branch_pruning_safe,
     _direct_ng_neighborhoods,
     _direct_label_diverse_harvest_soft_return_ready,
+    _direct_completion_bound_cut_safe,
     _direct_completed_journey_suffix_optimistic_objective,
     _direct_open_label_frontier_lower_bound,
     _direct_completion_bound_cache_key,
@@ -100,6 +110,8 @@ from BPC_future.pricing.journey_pricing import (
     _early_return_negative_candidates_ready,
     _profile_cut_penalty,
     _profile_cut_penalty_pruning_safe,
+    _journey_cut_dual_value,
+    _journey_pricing_cut_supported,
     _profile_mask_diagnostic_kwargs,
     _journey_task_set_branch_allowed,
     _profile_candidate_return_limit,
@@ -190,6 +202,11 @@ from BPC_future.solver.journey_driver import (
     _journey_completion_bound_final_probe_needed,
     _journey_completion_bound_probe_budget,
     _journey_config_with_call_deadline,
+    _journey_completion_bound_retry_budget_cap,
+    _journey_completion_bound_retry_gate_blocks,
+    _journey_completion_bound_retry_gate_context_key,
+    _journey_completion_bound_retry_gate_initial_stats,
+    _journey_completion_bound_retry_gate_update,
     _journey_fixed_task_set_repair_enabled,
     _journey_fixed_task_set_repair_pool_targets,
     _journey_fixed_task_set_repair_target_task_sets,
@@ -208,6 +225,7 @@ from BPC_future.solver.journey_driver import (
     _JourneyAdditionCount,
     _journey_active_task_sets,
     _journey_allowed_by_branch,
+    _journey_branch_selection_metadata,
     _journey_branch_same_mass,
     _journey_child_constraint_order,
     _journey_cut_hash,
@@ -228,12 +246,25 @@ from BPC_future.solver.journey_driver import (
     _journey_replacement_repair_target_task_sets,
     _price_fixed_task_set_representatives,
     _price_new_task_set_sweep,
+    _log_journey_cut_dual_diagnostics,
+    _audit_journey_weighted_rank1_cuts,
+    _journey_parse_positive_int_tuple,
+    _separate_journey_subset_row_cuts,
     _journey_static_cuts,
     _journey_static_subset_row_compactness_score,
     _journey_child_constraint_score,
+    _journey_child_constraint_order,
     _journey_child_queue_priority_width,
     _journey_child_score_map_from_config,
     _journey_branch_score_map_from_config,
+    _journey_branch_score_lookup_keys,
+    _journey_branch_root_score_gate_subtree_passes,
+    _journey_branch_candidate_phased_bkf_score,
+    _journey_branch_candidate_phased_testing_from_config,
+    _journey_branch_candidate_dynamic_k_limit,
+    _journey_branch_candidate_dynamic_k_probe_indices,
+    _journey_branch_decision_snapshot,
+    _journey_early_branch_score_gate,
     _normalize_journey_branch_score_map,
     _normalize_journey_child_score_map,
     _journey_skip_ordinary_retry_after_profile_materialization_failure,
@@ -292,6 +323,7 @@ from BPC_future.solver.journey_driver import (
     _log_journey_pricing,
     _journey_active_task_set_hash,
     _journey_task_set_dominance_safe,
+    _separate_journey_weighted_rank1_cuts,
     _journey_forbidden_signatures_for_node,
     _add_priced_journeys,
     _maybe_restart_journey_pool,
@@ -7317,7 +7349,45 @@ class BPCFutureTests(unittest.TestCase):
             ),
         )
         self.assertTrue(result.completion_bound_enabled)
+        self.assertTrue(result.direct_next_sortie_cache_requested)
+        self.assertTrue(result.direct_next_sortie_cache_effective_enabled)
+        self.assertEqual(result.direct_next_sortie_cache_disabled_reason, "")
         self.assertGreater(result.direct_next_sortie_cache_misses, 0)
+
+    @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
+    def test_direct_journey_label_completion_bound_reports_cache_disabled_by_partial_pruning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = _write_logical_graph_case(Path(tmp), outbound_energy=10.0, inbound_energy=10.0)
+            data = load_future_data(str(graph_path))
+        result = price_journeys(
+            data,
+            duals=JourneyDuals(cover={1: 0.0}, fleet_limit=0.0),
+            branch_constraints=tuple(),
+            config=JourneyPricingConfig(
+                time_bucket_size=5.0,
+                start_time_step=10.0,
+                max_tasks_per_trip=1,
+                time_limit=5.0,
+                max_candidate_trips=0,
+                max_dp_states=1000,
+                direct_journey_label_pricing_enabled=True,
+                direct_journey_label_early_return_negative=False,
+                direct_journey_label_task_set_bound_pruning_enabled=False,
+                direct_journey_label_completion_bound_enabled=True,
+                direct_journey_label_completion_bound_time_buckets=8,
+                direct_journey_label_next_sortie_cache_enabled=True,
+                direct_journey_label_completion_bound_partial_pruning_enabled=True,
+            ),
+        )
+        self.assertTrue(result.completion_bound_enabled)
+        self.assertTrue(result.direct_next_sortie_cache_requested)
+        self.assertFalse(result.direct_next_sortie_cache_effective_enabled)
+        self.assertEqual(
+            result.direct_next_sortie_cache_disabled_reason,
+            "completion_bound_partial_pruning_enabled",
+        )
+        self.assertEqual(result.direct_next_sortie_cache_hits, 0)
+        self.assertEqual(result.direct_next_sortie_cache_misses, 0)
 
     @unittest.skipUnless(HAS_SCIP, "PySCIPOpt unavailable")
     def test_direct_journey_label_pricing_keeps_cut_dual_reward_candidate(self):
@@ -11749,6 +11819,46 @@ class BPCFutureTests(unittest.TestCase):
         assert horizon_branch is not None
         self.assertEqual((horizon_branch[0].task_i, horizon_branch[0].task_j), (1, 2))
 
+        max_depth_allowed_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            tie_tolerance=0.02,
+            priority_mode="branch_score_horizon",
+            node_id=9,
+            branch_depth=1,
+            branch_score_map={
+                "node:9:depth:1:1,2": 0.91,
+                "node:9:depth:1:2,3": 0.10,
+            },
+            branch_score_horizon_tie_tolerance=0.02,
+            branch_score_max_depth=1,
+        )
+        self.assertIsNotNone(max_depth_allowed_branch)
+        assert max_depth_allowed_branch is not None
+        self.assertEqual((max_depth_allowed_branch[0].task_i, max_depth_allowed_branch[0].task_j), (1, 2))
+
+        max_depth_blocked_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            tie_tolerance=0.02,
+            priority_mode="branch_score_horizon",
+            node_id=9,
+            branch_depth=2,
+            branch_score_map={
+                "node:9:depth:2:1,2": 0.91,
+                "node:9:depth:2:2,3": 0.10,
+            },
+            branch_score_horizon_tie_tolerance=0.02,
+            branch_score_max_depth=1,
+        )
+        self.assertIsNotNone(max_depth_blocked_branch)
+        assert max_depth_blocked_branch is not None
+        self.assertEqual((max_depth_blocked_branch[0].task_i, max_depth_blocked_branch[0].task_j), (2, 3))
+
         capped_horizon_branch = _choose_journey_branch(
             data,
             values,
@@ -11797,6 +11907,1131 @@ class BPCFutureTests(unittest.TestCase):
         assert equal_fraction_negative_horizon_branch is not None
         self.assertEqual((equal_fraction_negative_horizon_branch[0].task_i, equal_fraction_negative_horizon_branch[0].task_j), (1, 2))
 
+    def test_journey_branch_routeopt_bkf_staged_phase0_filters_high_score_candidate(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("routeopt-bkf-staged", jid, tasks),
+            )
+
+        values = [(journey(1, (1, 2)), 0.49), (journey(2, (2, 3)), 0.5)]
+        score_rows = [
+            {"node_id": 0, "depth": 0, "task_i": 1, "task_j": 2, "score": 0.91},
+            {"node_id": 0, "depth": 0, "task_i": 1, "task_j": 3, "score": 0.91},
+            {"node_id": 0, "depth": 0, "task_i": 2, "task_j": 3, "score": 0.10},
+            {"node_id": 0, "depth": 1, "task_i": 1, "task_j": 2, "score": 0.91},
+            {"node_id": 7, "depth": 1, "task_i": 1, "task_j": 2, "score": 0.91},
+        ]
+        score_map = _journey_branch_score_map_from_config(
+            {"journey_branch_candidate_score_map": json.dumps(score_rows)},
+            data=data,
+        )
+
+        score_only_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            tie_tolerance=0.0,
+            priority_mode="branch_score_horizon",
+            node_id=0,
+            branch_depth=0,
+            branch_score_map=score_map,
+            branch_score_horizon_tie_tolerance=0.02,
+        )
+        self.assertIsNotNone(score_only_branch)
+        assert score_only_branch is not None
+        self.assertEqual((score_only_branch[0].task_i, score_only_branch[0].task_j), (1, 2))
+
+        staged_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            tie_tolerance=0.0,
+            priority_mode="routeopt_bkf_staged",
+            node_id=0,
+            branch_depth=0,
+            branch_score_map=score_map,
+            branch_score_horizon_tie_tolerance=0.02,
+            branch_phased_testing={
+                "enabled": True,
+                "phase0_enabled": True,
+                "base_priority_mode": "branch_score_horizon",
+                "phase0_min_fractionality": 0.495,
+                "fail_closed_to_priority_order": True,
+            },
+        )
+        self.assertIsNotNone(staged_branch)
+        assert staged_branch is not None
+        self.assertEqual((staged_branch[0].task_i, staged_branch[0].task_j), (2, 3))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "phase0_fallback.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    {
+                        "journey_branch_candidate_log_top_n": 4,
+                        "journey_branch_fractionality_tie_tolerance": 0.0,
+                        "journey_branch_candidate_priority": "routeopt_bkf_staged",
+                        "journey_branch_candidate_phased_testing_enabled": True,
+                        "journey_branch_candidate_phased_testing_base_priority": "fractionality",
+                        "journey_branch_candidate_phased_testing_phase0_min_fractionality": 0.99,
+                        "journey_branch_candidate_phased_testing_fail_closed_to_priority_order": True,
+                    },
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                )
+            finally:
+                logger.close()
+
+            fallback_rows = [
+                json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+            ]
+        self.assertEqual(len(fallback_rows), 1)
+        fallback_record = fallback_rows[0]
+        self.assertTrue(fallback_record["phased_testing_phase0_fallback_all_filtered"])
+        self.assertEqual(
+            fallback_record["phased_testing_phase0_fallback_reason"],
+            "all_candidates_filtered_fail_closed_to_priority_order",
+        )
+        self.assertEqual(fallback_record["phased_testing_phase0_pass_count"], 0)
+        self.assertGreater(fallback_record["phased_testing_phase0_fallback_count"], 0)
+        self.assertTrue(fallback_record["priority_top"][0]["phased_testing_phase0_fallback_enabled"])
+        self.assertEqual(
+            fallback_record["priority_top"][0]["phased_testing_stage"],
+            "phase0_fail_closed_fallback",
+        )
+        self.assertEqual(
+            fallback_record["priority_top"][0]["phased_testing_decision"],
+            "fallback_after_all_filtered",
+        )
+
+        protected_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            tie_tolerance=0.0,
+            priority_mode="routeopt_bkf_staged",
+            node_id=0,
+            branch_depth=0,
+            branch_score_map=score_map,
+            branch_score_horizon_tie_tolerance=0.02,
+            branch_score_selection_gate={
+                "enabled": True,
+                "min_score": 0.67,
+                "require_score_source": True,
+            },
+            branch_phased_testing={
+                "enabled": True,
+                "phase0_enabled": True,
+                "base_priority_mode": "branch_score_horizon",
+                "phase0_min_fractionality": 0.495,
+                "preserve_score_gate_winner_enabled": True,
+                "fail_closed_to_priority_order": True,
+            },
+        )
+        self.assertIsNotNone(protected_branch)
+        assert protected_branch is not None
+        self.assertEqual((protected_branch[0].task_i, protected_branch[0].task_j), (1, 2))
+
+        depth_gated_branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            tie_tolerance=0.0,
+            priority_mode="routeopt_bkf_staged",
+            node_id=0,
+            branch_depth=1,
+            branch_score_map=score_map,
+            branch_score_horizon_tie_tolerance=0.02,
+            branch_phased_testing={
+                "enabled": True,
+                "phase0_enabled": True,
+                "base_priority_mode": "branch_score_horizon",
+                "phase0_min_fractionality": 0.495,
+                "max_depth": 0,
+                "fail_closed_to_priority_order": True,
+            },
+        )
+        self.assertIsNotNone(depth_gated_branch)
+        assert depth_gated_branch is not None
+        self.assertEqual((depth_gated_branch[0].task_i, depth_gated_branch[0].task_j), (1, 2))
+
+        subtree_passes, subtree_metadata = _journey_branch_root_score_gate_subtree_passes(
+            (BranchConstraint("same_vehicle", 1, 2),),
+            branch_score_map=score_map,
+            branch_score_selection_gate={
+                "enabled": True,
+                "min_score": 0.67,
+                "require_score_source": True,
+            },
+            branch_score_require_state_key=False,
+        )
+        self.assertTrue(subtree_passes)
+        self.assertEqual(subtree_metadata["root_score_gate_subtree_pair"], [1, 2])
+        self.assertEqual(subtree_metadata["root_score_gate_subtree_reason"], "ok")
+
+        subtree_miss, subtree_miss_metadata = _journey_branch_root_score_gate_subtree_passes(
+            (BranchConstraint("same_vehicle", 2, 3),),
+            branch_score_map=score_map,
+            branch_score_selection_gate={
+                "enabled": True,
+                "min_score": 0.67,
+                "require_score_source": True,
+            },
+            branch_score_require_state_key=False,
+        )
+        self.assertFalse(subtree_miss)
+        self.assertEqual(subtree_miss_metadata["root_score_gate_subtree_reason"], "score_below_min")
+
+        subtree_gated_branch = _choose_journey_branch(
+            data,
+            values,
+            (BranchConstraint("same_vehicle", 1, 3),),
+            1.0e-6,
+            tie_tolerance=0.0,
+            priority_mode="routeopt_bkf_staged",
+            node_id=7,
+            branch_depth=1,
+            branch_score_map=score_map,
+            branch_score_horizon_tie_tolerance=0.02,
+            branch_score_selection_gate={
+                "enabled": True,
+                "min_score": 0.67,
+                "require_score_source": True,
+            },
+            branch_phased_testing={
+                "enabled": True,
+                "phase0_enabled": True,
+                "base_priority_mode": "branch_score_horizon",
+                "phase0_min_fractionality": 0.495,
+                "root_score_gate_subtree_max_depth": 0,
+                "fail_closed_to_priority_order": True,
+            },
+        )
+        self.assertIsNotNone(subtree_gated_branch)
+        assert subtree_gated_branch is not None
+        self.assertEqual((subtree_gated_branch[0].task_i, subtree_gated_branch[0].task_j), (1, 2))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    {
+                        "journey_branch_candidate_log_top_n": 4,
+                        "journey_branch_fractionality_tie_tolerance": 0.0,
+                        "journey_branch_candidate_priority": "routeopt_bkf_staged",
+                        "journey_branch_candidate_score_horizon_tie_tolerance": 0.02,
+                        "journey_branch_candidate_score_map": json.dumps(score_rows),
+                        "journey_branch_candidate_phased_testing_enabled": True,
+                        "journey_branch_candidate_phased_testing_base_priority": "branch_score_horizon",
+                        "journey_branch_candidate_phased_testing_phase0_min_fractionality": 0.495,
+                        "journey_branch_candidate_phased_testing_preserve_score_gate_winner_enabled": True,
+                        "journey_branch_candidate_phased_testing_max_depth": 0,
+                        "journey_branch_candidate_score_selection_gate_enabled": True,
+                        "journey_branch_candidate_score_selection_gate_min_score": 0.67,
+                        "journey_branch_candidate_score_selection_gate_require_score_source": True,
+                    },
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=1,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertTrue(record["phased_testing_enabled"])
+        self.assertEqual(record["phased_testing_max_depth"], 0)
+        self.assertTrue(record["phased_testing_preserve_score_gate_winner_enabled"])
+        self.assertEqual(record["selected_pair"], [1, 2])
+        self.assertEqual((record["priority_top"][0]["task_i"], record["priority_top"][0]["task_j"]), (1, 2))
+        self.assertEqual(record["priority_top"][0]["phased_testing_depth_gate_reason"], "depth_exceeds_max")
+        low_fractionality = next(
+            item for item in record["top"] if (item["task_i"], item["task_j"]) == (1, 2)
+        )
+        self.assertEqual(low_fractionality["phased_testing_depth_gate_reason"], "depth_exceeds_max")
+
+    def test_journey_branch_routeopt_bkf_staged_phase1_logs_child_lp_probe(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...], cost: float) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=("routeopt-bkf-phase1", jid, tasks),
+            )
+
+        j1 = journey(1, (1,), 8.0)
+        j2 = journey(2, (2,), 8.0)
+        j3 = journey(3, (3,), 8.0)
+        j12 = journey(12, (1, 2), 10.0)
+        j23 = journey(23, (2, 3), 11.0)
+        j13 = journey(13, (1, 3), 12.0)
+        values = [(j12, 0.5), (j23, 0.5)]
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        for column in (j1, j2, j3, j12, j23, j13):
+            pool.add(column)
+        config = {
+            "journey_branch_candidate_log_top_n": 4,
+            "journey_branch_fractionality_tie_tolerance": 0.0,
+            "journey_branch_candidate_priority": "routeopt_bkf_staged",
+            "journey_branch_candidate_phased_testing_enabled": True,
+            "journey_branch_candidate_phased_testing_base_priority": "fractionality",
+            "journey_branch_candidate_phased_testing_phase1_lp_enabled": True,
+            "journey_branch_candidate_phased_testing_phase1_max_candidates": 2,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    config,
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                    journey_pool=pool,
+                    cuts=tuple(),
+                    active_fleet_limit=3,
+                    parent_objective=0.0,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertTrue(record["phased_testing_phase1_lp_enabled"])
+        self.assertEqual(record["phased_testing_phase1_max_candidates"], 2)
+        self.assertTrue(record["phased_testing_controller_active"])
+        self.assertEqual(record["phased_testing_controller_input_count"], 2)
+        self.assertEqual(record["phased_testing_phase1_candidate_count"], 2)
+        self.assertEqual(record["phased_testing_phase1_probe_count"], 2)
+        self.assertEqual(record["phased_testing_phase1_complete_count"], 2)
+        self.assertEqual(record["phased_testing_phase1_dynamic_k_excluded_count"], 0)
+        self.assertEqual(record["phased_testing_phase1_reason_counts"], {"ok": 2})
+        self.assertEqual(record["phased_testing_decision_counts"], {"probed_complete": 2})
+        self.assertGreaterEqual(record["phased_testing_phase1_best_min_child_lp_gain"], 0.0)
+        self.assertGreaterEqual(record["phased_testing_phase1_best_child_lp_gain_product"], 0.0)
+        self.assertFalse(record["phased_testing_official_bound_effect_any"])
+        self.assertFalse(record["phased_testing_certificate_effect_any"])
+        selected = record["selected"]
+        self.assertTrue(selected["phased_testing_phase1_lp_enabled"])
+        self.assertEqual(selected["phased_testing_phase1_lp_reason"], "ok")
+        self.assertEqual(selected["phased_testing_stage"], "phase1_lp")
+        self.assertEqual(selected["phased_testing_decision"], "probed_complete")
+        self.assertEqual(selected["phased_testing_elimination_reason"], "")
+        self.assertIn(selected["phase1_same_child_status"], {"OPTIMAL", "optimal"})
+        self.assertIn(selected["phase1_separate_child_status"], {"OPTIMAL", "optimal"})
+        self.assertGreaterEqual(selected["phase1_min_child_lp_gain"], 0.0)
+        self.assertGreaterEqual(selected["phase1_sum_child_lp_gain"], selected["phase1_min_child_lp_gain"])
+        self.assertIn("phase1_child_width_balance", selected)
+        self.assertIn("phase1_child_lp_gain_gap", selected)
+        self.assertIn("phase1_child_lp_gain_balance_ratio", selected)
+        self.assertIn("phase1_same_child_wall_time", selected)
+        self.assertIn("phase1_separate_child_wall_time", selected)
+        self.assertIn("phase1_wall_time", selected)
+        self.assertGreaterEqual(selected["phase1_wall_time"], 0.0)
+        self.assertFalse(selected["phase1_official_bound_effect"])
+        self.assertFalse(selected["phase1_certificate_effect"])
+        probed = [
+            item for item in record["priority_top"] if item.get("phased_testing_phase1_lp_enabled")
+        ]
+        self.assertEqual(len(probed), 2)
+
+        metadata = _journey_branch_selection_metadata(
+            data,
+            config,
+            values,
+            tuple(),
+            1.0e-6,
+            node_id=0,
+            depth=0,
+            journey_pool=pool,
+            cuts=tuple(),
+            active_fleet_limit=3,
+            parent_objective=0.0,
+        )
+        self.assertTrue(metadata["phased_testing_phase1_lp_enabled"])
+        self.assertEqual(metadata["phased_testing_phase1_lp_reason"], "ok")
+        self.assertEqual(metadata["phased_testing_stage"], "phase1_lp")
+        self.assertEqual(metadata["phased_testing_decision"], "probed_complete")
+        self.assertEqual(metadata["phased_testing_elimination_reason"], "")
+        self.assertIn("phase1_wall_time", metadata)
+        self.assertIn("phase1_child_lp_gain_gap", metadata)
+        self.assertIn("phase1_child_lp_gain_balance_ratio", metadata)
+        self.assertFalse(metadata["phase1_official_bound_effect"])
+        self.assertFalse(metadata["phase1_certificate_effect"])
+
+    def test_journey_branch_routeopt_bkf_phase1_cut_snapshot_is_diagnostic(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...], cost: float) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=("routeopt-bkf-cut-snapshot", jid, tasks),
+            )
+
+        columns = (
+            journey(1, (1,), 8.0),
+            journey(2, (2,), 8.0),
+            journey(3, (3,), 8.0),
+            journey(12, (1, 2), 10.0),
+            journey(23, (2, 3), 11.0),
+            journey(13, (1, 3), 12.0),
+        )
+        values = [(columns[3], 0.5), (columns[4], 0.5)]
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        for column in columns:
+            pool.add(column)
+        config = {
+            "journey_branch_candidate_log_top_n": 4,
+            "journey_branch_fractionality_tie_tolerance": 0.0,
+            "journey_branch_candidate_priority": "routeopt_bkf_staged",
+            "journey_branch_candidate_phased_testing_enabled": True,
+            "journey_branch_candidate_phased_testing_base_priority": "fractionality",
+            "journey_branch_candidate_phased_testing_phase1_lp_enabled": True,
+            "journey_branch_candidate_phased_testing_phase1_max_candidates": 2,
+            "journey_branch_candidate_phased_testing_phase1_cut_snapshot_enabled": True,
+            "journey_dynamic_subset_row_audit_enabled": True,
+            "journey_dynamic_subset_row_cuts_enabled": True,
+            "journey_dynamic_subset_row_cut_gate_enabled": True,
+            "journey_dynamic_subset_row_cut_gate_min_best_violation": 0.0,
+            "journey_dynamic_subset_row_max_depth": 1,
+            "journey_dynamic_subset_row_max_rounds": 1,
+            "journey_dynamic_subset_row_cut_budget": 20,
+            "journey_dynamic_subset_row_max_added": 4,
+            "journey_dynamic_subset_row_max_subset_size": 4,
+            "journey_dynamic_subset_row_min_violation": 1.0e-9,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    config,
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                    journey_pool=pool,
+                    cuts=tuple(),
+                    active_fleet_limit=3,
+                    parent_objective=0.0,
+                )
+            finally:
+                logger.close()
+            record = json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertTrue(record["phased_testing_phase1_cut_snapshot_enabled"])
+        self.assertGreaterEqual(record["phased_testing_phase1_cut_snapshot_enabled_count"], 1)
+        self.assertIn("phased_testing_phase1_cut_snapshot_added_total", record)
+        selected = record["selected"]
+        self.assertTrue(selected["phase1_cut_snapshot_enabled"])
+        self.assertIn("phase1_cut_snapshot_added_total", selected)
+        self.assertIn("phase1_cut_snapshot_min_child_lp_gain", selected)
+        self.assertIn("phase1_cut_snapshot_child_lp_gain_product", selected)
+        self.assertIn("phase1_cut_snapshot_child_lp_gain_gap", selected)
+        self.assertIn("phase1_cut_snapshot_child_lp_gain_balance_ratio", selected)
+        self.assertIn("phase1_cut_snapshot_wall_time", selected)
+        self.assertIn("phase1_diagnostic_wall_time", selected)
+        self.assertGreaterEqual(selected["phase1_diagnostic_wall_time"], selected["phase1_wall_time"])
+        self.assertFalse(selected["phase1_official_bound_effect"])
+        self.assertFalse(selected["phase1_certificate_effect"])
+
+    def test_journey_branch_routeopt_bkf_ignores_cut_snapshot_diagnostic_wall_time(self):
+        candidate_a = {
+            "task_i": 1,
+            "task_j": 2,
+            "fractionality": 0.5,
+            "pool_balance_gap": 0,
+            "pool_max_child_width": 10,
+            "_phase1_lp_probe": {
+                "complete": True,
+                "reason": "ok",
+                "min_child_lp_gain": 2.0,
+                "child_lp_gain_product": 4.0,
+                "sum_child_lp_gain": 4.0,
+                "cut_snapshot_min_child_lp_gain": 12.0,
+                "cut_snapshot_child_lp_gain_product": 144.0,
+                "wall_time": 0.01,
+                "cut_snapshot_wall_time": 20.0,
+                "diagnostic_wall_time": 20.01,
+                "official_bound_effect": False,
+                "certificate_effect": False,
+            },
+        }
+        candidate_b = copy.deepcopy(candidate_a)
+        candidate_b["_phase1_lp_probe"]["cut_snapshot_wall_time"] = 0.0
+        candidate_b["_phase1_lp_probe"]["diagnostic_wall_time"] = 0.01
+        config = {
+            "bkf_phase1_min_gain_weight": 1.0,
+            "bkf_phase1_product_weight": 1.0,
+            "bkf_phase1_cut_snapshot_min_gain_weight": 0.0,
+            "bkf_phase1_cut_snapshot_product_weight": 0.0,
+            "bkf_phase_wall_time_penalty": 1000.0,
+        }
+
+        score_a, reason_a = _journey_branch_candidate_phased_bkf_score(candidate_a, config)
+        score_b, reason_b = _journey_branch_candidate_phased_bkf_score(candidate_b, config)
+
+        self.assertAlmostEqual(score_a, score_b)
+        self.assertIn("phase_wall=0.01", reason_a)
+        self.assertIn("phase_wall=0.01", reason_b)
+
+    def test_journey_branch_routeopt_bkf_staged_phase2_logs_heuristic_probe(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...], cost: float) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=("routeopt-bkf-phase2", jid, tasks),
+            )
+
+        j1 = journey(1, (1,), 8.0)
+        j2 = journey(2, (2,), 8.0)
+        j3 = journey(3, (3,), 8.0)
+        j12 = journey(12, (1, 2), 10.0)
+        j23 = journey(23, (2, 3), 11.0)
+        j13 = journey(13, (1, 3), 12.0)
+        values = [(j12, 0.5), (j23, 0.5)]
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        for column in (j1, j2, j3, j12, j23, j13):
+            pool.add(column)
+        config = {
+            "journey_branch_candidate_log_top_n": 4,
+            "journey_branch_fractionality_tie_tolerance": 0.0,
+            "journey_branch_candidate_priority": "routeopt_bkf_staged",
+            "journey_branch_candidate_phased_testing_enabled": True,
+            "journey_branch_candidate_phased_testing_base_priority": "fractionality",
+            "journey_branch_candidate_phased_testing_phase1_lp_enabled": True,
+            "journey_branch_candidate_phased_testing_phase1_max_candidates": 2,
+            "journey_branch_candidate_phased_testing_phase2_heuristic_enabled": True,
+            "journey_branch_candidate_phased_testing_phase2_max_candidates": 1,
+            "journey_branch_candidate_phased_testing_phase2_time_limit": 0.05,
+            "journey_branch_candidate_phased_testing_phase2_max_returned_journeys": 1,
+            "journey_heuristic_max_returned_journeys": 1,
+            "journey_heuristic_profile_labeling_enabled": False,
+            "journey_heuristic_direct_journey_label_pricing_enabled": True,
+            "journey_heuristic_direct_journey_label_max_labels_per_node": 1000,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    config,
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                    journey_pool=pool,
+                    cuts=tuple(),
+                    active_fleet_limit=3,
+                    parent_objective=0.0,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertTrue(record["phased_testing_phase2_heuristic_enabled"])
+        self.assertEqual(record["phased_testing_phase2_max_candidates"], 1)
+        self.assertAlmostEqual(record["phased_testing_phase2_time_limit"], 0.05)
+        self.assertTrue(record["phased_testing_controller_active"])
+        self.assertEqual(record["phased_testing_phase1_candidate_count"], 2)
+        self.assertEqual(record["phased_testing_phase1_probe_count"], 2)
+        self.assertEqual(record["phased_testing_phase2_candidate_count"], 2)
+        self.assertEqual(record["phased_testing_phase2_probe_count"], 1)
+        self.assertEqual(record["phased_testing_phase2_dynamic_k_excluded_count"], 1)
+        self.assertIn("dynamic_k_excluded", record["phased_testing_phase2_reason_counts"])
+        self.assertGreaterEqual(record["phased_testing_phase2_total_wall_time"], 0.0)
+        self.assertGreaterEqual(record["phased_testing_phase2_negative_child_count_total"], 0)
+        self.assertGreaterEqual(record["phased_testing_phase2_negative_journey_count_total"], 0)
+        self.assertFalse(record["phased_testing_phase2_official_bound_effect_any"])
+        self.assertFalse(record["phased_testing_phase2_certificate_effect_any"])
+        self.assertFalse(record["phased_testing_official_bound_effect_any"])
+        self.assertFalse(record["phased_testing_certificate_effect_any"])
+        probed = [
+            item
+            for item in record["priority_top"]
+            if item.get("phased_testing_phase2_heuristic_enabled")
+            and item.get("phased_testing_phase2_heuristic_reason") != "dynamic_k_excluded"
+        ]
+        self.assertEqual(len(probed), 1)
+        selected = probed[0]
+        self.assertIn("phase2_same_child_status", selected)
+        self.assertIn("phase2_separate_child_status", selected)
+        self.assertNotEqual(selected["phase2_same_child_status"], "NO_TIME")
+        self.assertNotEqual(selected["phase2_separate_child_status"], "NO_TIME")
+        self.assertIn("phase2_same_child_budget", selected)
+        self.assertIn("phase2_separate_child_budget", selected)
+        self.assertGreater(selected["phase2_same_child_budget"], 0.0)
+        self.assertGreater(selected["phase2_separate_child_budget"], 0.0)
+        self.assertGreaterEqual(selected["phase2_negative_child_count"], 0)
+        self.assertIn("phase2_negative_journey_balance_gap", selected)
+        self.assertIn("phase2_child_wall_time_balance_gap", selected)
+        self.assertIn("phase2_child_status_mismatch", selected)
+        self.assertGreaterEqual(selected["phase2_wall_time"], 0.0)
+        self.assertFalse(selected["phase2_official_bound_effect"])
+        self.assertFalse(selected["phase2_certificate_effect"])
+
+        metadata = _journey_branch_selection_metadata(
+            data,
+            config,
+            values,
+            tuple(),
+            1.0e-6,
+            node_id=0,
+            depth=0,
+            journey_pool=pool,
+            cuts=tuple(),
+            active_fleet_limit=3,
+            parent_objective=0.0,
+        )
+        self.assertTrue(metadata["phased_testing_phase2_heuristic_enabled"])
+        self.assertIn("phase2_same_child_budget", metadata)
+        self.assertIn("phase2_separate_child_budget", metadata)
+        self.assertIn("phase2_negative_journey_balance_gap", metadata)
+        self.assertIn("phase2_child_wall_time_balance_gap", metadata)
+        self.assertIn("phase2_child_status_mismatch", metadata)
+        self.assertFalse(metadata["phase2_official_bound_effect"])
+        self.assertFalse(metadata["phase2_certificate_effect"])
+
+        override_metadata = _journey_branch_selection_metadata(
+            data,
+            config,
+            values,
+            tuple(),
+            1.0e-6,
+            node_id=0,
+            depth=0,
+            journey_pool=pool,
+            cuts=tuple(),
+            active_fleet_limit=3,
+            parent_objective=0.0,
+            selected_pair_override=(2, 3),
+        )
+        self.assertEqual(override_metadata["selected_pair"], [2, 3])
+        self.assertIn("priority_selected_pair", override_metadata)
+        self.assertEqual(
+            override_metadata["selected_pair_from_branch_override"],
+            override_metadata["priority_selected_pair"] != [2, 3],
+        )
+
+    def test_journey_branch_decision_snapshot_feeds_log_and_metadata_without_reordering(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3), vehicles=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...], cost: float) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=("routeopt-bkf-snapshot", jid, tasks),
+            )
+
+        j1 = journey(1, (1,), 8.0)
+        j2 = journey(2, (2,), 8.0)
+        j3 = journey(3, (3,), 8.0)
+        j12 = journey(12, (1, 2), 10.0)
+        j23 = journey(23, (2, 3), 11.0)
+        j13 = journey(13, (1, 3), 12.0)
+        values = [(j12, 0.5), (j23, 0.5)]
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        for column in (j1, j2, j3, j12, j23, j13):
+            pool.add(column)
+        config = {
+            "journey_branch_candidate_log_top_n": 4,
+            "journey_branch_fractionality_tie_tolerance": 0.0,
+            "journey_branch_candidate_priority": "routeopt_bkf_staged",
+            "journey_branch_candidate_phased_testing_enabled": True,
+            "journey_branch_candidate_phased_testing_base_priority": "fractionality",
+            "journey_branch_candidate_phased_testing_phase1_lp_enabled": True,
+            "journey_branch_candidate_phased_testing_phase1_max_candidates": 2,
+            "journey_branch_candidate_phased_testing_phase2_heuristic_enabled": True,
+            "journey_branch_candidate_phased_testing_phase2_max_candidates": 1,
+            "journey_branch_candidate_phased_testing_phase2_time_limit": 0.05,
+            "journey_branch_candidate_phased_testing_phase2_max_returned_journeys": 1,
+            "journey_heuristic_max_returned_journeys": 1,
+            "journey_heuristic_profile_labeling_enabled": False,
+            "journey_heuristic_direct_journey_label_pricing_enabled": True,
+            "journey_heuristic_direct_journey_label_max_labels_per_node": 1000,
+        }
+        decision = _journey_branch_decision_snapshot(
+            data,
+            config,
+            values,
+            tuple(),
+            1.0e-6,
+            node_id=0,
+            depth=0,
+            journey_pool=pool,
+            cuts=tuple(),
+            active_fleet_limit=3,
+            parent_objective=0.0,
+        )
+        self.assertTrue(decision["priority_order"])
+        selected_pair = [
+            int(decision["priority_order"][0]["task_i"]),
+            int(decision["priority_order"][0]["task_j"]),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                with patch(
+                    "BPC_future.solver.journey_driver._ordered_journey_branch_candidates_for_priority",
+                    side_effect=AssertionError("branch ordering should reuse snapshot"),
+                ):
+                    _log_journey_branch_candidates(
+                        data,
+                        config,
+                        logger,
+                        values,
+                        tuple(),
+                        1.0e-6,
+                        node_id=0,
+                        depth=0,
+                        journey_pool=pool,
+                        cuts=tuple(),
+                        active_fleet_limit=3,
+                        parent_objective=0.0,
+                        branch_decision=decision,
+                    )
+                    metadata = _journey_branch_selection_metadata(
+                        data,
+                        config,
+                        values,
+                        tuple(),
+                        1.0e-6,
+                        node_id=0,
+                        depth=0,
+                        journey_pool=pool,
+                        cuts=tuple(),
+                        active_fleet_limit=3,
+                        parent_objective=0.0,
+                        selected_pair_override=tuple(selected_pair),
+                        branch_decision=decision,
+                    )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["selected_pair"], selected_pair)
+        self.assertEqual(metadata["selected_pair"], selected_pair)
+        self.assertEqual(metadata["priority_selected_pair"], selected_pair)
+        self.assertFalse(metadata["selected_pair_from_branch_override"])
+        self.assertTrue(rows[0]["selected"]["phased_testing_phase2_heuristic_enabled"])
+        self.assertTrue(metadata["phased_testing_phase2_heuristic_enabled"])
+
+    def test_journey_branch_routeopt_bkf_v736_preset_fills_stable_parameters(self):
+        phased = _journey_branch_candidate_phased_testing_from_config(
+            {
+                "journey_branch_candidate_phased_testing_preset": "routeopt_bkf_v736",
+                "journey_branch_candidate_phased_testing_enabled": True,
+                "journey_branch_candidate_phased_testing_phase1_lp_enabled": True,
+                "journey_branch_candidate_phased_testing_phase2_heuristic_enabled": True,
+                "journey_branch_candidate_phased_testing_dynamic_k_enabled": True,
+            }
+        )
+
+        self.assertEqual(phased["preset"], "routeopt_bkf_v736")
+        self.assertEqual(phased["base_priority_mode"], "fractionality")
+        self.assertAlmostEqual(phased["phase0_min_fractionality"], 0.45)
+        self.assertEqual(phased["phase1_max_candidates"], 12)
+        self.assertEqual(phased["phase2_max_candidates"], 3)
+        self.assertAlmostEqual(phased["phase2_time_limit"], 0.08)
+        self.assertEqual(phased["dynamic_k_min_candidates"], 9)
+        self.assertEqual(phased["dynamic_k_phase1_max_candidates"], 12)
+        self.assertEqual(phased["dynamic_k_phase2_max_candidates"], 3)
+        self.assertTrue(phased["dynamic_k_diverse_pool_enabled"])
+        self.assertEqual(phased["dynamic_k_diverse_pool_extra_candidates"], 2)
+
+        override = _journey_branch_candidate_phased_testing_from_config(
+            {
+                "journey_branch_candidate_phased_testing_preset": "routeopt_bkf_v736",
+                "journey_branch_candidate_phased_testing_base_priority": "branch_score_horizon",
+                "journey_branch_candidate_phased_testing_phase2_time_limit": 0.02,
+                "journey_branch_candidate_phased_testing_dynamic_k_min_candidates": 4,
+                "journey_branch_candidate_phased_testing_dynamic_k_diverse_pool_enabled": False,
+            }
+        )
+        self.assertEqual(override["base_priority_mode"], "branch_score_horizon")
+        self.assertAlmostEqual(override["phase2_time_limit"], 0.02)
+        self.assertEqual(override["dynamic_k_min_candidates"], 4)
+        self.assertFalse(override["dynamic_k_diverse_pool_enabled"])
+
+    def test_journey_branch_routeopt_bkf_dynamic_k_uses_sqrt_cap(self):
+        fixed = _journey_branch_candidate_dynamic_k_limit(
+            9,
+            7,
+            phase="phase1_lp_testing",
+            phased_testing={"dynamic_k_enabled": False},
+        )
+        self.assertFalse(fixed["enabled"])
+        self.assertEqual(fixed["actual_limit"], 7)
+        self.assertEqual(fixed["reason"], "fixed_limit")
+
+        dynamic = _journey_branch_candidate_dynamic_k_limit(
+            9,
+            None,
+            phase="phase1_lp_testing",
+            phased_testing={
+                "dynamic_k_enabled": True,
+                "dynamic_k_min_candidates": 2,
+                "dynamic_k_max_candidates": 6,
+                "dynamic_k_sqrt_factor": 1.0,
+            },
+        )
+        self.assertTrue(dynamic["enabled"])
+        self.assertEqual(dynamic["sqrt_limit"], 3)
+        self.assertEqual(dynamic["actual_limit"], 3)
+        self.assertEqual(dynamic["reason"], "sqrt_dynamic_k")
+
+        capped = _journey_branch_candidate_dynamic_k_limit(
+            100,
+            4,
+            phase="phase2_heuristic_testing",
+            phased_testing={
+                "dynamic_k_enabled": True,
+                "dynamic_k_min_candidates": 2,
+                "dynamic_k_max_candidates": 8,
+                "dynamic_k_sqrt_factor": 2.0,
+            },
+        )
+        self.assertEqual(capped["actual_limit"], 4)
+
+        phase_specific = _journey_branch_candidate_dynamic_k_limit(
+            72,
+            None,
+            phase="phase1_lp_testing",
+            phased_testing={
+                "dynamic_k_enabled": True,
+                "dynamic_k_min_candidates": 2,
+                "dynamic_k_max_candidates": 4,
+                "dynamic_k_phase1_max_candidates": 10,
+                "dynamic_k_sqrt_factor": 1.0,
+            },
+        )
+        self.assertEqual(phase_specific["sqrt_limit"], 9)
+        self.assertEqual(phase_specific["actual_limit"], 9)
+
+        phase2_specific = _journey_branch_candidate_dynamic_k_limit(
+            72,
+            None,
+            phase="phase2_heuristic_testing",
+            phased_testing={
+                "dynamic_k_enabled": True,
+                "dynamic_k_min_candidates": 2,
+                "dynamic_k_max_candidates": 9,
+                "dynamic_k_phase2_max_candidates": 3,
+                "dynamic_k_sqrt_factor": 1.0,
+            },
+        )
+        self.assertEqual(phase2_specific["actual_limit"], 3)
+
+    def test_journey_branch_routeopt_bkf_dynamic_k_diverse_pool_adds_balance_frontier(self):
+        ordered = [
+            {"task_i": 1, "task_j": 2, "fractionality": 0.5, "pool_balance_gap": 90, "pool_max_child_width": 300},
+            {"task_i": 1, "task_j": 3, "fractionality": 0.5, "pool_balance_gap": 80, "pool_max_child_width": 300},
+            {"task_i": 1, "task_j": 4, "fractionality": 0.5, "pool_balance_gap": 70, "pool_max_child_width": 300},
+            {"task_i": 2, "task_j": 4, "fractionality": 0.5, "pool_balance_gap": 60, "pool_max_child_width": 300},
+            {"task_i": 3, "task_j": 10, "fractionality": 0.5, "pool_balance_gap": 10, "pool_max_child_width": 300},
+        ]
+        dynamic = {
+            "enabled": True,
+            "actual_limit": 2,
+            "candidate_count": len(ordered),
+            "reason": "sqrt_dynamic_k",
+        }
+        plain = _journey_branch_candidate_dynamic_k_probe_indices(
+            ordered,
+            dynamic,
+            phased_testing={"dynamic_k_enabled": True},
+        )
+        self.assertEqual(plain, {0, 1})
+
+        diverse = _journey_branch_candidate_dynamic_k_probe_indices(
+            ordered,
+            dynamic,
+            phased_testing={
+                "dynamic_k_enabled": True,
+                "dynamic_k_diverse_pool_enabled": True,
+                "dynamic_k_diverse_pool_extra_candidates": 1,
+            },
+        )
+        self.assertEqual(diverse, {0, 1, 4})
+
+    def test_journey_branch_routeopt_bkf_weighted_score_does_not_over_penalize_small_phase2_negative(self):
+        safer_zero_negative = {
+            "task_i": 10,
+            "task_j": 19,
+            "fractionality": 0.466667,
+            "pool_balance_gap": 65,
+            "pool_max_child_width": 302,
+            "_phase1_lp_probe": {
+                "complete": True,
+                "min_child_lp_gain": 3.400417303,
+                "child_lp_gain_product": 49.695215619,
+                "sum_child_lp_gain": 11.60,
+                "child_width_balance": 65,
+                "child_max_width": 302,
+                "wall_time": 0.0060683,
+                "official_bound_effect": False,
+                "certificate_effect": False,
+            },
+            "_phase2_heuristic_probe": {
+                "complete": True,
+                "negative_child_count": 0,
+                "negative_journey_count": 0,
+                "worst_negative_severity": 0.0,
+                "wall_time": 0.0,
+                "official_bound_effect": False,
+                "certificate_effect": False,
+            },
+        }
+        balanced_with_one_negative = {
+            "task_i": 4,
+            "task_j": 6,
+            "fractionality": 0.466667,
+            "pool_balance_gap": 71,
+            "pool_max_child_width": 302,
+            "_phase1_lp_probe": {
+                "complete": True,
+                "min_child_lp_gain": 3.684208667,
+                "child_lp_gain_product": 59.005534427,
+                "sum_child_lp_gain": 16.0,
+                "child_lp_gain_gap": 4.2,
+                "child_lp_gain_balance_ratio": 0.558006,
+                "child_width_balance": 71,
+                "child_max_width": 302,
+                "wall_time": 0.0460722,
+                "official_bound_effect": False,
+                "certificate_effect": False,
+            },
+            "_phase2_heuristic_probe": {
+                "complete": True,
+                "negative_child_count": 1,
+                "negative_journey_count": 1,
+                "worst_negative_severity": 0.574961,
+                "wall_time": 0.0,
+                "official_bound_effect": False,
+                "certificate_effect": False,
+            },
+        }
+        config = {
+            "bkf_phase1_min_gain_weight": 6.0,
+            "bkf_phase1_product_weight": 0.03,
+            "bkf_phase2_negative_child_penalty": 0.75,
+            "bkf_phase2_negative_journey_penalty": 0.005,
+            "bkf_phase2_worst_negative_penalty": 0.25,
+            "bkf_child_width_balance_penalty": 0.0015,
+            "bkf_child_max_width_penalty": 0.0002,
+            "bkf_phase_wall_time_penalty": 0.01,
+        }
+        zero_score, zero_reason = _journey_branch_candidate_phased_bkf_score(
+            safer_zero_negative,
+            config,
+        )
+        balanced_score, balanced_reason = _journey_branch_candidate_phased_bkf_score(
+            balanced_with_one_negative,
+            config,
+        )
+        self.assertGreater(balanced_score, zero_score)
+        self.assertIn("fractionality=0.466667", balanced_reason)
+        self.assertIn("phase2_negative_child_count=1", balanced_reason)
+        self.assertIn("dynamic_k_excluded_count=0", balanced_reason)
+        self.assertIn("phase1_child_lp_gain_product=59.0055", balanced_reason)
+        self.assertIn("phase1_child_lp_gain_gap=4.2", balanced_reason)
+        self.assertIn("phase1_child_lp_gain_balance_ratio=0.558006", balanced_reason)
+        self.assertIn("phase2_negative_child_count=0", zero_reason)
+
+        skipped_phase2 = {
+            **balanced_with_one_negative,
+            "_phase2_heuristic_probe": {
+                "enabled": True,
+                "complete": False,
+                "reason": "dynamic_k_excluded",
+                "official_bound_effect": False,
+                "certificate_effect": False,
+            },
+        }
+        skipped_score, skipped_reason = _journey_branch_candidate_phased_bkf_score(
+            skipped_phase2,
+            config,
+        )
+        self.assertLess(skipped_score, balanced_score)
+        self.assertIn("dynamic_k_excluded_count=1", skipped_reason)
+
+    def test_journey_branch_routeopt_bkf_dynamic_k_is_logged_for_phase1(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3, 4), vehicles=(1, 2, 3, 4))
+
+        def journey(jid: int, tasks: tuple[int, ...], cost: float) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=float(cost),
+                fixed_vehicle_cost=0.0,
+                cost=float(cost),
+                signature=("routeopt-bkf-dynk", jid, tasks),
+            )
+
+        j1 = journey(1, (1,), 8.0)
+        j2 = journey(2, (2,), 8.0)
+        j3 = journey(3, (3,), 8.0)
+        j4 = journey(4, (4,), 8.0)
+        j12 = journey(12, (1, 2), 10.0)
+        j13 = journey(13, (1, 3), 10.0)
+        j24 = journey(24, (2, 4), 10.0)
+        values = [(j12, 0.5), (j13, 0.5), (j24, 0.5)]
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        for column in (j1, j2, j3, j4, j12, j13, j24):
+            pool.add(column)
+        config = {
+            "journey_branch_candidate_log_top_n": 6,
+            "journey_branch_fractionality_tie_tolerance": 0.0,
+            "journey_branch_candidate_priority": "routeopt_bkf_staged",
+            "journey_branch_candidate_phased_testing_enabled": True,
+            "journey_branch_candidate_phased_testing_base_priority": "fractionality",
+            "journey_branch_candidate_phased_testing_phase1_lp_enabled": True,
+            "journey_branch_candidate_phased_testing_dynamic_k_enabled": True,
+            "journey_branch_candidate_phased_testing_dynamic_k_min_candidates": 1,
+            "journey_branch_candidate_phased_testing_dynamic_k_sqrt_factor": 1.0,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    config,
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                    journey_pool=pool,
+                    cuts=tuple(),
+                    active_fleet_limit=4,
+                    parent_objective=0.0,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertTrue(record["phased_testing_dynamic_k_enabled"])
+        self.assertEqual(record["candidate_count"], 3)
+        self.assertEqual(record["phased_testing_controller_input_count"], 3)
+        self.assertEqual(record["phased_testing_phase1_candidate_count"], 3)
+        self.assertEqual(record["phased_testing_phase1_probe_count"], 2)
+        self.assertEqual(record["phased_testing_phase1_complete_count"], 2)
+        self.assertEqual(record["phased_testing_phase1_dynamic_k_excluded_count"], 1)
+        self.assertEqual(
+            record["phased_testing_phase1_reason_counts"],
+            {"dynamic_k_excluded": 1, "ok": 2},
+        )
+        self.assertEqual(
+            record["phased_testing_decision_counts"],
+            {"probed_complete": 2, "skipped_by_dynamic_k": 1},
+        )
+        probed = [
+            item
+            for item in record["priority_top"]
+            if item.get("phased_testing_phase1_lp_enabled")
+            and item.get("phased_testing_phase1_lp_reason") != "dynamic_k_excluded"
+        ]
+        excluded = [
+            item
+            for item in record["priority_top"]
+            if item.get("phased_testing_phase1_lp_reason") == "dynamic_k_excluded"
+        ]
+        self.assertEqual(len(probed), 2)
+        self.assertEqual(len(excluded), 1)
+        self.assertTrue(probed[0]["phase1_dynamic_k_enabled"])
+        self.assertEqual(probed[0]["phase1_dynamic_k_reason"], "sqrt_dynamic_k")
+        self.assertEqual(probed[0]["phase1_dynamic_k_actual_limit"], 2)
+        self.assertEqual(excluded[0]["phase1_dynamic_k_actual_limit"], 2)
+        self.assertEqual(excluded[0]["phased_testing_stage"], "phase1_lp")
+        self.assertEqual(excluded[0]["phased_testing_decision"], "skipped_by_dynamic_k")
+        self.assertEqual(excluded[0]["phased_testing_elimination_reason"], "dynamic_k_excluded")
+
     def test_journey_branch_can_force_pair_for_controlled_ab(self):
         self.assertEqual(_journey_forced_branch_pair("force_pair:3,1"), (1, 3))
         self.assertEqual(_journey_forced_branch_pair("forced_pair=2;3"), (2, 3))
@@ -11811,6 +13046,14 @@ class BPCFutureTests(unittest.TestCase):
                 constraints=(BranchConstraint("same_vehicle", 2, 3),),
             ),
             (1, 3),
+        )
+        self.assertEqual(
+            _journey_forced_branch_pair(
+                "force_pair_path:0:2,3=same_vehicle;1:1,3",
+                depth=0,
+                constraints=tuple(),
+            ),
+            (2, 3),
         )
         self.assertIsNone(
             _journey_forced_branch_pair(
@@ -12031,7 +13274,18 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual((record["selected"]["task_i"], record["selected"]["task_j"]), (1, 2))
         self.assertEqual((record["priority_top"][0]["task_i"], record["priority_top"][0]["task_j"]), (1, 2))
         self.assertAlmostEqual(record["selected"]["branch_score"], 0.91)
-        self.assertEqual(record["selected"]["branch_score_source"], "node:0:depth:0:1,2")
+        self.assertEqual(record["selected"]["branch_score_source"], "state:root::node:0:depth:0:1,2")
+        self.assertEqual(record["baseline_pair"], [2, 3])
+        self.assertEqual(record["scored_pair"], [1, 2])
+        self.assertEqual(record["selected_pair"], [1, 2])
+        self.assertTrue(record["selected_pair_changed"])
+        self.assertEqual(record["baseline_rank"], 2)
+        self.assertEqual(record["scored_rank"], 1)
+        self.assertAlmostEqual(record["selected_score"], 0.91)
+        self.assertEqual(record["selected_score_source"], "state:root::node:0:depth:0:1,2")
+        self.assertEqual(record["score_available_count"], 2)
+        self.assertEqual(record["score_missing_count"], 0)
+        self.assertTrue(record["score_map_context_allowed"])
 
     def test_journey_branch_candidate_log_records_branch_score_horizon(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
@@ -12087,7 +13341,106 @@ class BPCFutureTests(unittest.TestCase):
         self.assertEqual((record["selected"]["task_i"], record["selected"]["task_j"]), (1, 2))
         self.assertEqual((record["priority_top"][0]["task_i"], record["priority_top"][0]["task_j"]), (1, 2))
         self.assertAlmostEqual(record["selected"]["branch_score"], 0.91)
-        self.assertEqual(record["selected"]["branch_score_source"], "node:0:depth:0:1,2")
+        self.assertEqual(record["selected"]["branch_score_source"], "state:root::node:0:depth:0:1,2")
+        self.assertEqual(record["baseline_pair"], [2, 3])
+        self.assertEqual(record["scored_pair"], [1, 2])
+        self.assertEqual(record["selected_pair"], [1, 2])
+        self.assertTrue(record["selected_pair_changed"])
+        self.assertEqual(record["score_available_count"], 1)
+        self.assertEqual(record["score_missing_count"], 1)
+
+    def test_journey_branch_score_selection_gate_falls_back_on_width_cap(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=0.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=float(jid),
+                signature=("branch-score-selection-gate", jid, tasks),
+            )
+
+        values = [(journey(1, (1, 2)), 0.49), (journey(2, (2, 3)), 0.5)]
+        pool = JourneyPool()
+        for col in (journey(10, (1, 2)), journey(11, (3,)), journey(12, (1,))):
+            pool.add(col)
+        score_rows = [
+            {"node_id": 0, "depth": 0, "task_i": 1, "task_j": 2, "score": 0.91},
+            {"node_id": 0, "depth": 0, "task_i": 2, "task_j": 3, "score": 0.10},
+        ]
+        gate = {
+            "enabled": True,
+            "min_score": 0.5,
+            "require_score_source": True,
+            "max_pool_total_child_width": 1.0,
+            "max_pool_balance_gap": None,
+            "max_pool_child_width": None,
+        }
+
+        branch = _choose_journey_branch(
+            data,
+            values,
+            tuple(),
+            1.0e-6,
+            tie_tolerance=0.0,
+            priority_mode="branch_score_horizon",
+            node_id=0,
+            branch_depth=0,
+            branch_score_map=_journey_branch_score_map_from_config(
+                {"journey_branch_candidate_score_map": json.dumps(score_rows)},
+                data=data,
+            ),
+            branch_score_horizon_tie_tolerance=0.02,
+            branch_score_selection_gate=gate,
+            journey_pool=pool,
+        )
+        self.assertIsNotNone(branch)
+        assert branch is not None
+        self.assertEqual((branch[0].task_i, branch[0].task_j), (2, 3))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "branch_candidates.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_branch_candidates(
+                    data,
+                    {
+                        "journey_branch_candidate_log_top_n": 4,
+                        "journey_branch_fractionality_tie_tolerance": 0.0,
+                        "journey_branch_candidate_priority": "branch_score_horizon",
+                        "journey_branch_candidate_score_horizon_tie_tolerance": 0.02,
+                        "journey_branch_candidate_score_map": json.dumps(score_rows),
+                        "journey_branch_candidate_score_selection_gate_enabled": True,
+                        "journey_branch_candidate_score_selection_gate_min_score": 0.5,
+                        "journey_branch_candidate_score_selection_gate_max_pool_total_child_width": 1,
+                    },
+                    logger,
+                    values,
+                    tuple(),
+                    1.0e-6,
+                    node_id=0,
+                    depth=0,
+                    journey_pool=pool,
+                )
+            finally:
+                logger.close()
+
+            rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        record = rows[0]
+        self.assertEqual((record["selected"]["task_i"], record["selected"]["task_j"]), (2, 3))
+        self.assertEqual(record["baseline_pair"], [2, 3])
+        self.assertEqual(record["scored_pair"], [1, 2])
+        self.assertEqual(record["selected_pair"], [2, 3])
+        self.assertFalse(record["selected_pair_changed"])
+        self.assertTrue(record["branch_score_selection_gate_enabled"])
+        self.assertFalse(record["branch_score_selection_gate_passed"])
 
     def test_journey_branch_score_context_gate_disables_mismatched_map(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
@@ -12224,8 +13577,16 @@ class BPCFutureTests(unittest.TestCase):
             },
         ]
         raw_map = _normalize_journey_branch_score_map(rows)
-        self.assertIn("node:0:depth:0:1,2", raw_map)
-        self.assertIn("node:0:depth:0:1,3", raw_map)
+        self.assertNotIn("node:0:depth:0:1,2", raw_map)
+        self.assertNotIn("node:0:depth:0:1,3", raw_map)
+        self.assertIn(
+            "BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json|node:0:depth:0:1,2",
+            raw_map,
+        )
+        self.assertIn(
+            "BPC_future/logical_graph/tasks_020/sector-wave/demo_seed2.json|node:0:depth:0:1,3",
+            raw_map,
+        )
         self.assertIn("node:0:depth:0:1,4", raw_map)
 
         matched = _journey_branch_score_map_from_config(
@@ -12295,6 +13656,129 @@ class BPCFutureTests(unittest.TestCase):
         self.assertIn("node:0:depth:0:1,5", path_variant)
         self.assertIn("node:0:depth:0:1,6", path_variant)
         self.assertNotIn("node:0:depth:0:1,7", path_variant)
+
+        audit_map = {
+            "BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json|node:0:depth:0:1,8": 6.5,
+            "BPC_future/logical_graph/tasks_020/sector-wave/demo_seed2.json|node:0:depth:0:1,8": 7.5,
+        }
+        audit_variant = _journey_branch_score_map_from_config(
+            {"journey_branch_candidate_score_map": json.dumps(audit_map)},
+            data=SimpleNamespace(
+                name="demo_seed1",
+                instance_path="BPC_future/logical_graph/tasks_020/greedy-anchor/demo_seed1.json",
+            ),
+        )
+        self.assertEqual(audit_variant.get("node:0:depth:0:1,8"), 6.5)
+
+    def test_journey_branch_score_rows_do_not_collapse_duplicate_instance_keys(self):
+        rows = [
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/family_a/demo_seed1.json",
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 3,
+                "task_j": 12,
+                "score": 0.25,
+            },
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/family_b/demo_seed2.json",
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 3,
+                "task_j": 12,
+                "score": 0.75,
+            },
+        ]
+        raw_map = _normalize_journey_branch_score_map(rows)
+        self.assertNotIn("node:0:depth:0:3,12", raw_map)
+        self.assertEqual(
+            raw_map.get("BPC_future/logical_graph/tasks_020/family_a/demo_seed1.json|node:0:depth:0:3,12"),
+            0.25,
+        )
+        self.assertEqual(
+            raw_map.get("BPC_future/logical_graph/tasks_020/family_b/demo_seed2.json|node:0:depth:0:3,12"),
+            0.75,
+        )
+
+        matched = _journey_branch_score_map_from_config(
+            {"journey_branch_candidate_score_map": json.dumps(rows)},
+            data=SimpleNamespace(
+                name="demo_seed2",
+                instance_path="BPC_future/logical_graph/tasks_020/family_b/demo_seed2.json",
+            ),
+        )
+        self.assertEqual(matched.get("node:0:depth:0:3,12"), 0.75)
+
+    def test_journey_branch_score_rows_preserve_branch_state_keys(self):
+        constraints = (BranchConstraint("same_vehicle", 5, 19),)
+        state_key = "RF(5,19)=same_vehicle"
+        rows = [
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/random-wave/demo_seed61001.json",
+                "node_id": 1,
+                "depth": 1,
+                "task_i": 8,
+                "task_j": 12,
+                "score": 0.88,
+                "branch_state_key": state_key,
+                "branch_constraints": [state_key],
+            },
+            {
+                "instance": "BPC_future/logical_graph/tasks_020/random-wave/demo_seed61001.json",
+                "node_id": 1,
+                "depth": 1,
+                "task_i": 2,
+                "task_j": 5,
+                "score": 0.11,
+            },
+        ]
+
+        score_map = _journey_branch_score_map_from_config(
+            {"journey_branch_candidate_score_map": json.dumps(rows)},
+            data=SimpleNamespace(
+                name="demo_seed61001",
+                instance_path="BPC_future/logical_graph/tasks_020/random-wave/demo_seed61001.json",
+            ),
+        )
+
+        state_specific = "state:RF(5,19)=same_vehicle::node:1:depth:1:8,12"
+        self.assertEqual(score_map.get(state_specific), 0.88)
+        self.assertEqual(score_map.get("node:1:depth:1:8,12"), 0.88)
+        self.assertEqual(score_map.get("node:1:depth:1:2,5"), 0.11)
+        self.assertNotIn("state:root::node:1:depth:1:2,5", score_map)
+
+        root_rows = [
+            {
+                "node_id": 0,
+                "depth": 0,
+                "task_i": 1,
+                "task_j": 2,
+                "score": 0.77,
+            }
+        ]
+        root_score_map = _normalize_journey_branch_score_map(root_rows)
+        self.assertEqual(root_score_map.get("state:root::node:0:depth:0:1,2"), 0.77)
+        self.assertEqual(root_score_map.get("node:0:depth:0:1,2"), 0.77)
+
+        candidate = {"task_i": 8, "task_j": 12}
+        state_lookup = _journey_branch_score_lookup_keys(
+            candidate,
+            node_id=1,
+            depth=1,
+            constraints=constraints,
+            require_state_key=True,
+        )
+        self.assertIn(state_specific, state_lookup)
+        self.assertNotIn("node:1:depth:1:8,12", state_lookup)
+
+        fallback_lookup = _journey_branch_score_lookup_keys(
+            candidate,
+            node_id=1,
+            depth=1,
+            constraints=constraints,
+            require_state_key=False,
+        )
+        self.assertLess(fallback_lookup.index(state_specific), fallback_lookup.index("node:1:depth:1:8,12"))
 
     def test_journey_branch_candidate_log_records_forced_pair_binding(self):
         data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
@@ -14627,6 +16111,92 @@ class BPCFutureTests(unittest.TestCase):
         self.assertFalse(_journey_should_early_branch(config, node, 3, fractional_solution, 1.0e-6))
         self.assertTrue(_journey_should_early_branch(config, node, 4, fractional_solution, 1.0e-6))
 
+    def test_journey_early_branch_score_gate_requires_confident_scored_pair(self):
+        data = replace(load_future_data("very_small"), tasks=(1, 2, 3))
+
+        def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
+            return JourneyColumn(
+                id=jid,
+                trips=tuple(),
+                task_set=frozenset(tasks),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=1.0,
+                fixed_vehicle_cost=0.0,
+                cost=1.0,
+                signature=("score-gated-early-branch", jid, tasks),
+            )
+
+        solution = SimpleNamespace(
+            journey_values=[(journey(1, (1, 2)), 0.5), (journey(2, (1,)), 0.5)]
+        )
+        node = JourneyNode(0.0, 0, 0, tuple())
+        base_config = {
+            "journey_early_branching_enabled": True,
+            "journey_early_branching_min_cg_iter": 1,
+            "journey_early_branching_max_depth": 0,
+            "journey_early_branch_score_gate_enabled": True,
+            "journey_early_branch_score_gate_min_score": 0.70,
+            "journey_early_branch_score_gate_require_score_source": True,
+            "journey_branch_candidate_priority": "branch_score_horizon",
+            "journey_branch_candidate_score_horizon_tie_tolerance": 0.1,
+        }
+
+        self.assertFalse(
+            _journey_should_early_branch(
+                base_config,
+                node,
+                1,
+                solution,
+                1.0e-6,
+                data=data,
+            )
+        )
+        gate_passed, gate = _journey_early_branch_score_gate(base_config, data, node, solution, 1.0e-6)
+        self.assertFalse(gate_passed)
+        self.assertEqual(gate["score_gate_reason"], "missing_score_source")
+
+        low_score_config = dict(base_config, journey_branch_candidate_score_map={"1,2": 0.69})
+        gate_passed, gate = _journey_early_branch_score_gate(low_score_config, data, node, solution, 1.0e-6)
+        self.assertFalse(gate_passed)
+        self.assertEqual(gate["score_gate_reason"], "score_below_min")
+
+        high_score_config = dict(base_config, journey_branch_candidate_score_map={"1,2": 0.91})
+        gate_passed, gate = _journey_early_branch_score_gate(high_score_config, data, node, solution, 1.0e-6)
+        self.assertTrue(gate_passed)
+        self.assertEqual(gate["score_gate_reason"], "ok")
+        self.assertEqual(gate["score_gate_task_i"], 1)
+        self.assertEqual(gate["score_gate_task_j"], 2)
+        self.assertAlmostEqual(gate["score_gate_score"], 0.91)
+        self.assertTrue(
+            _journey_should_early_branch(
+                high_score_config,
+                node,
+                1,
+                solution,
+                1.0e-6,
+                data=data,
+            )
+        )
+
+        pool = JourneyPool()
+        for column in (journey(10, (1, 2)), journey(11, (1,)), journey(12, (2,))):
+            pool.add(column)
+        width_capped_config = dict(
+            high_score_config,
+            journey_early_branch_score_gate_max_pool_total_child_width=0,
+        )
+        gate_passed, gate = _journey_early_branch_score_gate(
+            width_capped_config,
+            data,
+            node,
+            solution,
+            1.0e-6,
+            journey_pool=pool,
+        )
+        self.assertFalse(gate_passed)
+        self.assertEqual(gate["score_gate_reason"], "pool_total_width_exceeds_cap")
+
     def test_journey_early_branch_after_incomplete_no_column_gate(self):
         def journey(jid: int, tasks: tuple[int, ...]) -> JourneyColumn:
             return JourneyColumn(
@@ -15531,6 +17101,310 @@ class BPCFutureTests(unittest.TestCase):
         )
         self.assertTrue(weak_viable)
         self.assertEqual(weak_budget, 3.0)
+
+    def test_completion_bound_retry_gate_is_opt_in_and_requires_history(self):
+        stats = _journey_completion_bound_retry_gate_initial_stats()
+        stats["expensive_profile_time_threshold"] = 20.0
+        disabled_skip, disabled_reason = _journey_completion_bound_retry_gate_blocks(
+            {},
+            stats,
+            task_count=20,
+            depth=0,
+        )
+        self.assertFalse(disabled_skip)
+        self.assertEqual(disabled_reason, "disabled")
+
+        config = {
+            "journey_certificate_completion_bound_retry_gate_enabled": True,
+            "journey_certificate_completion_bound_retry_gate_min_tasks": 20,
+            "journey_certificate_completion_bound_retry_gate_min_observations": 1,
+            "journey_certificate_completion_bound_retry_gate_max_expensive_zero_harvest_retries": 1,
+            "journey_certificate_completion_bound_retry_gate_expensive_profile_time": 20.0,
+        }
+        no_history_skip, no_history_reason = _journey_completion_bound_retry_gate_blocks(
+            config,
+            stats,
+            task_count=20,
+            depth=0,
+        )
+        self.assertFalse(no_history_skip)
+        self.assertEqual(no_history_reason, "insufficient_observations")
+
+    def test_completion_bound_retry_gate_blocks_expensive_zero_harvest(self):
+        config = {
+            "journey_certificate_completion_bound_retry_gate_enabled": True,
+            "journey_certificate_completion_bound_retry_gate_min_tasks": 20,
+            "journey_certificate_completion_bound_retry_gate_min_observations": 1,
+            "journey_certificate_completion_bound_retry_gate_max_expensive_zero_harvest_retries": 1,
+            "journey_certificate_completion_bound_retry_gate_expensive_profile_time": 20.0,
+        }
+        stats = _journey_completion_bound_retry_gate_initial_stats()
+        stats["expensive_profile_time_threshold"] = 20.0
+        _journey_completion_bound_retry_gate_blocks(config, stats, task_count=20, depth=0)
+        _journey_completion_bound_retry_gate_update(
+            stats,
+            SimpleNamespace(
+                journeys=[],
+                status="TIME_LIMIT",
+                reason="time_limit",
+                exhausted=False,
+                profile_generation_time=34.0,
+                pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+                negative_journeys=0,
+                selected_trips=0,
+                harvest_candidate_negative_count=0,
+                harvest_selected_count=0,
+            ),
+            pricing_kind="exact_completion_bound_retry",
+        )
+        skip, reason = _journey_completion_bound_retry_gate_blocks(config, stats, task_count=20, depth=0)
+        self.assertTrue(skip)
+        self.assertEqual(reason, "expensive_incomplete_zero_harvest_count_limit")
+        self.assertEqual(stats["total_count"], 1)
+        self.assertEqual(stats["zero_harvest_count"], 1)
+        self.assertEqual(stats["expensive_zero_harvest_count"], 1)
+        self.assertEqual(stats["incomplete_zero_harvest_count"], 1)
+        self.assertEqual(stats["expensive_incomplete_zero_harvest_count"], 1)
+
+    def test_completion_bound_retry_gate_keeps_harvest_signal(self):
+        config = {
+            "journey_certificate_completion_bound_retry_gate_enabled": True,
+            "journey_certificate_completion_bound_retry_gate_min_tasks": 20,
+            "journey_certificate_completion_bound_retry_gate_min_observations": 1,
+            "journey_certificate_completion_bound_retry_gate_max_expensive_zero_harvest_retries": 1,
+            "journey_certificate_completion_bound_retry_gate_expensive_profile_time": 20.0,
+        }
+        stats = _journey_completion_bound_retry_gate_initial_stats()
+        _journey_completion_bound_retry_gate_blocks(config, stats, task_count=20, depth=0)
+        _journey_completion_bound_retry_gate_update(
+            stats,
+            SimpleNamespace(
+                journeys=[],
+                status="OPTIMAL",
+                reason="found_negative_journey",
+                exhausted=True,
+                profile_generation_time=45.0,
+                pricing_state=PRICING_STATE_FOUND_NEGATIVE,
+                negative_journeys=1,
+                selected_trips=1,
+                harvest_candidate_negative_count=1,
+                harvest_selected_count=1,
+            ),
+            pricing_kind="exact_completion_bound_retry",
+        )
+        skip, reason = _journey_completion_bound_retry_gate_blocks(config, stats, task_count=20, depth=0)
+        self.assertFalse(skip)
+        self.assertEqual(reason, "below_limits")
+        self.assertEqual(stats["zero_harvest_count"], 0)
+        self.assertEqual(stats["found_negative_count"], 1)
+
+    def test_completion_bound_retry_gate_ignores_ordinary_retry_history(self):
+        config = {
+            "journey_certificate_completion_bound_retry_gate_enabled": True,
+            "journey_certificate_completion_bound_retry_gate_min_tasks": 20,
+            "journey_certificate_completion_bound_retry_gate_min_observations": 1,
+            "journey_certificate_completion_bound_retry_gate_max_expensive_zero_harvest_retries": 1,
+            "journey_certificate_completion_bound_retry_gate_expensive_profile_time": 20.0,
+        }
+        stats = _journey_completion_bound_retry_gate_initial_stats()
+        stats["expensive_profile_time_threshold"] = 20.0
+        _journey_completion_bound_retry_gate_update(
+            stats,
+            SimpleNamespace(
+                journeys=[],
+                status="TIME_LIMIT",
+                reason="time_limit",
+                exhausted=False,
+                profile_generation_time=60.0,
+                pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+                negative_journeys=0,
+                selected_trips=0,
+                harvest_candidate_negative_count=0,
+                harvest_selected_count=0,
+            ),
+            pricing_kind="exact_retry",
+        )
+        skip, reason = _journey_completion_bound_retry_gate_blocks(config, stats, task_count=20, depth=0)
+        self.assertFalse(skip)
+        self.assertEqual(reason, "insufficient_observations")
+        self.assertEqual(stats["total_count"], 0)
+        self.assertEqual(stats["expensive_zero_harvest_count"], 0)
+
+    def test_completion_bound_retry_gate_context_scope_isolates_depth_trigger(self):
+        config = {
+            "journey_certificate_completion_bound_retry_gate_enabled": True,
+            "journey_certificate_completion_bound_retry_gate_context_scope": "depth_trigger",
+            "journey_certificate_completion_bound_retry_gate_min_tasks": 20,
+            "journey_certificate_completion_bound_retry_gate_min_observations": 2,
+            "journey_certificate_completion_bound_retry_gate_max_expensive_zero_harvest_retries": 2,
+            "journey_certificate_completion_bound_retry_gate_expensive_profile_time": 20.0,
+        }
+        stats = _journey_completion_bound_retry_gate_initial_stats()
+        root_key = _journey_completion_bound_retry_gate_context_key(
+            config,
+            depth=0,
+            branch_constraints=tuple(),
+            trigger="initial_duplicate_no_new_columns",
+        )
+        child_key = _journey_completion_bound_retry_gate_context_key(
+            config,
+            depth=1,
+            branch_constraints=tuple(),
+            trigger="no_retry_budget",
+        )
+        self.assertNotEqual(root_key, child_key)
+        _journey_completion_bound_retry_gate_blocks(config, stats, task_count=20, depth=0, context_key=root_key)
+        for _ in range(2):
+            _journey_completion_bound_retry_gate_update(
+                stats,
+                SimpleNamespace(
+                    journeys=[],
+                    status="TIME_LIMIT",
+                    reason="time_limit",
+                    exhausted=False,
+                    profile_generation_time=30.0,
+                    pricing_state=PRICING_STATE_INCOMPLETE_LIMIT,
+                    negative_journeys=0,
+                    selected_trips=0,
+                    harvest_candidate_negative_count=0,
+                    harvest_selected_count=0,
+                ),
+                pricing_kind="exact_completion_bound_retry",
+                context_key=root_key,
+            )
+        root_skip, root_reason = _journey_completion_bound_retry_gate_blocks(
+            config,
+            stats,
+            task_count=20,
+            depth=0,
+            context_key=root_key,
+        )
+        child_skip, child_reason = _journey_completion_bound_retry_gate_blocks(
+            config,
+            stats,
+            task_count=20,
+            depth=1,
+            context_key=child_key,
+        )
+        self.assertTrue(root_skip)
+        self.assertEqual(root_reason, "expensive_incomplete_zero_harvest_count_limit")
+        self.assertFalse(child_skip)
+        self.assertEqual(child_reason, "insufficient_observations")
+        self.assertEqual(stats["total_count"], 2)
+
+    def test_completion_bound_retry_budget_cap_is_opt_in_and_contextual(self):
+        stats = _journey_completion_bound_retry_gate_initial_stats()
+        stats["expensive_profile_time_threshold"] = 20.0
+        disabled_budget, disabled_metadata = _journey_completion_bound_retry_budget_cap(
+            {},
+            stats,
+            task_count=20,
+            depth=0,
+            context_key="after_retry",
+            proposed_budget=90.0,
+            min_budget=2.0,
+        )
+        self.assertEqual(disabled_budget, 90.0)
+        self.assertFalse(disabled_metadata["retry_budget_cap_enabled"])
+        self.assertFalse(disabled_metadata["retry_budget_cap_applied"])
+
+        config = {
+            "journey_certificate_completion_bound_retry_budget_cap_enabled": True,
+            "journey_certificate_completion_bound_retry_budget_cap_min_tasks": 20,
+            "journey_certificate_completion_bound_retry_budget_cap_min_observations": 1,
+            "journey_certificate_completion_bound_retry_budget_cap_min_expensive_zero_harvest_retries": 1,
+            "journey_certificate_completion_bound_retry_budget_cap_time": 12.0,
+            "journey_certificate_completion_bound_retry_budget_cap_min_time": 2.0,
+            "journey_certificate_completion_bound_retry_budget_cap_certified_profile_margin": 5.0,
+        }
+        no_history_budget, no_history_metadata = _journey_completion_bound_retry_budget_cap(
+            config,
+            stats,
+            task_count=20,
+            depth=0,
+            context_key="after_retry",
+            proposed_budget=90.0,
+            min_budget=2.0,
+        )
+        self.assertEqual(no_history_budget, 90.0)
+        self.assertFalse(no_history_metadata["retry_budget_cap_applied"])
+        self.assertEqual(no_history_metadata["retry_budget_cap_reason"], "insufficient_observations")
+
+        _journey_completion_bound_retry_gate_update(
+            stats,
+            SimpleNamespace(
+                journeys=[],
+                status="OPTIMAL",
+                reason="direct_label_no_negative_journey",
+                exhausted=True,
+                global_certificate_capable=True,
+                completion_bound_enabled=True,
+                profile_generation_time=34.0,
+                pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+                negative_journeys=0,
+                selected_trips=0,
+                harvest_candidate_negative_count=0,
+                harvest_selected_count=0,
+            ),
+            pricing_kind="exact_completion_bound_retry",
+            context_key="after_retry",
+        )
+        capped_budget, capped_metadata = _journey_completion_bound_retry_budget_cap(
+            config,
+            stats,
+            task_count=20,
+            depth=0,
+            context_key="after_retry",
+            proposed_budget=90.0,
+            min_budget=2.0,
+        )
+        self.assertEqual(capped_budget, 39.0)
+        self.assertTrue(capped_metadata["retry_budget_cap_applied"])
+        self.assertEqual(capped_metadata["retry_budget_cap_reason"], "context_history")
+        self.assertEqual(capped_metadata["retry_budget_cap_context_total_count"], 1)
+        self.assertEqual(capped_metadata["retry_budget_cap_context_certified_zero_harvest_count"], 1)
+        self.assertEqual(capped_metadata["retry_budget_cap_certified_profile_floor"], 39.0)
+
+    def test_completion_bound_retry_budget_cap_keeps_unseen_context_uncapped(self):
+        config = {
+            "journey_certificate_completion_bound_retry_budget_cap_enabled": True,
+            "journey_certificate_completion_bound_retry_budget_cap_min_observations": 1,
+            "journey_certificate_completion_bound_retry_budget_cap_min_expensive_zero_harvest_retries": 1,
+            "journey_certificate_completion_bound_retry_budget_cap_time": 12.0,
+        }
+        stats = _journey_completion_bound_retry_gate_initial_stats()
+        stats["expensive_profile_time_threshold"] = 20.0
+        _journey_completion_bound_retry_gate_update(
+            stats,
+            SimpleNamespace(
+                journeys=[],
+                status="OPTIMAL",
+                reason="direct_label_no_negative_journey",
+                exhausted=True,
+                global_certificate_capable=True,
+                completion_bound_enabled=True,
+                profile_generation_time=40.0,
+                pricing_state=PRICING_STATE_CERTIFIED_NO_NEGATIVE,
+                negative_journeys=0,
+                selected_trips=0,
+                harvest_candidate_negative_count=0,
+                harvest_selected_count=0,
+            ),
+            pricing_kind="exact_completion_bound_retry",
+            context_key="after_retry",
+        )
+        budget, metadata = _journey_completion_bound_retry_budget_cap(
+            config,
+            stats,
+            task_count=20,
+            depth=0,
+            context_key="no_retry_budget",
+            proposed_budget=90.0,
+            min_budget=2.0,
+        )
+        self.assertEqual(budget, 90.0)
+        self.assertFalse(metadata["retry_budget_cap_applied"])
+        self.assertEqual(metadata["retry_budget_cap_reason"], "insufficient_observations")
 
     def test_final_judge_config_with_call_deadline_sets_absolute_deadline(self):
         base = JourneyPricingConfig(time_limit=100.0)
@@ -24622,12 +26496,17 @@ class BPCFutureTests(unittest.TestCase):
         fleet_cut = FleetLowerBoundCut(1)
         sortie_cut = SortieLowerBoundCut(2)
         subset_cut = SubsetRowCut((1, 2, 3), 2)
+        weighted_cut = WeightedSubsetRowCut((1, 2, 3), (1, 2, 1), 3)
         time_cut = TimePointCapacityCut(1, trip.start_time + 0.1)
         self.assertEqual(fleet_cut.coefficient(trip, 1), 0.0)
         self.assertEqual(fleet_cut.y_coefficient(1), 1.0)
         self.assertEqual(sortie_cut.coefficient(trip, 1), -1.0)
         self.assertEqual(sortie_cut.rhs, -2.0)
         self.assertEqual(subset_cut.coefficient(trip, 1), 1.0)
+        self.assertEqual(weighted_cut.rhs, 1.0)
+        self.assertEqual(weighted_cut.coefficient(trip, 1), 1.0)
+        self.assertEqual(weighted_cut.payload()["weights"], [1, 2, 1])
+        self.assertEqual(weighted_cut.key, ("weighted_subset_row", 3, (1, 2, 3), (1, 2, 1)))
         self.assertEqual(time_cut.coefficient(trip, 1), 1.0)
         self.assertEqual(time_cut.coefficient(trip, 2), 0.0)
         self.assertEqual(time_cut.y_coefficient(1), -1.0)
@@ -24636,6 +26515,197 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(add_cut_unique(cuts, keys, subset_cut))
         self.assertFalse(add_cut_unique(cuts, keys, SubsetRowCut((3, 2, 1), 2)))
         self.assertEqual(len(cuts), 1)
+
+    def test_weighted_subset_row_live_pricing_is_rc_consistent_and_fail_closed_for_bounds(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        cut = WeightedSubsetRowCut((first, second, third), (2, 1, 2), 3)
+        cuts = (cut,)
+        journey = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=70.0,
+            fixed_vehicle_cost=30.0,
+            cost=100.0,
+            signature=(((first, third), tuple(), 0.0),),
+        )
+        duals = JourneyDuals(
+            cover={first: 3.0, second: 999.0, third: 7.0},
+            fleet_limit=5.0,
+            cuts={0: 11.0},
+        )
+        masks = _cut_masks(data, cuts)
+        task_to_bit = {int(task): index for index, task in enumerate(data.tasks)}
+        mask = (1 << task_to_bit[first]) | (1 << task_to_bit[third])
+
+        self.assertTrue(_journey_pricing_cut_supported(cut))
+        self.assertAlmostEqual(_journey_cut_dual_value(mask, duals.cuts or {}, cuts, masks), 11.0)
+        self.assertAlmostEqual(manual_journey_reduced_cost(journey, duals, cuts), 74.0)
+        self.assertFalse(_direct_completion_bound_cut_safe(duals.cuts or {}, cuts))
+        self.assertFalse(_profile_cut_penalty_pruning_safe({0: -11.0}, cuts))
+        self.assertFalse(_profile_cut_penalty_pruning_safe({0: 11.0}, cuts))
+
+    def test_journey_weighted_rank1_cut_audit_logs_candidates_without_bound_effect(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        j12 = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        j23 = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({second, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, third), tuple(), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(j12, 0.7), (j23, 0.7)])
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "weighted_rank1.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _audit_journey_weighted_rank1_cuts(
+                    data,
+                    {
+                        "journey_weighted_rank1_cut_audit_enabled": True,
+                        "journey_weighted_rank1_cut_audit_candidate_budget": 20,
+                        "journey_weighted_rank1_cut_audit_denominators": "3",
+                        "journey_weighted_rank1_cut_audit_max_subset_size": 3,
+                        "journey_weighted_rank1_cut_audit_min_violation": 1.0e-9,
+                    },
+                    solution,
+                    logger,
+                    1,
+                    node_id=4,
+                    depth=0,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+        audit = next(record for record in records if record["event"] == "journey_weighted_rank1_cut_audit")
+        self.assertTrue(audit["audit_only"])
+        self.assertFalse(audit["production_ready"])
+        self.assertFalse(audit["pricing_supported"])
+        self.assertFalse(audit["official_bound_effect"])
+        self.assertFalse(audit["certificate_effect"])
+        self.assertGreater(audit["generated"], 0)
+        self.assertGreater(audit["violated"], 0)
+        self.assertGreater(audit["best_violation"], 0.0)
+        self.assertEqual(audit["denominators"], [3])
+        self.assertTrue(audit["top_candidates"])
+        self.assertIn("weights", audit["top_candidates"][0])
+        self.assertIn(second, audit["top_candidates"][0]["tasks"])
+
+    def test_journey_weighted_rank1_separator_is_opt_in_and_deduplicates(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        j12 = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        j23 = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({second, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, third), tuple(), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(j12, 0.7), (j23, 0.7)])
+        cuts: list[Any] = []
+        cut_keys: set[tuple] = set()
+        config = {
+            "journey_weighted_rank1_cuts_enabled": True,
+            "journey_weighted_rank1_cut_candidate_budget": 20,
+            "journey_weighted_rank1_cut_denominators": "3",
+            "journey_weighted_rank1_cut_max_subset_size": 3,
+            "journey_weighted_rank1_cut_max_added": 2,
+            "journey_weighted_rank1_cut_min_violation": 1.0e-9,
+            "journey_weighted_rank1_cut_gate_enabled": True,
+            "journey_weighted_rank1_cut_gate_min_best_violation": 0.1,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "weighted_separator.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                disabled_added = _separate_journey_weighted_rank1_cuts(
+                    data,
+                    {**config, "journey_weighted_rank1_cuts_enabled": False},
+                    solution,
+                    cuts,
+                    cut_keys,
+                    logger,
+                    1,
+                    node_id=5,
+                    depth=0,
+                )
+                added = _separate_journey_weighted_rank1_cuts(
+                    data,
+                    config,
+                    solution,
+                    cuts,
+                    cut_keys,
+                    logger,
+                    1,
+                    node_id=5,
+                    depth=0,
+                )
+                duplicate_added = _separate_journey_weighted_rank1_cuts(
+                    data,
+                    config,
+                    solution,
+                    cuts,
+                    cut_keys,
+                    logger,
+                    1,
+                    node_id=5,
+                    depth=0,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(disabled_added, 0)
+        self.assertGreater(added, 0)
+        self.assertEqual(duplicate_added, 0)
+        self.assertTrue(any(isinstance(cut, WeightedSubsetRowCut) for cut in cuts))
+        separations = [record for record in records if record["event"] == "journey_weighted_rank1_cut_separation"]
+        self.assertEqual(len(separations), 2)
+        first_sep = separations[0]
+        self.assertTrue(first_sep["add_enabled"])
+        self.assertTrue(first_sep["cut_gate_passed"])
+        self.assertGreater(first_sep["violated"], 0)
+        self.assertEqual(first_sep["added"], added)
+        self.assertTrue(first_sep["exact_pricing_supported"])
+        self.assertTrue(first_sep["completion_bound_fail_closed"])
+        added_events = [record for record in records if record["event"] == "journey_weighted_rank1_cut_added"]
+        self.assertEqual(len(added_events), added)
+        self.assertEqual(added_events[0]["kind"], "weighted_subset_row")
+        self.assertEqual(added_events[0]["source"], "weighted_rank1")
 
     def test_journey_static_cuts_exclude_sortie_lower_bound(self):
         data = load_future_data("very_small")
@@ -24673,6 +26743,507 @@ class BPCFutureTests(unittest.TestCase):
         self.assertTrue(_journey_task_set_dominance_safe(tuple(cuts), tuple()))
         score = _journey_static_subset_row_compactness_score(data, tuple(int(task) for task in data.tasks[:3]))
         self.assertTrue(math.isfinite(score))
+
+    def test_journey_dynamic_subset_row_cuts_are_branch_depth_opt_in(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        j12 = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        j23 = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({second, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, third), tuple(), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(j12, 0.6), (j23, 0.6)])
+        base_config = {
+            "journey_dynamic_subset_row_cuts_enabled": True,
+            "journey_dynamic_subset_row_max_rounds": 1,
+            "journey_dynamic_subset_row_cut_budget": 20,
+            "journey_dynamic_subset_row_max_added": 4,
+            "journey_dynamic_subset_row_max_subset_size": 4,
+            "journey_dynamic_subset_row_min_violation": 1.0e-9,
+        }
+
+        cuts: list[Any] = []
+        cut_keys: set[tuple] = set()
+        self.assertEqual(
+            _separate_journey_subset_row_cuts(
+                data,
+                base_config,
+                solution,
+                cuts,
+                cut_keys,
+                FutureLogger(None, console=False),
+                1,
+                node_id=2,
+                depth=1,
+            ),
+            0,
+        )
+        self.assertEqual(cuts, [])
+
+        added = _separate_journey_subset_row_cuts(
+            data,
+            {**base_config, "journey_dynamic_subset_row_max_depth": 1},
+            solution,
+            cuts,
+            cut_keys,
+            FutureLogger(None, console=False),
+            1,
+            node_id=2,
+            depth=1,
+        )
+        self.assertGreater(added, 0)
+        self.assertTrue(any(isinstance(cut, SubsetRowCut) and {first, second, third}.issubset(set(cut.tasks)) for cut in cuts))
+
+    def test_journey_dynamic_subset_row_audit_logs_violations_without_adding_cuts(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        j12 = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        j23 = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({second, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, third), tuple(), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(j12, 0.6), (j23, 0.6)])
+        cuts: list[Any] = []
+        cut_keys: set[tuple] = set()
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "cuts.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                added = _separate_journey_subset_row_cuts(
+                    data,
+                    {
+                        "journey_dynamic_subset_row_audit_enabled": True,
+                        "journey_dynamic_subset_row_max_rounds": 1,
+                        "journey_dynamic_subset_row_cut_budget": 20,
+                        "journey_dynamic_subset_row_max_added": 0,
+                        "journey_dynamic_subset_row_max_subset_size": 4,
+                        "journey_dynamic_subset_row_min_violation": 1.0e-9,
+                        "journey_dynamic_subset_row_route_region_guided_candidates_enabled": True,
+                        "journey_dynamic_subset_row_route_region_guided_candidate_budget": 12,
+                    },
+                    solution,
+                    cuts,
+                    cut_keys,
+                    logger,
+                    1,
+                    node_id=2,
+                    depth=0,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+            summary = summarize_dynamic_src(
+                [Path(tmp)],
+                Path(tmp) / "summary",
+                Path(tmp) / "summary.md",
+            )
+        self.assertEqual(added, 0)
+        self.assertEqual(cuts, [])
+        separation = next(record for record in records if record["event"] == "journey_cut_separation")
+        self.assertTrue(separation["audit_enabled"])
+        self.assertTrue(separation["audit_only"])
+        self.assertTrue(separation["route_region_guided_candidates_enabled"])
+        self.assertGreater(separation["route_region_guided_generated"], 0)
+        self.assertEqual(separation["route_region_guided_max_subset_size"], 4)
+        self.assertFalse(separation["route_region_guided_extended_sizes"])
+        self.assertEqual(separation["route_region_guided_k_values"], [2, 3])
+        self.assertGreater(separation["violated"], 0)
+        self.assertGreater(separation["best_violation"], 0.0)
+        self.assertTrue(separation["top_candidates"])
+        self.assertIn("compactness", separation["top_candidates"][0])
+        self.assertIn("candidate_source", separation["top_candidates"][0])
+        self.assertTrue(separation["route_region_audit_enabled"])
+        self.assertEqual(separation["route_region_active_journey_count"], 2)
+        self.assertEqual(separation["route_region_active_task_set_count"], 2)
+        self.assertTrue(separation["route_region_top_task_hubs"])
+        self.assertTrue(separation["route_region_top_pair_hubs"])
+        self.assertTrue(separation["route_region_top_active_task_sets"])
+        self.assertIn("activity", separation["top_candidates"][0])
+        self.assertIn("active_overlap_journey_count", separation["top_candidates"][0])
+        self.assertIn("active_overlap_top_task_sets", separation["top_candidates"][0])
+        self.assertTrue(summary["global_route_region_task_hubs"])
+        self.assertTrue(summary["global_route_region_pair_hubs"])
+        self.assertGreater(summary["runs"][0]["total_route_region_guided_generated"], 0)
+        self.assertFalse(summary["official_bound_effect"])
+        self.assertFalse(summary["certificate_effect"])
+
+    def test_journey_parse_positive_int_tuple_accepts_csv_and_iterables(self):
+        self.assertEqual(_journey_parse_positive_int_tuple(None, (2, 3)), (2, 3))
+        self.assertEqual(_journey_parse_positive_int_tuple("4, 2, bad, 4, 1", (2, 3)), (2, 4))
+        self.assertEqual(_journey_parse_positive_int_tuple([5, "3", 0, None], (2, 3)), (3, 5))
+        self.assertEqual(_journey_parse_positive_int_tuple("", (2, 3)), (2, 3))
+
+    def test_journey_cut_dual_diagnostics_logs_binding_subset_row_dual(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        j12 = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        j23 = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({second, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, third), tuple(), 0.0),),
+        )
+        cut = SubsetRowCut((first, second, third), 2)
+        solution = SimpleNamespace(
+            objective=10.0,
+            journey_values=[(j12, 0.5), (j23, 0.5)],
+            duals=JourneyDuals(
+                cover={int(task): 0.0 for task in data.tasks},
+                fleet_limit=0.0,
+                cuts={0: -4.0},
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "cut_duals.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                _log_journey_cut_dual_diagnostics(
+                    {"journey_cut_dual_diagnostics_enabled": True},
+                    logger,
+                    solution,
+                    (cut,),
+                    node_id=3,
+                    depth=1,
+                    cg_iter=2,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+            summary = summarize_dynamic_src(
+                [Path(tmp)],
+                Path(tmp) / "summary",
+                Path(tmp) / "summary.md",
+            )
+        diag = next(record for record in records if record["event"] == "journey_cut_dual_diagnostics")
+        self.assertEqual(diag["node_id"], 3)
+        self.assertEqual(diag["depth"], 1)
+        self.assertEqual(diag["cuts_active"], 1)
+        self.assertEqual(diag["cut_count_by_kind"]["subset_row"], 1)
+        self.assertEqual(diag["nonzero_cut_dual_count"], 1)
+        self.assertEqual(diag["binding_cut_count"], 1)
+        self.assertEqual(diag["binding_nonzero_cut_count"], 1)
+        self.assertAlmostEqual(diag["cut_dual_objective_contribution"], -4.0)
+        self.assertEqual(diag["subset_row_nonzero_dual_count"], 1)
+        self.assertEqual(diag["subset_row_binding_count"], 1)
+        self.assertEqual(diag["top_cuts"][0]["tasks"], [first, second, third])
+        self.assertAlmostEqual(diag["top_cuts"][0]["activity"], 1.0)
+        self.assertAlmostEqual(diag["top_cuts"][0]["sense_slack"], 0.0)
+        self.assertEqual(summary["cut_dual_diagnostic_count"], 1)
+        self.assertEqual(summary["cut_dual_nonzero_event_count"], 1)
+        self.assertEqual(summary["max_nonzero_cut_dual_count"], 1)
+        self.assertEqual(summary["max_subset_row_nonzero_dual_count"], 1)
+        self.assertEqual(summary["max_binding_nonzero_cut_count"], 1)
+        self.assertAlmostEqual(summary["max_cut_dual_abs_sum"], 4.0)
+        self.assertTrue(summary["runs"][0]["top_cut_dual_rows"])
+
+    def test_journey_dynamic_subset_row_cut_gate_blocks_low_violation_addition(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        j12 = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        j23 = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({second, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, third), tuple(), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(j12, 0.6), (j23, 0.6)])
+        cuts: list[Any] = []
+        cut_keys: set[tuple] = set()
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "cuts.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                added = _separate_journey_subset_row_cuts(
+                    data,
+                    {
+                        "journey_dynamic_subset_row_cuts_enabled": True,
+                        "journey_dynamic_subset_row_audit_enabled": True,
+                        "journey_dynamic_subset_row_cut_gate_enabled": True,
+                        "journey_dynamic_subset_row_cut_gate_min_best_violation": 0.3,
+                        "journey_dynamic_subset_row_max_rounds": 1,
+                        "journey_dynamic_subset_row_cut_budget": 20,
+                        "journey_dynamic_subset_row_max_added": 4,
+                        "journey_dynamic_subset_row_max_subset_size": 4,
+                        "journey_dynamic_subset_row_min_violation": 1.0e-9,
+                    },
+                    solution,
+                    cuts,
+                    cut_keys,
+                    logger,
+                    1,
+                    node_id=2,
+                    depth=0,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(added, 0)
+        self.assertEqual(cuts, [])
+        separation = next(record for record in records if record["event"] == "journey_cut_separation")
+        self.assertTrue(separation["cut_gate_enabled"])
+        self.assertFalse(separation["cut_gate_passed"])
+        self.assertEqual(separation["cut_gate_reason"], "best_violation_below_threshold")
+        self.assertGreater(separation["violated"], 0)
+
+    def test_journey_dynamic_subset_row_min_add_depth_delays_root_cut_addition(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        j12 = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        j23 = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({second, third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((second, third), tuple(), 0.0),),
+        )
+        solution = SimpleNamespace(journey_values=[(j12, 0.6), (j23, 0.6)])
+        config = {
+            "journey_dynamic_subset_row_cuts_enabled": True,
+            "journey_dynamic_subset_row_audit_enabled": True,
+            "journey_dynamic_subset_row_max_depth": 1,
+            "journey_dynamic_subset_row_min_add_depth": 1,
+            "journey_dynamic_subset_row_max_rounds": 1,
+            "journey_dynamic_subset_row_cut_budget": 20,
+            "journey_dynamic_subset_row_max_added": 4,
+            "journey_dynamic_subset_row_max_subset_size": 4,
+            "journey_dynamic_subset_row_min_violation": 1.0e-9,
+        }
+        cuts: list[Any] = []
+        cut_keys: set[tuple] = set()
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "cuts.jsonl"
+            logger = FutureLogger(log_path, console=False)
+            try:
+                root_added = _separate_journey_subset_row_cuts(
+                    data,
+                    config,
+                    solution,
+                    cuts,
+                    cut_keys,
+                    logger,
+                    1,
+                    node_id=0,
+                    depth=0,
+                )
+                child_added = _separate_journey_subset_row_cuts(
+                    data,
+                    config,
+                    solution,
+                    cuts,
+                    cut_keys,
+                    logger,
+                    1,
+                    node_id=1,
+                    depth=1,
+                )
+            finally:
+                logger.close()
+            records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(root_added, 0)
+        self.assertGreater(child_added, 0)
+        self.assertTrue(cuts)
+        separations = [record for record in records if record["event"] == "journey_cut_separation"]
+        self.assertEqual(len(separations), 2)
+        root_sep = next(record for record in separations if record["depth"] == 0)
+        child_sep = next(record for record in separations if record["depth"] == 1)
+        self.assertFalse(root_sep["cut_add_depth_passed"])
+        self.assertEqual(root_sep["cut_gate_reason"], "add_depth_below_min")
+        self.assertEqual(root_sep["added"], 0)
+        self.assertTrue(child_sep["cut_add_depth_passed"])
+        self.assertGreater(child_sep["added"], 0)
+
+    def test_journey_branch_metadata_records_cut_context(self):
+        data = load_future_data("very_small")
+        first, second, third = (int(task) for task in data.tasks[:3])
+        joint = JourneyColumn(
+            id=0,
+            trips=tuple(),
+            task_set=frozenset({first, second}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((first, second), tuple(), 0.0),),
+        )
+        solo = JourneyColumn(
+            id=1,
+            trips=tuple(),
+            task_set=frozenset({third}),
+            start_time=0.0,
+            end_time=1.0,
+            travel_cost=0.0,
+            fixed_vehicle_cost=0.0,
+            cost=0.0,
+            signature=(((third,), tuple(), 0.0),),
+        )
+        cuts = (
+            FleetLowerBoundCut(1),
+            SubsetRowCut((first, second, third), 2),
+        )
+        metadata = _journey_branch_selection_metadata(
+            data,
+            {
+                "journey_branch_candidate_priority": "fractionality",
+                "journey_dynamic_subset_row_cuts_enabled": True,
+                "journey_dynamic_subset_row_cut_gate_enabled": True,
+                "journey_dynamic_subset_row_min_add_depth": 1,
+                "journey_dynamic_subset_row_max_depth": 2,
+                "journey_dynamic_subset_row_cut_gate_min_best_violation": 0.25,
+            },
+            [(joint, 0.5), (solo, 0.5)],
+            tuple(),
+            1.0e-6,
+            node_id=0,
+            depth=0,
+            cuts=cuts,
+        )
+
+        self.assertEqual(metadata["cut_context_active_count"], 2)
+        self.assertEqual(metadata["cut_context_subset_row_count"], 1)
+        self.assertEqual(metadata["cut_context_fleet_lb_count"], 1)
+        self.assertEqual(metadata["cut_context_dynamic_subset_row_regime"], "dynamic_src_child_or_deeper")
+        self.assertTrue(metadata["cut_context_dynamic_subset_row_cuts_enabled"])
+        self.assertTrue(metadata["cut_context_dynamic_subset_row_cut_gate_enabled"])
+        self.assertEqual(metadata["cut_context_dynamic_subset_row_min_add_depth"], 1)
+        self.assertEqual(metadata["cut_context_dynamic_subset_row_max_depth"], 2)
+        self.assertAlmostEqual(metadata["cut_context_dynamic_subset_row_gate_min_best_violation"], 0.25)
+        self.assertEqual(metadata["cut_context_hash"], _journey_cut_hash(cuts))
+
+    def test_journey_child_order_can_use_phase1_lp_objective(self):
+        data = load_future_data("very_small")
+        first, second = int(data.tasks[0]), int(data.tasks[1])
+        same = BranchConstraint("same_vehicle", first, second)
+        separate = BranchConstraint("separate_vehicle", first, second)
+        pool = JourneyPool(task_set_dominance_enabled=False)
+        pool.add(
+            JourneyColumn(
+                id=-1,
+                trips=tuple(),
+                task_set=frozenset({first, second}),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=0.0,
+                signature=(((first, second), tuple(), 0.0),),
+            )
+        )
+        pool.add(
+            JourneyColumn(
+                id=-1,
+                trips=tuple(),
+                task_set=frozenset({first}),
+                start_time=0.0,
+                end_time=1.0,
+                travel_cost=0.0,
+                fixed_vehicle_cost=0.0,
+                cost=0.0,
+                signature=(((first,), tuple(), 0.0),),
+            )
+        )
+
+        ordered = _journey_child_constraint_order(
+            pool,
+            tuple(),
+            (same, separate),
+            by_width=False,
+            priority_mode="phase1_lp_objective",
+            phase1_child_objectives={
+                "same_vehicle": 10.0,
+                "separate_vehicle": 25.0,
+            },
+        )
+        self.assertEqual(ordered[0][0].kind, "separate_vehicle")
+
+        fallback = _journey_child_constraint_order(
+            pool,
+            tuple(),
+            (same, separate),
+            by_width=False,
+            priority_mode="phase1_lp_objective",
+            phase1_child_objectives={},
+        )
+        self.assertEqual([constraint.kind for constraint, _allowed in fallback], ["same_vehicle", "separate_vehicle"])
 
     def test_journey_profile_pruning_is_not_safe_for_nonzero_fleet_cut_dual(self):
         cuts = (FleetLowerBoundCut(1),)

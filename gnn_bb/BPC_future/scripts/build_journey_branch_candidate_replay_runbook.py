@@ -35,6 +35,62 @@ _POSITIVE_NEIGHBOR_ANCHOR = {
     "pool_total_child_width": 801.0,
 }
 _POSITIVE_NEIGHBOR_PRESELECT_COUNT = 2
+_PHASED_NODE_FIELDS = (
+    "phased_testing_controller_active",
+    "phased_testing_controller_input_count",
+    "phased_testing_stage_counts",
+    "phased_testing_decision_counts",
+    "phased_testing_phase0_fail_reason_counts",
+    "phased_testing_phase1_candidate_count",
+    "phased_testing_phase1_probe_count",
+    "phased_testing_phase1_complete_count",
+    "phased_testing_phase1_dynamic_k_excluded_count",
+    "phased_testing_phase1_reason_counts",
+    "phased_testing_phase1_total_wall_time",
+    "phased_testing_phase1_best_min_child_lp_gain",
+    "phased_testing_phase1_best_child_lp_gain_product",
+    "phased_testing_phase1_official_bound_effect_any",
+    "phased_testing_phase1_certificate_effect_any",
+    "phased_testing_phase2_candidate_count",
+    "phased_testing_phase2_probe_count",
+    "phased_testing_phase2_complete_count",
+    "phased_testing_phase2_dynamic_k_excluded_count",
+    "phased_testing_phase2_reason_counts",
+    "phased_testing_phase2_total_wall_time",
+    "phased_testing_phase2_negative_child_count_total",
+    "phased_testing_phase2_negative_journey_count_total",
+    "phased_testing_phase2_generated_sequences_total",
+    "phased_testing_phase2_evaluated_timed_trips_total",
+    "phased_testing_phase2_worst_negative_severity_max",
+    "phased_testing_phase2_official_bound_effect_any",
+    "phased_testing_phase2_certificate_effect_any",
+    "phased_testing_official_bound_effect_any",
+    "phased_testing_certificate_effect_any",
+)
+_PHASED_CANDIDATE_FIELDS = (
+    "phased_testing_stage",
+    "phased_testing_decision",
+    "phased_testing_reason",
+    "phased_testing_elimination_reason",
+    "phase1_min_child_lp_gain",
+    "phase1_sum_child_lp_gain",
+    "phase1_child_lp_gain_product",
+    "phase1_child_width_balance",
+    "phase1_child_max_width",
+    "phase1_child_total_width",
+    "phase1_wall_time",
+    "phase1_official_bound_effect",
+    "phase1_certificate_effect",
+    "phase2_negative_child_count",
+    "phase2_negative_journey_count",
+    "phase2_best_reduced_cost",
+    "phase2_worst_negative_severity",
+    "phase2_generated_sequences",
+    "phase2_evaluated_timed_trips",
+    "phase2_wall_time",
+    "phase2_official_bound_effect",
+    "phase2_certificate_effect",
+)
 
 
 def _iter_jsonl_paths(paths: Iterable[Path]) -> Iterable[Path]:
@@ -116,6 +172,16 @@ def _int(value: Any, default: int = 0) -> int:
         return int(default)
 
 
+def _bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
+
+
 def _candidate_pair(candidate: Any) -> tuple[int, int] | None:
     if not isinstance(candidate, dict):
         return None
@@ -180,6 +246,120 @@ def _load_branch_impact_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_branch_score_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        if path.is_dir():
+            rows.extend(_iter_jsonl(path / "journey_branch_score_rows.jsonl"))
+            continue
+        if path.name == "summary.json":
+            rows.extend(_iter_jsonl(path.parent / "journey_branch_score_rows.jsonl"))
+            continue
+        if path.suffix == ".jsonl":
+            rows.extend(_iter_jsonl(path))
+            continue
+        payload = _read_json(path)
+        raw_rows = payload.get("rows")
+        if isinstance(raw_rows, list):
+            rows.extend(row for row in raw_rows if isinstance(row, dict))
+    return rows
+
+
+def _branch_score_by_context(
+    paths: Iterable[Path],
+) -> dict[tuple[str, int, int, int, int], dict[str, Any]]:
+    score_by_context: dict[tuple[str, int, int, int, int], dict[str, Any]] = {}
+    for row in _load_branch_score_rows(paths):
+        pair = _pair_from_value(row.get("pair"))
+        if pair is None:
+            pair = _pair_from_value([row.get("task_i"), row.get("task_j")])
+        if pair is None:
+            continue
+        instance = str(row.get("instance") or "")
+        node_id = _int(row.get("node_id"), -1)
+        depth = _int(row.get("depth"), -1)
+        if not instance or node_id < 0 or depth < 0:
+            continue
+        key = (instance, node_id, depth, int(pair[0]), int(pair[1]))
+        score = _optional_float(row.get("score"))
+        if score is None:
+            continue
+        current = score_by_context.get(key)
+        if current is None or float(score) > float(current.get("score", -1.0e30)):
+            score_by_context[key] = row
+    return score_by_context
+
+
+def _apply_external_branch_scores(
+    alternatives: list[dict[str, Any]],
+    *,
+    score_by_context: dict[tuple[str, int, int, int, int], dict[str, Any]],
+    instance: str,
+    node_id: int,
+    depth: int,
+) -> list[dict[str, Any]]:
+    if not score_by_context:
+        return alternatives
+    enriched: list[dict[str, Any]] = []
+    for item in alternatives:
+        pair = (int(item["task_i"]), int(item["task_j"]))
+        score_row = score_by_context.get((instance, int(node_id), int(depth), pair[0], pair[1]))
+        if score_row is None:
+            enriched.append(item)
+            continue
+        updated = dict(item)
+        updated["source_alt_branch_score"] = score_row.get("score")
+        updated["source_alt_branch_score_source"] = (
+            f"external_branch_score_rows:{score_row.get('score_mode') or 'unknown'}"
+        )
+        updated["source_alt_external_score_row"] = {
+            "score": score_row.get("score"),
+            "score_mode": score_row.get("score_mode"),
+            "predicted_walltime_gain": score_row.get("predicted_walltime_gain"),
+            "branch_priority_probability": score_row.get("branch_priority_probability"),
+            "tail_improved_probability": score_row.get("tail_improved_probability"),
+            "tree_policy_probability": score_row.get("tree_policy_probability"),
+        }
+        enriched.append(updated)
+    return enriched
+
+
+def _external_branch_score_event_priority(
+    record: dict[str, Any],
+    *,
+    candidate_source: str,
+    score_by_context: dict[tuple[str, int, int, int, int], dict[str, Any]],
+    instance: str,
+    node_id: int,
+    depth: int,
+) -> dict[str, Any]:
+    if not score_by_context:
+        return {}
+    selected_pair = _candidate_pair(record.get("selected"))
+    best_row: dict[str, Any] | None = None
+    best_pair: tuple[int, int] | None = None
+    for candidate in _logged_candidates(record, candidate_source):
+        pair = _candidate_pair(candidate)
+        if pair is None or pair == selected_pair:
+            continue
+        row = score_by_context.get((instance, int(node_id), int(depth), pair[0], pair[1]))
+        if row is None:
+            continue
+        if best_row is None or _float(row.get("score"), default=-1.0e30) > _float(
+            best_row.get("score"), default=-1.0e30
+        ):
+            best_row = row
+            best_pair = pair
+    if best_row is None or best_pair is None:
+        return {}
+    return {
+        "external_branch_score_event_priority": _float(best_row.get("score"), default=0.0),
+        "external_branch_score_event_pair": [int(best_pair[0]), int(best_pair[1])],
+        "external_branch_score_event_score_mode": best_row.get("score_mode"),
+        "external_branch_score_event_predicted_walltime_gain": best_row.get("predicted_walltime_gain"),
+    }
+
+
 def _branch_row_pair(row: dict[str, Any]) -> tuple[int, int] | None:
     if row.get("task_i") is None or row.get("task_j") is None:
         return None
@@ -217,6 +397,87 @@ def _impact_priority(row: dict[str, Any]) -> tuple[float, str]:
     return score, reason
 
 
+def _phased_node_context_from_sources(
+    record: dict[str, Any],
+    impact_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    context: dict[str, Any] = {}
+    impact_context = impact_context if isinstance(impact_context, dict) else {}
+    impact_phased = impact_context.get("branch_phased_testing")
+    if isinstance(impact_phased, dict):
+        context.update(impact_phased)
+    for field in _PHASED_NODE_FIELDS:
+        if field in impact_context and field not in context:
+            context[field] = impact_context[field]
+        if field in record:
+            context[field] = record[field]
+    return context
+
+
+def _phased_node_has_exact_effect(context: dict[str, Any]) -> bool:
+    return bool(
+        _bool(context.get("phased_testing_official_bound_effect_any"))
+        or _bool(context.get("phased_testing_certificate_effect_any"))
+        or _bool(context.get("phased_testing_phase1_official_bound_effect_any"))
+        or _bool(context.get("phased_testing_phase1_certificate_effect_any"))
+        or _bool(context.get("phased_testing_phase2_official_bound_effect_any"))
+        or _bool(context.get("phased_testing_phase2_certificate_effect_any"))
+    )
+
+
+def _phased_node_priority(context: dict[str, Any]) -> tuple[float, str]:
+    if not _bool(context.get("phased_testing_controller_active")):
+        return 0.0, "phased_controller_inactive"
+    phase1_min_gain = max(
+        0.0,
+        _float(context.get("phased_testing_phase1_best_min_child_lp_gain"), default=0.0),
+    )
+    phase1_product = max(
+        0.0,
+        _float(context.get("phased_testing_phase1_best_child_lp_gain_product"), default=0.0),
+    )
+    phase1_complete = max(
+        0.0,
+        _float(context.get("phased_testing_phase1_complete_count"), default=0.0),
+    )
+    phase2_negative_child = max(
+        0.0,
+        _float(context.get("phased_testing_phase2_negative_child_count_total"), default=0.0),
+    )
+    phase2_negative_journey = max(
+        0.0,
+        _float(context.get("phased_testing_phase2_negative_journey_count_total"), default=0.0),
+    )
+    phase2_worst_negative = max(
+        0.0,
+        _float(context.get("phased_testing_phase2_worst_negative_severity_max"), default=0.0),
+    )
+    phase1_wall = max(0.0, _float(context.get("phased_testing_phase1_total_wall_time"), default=0.0))
+    phase2_wall = max(0.0, _float(context.get("phased_testing_phase2_total_wall_time"), default=0.0))
+    exact_effect_penalty = 1000.0 if _phased_node_has_exact_effect(context) else 0.0
+    score = (
+        8.0 * phase1_min_gain
+        + 0.04 * phase1_product
+        + 0.5 * phase1_complete
+        - 2.0 * phase2_negative_child
+        - 0.02 * phase2_negative_journey
+        - 1.0 * phase2_worst_negative
+        - 0.01 * (phase1_wall + phase2_wall)
+        - exact_effect_penalty
+    )
+    reason = (
+        f"phase1_best_min_gain={phase1_min_gain:g};"
+        f"phase1_best_product={phase1_product:g};"
+        f"phase1_complete={phase1_complete:g};"
+        f"phase2_negative_child={phase2_negative_child:g};"
+        f"phase2_negative_journey={phase2_negative_journey:g};"
+        f"phase2_worst_negative={phase2_worst_negative:g};"
+        f"phase_wall={phase1_wall + phase2_wall:g};"
+        f"exact_effect={_phased_node_has_exact_effect(context)}"
+    )
+    return float(score), reason
+
+
 def _impact_priority_by_context(
     branch_impact_inputs: Iterable[Path],
     *,
@@ -236,6 +497,8 @@ def _impact_priority_by_context(
         key = (instance, node_id, depth, _pair_text(pair) or "")
         current = priority.get(key)
         if current is None or float(score) > float(current.get("branch_impact_priority", -1.0e30)):
+            phased = {field: row[field] for field in _PHASED_NODE_FIELDS if field in row}
+            phased_score, phased_reason = _phased_node_priority(phased)
             priority[key] = {
                 "branch_impact_priority": float(score),
                 "branch_impact_priority_reason": reason,
@@ -243,6 +506,9 @@ def _impact_priority_by_context(
                 "branch_impact_labels": row.get("branch_labels"),
                 "branch_impact_right_censored": bool(row.get("right_censored")),
                 "branch_impact_usable_for_training": bool(row.get("usable_for_branch_impact_training")),
+                "branch_phased_testing": phased,
+                "branch_phased_testing_priority": float(phased_score),
+                "branch_phased_testing_priority_reason": phased_reason,
             }
     return priority
 
@@ -640,6 +906,232 @@ def _select_layered_alternatives(alternatives: list[dict[str, Any]]) -> list[dic
     return selected
 
 
+def _clamped_float(value: Any, *, default: float = 0.0, low: float = -10.0, high: float = 10.0) -> float:
+    parsed = _optional_float(value)
+    if parsed is None:
+        return float(default)
+    return min(float(high), max(float(low), float(parsed)))
+
+
+def _routeopt_bkf_test_score(item: dict[str, Any]) -> tuple[float, str]:
+    """RouteOpt-inspired priority for deciding which branch pair to test.
+
+    This is an offline sampling heuristic only. It does not run BPC/pricing,
+    provide a bound, or certify a branch. It balances learned score evidence
+    with near-tie eligibility and child-width risk so replay budget goes to
+    candidates that are plausible but not obviously explosive.
+    """
+
+    branch_score = _clamped_float(item.get("source_alt_branch_score"), default=0.0, low=-5.0, high=5.0)
+    fractionality = _clamped_float(item.get("source_alt_fractionality"), default=0.0, low=0.0, high=0.5)
+    required_tolerance = max(0.0, _float(item.get("source_alt_required_tie_tolerance"), default=0.5))
+    width = max(0.0, _float(item.get("source_alt_pool_max_child_width"), default=1000.0))
+    total_width = max(0.0, _float(item.get("source_alt_pool_total_child_width"), default=2000.0))
+    balance_gap = max(0.0, _float(item.get("source_alt_pool_balance_gap"), default=1000.0))
+    incumbent_disagreement = _clamped_float(
+        item.get("source_alt_incumbent_disagreement"),
+        default=0.0,
+        low=0.0,
+        high=1.0,
+    )
+    phase1_min_gain = max(0.0, _float(item.get("source_alt_phase1_min_child_lp_gain"), default=0.0))
+    phase1_product = max(0.0, _float(item.get("source_alt_phase1_child_lp_gain_product"), default=0.0))
+    phase2_negative_child = max(0.0, _float(item.get("source_alt_phase2_negative_child_count"), default=0.0))
+    phase2_negative_journey = max(0.0, _float(item.get("source_alt_phase2_negative_journey_count"), default=0.0))
+    phase2_worst_negative = max(0.0, _float(item.get("source_alt_phase2_worst_negative_severity"), default=0.0))
+    phase_wall = max(0.0, _float(item.get("source_alt_phase1_wall_time"), default=0.0)) + max(
+        0.0,
+        _float(item.get("source_alt_phase2_wall_time"), default=0.0),
+    )
+    phased_exact_effect = (
+        _bool(item.get("source_alt_phase1_official_bound_effect"))
+        or _bool(item.get("source_alt_phase1_certificate_effect"))
+        or _bool(item.get("source_alt_phase2_official_bound_effect"))
+        or _bool(item.get("source_alt_phase2_certificate_effect"))
+    )
+    rank = max(0, int(item.get("source_alt_rank") or 0))
+    score = (
+        2.5 * branch_score
+        + 6.0 * fractionality
+        + 1.5 * incumbent_disagreement
+        + 6.0 * phase1_min_gain
+        + 0.03 * phase1_product
+        - 5.0 * required_tolerance
+        - 0.0020 * width
+        - 0.0005 * total_width
+        - 0.0015 * balance_gap
+        - 2.0 * phase2_negative_child
+        - 0.02 * phase2_negative_journey
+        - 1.0 * phase2_worst_negative
+        - 0.01 * phase_wall
+        - (1000.0 if phased_exact_effect else 0.0)
+        - 0.01 * rank
+    )
+    reason = (
+        f"branch_score={branch_score:g};fractionality={fractionality:g};"
+        f"required_tie_tolerance={required_tolerance:g};"
+        f"pool_max_child_width={width:g};pool_total_child_width={total_width:g};"
+        f"pool_balance_gap={balance_gap:g};"
+        f"incumbent_disagreement={incumbent_disagreement:g};"
+        f"phase1_min_child_lp_gain={phase1_min_gain:g};"
+        f"phase1_child_lp_gain_product={phase1_product:g};"
+        f"phase2_negative_child_count={phase2_negative_child:g};"
+        f"phase2_negative_journey_count={phase2_negative_journey:g};"
+        f"phase2_worst_negative_severity={phase2_worst_negative:g};"
+        f"phase_wall={phase_wall:g};phased_exact_effect={phased_exact_effect};"
+        f"rank={rank}"
+    )
+    return float(score), reason
+
+
+def _select_routeopt_bkf_alternatives(alternatives: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for item in sorted(
+        alternatives,
+        key=lambda candidate: (
+            -_routeopt_bkf_test_score(candidate)[0],
+            int(candidate.get("source_alt_rank") or 0),
+        ),
+    ):
+        score, reason = _routeopt_bkf_test_score(item)
+        enriched = _with_selection_reason(item, "routeopt_bkf_test_priority")
+        enriched["source_alt_routeopt_bkf_score"] = round(float(score), 9)
+        enriched["source_alt_routeopt_bkf_reason"] = reason
+        selected.append(enriched)
+    return selected
+
+
+def _select_routeopt_bkf_staged_alternatives(
+    alternatives: list[dict[str, Any]],
+    *,
+    min_alternatives: int,
+    max_alternatives: int,
+    score_gap: float,
+    max_pool_child_width: float | None,
+    max_pool_total_child_width: float | None,
+    max_pool_balance_gap: float | None,
+    require_score: bool,
+    min_branch_score: float | None,
+    allow_filtered_fallback: bool,
+) -> list[dict[str, Any]]:
+    """RouteOpt/BKF-style staged testing shortlist.
+
+    This is a runbook sampling controller, not a solver decision rule.  It
+    keeps the cheap BKF score from ``_routeopt_bkf_test_score`` but adds a
+    dynamic testing budget and fail-closed width/balance guards so expensive
+    paired probes focus on plausible branch pairs.
+    """
+
+    scored: list[tuple[dict[str, Any], float, str]] = []
+    filtered: list[tuple[dict[str, Any], float, str, str]] = []
+    for item in alternatives:
+        score, reason = _routeopt_bkf_test_score(item)
+        filter_reasons: list[str] = []
+        branch_score = _optional_float(item.get("source_alt_branch_score"))
+        if bool(require_score) and branch_score is None:
+            filter_reasons.append("missing_branch_score")
+        if min_branch_score is not None and (
+            branch_score is None or float(branch_score) < float(min_branch_score)
+        ):
+            filter_reasons.append("branch_score_below_floor")
+        if (
+            _bool(item.get("source_alt_phase1_official_bound_effect"))
+            or _bool(item.get("source_alt_phase1_certificate_effect"))
+            or _bool(item.get("source_alt_phase2_official_bound_effect"))
+            or _bool(item.get("source_alt_phase2_certificate_effect"))
+        ):
+            filter_reasons.append("phased_testing_bound_or_certificate_effect")
+        if (
+            max_pool_child_width is not None
+            and _float(item.get("source_alt_pool_max_child_width"), default=1.0e30)
+            > float(max_pool_child_width)
+        ):
+            filter_reasons.append("pool_max_child_width_over_cap")
+        if (
+            max_pool_total_child_width is not None
+            and _float(item.get("source_alt_pool_total_child_width"), default=1.0e30)
+            > float(max_pool_total_child_width)
+        ):
+            filter_reasons.append("pool_total_child_width_over_cap")
+        if (
+            max_pool_balance_gap is not None
+            and _float(item.get("source_alt_pool_balance_gap"), default=1.0e30)
+            > float(max_pool_balance_gap)
+        ):
+            filter_reasons.append("pool_balance_gap_over_cap")
+        if filter_reasons:
+            filtered.append((item, score, reason, ",".join(filter_reasons)))
+            continue
+        scored.append((item, score, reason))
+
+    if not scored:
+        if not bool(allow_filtered_fallback):
+            return []
+        fallback = sorted(
+            filtered,
+            key=lambda candidate: (
+                -candidate[1],
+                int(candidate[0].get("source_alt_rank") or 0),
+            ),
+        )[: max(0, int(min_alternatives))]
+        out: list[dict[str, Any]] = []
+        for item, score, reason, filter_reason in fallback:
+            enriched = _with_selection_reason(item, "routeopt_bkf_staged_fallback_filtered")
+            enriched["source_alt_routeopt_bkf_score"] = round(float(score), 9)
+            enriched["source_alt_routeopt_bkf_reason"] = reason
+            enriched["source_alt_routeopt_bkf_stage"] = "fallback_filtered"
+            enriched["source_alt_routeopt_bkf_filter_reason"] = filter_reason
+            out.append(enriched)
+        return out
+
+    scored.sort(key=lambda candidate: (-candidate[1], int(candidate[0].get("source_alt_rank") or 0)))
+    dynamic_k = max(
+        int(min_alternatives),
+        min(int(max_alternatives), max(1, int((len(scored) + 1).bit_length() - 1))),
+    )
+    best_score = float(scored[0][1])
+    selected: list[tuple[dict[str, Any], float, str]] = []
+    for item, score, reason in scored:
+        if len(selected) < dynamic_k or (
+            len(selected) < int(max_alternatives)
+            and best_score - float(score) <= float(score_gap)
+        ):
+            selected.append((item, score, reason))
+        if len(selected) >= int(max_alternatives):
+            break
+
+    out = []
+    for index, (item, score, reason) in enumerate(selected, start=1):
+        enriched = _with_selection_reason(item, "routeopt_bkf_staged")
+        enriched["source_alt_routeopt_bkf_score"] = round(float(score), 9)
+        enriched["source_alt_routeopt_bkf_reason"] = reason
+        enriched["source_alt_routeopt_bkf_stage"] = "accepted"
+        enriched["source_alt_routeopt_bkf_dynamic_k"] = int(dynamic_k)
+        enriched["source_alt_routeopt_bkf_stage_rank"] = int(index)
+        enriched["source_alt_routeopt_bkf_filtered_count"] = int(len(filtered))
+        out.append(enriched)
+    return out
+
+
+def _select_external_branch_score_alternatives(
+    alternatives: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for item in sorted(
+        alternatives,
+        key=lambda candidate: (
+            0 if _optional_float(candidate.get("source_alt_branch_score")) is not None else 1,
+            -_float(candidate.get("source_alt_branch_score"), default=-1.0e30),
+            int(candidate.get("source_alt_rank") or 0),
+        ),
+    ):
+        enriched = _with_selection_reason(item, "external_branch_score_priority")
+        if _optional_float(item.get("source_alt_branch_score")) is not None:
+            enriched["source_alt_external_branch_score_rank"] = len(selected) + 1
+        selected.append(enriched)
+    return selected
+
+
 def _select_positive_neighbor_alternatives(alternatives: list[dict[str, Any]]) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     used: set[tuple[int, int]] = set()
@@ -693,6 +1185,19 @@ def _alternative_candidates(
     *,
     candidate_source: str,
     candidate_selection: str = "legacy",
+    score_by_context: dict[tuple[str, int, int, int, int], dict[str, Any]] | None = None,
+    instance: str | None = None,
+    node_id: int | None = None,
+    depth: int | None = None,
+    staged_bkf_min_alternatives: int = 1,
+    staged_bkf_max_alternatives: int = 3,
+    staged_bkf_score_gap: float = 0.75,
+    staged_bkf_max_pool_child_width: float | None = None,
+    staged_bkf_max_pool_total_child_width: float | None = None,
+    staged_bkf_max_pool_balance_gap: float | None = None,
+    staged_bkf_require_score: bool = False,
+    staged_bkf_min_branch_score: float | None = None,
+    staged_bkf_allow_filtered_fallback: bool = True,
 ) -> list[dict[str, Any]]:
     selected_pair = _candidate_pair(record.get("selected"))
     selected_payload = record.get("selected") if isinstance(record.get("selected"), dict) else {}
@@ -748,12 +1253,47 @@ def _alternative_candidates(
                 "source_alt_pool_balance_gap": candidate.get("pool_balance_gap"),
                 "source_alt_branch_score": candidate.get("branch_score"),
                 "source_alt_branch_score_source": candidate.get("branch_score_source"),
+                **{
+                    f"source_alt_{field}": candidate.get(field)
+                    for field in _PHASED_CANDIDATE_FIELDS
+                    if field in candidate
+                },
             }
+        )
+    if (
+        score_by_context
+        and instance is not None
+        and node_id is not None
+        and depth is not None
+    ):
+        alternatives = _apply_external_branch_scores(
+            alternatives,
+            score_by_context=score_by_context,
+            instance=str(instance),
+            node_id=int(node_id),
+            depth=int(depth),
         )
     if candidate_selection == "positive_neighbor":
         return _select_positive_neighbor_alternatives(alternatives)
     if candidate_selection == "layered":
         return _select_layered_alternatives(alternatives)
+    if candidate_selection == "routeopt_bkf":
+        return _select_routeopt_bkf_alternatives(alternatives)
+    if candidate_selection == "routeopt_bkf_staged":
+        return _select_routeopt_bkf_staged_alternatives(
+            alternatives,
+            min_alternatives=max(0, int(staged_bkf_min_alternatives)),
+            max_alternatives=max(1, int(staged_bkf_max_alternatives)),
+            score_gap=float(staged_bkf_score_gap),
+            max_pool_child_width=staged_bkf_max_pool_child_width,
+            max_pool_total_child_width=staged_bkf_max_pool_total_child_width,
+            max_pool_balance_gap=staged_bkf_max_pool_balance_gap,
+            require_score=bool(staged_bkf_require_score),
+            min_branch_score=staged_bkf_min_branch_score,
+            allow_filtered_fallback=bool(staged_bkf_allow_filtered_fallback),
+        )
+    if candidate_selection == "external_branch_score":
+        return _select_external_branch_score_alternatives(alternatives)
     alternatives.sort(key=_legacy_alternative_sort_key)
     return [_with_selection_reason(item, "legacy_width_order") for item in alternatives]
 
@@ -834,15 +1374,34 @@ def build_runbook(
     exclude_runbooks: list[Path] | None = None,
     focus_delta_inputs: list[Path] | None = None,
     coverage_inputs: list[Path] | None = None,
+    branch_score_inputs: list[Path] | None = None,
     coverage_gap_only: bool = False,
     probe_mode: str = "full_replay",
     probe_max_nodes: int | None = None,
     probe_extra_nodes_after_branch: int = 2,
     probe_max_cg_iterations: int | None = None,
+    max_events_per_instance: int | None = None,
+    paired_probe: bool = False,
+    staged_bkf_min_alternatives: int = 1,
+    staged_bkf_max_alternatives: int = 3,
+    staged_bkf_score_gap: float = 0.75,
+    staged_bkf_max_pool_child_width: float | None = None,
+    staged_bkf_max_pool_total_child_width: float | None = None,
+    staged_bkf_max_pool_balance_gap: float | None = None,
+    staged_bkf_require_score: bool = False,
+    staged_bkf_min_branch_score: float | None = None,
+    staged_bkf_allow_filtered_fallback: bool = True,
 ) -> dict[str, Any]:
     if probe_mode not in {"full_replay", "child_probe"}:
         raise ValueError(f"unsupported probe_mode: {probe_mode}")
-    if candidate_selection not in {"legacy", "layered", "positive_neighbor"}:
+    if candidate_selection not in {
+        "legacy",
+        "layered",
+        "positive_neighbor",
+        "routeopt_bkf",
+        "routeopt_bkf_staged",
+        "external_branch_score",
+    }:
         raise ValueError(f"unsupported candidate_selection: {candidate_selection}")
     if (
         min_source_depth is not None
@@ -868,9 +1427,18 @@ def build_runbook(
     coverage_gap_skip_count = 0
     depth_filter_skip_count = 0
     source_event_time_filter_skip_count = 0
+    instance_event_limit_skip_count = 0
+    external_branch_score_event_count = 0
+    phased_testing_context_count = 0
+    phased_testing_exact_effect_skip_count = 0
+    paired_group_count = 0
+    paired_baseline_entry_count = 0
+    paired_alternative_entry_count = 0
+    paired_selected_missing_skip_count = 0
     event_count = 0
     event_with_entry_count = 0
     skipped_missing_instance = 0
+    accepted_event_count_by_instance: dict[str, int] = {}
     impact_priority = _impact_priority_by_context(
         branch_impact_inputs or [],
         instance_root=instance_root,
@@ -879,6 +1447,7 @@ def build_runbook(
         coverage_inputs or [],
         instance_root=instance_root,
     )
+    external_branch_scores = _branch_score_by_context(branch_score_inputs or [])
     candidate_events: list[dict[str, Any]] = []
     for log_path in _iter_jsonl_paths(log_paths):
         events = list(_iter_jsonl(log_path))
@@ -914,9 +1483,26 @@ def build_runbook(
             impact_key = (instance, node_id, depth, _pair_text(selected_pair) or "")
             impact = impact_priority.get(impact_key, {})
             coverage = coverage_priority.get(impact_key, {})
+            phased_context = _phased_node_context_from_sources(record, impact)
+            if _phased_node_has_exact_effect(phased_context):
+                phased_testing_exact_effect_skip_count += 1
+                continue
+            phased_score, phased_reason = _phased_node_priority(phased_context)
+            if _bool(phased_context.get("phased_testing_controller_active")):
+                phased_testing_context_count += 1
             if coverage_gap_only and not bool(coverage.get("coverage_gap_is_gap")):
                 coverage_gap_skip_count += 1
                 continue
+            external_event_priority = _external_branch_score_event_priority(
+                record,
+                candidate_source=candidate_source,
+                score_by_context=external_branch_scores,
+                instance=instance,
+                node_id=node_id,
+                depth=depth,
+            )
+            if external_event_priority:
+                external_branch_score_event_count += 1
             candidate_events.append(
                 {
                     "log_path": log_path,
@@ -927,14 +1513,20 @@ def build_runbook(
                     "input_order": len(candidate_events),
                     "branch_impact_priority": float(impact.get("branch_impact_priority", 0.0)),
                     "branch_impact_context": impact,
+                    "phased_testing_priority": float(phased_score),
+                    "phased_testing_priority_reason": phased_reason,
+                    "phased_testing_context": phased_context,
                     "coverage_gap_priority": float(coverage.get("coverage_gap_priority", 0.0)),
                     "coverage_context": coverage,
+                    **external_event_priority,
                 }
             )
     candidate_events.sort(
         key=lambda item: (
             -float(item["coverage_gap_priority"]),
+            -float(item["phased_testing_priority"]),
             -float(item["branch_impact_priority"]),
+            -float(item.get("external_branch_score_event_priority") or 0.0),
             int(item["input_order"]),
         )
     )
@@ -949,12 +1541,50 @@ def build_runbook(
             depth = _int(record.get("depth"), -1)
             if node_id < 0 or depth < 0:
                 continue
+            if (
+                max_events_per_instance is not None
+                and int(max_events_per_instance) >= 0
+                and accepted_event_count_by_instance.get(instance, 0) >= int(max_events_per_instance)
+            ):
+                instance_event_limit_skip_count += 1
+                continue
             selected_pair = _candidate_pair(record.get("selected"))
             path_edges = _node_parent_path(events, node_id)
             impact_context = item.get("branch_impact_context")
             impact_context = impact_context if isinstance(impact_context, dict) else {}
+            phased_context = item.get("phased_testing_context")
+            phased_context = phased_context if isinstance(phased_context, dict) else {}
             coverage_context = item.get("coverage_context")
             coverage_context = coverage_context if isinstance(coverage_context, dict) else {}
+            phased_entry_context = {
+                "phased_testing_priority": item.get("phased_testing_priority"),
+                "phased_testing_priority_reason": item.get("phased_testing_priority_reason"),
+                "phased_testing_context": phased_context,
+                "phased_testing_controller_active": phased_context.get(
+                    "phased_testing_controller_active"
+                ),
+                "phased_testing_phase1_best_min_child_lp_gain": phased_context.get(
+                    "phased_testing_phase1_best_min_child_lp_gain"
+                ),
+                "phased_testing_phase1_best_child_lp_gain_product": phased_context.get(
+                    "phased_testing_phase1_best_child_lp_gain_product"
+                ),
+                "phased_testing_phase2_negative_child_count_total": phased_context.get(
+                    "phased_testing_phase2_negative_child_count_total"
+                ),
+                "phased_testing_phase2_negative_journey_count_total": phased_context.get(
+                    "phased_testing_phase2_negative_journey_count_total"
+                ),
+                "phased_testing_phase2_worst_negative_severity_max": phased_context.get(
+                    "phased_testing_phase2_worst_negative_severity_max"
+                ),
+                "phased_testing_official_bound_effect_any": phased_context.get(
+                    "phased_testing_official_bound_effect_any"
+                ),
+                "phased_testing_certificate_effect_any": phased_context.get(
+                    "phased_testing_certificate_effect_any"
+                ),
+            }
             event_added_entry = False
             accepted_for_event = 0
             focus_key = (instance, node_id, depth, _pair_text(selected_pair) or "")
@@ -962,6 +1592,19 @@ def build_runbook(
                 record,
                 candidate_source=candidate_source,
                 candidate_selection=candidate_selection,
+                score_by_context=external_branch_scores,
+                instance=instance,
+                node_id=node_id,
+                depth=depth,
+                staged_bkf_min_alternatives=staged_bkf_min_alternatives,
+                staged_bkf_max_alternatives=staged_bkf_max_alternatives,
+                staged_bkf_score_gap=staged_bkf_score_gap,
+                staged_bkf_max_pool_child_width=staged_bkf_max_pool_child_width,
+                staged_bkf_max_pool_total_child_width=staged_bkf_max_pool_total_child_width,
+                staged_bkf_max_pool_balance_gap=staged_bkf_max_pool_balance_gap,
+                staged_bkf_require_score=staged_bkf_require_score,
+                staged_bkf_min_branch_score=staged_bkf_min_branch_score,
+                staged_bkf_allow_filtered_fallback=staged_bkf_allow_filtered_fallback,
             )
             alternatives, focus_available, focus_missing = (
                 _prioritize_focus_strong_positive_alternatives(
@@ -971,6 +1614,206 @@ def build_runbook(
             )
             focus_strong_positive_pair_available_count += focus_available
             focus_strong_positive_pair_missing_count += focus_missing
+            if bool(paired_probe):
+                if selected_pair is None:
+                    paired_selected_missing_skip_count += 1
+                    continue
+                if len(entries) + 2 > int(limit):
+                    continue
+                selected_key = (
+                    instance,
+                    node_id,
+                    depth,
+                    int(selected_pair[0]),
+                    int(selected_pair[1]),
+                )
+                if selected_key in excluded_entry_keys:
+                    excluded_entry_skip_count += 1
+                    continue
+                if selected_key in seen:
+                    continue
+                viable_alternatives: list[dict[str, Any]] = []
+                for alt in alternatives:
+                    if len(viable_alternatives) >= max(0, int(alt_pairs_per_event)):
+                        break
+                    alt_pair = (int(alt["task_i"]), int(alt["task_j"]))
+                    key = (instance, node_id, depth, alt_pair[0], alt_pair[1])
+                    if key in excluded_entry_keys or key in seen:
+                        continue
+                    viable_alternatives.append(alt)
+                if not viable_alternatives:
+                    continue
+                alternatives = viable_alternatives
+            pair_group_id = (
+                f"{_safe_slug(Path(instance).stem)}__d{int(depth)}__n{int(node_id)}__"
+                f"sel_{_pair_text(selected_pair) or 'none'}"
+            )
+            if bool(paired_probe):
+                if selected_pair is None:
+                    paired_selected_missing_skip_count += 1
+                elif len(entries) < int(limit):
+                    baseline_alt = {
+                        "task_i": int(selected_pair[0]),
+                        "task_j": int(selected_pair[1]),
+                        "source_alt_rank": -1,
+                        "source_alt_fractionality": (
+                            record.get("selected", {}).get("fractionality")
+                            if isinstance(record.get("selected"), dict)
+                            else None
+                        ),
+                        "source_selected_fractionality": (
+                            record.get("selected", {}).get("fractionality")
+                            if isinstance(record.get("selected"), dict)
+                            else None
+                        ),
+                        "source_max_logged_fractionality": None,
+                        "source_alt_fractionality_gap_to_selected": 0.0,
+                        "source_alt_required_tie_tolerance": 0.0,
+                        "source_alt_same_mass": None,
+                        "source_alt_support_count": None,
+                        "source_alt_incumbent_relation": None,
+                        "source_alt_incumbent_disagreement": None,
+                        "source_alt_pool_same_allowed": None,
+                        "source_alt_pool_separate_allowed": None,
+                        "source_alt_pool_max_child_width": None,
+                        "source_alt_pool_total_child_width": None,
+                        "source_alt_pool_balance_gap": None,
+                        "source_alt_branch_score": None,
+                        "source_alt_branch_score_source": None,
+                        "source_alt_selection_reason": "selected_baseline",
+                    }
+                    selected_key = (
+                        instance,
+                        node_id,
+                        depth,
+                        int(selected_pair[0]),
+                        int(selected_pair[1]),
+                    )
+                    if selected_key not in seen and selected_key not in excluded_entry_keys:
+                        seen.add(selected_key)
+                        force_rule = _force_pair_path_rule(path_edges, depth, selected_pair)
+                        experiment = (
+                            f"{len(entries) + 1:03d}_candidate_selected_d{depth}_n{node_id}_"
+                            f"{selected_pair[0]}_{selected_pair[1]}_"
+                            f"{_safe_slug(Path(instance).stem)}"
+                        )
+                        result_dir = run_root / experiment
+                        effective_probe_max_nodes = None
+                        effective_probe_max_cg_iterations = None
+                        if probe_mode == "child_probe":
+                            if probe_max_nodes is None:
+                                effective_probe_max_nodes = max(
+                                    1,
+                                    int(depth) + 1 + max(0, int(probe_extra_nodes_after_branch)),
+                                )
+                            else:
+                                effective_probe_max_nodes = max(1, int(probe_max_nodes))
+                            effective_probe_max_cg_iterations = (
+                                None
+                                if probe_max_cg_iterations is None
+                                else max(1, int(probe_max_cg_iterations))
+                            )
+                        command = _command(
+                            config=config,
+                            instance=instance,
+                            time_limit=time_limit,
+                            result_dir=result_dir,
+                            force_rule=force_rule,
+                            candidate_log_top_n=candidate_log_top_n,
+                            probe_mode=probe_mode,
+                            probe_max_nodes=effective_probe_max_nodes,
+                            probe_max_cg_iterations=effective_probe_max_cg_iterations,
+                        )
+                        entries.append(
+                            {
+                                "experiment": experiment,
+                                "instance": instance,
+                                "source_type": "branch_candidate_log_selected_pair",
+                                "pair_group_id": pair_group_id,
+                                "pair_role": "selected_baseline",
+                                "source_log_file": str(log_path),
+                                "source_node_id": node_id,
+                                "source_depth": depth,
+                                "source_priority_mode": record.get("priority_mode"),
+                                "source_event_time": item.get("source_event_time"),
+                                "source_candidate_count": record.get("candidate_count"),
+                                "source_eligible_count": record.get("eligible_count"),
+                                "source_logged_priority_count": len(record.get("priority_top") or []),
+                                "source_logged_top_count": len(record.get("top") or []),
+                                "source_selected_pair": list(selected_pair),
+                                "source_selected": record.get("selected"),
+                                "source_path_edges": path_edges,
+                                "branch_impact_priority": item.get("branch_impact_priority"),
+                                "branch_impact_priority_reason": impact_context.get(
+                                    "branch_impact_priority_reason"
+                                ),
+                                "branch_impact_tail_class": impact_context.get("branch_impact_tail_class"),
+                                "branch_impact_labels": impact_context.get("branch_impact_labels"),
+                                "branch_impact_right_censored": impact_context.get(
+                                    "branch_impact_right_censored"
+                                ),
+                                "branch_impact_usable_for_training": impact_context.get(
+                                    "branch_impact_usable_for_training"
+                                ),
+                                **phased_entry_context,
+                                "external_branch_score_event_priority": item.get(
+                                    "external_branch_score_event_priority"
+                                ),
+                                "external_branch_score_event_pair": item.get(
+                                    "external_branch_score_event_pair"
+                                ),
+                                "external_branch_score_event_score_mode": item.get(
+                                    "external_branch_score_event_score_mode"
+                                ),
+                                "external_branch_score_event_predicted_walltime_gain": item.get(
+                                    "external_branch_score_event_predicted_walltime_gain"
+                                ),
+                                "coverage_gap_priority": item.get("coverage_gap_priority"),
+                                "coverage_gap_priority_reason": coverage_context.get(
+                                    "coverage_gap_priority_reason"
+                                ),
+                                "coverage_gap_is_gap": coverage_context.get("coverage_gap_is_gap"),
+                                "coverage_scored_candidate_count": coverage_context.get(
+                                    "coverage_scored_candidate_count"
+                                ),
+                                "coverage_eligible_scored_candidate_count": coverage_context.get(
+                                    "coverage_eligible_scored_candidate_count"
+                                ),
+                                "coverage_would_change_selected": coverage_context.get(
+                                    "coverage_would_change_selected"
+                                ),
+                                "coverage_would_change_selected_any_logged": coverage_context.get(
+                                    "coverage_would_change_selected_any_logged"
+                                ),
+                                "coverage_best_scored_pair": coverage_context.get(
+                                    "coverage_best_scored_pair"
+                                ),
+                                "coverage_best_scored_required_tie_tolerance": coverage_context.get(
+                                    "coverage_best_scored_required_tie_tolerance"
+                                ),
+                                "forced_pair": [int(selected_pair[0]), int(selected_pair[1])],
+                                "forced_pair_path_rule": force_rule,
+                                "probe_mode": probe_mode,
+                                "probe_max_nodes": effective_probe_max_nodes,
+                                "probe_max_cg_iterations": effective_probe_max_cg_iterations,
+                                "command": command,
+                                "shell_command": shlex.join(command),
+                                "expected_label_source": "paired_fixed_budget_child_probe_then_compare_group_rows"
+                                if probe_mode == "child_probe"
+                                else "paired_full_replay_then_compare_counterfactual_delta",
+                                **baseline_alt,
+                            }
+                        )
+                        paired_baseline_entry_count += 1
+                        paired_group_count += 1
+                        if not event_added_entry:
+                            event_with_entry_count += 1
+                            accepted_event_count_by_instance[instance] = (
+                                accepted_event_count_by_instance.get(instance, 0) + 1
+                            )
+                            event_added_entry = True
+                    elif selected_key in excluded_entry_keys:
+                        excluded_entry_skip_count += 1
             for alt in alternatives:
                 if accepted_for_event >= max(0, int(alt_pairs_per_event)):
                     break
@@ -1022,6 +1865,8 @@ def build_runbook(
                         "experiment": experiment,
                         "instance": instance,
                         "source_type": "branch_candidate_log_alt_pair",
+                        "pair_group_id": pair_group_id if bool(paired_probe) else None,
+                        "pair_role": "alternative" if bool(paired_probe) else None,
                         "source_log_file": str(log_path),
                         "source_node_id": node_id,
                         "source_depth": depth,
@@ -1041,6 +1886,19 @@ def build_runbook(
                         "branch_impact_right_censored": impact_context.get("branch_impact_right_censored"),
                         "branch_impact_usable_for_training": impact_context.get(
                             "branch_impact_usable_for_training"
+                        ),
+                        **phased_entry_context,
+                        "external_branch_score_event_priority": item.get(
+                            "external_branch_score_event_priority"
+                        ),
+                        "external_branch_score_event_pair": item.get(
+                            "external_branch_score_event_pair"
+                        ),
+                        "external_branch_score_event_score_mode": item.get(
+                            "external_branch_score_event_score_mode"
+                        ),
+                        "external_branch_score_event_predicted_walltime_gain": item.get(
+                            "external_branch_score_event_predicted_walltime_gain"
                         ),
                         "coverage_gap_priority": item.get("coverage_gap_priority"),
                         "coverage_gap_priority_reason": coverage_context.get(
@@ -1076,9 +1934,14 @@ def build_runbook(
                         **alt,
                     }
                 )
+                if bool(paired_probe):
+                    paired_alternative_entry_count += 1
                 accepted_for_event += 1
                 if not event_added_entry:
                     event_with_entry_count += 1
+                    accepted_event_count_by_instance[instance] = (
+                        accepted_event_count_by_instance.get(instance, 0) + 1
+                    )
                     event_added_entry = True
     runbook = {
         "schema_version": "journey_branch_candidate_replay_runbook_v1",
@@ -1106,6 +1969,9 @@ def build_runbook(
         "exclude_runbook_paths": [str(path) for path in (exclude_runbooks or [])],
         "focus_delta_input_paths": [str(path) for path in (focus_delta_inputs or [])],
         "coverage_input_paths": [str(path) for path in (coverage_inputs or [])],
+        "branch_score_input_paths": [str(path) for path in (branch_score_inputs or [])],
+        "external_branch_score_context_count": len(external_branch_scores),
+        "external_branch_score_event_count": int(external_branch_score_event_count),
         "coverage_gap_only": bool(coverage_gap_only),
         "probe_mode": probe_mode,
         "probe_max_nodes": None if probe_max_nodes is None else int(probe_max_nodes),
@@ -1113,6 +1979,33 @@ def build_runbook(
         "probe_max_cg_iterations": None
         if probe_max_cg_iterations is None
         else int(probe_max_cg_iterations),
+        "max_events_per_instance": None
+        if max_events_per_instance is None
+        else int(max_events_per_instance),
+        "paired_probe": bool(paired_probe),
+        "staged_bkf_min_alternatives": int(staged_bkf_min_alternatives),
+        "staged_bkf_max_alternatives": int(staged_bkf_max_alternatives),
+        "staged_bkf_score_gap": float(staged_bkf_score_gap),
+        "staged_bkf_max_pool_child_width": None
+        if staged_bkf_max_pool_child_width is None
+        else float(staged_bkf_max_pool_child_width),
+        "staged_bkf_max_pool_total_child_width": None
+        if staged_bkf_max_pool_total_child_width is None
+        else float(staged_bkf_max_pool_total_child_width),
+        "staged_bkf_max_pool_balance_gap": None
+        if staged_bkf_max_pool_balance_gap is None
+        else float(staged_bkf_max_pool_balance_gap),
+        "staged_bkf_require_score": bool(staged_bkf_require_score),
+        "staged_bkf_min_branch_score": None
+        if staged_bkf_min_branch_score is None
+        else float(staged_bkf_min_branch_score),
+        "staged_bkf_allow_filtered_fallback": bool(staged_bkf_allow_filtered_fallback),
+        "paired_group_count": int(paired_group_count),
+        "paired_baseline_entry_count": int(paired_baseline_entry_count),
+        "paired_alternative_entry_count": int(paired_alternative_entry_count),
+        "paired_selected_missing_skip_count": int(paired_selected_missing_skip_count),
+        "instance_event_limit_skip_count": int(instance_event_limit_skip_count),
+        "accepted_event_count_by_instance": dict(sorted(accepted_event_count_by_instance.items())),
         "excluded_entry_key_count": len(excluded_entry_keys),
         "excluded_entry_skip_count": int(excluded_entry_skip_count),
         "focus_context_count": len(focus_context_keys),
@@ -1130,6 +2023,8 @@ def build_runbook(
         "depth_filter_skip_count": int(depth_filter_skip_count),
         "source_event_time_filter_skip_count": int(source_event_time_filter_skip_count),
         "branch_impact_priority_context_count": len(impact_priority),
+        "phased_testing_priority_context_count": int(phased_testing_context_count),
+        "phased_testing_exact_effect_skip_count": int(phased_testing_exact_effect_skip_count),
         "candidate_event_count_seen": int(event_count),
         "candidate_event_count_with_replay_entries": int(event_with_entry_count),
         "skipped_missing_instance_event_count": int(skipped_missing_instance),
@@ -1187,6 +2082,15 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"alt_pairs_per_event = {runbook.get('alt_pairs_per_event')}",
         f"candidate_source = {runbook.get('candidate_source')}",
         f"candidate_selection = {runbook.get('candidate_selection')}",
+        f"staged_bkf_min_alternatives = {runbook.get('staged_bkf_min_alternatives')}",
+        f"staged_bkf_max_alternatives = {runbook.get('staged_bkf_max_alternatives')}",
+        f"staged_bkf_score_gap = {runbook.get('staged_bkf_score_gap')}",
+        f"staged_bkf_max_pool_child_width = {runbook.get('staged_bkf_max_pool_child_width')}",
+        f"staged_bkf_max_pool_total_child_width = {runbook.get('staged_bkf_max_pool_total_child_width')}",
+        f"staged_bkf_max_pool_balance_gap = {runbook.get('staged_bkf_max_pool_balance_gap')}",
+        f"staged_bkf_require_score = {runbook.get('staged_bkf_require_score')}",
+        f"staged_bkf_min_branch_score = {runbook.get('staged_bkf_min_branch_score')}",
+        f"staged_bkf_allow_filtered_fallback = {runbook.get('staged_bkf_allow_filtered_fallback')}",
         f"candidate_log_top_n = {runbook.get('candidate_log_top_n')}",
         f"min_source_depth = {runbook.get('min_source_depth')}",
         f"max_source_depth = {runbook.get('max_source_depth')}",
@@ -1195,11 +2099,22 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"exclude_runbook_paths = {runbook.get('exclude_runbook_paths')}",
         f"focus_delta_input_paths = {runbook.get('focus_delta_input_paths')}",
         f"coverage_input_paths = {runbook.get('coverage_input_paths')}",
+        f"branch_score_input_paths = {runbook.get('branch_score_input_paths')}",
+        f"external_branch_score_context_count = {runbook.get('external_branch_score_context_count')}",
+        f"external_branch_score_event_count = {runbook.get('external_branch_score_event_count')}",
         f"coverage_gap_only = {runbook.get('coverage_gap_only')}",
         f"probe_mode = {runbook.get('probe_mode')}",
         f"probe_max_nodes = {runbook.get('probe_max_nodes')}",
         f"probe_extra_nodes_after_branch = {runbook.get('probe_extra_nodes_after_branch')}",
         f"probe_max_cg_iterations = {runbook.get('probe_max_cg_iterations')}",
+        f"max_events_per_instance = {runbook.get('max_events_per_instance')}",
+        f"paired_probe = {runbook.get('paired_probe')}",
+        f"paired_group_count = {runbook.get('paired_group_count')}",
+        f"paired_baseline_entry_count = {runbook.get('paired_baseline_entry_count')}",
+        f"paired_alternative_entry_count = {runbook.get('paired_alternative_entry_count')}",
+        f"paired_selected_missing_skip_count = {runbook.get('paired_selected_missing_skip_count')}",
+        f"instance_event_limit_skip_count = {runbook.get('instance_event_limit_skip_count')}",
+        f"accepted_event_count_by_instance = {runbook.get('accepted_event_count_by_instance')}",
         f"excluded_entry_key_count = {runbook.get('excluded_entry_key_count')}",
         f"excluded_entry_skip_count = {runbook.get('excluded_entry_skip_count')}",
         f"focus_context_count = {runbook.get('focus_context_count')}",
@@ -1215,6 +2130,8 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
         f"depth_filter_skip_count = {runbook.get('depth_filter_skip_count')}",
         f"source_event_time_filter_skip_count = {runbook.get('source_event_time_filter_skip_count')}",
         f"branch_impact_priority_context_count = {runbook.get('branch_impact_priority_context_count')}",
+        f"phased_testing_priority_context_count = {runbook.get('phased_testing_priority_context_count')}",
+        f"phased_testing_exact_effect_skip_count = {runbook.get('phased_testing_exact_effect_skip_count')}",
         "production_ready = false",
         "stage4_candidate_ready = false",
         "certificate_effect = false",
@@ -1234,6 +2151,8 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"source_node_id = {entry.get('source_node_id')}",
                 f"source_depth = {entry.get('source_depth')}",
                 f"source_event_time = {entry.get('source_event_time')}",
+                f"pair_group_id = {entry.get('pair_group_id')}",
+                f"pair_role = {entry.get('pair_role')}",
                 f"source_selected_pair = {entry.get('source_selected_pair')}",
                 f"forced_pair = {entry.get('forced_pair')}",
                 f"forced_pair_path_rule = {entry.get('forced_pair_path_rule')}",
@@ -1244,11 +2163,22 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"source_alt_selection_reason = {entry.get('source_alt_selection_reason')}",
                 f"source_alt_focus_strong_positive = {entry.get('source_alt_focus_strong_positive')}",
                 f"source_alt_positive_neighbor_score = {entry.get('source_alt_positive_neighbor_score')}",
+                f"source_alt_routeopt_bkf_score = {entry.get('source_alt_routeopt_bkf_score')}",
+                f"source_alt_routeopt_bkf_reason = {entry.get('source_alt_routeopt_bkf_reason')}",
+                f"source_alt_routeopt_bkf_stage = {entry.get('source_alt_routeopt_bkf_stage')}",
+                f"source_alt_routeopt_bkf_dynamic_k = {entry.get('source_alt_routeopt_bkf_dynamic_k')}",
+                f"source_alt_routeopt_bkf_stage_rank = {entry.get('source_alt_routeopt_bkf_stage_rank')}",
+                f"source_alt_routeopt_bkf_filtered_count = {entry.get('source_alt_routeopt_bkf_filtered_count')}",
+                f"source_alt_external_branch_score_rank = {entry.get('source_alt_external_branch_score_rank')}",
+                f"external_branch_score_event_priority = {entry.get('external_branch_score_event_priority')}",
+                f"external_branch_score_event_pair = {entry.get('external_branch_score_event_pair')}",
+                f"external_branch_score_event_predicted_walltime_gain = {entry.get('external_branch_score_event_predicted_walltime_gain')}",
                 f"source_selected_fractionality = {entry.get('source_selected_fractionality')}",
                 f"source_alt_fractionality = {entry.get('source_alt_fractionality')}",
                 f"source_alt_required_tie_tolerance = {entry.get('source_alt_required_tie_tolerance')}",
                 f"source_alt_pool_max_child_width = {entry.get('source_alt_pool_max_child_width')}",
                 f"source_alt_pool_total_child_width = {entry.get('source_alt_pool_total_child_width')}",
+                f"source_alt_pool_balance_gap = {entry.get('source_alt_pool_balance_gap')}",
                 f"source_alt_branch_score = {entry.get('source_alt_branch_score')}",
                 f"coverage_gap_priority = {entry.get('coverage_gap_priority')}",
                 f"coverage_gap_priority_reason = {entry.get('coverage_gap_priority_reason')}",
@@ -1256,6 +2186,16 @@ def _render_report(runbook: dict[str, Any], output_dir: Path) -> str:
                 f"coverage_best_scored_required_tie_tolerance = {entry.get('coverage_best_scored_required_tie_tolerance')}",
                 f"branch_impact_priority = {entry.get('branch_impact_priority')}",
                 f"branch_impact_priority_reason = {entry.get('branch_impact_priority_reason')}",
+                f"phased_testing_priority = {entry.get('phased_testing_priority')}",
+                f"phased_testing_priority_reason = {entry.get('phased_testing_priority_reason')}",
+                "phased_testing_phase1_best_min_child_lp_gain = "
+                f"{entry.get('phased_testing_phase1_best_min_child_lp_gain')}",
+                "phased_testing_phase1_best_child_lp_gain_product = "
+                f"{entry.get('phased_testing_phase1_best_child_lp_gain_product')}",
+                "phased_testing_phase2_negative_child_count_total = "
+                f"{entry.get('phased_testing_phase2_negative_child_count_total')}",
+                "phased_testing_phase2_worst_negative_severity_max = "
+                f"{entry.get('phased_testing_phase2_worst_negative_severity_max')}",
                 "```",
                 "",
                 "```bash",
@@ -1301,12 +2241,22 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--candidate-selection",
-        choices=("legacy", "layered", "positive_neighbor"),
+        choices=(
+            "legacy",
+            "layered",
+            "positive_neighbor",
+            "routeopt_bkf",
+            "routeopt_bkf_staged",
+            "external_branch_score",
+        ),
         default="legacy",
         help=(
             "legacy preserves historical width-ordered alternatives; layered "
             "samples fractionality, near-tie, width, balance, score, and rank-diverse strata; "
-            "positive_neighbor preselects V323-like candidates before layered fill."
+            "positive_neighbor preselects V323-like candidates before layered fill; "
+            "routeopt_bkf uses a RouteOpt-inspired branch-testing priority score; "
+            "routeopt_bkf_staged adds dynamic-K and width/balance proof-risk caps; "
+            "external_branch_score selects directly by external score rows for pure model-signal replay."
         ),
     )
     parser.add_argument("--candidate-log-top-n", type=int, default=200)
@@ -1322,6 +2272,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--exclude-runbook", nargs="*", type=Path, default=[])
     parser.add_argument("--focus-delta-input", nargs="*", type=Path, default=[])
     parser.add_argument("--coverage-input", nargs="*", type=Path, default=[])
+    parser.add_argument(
+        "--branch-score-input",
+        nargs="*",
+        type=Path,
+        default=[],
+        help=(
+            "Optional journey_branch_score_rows source(s) used to overwrite "
+            "candidate branch_score before candidate-selection strata are applied."
+        ),
+    )
     parser.add_argument(
         "--coverage-gap-only",
         action="store_true",
@@ -1351,6 +2311,48 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Optional max_cg_iterations/journey_max_cg_iterations override for child_probe entries.",
     )
+    parser.add_argument(
+        "--max-events-per-instance",
+        type=int,
+        default=None,
+        help="Optional cap on source branch-candidate events accepted per instance before alt-pair expansion.",
+    )
+    parser.add_argument(
+        "--paired-probe",
+        action="store_true",
+        help=(
+            "For each accepted source event, emit the selected baseline pair "
+            "plus alternative pairs with a shared pair_group_id for paired proof-cost comparison."
+        ),
+    )
+    parser.add_argument("--staged-bkf-min-alternatives", type=int, default=1)
+    parser.add_argument("--staged-bkf-max-alternatives", type=int, default=3)
+    parser.add_argument("--staged-bkf-score-gap", type=float, default=0.75)
+    parser.add_argument("--staged-bkf-max-pool-child-width", type=float, default=None)
+    parser.add_argument("--staged-bkf-max-pool-total-child-width", type=float, default=None)
+    parser.add_argument("--staged-bkf-max-pool-balance-gap", type=float, default=None)
+    parser.add_argument(
+        "--staged-bkf-require-score",
+        action="store_true",
+        help="Require an external/embedded branch score before a candidate can pass staged BKF filtering.",
+    )
+    parser.add_argument(
+        "--staged-bkf-min-branch-score",
+        type=float,
+        default=None,
+        help=(
+            "Optional minimum external/embedded branch score for staged BKF. "
+            "Candidates below this floor are filtered before expensive replay sampling."
+        ),
+    )
+    parser.add_argument(
+        "--staged-bkf-disable-filtered-fallback",
+        action="store_true",
+        help=(
+            "Fail closed when every staged BKF candidate is filtered instead of "
+            "probing the best filtered candidate."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1375,11 +2377,23 @@ def main() -> None:
         exclude_runbooks=list(args.exclude_runbook),
         focus_delta_inputs=list(args.focus_delta_input),
         coverage_inputs=list(args.coverage_input),
+        branch_score_inputs=list(args.branch_score_input),
         coverage_gap_only=bool(args.coverage_gap_only),
         probe_mode=str(args.probe_mode),
         probe_max_nodes=args.probe_max_nodes,
         probe_extra_nodes_after_branch=args.probe_extra_nodes_after_branch,
         probe_max_cg_iterations=args.probe_max_cg_iterations,
+        max_events_per_instance=args.max_events_per_instance,
+        paired_probe=bool(args.paired_probe),
+        staged_bkf_min_alternatives=int(args.staged_bkf_min_alternatives),
+        staged_bkf_max_alternatives=int(args.staged_bkf_max_alternatives),
+        staged_bkf_score_gap=float(args.staged_bkf_score_gap),
+        staged_bkf_max_pool_child_width=args.staged_bkf_max_pool_child_width,
+        staged_bkf_max_pool_total_child_width=args.staged_bkf_max_pool_total_child_width,
+        staged_bkf_max_pool_balance_gap=args.staged_bkf_max_pool_balance_gap,
+        staged_bkf_require_score=bool(args.staged_bkf_require_score),
+        staged_bkf_min_branch_score=args.staged_bkf_min_branch_score,
+        staged_bkf_allow_filtered_fallback=not bool(args.staged_bkf_disable_filtered_fallback),
     )
     print(json.dumps({key: value for key, value in runbook.items() if key != "entries"}, indent=2, sort_keys=True))
 

@@ -168,6 +168,72 @@ class SubsetRowCut:
 
 
 @dataclass(frozen=True)
+class WeightedSubsetRowCut:
+    """Rank-1-like task subset row used first as an audit contract.
+
+    This is the weighted generalization of ``SubsetRowCut``:
+
+        coeff(column) = floor(sum_i weight_i * a_i(column) / denominator)
+        rhs = floor(sum_i weight_i / denominator)
+
+    With nonnegative fractional multipliers over the task-cover equalities, the
+    row is valid for integer journey selections.  Live pricing support is kept
+    separate; the current BPC_future solver only audits these rows unless a
+    future pricing-compatible implementation explicitly enables them.
+    """
+
+    tasks: tuple[int, ...]
+    weights: tuple[int, ...]
+    denominator: int
+    kind: str = "weighted_subset_row"
+    sense: str = "<="
+
+    def __post_init__(self) -> None:
+        if len(self.tasks) != len(self.weights):
+            raise ValueError("weighted subset row tasks and weights must have the same length")
+        denominator = int(self.denominator)
+        if denominator <= 1:
+            raise ValueError("weighted subset row denominator must be greater than 1")
+        pairs = sorted((int(task), int(weight)) for task, weight in zip(self.tasks, self.weights))
+        if any(weight <= 0 for _task, weight in pairs):
+            raise ValueError("weighted subset row weights must be positive")
+        if any(weight >= denominator for _task, weight in pairs):
+            raise ValueError("weighted subset row weights must be smaller than denominator")
+        object.__setattr__(self, "tasks", tuple(task for task, _weight in pairs))
+        object.__setattr__(self, "weights", tuple(weight for _task, weight in pairs))
+        object.__setattr__(self, "denominator", denominator)
+
+    @property
+    def rhs(self) -> float:
+        return float(sum(int(weight) for weight in self.weights) // int(self.denominator))
+
+    @property
+    def key(self) -> tuple:
+        return (self.kind, int(self.denominator), self.tasks, self.weights)
+
+    def coefficient(self, trip: TimedTrip, vehicle: int) -> float:
+        task_set = set(int(task) for task in trip.task_set)
+        weighted_overlap = sum(
+            int(weight)
+            for task, weight in zip(self.tasks, self.weights)
+            if int(task) in task_set
+        )
+        return float(weighted_overlap // int(self.denominator))
+
+    def y_coefficient(self, vehicle: int) -> float:
+        return 0.0
+
+    def payload(self) -> dict:
+        return {
+            "kind": self.kind,
+            "tasks": list(self.tasks),
+            "weights": list(self.weights),
+            "denominator": int(self.denominator),
+            "rhs": self.rhs,
+        }
+
+
+@dataclass(frozen=True)
 class TimePointCapacityCut:
     vehicle: int
     time_point: float

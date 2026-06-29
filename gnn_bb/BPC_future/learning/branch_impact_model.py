@@ -45,6 +45,16 @@ BRANCH_IMPACT_HEAD_NAMES: tuple[str, ...] = (
     "predicted_child_negative_pricing_events",
     "predicted_child_completion_bound_retries",
     "predicted_child_early_branch_triggers",
+    "predicted_walltime_gain",
+    "predicted_child_proof_cpu",
+    "predicted_time_to_certificate",
+    "predicted_gap_improvement",
+    "predicted_primal_improvement",
+    "predicted_dual_bound_gain",
+    "predicted_fathom_gain",
+    "predicted_branch_count_delta",
+    "predicted_completion_bound_retry_gain",
+    "tree_policy",
 )
 
 
@@ -247,6 +257,20 @@ class GATBranchImpactModel(nn.Module):
             self.impact_hidden_dim,
             dropout=float(dropout),
         )
+        self.walltime_gain_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.child_proof_cpu_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.time_to_certificate_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.gap_improvement_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.primal_improvement_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.dual_bound_gain_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.fathom_gain_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.branch_count_delta_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
+        self.completion_bound_retry_gain_head = _mlp_head(
+            decision_dim,
+            self.impact_hidden_dim,
+            dropout=float(dropout),
+        )
+        self.tree_policy_head = _mlp_head(decision_dim, self.impact_hidden_dim, dropout=float(dropout))
 
     def forward(
         self,
@@ -283,6 +307,16 @@ class GATBranchImpactModel(nn.Module):
         predicted_child_negative_pricing_events = self.child_negative_pricing_events_head(decision_input).squeeze(-1)
         predicted_child_completion_bound_retries = self.child_completion_bound_retries_head(decision_input).squeeze(-1)
         predicted_child_early_branch_triggers = self.child_early_branch_triggers_head(decision_input).squeeze(-1)
+        predicted_walltime_gain = self.walltime_gain_head(decision_input).squeeze(-1)
+        predicted_child_proof_cpu = self.child_proof_cpu_head(decision_input).squeeze(-1)
+        predicted_time_to_certificate = self.time_to_certificate_head(decision_input).squeeze(-1)
+        predicted_gap_improvement = self.gap_improvement_head(decision_input).squeeze(-1)
+        predicted_primal_improvement = self.primal_improvement_head(decision_input).squeeze(-1)
+        predicted_dual_bound_gain = self.dual_bound_gain_head(decision_input).squeeze(-1)
+        predicted_fathom_gain = self.fathom_gain_head(decision_input).squeeze(-1)
+        predicted_branch_count_delta = self.branch_count_delta_head(decision_input).squeeze(-1)
+        predicted_completion_bound_retry_gain = self.completion_bound_retry_gain_head(decision_input).squeeze(-1)
+        tree_policy_logit = self.tree_policy_head(decision_input).squeeze(-1)
         outputs: Dict[str, Tensor] = {
             "branch_pair_embedding": branch_embedding,
             "context_embedding": context_embedding,
@@ -304,6 +338,17 @@ class GATBranchImpactModel(nn.Module):
             "predicted_child_negative_pricing_events": predicted_child_negative_pricing_events,
             "predicted_child_completion_bound_retries": predicted_child_completion_bound_retries,
             "predicted_child_early_branch_triggers": predicted_child_early_branch_triggers,
+            "predicted_walltime_gain": predicted_walltime_gain,
+            "predicted_child_proof_cpu": predicted_child_proof_cpu,
+            "predicted_time_to_certificate": predicted_time_to_certificate,
+            "predicted_gap_improvement": predicted_gap_improvement,
+            "predicted_primal_improvement": predicted_primal_improvement,
+            "predicted_dual_bound_gain": predicted_dual_bound_gain,
+            "predicted_fathom_gain": predicted_fathom_gain,
+            "predicted_branch_count_delta": predicted_branch_count_delta,
+            "predicted_completion_bound_retry_gain": predicted_completion_bound_retry_gain,
+            "tree_policy_logit": tree_policy_logit,
+            "tree_policy_probability": torch.sigmoid(tree_policy_logit),
         }
         outputs.update(branch_output)
         for name, value in outputs.items():

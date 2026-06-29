@@ -61,6 +61,16 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
                     regression=True,
                 ),
                 _delta_row(
+                    "nonoptimal_gain",
+                    instance=instance,
+                    label_type="observed_walltime_gain",
+                    baseline_status="TIME_LIMIT",
+                    alternative_status="TIME_LIMIT",
+                    baseline_wall=556.0,
+                    alternative_wall=427.0,
+                    pair=[2, 3],
+                ),
+                _delta_row(
                     "local_only",
                     instance=instance,
                     label_type="local_only_hard_negative",
@@ -70,6 +80,53 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
                     alternative_wall=220.0,
                     pair=[1, 2],
                     right_censored=True,
+                ),
+                _delta_row(
+                    "changed_timeout_no_effect",
+                    instance=instance,
+                    label_type="changed_timeout_no_effect_hard_negative",
+                    baseline_status="EXTERNAL_TIME_LIMIT",
+                    alternative_status="EXTERNAL_TIME_LIMIT",
+                    baseline_wall=600.0,
+                    alternative_wall=600.0,
+                    pair=[1, 3],
+                    no_effect_hard_negative=True,
+                ),
+                _delta_row(
+                    "paired_probe_hard_negative",
+                    instance=instance,
+                    label_type="paired_probe_hard_negative_proxy",
+                    baseline_status="BASELINE_CHILD_PROBE",
+                    alternative_status="TIME_LIMIT",
+                    baseline_wall=95.0,
+                    alternative_wall=105.0,
+                    pair=[2, 3],
+                    no_effect_hard_negative=True,
+                    right_censored=True,
+                ),
+                _delta_row(
+                    "paired_probe_positive",
+                    instance=instance,
+                    label_type="paired_probe_positive_proxy",
+                    baseline_status="BASELINE_CHILD_PROBE",
+                    alternative_status="OPTIMAL",
+                    baseline_wall=105.0,
+                    alternative_wall=104.0,
+                    pair=[1, 3],
+                    wall_improved=True,
+                    right_censored=True,
+                ),
+                _delta_row(
+                    "gap_aux",
+                    instance=instance,
+                    label_type="weak_gap_fathom_positive",
+                    baseline_status="EXTERNAL_TIME_LIMIT",
+                    alternative_status="EXTERNAL_TIME_LIMIT",
+                    baseline_wall=600.0,
+                    alternative_wall=600.0,
+                    pair=[1, 2],
+                    right_censored=True,
+                    usable_for_gap_aux_training=True,
                 ),
             ]
             _write_jsonl(delta_dir / "branch_counterfactual_delta_rows.jsonl", rows)
@@ -83,30 +140,58 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
 
             self.assertTrue(summary["diagnostic_only"])
             self.assertFalse(summary["runs_bpc_or_pricing"])
-            self.assertEqual(summary["sample_count"], 3)
+            self.assertEqual(summary["sample_count"], 8)
             self.assertEqual(
                 summary["branch_priority_label_counts"],
                 {
-                    "not_walltime_gain": 1,
-                    "walltime_gain_positive": 2,
+                    "aux_only_weak_positive": 2,
+                    "not_walltime_gain": 3,
+                    "walltime_gain_positive": 3,
                 },
             )
             self.assertEqual(
                 summary["target_wall_crossing_label_counts"],
                 {
-                    "not_target_wall_crossing": 2,
+                    "not_target_wall_crossing": 7,
                     "target_wall_crossing_positive": 1,
                 },
             )
+            self.assertEqual(summary["row_kind_counts"]["walltime_gain_positive"], 2)
             self.assertEqual(summary["row_kind_counts"]["local_only_hard_negative"], 1)
+            self.assertEqual(summary["row_kind_counts"]["paired_probe_hard_negative_proxy"], 1)
+            self.assertEqual(summary["row_kind_counts"]["paired_probe_positive_proxy"], 1)
+            self.assertEqual(summary["row_kind_counts"]["weak_gap_fathom_positive"], 1)
             self.assertIn(
                 "not_training_sample:local_only_hard_negative",
                 summary["skipped_counts"],
             )
             self.assertTrue(summary["sanity_training_dataset_ready"])
             manifest = json.loads((tmp_path / "dataset" / "manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["sample_count"], 3)
+            self.assertEqual(manifest["sample_count"], 8)
             self.assertEqual(manifest["branch_feature_schema"], list(BRANCH_IMPACT_FEATURE_SCHEMA))
+            self.assertIn("phase1_min_child_lp_gain", manifest["context_feature_schema"])
+            self.assertIn("phase1_child_lp_gain_product", manifest["context_feature_schema"])
+            self.assertIn("phase1_child_lp_gain_gap", manifest["context_feature_schema"])
+            self.assertIn("phase1_child_lp_gain_balance_ratio", manifest["context_feature_schema"])
+            self.assertIn("phase1_cut_snapshot_min_child_lp_gain", manifest["context_feature_schema"])
+            self.assertIn("phase1_cut_snapshot_child_lp_gain_product", manifest["context_feature_schema"])
+            self.assertIn("phase1_cut_snapshot_child_lp_gain_gap", manifest["context_feature_schema"])
+            self.assertIn(
+                "phase1_cut_snapshot_child_lp_gain_balance_ratio",
+                manifest["context_feature_schema"],
+            )
+            self.assertIn("phase1_cut_snapshot_wall_time", manifest["context_feature_schema"])
+            self.assertIn("phase1_diagnostic_wall_time", manifest["context_feature_schema"])
+            self.assertIn("phase2_negative_child_count", manifest["context_feature_schema"])
+            self.assertIn("phase2_negative_journey_balance_gap", manifest["context_feature_schema"])
+            self.assertIn("phase2_child_wall_time_balance_gap", manifest["context_feature_schema"])
+            self.assertIn("phase2_child_status_mismatch", manifest["context_feature_schema"])
+            self.assertIn("phase2_wall_time", manifest["context_feature_schema"])
+            self.assertIn("phased_testing_stage_code", manifest["context_feature_schema"])
+            self.assertIn("phased_testing_decision_code", manifest["context_feature_schema"])
+            self.assertIn("phased_testing_elimination_reason_code", manifest["context_feature_schema"])
+            self.assertIn("cut_context_dynamic_subset_row_regime_code", manifest["context_feature_schema"])
+            self.assertIn("cut_context_subset_row_count", manifest["context_feature_schema"])
             self.assertEqual(manifest["exactness_contract"]["certificate_source"], False)
             sample = torch.load(
                 tmp_path / "dataset" / manifest["samples"][0]["path"],
@@ -115,8 +200,83 @@ class GATBranchActionSanityDatasetTests(unittest.TestCase):
             )
             self.assertEqual(tuple(sample.branch_pair_indices.shape), (1, 2))
             self.assertEqual(tuple(sample.branch_pair_features.shape), (1, len(BRANCH_IMPACT_FEATURE_SCHEMA)))
-            self.assertEqual(tuple(sample.context_features.shape), (11,))
-            self.assertEqual(tuple(sample.branch_action_labels.shape), (1, 12))
+            self.assertEqual(tuple(sample.context_features.shape), (len(manifest["context_feature_schema"]),))
+            phase1_min_index = manifest["context_feature_schema"].index("phase1_min_child_lp_gain")
+            phase1_product_index = manifest["context_feature_schema"].index("phase1_child_lp_gain_product")
+            phase1_gap_index = manifest["context_feature_schema"].index("phase1_child_lp_gain_gap")
+            phase1_ratio_index = manifest["context_feature_schema"].index(
+                "phase1_child_lp_gain_balance_ratio"
+            )
+            phase1_cut_min_index = manifest["context_feature_schema"].index(
+                "phase1_cut_snapshot_min_child_lp_gain"
+            )
+            phase1_cut_product_index = manifest["context_feature_schema"].index(
+                "phase1_cut_snapshot_child_lp_gain_product"
+            )
+            phase1_cut_gap_index = manifest["context_feature_schema"].index(
+                "phase1_cut_snapshot_child_lp_gain_gap"
+            )
+            phase1_cut_ratio_index = manifest["context_feature_schema"].index(
+                "phase1_cut_snapshot_child_lp_gain_balance_ratio"
+            )
+            phase1_cut_wall_index = manifest["context_feature_schema"].index("phase1_cut_snapshot_wall_time")
+            phase1_diag_wall_index = manifest["context_feature_schema"].index("phase1_diagnostic_wall_time")
+            phase2_gap_index = manifest["context_feature_schema"].index(
+                "phase2_negative_journey_balance_gap"
+            )
+            phase2_wall_gap_index = manifest["context_feature_schema"].index(
+                "phase2_child_wall_time_balance_gap"
+            )
+            phase2_status_mismatch_index = manifest["context_feature_schema"].index(
+                "phase2_child_status_mismatch"
+            )
+            phased_stage_index = manifest["context_feature_schema"].index("phased_testing_stage_code")
+            phased_decision_index = manifest["context_feature_schema"].index("phased_testing_decision_code")
+            phased_elimination_index = manifest["context_feature_schema"].index(
+                "phased_testing_elimination_reason_code"
+            )
+            cut_regime_index = manifest["context_feature_schema"].index(
+                "cut_context_dynamic_subset_row_regime_code"
+            )
+            cut_subset_index = manifest["context_feature_schema"].index("cut_context_subset_row_count")
+            cut_min_add_depth_index = manifest["context_feature_schema"].index(
+                "cut_context_dynamic_subset_row_min_add_depth"
+            )
+            self.assertAlmostEqual(float(sample.context_features[phase1_min_index]), 3.5)
+            self.assertAlmostEqual(float(sample.context_features[phase1_product_index]), 42.0)
+            self.assertAlmostEqual(float(sample.context_features[phase1_gap_index]), 1.0)
+            self.assertAlmostEqual(float(sample.context_features[phase1_ratio_index]), 0.75)
+            self.assertAlmostEqual(float(sample.context_features[phase1_cut_min_index]), 5.5)
+            self.assertAlmostEqual(float(sample.context_features[phase1_cut_product_index]), 56.0)
+            self.assertAlmostEqual(float(sample.context_features[phase1_cut_gap_index]), 2.5)
+            self.assertAlmostEqual(float(sample.context_features[phase1_cut_ratio_index]), 0.6875)
+            self.assertAlmostEqual(float(sample.context_features[phase1_cut_wall_index]), 0.02)
+            self.assertAlmostEqual(float(sample.context_features[phase1_diag_wall_index]), 0.032)
+            self.assertAlmostEqual(float(sample.context_features[phase2_gap_index]), 2.0)
+            self.assertAlmostEqual(float(sample.context_features[phase2_wall_gap_index]), 0.015)
+            self.assertAlmostEqual(float(sample.context_features[phase2_status_mismatch_index]), 1.0)
+            self.assertAlmostEqual(float(sample.context_features[phased_stage_index]), 4.0)
+            self.assertAlmostEqual(float(sample.context_features[phased_decision_index]), 8.0)
+            self.assertAlmostEqual(float(sample.context_features[phased_elimination_index]), 0.0)
+            self.assertAlmostEqual(float(sample.context_features[cut_regime_index]), 4.0)
+            self.assertAlmostEqual(float(sample.context_features[cut_subset_index]), 3.0)
+            self.assertAlmostEqual(float(sample.context_features[cut_min_add_depth_index]), 1.0)
+            self.assertIn("y_gap_improvement", manifest["label_schema"])
+            self.assertIn("y_fathom_gain", manifest["label_schema"])
+            self.assertIn("y_branch_count_delta", manifest["label_schema"])
+            self.assertIn("y_completion_bound_retry_gain", manifest["label_schema"])
+            self.assertEqual(tuple(sample.branch_action_labels.shape), (1, len(manifest["label_schema"])))
+            self.assertTrue(hasattr(sample, "y_walltime_gain"))
+            self.assertGreater(float(sample.y_walltime_gain.view(-1)[0]), 0.0)
+            self.assertTrue(hasattr(sample, "y_child_proof_cpu"))
+            self.assertTrue(hasattr(sample, "y_time_to_certificate"))
+            self.assertTrue(hasattr(sample, "y_gap_improvement"))
+            self.assertTrue(hasattr(sample, "gap_improvement_loss_weight"))
+            self.assertTrue(hasattr(sample, "y_fathom_gain"))
+            self.assertTrue(hasattr(sample, "y_completion_bound_retry_gain"))
+            self.assertAlmostEqual(float(sample.y_gap_improvement.view(-1)[0]), 0.25)
+            self.assertAlmostEqual(float(sample.y_fathom_gain.view(-1)[0]), 2.0)
+            self.assertAlmostEqual(float(sample.y_completion_bound_retry_gain.view(-1)[0]), 3.0)
             self.assertTrue((tmp_path / "dataset" / "summary.json").exists())
             report = (tmp_path / "report.md").read_text(encoding="utf-8")
             self.assertIn("sanity_training_dataset_ready = true", report)
@@ -136,11 +296,19 @@ def _delta_row(
     wall_improved: bool = False,
     regression: bool = False,
     right_censored: bool = False,
+    no_effect_hard_negative: bool = False,
+    usable_for_gap_aux_training: bool = False,
 ) -> dict[str, object]:
     labels = {
         "y_counterfactual_wall_improved": 1.0 if wall_improved else 0.0,
         "y_counterfactual_regression": 1.0 if regression else 0.0,
         "y_counterfactual_timeout_regression": 1.0 if regression else 0.0,
+        "y_counterfactual_no_effect_hard_negative": 1.0 if no_effect_hard_negative else 0.0,
+        "y_gap_improvement": 0.25,
+        "y_primal_improvement": 1.5,
+        "y_dual_bound_gain": 0.125,
+        "y_fathom_gain": 2.0,
+        "y_completion_bound_final_judge_retry_gain": 3.0,
     }
     branch_labels = {
         "y_tail_improved": 1.0 if wall_improved else 0.0,
@@ -173,6 +341,10 @@ def _delta_row(
         "right_censored_counterfactual": right_censored,
         "timeout_regression": regression,
         "counterfactual_label_type": label_type,
+        "usable_for_gap_aux_training": usable_for_gap_aux_training,
+        "deltas": {
+            "branch_count_delta": -4.0,
+        },
         "labels": labels,
         "alternative_branch_labels": branch_labels,
         "alternative_raw_row": {
@@ -182,6 +354,46 @@ def _delta_row(
             "eligible_count": 8,
             "branch_rank_in_top": 1,
             "branch_rank_in_priority_top": 1,
+            "phased_testing_stage": "phase1_lp",
+            "phased_testing_decision": "probed_complete",
+            "phased_testing_reason": "ok",
+            "phased_testing_elimination_reason": "",
+            "phased_testing_phase0_passed": True,
+            "phased_testing_phase1_lp_complete": True,
+            "phased_testing_phase2_heuristic_complete": False,
+            "phase1_min_child_lp_gain": 3.5,
+            "phase1_child_lp_gain_product": 42.0,
+            "phase1_child_lp_gain_gap": 1.0,
+            "phase1_child_lp_gain_balance_ratio": 0.75,
+            "phase1_child_width_balance": 7,
+            "phase1_wall_time": 0.012,
+            "phase1_dynamic_k_probe_count": 8,
+            "phase1_cut_snapshot_complete": True,
+            "phase1_cut_snapshot_added_total": 3,
+            "phase1_cut_snapshot_min_child_lp_gain": 5.5,
+            "phase1_cut_snapshot_child_lp_gain_product": 56.0,
+            "phase1_cut_snapshot_child_lp_gain_gap": 2.5,
+            "phase1_cut_snapshot_child_lp_gain_balance_ratio": 0.6875,
+            "phase1_cut_snapshot_wall_time": 0.02,
+            "phase1_diagnostic_wall_time": 0.032,
+            "phase2_negative_child_count": 1,
+            "phase2_negative_journey_count": 2,
+            "phase2_negative_journey_balance_gap": 2,
+            "phase2_best_reduced_cost": -0.25,
+            "phase2_worst_negative_severity": 0.25,
+            "phase2_child_wall_time_balance_gap": 0.015,
+            "phase2_child_status_mismatch": True,
+            "phase2_wall_time": 0.04,
+            "phase2_dynamic_k_probe_count": 8,
+            "cut_context_active_count": 4,
+            "cut_context_subset_row_count": 3,
+            "cut_context_fleet_lb_count": 1,
+            "cut_context_dynamic_subset_row_regime": "dynamic_src_child_or_deeper",
+            "cut_context_dynamic_subset_row_cuts_enabled": True,
+            "cut_context_dynamic_subset_row_cut_gate_enabled": True,
+            "cut_context_dynamic_subset_row_min_add_depth": 1,
+            "cut_context_dynamic_subset_row_max_depth": 2,
+            "cut_context_dynamic_subset_row_gate_min_best_violation": 0.25,
         },
     }
 
