@@ -1,0 +1,15 @@
+guidance_mode: "opt_in"
+journey_gat_shadow_enabled: true
+journey_gat_optin_enabled: true
+mutates_solver: true
+can_certify: false
+exact_status_effect: "none"
+
+instance: "data/instances/lunar_ice_020/instance_001_logical_graph.json"
+output: "runs/logs/lunar_ice_020_instance_001_gat_optin_dryrun.json"
+checkpoint_path: ""
+checkpoint_schema_version: ""
+expected_guidance_graph_schema_version: "lunar_ice_bpc.guidance_graph.v1"
+safe_source_required: true
+
+note: "Placeholder for future opt-in scheduling experiments. Current shadow runner must reject this config."

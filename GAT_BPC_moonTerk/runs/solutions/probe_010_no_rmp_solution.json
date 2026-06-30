@@ -1,0 +1,256 @@
+{
+  "analytic_lower_bound": {
+    "bound": 1362.361947,
+    "completion_term_bound": 1361.44048,
+    "exact_status": "RELAXATION_LOWER_BOUND",
+    "note": "Conservative non-BPC relaxation lower bound; ignores nonnegative routing, return, recharge, fleet, capacity, shadow, and beta journey-end terms.",
+    "service_energy_bound": 71.834848,
+    "service_risk_bound": 2.031184,
+    "status": "ANALYTIC_RELAXATION_BOUND",
+    "task_count": 10
+  },
+  "canonical_baseline": {
+    "exact_status": "NOT_BPC_CERTIFIED",
+    "generated_journey_count": 447,
+    "generated_sortie_count": 561900,
+    "note": "Optimal only within the restricted canonical-path journey-column universe ('low_time', 'low_energy', 'low_risk'); no true-dual BPC certificate.",
+    "objective": 1455.561609,
+    "pareto_label_count": 739,
+    "route_template_count": 629,
+    "set_partition_state_count": 1473,
+    "status": "CANONICAL_DP_BASELINE_OPTIMAL"
+  },
+  "canonical_objective": 1455.561609,
+  "covered_task_count": 10,
+  "direct_exact_baseline": {
+    "exact_status": "NOT_SOLVED",
+    "generated_journey_count": 0,
+    "generated_sortie_count": 0,
+    "note": "task_count=10 exceeds max_exact_tasks=5",
+    "objective": null,
+    "pareto_label_count": 0,
+    "route_template_count": 0,
+    "set_partition_state_count": 0,
+    "status": "SKIPPED_TOO_LARGE_FOR_DIRECT_DP_BASELINE"
+  },
+  "direct_exact_objective": null,
+  "direct_root_certificate": {
+    "active_column_count": 0,
+    "certificate_scope": "fixed_logical_graph_direct_root",
+    "enabled": false,
+    "exact_status": "NOT_SOLVED",
+    "fleet_dual": null,
+    "fleet_size": 2,
+    "generated_journey_count": 0,
+    "generated_sortie_count": 0,
+    "integer_matches_root_lp": false,
+    "integer_objective": null,
+    "iteration_count": 0,
+    "lp_bound": null,
+    "max_direct_tasks": 5,
+    "min_reduced_cost": null,
+    "note": "task_count=10 exceeds max_direct_tasks=5.",
+    "pareto_label_count": 0,
+    "root_gap": null,
+    "route_template_count": 0,
+    "status": "SKIPPED_TOO_LARGE_FOR_DIRECT_ROOT_CERTIFICATE",
+    "task_count": 10,
+    "task_cover_duals": {},
+    "universe_column_count": 0,
+    "uses_true_dual_bpc_certificate": false
+  },
+  "exact_status": "NOT_BPC_CERTIFIED",
+  "gap_type": "analytic_relaxation_not_bpc_certificate",
+  "generated_journey_count": 447,
+  "generated_sortie_count": 561900,
+  "incumbent_source": "canonical_dp_baseline",
+  "instance_id": "lunar_ice_010_001_seed729001",
+  "journeys": [
+    {
+      "sorties": [
+        {
+          "demand": 3.0,
+          "distance_km": 25.998222,
+          "end_time": 290.738594,
+          "energy_proxy": 81.362033,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_time",
+              "to": "ice_site_010"
+            },
+            {
+              "from": "ice_site_010",
+              "path_type": "low_time",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_time",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 89.362033,
+          "return_time": 201.376561,
+          "risk_integral": 8.718943,
+          "service_starts": {
+            "ice_site_001": 40.0,
+            "ice_site_002": 148.71718,
+            "ice_site_010": 19.236872
+          },
+          "shadow_exposure_min": 120.689849,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_010",
+            "ice_site_001",
+            "ice_site_002"
+          ],
+          "travel_time": 72.081731
+        }
+      ],
+      "vehicle_id": "rover_01"
+    },
+    {
+      "sorties": [
+        {
+          "demand": 3.5,
+          "distance_km": 18.10181,
+          "end_time": 283.286567,
+          "energy_proxy": 75.779367,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_time",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_time",
+              "to": "ice_site_008"
+            },
+            {
+              "from": "ice_site_008",
+              "path_type": "low_time",
+              "to": "ice_site_006"
+            },
+            {
+              "from": "ice_site_006",
+              "path_type": "low_time",
+              "to": "ice_site_007"
+            },
+            {
+              "from": "ice_site_007",
+              "path_type": "low_time",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 83.779367,
+          "return_time": 199.5072,
+          "risk_integral": 5.637481,
+          "service_starts": {
+            "ice_site_003": 15.679786,
+            "ice_site_006": 85.00079,
+            "ice_site_007": 171.221389,
+            "ice_site_008": 37.901589
+          },
+          "shadow_exposure_min": 93.54498,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_003",
+            "ice_site_008",
+            "ice_site_006",
+            "ice_site_007"
+          ],
+          "travel_time": 49.091452
+        },
+        {
+          "demand": 2.0,
+          "distance_km": 28.839828,
+          "end_time": 523.134338,
+          "energy_proxy": 79.344925,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_energy",
+              "to": "ice_site_009"
+            },
+            {
+              "from": "ice_site_009",
+              "path_type": "low_energy",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_energy",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 87.344925,
+          "return_time": 435.789413,
+          "risk_integral": 7.54804,
+          "service_starts": {
+            "ice_site_004": 380.0,
+            "ice_site_005": 350.0,
+            "ice_site_009": 302.495852
+          },
+          "shadow_exposure_min": 64.182022,
+          "start_time": 283.286567,
+          "tasks": [
+            "ice_site_009",
+            "ice_site_005",
+            "ice_site_004"
+          ],
+          "travel_time": 76.179379
+        }
+      ],
+      "vehicle_id": "rover_02"
+    }
+  ],
+  "lower_bound": 1362.361947,
+  "makespan_min": 523.134338,
+  "node_count": 1,
+  "note": "Optimal only within the restricted canonical-path journey-column universe ('low_time', 'low_energy', 'low_risk'); no true-dual BPC certificate.",
+  "objective": 1455.561609,
+  "pareto_label_count": 739,
+  "relaxation_gap": 0.064030036,
+  "restricted_rmp": {
+    "enabled": false
+  },
+  "route_template_count": 629,
+  "schema_version": "lunar_ice_bpc.solution.v1",
+  "seeded_journey_pool": {
+    "column_count": 14,
+    "covered_task_count": 10,
+    "invalid_reference_journey_count": 0,
+    "invalid_reference_sortie_count": 0,
+    "note": "Seeded diagnostic pool from reference journeys, reference sorties, and singleton journeys.",
+    "reference_journey_count": 2,
+    "reference_sortie_count": 3,
+    "singleton_count": 10,
+    "status": "SEEDED_JOURNEY_POOL_BUILT"
+  },
+  "set_partition_state_count": 1473,
+  "solver_options": {
+    "canonical_dp_max_tasks": 10,
+    "direct_pricing_cg_rounds": 1,
+    "direct_pricing_enabled": false,
+    "direct_pricing_max_tasks": 5,
+    "restricted_rmp_enabled": false,
+    "uses_true_dual_bpc_certificate": false
+  },
+  "status": "CANONICAL_DP_BASELINE_OPTIMAL",
+  "task_count": 10
+}

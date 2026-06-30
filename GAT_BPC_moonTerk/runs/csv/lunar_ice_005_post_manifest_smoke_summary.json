@@ -1,0 +1,23 @@
+{
+  "certified_optimal_count": 0,
+  "exact_baseline_optimal_count": 20,
+  "exact_status_counts": {
+    "EXACT_BASELINE_OPTIMAL": 20
+  },
+  "fixed_graph_integer_root_certified_count": 20,
+  "fixed_graph_root_lp_certified_count": 20,
+  "max_wall_time_sec": 8.561612,
+  "mean_relaxation_gap": 0.107352448,
+  "mean_wall_time_sec": 7.709115,
+  "note": "exact_baseline_optimal_count counts exhaustive direct-DP fixed-graph optima; fixed_graph_root_lp_certified_count is scoped to the fixed three-path root LP; certified_optimal_count remains 0 until the true-dual BPC certificate path is ported.",
+  "results_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/csv/lunar_ice_005_post_manifest_smoke.csv",
+  "run_count": 20,
+  "schema_version": "lunar_ice_bpc.benchmark_summary.v1",
+  "solution_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/solutions/lunar_ice_005_post_manifest_smoke",
+  "status_counts": {
+    "DIRECT_DP_BASELINE_OPTIMAL": 20
+  },
+  "time_limit_exceeded_count": 0,
+  "timeout_reason_counts": {},
+  "total_node_count": 20
+}

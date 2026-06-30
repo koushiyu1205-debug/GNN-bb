@@ -1,0 +1,240 @@
+{
+  "can_certify": false,
+  "edge_count": 7350,
+  "edge_feature_schema": [
+    "travel_time_norm",
+    "energy_norm",
+    "risk_norm",
+    "distance_norm",
+    "shadow_exposure_norm",
+    "is_low_time",
+    "is_low_energy",
+    "is_low_risk"
+  ],
+  "exact_status_effect": "none",
+  "guidance_graph_schema_version": "lunar_ice_bpc.guidance_graph.v1",
+  "instance_id": "lunar_ice_050_004_seed1129004",
+  "mode": "shadow_only",
+  "mutates_solver": false,
+  "node_count": 50,
+  "node_feature_schema": [
+    "x_norm",
+    "y_norm",
+    "expected_ice_norm",
+    "ice_confidence",
+    "science_weight",
+    "local_shadow_score",
+    "local_thermal_risk",
+    "local_slope_risk",
+    "demand",
+    "service_time_norm",
+    "service_energy_norm",
+    "mode_detect",
+    "mode_sample",
+    "mode_drill"
+  ],
+  "note": "Diagnostic shadow guidance only; not a pricing oracle, lower bound, or certificate.",
+  "schema_version": "lunar_ice_bpc.gat_shadow_report.v1",
+  "task_priority": [
+    {
+      "id": "ice_site_027",
+      "shadow_priority_score": 0.91492
+    },
+    {
+      "id": "ice_site_016",
+      "shadow_priority_score": 0.83771115
+    },
+    {
+      "id": "ice_site_032",
+      "shadow_priority_score": 0.79465
+    },
+    {
+      "id": "ice_site_012",
+      "shadow_priority_score": 0.7384717
+    },
+    {
+      "id": "ice_site_033",
+      "shadow_priority_score": 0.7208798
+    },
+    {
+      "id": "ice_site_030",
+      "shadow_priority_score": 0.71154365
+    },
+    {
+      "id": "ice_site_034",
+      "shadow_priority_score": 0.7017459
+    },
+    {
+      "id": "ice_site_015",
+      "shadow_priority_score": 0.69656255
+    },
+    {
+      "id": "ice_site_014",
+      "shadow_priority_score": 0.69430615
+    },
+    {
+      "id": "ice_site_007",
+      "shadow_priority_score": 0.68977595
+    },
+    {
+      "id": "ice_site_038",
+      "shadow_priority_score": 0.67632675
+    },
+    {
+      "id": "ice_site_028",
+      "shadow_priority_score": 0.67495925
+    },
+    {
+      "id": "ice_site_026",
+      "shadow_priority_score": 0.665325
+    },
+    {
+      "id": "ice_site_031",
+      "shadow_priority_score": 0.66160065
+    },
+    {
+      "id": "ice_site_035",
+      "shadow_priority_score": 0.64555435
+    },
+    {
+      "id": "ice_site_043",
+      "shadow_priority_score": 0.6432628
+    },
+    {
+      "id": "ice_site_048",
+      "shadow_priority_score": 0.64227455
+    },
+    {
+      "id": "ice_site_013",
+      "shadow_priority_score": 0.6387181
+    },
+    {
+      "id": "ice_site_047",
+      "shadow_priority_score": 0.6108159
+    },
+    {
+      "id": "ice_site_010",
+      "shadow_priority_score": 0.6035048
+    },
+    {
+      "id": "ice_site_025",
+      "shadow_priority_score": 0.5957142
+    },
+    {
+      "id": "ice_site_004",
+      "shadow_priority_score": 0.5824422
+    },
+    {
+      "id": "ice_site_023",
+      "shadow_priority_score": 0.5811379
+    },
+    {
+      "id": "ice_site_024",
+      "shadow_priority_score": 0.57023985
+    },
+    {
+      "id": "ice_site_018",
+      "shadow_priority_score": 0.56804285
+    },
+    {
+      "id": "ice_site_036",
+      "shadow_priority_score": 0.56792765
+    },
+    {
+      "id": "ice_site_006",
+      "shadow_priority_score": 0.56648885
+    },
+    {
+      "id": "ice_site_050",
+      "shadow_priority_score": 0.5547944
+    },
+    {
+      "id": "ice_site_005",
+      "shadow_priority_score": 0.54712965
+    },
+    {
+      "id": "ice_site_045",
+      "shadow_priority_score": 0.54094695
+    },
+    {
+      "id": "ice_site_009",
+      "shadow_priority_score": 0.52704625
+    },
+    {
+      "id": "ice_site_029",
+      "shadow_priority_score": 0.5198327
+    },
+    {
+      "id": "ice_site_044",
+      "shadow_priority_score": 0.51742095
+    },
+    {
+      "id": "ice_site_040",
+      "shadow_priority_score": 0.51583625
+    },
+    {
+      "id": "ice_site_011",
+      "shadow_priority_score": 0.49995185
+    },
+    {
+      "id": "ice_site_017",
+      "shadow_priority_score": 0.49105295
+    },
+    {
+      "id": "ice_site_020",
+      "shadow_priority_score": 0.49055355
+    },
+    {
+      "id": "ice_site_039",
+      "shadow_priority_score": 0.4882922
+    },
+    {
+      "id": "ice_site_002",
+      "shadow_priority_score": 0.47880615
+    },
+    {
+      "id": "ice_site_003",
+      "shadow_priority_score": 0.4744851
+    },
+    {
+      "id": "ice_site_037",
+      "shadow_priority_score": 0.46894515
+    },
+    {
+      "id": "ice_site_041",
+      "shadow_priority_score": 0.4644277
+    },
+    {
+      "id": "ice_site_021",
+      "shadow_priority_score": 0.45768385
+    },
+    {
+      "id": "ice_site_001",
+      "shadow_priority_score": 0.4527963
+    },
+    {
+      "id": "ice_site_008",
+      "shadow_priority_score": 0.45212325
+    },
+    {
+      "id": "ice_site_049",
+      "shadow_priority_score": 0.44233095
+    },
+    {
+      "id": "ice_site_022",
+      "shadow_priority_score": 0.43269385
+    },
+    {
+      "id": "ice_site_042",
+      "shadow_priority_score": 0.413978
+    },
+    {
+      "id": "ice_site_046",
+      "shadow_priority_score": 0.4079976
+    },
+    {
+      "id": "ice_site_019",
+      "shadow_priority_score": 0.4057523
+    }
+  ]
+}

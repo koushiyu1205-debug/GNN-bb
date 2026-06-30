@@ -1,0 +1,80 @@
+{
+  "can_certify": false,
+  "edge_count": 270,
+  "edge_feature_schema": [
+    "travel_time_norm",
+    "energy_norm",
+    "risk_norm",
+    "distance_norm",
+    "shadow_exposure_norm",
+    "is_low_time",
+    "is_low_energy",
+    "is_low_risk"
+  ],
+  "exact_status_effect": "none",
+  "guidance_graph_schema_version": "lunar_ice_bpc.guidance_graph.v1",
+  "instance_id": "lunar_ice_010_014_seed729014",
+  "mode": "shadow_only",
+  "mutates_solver": false,
+  "node_count": 10,
+  "node_feature_schema": [
+    "x_norm",
+    "y_norm",
+    "expected_ice_norm",
+    "ice_confidence",
+    "science_weight",
+    "local_shadow_score",
+    "local_thermal_risk",
+    "local_slope_risk",
+    "demand",
+    "service_time_norm",
+    "service_energy_norm",
+    "mode_detect",
+    "mode_sample",
+    "mode_drill"
+  ],
+  "note": "Diagnostic shadow guidance only; not a pricing oracle, lower bound, or certificate.",
+  "schema_version": "lunar_ice_bpc.gat_shadow_report.v1",
+  "task_priority": [
+    {
+      "id": "ice_site_006",
+      "shadow_priority_score": 0.6993079
+    },
+    {
+      "id": "ice_site_003",
+      "shadow_priority_score": 0.68987525
+    },
+    {
+      "id": "ice_site_001",
+      "shadow_priority_score": 0.67497845
+    },
+    {
+      "id": "ice_site_005",
+      "shadow_priority_score": 0.62147745
+    },
+    {
+      "id": "ice_site_004",
+      "shadow_priority_score": 0.5751919
+    },
+    {
+      "id": "ice_site_008",
+      "shadow_priority_score": 0.56206025
+    },
+    {
+      "id": "ice_site_009",
+      "shadow_priority_score": 0.54000565
+    },
+    {
+      "id": "ice_site_007",
+      "shadow_priority_score": 0.4822638
+    },
+    {
+      "id": "ice_site_002",
+      "shadow_priority_score": 0.4704271
+    },
+    {
+      "id": "ice_site_010",
+      "shadow_priority_score": 0.42914375
+    }
+  ]
+}

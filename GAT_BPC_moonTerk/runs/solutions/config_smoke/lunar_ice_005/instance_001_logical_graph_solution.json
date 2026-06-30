@@ -1,0 +1,110 @@
+{
+  "covered_task_count": 5,
+  "exact_status": "NOT_BPC_CERTIFIED",
+  "generated_journey_count": 31,
+  "generated_sortie_count": 975,
+  "instance_id": "lunar_ice_005_001_seed629001",
+  "journeys": [
+    {
+      "sorties": [
+        {
+          "demand": 3.0,
+          "distance_km": 23.485242,
+          "end_time": 286.174592,
+          "energy_proxy": 77.449782,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_time",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_time",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 85.449782,
+          "return_time": 200.72481,
+          "risk_integral": 7.22197,
+          "service_starts": {
+            "ice_site_002": 14.819666,
+            "ice_site_003": 59.711465,
+            "ice_site_004": 170.152773
+          },
+          "shadow_exposure_min": 98.107493,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_002",
+            "ice_site_003",
+            "ice_site_004"
+          ],
+          "travel_time": 63.894307
+        },
+        {
+          "demand": 1.5,
+          "distance_km": 20.454044,
+          "end_time": 445.400783,
+          "energy_proxy": 51.547955,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_time",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_time",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_time",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 59.547955,
+          "return_time": 385.852828,
+          "risk_integral": 3.743408,
+          "service_starts": {
+            "ice_site_001": 300.137805,
+            "ice_site_005": 333.26688
+          },
+          "shadow_exposure_min": 26.316417,
+          "start_time": 286.174592,
+          "tasks": [
+            "ice_site_001",
+            "ice_site_005"
+          ],
+          "travel_time": 50.527288
+        }
+      ],
+      "vehicle_id": "rover_01"
+    }
+  ],
+  "makespan_min": 445.400783,
+  "note": "Optimal only within the restricted canonical-path journey-column universe ('low_time', 'low_energy', 'low_risk'); no true-dual BPC certificate.",
+  "objective": 707.095855,
+  "pareto_label_count": 43,
+  "route_template_count": 76,
+  "schema_version": "lunar_ice_bpc.solution.v1",
+  "set_partition_state_count": 33,
+  "solver_options": {
+    "canonical_dp_max_tasks": 10,
+    "uses_true_dual_bpc_certificate": false
+  },
+  "status": "CANONICAL_DP_BASELINE_OPTIMAL",
+  "task_count": 5
+}

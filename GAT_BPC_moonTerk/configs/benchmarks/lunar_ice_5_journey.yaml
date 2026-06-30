@@ -1,0 +1,41 @@
+manifest: "data/manifests/lunar_ice_benchmark_manifest.json"
+scales: [5]
+instances: []
+instance_dir: "."
+results_csv: "runs/csv/lunar_ice_005_benchmark.csv"
+solution_dir: "runs/solutions/lunar_ice_005_benchmark"
+summary_json: "runs/csv/lunar_ice_005_benchmark_summary.json"
+master_mode: "journey"
+time_limit: 600
+max_nodes: 100
+canonical_dp_max_tasks: 10
+direct_baseline_max_tasks: 10
+direct_baseline_time_limit: null
+restricted_rmp_enabled: true
+direct_pricing_enabled: true
+direct_pricing_max_tasks: 5
+direct_pricing_cg_rounds: 1
+pricing_eps: 1.0e-6
+integer_tol: 1.0e-6
+
+time_bucket_size: 10.0
+pricing_start_time_step: 10.0
+max_tasks_per_trip: 6
+Q_ice: 6.0
+resource_map_extent_km: 30.0
+synthetic_grid_resolution_m: 100.0
+horizon_min: 720.0
+active_fleet_limit: 1
+
+energy_unit: "dimensionless_proxy"
+B_use: 100.0
+B_use_tunable_after_exact_baseline: true
+recharge_model: "linear_deficit_with_dock_overhead"
+dock_overhead_min: 8.0
+recharge_power_proxy_per_min: 1.0
+depot_chargers: "unlimited"
+max_shadow_exposure_per_sortie: 180.0
+
+journey_branching_enabled: true
+journey_gat_shadow_enabled: false
+journey_gat_optin_enabled: false

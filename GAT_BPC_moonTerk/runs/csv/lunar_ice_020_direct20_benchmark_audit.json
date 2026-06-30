@@ -1,0 +1,78 @@
+{
+  "expected_per_scale": 20,
+  "note": "Audits current benchmark evidence against the planned scale acceptance targets. Fixed-graph baselines are tracked separately from future true-dual BPC certificates.",
+  "overall_status": "PASS",
+  "results_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/csv/lunar_ice_020_direct20_benchmark.csv",
+  "scale_labels": [
+    "020"
+  ],
+  "scales": {
+    "020": {
+      "bpc_certificate_status_counts": {
+        "NOT_PORTED_TRUE_DUAL_BPC": 20
+      },
+      "checks": {
+        "all_instances_exact": true,
+        "exact_count_target_met": true,
+        "mean_optimal_time_target_met": true,
+        "run_count_matches_expected": true,
+        "scalable_report_complete": true,
+        "time_limit_not_exceeded": true,
+        "timeout_reason_reported_when_needed": true,
+        "valid_gap_reported": true
+      },
+      "completion_bound_consistency_pass_count": 0,
+      "completion_bound_consistency_status_counts": {
+        "missing": 20
+      },
+      "direct_baseline_status_counts": {
+        "DIRECT_DP_BASELINE_OPTIMAL": 20
+      },
+      "exact_claim_scope_counts": {
+        "fixed_logical_graph_exhaustive_direct_dp": 20
+      },
+      "exact_optimal_count": 20,
+      "expected_run_count": 20,
+      "fixed_graph_pricing_closure_closed_count": 0,
+      "fixed_graph_pricing_closure_diagnostic_only_count": 0,
+      "fixed_graph_pricing_closure_status_counts": {
+        "missing": 20
+      },
+      "incomplete_reason_reported_count": 20,
+      "incumbent_count": 20,
+      "mean_optimal_wall_time_metric": "exact_baseline_wall_time_sec_or_wall_time_sec",
+      "mean_optimal_wall_time_sec": 7.908368,
+      "mean_optimal_wall_time_target_sec": 100.0,
+      "no_negative_certificate_count": 0,
+      "node_count_reported_count": 20,
+      "pricing_certificate_selected_source_counts": {
+        "diagnostic_fallback": 20
+      },
+      "pricing_certificate_status_counts": {
+        "NOT_PORTED_TRUE_DUAL_BPC": 20
+      },
+      "pricing_workload_reported_count": 20,
+      "required_exact_optimal_count": 20,
+      "run_count": 20,
+      "scale": 20,
+      "scale_label": "020",
+      "status": "PASS",
+      "time_limit_exceeded_count": 0,
+      "timeout_reason_reported_count": 0,
+      "true_dual_bpc_certificate_count": 0,
+      "true_dual_pricing_tail_certified_count": 0,
+      "true_dual_pricing_tail_dual_vector_bound_count": 0,
+      "true_dual_pricing_tail_not_ported_count": 20,
+      "true_dual_pricing_tail_status_counts": {
+        "TRUE_DUAL_PRICING_TAIL_NOT_PORTED": 20
+      },
+      "true_dual_readiness_fixed_graph_closure_complete_count": 0,
+      "true_dual_readiness_status_counts": {
+        "BLOCKED_BY_RMP_STATUS": 20
+      },
+      "true_dual_readiness_waiting_true_dual_count": 0,
+      "valid_gap_count": 20
+    }
+  },
+  "schema_version": "lunar_ice_bpc.benchmark_audit.v1"
+}

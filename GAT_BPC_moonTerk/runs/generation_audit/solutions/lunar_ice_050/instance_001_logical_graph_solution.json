@@ -1,0 +1,1192 @@
+{
+  "analytic_lower_bound": {
+    "bound": 12321.71715,
+    "completion_term_bound": 12317.210484,
+    "exact_status": "RELAXATION_LOWER_BOUND",
+    "note": "Conservative non-BPC relaxation lower bound; ignores nonnegative routing, return, recharge, fleet, capacity, shadow, and beta journey-end terms.",
+    "service_energy_bound": 360.86539,
+    "service_risk_bound": 8.980122,
+    "status": "ANALYTIC_RELAXATION_BOUND",
+    "task_count": 50
+  },
+  "canonical_baseline": {
+    "exact_status": "NOT_SOLVED",
+    "generated_journey_count": 0,
+    "generated_sortie_count": 0,
+    "note": "task_count=50 exceeds max_exact_tasks=10",
+    "objective": null,
+    "pareto_label_count": 0,
+    "route_template_count": 0,
+    "set_partition_state_count": 0,
+    "status": "SKIPPED_TOO_LARGE_FOR_ENUM_BASELINE"
+  },
+  "canonical_objective": null,
+  "covered_task_count": 50,
+  "direct_exact_baseline": {
+    "exact_status": "NOT_SOLVED",
+    "generated_journey_count": 0,
+    "generated_sortie_count": 0,
+    "note": "task_count=50 exceeds max_exact_tasks=5",
+    "objective": null,
+    "pareto_label_count": 0,
+    "route_template_count": 0,
+    "set_partition_state_count": 0,
+    "status": "SKIPPED_TOO_LARGE_FOR_DIRECT_DP_BASELINE"
+  },
+  "direct_exact_objective": null,
+  "direct_root_certificate": {
+    "active_column_count": 0,
+    "certificate_scope": "fixed_logical_graph_direct_root",
+    "enabled": false,
+    "exact_status": "NOT_SOLVED",
+    "fleet_dual": null,
+    "fleet_size": 5,
+    "generated_journey_count": 0,
+    "generated_sortie_count": 0,
+    "integer_matches_root_lp": false,
+    "integer_objective": null,
+    "iteration_count": 0,
+    "lp_bound": null,
+    "max_direct_tasks": 5,
+    "min_reduced_cost": null,
+    "note": "task_count=50 exceeds max_direct_tasks=5.",
+    "pareto_label_count": 0,
+    "root_gap": null,
+    "route_template_count": 0,
+    "status": "SKIPPED_TOO_LARGE_FOR_DIRECT_ROOT_CERTIFICATE",
+    "task_count": 50,
+    "task_cover_duals": {},
+    "universe_column_count": 0,
+    "uses_true_dual_bpc_certificate": false
+  },
+  "exact_status": "NOT_SOLVED",
+  "gap_type": "analytic_relaxation_not_bpc_certificate",
+  "generated_journey_count": 0,
+  "generated_sortie_count": 0,
+  "incumbent_source": "reference_solution",
+  "instance_id": "lunar_ice_050_001_seed1129001",
+  "journeys": [
+    {
+      "sorties": [
+        {
+          "demand": 3.5,
+          "distance_km": 24.622851,
+          "end_time": 326.455625,
+          "energy_proxy": 96.216363,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_049"
+            },
+            {
+              "from": "ice_site_049",
+              "path_type": "low_risk",
+              "to": "ice_site_012"
+            },
+            {
+              "from": "ice_site_012",
+              "path_type": "low_risk",
+              "to": "ice_site_050"
+            },
+            {
+              "from": "ice_site_050",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 104.216363,
+          "return_time": 222.239262,
+          "risk_integral": 7.772698,
+          "service_starts": {
+            "ice_site_012": 86.856524,
+            "ice_site_049": 22.027088,
+            "ice_site_050": 115.317937
+          },
+          "shadow_exposure_min": 99.67953,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_049",
+            "ice_site_012",
+            "ice_site_050"
+          ],
+          "travel_time": 67.412135
+        },
+        {
+          "demand": 3.0,
+          "distance_km": 29.418512,
+          "end_time": 604.369812,
+          "energy_proxy": 95.746384,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_014"
+            },
+            {
+              "from": "ice_site_014",
+              "path_type": "low_risk",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_risk",
+              "to": "ice_site_020"
+            },
+            {
+              "from": "ice_site_020",
+              "path_type": "low_risk",
+              "to": "ice_site_044"
+            },
+            {
+              "from": "ice_site_044",
+              "path_type": "low_risk",
+              "to": "ice_site_041"
+            },
+            {
+              "from": "ice_site_041",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 103.746384,
+          "return_time": 500.623428,
+          "risk_integral": 11.559436,
+          "service_starts": {
+            "ice_site_005": 389.454275,
+            "ice_site_014": 346.739065,
+            "ice_site_020": 415.722436,
+            "ice_site_041": 464.747021,
+            "ice_site_044": 443.706161
+          },
+          "shadow_exposure_min": 96.905942,
+          "start_time": 326.455625,
+          "tasks": [
+            "ice_site_014",
+            "ice_site_005",
+            "ice_site_020",
+            "ice_site_044",
+            "ice_site_041"
+          ],
+          "travel_time": 86.625993
+        },
+        {
+          "demand": 2.0,
+          "distance_km": 28.999707,
+          "end_time": 856.444514,
+          "energy_proxy": 90.243641,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "ice_site_035"
+            },
+            {
+              "from": "ice_site_035",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 98.243641,
+          "return_time": 758.200873,
+          "risk_integral": 9.208875,
+          "service_starts": {
+            "ice_site_004": 642.128959,
+            "ice_site_035": 706.933553
+          },
+          "shadow_exposure_min": 59.676825,
+          "start_time": 604.369812,
+          "tasks": [
+            "ice_site_004",
+            "ice_site_035"
+          ],
+          "travel_time": 80.507901
+        }
+      ],
+      "vehicle_id": "rover_01"
+    },
+    {
+      "sorties": [
+        {
+          "demand": 4.0,
+          "distance_km": 26.289668,
+          "end_time": 322.455702,
+          "energy_proxy": 98.034579,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_025"
+            },
+            {
+              "from": "ice_site_025",
+              "path_type": "low_risk",
+              "to": "ice_site_029"
+            },
+            {
+              "from": "ice_site_029",
+              "path_type": "low_risk",
+              "to": "ice_site_013"
+            },
+            {
+              "from": "ice_site_013",
+              "path_type": "low_risk",
+              "to": "ice_site_027"
+            },
+            {
+              "from": "ice_site_027",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 106.034579,
+          "return_time": 216.421123,
+          "risk_integral": 9.203961,
+          "service_starts": {
+            "ice_site_013": 84.088874,
+            "ice_site_025": 21.492811,
+            "ice_site_027": 142.043003,
+            "ice_site_029": 41.880434
+          },
+          "shadow_exposure_min": 109.551842,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_025",
+            "ice_site_029",
+            "ice_site_013",
+            "ice_site_027"
+          ],
+          "travel_time": 74.00669
+        },
+        {
+          "demand": 2.5,
+          "distance_km": 29.10943,
+          "end_time": 621.368857,
+          "energy_proxy": 94.54842,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_006"
+            },
+            {
+              "from": "ice_site_006",
+              "path_type": "low_risk",
+              "to": "ice_site_016"
+            },
+            {
+              "from": "ice_site_016",
+              "path_type": "low_risk",
+              "to": "ice_site_022"
+            },
+            {
+              "from": "ice_site_022",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 102.54842,
+          "return_time": 518.820437,
+          "risk_integral": 10.944495,
+          "service_starts": {
+            "ice_site_006": 354.024292,
+            "ice_site_016": 449.645674,
+            "ice_site_022": 469.767658
+          },
+          "shadow_exposure_min": 89.388881,
+          "start_time": 322.455702,
+          "tasks": [
+            "ice_site_006",
+            "ice_site_016",
+            "ice_site_022"
+          ],
+          "travel_time": 84.449744
+        },
+        {
+          "demand": 2.5,
+          "distance_km": 28.497905,
+          "end_time": 905.501571,
+          "energy_proxy": 83.915111,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_009"
+            },
+            {
+              "from": "ice_site_009",
+              "path_type": "low_risk",
+              "to": "ice_site_038"
+            },
+            {
+              "from": "ice_site_038",
+              "path_type": "low_risk",
+              "to": "ice_site_037"
+            },
+            {
+              "from": "ice_site_037",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 91.915111,
+          "return_time": 813.58646,
+          "risk_integral": 8.138023,
+          "service_starts": {
+            "ice_site_009": 647.725436,
+            "ice_site_037": 765.926002,
+            "ice_site_038": 741.577436
+          },
+          "shadow_exposure_min": 84.595059,
+          "start_time": 621.368857,
+          "tasks": [
+            "ice_site_009",
+            "ice_site_038",
+            "ice_site_037"
+          ],
+          "travel_time": 76.327525
+        }
+      ],
+      "vehicle_id": "rover_02"
+    },
+    {
+      "sorties": [
+        {
+          "demand": 2.0,
+          "distance_km": 26.475014,
+          "end_time": 227.408875,
+          "energy_proxy": 80.542506,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_042"
+            },
+            {
+              "from": "ice_site_042",
+              "path_type": "low_risk",
+              "to": "ice_site_015"
+            },
+            {
+              "from": "ice_site_015",
+              "path_type": "low_risk",
+              "to": "ice_site_043"
+            },
+            {
+              "from": "ice_site_043",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 88.542506,
+          "return_time": 138.866369,
+          "risk_integral": 9.762671,
+          "service_starts": {
+            "ice_site_015": 76.484337,
+            "ice_site_042": 27.678103,
+            "ice_site_043": 97.266709
+          },
+          "shadow_exposure_min": 68.231946,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_042",
+            "ice_site_015",
+            "ice_site_043"
+          ],
+          "travel_time": 76.73332
+        },
+        {
+          "demand": 4.0,
+          "distance_km": 27.887179,
+          "end_time": 549.953467,
+          "energy_proxy": 99.415258,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_risk",
+              "to": "ice_site_017"
+            },
+            {
+              "from": "ice_site_017",
+              "path_type": "low_risk",
+              "to": "ice_site_045"
+            },
+            {
+              "from": "ice_site_045",
+              "path_type": "low_risk",
+              "to": "ice_site_026"
+            },
+            {
+              "from": "ice_site_026",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 107.415258,
+          "return_time": 442.538209,
+          "risk_integral": 8.946835,
+          "service_starts": {
+            "ice_site_002": 242.381376,
+            "ice_site_003": 380.320613,
+            "ice_site_017": 293.034901,
+            "ice_site_026": 348.035413,
+            "ice_site_045": 327.949197
+          },
+          "shadow_exposure_min": 101.050334,
+          "start_time": 227.408875,
+          "tasks": [
+            "ice_site_002",
+            "ice_site_017",
+            "ice_site_045",
+            "ice_site_026",
+            "ice_site_003"
+          ],
+          "travel_time": 76.910931
+        },
+        {
+          "demand": 3.0,
+          "distance_km": 31.233006,
+          "end_time": 836.848563,
+          "energy_proxy": 99.974991,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_011"
+            },
+            {
+              "from": "ice_site_011",
+              "path_type": "low_risk",
+              "to": "ice_site_010"
+            },
+            {
+              "from": "ice_site_010",
+              "path_type": "low_risk",
+              "to": "ice_site_031"
+            },
+            {
+              "from": "ice_site_031",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 107.974991,
+          "return_time": 728.873572,
+          "risk_integral": 9.854633,
+          "service_starts": {
+            "ice_site_010": 601.112887,
+            "ice_site_011": 574.989622,
+            "ice_site_031": 642.485054
+          },
+          "shadow_exposure_min": 79.819187,
+          "start_time": 549.953467,
+          "tasks": [
+            "ice_site_011",
+            "ice_site_010",
+            "ice_site_031"
+          ],
+          "travel_time": 86.325471
+        }
+      ],
+      "vehicle_id": "rover_03"
+    },
+    {
+      "sorties": [
+        {
+          "demand": 3.0,
+          "distance_km": 26.649503,
+          "end_time": 287.180978,
+          "energy_proxy": 88.260361,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_036"
+            },
+            {
+              "from": "ice_site_036",
+              "path_type": "low_risk",
+              "to": "ice_site_034"
+            },
+            {
+              "from": "ice_site_034",
+              "path_type": "low_risk",
+              "to": "ice_site_008"
+            },
+            {
+              "from": "ice_site_008",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 96.260361,
+          "return_time": 190.920617,
+          "risk_integral": 10.215465,
+          "service_starts": {
+            "ice_site_008": 130.62321,
+            "ice_site_034": 87.268331,
+            "ice_site_036": 32.424295
+          },
+          "shadow_exposure_min": 98.754459,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_036",
+            "ice_site_034",
+            "ice_site_008"
+          ],
+          "travel_time": 77.671347
+        },
+        {
+          "demand": 1.5,
+          "distance_km": 22.915102,
+          "end_time": 472.868459,
+          "energy_proxy": 65.305032,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_048"
+            },
+            {
+              "from": "ice_site_048",
+              "path_type": "low_risk",
+              "to": "ice_site_007"
+            },
+            {
+              "from": "ice_site_007",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 73.305032,
+          "return_time": 399.563427,
+          "risk_integral": 8.081833,
+          "service_starts": {
+            "ice_site_007": 350.963908,
+            "ice_site_048": 317.353511
+          },
+          "shadow_exposure_min": 58.286147,
+          "start_time": 287.180978,
+          "tasks": [
+            "ice_site_048",
+            "ice_site_007"
+          ],
+          "travel_time": 65.517227
+        },
+        {
+          "demand": 2.5,
+          "distance_km": 32.693705,
+          "end_time": 766.814844,
+          "energy_proxy": 92.801158,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_033"
+            },
+            {
+              "from": "ice_site_033",
+              "path_type": "low_risk",
+              "to": "ice_site_032"
+            },
+            {
+              "from": "ice_site_032",
+              "path_type": "low_risk",
+              "to": "ice_site_021"
+            },
+            {
+              "from": "ice_site_021",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 100.801158,
+          "return_time": 666.013686,
+          "risk_integral": 8.990916,
+          "service_starts": {
+            "ice_site_021": 627.302095,
+            "ice_site_032": 517.32822,
+            "ice_site_033": 494.363513
+          },
+          "shadow_exposure_min": 69.749953,
+          "start_time": 472.868459,
+          "tasks": [
+            "ice_site_033",
+            "ice_site_032",
+            "ice_site_021"
+          ],
+          "travel_time": 87.467595
+        }
+      ],
+      "vehicle_id": "rover_04"
+    },
+    {
+      "sorties": [
+        {
+          "demand": 3.5,
+          "distance_km": 25.518737,
+          "end_time": 326.004676,
+          "energy_proxy": 86.652771,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_040"
+            },
+            {
+              "from": "ice_site_040",
+              "path_type": "low_risk",
+              "to": "ice_site_018"
+            },
+            {
+              "from": "ice_site_018",
+              "path_type": "low_risk",
+              "to": "ice_site_019"
+            },
+            {
+              "from": "ice_site_019",
+              "path_type": "low_risk",
+              "to": "ice_site_039"
+            },
+            {
+              "from": "ice_site_039",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 94.652771,
+          "return_time": 231.351905,
+          "risk_integral": 8.766204,
+          "service_starts": {
+            "ice_site_018": 116.275312,
+            "ice_site_019": 173.721249,
+            "ice_site_039": 197.654513,
+            "ice_site_040": 23.504276
+          },
+          "shadow_exposure_min": 121.108525,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_040",
+            "ice_site_018",
+            "ice_site_019",
+            "ice_site_039"
+          ],
+          "travel_time": 71.157051
+        },
+        {
+          "demand": 2.5,
+          "distance_km": 31.119958,
+          "end_time": 588.875935,
+          "energy_proxy": 90.562562,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_023"
+            },
+            {
+              "from": "ice_site_023",
+              "path_type": "low_risk",
+              "to": "ice_site_046"
+            },
+            {
+              "from": "ice_site_046",
+              "path_type": "low_risk",
+              "to": "ice_site_028"
+            },
+            {
+              "from": "ice_site_028",
+              "path_type": "low_risk",
+              "to": "ice_site_047"
+            },
+            {
+              "from": "ice_site_047",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 98.562562,
+          "return_time": 490.313373,
+          "risk_integral": 11.118526,
+          "service_starts": {
+            "ice_site_023": 347.735942,
+            "ice_site_028": 423.257773,
+            "ice_site_046": 389.74401,
+            "ice_site_047": 453.269152
+          },
+          "shadow_exposure_min": 77.716606,
+          "start_time": 326.004676,
+          "tasks": [
+            "ice_site_023",
+            "ice_site_046",
+            "ice_site_028",
+            "ice_site_047"
+          ],
+          "travel_time": 89.464979
+        },
+        {
+          "demand": 3.0,
+          "distance_km": 28.829624,
+          "end_time": 914.0082,
+          "energy_proxy": 91.658779,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_024"
+            },
+            {
+              "from": "ice_site_024",
+              "path_type": "low_risk",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "ice_site_030"
+            },
+            {
+              "from": "ice_site_030",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 99.658779,
+          "return_time": 814.349421,
+          "risk_integral": 10.620014,
+          "service_starts": {
+            "ice_site_001": 636.961912,
+            "ice_site_024": 608.442977,
+            "ice_site_030": 740.626488
+          },
+          "shadow_exposure_min": 141.929118,
+          "start_time": 588.875935,
+          "tasks": [
+            "ice_site_024",
+            "ice_site_001",
+            "ice_site_030"
+          ],
+          "travel_time": 81.848557
+        }
+      ],
+      "vehicle_id": "rover_05"
+    }
+  ],
+  "lower_bound": 12321.71715,
+  "makespan_min": 914.0082,
+  "note": "Fallback incumbent from reference or seeded column pool; no exact BPC lower bound or certificate. task_count=50 exceeds max_exact_tasks=10",
+  "objective": 12790.023781,
+  "pareto_label_count": 0,
+  "relaxation_gap": 0.036614993,
+  "restricted_rmp": {
+    "active_column_count": 70,
+    "added_column_count": 0,
+    "direct_column_generation": {
+      "enabled": false,
+      "reason": "seeded_large_pool_uses_direct_pricing_probe_only"
+    },
+    "direct_pricing": {
+      "best_column": {
+        "end_time": 546.564732,
+        "legs": [
+          [
+            {
+              "from": "depot",
+              "path_type": "low_energy",
+              "to": "ice_site_018"
+            },
+            {
+              "from": "ice_site_018",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_006"
+            },
+            {
+              "from": "ice_site_006",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ]
+        ],
+        "objective": 514.286836,
+        "sortie_count": 2,
+        "task_count": 3,
+        "tasks": [
+          "ice_site_002",
+          "ice_site_006",
+          "ice_site_018"
+        ]
+      },
+      "best_reduced_cost": -3710.746331,
+      "candidate_round_count": 8,
+      "candidate_round_limit": 8,
+      "candidate_sets": [
+        [
+          "ice_site_001",
+          "ice_site_009",
+          "ice_site_004",
+          "ice_site_003",
+          "ice_site_005"
+        ],
+        [
+          "ice_site_003",
+          "ice_site_007",
+          "ice_site_034",
+          "ice_site_005",
+          "ice_site_015"
+        ],
+        [
+          "ice_site_002",
+          "ice_site_008",
+          "ice_site_039",
+          "ice_site_028",
+          "ice_site_034"
+        ],
+        [
+          "ice_site_007",
+          "ice_site_006",
+          "ice_site_002",
+          "ice_site_008",
+          "ice_site_018"
+        ],
+        [
+          "ice_site_010",
+          "ice_site_019",
+          "ice_site_012",
+          "ice_site_023",
+          "ice_site_039"
+        ],
+        [
+          "ice_site_028",
+          "ice_site_024",
+          "ice_site_047",
+          "ice_site_033",
+          "ice_site_011"
+        ],
+        [
+          "ice_site_045",
+          "ice_site_025",
+          "ice_site_022",
+          "ice_site_046",
+          "ice_site_020"
+        ],
+        [
+          "ice_site_026",
+          "ice_site_044",
+          "ice_site_037",
+          "ice_site_041",
+          "ice_site_043"
+        ]
+      ],
+      "candidate_summaries": [
+        {
+          "best_reduced_cost": -1866.197985,
+          "candidate_task_ids": [
+            "ice_site_001",
+            "ice_site_003",
+            "ice_site_004",
+            "ice_site_005",
+            "ice_site_009"
+          ],
+          "feasible_sortie_template_count": 151,
+          "negative_found": true,
+          "pareto_label_count": 15,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        },
+        {
+          "best_reduced_cost": -1863.668618,
+          "candidate_task_ids": [
+            "ice_site_003",
+            "ice_site_005",
+            "ice_site_007",
+            "ice_site_015",
+            "ice_site_034"
+          ],
+          "feasible_sortie_template_count": 909,
+          "negative_found": true,
+          "pareto_label_count": 61,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        },
+        {
+          "best_reduced_cost": -1852.467362,
+          "candidate_task_ids": [
+            "ice_site_002",
+            "ice_site_008",
+            "ice_site_028",
+            "ice_site_034",
+            "ice_site_039"
+          ],
+          "feasible_sortie_template_count": 2965,
+          "full_cover_objective": 818.34464,
+          "full_cover_reduced_cost": -1335.873507,
+          "negative_found": true,
+          "pareto_label_count": 85,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        },
+        {
+          "best_reduced_cost": -3710.746331,
+          "candidate_task_ids": [
+            "ice_site_002",
+            "ice_site_006",
+            "ice_site_007",
+            "ice_site_008",
+            "ice_site_018"
+          ],
+          "feasible_sortie_template_count": 423,
+          "negative_found": true,
+          "pareto_label_count": 44,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        },
+        {
+          "best_reduced_cost": 549.377919,
+          "candidate_task_ids": [
+            "ice_site_010",
+            "ice_site_012",
+            "ice_site_019",
+            "ice_site_023",
+            "ice_site_039"
+          ],
+          "feasible_sortie_template_count": 1068,
+          "full_cover_objective": 1042.592992,
+          "full_cover_reduced_cost": 782.241662,
+          "negative_found": false,
+          "pareto_label_count": 50,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        },
+        {
+          "best_reduced_cost": 2144.592757,
+          "candidate_task_ids": [
+            "ice_site_011",
+            "ice_site_024",
+            "ice_site_028",
+            "ice_site_033",
+            "ice_site_047"
+          ],
+          "feasible_sortie_template_count": 1342,
+          "negative_found": false,
+          "pareto_label_count": 41,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        },
+        {
+          "best_reduced_cost": 1871.977175,
+          "candidate_task_ids": [
+            "ice_site_020",
+            "ice_site_022",
+            "ice_site_025",
+            "ice_site_045",
+            "ice_site_046"
+          ],
+          "feasible_sortie_template_count": 626,
+          "negative_found": false,
+          "pareto_label_count": 37,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        },
+        {
+          "best_reduced_cost": 1906.49321,
+          "candidate_task_ids": [
+            "ice_site_026",
+            "ice_site_037",
+            "ice_site_041",
+            "ice_site_043",
+            "ice_site_044"
+          ],
+          "feasible_sortie_template_count": 315,
+          "full_cover_objective": 1408.427555,
+          "full_cover_reduced_cost": 3250.415002,
+          "negative_found": false,
+          "pareto_label_count": 44,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        }
+      ],
+      "candidate_task_count": 5,
+      "candidate_task_ids": [
+        "ice_site_002",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_008",
+        "ice_site_018"
+      ],
+      "exact_status": "NOT_SOLVED",
+      "feasible_sortie_template_count": 7799,
+      "max_direct_tasks": 5,
+      "negative_column_count": 5,
+      "negative_found": true,
+      "note": "Partial direct-label pricing on a selected candidate task subset; negative columns are valid diagnostics, but no-negative is not exhaustive.",
+      "pareto_label_count": 377,
+      "pricing_complete_for_all_tasks": false,
+      "sortie_attempt_count": 976680,
+      "sortie_template_cache": {
+        "enabled": false
+      },
+      "status": "PARTIAL_DIRECT_LABEL_PRICED",
+      "task_count": 50
+    },
+    "enabled": true,
+    "exact_status": "NOT_BPC_CERTIFIED",
+    "fleet_dual": -1841.987447,
+    "iteration_count": 1,
+    "min_reduced_cost": 0.0,
+    "note": "LP bound is optimal only for the supplied restricted journey-column universe; all restricted columns were loaded.",
+    "objective_bound": 12958.304256,
+    "pool": {
+      "column_count": 70,
+      "covered_task_count": 50,
+      "invalid_reference_journey_count": 0,
+      "invalid_reference_sortie_count": 0,
+      "note": "Seeded diagnostic pool from reference journeys, reference sorties, and singleton journeys.",
+      "reference_journey_count": 5,
+      "reference_sortie_count": 15,
+      "singleton_count": 50,
+      "status": "SEEDED_JOURNEY_POOL_BUILT"
+    },
+    "pool_type": "seeded_reference_singleton_pool",
+    "pricing_history": [
+      {
+        "active_column_count": 70,
+        "added_column_count": 0,
+        "iteration": 1,
+        "lp_dual_bound": 12958.304256,
+        "min_reduced_cost": 0.0,
+        "negative_column_count": 0
+      }
+    ],
+    "status": "RESTRICTED_RMP_OPTIMAL",
+    "task_cover_duals": {
+      "ice_site_001": 2446.508566,
+      "ice_site_002": 2027.490718,
+      "ice_site_003": 2229.867407,
+      "ice_site_004": 2256.814124,
+      "ice_site_005": 2186.51983,
+      "ice_site_006": 2100.450945,
+      "ice_site_007": 2173.09164,
+      "ice_site_008": 1968.714876,
+      "ice_site_009": 2325.752594,
+      "ice_site_010": 1431.635638,
+      "ice_site_011": 0.0,
+      "ice_site_012": 190.592205,
+      "ice_site_013": 0.0,
+      "ice_site_014": 0.0,
+      "ice_site_015": 0.0,
+      "ice_site_016": 0.0,
+      "ice_site_017": -1242.543584,
+      "ice_site_018": 1939.078951,
+      "ice_site_019": 316.368718,
+      "ice_site_020": 0.0,
+      "ice_site_021": -345.843353,
+      "ice_site_022": 0.0,
+      "ice_site_023": 163.742216,
+      "ice_site_024": 0.0,
+      "ice_site_025": 0.0,
+      "ice_site_026": 0.0,
+      "ice_site_027": 0.0,
+      "ice_site_028": 0.0,
+      "ice_site_029": 0.0,
+      "ice_site_030": 0.0,
+      "ice_site_031": 0.0,
+      "ice_site_032": 0.0,
+      "ice_site_033": 0.0,
+      "ice_site_034": 0.0,
+      "ice_site_035": 0.0,
+      "ice_site_036": 0.0,
+      "ice_site_037": 0.0,
+      "ice_site_038": 0.0,
+      "ice_site_039": 0.0,
+      "ice_site_040": 0.0,
+      "ice_site_041": 0.0,
+      "ice_site_042": 0.0,
+      "ice_site_043": 0.0,
+      "ice_site_044": 0.0,
+      "ice_site_045": 0.0,
+      "ice_site_046": 0.0,
+      "ice_site_047": 0.0,
+      "ice_site_048": 0.0,
+      "ice_site_049": 0.0,
+      "ice_site_050": 0.0
+    },
+    "universe_column_count": 70
+  },
+  "route_template_count": 0,
+  "schema_version": "lunar_ice_bpc.solution.v1",
+  "seeded_column_pool_selection": {
+    "candidate_column_count": 70,
+    "journey_count": 0,
+    "journeys": [],
+    "max_states": 50000,
+    "note": "Stopped after reaching max_states=50000.",
+    "objective": null,
+    "state_count": 50001,
+    "status": "COLUMN_POOL_STATE_LIMIT",
+    "unique_task_set_count": 70
+  },
+  "seeded_journey_pool": {
+    "column_count": 70,
+    "covered_task_count": 50,
+    "invalid_reference_journey_count": 0,
+    "invalid_reference_sortie_count": 0,
+    "note": "Seeded diagnostic pool from reference journeys, reference sorties, and singleton journeys.",
+    "reference_journey_count": 5,
+    "reference_sortie_count": 15,
+    "singleton_count": 50,
+    "status": "SEEDED_JOURNEY_POOL_BUILT"
+  },
+  "set_partition_state_count": 0,
+  "solver_options": {
+    "canonical_dp_max_tasks": 10,
+    "direct_pricing_cg_rounds": 1,
+    "direct_pricing_enabled": true,
+    "direct_pricing_max_tasks": 5,
+    "restricted_rmp_enabled": true,
+    "uses_true_dual_bpc_certificate": false
+  },
+  "status": "FEASIBLE_REFERENCE",
+  "task_count": 50
+}

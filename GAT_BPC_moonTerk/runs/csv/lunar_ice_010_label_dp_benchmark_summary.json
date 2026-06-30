@@ -1,0 +1,85 @@
+{
+  "bpc_certificate_status_counts": {
+    "CERTIFIED_NO_NEGATIVE": 20
+  },
+  "branch_node_queue_branch_feasible_negative_count": 13,
+  "branch_node_queue_direct_pricing_probe_node_count": 60,
+  "branch_node_queue_evaluated_node_count": 140,
+  "branch_node_queue_expanded_node_count": 60,
+  "branch_node_queue_node_bound_can_fathom_count": 0,
+  "branch_node_queue_node_bound_fail_closed_count": 140,
+  "branch_node_queue_node_bound_incumbent_attached_count": 140,
+  "branch_node_queue_node_bound_incumbent_missing_count": 0,
+  "branch_node_queue_node_pricing_certificate_can_certify_count": 0,
+  "branch_node_queue_post_pricing_added_column_count": 16,
+  "branch_node_queue_post_pricing_restricted_rmp_node_count": 13,
+  "branch_node_queue_status_counts": {
+    "RESTRICTED_BRANCH_NODE_QUEUE_EVALUATED": 20
+  },
+  "branch_tree_probe_child_evaluated_count": 40,
+  "branch_tree_probe_evaluated_node_count": 60,
+  "branch_tree_probe_status_counts": {
+    "BRANCH_TREE_RESTRICTED_RMP_EVALUATED": 20
+  },
+  "certified_optimal_count": 20,
+  "completion_bound_consistency_pass_count": 0,
+  "completion_bound_consistency_status_counts": {
+    "missing": 20
+  },
+  "cut_probe_status_counts": {
+    "CUT_PROBE_READY": 20
+  },
+  "cut_probe_violated_subset_candidate_count": 0,
+  "direct_baseline_status_counts": {
+    "DIRECT_DP_BASELINE_OPTIMAL": 20
+  },
+  "direct_pricing_completion_bound_evaluated_label_count": 9320,
+  "direct_pricing_completion_bound_pruned_label_count": 15,
+  "exact_baseline_optimal_count": 20,
+  "exact_claim_scope_counts": {
+    "fixed_logical_graph_exhaustive_direct_dp": 20
+  },
+  "exact_status_counts": {
+    "EXACT_BASELINE_OPTIMAL": 20
+  },
+  "fixed_graph_integer_root_certified_count": 20,
+  "fixed_graph_root_lp_certified_count": 20,
+  "fractional_branch_probe_status_counts": {
+    "NO_FRACTIONAL_BRANCH_CANDIDATE": 20
+  },
+  "max_exact_baseline_wall_time_sec": 5.217225,
+  "max_wall_time_sec": 31.793226,
+  "mean_exact_baseline_wall_time_sec": 4.254416,
+  "mean_relaxation_gap": 0.0,
+  "mean_wall_time_sec": 23.840145,
+  "node_bound_certificate_status_counts": {
+    "NODE_BOUND_FATHOMED": 20
+  },
+  "node_bound_fathomed_count": 20,
+  "note": "exact_baseline_optimal_count counts exhaustive direct-DP fixed-graph optima; fixed_graph_root_lp_certified_count is scoped to the fixed three-path root LP; certified_optimal_count is positive only when the selected pricing certificate is true-dual and the node-bound artifact can fathom the node.",
+  "official_pricing_frontier_count": 20,
+  "pricing_frontier_status_counts": {
+    "CERTIFIED_FRONTIER_NO_NEGATIVE": 20
+  },
+  "results_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/csv/lunar_ice_010_label_dp_benchmark.csv",
+  "run_count": 20,
+  "schema_version": "lunar_ice_bpc.benchmark_summary.v1",
+  "solution_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/solutions/lunar_ice_010_label_dp_benchmark",
+  "status_counts": {
+    "DIRECT_DP_BASELINE_OPTIMAL": 20
+  },
+  "time_limit_exceeded_count": 0,
+  "timeout_reason_counts": {},
+  "total_node_count": 20,
+  "true_dual_bpc_certificate_count": 20,
+  "true_dual_pricing_tail_certified_count": 20,
+  "true_dual_pricing_tail_dual_vector_bound_count": 20,
+  "true_dual_pricing_tail_status_counts": {
+    "TRUE_DUAL_PRICING_TAIL_CERTIFIED": 20
+  },
+  "true_dual_readiness_missing_input_count": 0,
+  "true_dual_readiness_status_counts": {
+    "TRUE_DUAL_CERTIFICATE_READY": 20
+  },
+  "true_dual_readiness_waiting_count": 0
+}

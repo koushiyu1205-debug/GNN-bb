@@ -1,0 +1,714 @@
+{
+  "analytic_lower_bound": {
+    "bound": 625.850153,
+    "completion_term_bound": 625.416668,
+    "exact_status": "RELAXATION_LOWER_BOUND",
+    "note": "Conservative non-BPC relaxation lower bound; ignores nonnegative routing, return, recharge, fleet, capacity, shadow, and beta journey-end terms.",
+    "service_energy_bound": 34.13812,
+    "service_risk_bound": 0.921039,
+    "status": "ANALYTIC_RELAXATION_BOUND",
+    "task_count": 5
+  },
+  "canonical_baseline": {
+    "exact_status": "NOT_BPC_CERTIFIED",
+    "generated_journey_count": 31,
+    "generated_sortie_count": 975,
+    "note": "Optimal only within the restricted canonical-path journey-column universe ('low_time', 'low_energy', 'low_risk'); no true-dual BPC certificate.",
+    "objective": 707.095855,
+    "pareto_label_count": 43,
+    "route_template_count": 76,
+    "set_partition_state_count": 33,
+    "status": "CANONICAL_DP_BASELINE_OPTIMAL"
+  },
+  "canonical_objective": 707.095855,
+  "covered_task_count": 5,
+  "direct_exact_baseline": {
+    "exact_status": "EXACT_BASELINE_OPTIMAL",
+    "generated_journey_count": 31,
+    "generated_sortie_count": 122085,
+    "note": "Optimal over the fixed logical graph with all three per-leg path choices and exhaustive direct DP; this is an exact baseline, not a true-dual BPC certificate.",
+    "objective": 704.550042,
+    "pareto_label_count": 57,
+    "route_template_count": 1205,
+    "set_partition_state_count": 33,
+    "status": "DIRECT_DP_BASELINE_OPTIMAL"
+  },
+  "direct_exact_objective": 704.550042,
+  "direct_root_certificate": {
+    "active_column_count": 31,
+    "certificate_scope": "fixed_logical_graph_direct_root",
+    "enabled": true,
+    "exact_status": "FIXED_GRAPH_INTEGER_OPTIMAL",
+    "fleet_dual": -86.689577,
+    "fleet_size": 1,
+    "generated_journey_count": 31,
+    "generated_sortie_count": 122085,
+    "integer_matches_root_lp": true,
+    "integer_objective": 704.550042,
+    "iteration_count": 1,
+    "lp_bound": 704.550042,
+    "max_direct_tasks": 5,
+    "min_reduced_cost": 0.0,
+    "note": "Certified only for the exhaustive direct journey-column universe of the fixed three-path logical graph at the root LP; no cuts, branching, or true-dual BPC certificate.",
+    "pareto_label_count": 57,
+    "root_gap": 0.0,
+    "route_template_count": 1205,
+    "status": "DIRECT_ROOT_FIXED_GRAPH_INTEGER_CERTIFIED",
+    "task_count": 5,
+    "task_cover_duals": {
+      "ice_site_001": 188.641347,
+      "ice_site_002": 90.934955,
+      "ice_site_003": 140.38768,
+      "ice_site_004": 127.464692,
+      "ice_site_005": 243.810945
+    },
+    "universe_column_count": 31,
+    "uses_true_dual_bpc_certificate": false
+  },
+  "exact_status": "EXACT_BASELINE_OPTIMAL",
+  "gap_type": "analytic_relaxation_not_bpc_certificate",
+  "generated_journey_count": 31,
+  "generated_sortie_count": 122085,
+  "incumbent_source": "direct_dp_exact_baseline",
+  "instance_id": "lunar_ice_005_001_seed629001",
+  "journeys": [
+    {
+      "sorties": [
+        {
+          "demand": 3.0,
+          "distance_km": 23.533563,
+          "end_time": 284.787782,
+          "energy_proxy": 76.785271,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 84.785271,
+          "return_time": 200.002511,
+          "risk_integral": 6.890384,
+          "service_starts": {
+            "ice_site_002": 14.468913,
+            "ice_site_003": 59.360712,
+            "ice_site_004": 169.80202
+          },
+          "shadow_exposure_min": 96.505266,
+          "start_time": 0.0,
+          "tasks": [
+            "ice_site_002",
+            "ice_site_003",
+            "ice_site_004"
+          ],
+          "travel_time": 63.172008
+        },
+        {
+          "demand": 1.5,
+          "distance_km": 20.519325,
+          "end_time": 443.872139,
+          "energy_proxy": 51.454824,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_time",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_time",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 59.454824,
+          "return_time": 384.417315,
+          "risk_integral": 3.670609,
+          "service_starts": {
+            "ice_site_001": 298.750995,
+            "ice_site_005": 331.88007
+          },
+          "shadow_exposure_min": 25.836409,
+          "start_time": 284.787782,
+          "tasks": [
+            "ice_site_001",
+            "ice_site_005"
+          ],
+          "travel_time": 50.478585
+        }
+      ],
+      "vehicle_id": "rover_01"
+    }
+  ],
+  "lower_bound": 625.850153,
+  "makespan_min": 443.872139,
+  "node_count": 1,
+  "note": "Optimal over the fixed logical graph with all three per-leg path choices and exhaustive direct DP; this is an exact baseline, not a true-dual BPC certificate.",
+  "objective": 704.550042,
+  "pareto_label_count": 57,
+  "relaxation_gap": 0.111702341,
+  "restricted_rmp": {
+    "active_column_count": 31,
+    "added_column_count": 0,
+    "direct_column_generation": {
+      "added_column_count": 1,
+      "enabled": true,
+      "exact_status": "NOT_SOLVED",
+      "final_active_column_count": 31,
+      "final_bound": 704.550042,
+      "final_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+      "first_direct_pricing": {
+        "best_column": {
+          "end_time": 443.872139,
+          "legs": [
+            [
+              {
+                "from": "depot",
+                "path_type": "low_risk",
+                "to": "ice_site_002"
+              },
+              {
+                "from": "ice_site_002",
+                "path_type": "low_time",
+                "to": "ice_site_003"
+              },
+              {
+                "from": "ice_site_003",
+                "path_type": "low_time",
+                "to": "ice_site_004"
+              },
+              {
+                "from": "ice_site_004",
+                "path_type": "low_risk",
+                "to": "depot"
+              }
+            ],
+            [
+              {
+                "from": "depot",
+                "path_type": "low_time",
+                "to": "ice_site_001"
+              },
+              {
+                "from": "ice_site_001",
+                "path_type": "low_time",
+                "to": "ice_site_005"
+              },
+              {
+                "from": "ice_site_005",
+                "path_type": "low_risk",
+                "to": "depot"
+              }
+            ]
+          ],
+          "objective": 704.550042,
+          "sortie_count": 2,
+          "task_count": 5,
+          "tasks": [
+            "ice_site_001",
+            "ice_site_002",
+            "ice_site_003",
+            "ice_site_004",
+            "ice_site_005"
+          ]
+        },
+        "best_reduced_cost": -2.545813,
+        "candidate_round_count": 1,
+        "candidate_round_limit": null,
+        "candidate_sets": [
+          [
+            "ice_site_001",
+            "ice_site_002",
+            "ice_site_003",
+            "ice_site_004",
+            "ice_site_005"
+          ]
+        ],
+        "candidate_summaries": [
+          {
+            "best_reduced_cost": -2.545813,
+            "candidate_task_ids": [
+              "ice_site_001",
+              "ice_site_002",
+              "ice_site_003",
+              "ice_site_004",
+              "ice_site_005"
+            ],
+            "feasible_sortie_template_count": 1205,
+            "full_cover_objective": 704.550042,
+            "full_cover_reduced_cost": -2.545813,
+            "negative_found": true,
+            "pareto_label_count": 57,
+            "sortie_attempt_count": 122085,
+            "sortie_template_cache_hit": false
+          }
+        ],
+        "candidate_task_count": 5,
+        "candidate_task_ids": [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_003",
+          "ice_site_004",
+          "ice_site_005"
+        ],
+        "exact_status": "NOT_BPC_CERTIFIED",
+        "feasible_sortie_template_count": 1205,
+        "max_direct_tasks": 5,
+        "negative_column_count": 2,
+        "negative_found": true,
+        "note": "Direct-label pricing over all three per-leg path choices for the full task set within max_direct_tasks; not an official BPC certificate.",
+        "pareto_label_count": 57,
+        "pricing_complete_for_all_tasks": true,
+        "sortie_attempt_count": 122085,
+        "sortie_template_cache": {
+          "built_sortie_attempt_count": 122085,
+          "enabled": true,
+          "entry_count": 1,
+          "hit_count": 0,
+          "miss_count": 1,
+          "reused_sortie_attempt_count": 0
+        },
+        "status": "DIRECT_LABEL_PRICED",
+        "task_count": 5
+      },
+      "history": [
+        {
+          "added_column_count": 1,
+          "best_reduced_cost": -2.545813,
+          "direct_pricing_complete_for_all_tasks": true,
+          "direct_pricing_status": "DIRECT_LABEL_PRICED",
+          "duplicate_column": true,
+          "negative_found": true,
+          "priced_column_count": 2,
+          "rmp_active_column_count": 31,
+          "rmp_bound": 707.095855,
+          "round": 1,
+          "sortie_template_cache": {
+            "built_sortie_attempt_count": 122085,
+            "enabled": true,
+            "entry_count": 1,
+            "hit_count": 0,
+            "miss_count": 1,
+            "reused_sortie_attempt_count": 0
+          }
+        }
+      ],
+      "integer_incumbent": {
+        "candidate_column_count": 32,
+        "journey_count": 1,
+        "journeys": [
+          {
+            "sorties": [
+              {
+                "demand": 3.0,
+                "distance_km": 23.533563,
+                "end_time": 284.787782,
+                "energy_proxy": 76.785271,
+                "feasible": true,
+                "legs": [
+                  {
+                    "from": "depot",
+                    "path_type": "low_risk",
+                    "to": "ice_site_002"
+                  },
+                  {
+                    "from": "ice_site_002",
+                    "path_type": "low_time",
+                    "to": "ice_site_003"
+                  },
+                  {
+                    "from": "ice_site_003",
+                    "path_type": "low_time",
+                    "to": "ice_site_004"
+                  },
+                  {
+                    "from": "ice_site_004",
+                    "path_type": "low_risk",
+                    "to": "depot"
+                  }
+                ],
+                "recharge_time": 84.785271,
+                "return_time": 200.002511,
+                "risk_integral": 6.890384,
+                "service_starts": {
+                  "ice_site_002": 14.468913,
+                  "ice_site_003": 59.360712,
+                  "ice_site_004": 169.80202
+                },
+                "shadow_exposure_min": 96.505266,
+                "start_time": 0.0,
+                "tasks": [
+                  "ice_site_002",
+                  "ice_site_003",
+                  "ice_site_004"
+                ],
+                "travel_time": 63.172008
+              },
+              {
+                "demand": 1.5,
+                "distance_km": 20.519325,
+                "end_time": 443.872139,
+                "energy_proxy": 51.454824,
+                "feasible": true,
+                "legs": [
+                  {
+                    "from": "depot",
+                    "path_type": "low_time",
+                    "to": "ice_site_001"
+                  },
+                  {
+                    "from": "ice_site_001",
+                    "path_type": "low_time",
+                    "to": "ice_site_005"
+                  },
+                  {
+                    "from": "ice_site_005",
+                    "path_type": "low_risk",
+                    "to": "depot"
+                  }
+                ],
+                "recharge_time": 59.454824,
+                "return_time": 384.417315,
+                "risk_integral": 3.670609,
+                "service_starts": {
+                  "ice_site_001": 298.750995,
+                  "ice_site_005": 331.88007
+                },
+                "shadow_exposure_min": 25.836409,
+                "start_time": 284.787782,
+                "tasks": [
+                  "ice_site_001",
+                  "ice_site_005"
+                ],
+                "travel_time": 50.478585
+              }
+            ],
+            "vehicle_id": "rover_pool_01"
+          }
+        ],
+        "note": "Optimal only within the supplied journey-column pool.",
+        "objective": 704.550042,
+        "state_count": 33,
+        "status": "COLUMN_POOL_EXACT_COVER",
+        "unique_task_set_count": 31
+      },
+      "last_direct_pricing": {
+        "best_column": {
+          "end_time": 443.872139,
+          "legs": [
+            [
+              {
+                "from": "depot",
+                "path_type": "low_risk",
+                "to": "ice_site_002"
+              },
+              {
+                "from": "ice_site_002",
+                "path_type": "low_time",
+                "to": "ice_site_003"
+              },
+              {
+                "from": "ice_site_003",
+                "path_type": "low_time",
+                "to": "ice_site_004"
+              },
+              {
+                "from": "ice_site_004",
+                "path_type": "low_risk",
+                "to": "depot"
+              }
+            ],
+            [
+              {
+                "from": "depot",
+                "path_type": "low_time",
+                "to": "ice_site_001"
+              },
+              {
+                "from": "ice_site_001",
+                "path_type": "low_time",
+                "to": "ice_site_005"
+              },
+              {
+                "from": "ice_site_005",
+                "path_type": "low_risk",
+                "to": "depot"
+              }
+            ]
+          ],
+          "objective": 704.550042,
+          "sortie_count": 2,
+          "task_count": 5,
+          "tasks": [
+            "ice_site_001",
+            "ice_site_002",
+            "ice_site_003",
+            "ice_site_004",
+            "ice_site_005"
+          ]
+        },
+        "best_reduced_cost": -2.545813,
+        "candidate_round_count": 1,
+        "candidate_round_limit": null,
+        "candidate_sets": [
+          [
+            "ice_site_001",
+            "ice_site_002",
+            "ice_site_003",
+            "ice_site_004",
+            "ice_site_005"
+          ]
+        ],
+        "candidate_summaries": [
+          {
+            "best_reduced_cost": -2.545813,
+            "candidate_task_ids": [
+              "ice_site_001",
+              "ice_site_002",
+              "ice_site_003",
+              "ice_site_004",
+              "ice_site_005"
+            ],
+            "feasible_sortie_template_count": 1205,
+            "full_cover_objective": 704.550042,
+            "full_cover_reduced_cost": -2.545813,
+            "negative_found": true,
+            "pareto_label_count": 57,
+            "sortie_attempt_count": 122085,
+            "sortie_template_cache_hit": false
+          }
+        ],
+        "candidate_task_count": 5,
+        "candidate_task_ids": [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_003",
+          "ice_site_004",
+          "ice_site_005"
+        ],
+        "exact_status": "NOT_BPC_CERTIFIED",
+        "feasible_sortie_template_count": 1205,
+        "max_direct_tasks": 5,
+        "negative_column_count": 2,
+        "negative_found": true,
+        "note": "Direct-label pricing over all three per-leg path choices for the full task set within max_direct_tasks; not an official BPC certificate.",
+        "pareto_label_count": 57,
+        "pricing_complete_for_all_tasks": true,
+        "sortie_attempt_count": 122085,
+        "sortie_template_cache": {
+          "built_sortie_attempt_count": 122085,
+          "enabled": true,
+          "entry_count": 1,
+          "hit_count": 0,
+          "miss_count": 1,
+          "reused_sortie_attempt_count": 0
+        },
+        "status": "DIRECT_LABEL_PRICED",
+        "task_count": 5
+      },
+      "note": "Stopped after max_rounds=1; direct pricing may still find negative columns.",
+      "round_count": 1,
+      "sortie_template_cache": {
+        "built_sortie_attempt_count": 122085,
+        "enabled": true,
+        "entry_count": 1,
+        "hit_count": 0,
+        "miss_count": 1,
+        "reused_sortie_attempt_count": 0
+      },
+      "status": "DIRECT_CG_ROUND_LIMIT"
+    },
+    "direct_pricing": {
+      "best_column": {
+        "end_time": 443.872139,
+        "legs": [
+          [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          [
+            {
+              "from": "depot",
+              "path_type": "low_time",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_time",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ]
+        ],
+        "objective": 704.550042,
+        "sortie_count": 2,
+        "task_count": 5,
+        "tasks": [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_003",
+          "ice_site_004",
+          "ice_site_005"
+        ]
+      },
+      "best_reduced_cost": -2.545813,
+      "candidate_round_count": 1,
+      "candidate_round_limit": null,
+      "candidate_sets": [
+        [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_003",
+          "ice_site_004",
+          "ice_site_005"
+        ]
+      ],
+      "candidate_summaries": [
+        {
+          "best_reduced_cost": -2.545813,
+          "candidate_task_ids": [
+            "ice_site_001",
+            "ice_site_002",
+            "ice_site_003",
+            "ice_site_004",
+            "ice_site_005"
+          ],
+          "feasible_sortie_template_count": 1205,
+          "full_cover_objective": 704.550042,
+          "full_cover_reduced_cost": -2.545813,
+          "negative_found": true,
+          "pareto_label_count": 57,
+          "sortie_attempt_count": 122085,
+          "sortie_template_cache_hit": false
+        }
+      ],
+      "candidate_task_count": 5,
+      "candidate_task_ids": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_004",
+        "ice_site_005"
+      ],
+      "exact_status": "NOT_BPC_CERTIFIED",
+      "feasible_sortie_template_count": 1205,
+      "max_direct_tasks": 5,
+      "negative_column_count": 2,
+      "negative_found": true,
+      "note": "Direct-label pricing over all three per-leg path choices for the full task set within max_direct_tasks; not an official BPC certificate.",
+      "pareto_label_count": 57,
+      "pricing_complete_for_all_tasks": true,
+      "sortie_attempt_count": 122085,
+      "sortie_template_cache": {
+        "built_sortie_attempt_count": 122085,
+        "enabled": true,
+        "entry_count": 1,
+        "hit_count": 0,
+        "miss_count": 1,
+        "reused_sortie_attempt_count": 0
+      },
+      "status": "DIRECT_LABEL_PRICED",
+      "task_count": 5
+    },
+    "enabled": true,
+    "exact_status": "NOT_BPC_CERTIFIED",
+    "fleet_dual": -94.600771,
+    "iteration_count": 1,
+    "min_reduced_cost": -0.0,
+    "note": "LP bound is optimal only for the supplied restricted journey-column universe; all restricted columns were loaded.",
+    "objective_bound": 707.095855,
+    "pool": {
+      "column_count": 31,
+      "generated_sortie_count": 975,
+      "pareto_label_count": 43,
+      "route_template_count": 76
+    },
+    "pool_type": "canonical_path_universe",
+    "pricing_history": [
+      {
+        "active_column_count": 31,
+        "added_column_count": 0,
+        "iteration": 1,
+        "lp_dual_bound": 707.095855,
+        "min_reduced_cost": -0.0,
+        "negative_column_count": 0
+      }
+    ],
+    "status": "RESTRICTED_RMP_OPTIMAL",
+    "task_cover_duals": {
+      "ice_site_001": 190.411177,
+      "ice_site_002": 93.412955,
+      "ice_site_003": 142.904383,
+      "ice_site_004": 129.436569,
+      "ice_site_005": 245.531542
+    },
+    "universe_column_count": 31
+  },
+  "route_template_count": 1205,
+  "schema_version": "lunar_ice_bpc.solution.v1",
+  "seeded_journey_pool": {
+    "column_count": 8,
+    "covered_task_count": 5,
+    "invalid_reference_journey_count": 0,
+    "invalid_reference_sortie_count": 0,
+    "note": "Seeded diagnostic pool from reference journeys, reference sorties, and singleton journeys.",
+    "reference_journey_count": 1,
+    "reference_sortie_count": 2,
+    "singleton_count": 5,
+    "status": "SEEDED_JOURNEY_POOL_BUILT"
+  },
+  "set_partition_state_count": 33,
+  "solver_options": {
+    "canonical_dp_max_tasks": 10,
+    "direct_pricing_cg_rounds": 1,
+    "direct_pricing_enabled": true,
+    "direct_pricing_max_tasks": 5,
+    "restricted_rmp_enabled": true,
+    "uses_true_dual_bpc_certificate": false
+  },
+  "status": "DIRECT_DP_BASELINE_OPTIMAL",
+  "task_count": 5
+}

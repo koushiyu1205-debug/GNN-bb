@@ -1,0 +1,14 @@
+guidance_mode: "shadow_only"
+journey_gat_shadow_enabled: true
+journey_gat_optin_enabled: false
+mutates_solver: false
+can_certify: false
+exact_status_effect: "none"
+
+checkpoint_path: ""
+checkpoint_schema_version: ""
+expected_guidance_graph_schema_version: "lunar_ice_bpc.guidance_graph.v1"
+expected_shadow_report_schema_version: "lunar_ice_bpc.gat_shadow_report.v1"
+safe_source_required: true
+
+output_dir: "runs/logs"

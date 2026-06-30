@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lunar-ice-bpc"
+version = "0.1.0"
+description = "Lunar polar water-ice CVRPTW instances and exact-safe GAT+BPC scaffolding."
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

@@ -1,0 +1,200 @@
+{
+  "hard_failure_sections": [],
+  "incomplete_sections": [
+    "benchmark_evidence"
+  ],
+  "note": "COMPLETE means the current evidence satisfies this audit's project-level checks. IN_PROGRESS means no hard boundary violation was found, but planned final criteria remain open.",
+  "overall_status": "IN_PROGRESS",
+  "project_root": "/home/kai/work/GAT_BPC_moonTerk",
+  "schema_version": "lunar_ice_bpc.refactor_audit.v1",
+  "sections": {
+    "benchmark_evidence": {
+      "incomplete": [
+        "030: final exact closure target is not met yet",
+        "050: final exact closure target is not met yet"
+      ],
+      "issues": [],
+      "scales": {
+        "005": {
+          "audit_status": "PASS",
+          "completion_bound_consistency_pass_count": 20,
+          "exact_optimal_count": 20,
+          "fixed_graph_pricing_closure_closed_count": 20,
+          "fixed_graph_pricing_closure_diagnostic_only_count": 0,
+          "incomplete_reason_reported_count": 20,
+          "mean_optimal_wall_time_sec": 0.020173,
+          "path": "runs/csv/lunar_ice_005_label_dp_benchmark_audit.json",
+          "pricing_workload_reported_count": 20,
+          "required_exact_optimal_count": 20,
+          "run_count": 20,
+          "true_dual_bpc_certificate_count": 20,
+          "true_dual_pricing_tail_certified_count": 20,
+          "true_dual_pricing_tail_dual_vector_bound_count": 20,
+          "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_readiness_waiting_true_dual_count": 0,
+          "valid_gap_count": 20
+        },
+        "010": {
+          "audit_status": "PASS",
+          "completion_bound_consistency_pass_count": 0,
+          "exact_optimal_count": 20,
+          "fixed_graph_pricing_closure_closed_count": 0,
+          "fixed_graph_pricing_closure_diagnostic_only_count": 0,
+          "incomplete_reason_reported_count": 20,
+          "mean_optimal_wall_time_sec": 4.254416,
+          "path": "runs/csv/lunar_ice_010_label_dp_benchmark_audit.json",
+          "pricing_workload_reported_count": 20,
+          "required_exact_optimal_count": 20,
+          "run_count": 20,
+          "true_dual_bpc_certificate_count": 20,
+          "true_dual_pricing_tail_certified_count": 20,
+          "true_dual_pricing_tail_dual_vector_bound_count": 20,
+          "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_readiness_waiting_true_dual_count": 0,
+          "valid_gap_count": 20
+        },
+        "020": {
+          "audit_status": "PASS",
+          "completion_bound_consistency_pass_count": 0,
+          "exact_optimal_count": 20,
+          "fixed_graph_pricing_closure_closed_count": 0,
+          "fixed_graph_pricing_closure_diagnostic_only_count": 0,
+          "incomplete_reason_reported_count": 20,
+          "mean_optimal_wall_time_sec": 7.908368,
+          "path": "runs/csv/lunar_ice_020_direct20_benchmark_audit.json",
+          "pricing_workload_reported_count": 20,
+          "required_exact_optimal_count": 20,
+          "run_count": 20,
+          "true_dual_bpc_certificate_count": 0,
+          "true_dual_pricing_tail_certified_count": 0,
+          "true_dual_pricing_tail_dual_vector_bound_count": 0,
+          "true_dual_pricing_tail_not_ported_count": 20,
+          "true_dual_readiness_waiting_true_dual_count": 0,
+          "valid_gap_count": 20
+        },
+        "030": {
+          "audit_status": "FAIL",
+          "completion_bound_consistency_pass_count": 0,
+          "exact_optimal_count": 0,
+          "fixed_graph_pricing_closure_closed_count": 0,
+          "fixed_graph_pricing_closure_diagnostic_only_count": 0,
+          "incomplete_reason_reported_count": 20,
+          "mean_optimal_wall_time_sec": null,
+          "path": "runs/csv/lunar_ice_030_default_benchmark_audit.json",
+          "pricing_workload_reported_count": 20,
+          "required_exact_optimal_count": 15,
+          "run_count": 20,
+          "true_dual_bpc_certificate_count": 0,
+          "true_dual_pricing_tail_certified_count": 0,
+          "true_dual_pricing_tail_dual_vector_bound_count": 20,
+          "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_readiness_waiting_true_dual_count": 0,
+          "valid_gap_count": 20
+        },
+        "050": {
+          "audit_status": "FAIL",
+          "completion_bound_consistency_pass_count": 0,
+          "exact_optimal_count": 0,
+          "fixed_graph_pricing_closure_closed_count": 0,
+          "fixed_graph_pricing_closure_diagnostic_only_count": 0,
+          "incomplete_reason_reported_count": 20,
+          "mean_optimal_wall_time_sec": null,
+          "path": "runs/csv/lunar_ice_050_default_benchmark_audit.json",
+          "pricing_workload_reported_count": 20,
+          "required_exact_optimal_count": 3,
+          "run_count": 20,
+          "true_dual_bpc_certificate_count": 0,
+          "true_dual_pricing_tail_certified_count": 0,
+          "true_dual_pricing_tail_dual_vector_bound_count": 20,
+          "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_readiness_waiting_true_dual_count": 0,
+          "valid_gap_count": 20
+        },
+        "100": {
+          "audit_status": "PASS",
+          "completion_bound_consistency_pass_count": 0,
+          "exact_optimal_count": 0,
+          "fixed_graph_pricing_closure_closed_count": 0,
+          "fixed_graph_pricing_closure_diagnostic_only_count": 0,
+          "incomplete_reason_reported_count": 20,
+          "mean_optimal_wall_time_sec": null,
+          "path": "runs/csv/lunar_ice_100_default_benchmark_audit.json",
+          "pricing_workload_reported_count": 20,
+          "required_exact_optimal_count": 0,
+          "run_count": 20,
+          "true_dual_bpc_certificate_count": 0,
+          "true_dual_pricing_tail_certified_count": 0,
+          "true_dual_pricing_tail_dual_vector_bound_count": 20,
+          "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_readiness_waiting_true_dual_count": 0,
+          "valid_gap_count": 20
+        }
+      },
+      "status": "INCOMPLETE",
+      "true_dual_bpc_certificate_total": 40
+    },
+    "gat_shadow": {
+      "issues": [],
+      "status": "PASS",
+      "summaries": [
+        {
+          "can_certify_count": 0,
+          "exact_status_effect_counts": {
+            "none": 60
+          },
+          "expected_count": 60,
+          "mode_counts": {
+            "shadow_only": 60
+          },
+          "mutates_solver_count": 0,
+          "path": "runs/logs/gat_shadow_005_010_020_summary.json",
+          "run_count": 60
+        },
+        {
+          "can_certify_count": 0,
+          "exact_status_effect_counts": {
+            "none": 120
+          },
+          "expected_count": 120,
+          "mode_counts": {
+            "shadow_only": 120
+          },
+          "mutates_solver_count": 0,
+          "path": "runs/logs/gat_shadow_all_summary.json",
+          "run_count": 120
+        }
+      ]
+    },
+    "manifest": {
+      "accepted_total_count": 120,
+      "instance_samples_per_scale": 1,
+      "issues": [],
+      "manifest_path": "/home/kai/work/GAT_BPC_moonTerk/data/manifests/lunar_ice_benchmark_manifest.json",
+      "missing_paths": [],
+      "scale_instance_counts": {
+        "005": 20,
+        "010": 20,
+        "020": 20,
+        "030": 20,
+        "050": 20,
+        "100": 20
+      },
+      "status": "PASS",
+      "validate_all_instances": false,
+      "validated_instance_count": 6,
+      "validation_issues": []
+    },
+    "runtime_legacy_link_scan": {
+      "files_scanned": 71,
+      "occurrence_count": 0,
+      "occurrences": [],
+      "scan_roots": [
+        "src",
+        "scripts",
+        "configs",
+        "pyproject.toml"
+      ],
+      "status": "PASS"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+master_mode: "journey"
+journey_branching_enabled: true
+journey_gat_shadow_enabled: false
+journey_gat_optin_enabled: false
+
+max_workers: 4
+time_limit: 600
+max_nodes: 100
+canonical_dp_max_tasks: 10
+direct_baseline_max_tasks: 10
+direct_baseline_time_limit: null
+restricted_rmp_enabled: true
+direct_pricing_enabled: true
+direct_pricing_max_tasks: 5
+direct_pricing_cg_rounds: 1
+
+time_bucket_size: 10.0
+max_tasks_per_trip: 6
+Q_ice: 6.0
+resource_map_extent_km: 30.0
+synthetic_grid_resolution_m: 100.0
+
+energy_unit: "dimensionless_proxy"
+B_use: 100.0
+B_use_tunable_after_exact_baseline: true
+recharge_model: "linear_deficit_with_dock_overhead"
+dock_overhead_min: 8.0
+recharge_power_proxy_per_min: 1.0
+depot_chargers: "unlimited"
+
+objective_mode: "weighted_discovery_completion"
+objective_alpha_discovery_completion: 1.0
+objective_beta_journey_end_time: 0.05
+objective_gamma_lunar_ice_risk: 0.10
+objective_delta_energy: 0.01

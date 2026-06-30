@@ -1,0 +1,25 @@
+{
+  "certified_optimal_count": 0,
+  "exact_baseline_optimal_count": 1,
+  "exact_status_counts": {
+    "EXACT_BASELINE_OPTIMAL": 1,
+    "NOT_BPC_CERTIFIED": 1,
+    "NOT_SOLVED": 4
+  },
+  "fixed_graph_integer_root_certified_count": 1,
+  "fixed_graph_root_lp_certified_count": 1,
+  "max_wall_time_sec": 32.224311,
+  "mean_relaxation_gap": 0.065031004,
+  "mean_wall_time_sec": 18.010659,
+  "note": "exact_baseline_optimal_count counts exhaustive direct-DP fixed-graph optima; fixed_graph_root_lp_certified_count is scoped to the fixed three-path root LP; certified_optimal_count remains 0 until the true-dual BPC certificate path is ported.",
+  "results_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/generation_audit/per_scale_1_benchmark.csv",
+  "run_count": 6,
+  "schema_version": "lunar_ice_bpc.benchmark_summary.v1",
+  "solution_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/generation_audit/solutions",
+  "status_counts": {
+    "CANONICAL_DP_BASELINE_OPTIMAL": 1,
+    "DIRECT_DP_BASELINE_OPTIMAL": 1,
+    "FEASIBLE_REFERENCE": 4
+  },
+  "time_limit_exceeded_count": 0
+}

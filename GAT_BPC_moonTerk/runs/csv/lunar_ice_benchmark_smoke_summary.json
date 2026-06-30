@@ -1,0 +1,19 @@
+{
+  "certified_optimal_count": 0,
+  "exact_baseline_optimal_count": 1,
+  "exact_status_counts": {
+    "EXACT_BASELINE_OPTIMAL": 1,
+    "NOT_BPC_CERTIFIED": 1
+  },
+  "max_wall_time_sec": 12.403214,
+  "mean_wall_time_sec": 7.451107,
+  "note": "exact_baseline_optimal_count counts exhaustive direct-DP fixed-graph optima; certified_optimal_count remains 0 until the true-dual BPC certificate path is ported.",
+  "results_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/csv/lunar_ice_benchmark_smoke.csv",
+  "run_count": 2,
+  "schema_version": "lunar_ice_bpc.benchmark_summary.v1",
+  "solution_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/solutions/benchmark_smoke",
+  "status_counts": {
+    "CANONICAL_DP_BASELINE_OPTIMAL": 1,
+    "DIRECT_DP_BASELINE_OPTIMAL": 1
+  }
+}
