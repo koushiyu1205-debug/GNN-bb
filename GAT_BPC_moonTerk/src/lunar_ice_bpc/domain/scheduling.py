@@ -214,9 +214,16 @@ def _route_feasible(sequence: list[str], tasks: dict[str, dict], edges: dict[str
     )
 
 
-def _build_reference_solution(tasks: dict[str, dict], edges: dict[str, dict[str, dict]], config: LunarIceConfig, scale: int) -> dict:
-    depot = (15.0, 15.0)
-    ordered = sorted(
+def _build_reference_solution(
+    tasks: dict[str, dict],
+    edges: dict[str, dict[str, dict]],
+    config: LunarIceConfig,
+    scale: int,
+    *,
+    task_order: list[str] | None = None,
+) -> dict:
+    depot = (float(config.resource_map_extent_km) / 2.0, float(config.resource_map_extent_km) / 2.0)
+    ordered = list(task_order) if task_order is not None else sorted(
         tasks.keys(),
         key=lambda task_id: (
             math.atan2(float(tasks[task_id]["xy_km"][1]) - depot[1], float(tasks[task_id]["xy_km"][0]) - depot[0]),

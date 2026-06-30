@@ -1,0 +1,130 @@
+{
+  "catalog_id": "lunar_south_pole_real_map_sources_v1",
+  "layers": [
+    {
+      "key": "lola_dem",
+      "local_exists": true,
+      "local_filename": "LOLA_80S_dem_80m.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/LOLA_80S_dem_80m.tif",
+      "native_resolution_m": 80.0,
+      "notes": "Optional elevation layer. When present, directed path search distinguishes uphill and downhill traversal.",
+      "required_for_lola_preview": false,
+      "role": "directional_elevation_optional",
+      "source_page": "https://pgda.gsfc.nasa.gov/products/90",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_80MPP_ADJ.TIF",
+      "title": "LOLA south-pole digital elevation model"
+    },
+    {
+      "key": "lola_hillshade",
+      "local_exists": false,
+      "local_filename": "LOLA_80S_hillshade.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/LOLA_80S_hillshade.tif",
+      "native_resolution_m": 80.0,
+      "notes": "Visual terrain context only; not used as a physical objective layer.",
+      "required_for_lola_preview": false,
+      "role": "context_background",
+      "source_page": "https://pgda.gsfc.nasa.gov/products/90",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_80MPP_ADJ_HILL.TIF",
+      "title": "LOLA south-pole adjusted hillshade"
+    },
+    {
+      "key": "lola_slope",
+      "local_exists": true,
+      "local_filename": "LOLA_80S_slope_100m.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/LOLA_80S_slope_100m.tif",
+      "native_resolution_m": 1000.0,
+      "notes": "Required for first real-map terrain risk preview; PGDA GeoTIFF reports 1000 m pixels.",
+      "required_for_lola_preview": true,
+      "role": "terrain_risk",
+      "source_page": "https://pgda.gsfc.nasa.gov/products/90",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDRM_80S_1000MPP_ADJ_SLP_100M.TIF",
+      "title": "LOLA south-pole slope"
+    },
+    {
+      "key": "lola_roughness",
+      "local_exists": true,
+      "local_filename": "LOLA_80S_roughness_100m.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/LOLA_80S_roughness_100m.tif",
+      "native_resolution_m": 1000.0,
+      "notes": "Required for first real-map terrain risk preview; PGDA GeoTIFF reports 1000 m pixels.",
+      "required_for_lola_preview": true,
+      "role": "terrain_risk",
+      "source_page": "https://pgda.gsfc.nasa.gov/products/90",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDRM_80S_1000MPP_ADJ_ROUGH_100M.TIF",
+      "title": "LOLA south-pole roughness"
+    },
+    {
+      "key": "lola_psr",
+      "local_exists": true,
+      "local_filename": "LOLA_80S_psr_20m.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/LOLA_80S_psr_20m.tif",
+      "native_resolution_m": 20.0,
+      "notes": "Required for PSR exposure and water-ice resource proxy preview.",
+      "required_for_lola_preview": true,
+      "role": "shadow_and_psr",
+      "source_page": "https://pgda.gsfc.nasa.gov/products/90",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LPSR_80S_20MPP_ADJ.TIF",
+      "title": "LOLA south-pole permanently shadowed regions"
+    },
+    {
+      "key": "lola_avg_solar_visibility",
+      "local_exists": true,
+      "local_filename": "AVGVISIB_85S_060M_201608.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/AVGVISIB_85S_060M_201608.tif",
+      "native_resolution_m": 60.0,
+      "notes": "Optional but preferred illumination layer for peak-of-eternal-light depot scoring.",
+      "required_for_lola_preview": false,
+      "role": "illumination_optional",
+      "source_page": "https://pgda.gsfc.nasa.gov/products/69",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608.TIF",
+      "title": "LOLA south-pole average solar visibility"
+    },
+    {
+      "key": "diviner_temperature",
+      "local_exists": false,
+      "local_filename": "DIVINER_south_pole_temperature.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/DIVINER_south_pole_temperature.tif",
+      "native_resolution_m": 500.0,
+      "notes": "Optional thermal layer. Record native resolution; do not treat as 100 m measurement.",
+      "required_for_lola_preview": false,
+      "role": "thermal_risk_optional",
+      "source_page": "https://pds-geosciences.wustl.edu/missions/lro/diviner.htm",
+      "source_url": "https://pds-geosciences.wustl.edu/missions/lro/diviner.htm",
+      "title": "Diviner polar temperature layer"
+    },
+    {
+      "key": "m3_water",
+      "local_exists": false,
+      "local_filename": "M3_water_proxy_south_pole.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/M3_water_proxy_south_pole.tif",
+      "native_resolution_m": null,
+      "notes": "Optional science-weight proxy; OH and H2O absorption overlap must be documented.",
+      "required_for_lola_preview": false,
+      "role": "surface_water_proxy_optional",
+      "source_page": "https://astrogeology.usgs.gov/search/map/lunar_m3_water_map_pds4_archive",
+      "source_url": "https://astrogeology.usgs.gov/search/map/lunar_m3_water_map_pds4_archive",
+      "title": "M3 OH/H2O surface water proxy"
+    },
+    {
+      "key": "lend_hydrogen",
+      "local_exists": false,
+      "local_filename": "LEND_hydrogen_proxy_south_pole.tif",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/LEND_hydrogen_proxy_south_pole.tif",
+      "native_resolution_m": 5000.0,
+      "notes": "Optional coarse background proxy; keep native resolution explicit.",
+      "required_for_lola_preview": false,
+      "role": "subsurface_hydrogen_proxy_optional",
+      "source_page": "https://arcnav.psi.edu/urn%3Anasa%3Apds%3Acontext%3Ainstrument%3Alend.lro",
+      "source_url": "https://arcnav.psi.edu/urn%3Anasa%3Apds%3Acontext%3Ainstrument%3Alend.lro",
+      "title": "LEND hydrogen/neutron proxy"
+    }
+  ],
+  "local_ready": true,
+  "raw_map_dir": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps",
+  "required_lola_layers": [
+    "lola_slope",
+    "lola_roughness",
+    "lola_psr"
+  ],
+  "schema_version": "lunar_ice_bpc.real_map_sources.v1"
+}

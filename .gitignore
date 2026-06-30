@@ -3,3 +3,5 @@ __pycache__/
 *$py.class
 
 gnn_bb/BPC_future/logical_graph/tasks_*/
+GAT_BPC_moonTerk/data/raw_maps/LOLA_80S_dem_80m.tif
+GAT_BPC_moonTerk/data/raw_maps/LOLA_80S_psr_20m.tif

@@ -1,0 +1,30 @@
+{
+  "downloads": [
+    {
+      "bytes": 33994464,
+      "elapsed_sec": 17.964,
+      "key": "lola_avg_solar_visibility",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/AVGVISIB_85S_060M_201608.tif",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608.TIF",
+      "status": "downloaded"
+    }
+  ],
+  "dry_run": false,
+  "planned_downloads": [
+    {
+      "curl": "curl -L --fail --retry 3 --connect-timeout 30 --max-time 300 -o /home/kai/work/GAT_BPC_moonTerk/data/raw_maps/AVGVISIB_85S_060M_201608.tif https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608.TIF",
+      "key": "lola_avg_solar_visibility",
+      "local_path": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps/AVGVISIB_85S_060M_201608.tif",
+      "source_page": "https://pgda.gsfc.nasa.gov/products/69",
+      "source_url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608.TIF"
+    }
+  ],
+  "print_curl": false,
+  "probe_only": false,
+  "raw_map_dir": "/home/kai/work/GAT_BPC_moonTerk/data/raw_maps",
+  "requested_layers": [
+    "lola_avg_solar_visibility"
+  ],
+  "schema_version": "lunar_ice_bpc.real_map_download_manifest.v1",
+  "status": "DOWNLOADS_READY"
+}

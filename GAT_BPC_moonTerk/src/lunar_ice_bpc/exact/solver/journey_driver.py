@@ -18,6 +18,7 @@ from lunar_ice_bpc.domain.scenario import PATH_TYPES
 from lunar_ice_bpc.exact.core.columns import SortieLeg, TimedSortie, build_timed_sortie
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn, build_journey_column
+from lunar_ice_bpc.exact.master.journey_rmp import _simplex_max_leq
 
 
 CANONICAL_PATH_POLICIES: tuple[tuple[str, ...], ...] = (
@@ -39,6 +40,7 @@ class JourneyBaselineResult:
     pareto_label_count: int
     set_partition_state_count: int
     note: str
+    wall_time_sec: float | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,7 @@ class DirectBaselineTimeLimitExceeded(RuntimeError):
 def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 10) -> JourneyBaselineResult:
     """Solve a small instance over the restricted canonical-path universe."""
 
+    start = perf_counter()
     if len(data.task_ids) > int(max_exact_tasks):
         return JourneyBaselineResult(
             status="SKIPPED_TOO_LARGE_FOR_ENUM_BASELINE",
@@ -132,6 +135,7 @@ def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 1
             pareto_label_count=0,
             set_partition_state_count=0,
             note=f"task_count={len(data.task_ids)} exceeds max_exact_tasks={max_exact_tasks}",
+            wall_time_sec=_elapsed_sec(start),
         )
     universe = enumerate_canonical_journey_columns(data, max_exact_tasks=int(max_exact_tasks))
     best_labels, state_count = _select_vehicle_partition(data, universe.best_label_by_mask)
@@ -147,6 +151,7 @@ def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 1
             pareto_label_count=universe.pareto_label_count,
             set_partition_state_count=state_count,
             note="No cover was found in the restricted canonical-path journey universe.",
+            wall_time_sec=_elapsed_sec(start),
         )
     best = tuple(build_journey_column(data, label.sorties) for label in best_labels)
     return JourneyBaselineResult(
@@ -163,6 +168,7 @@ def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 1
             "Optimal only within the restricted canonical-path journey-column universe "
             f"{tuple(PATH_TYPES)}; no true-dual BPC certificate."
         ),
+        wall_time_sec=_elapsed_sec(start),
     )
 
 
@@ -174,6 +180,7 @@ def solve_direct_journey_baseline(
 ) -> JourneyBaselineResult:
     """Solve a small instance over all fixed logical-graph path options."""
 
+    start = perf_counter()
     if len(data.task_ids) > int(max_exact_tasks):
         return JourneyBaselineResult(
             status="SKIPPED_TOO_LARGE_FOR_DIRECT_DP_BASELINE",
@@ -186,6 +193,7 @@ def solve_direct_journey_baseline(
             pareto_label_count=0,
             set_partition_state_count=0,
             note=f"task_count={len(data.task_ids)} exceeds max_exact_tasks={max_exact_tasks}",
+            wall_time_sec=_elapsed_sec(start),
         )
     deadline = _deadline_from_limit(wall_time_limit_sec)
     try:
@@ -205,6 +213,7 @@ def solve_direct_journey_baseline(
                 f"Fixed-graph direct DP exceeded wall_time_limit_sec={wall_time_limit_sec} "
                 f"during {exc.stage}; partial counts are diagnostic only."
             ),
+            wall_time_sec=_elapsed_sec(start),
         )
     try:
         best_labels, state_count = _select_vehicle_partition(
@@ -227,6 +236,7 @@ def solve_direct_journey_baseline(
                 f"Fixed-graph direct DP exceeded wall_time_limit_sec={wall_time_limit_sec} "
                 f"during {exc.stage}; partial counts are diagnostic only."
             ),
+            wall_time_sec=_elapsed_sec(start),
         )
     if best_labels is None:
         return JourneyBaselineResult(
@@ -240,6 +250,7 @@ def solve_direct_journey_baseline(
             pareto_label_count=universe.pareto_label_count,
             set_partition_state_count=state_count,
             note="No cover was found in the exhaustive direct-path journey universe.",
+            wall_time_sec=_elapsed_sec(start),
         )
     best = tuple(build_journey_column(data, label.sorties) for label in best_labels)
     return JourneyBaselineResult(
@@ -256,6 +267,7 @@ def solve_direct_journey_baseline(
             "Optimal over the fixed logical graph with all three per-leg path choices "
             "and exhaustive direct DP; this is an exact baseline, not a true-dual BPC certificate."
         ),
+        wall_time_sec=_elapsed_sec(start),
     )
 
 
@@ -792,29 +804,90 @@ def _select_vehicle_partition(
             bit = bits & -bits
             bits -= bit
             masks_by_required_bit.setdefault(bit, []).append(mask)
-    for masks in masks_by_required_bit.values():
-        masks.sort(key=lambda mask: (-int(mask).bit_count(), cost_by_mask[mask], mask))
-
     max_cover_size = max(int(mask).bit_count() for mask in best_label_by_mask)
     best_value = float("inf")
     best_masks: tuple[int, ...] | None = None
     state_count = 0
     use_large_partition_bounds = len(data.task_ids) > 20
-    remaining_lb = (
-        _remaining_service_lower_bound_fn(data)
-        if use_large_partition_bounds
-        else (lambda _mask: 0.0)
-    )
     if use_large_partition_bounds:
-        greedy_masks = _greedy_partition_cover(
-            full_mask,
-            int(data.fleet_size),
-            cost_by_mask=cost_by_mask,
-            masks_by_required_bit=masks_by_required_bit,
-        )
-        if greedy_masks is not None:
-            best_masks = greedy_masks
-            best_value = sum(float(cost_by_mask[mask]) for mask in greedy_masks)
+        for masks in masks_by_required_bit.values():
+            masks.sort(
+                key=lambda mask: (
+                    float(cost_by_mask[mask]) / max(1, int(mask).bit_count()),
+                    float(cost_by_mask[mask]),
+                    -int(mask).bit_count(),
+                    mask,
+                )
+            )
+        try:
+            service_lb = _remaining_service_lower_bound_fn(data)
+            dual_lb = _remaining_cover_dual_lower_bound_fn(
+                cost_by_mask,
+                masks_by_required_bit,
+                task_count=len(data.task_ids),
+                deadline=deadline,
+            )
+            cardinality_lb = _remaining_cardinality_lower_bound_fn(
+                cost_by_mask,
+                task_count=len(data.task_ids),
+                max_slots=int(data.fleet_size),
+                deadline=deadline,
+            )
+            lp_cover_lb = (
+                _remaining_lp_cover_lower_bound_fn(
+                    cost_by_mask,
+                    task_count=len(data.task_ids),
+                    deadline=deadline,
+                )
+                if _remaining_wall_time(deadline) >= 180.0
+                else (lambda _mask: 0.0)
+            )
+            remaining_lb = lambda mask: max(service_lb(mask), dual_lb(mask), lp_cover_lb(mask))
+            remaining_slot_lb = lambda mask, slots: max(remaining_lb(mask), cardinality_lb(mask, slots))
+            incumbent_candidates = [
+                _greedy_partition_cover(
+                    full_mask,
+                    int(data.fleet_size),
+                    cost_by_mask=cost_by_mask,
+                    masks_by_required_bit=masks_by_required_bit,
+                ),
+                _beam_partition_cover(
+                    full_mask,
+                    int(data.fleet_size),
+                    cost_by_mask=cost_by_mask,
+                    masks_by_required_bit=masks_by_required_bit,
+                    lower_bound=remaining_lb,
+                    deadline=deadline,
+                ),
+            ]
+        except DirectBaselineTimeLimitExceeded as exc:
+            raise DirectBaselineTimeLimitExceeded(
+                stage="fleet_set_partition",
+                generated_journey_count=len(best_label_by_mask),
+                generated_sortie_count=0,
+                route_template_count=0,
+                pareto_label_count=0,
+                set_partition_state_count=state_count,
+            ) from exc
+        for incumbent_masks in incumbent_candidates:
+            if incumbent_masks is None:
+                continue
+            incumbent_value = sum(float(cost_by_mask[mask]) for mask in incumbent_masks)
+            if incumbent_value < best_value - 1.0e-9:
+                best_masks = incumbent_masks
+                best_value = incumbent_value
+    else:
+        for masks in masks_by_required_bit.values():
+            masks.sort(key=lambda mask: (-int(mask).bit_count(), cost_by_mask[mask], mask))
+        remaining_lb = lambda _mask: 0.0
+        remaining_slot_lb = lambda _mask, _slots: 0.0
+    branch_bits_by_support = _branch_bits_by_support(masks_by_required_bit)
+    state_best_accumulated: dict[tuple[int, int], float] = {}
+
+    def branch_bit_for(remaining_mask: int) -> int:
+        if not use_large_partition_bounds:
+            return remaining_mask & -remaining_mask
+        return _static_branch_bit(remaining_mask, branch_bits_by_support)
 
     def search(remaining_mask: int, vehicle_slots: int, accumulated_cost: float, chosen_masks: list[int]) -> None:
         nonlocal best_value, best_masks, state_count
@@ -839,25 +912,55 @@ def _select_vehicle_partition(
             return
         if accumulated_cost >= best_value - 1.0e-9:
             return
-        if accumulated_cost + remaining_lb(remaining_mask) >= best_value - 1.0e-9:
+        if accumulated_cost + remaining_slot_lb(remaining_mask, vehicle_slots) >= best_value - 1.0e-9:
             return
         if int(remaining_mask).bit_count() > int(vehicle_slots) * max_cover_size:
             return
+        if use_large_partition_bounds:
+            state_key = (int(remaining_mask), int(vehicle_slots))
+            previous_best = state_best_accumulated.get(state_key)
+            if previous_best is not None and previous_best <= accumulated_cost + 1.0e-9:
+                return
+            state_best_accumulated[state_key] = float(accumulated_cost)
         if vehicle_slots == 1:
             label_cost = cost_by_mask.get(remaining_mask)
             if label_cost is not None and accumulated_cost + label_cost < best_value - 1.0e-9:
                 best_value = accumulated_cost + label_cost
                 best_masks = tuple((*chosen_masks, remaining_mask))
             return
-
-        required_bit = remaining_mask & -remaining_mask
+        if vehicle_slots == 2:
+            direct_cost = cost_by_mask.get(remaining_mask)
+            if direct_cost is not None and accumulated_cost + direct_cost < best_value - 1.0e-9:
+                best_value = accumulated_cost + direct_cost
+                best_masks = tuple((*chosen_masks, remaining_mask))
+            required_bit = branch_bit_for(remaining_mask)
+            for mask in masks_by_required_bit.get(required_bit, []):
+                if mask & remaining_mask != mask:
+                    continue
+                complement = remaining_mask ^ mask
+                if complement == 0:
+                    continue
+                label_cost = cost_by_mask.get(complement)
+                if label_cost is None:
+                    continue
+                next_cost = accumulated_cost + cost_by_mask[mask] + label_cost
+                if next_cost < best_value - 1.0e-9:
+                    best_value = next_cost
+                    best_masks = tuple((*chosen_masks, mask, complement))
+            return
+        required_bit = branch_bit_for(remaining_mask)
         for mask in masks_by_required_bit.get(required_bit, []):
             if mask & remaining_mask != mask:
+                continue
+            remaining_after = remaining_mask ^ mask
+            if int(remaining_after).bit_count() > int(vehicle_slots - 1) * max_cover_size:
                 continue
             next_cost = accumulated_cost + cost_by_mask[mask]
             if next_cost >= best_value - 1.0e-9:
                 continue
-            search(remaining_mask ^ mask, vehicle_slots - 1, next_cost, [*chosen_masks, mask])
+            if next_cost + remaining_slot_lb(remaining_after, vehicle_slots - 1) >= best_value - 1.0e-9:
+                continue
+            search(remaining_after, vehicle_slots - 1, next_cost, [*chosen_masks, mask])
 
     search(full_mask, data.fleet_size, 0.0, [])
     if best_masks is None:
@@ -872,13 +975,14 @@ def _greedy_partition_cover(
     cost_by_mask: dict[int, float],
     masks_by_required_bit: dict[int, list[int]],
 ) -> tuple[int, ...] | None:
+    branch_bits_by_support = _branch_bits_by_support(masks_by_required_bit)
     remaining_mask = int(full_mask)
     slots = int(vehicle_slots)
     chosen: list[int] = []
     while remaining_mask:
         if slots <= 0:
             return None
-        required_bit = remaining_mask & -remaining_mask
+        required_bit = _static_branch_bit(remaining_mask, branch_bits_by_support)
         candidates = [
             mask
             for mask in masks_by_required_bit.get(required_bit, [])
@@ -891,6 +995,324 @@ def _greedy_partition_cover(
         remaining_mask ^= mask
         slots -= 1
     return tuple(chosen)
+
+
+def _beam_partition_cover(
+    full_mask: int,
+    vehicle_slots: int,
+    *,
+    cost_by_mask: dict[int, float],
+    masks_by_required_bit: dict[int, list[int]],
+    lower_bound,
+    deadline: float | None = None,
+    beam_width: int = 4096,
+    branch_limit: int = 96,
+) -> tuple[int, ...] | None:
+    """Find a feasible partition quickly; the result is only an incumbent."""
+
+    branch_bits_by_support = _branch_bits_by_support(masks_by_required_bit)
+    states: list[tuple[float, float, int, int, tuple[int, ...]]] = [
+        (float(lower_bound(full_mask)), 0.0, int(full_mask), int(vehicle_slots), tuple())
+    ]
+    best_complete: tuple[float, tuple[int, ...]] | None = None
+    for _depth in range(max(1, int(vehicle_slots))):
+        _raise_if_deadline_exceeded(deadline)
+        next_states: list[tuple[float, float, int, int, tuple[int, ...]]] = []
+        for _score, cost, remaining_mask, slots, chosen in states:
+            _raise_if_deadline_exceeded(deadline)
+            if remaining_mask == 0:
+                if best_complete is None or cost < best_complete[0] - 1.0e-9:
+                    best_complete = (cost, chosen)
+                continue
+            if slots <= 0:
+                continue
+            required_bit = _static_branch_bit(remaining_mask, branch_bits_by_support)
+            candidates: list[int] = []
+            scanned = 0
+            for mask in masks_by_required_bit.get(required_bit, []):
+                scanned += 1
+                if scanned % 1024 == 0:
+                    _raise_if_deadline_exceeded(deadline)
+                if mask & remaining_mask != mask:
+                    continue
+                candidates.append(mask)
+                if len(candidates) >= max(1, int(branch_limit)):
+                    break
+            for mask in candidates:
+                next_remaining = remaining_mask ^ mask
+                next_cost = cost + float(cost_by_mask[mask])
+                next_chosen = (*chosen, mask)
+                if next_remaining == 0:
+                    if best_complete is None or next_cost < best_complete[0] - 1.0e-9:
+                        best_complete = (next_cost, next_chosen)
+                    continue
+                next_slots = slots - 1
+                if next_slots <= 0:
+                    continue
+                score = next_cost + float(lower_bound(next_remaining))
+                next_states.append((score, next_cost, next_remaining, next_slots, next_chosen))
+        if best_complete is not None:
+            return best_complete[1]
+        if not next_states:
+            return None
+        next_states.sort(key=lambda row: (row[0], row[1], int(row[2]).bit_count(), row[2]))
+        states = next_states[: max(1, int(beam_width))]
+    return best_complete[1] if best_complete is not None else None
+
+
+def _branch_bits_by_support(masks_by_required_bit: dict[int, list[int]]) -> tuple[int, ...]:
+    return tuple(sorted(masks_by_required_bit, key=lambda bit: (len(masks_by_required_bit[bit]), bit)))
+
+
+def _static_branch_bit(remaining_mask: int, branch_bits_by_support: tuple[int, ...]) -> int:
+    for bit in branch_bits_by_support:
+        if int(remaining_mask) & int(bit):
+            return int(bit)
+    return int(remaining_mask) & -int(remaining_mask)
+
+
+def _remaining_lp_cover_lower_bound_fn(
+    cost_by_mask: dict[int, float],
+    *,
+    task_count: int,
+    deadline: float | None = None,
+    max_rounds: int = 10,
+    initial_constraint_count: int = 224,
+    add_per_round: int = 200,
+):
+    """Build a feasible nonnegative cover-dual lower bound by constraint generation."""
+
+    if not cost_by_mask or any(float(cost) < -1.0e-9 for cost in cost_by_mask.values()):
+        return lambda _mask: 0.0
+    task_count = int(task_count)
+    objective = [1.0 for _ in range(task_count)]
+    active: set[int] = set()
+    for mask in cost_by_mask:
+        if int(mask) & (int(mask) - 1) == 0:
+            active.add(int(mask))
+    for mask, _cost in sorted(
+        cost_by_mask.items(),
+        key=lambda item: (
+            float(item[1]) / max(1, int(item[0]).bit_count()),
+            float(item[1]),
+            -int(item[0]).bit_count(),
+            int(item[0]),
+        ),
+    )[: max(0, int(initial_constraint_count))]:
+        active.add(int(mask))
+
+    best_feasible_dual: tuple[float, ...] | None = None
+    best_feasible_value = 0.0
+    current_dual: tuple[float, ...] = tuple(0.0 for _ in range(task_count))
+    for _round in range(max(1, int(max_rounds))):
+        _raise_if_deadline_exceeded(deadline)
+        rows: list[list[float]] = []
+        rhs: list[float] = []
+        for mask in active:
+            rows.append(_mask_row(mask, task_count))
+            rhs.append(float(cost_by_mask[mask]))
+        simplex = _simplex_max_leq(objective, rows, rhs, max_pivots=1000)
+        if simplex.status != "OPTIMAL" or simplex.objective is None:
+            break
+        current_dual = tuple(max(0.0, float(value)) for value in simplex.solution)
+        violations: list[tuple[float, int]] = []
+        feasible_scale = 1.0
+        for index, (mask, cost) in enumerate(cost_by_mask.items()):
+            if index % 4096 == 0:
+                _raise_if_deadline_exceeded(deadline)
+            value = _mask_dual_sum(mask, current_dual)
+            if value > 1.0e-12:
+                feasible_scale = min(feasible_scale, float(cost) / value)
+            violation = value - float(cost)
+            if violation > 1.0e-6:
+                violations.append((float(violation), int(mask)))
+        scale = max(0.0, min(1.0, feasible_scale) * (1.0 - 1.0e-10))
+        scaled_dual = tuple(scale * value for value in current_dual)
+        scaled_value = sum(scaled_dual)
+        if scaled_value > best_feasible_value + 1.0e-9:
+            best_feasible_value = scaled_value
+            best_feasible_dual = scaled_dual
+        if not violations:
+            best_feasible_dual = current_dual
+            best_feasible_value = sum(current_dual)
+            break
+        for _violation, mask in heapq.nlargest(max(1, int(add_per_round)), violations):
+            active.add(mask)
+
+    dual = best_feasible_dual or tuple(0.0 for _ in range(task_count))
+
+    def lower_bound(mask: int) -> float:
+        return _mask_dual_sum(int(mask), dual)
+
+    return lower_bound
+
+
+def _mask_row(mask: int, task_count: int) -> list[float]:
+    row = [0.0 for _ in range(int(task_count))]
+    bits = int(mask)
+    while bits:
+        bit = bits & -bits
+        bits -= bit
+        index = bit.bit_length() - 1
+        if 0 <= index < int(task_count):
+            row[index] = 1.0
+    return row
+
+
+def _mask_dual_sum(mask: int, dual: tuple[float, ...]) -> float:
+    bits = int(mask)
+    value = 0.0
+    while bits:
+        bit = bits & -bits
+        bits -= bit
+        index = bit.bit_length() - 1
+        if 0 <= index < len(dual):
+            value += float(dual[index])
+    return value
+
+
+def _remaining_cardinality_lower_bound_fn(
+    cost_by_mask: dict[int, float],
+    *,
+    task_count: int,
+    max_slots: int,
+    deadline: float | None = None,
+):
+    """Relax the partition tail to cheapest column sizes covering enough tasks."""
+
+    if not cost_by_mask or any(float(cost) < -1.0e-9 for cost in cost_by_mask.values()):
+        return lambda _mask, _slots: 0.0
+    task_count = int(task_count)
+    max_slots = max(0, int(max_slots))
+    best_cost_by_size: dict[int, float] = {}
+    for mask, cost in cost_by_mask.items():
+        size = int(mask).bit_count()
+        if size <= 0:
+            continue
+        best_cost_by_size[size] = min(float(cost), best_cost_by_size.get(size, float("inf")))
+    if not best_cost_by_size:
+        return lambda _mask, _slots: 0.0
+
+    dp = [[float("inf")] * (task_count + 1) for _ in range(max_slots + 1)]
+    dp[0][0] = 0.0
+    suffix_best = [[float("inf")] * (task_count + 1) for _ in range(max_slots + 1)]
+    for slot in range(1, max_slots + 1):
+        _raise_if_deadline_exceeded(deadline)
+        previous = dp[slot - 1]
+        current = list(previous)
+        for covered, value in enumerate(previous):
+            if value == float("inf"):
+                continue
+            for size, cost in best_cost_by_size.items():
+                next_covered = min(task_count, covered + int(size))
+                candidate = float(value) + float(cost)
+                if candidate < current[next_covered]:
+                    current[next_covered] = candidate
+        dp[slot] = current
+    for slot in range(max_slots + 1):
+        best = float("inf")
+        for covered in range(task_count, -1, -1):
+            best = min(best, dp[slot][covered])
+            suffix_best[slot][covered] = best
+
+    def lower_bound(mask: int, slots: int) -> float:
+        slots = max(0, min(int(slots), max_slots))
+        required = max(0, min(task_count, int(mask).bit_count()))
+        value = suffix_best[slots][required]
+        return value if value != float("inf") else float("inf")
+
+    return lower_bound
+
+
+def _remaining_cover_dual_lower_bound_fn(
+    cost_by_mask: dict[int, float],
+    masks_by_required_bit: dict[int, list[int]],
+    *,
+    task_count: int,
+    deadline: float | None = None,
+):
+    """Build dual-feasible task-cover lower bounds for the partition tail."""
+
+    if not cost_by_mask or any(float(cost) < -1.0e-9 for cost in cost_by_mask.values()):
+        return lambda _mask: 0.0
+    bits = tuple(1 << index for index in range(int(task_count)))
+    support_size = {bit: len(masks_by_required_bit.get(bit, ())) for bit in bits}
+    singleton_cost = {bit: float(cost_by_mask.get(bit, float("inf"))) for bit in bits}
+    orders: list[tuple[int, ...]] = []
+
+    def add_order(order: Iterable[int]) -> None:
+        ordered = tuple(int(bit) for bit in order)
+        if ordered and ordered not in orders:
+            orders.append(ordered)
+
+    add_order(bits)
+    add_order(reversed(bits))
+    add_order(sorted(bits, key=lambda bit: (support_size[bit], singleton_cost[bit], bit)))
+    add_order(sorted(bits, key=lambda bit: (singleton_cost[bit], support_size[bit], bit)))
+    add_order(sorted(bits, key=lambda bit: (-singleton_cost[bit], support_size[bit], bit)))
+
+    vectors: list[tuple[float, ...]] = []
+    for order in orders:
+        _raise_if_deadline_exceeded(deadline)
+        vector = _build_cover_dual_vector(
+            cost_by_mask,
+            masks_by_required_bit,
+            bits=bits,
+            order=order,
+            deadline=deadline,
+        )
+        if sum(vector) > 1.0e-9 and vector not in vectors:
+            vectors.append(vector)
+    if not vectors:
+        return lambda _mask: 0.0
+
+    cache: dict[int, float] = {0: 0.0}
+
+    def lower_bound(mask: int) -> float:
+        mask = int(mask)
+        cached = cache.get(mask)
+        if cached is not None:
+            return cached
+        best = 0.0
+        for vector in vectors:
+            bits_left = mask
+            value = 0.0
+            while bits_left:
+                bit = bits_left & -bits_left
+                bits_left -= bit
+                value += vector[bit.bit_length() - 1]
+            best = max(best, value)
+        cache[mask] = max(0.0, best)
+        return cache[mask]
+
+    return lower_bound
+
+
+def _build_cover_dual_vector(
+    cost_by_mask: dict[int, float],
+    masks_by_required_bit: dict[int, list[int]],
+    *,
+    bits: tuple[int, ...],
+    order: tuple[int, ...],
+    deadline: float | None = None,
+) -> tuple[float, ...]:
+    slack_by_mask = {mask: float(cost) for mask, cost in cost_by_mask.items()}
+    dual_by_bit = {bit: 0.0 for bit in bits}
+    for bit in order:
+        _raise_if_deadline_exceeded(deadline)
+        supports = masks_by_required_bit.get(bit, [])
+        if not supports:
+            continue
+        increase = min(float(slack_by_mask[mask]) for mask in supports)
+        increase = max(0.0, increase - 1.0e-9)
+        if increase <= 1.0e-9:
+            continue
+        dual_by_bit[bit] += increase
+        for index, mask in enumerate(supports):
+            if index % 4096 == 0:
+                _raise_if_deadline_exceeded(deadline)
+            slack_by_mask[mask] = float(slack_by_mask[mask]) - increase
+    return tuple(max(0.0, dual_by_bit[bit]) for bit in bits)
 
 
 def _remaining_service_lower_bound_fn(data: LunarIceData):
@@ -941,6 +1363,16 @@ def _deadline_from_limit(wall_time_limit_sec: float | None) -> float | None:
     if limit <= 0.0:
         return perf_counter()
     return perf_counter() + limit
+
+
+def _elapsed_sec(start: float) -> float:
+    return round(perf_counter() - float(start), 6)
+
+
+def _remaining_wall_time(deadline: float | None) -> float:
+    if deadline is None:
+        return float("inf")
+    return max(0.0, float(deadline) - perf_counter())
 
 
 def _raise_if_deadline_exceeded(deadline: float | None) -> None:

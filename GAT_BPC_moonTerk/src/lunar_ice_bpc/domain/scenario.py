@@ -9,14 +9,14 @@ SCALES: tuple[int, ...] = (5, 10, 20, 30, 50, 100)
 PATH_TYPES: tuple[str, ...] = ("low_time", "low_energy", "low_risk")
 OPERATION_MODES: tuple[str, ...] = ("detect", "sample", "drill")
 SYNTHETIC_GENERATOR_ID = "synthetic_polar_resource_grid_v1"
-RISK_SCHEMA_VERSION = "lunar_ice_risk_v1"
-TIME_WINDOW_POLICY_ID = "canonical_lunar_ice_ref_tight_v2"
-PATH_OPTION_POLICY_ID = "three_path_low_time_energy_risk_v1"
+RISK_SCHEMA_VERSION = "lunar_ice_risk_v2"
+TIME_WINDOW_POLICY_ID = "sp50_three_temporal_modes_v1"
+PATH_OPTION_POLICY_ID = "sp50_three_path_psr_rim_slope_contrast_v2"
 
 FLEET_BY_SCALE = {5: 1, 10: 2, 20: 3, 30: 4, 50: 5, 100: 8}
 SOLVE_TIME_LIMIT_SEC_BY_SCALE = {5: 600.0, 10: 600.0, 20: 600.0, 30: 3600.0, 50: 3600.0, 100: 3600.0}
-HORIZON_BY_SCALE = {5: 720.0, 10: 720.0, 20: 1440.0, 30: 1440.0, 50: 2880.0, 100: 4320.0}
-ACTIVE_FOOTPRINT_BY_SCALE = {5: 12.0, 10: 12.0, 20: 20.0, 30: 20.0, 50: 30.0, 100: 30.0}
+HORIZON_BY_SCALE = {5: 960.0, 10: 960.0, 20: 1680.0, 30: 1680.0, 50: 3000.0, 100: 4560.0}
+ACTIVE_FOOTPRINT_BY_SCALE = {5: 50.0, 10: 50.0, 20: 50.0, 30: 50.0, 50: 50.0, 100: 50.0}
 SHADOW_CAP_BY_SCALE = {5: 180.0, 10: 180.0, 20: 240.0, 30: 240.0, 50: 300.0, 100: 300.0}
 
 WINDOW_WIDTH_CAP_BY_SCALE = {5: 180.0, 10: 150.0, 20: 120.0, 30: 100.0, 50: 80.0, 100: 60.0}
@@ -62,7 +62,7 @@ OPERATION_MODE_SPECS: dict[str, OperationModeSpec] = {
 class LunarIceConfig:
     """Default benchmark configuration from the refactor plan."""
 
-    resource_map_extent_km: float = 30.0
+    resource_map_extent_km: float = 50.0
     synthetic_grid_resolution_m: float = 100.0
     time_bucket_size: float = 10.0
     max_tasks_per_trip: int = 6
@@ -70,9 +70,9 @@ class LunarIceConfig:
     rover_max_speed_kmh: float = 30.0
     rover_target_mean_speed_kmh: float = 18.0
     energy_unit: str = "dimensionless_proxy"
-    b_use: float = 100.0
+    b_use: float = 500.0
     dock_overhead_min: float = 8.0
-    recharge_power_proxy_per_min: float = 1.0
+    recharge_power_proxy_per_min: float = 4.0
     depot_chargers: str = "unlimited"
     objective_alpha_discovery_completion: float = 1.0
     objective_beta_journey_end_time: float = 0.05

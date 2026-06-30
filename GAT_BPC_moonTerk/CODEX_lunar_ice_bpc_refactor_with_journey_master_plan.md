@@ -48,21 +48,43 @@
 13. Benchmark fleet rule 固定为 `005/010/020/030/050/100 -> 1/2/3/4/5/8`。
 14. 月球车速度采用快速探测设定：最大速度 `30 km/h`，目标平均速度约 `18 km/h`；旧 `BPC_future` 物理图使用 `base_speed_kmh=6.0`、`min_speed_kmh=1.0`，新场景不沿用旧慢速设定。
 15. `science_weight_i = 0.6 * normalized_ice_confidence_i + 0.4 * normalized_expected_ice_kg_i`，第一版不使用 `site_priority`。
-16. 新项目默认 resource map 使用 `30 x 30 km`。
+16. 正式 real-map benchmark 默认 resource map 使用 `50 x 50 km`，以同一个自动选出的南极高照明 depot 为中心。
 17. 第一版 `operation_mode` 只保留 `detect / drill / sample` 三类，不使用 `extract`。
 18. `max_tasks_per_trip` 固定为 `6`。
 19. 第一版 operation mode 采样比例固定为 `detect 50% / sample 30% / drill 20%`，并使用固定参数表生成 service time、service energy 和 demand。
 20. `Q_ice=6.0`，capacity demand 采用 operation-mode task units。
 21. 能量使用无量纲 proxy，第一版不绑定真实 Wh/kWh。
 22. `depot_chargers=unlimited`，不建 depot 充电位排队约束。
-23. Horizon 按规模固定：`005/010 -> 720 min`，`020/030 -> 1440 min`，`050 -> 2880 min`，`100 -> 4320 min`。
+23. Horizon 按规模轻微放宽：`005/010 -> 960 min`，`020/030 -> 1680 min`，`050 -> 3000 min`，`100 -> 4560 min`。时间窗宽度 cap 不随 horizon 放宽。
 24. 为靠近月表 PSR 作业现实，第一版使用 `max_shadow_exposure_per_sortie` 作为硬热控约束：`005/010 -> 180 min`，`020/030 -> 240 min`，`050/100 -> 300 min`。
-25. 目标 active footprint 随规模扩大：`005/010 -> 12 x 12 km`，`020/030 -> 20 x 20 km`，`050/100 -> 30 x 30 km`。
+25. 正式 real-map benchmark 的 active footprint 统一为 `50 x 50 km`；规模差异体现在同一底图上的任务点密度，而不是给不同规模裁不同范围。
 26. Synthetic grid resolution 固定为 `100 m`。
 27. Service energy 使用无量纲 proxy 区间：`detect -> 2-4`，`sample -> 6-10`，`drill -> 12-20`。
-28. `B_use` 初始值可设为 `100.0`，但允许根据 exact baseline 的可行率、gap 和 optimal closure 结果自行校准。
-29. 当前默认 benchmark 使用 `canonical_lunar_ice_ref_tight_v2` 时间窗策略：保持单一 canonical family，但将 100 规模 `mean_window_width` 上限从 `55 min` 调整为 `65 min`，避免在固定 detect/sample/drill service time 和 100m 网格下系统性拒绝可行 100-task 实例。
+28. `B_use` 初始值暂定为 `500.0`，后续必须根据 exact baseline 的可行率、gap 和 optimal closure 结果校准，避免过宽导致难求或过窄导致无解/单点 sortie。
+29. 当前默认 benchmark 使用 `sp50_three_temporal_modes_v1` 时间窗策略：正式 120 个实例不再按时间窗 family 扩展，但每个规模的 20 个实例按 `7 / 7 / 6` 分配到 `outer_to_inner`、`inner_to_outer`、`easy_to_hard` 三种任务节奏。
 30. 批量 benchmark 的 `max_workers=4` 使用进程池执行 CPU-bound exact baseline；小规模平均最优时间按 `exact_baseline_wall_time_sec` 统计，diagnostic restricted RMP / pricing / CG 时间单独保留，不混入 exact baseline 时间目标。
+31. 正式 benchmark 使用同一个 `50 x 50 km` 真实底图和同一个 depot，只改变 seed、任务点采样和时间窗模式；总数仍为 `6 * 20 = 120`。
+32. depot 允许基于 LOLA DEM + illumination 自动选取，同时记录与 Shackleton rim / Shackleton-de Gerlache ridge / de Gerlache rim 等文献命名区域的近似比较证据。
+33. 第一版真实数据链路允许用 LOLA DEM / slope / roughness / PSR / average solar visibility 建立 resource/risk/illumination 图；Diviner / M3 / LEND 后续再接入。
+34. 任务点从固定候选池按 selection score 无放回加权采样。PSR 边缘偏向 `detect`，PSR 内部和高资源区偏向 `sample` / `drill`，总体比例仍保持 `detect 50% / sample 30% / drill 20%`。
+35. 真实图输出使用 `lunar_ice_sp50_005/instance_001_logical_graph.json` 这类目录，不再沿用旧 `lunar_ice_real_*` 命名。
+36. 论文可视化每种规模只保留一个典型实例图，另保留 resource/risk map、DEM map、targets、三条路径和 solution overlay。
+
+## 0.2 当前落地记录（2026-06-30）
+
+- 已清理 `GAT_BPC_moonTerk` 下旧 synthetic/real 实例、旧 figures 和旧 solutions；未修改或删除 `BPC_future/`。
+- 已下载并接入 LOLA DEM / slope / roughness / PSR，以及 PGDA illumination 产品 `AVGVISIB_85S_060M_201608.TIF`。PGDA 页面上的 `*_COG.TIF` 链接返回 404，不作为当前 catalog URL。
+- 当前正式 sp50 benchmark depot 固定为 `[-9.90, -19.10] km`，本地 ROI 中心为 `[25.0, 25.0] km`；该点来自 dense-depot 可视化对比，仍是高照明候选点，同时让 50km ROI 覆盖更密集的 PSR / 水冰结构。自动选址函数仍保留为诊断工具，但默认 preview / instance 不再使用 `[-7.25, -11.15] km`。
+- depot 选择策略从“最高照明/高程”转为“高照明 depot 服务更密集水冰富集区”的论文叙事折中：保留 depot 永昼/高照明证据，同时优先让任务区域包含多个可见水冰/PSR hotspot。
+- 当前 sp50 preview 的 target 候选也加入 4km 边缘缓冲，100 个候选点的最小边界距离约 `4.05 km`，不再出现候选点贴边。
+- 已生成 `data/processed/real_maps/south_pole_sp50_preview.json`、`runs/figures/lunar_real_map_sp50_preview.svg` 和 `runs/figures/lunar_real_map_sp50_dem.svg`。
+- 已生成并验证 005 规模样例 `data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json`：`grid_shape=[500,500]`、30 条 directed edge、每条 edge 固定三条 path option、`time_window_mode=outer_to_inner`、reference makespan 约 `462.63 min`、schema issues 为 0。
+- 已改进 SVG 配色：预览图同时输出 resource/risk composite 和 DEM 两种底图；实例图支持 `--also-dem`，可同时输出 resource/risk 版和 DEM 底图版。当前采用参考遥感图的低饱和暖色假彩色风格：柔和沙金/月壤底色 + 低饱和蓝色水冰/PSR 结构 + 柔和红橙风险纹理；DEM 使用蓝色低洼、沙金中高地、低饱和红橙高差和浅金高岭渐变，并用 smoothstep 插值降低色带过渡生硬感，不再使用灰黑月面底图，也不强制色盲友好 palette。
+- 已给 real-map preview 和 instance SVG 增加图例/色标：resource/risk 图包含 ice/resource 色标、risk 色标、三路径和 PSR 区域图例；DEM 图包含 elevation 色标和任务/区域图例。
+- 已提高图像渲染分辨率：real-map preview SVG 从 260 cells 提到 360 cells；instance 内嵌 preview 从 72 cells 提到 180 cells。
+- real-map target 生成已改为 `water_ice_hotspot_directional_v1`：候选池先识别 PSR / 水冰富集 hotspot，再把每个 hotspot 拓宽为坑内核心 `hotspot_core` 和坑缘/过渡带 `hotspot_edge`，同时加入中等置信、边界和区域覆盖探索点。正式实例采样使用 `water_ice_hotspot_directional_sampling_v1`，小规模约 60% 点来自强富集区、约 40% 点来自探索/边界区域；science quota 内显式保留一部分 `hotspot_edge`，避免任务只挤在陨石坑内部。
+- 005 规模样例已更新为“富集区核心 + 坑缘过渡带 + 区域探索”：`sampled_hotspot_count=5`、任务点最小间距约 `17.53 km`，candidate role 分布为 `hotspot_edge=2 / hotspot_core=2 / exploration=1`，mode 分布为 `sample=3 / drill=1 / detect=1`；高资源/PSR 内部点偏向 `sample/drill`，坑缘和低置信区域偏向 `detect/sample`。
+- 当前明显瓶颈是 500x500 真实栅格上逐 directed arc 运行三类 Dijkstra。005 样例可接受，但 020/030/050/100 的完整全连接图需要后续做路径缓存、多源最短路或候选路径预计算，否则正式 120 实例生成会很慢。
 
 ## 1. 新项目位置与包名
 
@@ -782,12 +804,12 @@ Canonical time-window policy：
 
 ```text
 horizon_by_scale:
-  005 ->  720 min   # 12 h
-  010 ->  720 min   # 12 h
-  020 -> 1440 min   # 24 h
-  030 -> 1440 min   # 24 h
-  050 -> 2880 min   # 48 h
-  100 -> 4320 min   # 72 h
+  005 ->  960 min   # 16 h
+  010 ->  960 min   # 16 h
+  020 -> 1680 min   # 28 h
+  030 -> 1680 min   # 28 h
+  050 -> 3000 min   # 50 h
+  100 -> 4560 min   # 76 h
 ```
 
 若参考调度 `reference_makespan > H`，reject 当前实例并重新采样；不通过放宽 horizon 来接受实例。
@@ -996,14 +1018,14 @@ active_footprint_by_scale:
   "030": 20.0
   "050": 30.0
   "100": 30.0
-horizon_min: 720.0
+horizon_min: 960.0
 horizon_by_scale:
-  "005": 720.0
-  "010": 720.0
-  "020": 1440.0
-  "030": 1440.0
-  "050": 2880.0
-  "100": 4320.0
+  "005": 960.0
+  "010": 960.0
+  "020": 1680.0
+  "030": 1680.0
+  "050": 3000.0
+  "100": 4560.0
 operation_modes:
   - detect
   - drill
@@ -1301,11 +1323,11 @@ uses_true_dual_bpc_certificate
 - 但完整 fixed-graph direct exact baseline 在当前 DP/DFS 下超过 `5 min` 仍未闭合，不适合作为默认 30 benchmark exact path。
 - 因此 `030` benchmark 配置暂时保持 `direct_baseline_max_tasks=10`，不默认打开 direct30。
 - 已新增 `direct_baseline_time_limit` / `--direct-baseline-time-limit` fail-closed 机制；当 direct baseline 超时，CSV / summary / audit 会报告 `direct_baseline_status=DIRECT_DP_BASELINE_TIME_LIMIT`，主结果回退到 reference / seeded incumbent，`exact_claim_scope=none`。
-- 当前 direct baseline 超时会保留 partial enumeration diagnostics，而不是把计数清零。加入 dominated path option 过滤后，`lunar_ice_030/instance_001` 在 `30s` hard timeout 下返回：
-  - `generated_journey_count=283909`
-  - `generated_sortie_count=53750911`
-  - `route_template_count=764367`
-  - `pareto_label_count=413324`
+- 当前 direct baseline 超时会保留 partial enumeration diagnostics，而不是把计数清零。加入 dominated path option 过滤和 large-partition 剪枝后，`lunar_ice_030/instance_001` 在 `30s` hard timeout 下返回：
+  - `generated_journey_count=285742`
+  - `generated_sortie_count=53892103`
+  - `route_template_count=767979`
+  - `pareto_label_count=415780`
   - `set_partition_state_count=0`
   这说明同样 30 秒内 journey label DP 推进更深，且 route-template 分支更少。
 - 同一实例在 `120s` hard timeout 下已经能完成 single-vehicle journey label DP 并进入 fleet set-partition：
@@ -1313,15 +1335,20 @@ uses_true_dual_bpc_certificate
   - `generated_sortie_count=95866502`
   - `route_template_count=1430820`
   - `pareto_label_count=806906`
-  - `set_partition_state_count=2225288`
+  - `set_partition_state_count=37550`
   当前 30 exact closure 的主要瓶颈已转向 partition / branch-price proof，而不只是 sortie candidate generation。
+- 当前默认 large partition 搜索保留多类 exact-safe 辅助：service-only remaining lower bound、dual-feasible task-cover lower bound、cardinality-cost relaxation、有限宽度 beam cover incumbent、静态最少支持任务分支、同一 `(remaining_mask, vehicle_slots)` 下的累计成本支配缓存。当剩余 wall-time 至少约 `180s` 时，还会构造缩放后可行的 LP cover-dual lower bound。它们都不改变 fixed-graph optimum，不产生 official lower bound 或 BPC certificate；120 秒探针仍未闭合，说明它们只能缓解而不能解决 30/50 exact closure。
+- LP cover-dual 单独探针在该实例上可得到 fixed-column-universe feasible bound `5436.315639`，当前 greedy incumbent 约 `5596.579726`；但接入后 `300s` direct baseline 仍超时于 fleet set-partition，`set_partition_state_count=169124`，尚未形成 30 exact closure。
 - 已验证但未保留的 direct-DP 剪枝尝试：
   - `(start_time, remaining_mask)` 级 sortie candidate 生成会减少无关候选，但破坏 start-time cache 复用；`lunar_ice_020/instance_001` 探针从旧 CSV 约 `18.95s` 上升到约 `28.48s`。
   - hybrid `(start_time, remaining_mask)` cache 只在剩余任务数较小时启用，也未改善 30 秒探针；`lunar_ice_030/instance_001` 仍在 sortie candidate generation 阶段超时，且计数略差，因此已回滚。
   - 全局 fleet-label A* 原型使用 reference incumbent 和 service-only admissible lower bound，`60s` 内仍膨胀到约 `5.28M` heap states、`3.47M` Pareto states，未找到 full cover；说明仅调整搜索组织而没有更强 lower bound 不足以关闭 30。
   - reference journey task partition 可以提供可行上界，但作为 runner 默认 seed 未改善 30 的固定时限探针，因此未保留。
   - task-share set-partition lower bound 是 exact-safe 的，但该实例只剪掉 `1866` 个 partition search node，整体探针上升到约 `32.76s`。
-  - 因此这两项不作为当前默认实现保留；后续 30/50 closure 应优先做真正 branch-and-price / true-dual pricing proof path，或更强的 DP 状态压缩，而不是增加递归节点内重计算。
+  - 动态“当前 feasible candidate 最少任务”分支用 Python 列表扫描时剪枝很强，但单状态扫描成本过高；`120s` 探针只到约 `1724` 个 partition states，未闭合，因此未保留。
+  - 基于 Python 大整数 column bitset 的动态分支同样 exact-safe，但索引构建和每状态过滤成本偏高；`300s` 探针只到约 `1977` 个 partition states，未闭合，因此未保留。
+  - two-slot exact cache / three-slot tail 直接闭合会让 deep tail 扫描前移，`120s` 探针只到约 `3` 个可解释 partition states，未改善闭合，因此未保留。
+  - 因此这些尝试不作为当前默认实现保留；后续 30/50 closure 应优先做真正 branch-and-price / true-dual pricing proof path，或更强的 DP 状态压缩，而不是增加递归节点内重计算。
 - 30 规模后续要达成 `>=15/20` exact closure，不能只靠当前 root-level fixed-graph DP，下一步应实现 branch-and-price / true-dual pricing proof path，或继续加强 direct label DP 的 exact partition 剪枝。
 
 当前大规模默认 benchmark 证据：

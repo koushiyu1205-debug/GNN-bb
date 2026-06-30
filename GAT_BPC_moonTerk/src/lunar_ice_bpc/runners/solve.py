@@ -209,6 +209,8 @@ def solve_reference(
                 exact_baseline_elapsed=exact_elapsed,
                 restricted_rmp_elapsed=restricted_elapsed,
                 total_elapsed=perf_counter() - total_start,
+                canonical_baseline_elapsed=canonical_baseline.wall_time_sec,
+                direct_baseline_elapsed=direct_baseline.wall_time_sec,
             ),
             "note": baseline.note,
         }
@@ -341,6 +343,8 @@ def solve_reference(
             restricted_rmp_elapsed=restricted_elapsed,
             total_elapsed=perf_counter() - total_start,
             seeded_selection_elapsed=seeded_selection_elapsed,
+            canonical_baseline_elapsed=canonical_baseline.wall_time_sec,
+            direct_baseline_elapsed=direct_baseline.wall_time_sec,
         ),
         "note": (
             "Fallback incumbent from reference or seeded column pool; no exact BPC lower bound or certificate. "
@@ -582,6 +586,8 @@ def _timings_payload(
     restricted_rmp_elapsed: float,
     total_elapsed: float,
     seeded_selection_elapsed: float | None = None,
+    canonical_baseline_elapsed: float | None = None,
+    direct_baseline_elapsed: float | None = None,
 ) -> dict:
     payload = {
         "preprocess_wall_time_sec": round(float(preprocess_elapsed), 6),
@@ -591,6 +597,10 @@ def _timings_payload(
     }
     if seeded_selection_elapsed is not None:
         payload["seeded_selection_wall_time_sec"] = round(float(seeded_selection_elapsed), 6)
+    if canonical_baseline_elapsed is not None:
+        payload["canonical_baseline_wall_time_sec"] = round(float(canonical_baseline_elapsed), 6)
+    if direct_baseline_elapsed is not None:
+        payload["direct_baseline_wall_time_sec"] = round(float(direct_baseline_elapsed), 6)
     return payload
 
 
@@ -599,6 +609,7 @@ def _baseline_payload(result: JourneyBaselineResult) -> dict:
         "status": result.status,
         "exact_status": result.exact_status,
         "objective": result.objective,
+        "wall_time_sec": result.wall_time_sec,
         "generated_journey_count": result.generated_journey_count,
         "generated_sortie_count": result.generated_sortie_count,
         "route_template_count": result.route_template_count,

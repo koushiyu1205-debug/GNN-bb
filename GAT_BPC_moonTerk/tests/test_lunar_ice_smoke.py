@@ -22,6 +22,14 @@ from lunar_ice_bpc.domain.scenario import (
     SYNTHETIC_GENERATOR_ID,
     TIME_WINDOW_POLICY_ID,
 )
+from lunar_ice_bpc.domain.real_maps import (
+    REAL_MAP_REQUIRED_LOLA_LAYERS,
+    REAL_MAP_SOURCE_CATALOG_SCHEMA_VERSION,
+    build_real_map_edge_options,
+    build_real_map_preview,
+    real_map_source_catalog,
+    write_real_map_preview_svg,
+)
 from lunar_ice_bpc.domain.scheduling import generate_instance
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.certificates.pricing_certificate import (
@@ -86,6 +94,132 @@ from lunar_ice_bpc.runners.solve import _fallback_baseline_for_reporting, solve_
 
 
 class LunarIceSmokeTests(unittest.TestCase):
+    def test_real_map_source_catalog_records_required_lola_layers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            catalog = real_map_source_catalog(Path(tmp) / "raw_maps")
+        self.assertEqual(catalog["schema_version"], REAL_MAP_SOURCE_CATALOG_SCHEMA_VERSION)
+        self.assertEqual(tuple(catalog["required_lola_layers"]), REAL_MAP_REQUIRED_LOLA_LAYERS)
+        by_key = {item["key"]: item for item in catalog["layers"]}
+        for key in REAL_MAP_REQUIRED_LOLA_LAYERS:
+            self.assertIn(key, by_key)
+            self.assertTrue(by_key[key]["required_for_lola_preview"])
+            self.assertFalse(by_key[key]["local_exists"])
+            self.assertTrue(by_key[key]["source_url"].startswith("https://"))
+        self.assertFalse(catalog["local_ready"])
+
+    def test_real_map_preview_missing_layers_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preview = build_real_map_preview(raw_map_dir=root / "raw_maps")
+            svg_path = root / "real_map_preview.svg"
+            write_real_map_preview_svg(preview, svg_path)
+            self.assertTrue(svg_path.exists())
+        self.assertEqual(preview["status"], "MISSING_REQUIRED_REAL_MAP_LAYERS")
+        self.assertFalse(preview["uses_synthetic_fallback"])
+        self.assertEqual(tuple(preview["missing_required_lola_layers"]), REAL_MAP_REQUIRED_LOLA_LAYERS)
+        self.assertEqual(preview["targets"], [])
+        self.assertEqual(preview["path_options"], [])
+
+    def test_real_map_preview_reads_local_geotiffs_and_builds_paths(self) -> None:
+        try:
+            import numpy as np
+            import rasterio
+            from rasterio.transform import from_origin
+        except Exception as exc:
+            self.skipTest(f"rasterio/numpy unavailable: {exc}")
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_dir = Path(tmp) / "raw_maps"
+            raw_dir.mkdir()
+            n = 48
+            y, x = np.mgrid[0:n, 0:n]
+            slope = (x + y).astype("float32") / float(2 * n)
+            roughness = np.abs(x - y).astype("float32") / float(n)
+            dem = x.astype("float32") * 20.0
+            psr = np.zeros((n, n), dtype="float32")
+            psr[6:20, 28:42] = 1.0
+            transform = from_origin(-15000.0, 15000.0, 30000.0 / n, 30000.0 / n)
+            for filename, array in (
+                ("LOLA_80S_dem_80m.tif", dem),
+                ("LOLA_80S_slope_100m.tif", slope),
+                ("LOLA_80S_roughness_100m.tif", roughness),
+                ("LOLA_80S_psr_20m.tif", psr),
+            ):
+                with rasterio.open(
+                    raw_dir / filename,
+                    "w",
+                    driver="GTiff",
+                    height=n,
+                    width=n,
+                    count=1,
+                    dtype="float32",
+                    transform=transform,
+                    nodata=-9999.0,
+                ) as dataset:
+                    dataset.write(array, 1)
+            preview = build_real_map_preview(
+                raw_map_dir=raw_dir,
+                output_cells=40,
+                target_count=5,
+                path_target_count=2,
+                active_footprint_km=12.0,
+            )
+            edges = build_real_map_edge_options(
+                raw_map_dir=raw_dir,
+                nodes={"west": (8.0, 15.0), "east": (22.0, 15.0)},
+                output_cells=40,
+            )
+        self.assertEqual(preview["status"], "REAL_MAP_PREVIEW_READY")
+        self.assertFalse(preview["uses_synthetic_fallback"])
+        self.assertEqual(preview["missing_required_lola_layers"], [])
+        self.assertEqual(len(preview["targets"]), 5)
+        self.assertEqual(len(preview["path_options"]), 2 * len(PATH_TYPES))
+        self.assertEqual({option["path_type"] for option in preview["path_options"]}, set(PATH_TYPES))
+        for option in preview["path_options"]:
+            self.assertGreater(option["path_distance_km"], 0.0)
+            self.assertGreater(option["travel_time_min"], 0.0)
+            self.assertGreater(option["energy_proxy"], 0.0)
+            self.assertGreaterEqual(option["risk_integral"], 0.0)
+            self.assertGreaterEqual(option["shadow_exposure_min"], 0.0)
+            self.assertIn("generalized_cost", option)
+            self.assertEqual(option["directional_elevation_status"], "available")
+        for target in preview["targets"]:
+            self.assertLessEqual(abs(float(target["xy_km"][0]) - 15.0), 6.0 + 1.0e-9)
+            self.assertLessEqual(abs(float(target["xy_km"][1]) - 15.0), 6.0 + 1.0e-9)
+        by_direction = {(edge["from"], edge["to"]): {option["path_type"]: option for option in edge["path_options"]} for edge in edges}
+        uphill = by_direction[("west", "east")]["low_energy"]
+        downhill = by_direction[("east", "west")]["low_energy"]
+        self.assertGreater(uphill["positive_elevation_gain_m"], downhill["positive_elevation_gain_m"])
+        self.assertGreater(uphill["energy_proxy"], downhill["energy_proxy"])
+
+    def test_real_map_download_script_dry_run_records_planned_layers(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path = root / "download_manifest.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(project_root / "scripts" / "download_lunar_real_maps.py"),
+                    "--raw-map-dir",
+                    str(root / "raw_maps"),
+                    "--manifest-output",
+                    str(manifest_path),
+                    "--dry-run",
+                    "--print-curl",
+                ],
+                cwd=project_root,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            self.assertIn("curl -L", completed.stdout)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "DRY_RUN")
+        self.assertEqual(tuple(manifest["requested_layers"]), REAL_MAP_REQUIRED_LOLA_LAYERS)
+        self.assertEqual(len(manifest["planned_downloads"]), len(REAL_MAP_REQUIRED_LOLA_LAYERS))
+        self.assertEqual(manifest["downloads"], [])
+        self.assertTrue(all("curl" in item for item in manifest["planned_downloads"]))
+
     def test_generated_instance_schema_has_three_paths_and_no_comm(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         config = LunarIceConfig()
@@ -99,7 +233,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(instance["resource_map"]["risk_schema_version"], RISK_SCHEMA_VERSION)
         self.assertEqual(instance["resource_map"]["extent_km"], config.resource_map_extent_km)
         self.assertEqual(instance["resource_map"]["resolution_m"], config.synthetic_grid_resolution_m)
-        self.assertEqual(instance["resource_map"]["grid_shape"], [300, 300])
+        self.assertEqual(instance["resource_map"]["grid_shape"], [500, 500])
         self.assertEqual(instance["resource_map"]["active_footprint_km"], ACTIVE_FOOTPRINT_BY_SCALE[5])
         self.assertEqual(instance["vehicle"]["fleet_size"], FLEET_BY_SCALE[5])
         self.assertEqual(instance["vehicle"]["B_use"], config.b_use)
@@ -123,7 +257,7 @@ class LunarIceSmokeTests(unittest.TestCase):
 
         drifted_footprint = json.loads(json.dumps(instance))
         first_task = next(iter(drifted_footprint["tasks"].values()))
-        first_task["xy_km"] = [29.0, 29.0]
+        first_task["xy_km"] = [51.0, 51.0]
         self.assertTrue(any("outside active footprint" in issue for issue in validate_instance(drifted_footprint)))
 
     def test_operation_mode_is_single_task_attribute(self) -> None:
@@ -348,6 +482,71 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(direct.pareto_label_count, 17)
         self.assertIn("journey_label_dp", direct.note)
         self.assertIn("diagnostic only", direct.note)
+
+    def test_partition_cover_dual_lower_bound_is_column_feasible(self) -> None:
+        cost_by_mask = {
+            0b001: 3.0,
+            0b010: 4.0,
+            0b100: 5.0,
+            0b011: 6.0,
+            0b110: 8.0,
+            0b111: 12.0,
+        }
+        masks_by_required_bit: dict[int, list[int]] = {}
+        for mask in cost_by_mask:
+            bits = mask
+            while bits:
+                bit = bits & -bits
+                bits -= bit
+                masks_by_required_bit.setdefault(bit, []).append(mask)
+
+        lower_bound = journey_driver_module._remaining_cover_dual_lower_bound_fn(
+            cost_by_mask,
+            masks_by_required_bit,
+            task_count=3,
+        )
+
+        self.assertGreater(lower_bound(0b111), 0.0)
+        for mask, cost in cost_by_mask.items():
+            self.assertLessEqual(lower_bound(mask), cost + 1.0e-6)
+
+    def test_partition_cardinality_lower_bound_is_relaxed_cover_bound(self) -> None:
+        cost_by_mask = {
+            0b001: 3.0,
+            0b010: 4.0,
+            0b100: 5.0,
+            0b011: 6.0,
+            0b110: 8.0,
+            0b111: 12.0,
+        }
+        lower_bound = journey_driver_module._remaining_cardinality_lower_bound_fn(
+            cost_by_mask,
+            task_count=3,
+            max_slots=2,
+        )
+
+        feasible_cover_cost = cost_by_mask[0b001] + cost_by_mask[0b110]
+        self.assertLessEqual(lower_bound(0b111, 2), feasible_cover_cost + 1.0e-6)
+        self.assertGreaterEqual(lower_bound(0b111, 1), lower_bound(0b111, 2) - 1.0e-6)
+
+    def test_partition_lp_cover_lower_bound_is_column_feasible(self) -> None:
+        cost_by_mask = {
+            0b001: 3.0,
+            0b010: 4.0,
+            0b100: 5.0,
+            0b011: 6.0,
+            0b110: 8.0,
+            0b111: 12.0,
+        }
+        lower_bound = journey_driver_module._remaining_lp_cover_lower_bound_fn(
+            cost_by_mask,
+            task_count=3,
+            max_rounds=4,
+        )
+
+        self.assertGreater(lower_bound(0b111), 0.0)
+        for mask, cost in cost_by_mask.items():
+            self.assertLessEqual(lower_bound(mask), cost + 1.0e-6)
 
     def test_fallback_reporting_prefers_direct_timeout_workload(self) -> None:
         direct = JourneyBaselineResult(

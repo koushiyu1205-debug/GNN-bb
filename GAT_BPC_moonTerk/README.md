@@ -74,7 +74,7 @@ GAT_BPC_moonTerk/
 
 | 路径 | 含义 |
 | --- | --- |
-| `data/raw_maps/` | 未来接入 LOLA / Diviner / M3 / LEND 等真实栅格数据。第一版可以为空。 |
+| `data/raw_maps/` | LOLA / Diviner / M3 / LEND 等真实栅格数据的本地落盘区；`README.md` 记录第一版期望文件名。 |
 | `data/instances/` | synthetic polar resource grid 生成的 lunar-ice CVRPTW logical graph 实例。 |
 | `data/interim/` | 可重新生成的中间文件，例如 replay capture、candidate pool、临时 tensor。 |
 | `data/processed/` | 训练、审计、benchmark 可以直接消费的数据集，例如 target rows、batch samples、hard pairs。 |
@@ -125,11 +125,25 @@ python scripts/audit_lunar_ice_refactor.py --output-json runs/logs/lunar_ice_ref
 python scripts/run_lunar_ice_gat_shadow.py --instance data/instances/lunar_ice_005/instance_001_logical_graph.json
 python scripts/run_lunar_ice_gat_shadow.py --config configs/experiments/lunar_ice_20_gat_shadow.yaml
 python scripts/draw_lunar_ice_instance.py --instance data/instances/lunar_ice_005/instance_001_logical_graph.json
+python scripts/download_lunar_real_maps.py --dry-run --print-curl
+python scripts/download_lunar_real_maps.py --layers lola_avg_solar_visibility
+python scripts/draw_lunar_real_map_preview.py
+python scripts/download_lunar_real_maps.py --layers lola_dem
+python scripts/draw_lunar_real_map_preview.py --target-count 100 --path-target-count 3 --output-json data/processed/real_maps/south_pole_sp50_preview.json --output-svg runs/figures/lunar_real_map_sp50_preview.svg --output-dem-svg runs/figures/lunar_real_map_sp50_dem.svg
+python scripts/generate_lunar_real_map_instance.py --scale 5 --seed 629001 --index 1 --strict
+python scripts/run_lunar_ice_bpc.py --instance data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json --solution runs/solutions/lunar_ice_sp50_005_instance_001_solution.json --direct-baseline-max-tasks 5 --canonical-dp-max-tasks 5 --direct-pricing-max-tasks 5
+python scripts/draw_lunar_ice_instance.py --instance data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json --solution runs/solutions/lunar_ice_sp50_005_instance_001_solution.json --output runs/figures/lunar_ice_sp50_005_instance_001_solution.svg --also-dem --output-dem runs/figures/lunar_ice_sp50_005_instance_001_solution_dem.svg
 ```
 
 当前 `run_lunar_ice_bpc.py` 会先尝试小规模 exhaustive direct-DP baseline：当任务数不超过 `direct_baseline_max_tasks` 时，枚举固定 logical graph 上三条路径的所有 per-leg 组合、feasible sortie 和单车 journey，再做 fleet set-partition；此时可输出 `DIRECT_DP_BASELINE_OPTIMAL` 和 `exact_status=EXACT_BASELINE_OPTIMAL`。如果同一节点的 fixed-graph pricing closure 满足完整 task-subset 覆盖、RMP dual 绑定、completion-bound on/off 一致、且最小 reduced cost 非负，或 complete fixed-graph direct-root LP 满足 dual binding 与非负 reduced-cost 条件，则会生成作用域限定为固定三路径 logical graph 的 true-dual BPC certificate。当前 5-task benchmark 通过 pricing-closure 证书链闭合，10-task benchmark 通过 direct-root 证书链闭合；20-task benchmark 仍只有 fixed-graph exact baseline，大规模会退回 reference 或 seeded-pool incumbent，并报告 analytic relaxation gap 和 seeded RMP/pricing workload。
 
+`download_lunar_real_maps.py` 只负责真实地图文件准备：默认选择 LOLA slope / roughness / PSR 三个必需层，支持 `--dry-run --print-curl` 输出下载命令，支持 `--probe-only` 做连通性诊断，也可以直接下载到 `data/raw_maps/` 并写 `data/manifests/lunar_real_map_download_manifest.json`。`lola_dem` 是可选但推荐下载的 80 m DEM 层；`lola_avg_solar_visibility` 是推荐下载的 illumination 层，用于 depot 选址和永昼峰证据。存在 DEM 时 real-map directed edge 会用 signed elevation gain/loss 区分上坡和下坡的时间、能耗和风险。失败时 manifest 会记录 source URL、错误和 partial 文件状态，便于换网络后继续处理。`draw_lunar_real_map_preview.py` 是真实数据接入的第一层，不会调用 BPC。它读取 `data/raw_maps/` 下的本地 GeoTIFF，默认使用 dense water-ice benchmark depot `[-9.90, -19.10] km`，并以该 depot 为中心裁剪 `50 x 50 km` ROI，生成 source catalog、preview JSON、resource/risk SVG 和 DEM SVG；缺少真实数据时输出 `MISSING_REQUIRED_REAL_MAP_LAYERS`，并明确记录 `uses_synthetic_fallback=false`。远程 URL 只作为 provenance 记录，只有显式加 `--allow-remote` 才尝试在线读取；如需恢复自动选址诊断，可显式使用 `--auto-select-depot`。当前 PGDA slope / roughness GeoTIFF 报告的实际 pixel size 是 1000 m；PSR 是 20 m；DEM 是 80 m；illumination 是 60 m。
+
+`generate_lunar_real_map_instance.py` 把本地 LOLA/illumination raster 生成的 real-map preview 转成 `lunar_ice_bpc.instance.v1`。正式 real-map benchmark 使用同一个 `50 x 50 km` 底图和同一个 depot；规模差异来自同一底图上的任务点密度，实例差异来自 seed、候选点采样和时间窗模式。当前采样策略是 `water_ice_hotspot_directional_sampling_v1`：先识别 PSR / 水冰富集 hotspot，再把 hotspot 扩展为坑内核心 `hotspot_core` 和坑缘/过渡带 `hotspot_edge`，同时保留中等置信、边界和区域覆盖探索点；小规模实例约 60% 指向强富集区、约 40% 保留探索/边界区域。高资源/PSR 内部点偏向 `sample/drill`，坑缘和低置信区域偏向 `detect/sample`，避免任务点只挤在陨石坑内部。输出目录使用 `data/instances/lunar_ice_sp50_005/` 这类命名。每条 directed edge 固定三条 `low_time / low_energy / low_risk` raster path option，不新增第四类路径；该 real-map 路径仍是固定三路径 logical graph 的 scoped exact baseline，不声明对连续月面所有可能路径最优。
+
 direct-DP 和 direct-pricing 在枚举三条路径时会先做 per-arc 支配过滤：如果某个 path option 在 `travel_time_min`、`energy_proxy`、`risk_integral`、`shadow_exposure_min` 四个单调维度上都不优于另一条路径，且至少一个维度严格更差，则该 path option 不会被枚举。这是 exact-safe 的，因为它不能改善时间窗、能量、shadow 可行性或当前目标函数。
+
+30/50 的 fixed-graph direct baseline 在 fleet set-partition 阶段还会使用 service-only remaining lower bound、dual-feasible task-cover lower bound、cardinality-cost relaxation、有限宽度 beam incumbent、静态最少支持任务分支和同状态累计成本支配缓存做搜索剪枝；当剩余 wall-time 足够时，还会构造一个缩放后可行的 LP cover-dual lower bound。这些机制都只在已有 fixed-graph column universe 内工作，只用于 exact-safe 搜索，不生成 official lower bound 或 BPC certificate。
 
 求解输出现在包含 `bound_ledger`。其中只有 `official_lower_bound=true` 的记录能进入 solution / CSV 的 `lower_bound` 和 `relaxation_gap`；普通大规模 fallback 的 official source 仍是 `analytic_relaxation`。当 fixed-graph pricing closure 满足证书条件时，`fixed_graph_pricing_closure_lp` 会作为 scoped BPC node bound 进入 official lower bound；当 complete fixed-graph direct-root LP 满足 scoped true-dual 条件时，`direct_fixed_graph_root_lp` 也可以成为 official lower bound。`restricted_journey_rmp` 始终只作为 diagnostic bound 写入 `best_diagnostic_bound_*`。
 
@@ -177,7 +191,7 @@ branch-node queue 的每个 evaluated node 也会写入 fail-closed `pricing_cer
 
 `exact/solver/cut_separator.py` 提供一轮 restricted cut separation 诊断：从 `cut_probe` 的 subset-row 候选中选择 violated cut，重解一次 active-cut restricted RMP，并输出 `cut_separation_probe_*` CSV 字段。默认不自动加入 `fleet_lower_bound` 候选，因为 journey 模型允许单车多 sortie；未经证明的 fleet lower-bound 只能显式 opt-in。该 cut re-solve 仍只覆盖 supplied column pool，不改变 incumbent、official bound、certificate 或 exact status。
 
-`validate_instance()` 现在把月表水冰场景参数当作 schema contract 检查：`30 x 30 km` resource map、`100 m` synthetic grid、scale-dependent active footprint、fleet / horizon / `max_shadow_exposure_per_sortie`、`B_use=100.0`、`Q_ice=6.0`、`max_tasks_per_trip=6` 和 reference sortie 的 shadow / energy / capacity / horizon 可行性都会被验证。`generate_lunar_ice_benchmark.py` 生成的 manifest 同步记录这些参数，防止后续调参后 benchmark 数据和计划漂移。
+`validate_instance()` 现在把月表水冰场景参数当作 schema contract 检查：`50 x 50 km` resource map、`100 m` grid、统一 `50 km` active footprint、fleet / horizon / `max_shadow_exposure_per_sortie`、`B_use=500.0`、`recharge_power_proxy_per_min=4.0`、`Q_ice=6.0`、`max_tasks_per_trip=6` 和 reference sortie 的 shadow / energy / capacity / horizon 可行性都会被验证。`generate_lunar_ice_benchmark.py` 生成的 manifest 同步记录这些参数，防止后续调参后 benchmark 数据和计划漂移。
 
 `configs/benchmarks/lunar_ice_*_journey.yaml` 现在统一使用 `manifest + scales` 选择对应规模；生成正式 120 实例 manifest 后，每个配置会自动跑自己的 scale slice。命令行也可以用 `--scales 5,10` 临时覆盖。
 
