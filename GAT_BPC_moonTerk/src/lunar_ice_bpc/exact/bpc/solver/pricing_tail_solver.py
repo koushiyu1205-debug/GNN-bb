@@ -42,6 +42,7 @@ from lunar_ice_bpc.exact.solver.journey_driver import (
 B2A_MODE = "B2A_full_universe_rc_audit_fast_path"
 B2B_MODE = "B2B_seeded_tail_CG"
 B2B_R2_MODE = "B2B_R2_worker_before_final_judge"
+B2B_R3_MODE = "B2B_R3_true_dual_negative_search_worker"
 B2C_MODE = "B2C_limited_pricing_diagnostic"
 B2D_MODE = "B2D_proof_tail_kernel_profile"
 B2_PRODUCT_MODE = "B2_PRODUCT_EXACT_SOLVER"
@@ -130,7 +131,7 @@ def solve_b2_pricing_tail_baseline(
             max_direct_tasks=int(max_direct_tasks),
             negative_eps=negative_eps,
         )
-    if mode == B2B_R2_MODE:
+    if mode in {B2B_R2_MODE, B2B_R3_MODE}:
         return _solve_b2b_r2_worker_before_final_judge(
             data,
             b0_direct=b0_direct,
@@ -142,6 +143,7 @@ def solve_b2_pricing_tail_baseline(
             max_columns_per_round=int(max_columns_per_round),
             worker_payload=worker_payload,
             seed_mode=seed_mode,
+            mode=str(mode),
         )
     if mode != B2B_MODE:
         raise ValueError(f"unsupported B2 mode={mode!r}")
@@ -227,8 +229,38 @@ def _solve_limited_pricing_diagnostic(
     from time import perf_counter
 
     cache = DirectPricingCache()
-    limited_task_cap = min(8, max(1, len(data.task_ids) - 1)) if len(data.task_ids) > 5 else len(data.task_ids)
-    duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+    limited_task_cap = (
+        len(data.task_ids)
+        if len(data.task_ids) <= 5
+        else max(1, min(5, int(data.max_tasks_per_trip), int(len(data.task_ids) - 1)))
+    )
+    seed_columns, _seed_report = _build_b2b_r2_lightweight_seed_columns(
+        data,
+        b0_direct=b0_direct,
+        seed_mode="b0_incumbent_plus_singletons",
+        max_direct_tasks=max(1, min(int(len(data.task_ids)), int(max(1, max_candidate_sets)))),
+        mode=mode,
+    )
+    rmp_start = perf_counter()
+    master = solve_root_journey_master(
+        data,
+        seed_columns,
+        negative_eps=negative_eps,
+        rmp_iteration_id=f"{mode}-diagnostic-root",
+    )
+    rmp_wall_time = perf_counter() - rmp_start
+    if master.rmp.status == "RESTRICTED_RMP_OPTIMAL":
+        context = master.reduced_cost_context
+        duals = _duals_from_reduced_cost_context(context)
+        diagnostic_dual_source = "master.reduced_cost_context"
+        diagnostic_rmp_iteration_id = context.rmp_iteration_id
+        diagnostic_dual_fingerprint = context.dual_fingerprint
+    else:
+        context = None
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        diagnostic_dual_source = "zero_dual_fallback_rmp_not_optimal"
+        diagnostic_rmp_iteration_id = ""
+        diagnostic_dual_fingerprint = ""
     start = perf_counter()
     pricing, columns = price_direct_journey_columns(
         data,
@@ -243,6 +275,7 @@ def _solve_limited_pricing_diagnostic(
     elapsed = perf_counter() - start
     negative = bool(pricing.get("negative_found"))
     cache_stats = cache.stats()
+    labels_generated = int(pricing.get("pareto_label_count") or 0)
     diagnostic_scope = CertificateScope.DIAGNOSTIC_PRICING_FRONTIER
     pricing_state = PricingState.FOUND_NEGATIVE if negative else PricingState.LOCAL_NO_COLUMN_UNCERTIFIED
     return {
@@ -274,8 +307,24 @@ def _solve_limited_pricing_diagnostic(
         "completion_bound_policy": build_completion_bound_tail_policy(pruning_opt_in=False),
         "completion_bound_pruning_enabled": False,
         "limited_pricing": pricing,
+        "rmp_wall_time": round(rmp_wall_time, 6),
+        "diagnostic_dual_source": diagnostic_dual_source,
+        "diagnostic_rmp_iteration_id": diagnostic_rmp_iteration_id,
+        "diagnostic_dual_fingerprint": diagnostic_dual_fingerprint,
+        "rmp_dual_diagnostic": _rmp_dual_diagnostic_payload(
+            context=context,
+            pricing_payload=pricing,
+            harvest_payload=None,
+            status=pricing_state,
+            exit_reason=pricing_state.value,
+        ),
+        "worker_wall_time": round(elapsed, 6),
+        "final_judge_wall_time": 0.0,
         "time_to_first_negative": round(elapsed, 6) if negative else None,
-        "labels_generated": int(pricing.get("pareto_label_count") or 0),
+        "time_to_first_addable_negative": None,
+        "labels_generated": labels_generated,
+        "labels_generated_before_first_negative": labels_generated if negative else None,
+        "labels_generated_total": labels_generated,
         "sortie_templates": int(pricing.get("feasible_sortie_template_count") or 0),
         "journey_labels": len(columns),
         "candidate_sequences": int(pricing.get("candidate_round_count") or 0),
@@ -289,6 +338,7 @@ def _solve_limited_pricing_diagnostic(
             "addable_negative_early_stop_enabled": False,
             "changes_certificate_semantics": False,
         },
+        "exit_reason": pricing_state.value,
         "exact_status": "DIAGNOSTIC_ONLY",
         "fail_closed_reason": f"{mode}: limited pricing diagnostic cannot certify no-negative or provide an official bound.",
         "note": f"{mode} recorded bounded pricing/proof-tail diagnostics only; no certificate semantics changed.",
@@ -663,12 +713,15 @@ def _solve_b2b_r2_worker_before_final_judge(
     max_columns_per_round: int,
     worker_payload: dict | None,
     seed_mode: str,
+    mode: str = B2B_R2_MODE,
 ) -> dict:
+    active_mode = str(mode)
     seed_columns, seed_report = _build_b2b_r2_lightweight_seed_columns(
         data,
         b0_direct=b0_direct,
         seed_mode=seed_mode,
         max_direct_tasks=max_direct_tasks,
+        mode=active_mode,
     )
     pool = ColumnPool()
     view = MasterColumnView()
@@ -698,7 +751,7 @@ def _solve_b2b_r2_worker_before_final_judge(
             data,
             master_columns,
             negative_eps=negative_eps,
-            rmp_iteration_id=f"b2b-r2-root-{round_index}",
+            rmp_iteration_id=f"{active_mode}-root-{round_index}",
         )
         rmp_wall_time = perf_counter() - rmp_start
         profile_totals["rmp_wall_time"] += rmp_wall_time
@@ -725,18 +778,19 @@ def _solve_b2b_r2_worker_before_final_judge(
                 hidden_audit=last_hidden_audit,
                 seed_catalog=seed_catalog,
                 manual_rc_audit=None,
-                mode=B2B_R2_MODE,
+                mode=active_mode,
                 seed_report=seed_report,
                 algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
                 certificate_scope=CertificateScope.DIAGNOSTIC_RMP_BOUND,
                 pricing_state=PricingState.INCOMPLETE_LIMIT,
-                note="B2B_R2 root RMP did not solve to optimality; fail closed.",
+                note=f"{active_mode} root RMP did not solve to optimality; fail closed.",
                 profile_totals=profile_totals,
             )
 
         worker = _run_negative_search_worker(
             data,
             master=master,
+            reduced_cost_context=master.reduced_cost_context,
             master_columns=master_columns,
             b0_direct=b0_direct,
             pool=pool,
@@ -777,6 +831,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                             "worker_status": worker.status.value,
                             "worker_exit_reason": worker.payload.get("exit_reason"),
                             "worker_wall_time": worker.payload.get("worker_wall_time"),
+                            **_worker_round_diagnostic_fields(worker.payload),
                             "final_judge_called": False,
                             "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                             "addable_negative_count": int(harvest_payload["addable_negative_count"]),
@@ -795,7 +850,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                     data,
                     master_columns,
                     negative_eps=negative_eps,
-                    rmp_iteration_id=f"b2b-r2-root-{round_index}-closure",
+                    rmp_iteration_id=f"{active_mode}-root-{round_index}-closure",
                 )
                 rmp_wall_time = perf_counter() - rmp_start
                 profile_totals["rmp_wall_time"] += rmp_wall_time
@@ -822,12 +877,12 @@ def _solve_b2b_r2_worker_before_final_judge(
                         hidden_audit=last_hidden_audit,
                         seed_catalog=seed_catalog,
                         manual_rc_audit=None,
-                        mode=B2B_R2_MODE,
+                        mode=active_mode,
                         seed_report=seed_report,
                         algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
                         certificate_scope=CertificateScope.DIAGNOSTIC_RMP_BOUND,
                         pricing_state=PricingState.INCOMPLETE_LIMIT,
-                        note="B2B_R2 root RMP did not solve after worker progress; fail closed.",
+                        note=f"{active_mode} root RMP did not solve after worker progress; fail closed.",
                         profile_totals=profile_totals,
                     )
                 worker_only_success_count = 0
@@ -905,6 +960,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "worker_status": worker.status.value,
                 "worker_exit_reason": worker.payload.get("exit_reason"),
                 "worker_wall_time": worker.payload.get("worker_wall_time"),
+                **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
                 "final_judge_wall_time": round(judge_wall_time, 6),
                 "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
@@ -937,12 +993,12 @@ def _solve_b2b_r2_worker_before_final_judge(
                 hidden_audit=last_hidden_audit,
                 seed_catalog=seed_catalog,
                 manual_rc_audit=None,
-                mode=B2B_R2_MODE,
+                mode=active_mode,
                 seed_report=seed_report,
                 algorithm_status=AlgorithmStatus.BPC_GAP_AVAILABLE,
                 certificate_scope=CertificateScope.BPC_NODE_LP_CERTIFIED,
                 pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
-                note="B2B_R2 root LP certificate came only from the true-dual final judge after worker-before-final-judge rounds.",
+                note=f"{active_mode} root LP certificate came only from the true-dual final judge after worker-before-final-judge rounds.",
                 profile_totals=profile_totals,
             )
         if duplicate_only_round:
@@ -967,7 +1023,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                 hidden_audit=last_hidden_audit,
                 seed_catalog=seed_catalog,
                 manual_rc_audit=None,
-                mode=B2B_R2_MODE,
+                mode=active_mode,
                 seed_report=seed_report,
                 algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
                 certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
@@ -997,20 +1053,42 @@ def _solve_b2b_r2_worker_before_final_judge(
         hidden_audit=last_hidden_audit,
         seed_catalog=seed_catalog,
         manual_rc_audit=None,
-        mode=B2B_R2_MODE,
+        mode=active_mode,
         seed_report=seed_report,
         algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
         certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
         pricing_state=PricingState.INCOMPLETE_LIMIT,
-        note=f"Stopped after max_rounds={max_rounds}; B2B_R2 worker/final-judge root proof is incomplete.",
+        note=f"Stopped after max_rounds={max_rounds}; {active_mode} worker/final-judge root proof is incomplete.",
         profile_totals=profile_totals,
     )
+
+
+def _worker_round_diagnostic_fields(payload: dict) -> dict:
+    return {
+        "diagnostic_dual_source": payload.get("diagnostic_dual_source") or "",
+        "diagnostic_rmp_iteration_id": payload.get("diagnostic_rmp_iteration_id") or "",
+        "diagnostic_dual_fingerprint": payload.get("diagnostic_dual_fingerprint") or "",
+        "time_to_first_negative": payload.get("time_to_first_negative"),
+        "time_to_first_addable_negative": payload.get("time_to_first_addable_negative"),
+        "labels_generated": int(payload.get("labels_generated") or 0),
+        "labels_generated_before_first_negative": payload.get("labels_generated_before_first_negative"),
+        "labels_generated_total": int(payload.get("labels_generated_total") or payload.get("labels_generated") or 0),
+        "labels_extended": int(payload.get("labels_extended") or 0),
+        "sortie_templates": int(payload.get("sortie_templates") or 0),
+        "journey_labels": int(payload.get("journey_labels") or 0),
+        "candidate_sequences": int(payload.get("candidate_sequence_count") or payload.get("candidate_sequences") or 0),
+        "path_option_assignments": int(payload.get("path_option_assignments") or 0),
+        "cache_hit_count": int(payload.get("cache_hit_count") or 0),
+        "cache_miss_count": int(payload.get("cache_miss_count") or 0),
+        "rmp_dual_diagnostic": payload.get("rmp_dual_diagnostic") or {},
+    }
 
 
 def _run_negative_search_worker(
     data: LunarIceData,
     *,
     master,
+    reduced_cost_context,
     master_columns: tuple[JourneyColumn, ...],
     b0_direct,
     pool: ColumnPool,
@@ -1025,10 +1103,11 @@ def _run_negative_search_worker(
     max_selected: int,
 ) -> _NegativeSearchWorkerResult:
     worker_start = perf_counter()
+    duals = _duals_from_reduced_cost_context(reduced_cost_context)
     worker_task_cap = _worker_task_cap(data, max_direct_tasks)
     seed_task_sets = _negative_worker_seed_task_sets(
         data,
-        duals=master.rmp.duals,
+        duals=duals,
         master_columns=master_columns,
         b0_direct=b0_direct,
         seed_catalog=seed_catalog,
@@ -1037,7 +1116,7 @@ def _run_negative_search_worker(
     )
     pricing, priced_columns = price_direct_journey_columns(
         data,
-        master.rmp.duals,
+        duals,
         negative_eps=negative_eps,
         max_direct_tasks=worker_task_cap,
         allow_partial=True,
@@ -1048,7 +1127,7 @@ def _run_negative_search_worker(
     )
     negative_pairs = _manual_negative_pairs(
         priced_columns,
-        duals=master.rmp.duals,
+        duals=duals,
         negative_eps=negative_eps,
     )
     selected, harvest_payload = harvest_addable_negative_columns(
@@ -1064,6 +1143,7 @@ def _run_negative_search_worker(
     worker_wall_time = perf_counter() - worker_start
     cache_stats = cache.stats()
     completion_payload = pricing.get("completion_bound") if isinstance(pricing.get("completion_bound"), dict) else {}
+    labels_generated = int(pricing.get("pareto_label_count") or 0)
     status = PricingState.FOUND_NEGATIVE if negative_pairs else PricingState.LOCAL_NO_COLUMN_UNCERTIFIED
     if str(pricing.get("status") or "").startswith("SKIPPED"):
         status = PricingState.INCOMPLETE_LIMIT
@@ -1086,13 +1166,19 @@ def _run_negative_search_worker(
         "can_certify_no_negative": False,
         "uses_true_dual_bpc_certificate": False,
         "root_lp_bound_official": False,
+        "dual_source": "master.reduced_cost_context",
+        "diagnostic_dual_source": "master.reduced_cost_context",
+        "diagnostic_rmp_iteration_id": str(getattr(reduced_cost_context, "rmp_iteration_id", "") or ""),
+        "diagnostic_dual_fingerprint": str(getattr(reduced_cost_context, "dual_fingerprint", "") or ""),
         "completion_bound_pruning_enabled": False,
         "worker_wall_time": round(worker_wall_time, 6),
         "time_to_first_negative": round(worker_wall_time, 6) if negative_pairs else None,
         "time_to_first_addable_negative": round(worker_wall_time, 6) if selected else None,
         "candidate_task_set_count": int(pricing.get("candidate_round_count") or 0),
         "candidate_sequence_count": int(pricing.get("candidate_round_count") or 0),
-        "labels_generated": int(pricing.get("pareto_label_count") or 0),
+        "labels_generated": labels_generated,
+        "labels_generated_before_first_negative": labels_generated if negative_pairs else None,
+        "labels_generated_total": labels_generated,
         "labels_extended": int(pricing.get("sortie_attempt_count") or 0),
         "sortie_templates": int(pricing.get("feasible_sortie_template_count") or 0),
         "journey_labels": len(priced_columns),
@@ -1113,6 +1199,13 @@ def _run_negative_search_worker(
         "worker_task_cap": int(worker_task_cap),
         "pricing_payload": pricing,
         "harvest_payload": harvest_payload,
+        "rmp_dual_diagnostic": _rmp_dual_diagnostic_payload(
+            context=reduced_cost_context,
+            pricing_payload=pricing,
+            harvest_payload=harvest_payload,
+            status=status,
+            exit_reason=exit_reason,
+        ),
         "feasibility_cache": _feasibility_cache_payload(cache_stats),
         "exact_first_step_bound_profile": _exact_first_step_bound_profile(completion_payload),
         "note": "B2E worker is a negative-search worker only; local no-column is not a no-negative certificate.",
@@ -1132,6 +1225,7 @@ def _build_b2b_r2_lightweight_seed_columns(
     b0_direct,
     seed_mode: str,
     max_direct_tasks: int,
+    mode: str = B2B_R2_MODE,
 ) -> tuple[tuple[JourneyColumn, ...], dict]:
     """Build B2B_R2 seeds without full-universe enumeration.
 
@@ -1148,7 +1242,7 @@ def _build_b2b_r2_lightweight_seed_columns(
             max_direct_tasks=max_direct_tasks,
         )
         seed_report = dict(seed_report)
-        seed_report["b2_mode"] = B2B_R2_MODE
+        seed_report["b2_mode"] = str(mode)
         seed_report["seed_builder"] = "b1_seed_builder_fallback"
         return seed_columns, seed_report
 
@@ -1158,9 +1252,13 @@ def _build_b2b_r2_lightweight_seed_columns(
     seed_columns = _dedupe_journey_columns(columns)
     return seed_columns, {
         "b1_mode": "B1B_seeded_root_CG",
-        "b2_mode": B2B_R2_MODE,
+        "b2_mode": str(mode),
         "seed_mode": resolved_mode,
-        "seed_builder": "b2b_r2_lightweight_no_full_universe_enumeration",
+        "seed_builder": (
+            "b2b_r3_lightweight_no_full_universe_enumeration"
+            if str(mode) == B2B_R3_MODE
+            else "b2b_r2_lightweight_no_full_universe_enumeration"
+        ),
         "initial_column_count": len(seed_columns),
         "full_universe_column_count": None,
         "full_universe_preloaded": False,
@@ -1213,10 +1311,65 @@ def _manual_negative_pairs(
     return tuple(pairs)
 
 
+def _duals_from_reduced_cost_context(context) -> JourneyDuals:
+    return JourneyDuals(
+        cover={str(key): float(value) for key, value in getattr(context, "task_duals", {}).items()},
+        fleet_limit=float(getattr(context, "fleet_dual", 0.0)),
+        cuts={str(key): float(value) for key, value in getattr(context, "cut_duals", {}).items()},
+    )
+
+
+def _rmp_dual_diagnostic_payload(
+    *,
+    context,
+    pricing_payload: dict,
+    harvest_payload: dict | None,
+    status: PricingState,
+    exit_reason: str,
+) -> dict:
+    harvest_payload = harvest_payload or {}
+    if context is None:
+        return {
+            "schema_version": "lunar_ice_bpc.b2_rmp_dual_pricing_diagnostic.v1",
+            "dual_source": "zero_dual_fallback_rmp_not_optimal",
+            "rmp_iteration_id": "",
+            "dual_fingerprint": "",
+            "pricing_state": status.value,
+            "exit_reason": str(exit_reason),
+            "can_certify_no_negative": False,
+            "uses_true_dual_bpc_certificate": False,
+        }
+    labels_generated = int(pricing_payload.get("pareto_label_count") or pricing_payload.get("labels_generated") or 0)
+    return {
+        "schema_version": "lunar_ice_bpc.b2_rmp_dual_pricing_diagnostic.v1",
+        "dual_source": "master.reduced_cost_context",
+        "rmp_iteration_id": str(getattr(context, "rmp_iteration_id", "") or ""),
+        "dual_fingerprint": str(getattr(context, "dual_fingerprint", "") or ""),
+        "pricing_state": status.value,
+        "exit_reason": str(exit_reason),
+        "time_to_first_negative": None,
+        "time_to_first_addable_negative": None,
+        "labels_generated_before_first_negative": labels_generated if int(harvest_payload.get("candidate_negative_count") or 0) > 0 else None,
+        "labels_generated_total": labels_generated,
+        "labels_generated": labels_generated,
+        "sortie_templates": int(pricing_payload.get("feasible_sortie_template_count") or pricing_payload.get("sortie_templates") or 0),
+        "journey_labels": int(pricing_payload.get("negative_column_count") or pricing_payload.get("journey_labels") or 0),
+        "candidate_sequences": int(pricing_payload.get("candidate_round_count") or pricing_payload.get("candidate_sequences") or 0),
+        "path_option_assignments": int(pricing_payload.get("sortie_attempt_count") or pricing_payload.get("path_option_assignments") or 0),
+        "cache_hit_count": int((pricing_payload.get("sortie_template_cache") or {}).get("hit_count") or 0),
+        "cache_miss_count": int((pricing_payload.get("sortie_template_cache") or {}).get("miss_count") or 0),
+        "candidate_negative_count": int(harvest_payload.get("candidate_negative_count") or 0),
+        "addable_negative_count": int(harvest_payload.get("addable_negative_count") or 0),
+        "can_certify_no_negative": False,
+        "uses_true_dual_bpc_certificate": False,
+        "root_lp_bound_official": False,
+    }
+
+
 def _worker_task_cap(data: LunarIceData, max_direct_tasks: int) -> int:
     if len(data.task_ids) <= 5:
         return min(len(data.task_ids), int(max_direct_tasks))
-    return max(1, min(int(max_direct_tasks), int(data.max_tasks_per_trip), 8, len(data.task_ids) - 1))
+    return max(1, min(int(max_direct_tasks), int(data.max_tasks_per_trip), 3, len(data.task_ids) - 1))
 
 
 def _b2b_r2_worker_only_round_limit(max_rounds: int) -> int:
@@ -1254,7 +1407,8 @@ def _negative_worker_seed_task_sets(
         seen.add(normalized)
         rows.append(normalized)
 
-    add(tuple(ranked[: min(int(max_direct_tasks), len(ranked))]))
+    if len(data.task_ids) <= 5:
+        add(tuple(ranked[: min(int(max_direct_tasks), len(ranked))]))
     for column in tuple(getattr(b0_direct, "journeys", tuple()) or tuple()):
         add(tuple(sorted(column.task_set)))
     for column in master_columns:
@@ -1638,6 +1792,8 @@ def _empty_profile_totals() -> dict:
         "time_to_first_negative": None,
         "time_to_first_addable_negative": None,
         "labels_generated": 0,
+        "labels_generated_before_first_negative": None,
+        "labels_generated_total": 0,
         "labels_extended": 0,
         "sortie_templates": 0,
         "journey_labels": 0,
@@ -1662,6 +1818,9 @@ def _empty_profile_totals() -> dict:
         "final_judge_saved_by_worker_count": 0,
         "exit_reason": "",
         "last_worker_status": "",
+        "diagnostic_dual_source": "",
+        "diagnostic_rmp_iteration_id": "",
+        "diagnostic_dual_fingerprint": "",
     }
 
 
@@ -1679,12 +1838,19 @@ def _accumulate_worker_profile(totals: dict, payload: dict) -> None:
     _accumulate_pricing_profile(totals, payload)
     totals["worker_wall_time"] += float(payload.get("worker_wall_time") or 0.0)
     totals["exit_reason"] = str(payload.get("exit_reason") or totals.get("exit_reason") or "")
+    if payload.get("diagnostic_dual_source"):
+        totals["diagnostic_dual_source"] = str(payload.get("diagnostic_dual_source") or "")
+        totals["diagnostic_rmp_iteration_id"] = str(payload.get("diagnostic_rmp_iteration_id") or "")
+        totals["diagnostic_dual_fingerprint"] = str(payload.get("diagnostic_dual_fingerprint") or "")
     _set_first_time(totals, "time_to_first_negative", payload.get("time_to_first_negative"))
     _set_first_time(totals, "time_to_first_addable_negative", payload.get("time_to_first_addable_negative"))
+    _set_first_int(totals, "labels_generated_before_first_negative", payload.get("labels_generated_before_first_negative"))
 
 
 def _accumulate_pricing_profile(totals: dict, payload: dict) -> None:
-    totals["labels_generated"] += int(payload.get("labels_generated") or payload.get("pareto_label_count") or 0)
+    labels = int(payload.get("labels_generated") or payload.get("pareto_label_count") or 0)
+    totals["labels_generated"] += labels
+    totals["labels_generated_total"] += int(payload.get("labels_generated_total") or labels)
     totals["labels_extended"] += int(payload.get("labels_extended") or payload.get("sortie_attempt_count") or 0)
     totals["sortie_templates"] += int(payload.get("sortie_templates") or payload.get("feasible_sortie_template_count") or 0)
     totals["journey_labels"] += int(payload.get("journey_labels") or payload.get("negative_column_count") or 0)
@@ -1709,6 +1875,14 @@ def _set_first_time(totals: dict, key: str, value) -> None:
     totals[key] = value if old is None else min(float(old), value)
 
 
+def _set_first_int(totals: dict, key: str, value) -> None:
+    if value is None:
+        return
+    value = int(value)
+    old = totals.get(key)
+    totals[key] = value if old is None else min(int(old), value)
+
+
 def _profile_payload(profile_totals: dict | None, profiling: PruningCounter, final_judge: dict | None) -> dict:
     totals = _empty_profile_totals()
     if profile_totals:
@@ -1718,6 +1892,7 @@ def _profile_payload(profile_totals: dict | None, profiling: PruningCounter, fin
         totals["final_judge_wall_time"] = float(final_judge.get("final_judge_wall_time") or 0.0)
     pruning = profiling.to_payload()
     labels_generated = int(totals["labels_generated"] or pruning.get("labels_generated") or 0)
+    labels_generated_total = int(totals["labels_generated_total"] or labels_generated)
     labels_extended = int(totals["labels_extended"] or pruning.get("labels_extended") or 0)
     bound_prune_count = int(totals["bound_prune_count"] or pruning.get("labels_pruned_by_completion_bound") or 0)
     payload = {
@@ -1727,6 +1902,8 @@ def _profile_payload(profile_totals: dict | None, profiling: PruningCounter, fin
         "time_to_first_negative": totals["time_to_first_negative"],
         "time_to_first_addable_negative": totals["time_to_first_addable_negative"],
         "labels_generated": labels_generated,
+        "labels_generated_before_first_negative": totals["labels_generated_before_first_negative"],
+        "labels_generated_total": labels_generated_total,
         "labels_extended": labels_extended,
         "sortie_templates": int(totals["sortie_templates"]),
         "journey_labels": int(totals["journey_labels"]),
@@ -1749,6 +1926,9 @@ def _profile_payload(profile_totals: dict | None, profiling: PruningCounter, fin
         "worker_incomplete_count": int(totals["worker_incomplete_count"]),
         "final_judge_saved_by_worker_count": int(totals["final_judge_saved_by_worker_count"]),
         "worker_status": str(totals["last_worker_status"]),
+        "diagnostic_dual_source": str(totals["diagnostic_dual_source"]),
+        "diagnostic_rmp_iteration_id": str(totals["diagnostic_rmp_iteration_id"]),
+        "diagnostic_dual_fingerprint": str(totals["diagnostic_dual_fingerprint"]),
         "exit_reason": str(totals["exit_reason"]),
         "proof_tail_kernel_profile": {
             "enabled": bool(profile_totals),

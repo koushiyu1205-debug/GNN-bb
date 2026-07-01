@@ -65,6 +65,7 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2A_MODE,
     B2B_MODE,
     B2B_R2_MODE,
+    B2B_R3_MODE,
     B2C_MODE,
     B2D_MODE,
     B2_PRODUCT_MODE,
@@ -533,7 +534,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         report = run_b2_pricing_tail_ablation([instance], max_direct_tasks=5, b1_max_rounds=8, b2_max_rounds=8)
 
         self.assertEqual(report["schema_version"], "lunar_ice_bpc.b2_pricing_tail_ablation.v1")
-        self.assertEqual(report["row_count"], 9)
+        self.assertEqual(report["row_count"], 10)
         self.assertEqual(report["redlines"]["root_bound_gt_B0_violation_count"], 0)
         self.assertEqual(report["redlines"]["manual_rc_fail_count"], 0)
         self.assertEqual(report["redlines"]["selected_harvest_addability_fail_count"], 0)
@@ -550,11 +551,26 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertTrue(rows_by_mode[B2B_R2_MODE]["selected_all_would_enter_master"])
         self.assertGreater(rows_by_mode[B2B_R2_MODE]["worker_call_count"], 0)
         self.assertGreater(rows_by_mode[B2B_R2_MODE]["final_judge_call_count"], 0)
+        self.assertEqual(rows_by_mode[B2B_R3_MODE]["baseline_name"], B1B_MODE)
+        self.assertEqual(rows_by_mode[B2B_R3_MODE]["seed_builder"], "b2b_r3_lightweight_no_full_universe_enumeration")
+        self.assertFalse(rows_by_mode[B2B_R3_MODE]["full_universe_preloaded"])
+        self.assertEqual(rows_by_mode[B2B_R3_MODE]["diagnostic_dual_source"], "master.reduced_cost_context")
+        self.assertTrue(rows_by_mode[B2B_R3_MODE]["diagnostic_dual_fingerprint"])
+        self.assertGreater(rows_by_mode[B2B_R3_MODE]["labels_generated_total"], 0)
+        self.assertIsNotNone(rows_by_mode[B2B_R3_MODE]["labels_generated_before_first_negative"])
+        self.assertEqual(rows_by_mode[B2B_R3_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
         self.assertFalse(rows_by_mode[B2B_R2_MODE]["exact_first_step_bound_pruning_enabled"])
         self.assertEqual(rows_by_mode[B2_PRODUCT_MODE]["certificate_scope"], "DIRECT_DP_FIXED_GRAPH_OPTIMAL")
         self.assertEqual(rows_by_mode[B2_PRODUCT_MODE]["product_exact_solution_count"], 1)
         self.assertEqual(rows_by_mode[B2C_MODE]["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
         self.assertEqual(rows_by_mode[B2D_MODE]["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        for mode in (B2C_MODE, B2D_MODE):
+            self.assertEqual(rows_by_mode[mode]["diagnostic_dual_source"], "master.reduced_cost_context")
+            self.assertTrue(rows_by_mode[mode]["diagnostic_dual_fingerprint"])
+            self.assertGreater(rows_by_mode[mode]["labels_generated_total"], 0)
+            self.assertIsNotNone(rows_by_mode[mode]["worker_wall_time"])
+            self.assertEqual(rows_by_mode[mode]["final_judge_wall_time"], 0.0)
+            self.assertIn(rows_by_mode[mode]["exit_reason"], {"FOUND_NEGATIVE", "LOCAL_NO_COLUMN_UNCERTIFIED"})
         self.assertFalse(rows_by_mode[B2_PRODUCT_MODE]["root_lp_bound_official"])
         self.assertFalse(report["acceptance"]["b2_accepted"])
         self.assertTrue(report["acceptance"]["b2a_fast_path_accepted"])
@@ -580,7 +596,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertTrue(report_md.exists())
             text = report_md.read_text(encoding="utf-8")
             self.assertIn("B2 Accepted?", text)
-            self.assertIn("B2 Round2 Answers", text)
+            self.assertIn("B2 Round3 Answers", text)
 
     def test_b2_acceptance_requires_direct20_probe_and_report_disambiguates_guard(self) -> None:
         redlines = {
@@ -606,7 +622,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             "scale10_total_count": 20,
             "scale20_fail_closed_count": 20,
             "scale20_probe_count": 0,
-            "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE],
+            "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2B_R3_MODE, B2C_MODE, B2D_MODE],
             "scale30_count": 20,
             "notes": ["20-scale fail-closed guard deliberately sets max_direct_tasks below 20."],
         }
@@ -713,7 +729,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "matrix_group": matrix_group,
                 "scale": scale,
                 "instance_id": instance_id,
-                "baseline_name": B1B_MODE if mode in {B2B_MODE, B2B_R2_MODE} else "accepted_B1",
+                "baseline_name": B1B_MODE if mode in {B2B_MODE, B2B_R2_MODE, B2B_R3_MODE} else "accepted_B1",
                 "candidate_name": mode,
                 "algorithm_status": "BPC_INCOMPLETE_PRICING" if mode != B0_MODE else "DIRECT_DP_BASELINE_OPTIMAL",
                 "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
@@ -774,11 +790,19 @@ class LunarIceSmokeTests(unittest.TestCase):
                     scale=10,
                     matrix_group="10-scale selected5",
                 ),
+                row(
+                    B2B_R3_MODE,
+                    wall_time=2.0,
+                    fail_reason="",
+                    instance_id="instance_010_selected",
+                    scale=10,
+                    matrix_group="10-scale selected5",
+                ),
             ],
             "matrix": {
                 "scale10_selected_count": 5,
                 "scale20_probe_count": 0,
-                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE],
+                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2B_R3_MODE, B2C_MODE, B2D_MODE],
                 "notes": [],
             },
         }
@@ -793,6 +817,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                     row(B2_PRODUCT_MODE, wall_time=5.0, instance_id=instance_id),
                     row(B2A_MODE, wall_time=10.0, instance_id=instance_id),
                     row(B2B_R2_MODE, wall_time=10.0, fail_reason="worker diagnostic", instance_id=instance_id),
+                    row(B2B_R3_MODE, wall_time=9.0, fail_reason="", instance_id=instance_id),
                     row(B2C_MODE, wall_time=1.0, instance_id=instance_id),
                     row(B2D_MODE, wall_time=1.0, instance_id=instance_id),
                 ]
@@ -801,7 +826,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             "rows": extra_rows,
             "matrix": {
                 "scale20_probe_count": 5,
-                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE],
+                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2B_R3_MODE, B2C_MODE, B2D_MODE],
                 "direct20_probe_time_limit_sec": 60.0,
                 "notes": ["direct20-only unit test"],
             },
@@ -810,9 +835,9 @@ class LunarIceSmokeTests(unittest.TestCase):
 
         self.assertEqual(merged["matrix"]["scale20_probe_count"], 5)
         self.assertTrue(merged["acceptance"]["required_coverage_met"])
-        self.assertTrue(merged["acceptance"]["b2b_r2_seeded_tail_accepted"])
+        self.assertTrue(merged["acceptance"]["b2b_r3_seeded_tail_accepted"])
         self.assertEqual(merged["redlines"]["root_bound_gt_B0_violation_count"], 0)
-        b2b_row = next(row for row in merged["rows"] if row["candidate_name"] == B2B_R2_MODE)
+        b2b_row = next(row for row in merged["rows"] if row["candidate_name"] == B2B_R3_MODE)
         self.assertIn("wall_time_lower", b2b_row["improvement_reason"])
 
     def test_b2b_r2_incremental_report_runs_only_b2b_r2_groups(self) -> None:
@@ -976,6 +1001,33 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(b2["selected_count"], b2["harvest_selected_count"])
         self.assertEqual(b2["added_to_master_count"], b2["added_column_count"])
         self.assertFalse(b2["exact_first_step_bound_profile"]["exact_first_step_bound_pruning_enabled"])
+
+    def test_b2b_r3_worker_uses_true_rmp_dual_and_cannot_certify_locally(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b2 = solve_b2_pricing_tail_baseline(
+            data,
+            max_direct_tasks=5,
+            max_rounds=1,
+            mode=B2B_R3_MODE,
+        )
+
+        self.assertEqual(b2["b2_mode"], B2B_R3_MODE)
+        self.assertEqual(b2["seed_builder"], "b2b_r3_lightweight_no_full_universe_enumeration")
+        self.assertEqual(b2["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(b2["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertEqual(b2["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertFalse(b2["root_lp_bound_official"])
+        self.assertFalse(b2["uses_true_dual_bpc_certificate"])
+        self.assertEqual(b2["final_judge_call_count"], 0)
+        self.assertEqual(b2["diagnostic_dual_source"], "master.reduced_cost_context")
+        self.assertTrue(b2["diagnostic_dual_fingerprint"])
+        self.assertGreater(b2["worker_found_addable_negative_count"], 0)
+        self.assertGreater(b2["labels_generated_total"], 0)
+        self.assertIsNotNone(b2["labels_generated_before_first_negative"])
+        self.assertEqual(b2["history"][0]["diagnostic_dual_source"], "master.reduced_cost_context")
+        self.assertTrue(b2["history"][0]["diagnostic_dual_fingerprint"])
+        self.assertFalse(b2["history"][0]["rmp_dual_diagnostic"]["can_certify_no_negative"])
 
     def test_b2a_full_universe_rc_audit_fast_path_is_explicit(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)

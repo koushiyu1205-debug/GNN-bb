@@ -14,6 +14,7 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2A_MODE,
     B2B_MODE,
     B2B_R2_MODE,
+    B2B_R3_MODE,
     B2C_MODE,
     B2D_MODE,
     B2_PRODUCT_MODE,
@@ -26,7 +27,18 @@ from lunar_ice_bpc.io.instance_io import read_json
 from lunar_ice_bpc.runners.b0_b1_ablation import B0_MODE, B1A_MODE, B1B_MODE
 
 
-B2_MODES = (B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE)
+B2_MODES = (
+    B0_MODE,
+    B1A_MODE,
+    B1B_MODE,
+    B2_PRODUCT_MODE,
+    B2A_MODE,
+    B2B_MODE,
+    B2B_R2_MODE,
+    B2B_R3_MODE,
+    B2C_MODE,
+    B2D_MODE,
+)
 
 CSV_COLUMNS = (
     "matrix_group",
@@ -76,11 +88,16 @@ CSV_COLUMNS = (
     "direct_dp_fallback_count",
     "rmp_wall_time",
     "worker_status",
+    "diagnostic_dual_source",
+    "diagnostic_rmp_iteration_id",
+    "diagnostic_dual_fingerprint",
     "worker_wall_time",
     "final_judge_wall_time",
     "time_to_first_negative",
     "time_to_first_addable_negative",
     "labels_generated",
+    "labels_generated_before_first_negative",
+    "labels_generated_total",
     "labels_extended",
     "sortie_templates",
     "journey_labels",
@@ -322,6 +339,7 @@ def run_b2_pricing_tail_b2b_r2_incremental(
     direct20_probe_time_limit_sec: float = 120.0,
     fail_closed_max_direct_tasks: int = 10,
     b2_max_rounds: int = 8,
+    mode: str = B2B_R2_MODE,
 ) -> dict:
     """Run only B2B_R2 rows needed to patch an existing B2 matrix artifact."""
 
@@ -329,10 +347,11 @@ def run_b2_pricing_tail_b2b_r2_incremental(
     manifest_path = Path(manifest_path)
     if not manifest_path.is_absolute():
         manifest_path = project_root / manifest_path
+    active_mode = str(mode)
 
     rows: list[dict] = []
     notes = [
-        "This artifact contains only B2B_R2 rows and is intended to merge into an existing B2 matrix.",
+        f"This artifact contains only {active_mode} rows and is intended to merge into an existing B2 matrix.",
         "Runs are serial to avoid concurrent 20-scale final-judge memory spikes.",
     ]
 
@@ -340,7 +359,7 @@ def run_b2_pricing_tail_b2b_r2_incremental(
     rows.extend(
         run_b2_pricing_tail_ablation(
             scale5,
-            modes=(B2B_R2_MODE,),
+            modes=(active_mode,),
             max_direct_tasks=5,
             b2_max_rounds=b2_max_rounds,
             matrix_group="5-scale full",
@@ -352,7 +371,7 @@ def run_b2_pricing_tail_b2b_r2_incremental(
     rows.extend(
         run_b2_pricing_tail_ablation(
             scale10,
-            modes=(B2B_R2_MODE,),
+            modes=(active_mode,),
             max_direct_tasks=10,
             b2_max_rounds=b2_max_rounds,
             matrix_group="10-scale selected5" if len(scale10) < len(scale10_all) else "10-scale full",
@@ -360,19 +379,19 @@ def run_b2_pricing_tail_b2b_r2_incremental(
         )["rows"]
     )
     if len(scale10) < len(scale10_all):
-        notes.append(f"B2B_R2 10-scale ran selected {len(scale10)}/{len(scale10_all)}.")
+        notes.append(f"{active_mode} 10-scale ran selected {len(scale10)}/{len(scale10_all)}.")
 
     scale20_all = _manifest_instance_paths(manifest_path, project_root, scale=20)
     rows.extend(
         run_b2_pricing_tail_ablation(
             scale20_all,
-            modes=(B2B_R2_MODE,),
+            modes=(active_mode,),
             max_direct_tasks=int(fail_closed_max_direct_tasks),
             b2_max_rounds=b2_max_rounds,
             matrix_group="20-scale fail-closed guard",
         )["rows"]
     )
-    notes.append("B2B_R2 20-scale fail-closed guard uses max_direct_tasks below 20; fail-closed is expected.")
+    notes.append(f"{active_mode} 20-scale fail-closed guard uses max_direct_tasks below 20; fail-closed is expected.")
 
     offset = max(0, int(scale20_probe_offset))
     limit = max(0, int(scale20_probe_limit))
@@ -381,7 +400,7 @@ def run_b2_pricing_tail_b2b_r2_incremental(
         rows.extend(
             run_b2_pricing_tail_ablation(
                 scale20_probe,
-                modes=(B2B_R2_MODE,),
+                modes=(active_mode,),
                 max_direct_tasks=20,
                 b2_max_rounds=b2_max_rounds,
                 matrix_group="20-scale selected direct20 probe",
@@ -389,7 +408,7 @@ def run_b2_pricing_tail_b2b_r2_incremental(
             )["rows"]
         )
         notes.append(
-            f"B2B_R2 20-scale selected direct20 probe used {len(scale20_probe)} instance(s) "
+            f"{active_mode} 20-scale selected direct20 probe used {len(scale20_probe)} instance(s) "
             f"from offset {offset}, with per-row timeout {direct20_probe_time_limit_sec}s."
         )
 
@@ -397,7 +416,7 @@ def run_b2_pricing_tail_b2b_r2_incremental(
     rows.extend(
         run_b2_pricing_tail_ablation(
             scale30_all,
-            modes=(B2B_R2_MODE,),
+            modes=(active_mode,),
             max_direct_tasks=int(fail_closed_max_direct_tasks),
             b2_max_rounds=b2_max_rounds,
             matrix_group="30-scale fail-closed diagnostic",
@@ -413,7 +432,7 @@ def run_b2_pricing_tail_b2b_r2_incremental(
         "scale10_row_time_limit_sec": scale10_row_time_limit_sec,
         "scale20_fail_closed_count": len(scale20_all),
         "scale20_probe_count": len(scale20_probe),
-        "scale20_probe_modes": [B2B_R2_MODE],
+        "scale20_probe_modes": [active_mode],
         "scale20_probe_offset": offset,
         "scale30_count": len(scale30_all),
         "fail_closed_max_direct_tasks": int(fail_closed_max_direct_tasks),
@@ -422,6 +441,14 @@ def run_b2_pricing_tail_b2b_r2_incremental(
     }
     report["acceptance"] = _acceptance(report["rows"], report["redlines"], matrix=report["matrix"])
     return report
+
+
+def run_b2_pricing_tail_b2b_r3_incremental(
+    **kwargs,
+) -> dict:
+    """Run only B2B_R3 rows needed to patch an existing B2 matrix artifact."""
+
+    return run_b2_pricing_tail_b2b_r2_incremental(mode=B2B_R3_MODE, **kwargs)
 
 
 def run_b2_pricing_tail_b2b_r2_direct20_probe(
@@ -524,7 +551,7 @@ def write_b2_pricing_tail_ablation_artifacts(
     summary_json.parent.mkdir(parents=True, exist_ok=True)
     report_md.parent.mkdir(parents=True, exist_ok=True)
     with rows_csv.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+        writer = csv.DictWriter(fh, fieldnames=CSV_COLUMNS, extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         for row in report.get("rows", []):
             clean = {key: value for key, value in row.items() if not key.startswith("_")}
@@ -549,7 +576,7 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
         "## Completed Scope",
         "",
         "- 当前只评估 B2 root pricing-tail；不进入 B3 branch tree、B4 cuts/formulation、B5 GAT guidance。",
-        "- B2B_R2_worker_before_final_judge 是本轮新增候选；B2B_seeded_tail_CG 保留为上一轮对照。",
+        "- B2B_R3_true_dual_negative_search_worker 是本轮新增候选；B2B_R2_worker_before_final_judge 与 B2B_seeded_tail_CG 保留为对照。",
         "- B2A_full_universe_rc_audit_fast_path 只作为显式 full-universe audit fast path。",
         "- completion-bound pruning 默认关闭；只保留 audit / ordering / profiling 语义。",
         "",
@@ -605,12 +632,21 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
     if direct20_rows:
         b0_direct20 = [row for row in direct20_rows if row.get("candidate_name") == B0_MODE]
         product_direct20 = [row for row in direct20_rows if row.get("candidate_name") == B2_PRODUCT_MODE]
-        bpc_root_modes = {B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE, B2B_R2_MODE}
+        bpc_root_modes = {B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE, B2B_R2_MODE, B2B_R3_MODE}
         bpc_direct20 = [row for row in direct20_rows if row.get("candidate_name") in bpc_root_modes]
         b0_solved = sum(1 for row in b0_direct20 if row.get("algorithm_status") == "DIRECT_DP_BASELINE_OPTIMAL")
         product_solved = sum(1 for row in product_direct20 if int(row.get("product_exact_solution_count") or 0) == 1)
         bpc_timeouts = sum(1 for row in bpc_direct20 if "row_time_limit_sec" in str(row.get("fail_closed_reason") or ""))
-        b2b_improved = acceptance.get("b2b_r2_real_scale_improvement_count", 0)
+        b2b_r2_improved = sum(
+            1
+            for row in direct20_rows
+            if row.get("candidate_name") == B2B_R2_MODE and _real_improvement_reason(row)
+        )
+        b2b_r3_improved = sum(
+            1
+            for row in direct20_rows
+            if row.get("candidate_name") == B2B_R3_MODE and _real_improvement_reason(row)
+        )
         lines.extend([
             "",
             "## 20-Scale Direct20 Probe Interpretation",
@@ -619,7 +655,7 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
             f"- B2_PRODUCT direct20 fixed-graph exact solved rows: {product_solved}/{len(product_direct20)}。",
             f"- B1/B2 direct20 timeout rows: {bpc_timeouts}/{len(bpc_direct20)}。",
             "- 若 B0 direct20 闭合而 B1/B2 root rows timeout，本组应解释为 BPC root proof-tail 成本问题，不是 B0 direct-DP 失败。",
-            f"- B2B_R2 real-scale improvement rows: {b2b_improved}。",
+            f"- B2B_R2/R3 direct20 improvement rows: {b2b_r2_improved}/{b2b_r3_improved}。",
         ])
     lines.extend([
         "",
@@ -649,19 +685,20 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
         f"- product_exact_solution_count_by_scope: {acceptance.get('product_exact_solution_count_by_scope', {})}。",
         f"- direct_dp_fallback_count: {report.get('totals', {}).get('direct_dp_fallback_count', 0)}。",
         f"- labels_generated: {report.get('totals', {}).get('labels_generated', 0)}。",
+        f"- labels_generated_total: {report.get('totals', {}).get('labels_generated_total', 0)}。",
         f"- labels_extended: {report.get('totals', {}).get('labels_extended', 0)}。",
         f"- worker_found_addable_negative_count: {report.get('totals', {}).get('worker_found_addable_negative_count', 0)}。",
         f"- final_judge_saved_by_worker_count: {report.get('totals', {}).get('final_judge_saved_by_worker_count', 0)}。",
         f"- exact_first_step_bound_pruning_enabled: false；本轮只做 audit/order/profile。",
         f"- time_to_first_negative rows are diagnostic only; no B2C/B2D row can create an official lower bound。",
         "",
-        "## B2 Round2 Answers",
+        "## B2 Round3 Answers",
         "",
         f"- 1. B2_PRODUCT accepted: {acceptance.get('b2_product_exact_accepted')}；scope 必须保持 DIRECT_DP_FIXED_GRAPH_OPTIMAL，不是 BPC certificate。",
         f"- 2. B2A accepted: {acceptance.get('b2a_fast_path_accepted')}；仅作为 full-universe membership RC audit fast path。",
-        f"- 3. B2B_R2 accepted: {acceptance.get('b2b_r2_seeded_tail_accepted')}。",
+        f"- 3. B2B_R3 accepted: {acceptance.get('b2b_r3_seeded_tail_accepted')}；B2B_R2 accepted: {acceptance.get('b2b_r2_seeded_tail_accepted')}。",
         f"- 4. 10/20 timeout bottleneck: {bottleneck}。",
-        f"- 5. 允许进入 B3: {bool(acceptance.get('b2b_r2_seeded_tail_accepted') and acceptance.get('b2_accepted'))}；只有 B2B_R2 在 required coverage 上通过且 redlines 全 0 才能进入。",
+        f"- 5. 允许进入 B3: {bool(acceptance.get('b2b_r3_seeded_tail_accepted') and acceptance.get('b2_accepted'))}；只有 B2B_R3 在 required coverage 上通过且 redlines 全 0 才能进入。",
         "",
         "## B2 Accepted?",
         "",
@@ -672,9 +709,12 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
         f"- B2A fast path accepted as full-universe audit optimization: {acceptance.get('b2a_fast_path_accepted')}。",
         f"- B2B seeded tail accepted as next baseline: {acceptance.get('b2b_seeded_tail_accepted')}。",
         f"- B2B_R2 seeded tail accepted as next baseline: {acceptance.get('b2b_r2_seeded_tail_accepted')}。",
+        f"- B2B_R3 seeded tail accepted as next baseline: {acceptance.get('b2b_r3_seeded_tail_accepted')}。",
         f"- improvement_count: {acceptance.get('improvement_count')}。",
         f"- B2B_R2 real-scale improvement count: {acceptance.get('b2b_r2_real_scale_improvement_count')}。",
         f"- B2B_R2 10-scale improvement count: {acceptance.get('b2b_r2_10scale_improvement_count')}。",
+        f"- B2B_R3 real-scale improvement count: {acceptance.get('b2b_r3_real_scale_improvement_count')}。",
+        f"- B2B_R3 10-scale improvement count: {acceptance.get('b2b_r3_10scale_improvement_count')}。",
         f"- reason: {acceptance.get('reason')}。",
     ])
     if matrix.get("notes"):
@@ -694,7 +734,7 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
         "",
         "## B3 Entry",
         "",
-        "- 只有 `b2b_r2_seeded_tail_accepted=true` 且 redlines 全为 0 时，才允许把 B2B_R2 作为进入 B3 的 accepted baseline。",
+        "- 只有 `b2b_r3_seeded_tail_accepted=true` 且 redlines 全为 0 时，才允许把 B2B_R3 作为进入 B3 的 accepted baseline。",
     ])
     return "\n".join(lines) + "\n"
 
@@ -703,7 +743,7 @@ def _b2_timeout_bottleneck(rows: list[dict]) -> str:
     root_rows = [
         row for row in rows
         if int(row.get("scale") or 0) in {10, 20}
-        and row.get("candidate_name") in {B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE, B2B_R2_MODE}
+        and row.get("candidate_name") in {B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE, B2B_R2_MODE, B2B_R3_MODE}
     ]
     incomplete = [
         row for row in root_rows
@@ -854,6 +894,17 @@ def _run_mode(
         row = _row_from_raw(data, mode=mode, raw=result, matrix_group=matrix_group, elapsed=perf_counter() - start)
         row["_raw_result"] = result
         return row
+    if mode == B2B_R3_MODE:
+        result = solve_b2_pricing_tail_baseline(
+            data,
+            max_direct_tasks=max_direct_tasks,
+            max_rounds=b2_max_rounds,
+            mode=B2B_R3_MODE,
+            previous_baseline=baseline_cache.get(B1B_MODE),
+        )
+        row = _row_from_raw(data, mode=mode, raw=result, matrix_group=matrix_group, elapsed=perf_counter() - start)
+        row["_raw_result"] = result
+        return row
     if mode in {B2_PRODUCT_MODE, B2C_MODE, B2D_MODE}:
         result = solve_b2_pricing_tail_baseline(
             data,
@@ -936,11 +987,16 @@ def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: flo
         "direct_dp_fallback_count": int(raw.get("direct_dp_fallback_count") or 0),
         "rmp_wall_time": raw.get("rmp_wall_time"),
         "worker_status": raw.get("worker_status") or "",
+        "diagnostic_dual_source": raw.get("diagnostic_dual_source") or "",
+        "diagnostic_rmp_iteration_id": raw.get("diagnostic_rmp_iteration_id") or "",
+        "diagnostic_dual_fingerprint": raw.get("diagnostic_dual_fingerprint") or "",
         "worker_wall_time": raw.get("worker_wall_time"),
         "final_judge_wall_time": raw.get("final_judge_wall_time"),
         "time_to_first_negative": raw.get("time_to_first_negative"),
         "time_to_first_addable_negative": raw.get("time_to_first_addable_negative"),
         "labels_generated": int(raw.get("labels_generated") or raw.get("pareto_label_count") or 0),
+        "labels_generated_before_first_negative": raw.get("labels_generated_before_first_negative"),
+        "labels_generated_total": int(raw.get("labels_generated_total") or raw.get("labels_generated") or raw.get("pareto_label_count") or 0),
         "labels_extended": int(raw.get("labels_extended") or 0),
         "sortie_templates": int(raw.get("sortie_templates") or raw.get("feasible_sortie_template_count") or 0),
         "journey_labels": int(raw.get("journey_labels") or raw.get("generated_journey_count") or 0),
@@ -1037,11 +1093,16 @@ def _timeout_row(data, *, mode: str, max_direct_tasks: int, matrix_group: str, r
         "direct_dp_fallback_count": 0,
         "rmp_wall_time": None,
         "worker_status": "",
+        "diagnostic_dual_source": "",
+        "diagnostic_rmp_iteration_id": "",
+        "diagnostic_dual_fingerprint": "",
         "worker_wall_time": None,
         "final_judge_wall_time": None,
         "time_to_first_negative": None,
         "time_to_first_addable_negative": None,
         "labels_generated": 0,
+        "labels_generated_before_first_negative": None,
+        "labels_generated_total": 0,
         "labels_extended": 0,
         "sortie_templates": 0,
         "journey_labels": 0,
@@ -1086,6 +1147,7 @@ def _annotate_instance_improvements(rows: list[dict]) -> None:
         _compare_candidate(by_mode, baseline=B1A_MODE, candidate=B2A_MODE)
         _compare_candidate(by_mode, baseline=B1B_MODE, candidate=B2B_MODE)
         _compare_candidate(by_mode, baseline=B1B_MODE, candidate=B2B_R2_MODE)
+        _compare_candidate(by_mode, baseline=B1B_MODE, candidate=B2B_R3_MODE)
 
 
 def _compare_candidate(by_mode: dict[str, dict], *, baseline: str, candidate: str) -> None:
@@ -1189,7 +1251,7 @@ def _redlines(rows: list[dict]) -> dict:
             1
             for row in rows
             if int(row.get("scale") or 0) == 5
-            and row.get("candidate_name") in {B2A_MODE, B2B_MODE, B2B_R2_MODE}
+            and row.get("candidate_name") in {B2A_MODE, B2B_MODE, B2B_R2_MODE, B2B_R3_MODE}
             and row.get("certificate_scope_regression") is True
         ),
         "proof_debt_unreleased_certified_count": sum(1 for row in certified if int(row.get("proof_debt_unreleased_count") or 0) > 0),
@@ -1220,6 +1282,7 @@ def _totals(rows: list[dict]) -> dict:
         "worker_incomplete_count",
         "final_judge_saved_by_worker_count",
         "labels_generated",
+        "labels_generated_total",
         "labels_extended",
         "sortie_templates",
         "journey_labels",
@@ -1240,7 +1303,17 @@ def _totals(rows: list[dict]) -> dict:
 def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) -> dict:
     matrix = matrix or {}
     redlines_ok = all(int(value or 0) == 0 for value in redlines.values())
-    required_direct20_modes = {B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE}
+    required_direct20_modes = {
+        B0_MODE,
+        B1A_MODE,
+        B1B_MODE,
+        B2_PRODUCT_MODE,
+        B2A_MODE,
+        B2B_R2_MODE,
+        B2B_R3_MODE,
+        B2C_MODE,
+        B2D_MODE,
+    }
     direct20_rows = [row for row in rows if row.get("matrix_group") == "20-scale selected direct20 probe"]
     direct20_mode_instance_counts = {
         mode: len({str(row.get("instance_id")) for row in direct20_rows if row.get("candidate_name") == mode})
@@ -1259,6 +1332,10 @@ def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) ->
         row for row in rows
         if row.get("candidate_name") == B2B_R2_MODE and row.get("improvement_reason")
     ]
+    b2b_r3_improvements = [
+        row for row in rows
+        if row.get("candidate_name") == B2B_R3_MODE and row.get("improvement_reason")
+    ]
     b2b_real_scale_improvements = [
         row for row in b2b_improvements
         if (
@@ -1275,8 +1352,21 @@ def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) ->
             and _real_improvement_reason(row)
         )
     ]
+    b2b_r3_real_scale_improvements = [
+        row for row in b2b_r3_improvements
+        if (
+            int(row.get("scale") or 0) in {10, 20}
+            and row.get("matrix_group") in {"10-scale selected5", "10-scale full", "20-scale selected direct20 probe"}
+            and _real_improvement_reason(row)
+        )
+    ]
     b2b_r2_10scale_improvements = [
         row for row in b2b_r2_real_scale_improvements
+        if int(row.get("scale") or 0) == 10
+        and row.get("matrix_group") in {"10-scale selected5", "10-scale full"}
+    ]
+    b2b_r3_10scale_improvements = [
+        row for row in b2b_r3_real_scale_improvements
         if int(row.get("scale") or 0) == 10
         and row.get("matrix_group") in {"10-scale selected5", "10-scale full"}
     ]
@@ -1288,11 +1378,12 @@ def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) ->
     b2a_ok = bool(redlines_ok and b2a_improvements)
     b2b_ok = bool(redlines_ok and coverage_met and b2b_real_scale_improvements)
     b2b_r2_ok = bool(redlines_ok and coverage_met and b2b_r2_10scale_improvements)
+    b2b_r3_ok = bool(redlines_ok and coverage_met and b2b_r3_10scale_improvements)
     product_scope_counts = _count_product_scopes(rows)
     product_required_ok = _product_exact_required_coverage(rows)
-    accepted = bool(b2b_r2_ok)
+    accepted = bool(b2b_r3_ok)
     if accepted:
-        reason = "B2B_R2 improves seeded root tail on 10-scale selected coverage without redline violations."
+        reason = "B2B_R3 improves seeded root tail on 10-scale selected coverage without redline violations."
     elif not coverage_met:
         missing_modes = [mode for mode, count in direct20_mode_instance_counts.items() if count < 5]
         reason = (
@@ -1302,12 +1393,13 @@ def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) ->
         if missing_modes:
             reason += f" Undercovered direct20 modes: {','.join(missing_modes)}."
     else:
-        reason = "B2 remains diagnostic until B2B_R2 shows a 10-scale selected real improvement without redline violations."
+        reason = "B2 remains diagnostic until B2B_R3 shows a 10-scale selected real improvement without redline violations."
     return {
         "b2_accepted": accepted,
         "b2a_fast_path_accepted": b2a_ok,
         "b2b_seeded_tail_accepted": b2b_ok,
         "b2b_r2_seeded_tail_accepted": b2b_r2_ok,
+        "b2b_r3_seeded_tail_accepted": b2b_r3_ok,
         "b2_product_exact_accepted": bool(redlines_ok and product_required_ok),
         "required_coverage_met": coverage_met,
         "required_direct20_modes_met": required_direct20_modes_met,
@@ -1316,13 +1408,16 @@ def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) ->
         "missing_direct20_modes": [mode for mode, count in direct20_mode_instance_counts.items() if count < 5],
         "product_exact_required_coverage_met": product_required_ok,
         "product_exact_solution_count_by_scope": product_scope_counts,
-        "improvement_count": len(b2a_improvements) + len(b2b_improvements) + len(b2b_r2_improvements),
+        "improvement_count": len(b2a_improvements) + len(b2b_improvements) + len(b2b_r2_improvements) + len(b2b_r3_improvements),
         "b2a_improvement_count": len(b2a_improvements),
         "b2b_improvement_count": len(b2b_improvements),
         "b2b_r2_improvement_count": len(b2b_r2_improvements),
+        "b2b_r3_improvement_count": len(b2b_r3_improvements),
         "b2b_real_scale_improvement_count": len(b2b_real_scale_improvements),
         "b2b_r2_real_scale_improvement_count": len(b2b_r2_real_scale_improvements),
+        "b2b_r3_real_scale_improvement_count": len(b2b_r3_real_scale_improvements),
         "b2b_r2_10scale_improvement_count": len(b2b_r2_10scale_improvements),
+        "b2b_r3_10scale_improvement_count": len(b2b_r3_10scale_improvements),
         "reason": reason,
     }
 
@@ -1364,7 +1459,7 @@ def _load_instance(item: dict | str | Path) -> dict:
 def _baseline_name(mode: str) -> str:
     if mode == B2A_MODE:
         return B1A_MODE
-    if mode in {B2B_MODE, B2B_R2_MODE}:
+    if mode in {B2B_MODE, B2B_R2_MODE, B2B_R3_MODE}:
         return B1B_MODE
     if mode == B2_PRODUCT_MODE:
         return "fixed_graph_direct_dp_product_exact"
@@ -1385,6 +1480,8 @@ def _official_lower_bound_source(mode: str, raw: dict) -> str:
             return "b2b_true_dual_pricing_closure"
         if mode == B2B_R2_MODE:
             return "b2b_r2_true_dual_final_judge_closure"
+        if mode == B2B_R3_MODE:
+            return "b2b_r3_true_dual_final_judge_closure"
         if mode in {B1A_MODE, B1B_MODE}:
             return "b1_root_true_dual_pricing_closure"
     return ""

@@ -15,6 +15,7 @@ from lunar_ice_bpc.runners.b2_pricing_tail_ablation import (  # noqa: E402
     merge_b2_pricing_tail_reports,
     run_b2_pricing_tail_b2b_r2_direct20_probe,
     run_b2_pricing_tail_b2b_r2_incremental,
+    run_b2_pricing_tail_b2b_r3_incremental,
     run_b2_pricing_tail_direct20_probe,
     run_b2_pricing_tail_ablation_matrix,
     write_b2_pricing_tail_ablation_artifacts,
@@ -46,6 +47,11 @@ def main() -> int:
         help="Run only B2B_R2 rows for the B2 matrix groups.",
     )
     parser.add_argument(
+        "--b2b-r3-only",
+        action="store_true",
+        help="Run only B2B_R3 rows for the B2 matrix groups.",
+    )
+    parser.add_argument(
         "--b2b-r2-direct20-only",
         action="store_true",
         help="Run only B2B_R2 rows for the 20-scale selected direct20 probe.",
@@ -57,9 +63,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    only_modes = [args.direct20_only, args.b2b_r2_only, args.b2b_r2_direct20_only]
+    only_modes = [args.direct20_only, args.b2b_r2_only, args.b2b_r3_only, args.b2b_r2_direct20_only]
     if sum(bool(value) for value in only_modes) > 1:
-        raise SystemExit("--direct20-only, --b2b-r2-only, and --b2b-r2-direct20-only are mutually exclusive")
+        raise SystemExit("--direct20-only, --b2b-r2-only, --b2b-r3-only, and --b2b-r2-direct20-only are mutually exclusive")
 
     if args.direct20_only:
         report = run_b2_pricing_tail_direct20_probe(
@@ -90,6 +96,22 @@ def main() -> int:
             report = merge_b2_pricing_tail_reports(base_report, report)
     elif args.b2b_r2_only:
         report = run_b2_pricing_tail_b2b_r2_incremental(
+            manifest_path=args.manifest,
+            project_root=ROOT,
+            scale10_limit=args.scale10_limit,
+            scale10_row_time_limit_sec=args.scale10_row_time_limit,
+            scale20_probe_limit=args.scale20_probe_limit,
+            scale20_probe_offset=args.scale20_probe_offset,
+            direct20_probe_time_limit_sec=args.direct20_probe_time_limit,
+            fail_closed_max_direct_tasks=args.fail_closed_max_direct_tasks,
+            b2_max_rounds=args.b2_max_rounds,
+        )
+        existing_summary = ROOT / args.summary_json
+        if args.merge_existing_summary and existing_summary.exists():
+            base_report = json.loads(existing_summary.read_text(encoding="utf-8"))
+            report = merge_b2_pricing_tail_reports(base_report, report)
+    elif args.b2b_r3_only:
+        report = run_b2_pricing_tail_b2b_r3_incremental(
             manifest_path=args.manifest,
             project_root=ROOT,
             scale10_limit=args.scale10_limit,
