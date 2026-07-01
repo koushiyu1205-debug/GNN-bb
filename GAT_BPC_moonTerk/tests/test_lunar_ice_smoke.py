@@ -119,6 +119,12 @@ from lunar_ice_bpc.guidance.graph_builder import build_guidance_graph
 from lunar_ice_bpc.guidance.shadow_policy import build_shadow_report
 from lunar_ice_bpc.io.instance_io import validate_instance, write_json
 from lunar_ice_bpc.runners.audit import audit_benchmark_csv
+from lunar_ice_bpc.runners.b0_b1_ablation import (
+    B0_MODE,
+    B1A_MODE,
+    B1B_MODE,
+    run_b0_b1_ablation,
+)
 from lunar_ice_bpc.runners.benchmark import run_benchmark
 from lunar_ice_bpc.runners.refactor_audit import _audit_b5_guidance_suite, audit_refactor_state
 from lunar_ice_bpc.runners.generate_instances import generate_benchmark
@@ -389,6 +395,10 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertNotEqual(b1["certificate_scope"], "BPC_TREE_OPTIMAL")
         self.assertEqual(b1["pricing_state"], "CERTIFIED_NO_NEGATIVE")
         self.assertEqual(b1["exact_status"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(b1["b1_mode"], "B1A_full_universe_root_audit")
+        self.assertEqual(b1["seed_mode"], "full_universe")
+        self.assertTrue(b1["full_universe_preloaded"])
+        self.assertEqual(b1["initial_column_count"], b1["full_universe_column_count"])
         self.assertTrue(b1["uses_true_dual_bpc_certificate"])
         self.assertTrue(b1["certificate_ledger"]["valid"])
         self.assertEqual(b1["certificate_ledger"]["issues"], [])
@@ -421,6 +431,83 @@ class LunarIceSmokeTests(unittest.TestCase):
             b1["b0_ablation"]["direct_dp_certificate_scope"],
             "DIRECT_DP_FIXED_GRAPH_OPTIMAL",
         )
+
+    def test_b1_seeded_column_root_cg_finds_missing_columns_then_closes(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b1b = solve_b1_root_node_baseline(
+            data,
+            max_direct_tasks=5,
+            max_rounds=8,
+            seed_mode="b0_incumbent_plus_singletons",
+        )
+
+        self.assertEqual(b1b["b1_mode"], "B1B_seeded_root_CG")
+        self.assertEqual(b1b["seed_mode"], "b0_incumbent_plus_singletons")
+        self.assertFalse(b1b["full_universe_preloaded"])
+        self.assertLess(b1b["initial_column_count"], b1b["full_universe_column_count"])
+        self.assertGreater(b1b["added_column_count"], 0)
+        self.assertGreater(b1b["pricing_round_count"], 1)
+        self.assertEqual(b1b["history"][0]["pricing_state"], "FOUND_NEGATIVE")
+        self.assertGreater(b1b["history"][0]["negative_column_count"], 0)
+        self.assertGreater(b1b["history"][0]["added_column_count"], 0)
+        self.assertEqual(b1b["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(b1b["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+        self.assertEqual(b1b["exact_status"], "BPC_NODE_LP_CERTIFIED")
+        self.assertTrue(b1b["root_lp_bound_official"])
+        self.assertTrue(b1b["manual_rc_audit_pass"])
+        self.assertTrue(b1b["pricing_rc_audit_pass"])
+        self.assertEqual(b1b["proof_debt_unreleased_count"], 0)
+        self.assertTrue(b1b["b0_ablation"]["root_bound_le_direct_dp_integer_objective"])
+
+    def test_b0_b1_ablation_gate_reports_redlines_and_seeded_cg(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        report = run_b0_b1_ablation([instance], max_direct_tasks=5, b1_max_rounds=8)
+
+        self.assertEqual(report["schema_version"], "lunar_ice_bpc.b0_b1_ablation.v1")
+        self.assertEqual(report["accepted_baseline_layers"], ["B0", "B1"])
+        self.assertIn("B2", report["not_accepted_layers"])
+        self.assertEqual(report["row_count"], 3)
+        self.assertEqual(
+            report["redlines"],
+            {
+                "root_bound_gt_B0_violation_count": 0,
+                "direct_root_official_leak_count": 0,
+                "manual_rc_fail_count": 0,
+                "pricing_rc_fail_count": 0,
+            },
+        )
+        rows_by_mode = {row["mode"]: row for row in report["rows"]}
+        self.assertEqual(rows_by_mode[B0_MODE]["certificate_scope"], "DIRECT_DP_FIXED_GRAPH_OPTIMAL")
+        self.assertEqual(rows_by_mode[B0_MODE]["bpc_certificate_status"], "NOT_PORTED_TRUE_DUAL_BPC")
+        self.assertFalse(rows_by_mode[B0_MODE]["uses_true_dual_bpc_certificate"])
+        self.assertEqual(rows_by_mode[B1A_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertTrue(rows_by_mode[B1A_MODE]["full_universe_preloaded"])
+        self.assertEqual(rows_by_mode[B1B_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertFalse(rows_by_mode[B1B_MODE]["full_universe_preloaded"])
+        self.assertGreater(rows_by_mode[B1B_MODE]["added_column_count"], 0)
+        self.assertGreater(rows_by_mode[B1B_MODE]["pricing_round_count"], 1)
+
+    def test_b0_b1_ablation_fail_closes_over_task_limit(self) -> None:
+        instance = generate_instance(20, seed=829001, index=1)
+        report = run_b0_b1_ablation(
+            [instance],
+            modes=(B0_MODE, B1A_MODE, B1B_MODE),
+            max_direct_tasks=10,
+            b1_max_rounds=8,
+        )
+
+        rows_by_mode = {row["mode"]: row for row in report["rows"]}
+        self.assertEqual(rows_by_mode[B0_MODE]["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertEqual(rows_by_mode[B1A_MODE]["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(rows_by_mode[B1A_MODE]["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertFalse(rows_by_mode[B1A_MODE]["uses_true_dual_bpc_certificate"])
+        self.assertFalse(rows_by_mode[B1A_MODE]["root_lp_bound_official"])
+        self.assertEqual(rows_by_mode[B1B_MODE]["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(rows_by_mode[B1B_MODE]["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertFalse(rows_by_mode[B1B_MODE]["uses_true_dual_bpc_certificate"])
+        self.assertFalse(rows_by_mode[B1B_MODE]["root_lp_bound_official"])
+        self.assertEqual(report["redlines"]["direct_root_official_leak_count"], 0)
 
     def test_b1_alignment_costs_and_reduced_costs_match_b0_oracle(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -1303,11 +1390,17 @@ class LunarIceSmokeTests(unittest.TestCase):
         direct_root = result["direct_root_certificate"]
         self.assertIn(
             direct_root["status"],
-            {"DIRECT_ROOT_FIXED_GRAPH_LP_CERTIFIED", "DIRECT_ROOT_FIXED_GRAPH_INTEGER_CERTIFIED"},
+            {
+                "DIRECT_ROOT_FIXED_GRAPH_LP_AUDIT_DIAGNOSTIC",
+                "DIRECT_ROOT_FIXED_GRAPH_INTEGER_MATCH_DIAGNOSTIC",
+            },
         )
         self.assertIn(
             direct_root["exact_status"],
-            {"FIXED_GRAPH_ROOT_LP_CERTIFIED", "FIXED_GRAPH_INTEGER_OPTIMAL"},
+            {
+                "FIXED_GRAPH_ROOT_LP_DIAGNOSTIC",
+                "FIXED_GRAPH_ROOT_LP_INTEGRAL_DIAGNOSTIC",
+            },
         )
         self.assertEqual(direct_root["certificate_scope"], "fixed_logical_graph_direct_root")
         self.assertFalse(direct_root["uses_true_dual_bpc_certificate"])
@@ -2389,7 +2482,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             summary = run_benchmark(project_root=root, manifest_path=manifest_path, max_workers=2)
             self.assertEqual(summary["run_count"], 1)
             self.assertEqual(summary["exact_baseline_optimal_count"], 1)
-            self.assertEqual(summary["fixed_graph_root_lp_certified_count"], 1)
+            self.assertEqual(summary["fixed_graph_root_lp_diagnostic_audit_count"], 1)
             self.assertEqual(summary["exact_claim_scope_counts"], {"fixed_logical_graph_exhaustive_direct_dp": 1})
             self.assertEqual(summary["certificate_scope_counts"], {"DIRECT_DP_FIXED_GRAPH_OPTIMAL": 1})
             self.assertEqual(summary["bpc_certificate_status_counts"], {"CERTIFIED_NO_NEGATIVE": 1})
@@ -2762,7 +2855,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertIn("ran 1 instances", completed.stdout)
             summary = json.loads(summary_json.read_text(encoding="utf-8"))
             self.assertEqual(summary["run_count"], 1)
-            self.assertEqual(summary["fixed_graph_root_lp_certified_count"], 1)
+            self.assertEqual(summary["fixed_graph_root_lp_diagnostic_audit_count"], 1)
             self.assertEqual(summary["time_limit_exceeded_count"], 0)
             self.assertTrue((solution_dir / "lunar_ice_005" / "instance_solution.json").exists())
             self.assertFalse((solution_dir / "lunar_ice_010" / "instance_solution.json").exists())

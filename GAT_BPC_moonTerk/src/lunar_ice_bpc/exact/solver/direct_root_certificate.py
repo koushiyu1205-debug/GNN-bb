@@ -148,14 +148,14 @@ def build_direct_root_certificate(
         and abs(float(integer_objective) - float(rmp.objective_bound)) <= abs(float(gap_eps))
     )
     status = (
-        "DIRECT_ROOT_FIXED_GRAPH_INTEGER_CERTIFIED"
+        "DIRECT_ROOT_FIXED_GRAPH_INTEGER_MATCH_DIAGNOSTIC"
         if integer_matches_root_lp
-        else "DIRECT_ROOT_FIXED_GRAPH_LP_CERTIFIED"
+        else "DIRECT_ROOT_FIXED_GRAPH_LP_AUDIT_DIAGNOSTIC"
     )
     exact_status = (
-        "FIXED_GRAPH_INTEGER_OPTIMAL"
+        "FIXED_GRAPH_ROOT_LP_INTEGRAL_DIAGNOSTIC"
         if integer_matches_root_lp
-        else "FIXED_GRAPH_ROOT_LP_CERTIFIED"
+        else "FIXED_GRAPH_ROOT_LP_DIAGNOSTIC"
     )
     return DirectRootCertificate(
         enabled=True,

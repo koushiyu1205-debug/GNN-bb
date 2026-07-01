@@ -1,4 +1,4 @@
-"""Diagnostic fixed-graph exhaustive pricing closure loop."""
+"""Fail-closed fixed-graph exhaustive pricing closure loop."""
 
 from __future__ import annotations
 
@@ -29,9 +29,11 @@ def run_fixed_graph_pricing_closure(
 ) -> dict:
     """Run a fail-closed exhaustive fixed-graph pricing closure loop.
 
-    The loop is intentionally diagnostic. It can close the supplied column pool
-    against the fixed three-path logical graph for small instances, but the
-    resulting no-negative evidence is still not the true-dual BPC certificate.
+    The loop is diagnostic until every true-dual closure gate passes. Once
+    pricing completeness, RMP optimality, dual binding, completion-bound
+    consistency, and nonnegative reduced cost are all verified, it certifies a
+    scoped fixed-logical-graph BPC node LP bound. It never certifies a full BPC
+    tree optimum.
     """
 
     cut_context = cut_context or CutContext()
@@ -141,8 +143,8 @@ def run_fixed_graph_pricing_closure(
                 branch_context=branch_context,
                 fixed_graph_no_negative_proved=True,
                 note=(
-                    "Exhaustive direct-label pricing found no negative fixed-graph column after diagnostic "
-                    "column closure; this is not a true-dual BPC certificate."
+                    "Exhaustive direct-label pricing found no negative fixed-graph column; the result "
+                    "certifies only if the true-dual closure gates pass."
                 ),
             )
         if not added_columns:

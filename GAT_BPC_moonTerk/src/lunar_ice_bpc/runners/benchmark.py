@@ -864,14 +864,16 @@ def _summary(rows: list[dict]) -> dict:
         "mean_relaxation_gap": round(sum(gaps) / max(1, len(gaps)), 9) if gaps else None,
         "total_node_count": sum(int(float(row.get("node_count") or 0)) for row in rows),
         "exact_baseline_optimal_count": sum(1 for row in rows if row["exact_status"] == "EXACT_BASELINE_OPTIMAL"),
-        "fixed_graph_root_lp_certified_count": sum(
+        "fixed_graph_root_lp_diagnostic_audit_count": sum(
             1
             for row in rows
             if row.get("direct_root_certificate_exact_status")
-            in {"FIXED_GRAPH_ROOT_LP_CERTIFIED", "FIXED_GRAPH_INTEGER_OPTIMAL"}
+            in {"FIXED_GRAPH_ROOT_LP_DIAGNOSTIC", "FIXED_GRAPH_ROOT_LP_INTEGRAL_DIAGNOSTIC"}
         ),
-        "fixed_graph_integer_root_certified_count": sum(
-            1 for row in rows if row.get("direct_root_certificate_exact_status") == "FIXED_GRAPH_INTEGER_OPTIMAL"
+        "fixed_graph_integer_root_diagnostic_count": sum(
+            1
+            for row in rows
+            if row.get("direct_root_certificate_exact_status") == "FIXED_GRAPH_ROOT_LP_INTEGRAL_DIAGNOSTIC"
         ),
         "direct_pricing_completion_bound_pruned_label_count": sum(
             int(float(row.get("direct_pricing_completion_bound_pruned_label_count") or 0))
@@ -954,7 +956,8 @@ def _summary(rows: list[dict]) -> dict:
         ),
         "note": (
             "exact_baseline_optimal_count counts exhaustive direct-DP fixed-graph optima; "
-            "fixed_graph_root_lp_certified_count is scoped to the fixed three-path root LP; "
+            "fixed_graph_root_lp_diagnostic_audit_count is scoped to the fixed three-path root LP and is not "
+            "a BPC certificate; "
             "certified_optimal_count is positive only when the selected pricing certificate is true-dual "
             "and the node-bound artifact can fathom the node."
         ),

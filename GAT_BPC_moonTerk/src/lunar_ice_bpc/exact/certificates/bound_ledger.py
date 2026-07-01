@@ -212,12 +212,4 @@ def _fixed_graph_closure_has_bpc_bound(closure: dict[str, Any]) -> bool:
 
 
 def _direct_root_has_bpc_bound(payload: dict[str, Any]) -> bool:
-    min_reduced_cost = _float_or_none(payload.get("min_reduced_cost"))
-    return bool(
-        payload.get("enabled") is True
-        and payload.get("uses_true_dual_bpc_certificate") is True
-        and str(payload.get("exact_status") or "")
-        in {"FIXED_GRAPH_ROOT_LP_CERTIFIED", "FIXED_GRAPH_INTEGER_OPTIMAL"}
-        and min_reduced_cost is not None
-        and min_reduced_cost >= -1.0e-6
-    )
+    return False

@@ -551,16 +551,7 @@ def _fixed_graph_closure_has_true_dual_certificate(closure: dict) -> bool:
 
 
 def _direct_root_has_true_dual_certificate(direct_root_certificate: dict, dual_binding: dict) -> bool:
-    min_reduced_cost = _float_or_none(direct_root_certificate.get("min_reduced_cost"))
-    return bool(
-        direct_root_certificate.get("enabled") is True
-        and direct_root_certificate.get("uses_true_dual_bpc_certificate") is True
-        and str(direct_root_certificate.get("exact_status") or "")
-        in {"FIXED_GRAPH_ROOT_LP_CERTIFIED", "FIXED_GRAPH_INTEGER_OPTIMAL"}
-        and dual_binding.get("dual_vector_bound_to_rmp") is True
-        and min_reduced_cost is not None
-        and min_reduced_cost >= -1.0e-6
-    )
+    return False
 
 
 def _direct_root_rmp_binding_payload(direct_root_certificate: dict) -> dict:

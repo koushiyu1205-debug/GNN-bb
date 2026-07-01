@@ -17,6 +17,7 @@ from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import manual_journey_reduced_cost
 from lunar_ice_bpc.exact.pricing.journey_pricing import DirectPricingCache
 from lunar_ice_bpc.exact.solver.journey_driver import (
+    enumerate_canonical_journey_columns,
     enumerate_direct_journey_columns,
     solve_direct_journey_baseline,
 )
@@ -30,6 +31,7 @@ def solve_b1_root_node_baseline(
     max_rounds: int = 8,
     negative_eps: float = 1.0e-6,
     max_columns_per_round: int = 64,
+    seed_mode: str = "full_universe",
 ) -> dict:
     """Solve the root BPC baseline on the fixed logical graph.
 
@@ -46,10 +48,13 @@ def solve_b1_root_node_baseline(
             max_direct_tasks=max_direct_tasks,
         )
 
-    seed_columns = tuple(initial_columns) if initial_columns is not None else enumerate_direct_journey_columns(
+    seed_columns, seed_report = build_b1_seed_columns(
         data,
-        max_exact_tasks=int(max_direct_tasks),
-    ).columns
+        b0_direct=b0_direct,
+        initial_columns=initial_columns,
+        seed_mode=seed_mode,
+        max_direct_tasks=int(max_direct_tasks),
+    )
     pool = ColumnPool()
     view = MasterColumnView()
     _load_columns(pool, view, seed_columns)
@@ -85,6 +90,7 @@ def solve_b1_root_node_baseline(
                 pricing_state=PricingState.INCOMPLETE_LIMIT,
                 master=master,
                 final_judge=None,
+                seed_report=seed_report,
                 note="Root RMP did not solve to optimality; fail closed.",
             )
         judge = run_true_dual_root_final_judge(
@@ -133,6 +139,7 @@ def solve_b1_root_node_baseline(
                 pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
                 master=master,
                 final_judge=judge.pricing_payload,
+                seed_report=seed_report,
                 note="Root LP bound is certified by journey RMP plus exhaustive true-dual fixed-graph pricing.",
             )
         if judge.pricing_state == PricingState.FOUND_NEGATIVE and added == 0:
@@ -156,12 +163,59 @@ def solve_b1_root_node_baseline(
         pricing_state=pricing_state,
         master=last_master,
         final_judge=None if last_judge is None else last_judge.pricing_payload,
+        seed_report=seed_report,
         note=(
             "Root pricing found only duplicate negative columns; certificate blocked."
             if duplicate_only
             else f"Stopped after max_rounds={max_rounds}; root no-negative proof is incomplete."
         ),
     )
+
+
+def build_b1_seed_columns(
+    data: LunarIceData,
+    *,
+    b0_direct,
+    initial_columns: Iterable[JourneyColumn] | None = None,
+    seed_mode: str = "full_universe",
+    max_direct_tasks: int = 5,
+) -> tuple[tuple[JourneyColumn, ...], dict]:
+    """Build B1 root seed columns without conflating audit and CG modes."""
+
+    full_universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
+    if initial_columns is not None:
+        resolved_mode = "custom_initial_columns"
+        columns = tuple(initial_columns)
+    else:
+        resolved_mode = str(seed_mode)
+        if resolved_mode == "full_universe":
+            columns = full_universe
+        elif resolved_mode == "b0_incumbent":
+            columns = tuple(b0_direct.journeys)
+        elif resolved_mode == "b0_incumbent_plus_singletons":
+            columns = _dedupe_columns(
+                tuple(b0_direct.journeys)
+                + tuple(column for column in full_universe if len(column.task_set) == 1)
+            )
+        elif resolved_mode == "canonical":
+            columns = enumerate_canonical_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
+        elif resolved_mode == "canonical_plus_b0_incumbent":
+            canonical = enumerate_canonical_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
+            columns = _dedupe_columns(tuple(b0_direct.journeys) + tuple(canonical))
+        else:
+            raise ValueError(f"unsupported B1 seed_mode={seed_mode!r}")
+
+    full_universe_signatures = {column_signature_from_journey(column) for column in full_universe}
+    seed_signatures = {column_signature_from_journey(column) for column in columns}
+    full_universe_preloaded = bool(seed_signatures == full_universe_signatures and len(columns) == len(full_universe))
+    b1_mode = "B1A_full_universe_root_audit" if full_universe_preloaded else "B1B_seeded_root_CG"
+    return tuple(columns), {
+        "b1_mode": b1_mode,
+        "seed_mode": resolved_mode,
+        "initial_column_count": len(columns),
+        "full_universe_column_count": len(full_universe),
+        "full_universe_preloaded": full_universe_preloaded,
+    }
 
 
 def _load_columns(pool: ColumnPool, view: MasterColumnView, columns: Iterable[JourneyColumn]) -> None:
@@ -182,6 +236,18 @@ def _master_columns(pool: ColumnPool, view: MasterColumnView) -> tuple[JourneyCo
         if column is not None and isinstance(column.payload, JourneyColumn):
             columns.append(column.payload)
     return tuple(columns)
+
+
+def _dedupe_columns(columns: Iterable[JourneyColumn]) -> tuple[JourneyColumn, ...]:
+    unique: list[JourneyColumn] = []
+    seen = set()
+    for column in columns:
+        signature = column_signature_from_journey(column)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(column)
+    return tuple(unique)
 
 
 def _add_negative_columns(
@@ -225,6 +291,7 @@ def _payload(
     pricing_state: PricingState,
     master,
     final_judge: dict | None,
+    seed_report: dict,
     note: str,
 ) -> dict:
     root_bound = master.rmp.objective_bound if master is not None else None
@@ -283,6 +350,11 @@ def _payload(
         "certificate_ledger": ledger_payload,
         "proof_debt_queue": proof_debt.audit(),
         "task_count": len(data.task_ids),
+        "b1_mode": seed_report["b1_mode"],
+        "seed_mode": seed_report["seed_mode"],
+        "initial_column_count": seed_report["initial_column_count"],
+        "full_universe_column_count": seed_report["full_universe_column_count"],
+        "full_universe_preloaded": seed_report["full_universe_preloaded"],
         "round_count": int(round_count),
         "pricing_round_count": int(round_count),
         "added_column_count": int(added_column_count),
@@ -350,6 +422,11 @@ def _incomplete_payload(
         "proof_debt_queue": proof_debt.audit(),
         "task_count": len(data.task_ids),
         "max_direct_tasks": int(max_direct_tasks),
+        "b1_mode": "B1_fail_closed_over_task_limit",
+        "seed_mode": "none_over_task_limit",
+        "initial_column_count": 0,
+        "full_universe_column_count": None,
+        "full_universe_preloaded": False,
         "round_count": 0,
         "pricing_round_count": 0,
         "added_column_count": 0,
