@@ -20,9 +20,13 @@ class HarvestCandidateReport:
     task_set: tuple[str, ...]
     is_negative: bool
     would_enter_master: bool
+    addability_reason: str
     reject_reason: str
     pool_contains_signature: bool
     current_master_contains_signature: bool
+    is_forbidden_signature: bool
+    is_allowed_by_branch: bool
+    is_allowed_by_cut_context: bool
     would_change_active_support: bool
 
 
@@ -47,6 +51,10 @@ def harvest_addable_negative_columns(
     seen_signatures: set[object] = set()
     duplicate_signature_count = 0
     forbidden_count = 0
+    branch_filtered_count = 0
+    cut_filtered_count = 0
+    duplicate_in_current_master_count = 0
+    in_pool_not_master_count = 0
     dominance_filtered_count = 0
     negative_count = 0
     for true_rc, column in candidates:
@@ -71,8 +79,16 @@ def harvest_addable_negative_columns(
         )
         if report.is_forbidden_signature:
             forbidden_count += 1
+        if not report.is_allowed_by_branch:
+            branch_filtered_count += 1
+        if not report.is_allowed_by_cut_context:
+            cut_filtered_count += 1
         if not report.would_change_active_support:
             dominance_filtered_count += 1
+        if report.current_master_contains_signature:
+            duplicate_in_current_master_count += 1
+        if report.pool_contains_signature and not report.current_master_contains_signature:
+            in_pool_not_master_count += 1
         if report.pool_contains_signature or report.current_master_contains_signature:
             duplicate_signature_count += 1
         if report.would_enter_master:
@@ -84,9 +100,13 @@ def harvest_addable_negative_columns(
                 task_set=task_set,
                 is_negative=True,
                 would_enter_master=report.would_enter_master,
+                addability_reason=report.reason,
                 reject_reason=report.reject_reason,
                 pool_contains_signature=report.pool_contains_signature,
                 current_master_contains_signature=report.current_master_contains_signature,
+                is_forbidden_signature=report.is_forbidden_signature,
+                is_allowed_by_branch=report.is_allowed_by_branch,
+                is_allowed_by_cut_context=report.is_allowed_by_cut_context,
                 would_change_active_support=report.would_change_active_support,
             )
         )
@@ -97,20 +117,36 @@ def harvest_addable_negative_columns(
     counter.candidate_addable_count += len(addable)
     payload = {
         "schema_version": "lunar_ice_bpc.b2_harvest.v1",
+        "candidate_negative_count": int(negative_count),
+        "addable_negative_count": len(addable),
+        "duplicate_in_current_master_count": int(duplicate_in_current_master_count),
+        "in_pool_not_master_count": int(in_pool_not_master_count),
+        "forbidden_signature_count": int(forbidden_count),
+        "branch_filtered_count": int(branch_filtered_count),
+        "cut_filtered_count": int(cut_filtered_count),
+        "selected_count": len(selected),
         "harvest_candidate_negative_count": int(negative_count),
         "harvest_addable_candidate_count": len(addable),
         "harvest_selected_count": len(selected),
         "harvest_duplicate_signature_count": int(duplicate_signature_count),
         "harvest_forbidden_signature_count": int(forbidden_count),
+        "harvest_branch_filtered_count": int(branch_filtered_count),
+        "harvest_cut_filtered_count": int(cut_filtered_count),
+        "harvest_duplicate_in_current_master_count": int(duplicate_in_current_master_count),
+        "harvest_in_pool_not_master_count": int(in_pool_not_master_count),
         "harvest_dominance_filtered_count": int(dominance_filtered_count),
         "reports": [
             {
                 "true_reduced_cost": report.true_reduced_cost,
                 "task_set": list(report.task_set),
                 "would_enter_master": report.would_enter_master,
+                "addability_reason": report.addability_reason,
                 "reject_reason": report.reject_reason,
                 "pool_contains_signature": report.pool_contains_signature,
                 "current_master_contains_signature": report.current_master_contains_signature,
+                "is_forbidden_signature": report.is_forbidden_signature,
+                "is_allowed_by_branch": report.is_allowed_by_branch,
+                "is_allowed_by_cut_context": report.is_allowed_by_cut_context,
                 "would_change_active_support": report.would_change_active_support,
             }
             for report in reports
@@ -118,4 +154,3 @@ def harvest_addable_negative_columns(
         "profiling": counter.to_payload(),
     }
     return selected, payload
-

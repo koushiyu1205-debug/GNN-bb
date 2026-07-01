@@ -24,7 +24,7 @@ def main() -> int:
     parser.add_argument("--report-md", default="runs/b0_b1_ablation/b0_b1_ablation_report_zh.md")
     parser.add_argument("--scale10-limit", type=int, default=5)
     parser.add_argument("--scale10-row-time-limit", type=float, default=60.0)
-    parser.add_argument("--scale20-probe-limit", type=int, default=1)
+    parser.add_argument("--scale20-probe-limit", type=int, default=5)
     parser.add_argument("--direct20-probe-time-limit", type=float, default=60.0)
     parser.add_argument("--fail-closed-max-direct-tasks", type=int, default=10)
     parser.add_argument("--b1-max-rounds", type=int, default=8)

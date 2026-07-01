@@ -116,7 +116,7 @@ def run_b0_b1_ablation_matrix(
     project_root: str | Path,
     scale10_limit: int = 5,
     scale10_row_time_limit_sec: float | None = 60.0,
-    scale20_probe_limit: int = 1,
+    scale20_probe_limit: int = 5,
     direct20_probe_time_limit_sec: float = 60.0,
     fail_closed_max_direct_tasks: int = 10,
     b1_max_rounds: int = 8,
@@ -167,13 +167,17 @@ def run_b0_b1_ablation_matrix(
             max_workers=max_workers,
         )["rows"]
     )
+    matrix_notes.append(
+        "20-scale fail-closed guard deliberately sets max_direct_tasks below 20; "
+        "B0 optimal=0 in that group is an expected skip, not evidence that direct20 B0 fails."
+    )
 
     scale20_probe = scale20_all[: max(0, int(scale20_probe_limit))]
     if scale20_probe:
         rows.extend(
             run_b0_b1_ablation(
                 scale20_probe,
-                modes=(B1A_MODE, B1B_MODE),
+                modes=(B0_MODE, B1A_MODE, B1B_MODE),
                 max_direct_tasks=20,
                 b1_max_rounds=b1_max_rounds,
                 matrix_group="20-scale selected direct20 probe",
@@ -182,7 +186,8 @@ def run_b0_b1_ablation_matrix(
             )["rows"]
         )
         matrix_notes.append(
-            f"20-scale direct20 probe used {len(scale20_probe)} selected instance(s) with per-row timeout {direct20_probe_time_limit_sec}s."
+            f"20-scale direct20 probe used {len(scale20_probe)} selected instance(s), modes B0/B1A/B1B, "
+            f"with per-row timeout {direct20_probe_time_limit_sec}s."
         )
 
     scale30_all = _manifest_instance_paths(manifest_path, project_root, scale=30)
@@ -205,6 +210,7 @@ def run_b0_b1_ablation_matrix(
         "scale10_row_time_limit_sec": scale10_row_time_limit_sec,
         "scale20_fail_closed_count": len(scale20_all),
         "scale20_probe_count": len(scale20_probe),
+        "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE],
         "scale30_count": len(scale30_all),
         "fail_closed_max_direct_tasks": int(fail_closed_max_direct_tasks),
         "direct20_probe_time_limit_sec": float(direct20_probe_time_limit_sec),
@@ -244,7 +250,10 @@ def render_b0_b1_ablation_markdown(report: dict, *, rows_csv: str | Path, summar
         "",
         "## 完成范围",
         "",
-        "- 当前 accepted baseline layers: B0, B1。",
+        "- B0 accepted evidence: 5-scale full、10-scale selected direct-DP、20-scale selected direct20 probe。",
+        "- B1 accepted: 5-scale proof-safe root closure。",
+        "- B1 not yet accepted: 10/20 root closure；当前 selected 10 与 selected direct20 仍由 row timeout fail-closed。",
+        "- B2 entry purpose: target 10-scale B1 timeout / pricing-tail / addability / final judge cost，不声称 B1 已在 10/20 完成。",
         "- B2/B3/B4/B5 文件若存在，仅视为 scaffold / preliminary module，不纳入当前完成状态。",
         "- 本报告不启用 harvesting、GAT、cuts 或 full branch tree。",
         "",
@@ -261,7 +270,9 @@ def render_b0_b1_ablation_markdown(report: dict, *, rows_csv: str | Path, summar
         f"- 10-scale row timeout: {matrix.get('scale10_row_time_limit_sec')} 秒。",
         f"- 20-scale fail-closed guard: {matrix.get('scale20_fail_closed_count', 0)} instances。",
         f"- 20-scale selected direct20 probe: {matrix.get('scale20_probe_count', 0)} instances。",
+        f"- 20-scale selected direct20 probe modes: {', '.join(matrix.get('scale20_probe_modes') or [])}。",
         f"- 30-scale fail-closed diagnostic: {matrix.get('scale30_count', 0)} instances。",
+        "- 20-scale fail-closed guard 中的 B0 optimal=0 是预期行为；该组不测试 direct20 能力，只测试 task_count > max_direct_tasks 时是否 fail-closed。",
         "",
         "## 红线",
         "",
@@ -284,6 +295,36 @@ def render_b0_b1_ablation_markdown(report: dict, *, rows_csv: str | Path, summar
             "{manual_rc_fail_count} | {pricing_rc_fail_count} | {direct_root_official_leak_count} | "
             "{mean_wall_time} | {p90_wall_time} | {mean_added_columns} | {mean_pricing_rounds} |".format(**row)
         )
+    direct20_rows = [
+        row for row in report.get("rows", [])
+        if row.get("matrix_group") == "20-scale selected direct20 probe"
+    ]
+    if direct20_rows:
+        lines.extend(["", "## 20-scale direct20 对照", ""])
+        by_instance: dict[str, list[dict]] = defaultdict(list)
+        for row in direct20_rows:
+            by_instance[str(row.get("instance_id"))].append(row)
+        for instance_id, instance_rows in by_instance.items():
+            by_mode = {row.get("mode"): row for row in instance_rows}
+            b0 = by_mode.get(B0_MODE)
+            b1a = by_mode.get(B1A_MODE)
+            b1b = by_mode.get(B1B_MODE)
+            if b0:
+                lines.append(
+                    f"- `{instance_id}` B0 direct-DP: {b0.get('algorithm_status')} / "
+                    f"{b0.get('certificate_scope')}，wall={b0.get('wall_time')}s。"
+                )
+            if b1a:
+                lines.append(
+                    f"- `{instance_id}` B1A full-universe root audit: {b1a.get('algorithm_status')} / "
+                    f"{b1a.get('certificate_scope')}，wall={b1a.get('wall_time')}s，reason={b1a.get('fail_closed_reason')}。"
+                )
+            if b1b:
+                lines.append(
+                    f"- `{instance_id}` B1B seeded-CG: {b1b.get('algorithm_status')} / "
+                    f"{b1b.get('certificate_scope')}，wall={b1b.get('wall_time')}s，reason={b1b.get('fail_closed_reason')}。"
+                )
+        lines.append("- 结论：同一 selected direct20 instance 上 direct-DP integer oracle 能闭合；当前瓶颈是 B1 root pricing closure / final judge 成本。")
     lines.extend(["", "## B1B seeded-CG 说明", ""])
     b1b_rows = [row for row in report.get("rows", []) if row.get("mode") == B1B_MODE]
     zero_added = [row for row in b1b_rows if _float(row.get("added_column_count")) == 0.0]
@@ -323,6 +364,7 @@ def render_b0_b1_ablation_markdown(report: dict, *, rows_csv: str | Path, summar
             "- B0 pure 路径不得产生 true-dual BPC certificate。",
             "- B1A/B1B 只有 true-dual final judge closure、manual RC audit、pricing RC audit、proof debt gate 全通过时，才允许 `BPC_NODE_LP_CERTIFIED`。",
             "- `direct_fixed_graph_root_lp` 只允许作为 diagnostic audit，不允许进入 official BPC bound。",
+            "- B1A full-universe 若未来加入 `full_universe_membership_rc_audit`，必须先证明 initial columns 等于 complete fixed pricing universe；否则仍必须走 true-dual final judge。",
         ]
     )
     return "\n".join(lines) + "\n"

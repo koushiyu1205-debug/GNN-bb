@@ -1,354 +1,449 @@
-# B3：Branch-and-Price Tree Layer
+<!--
+Lunar-GAT-BPC-Exact 可消融 baseline 递增路线文档。
+原则：每一层都是一个可运行 candidate baseline；只有在真实 5/10/20/30 规模消融中优于当前 best accepted baseline，才可晋级。
+-->
+# 04_B3_Branch_and_Price_Tree_Layer
 
-## 1. 目标
+## 0. 定位
 
-B3 在 B2 的 root BPC + tail optimization 基础上，实现真正的 Branch-and-Price tree。
-
-它解决的问题是：
+B3 是一个独立的可消融候选层：
 
 ```text
-root RMP LP closure 只能证明 LP relaxation；
-如果 root LP fractional，必须通过 branch tree 证明 integer optimality。
+B3 = best_accepted_baseline + branch-and-price tree
 ```
 
-B3 仍然不默认启用：
+B3 不等于“无条件接在 B2 后面”。如果 B2 没有被接受，B3 的比较对象应回退到当前 best accepted baseline，而不是被 B2 带偏。
+
+B3 的核心任务：
 
 ```text
-GAT guidance
-live cuts
+将 root LP certificate / root gap 转化为 integer proof。
+```
+
+B3 只解决：
+
+```text
+LP fractional -> branch tree -> BPC_TREE_OPTIMAL or clear fail-closed status
+```
+
+B3 不解决：
+
+```text
+root pricing-tail 太慢
+cut/formulation lower-bound weak
+GAT ordering
 route-order branch
-completion-bound pruning under branch context unless separately proved
+live cuts
 ```
 
 ---
 
-## 2. B3 相对 B2 新增
+## 1. Entry gate
+
+B3 可以开始 implementation scaffold，但不能被接受为 baseline，除非满足：
 
 ```text
-Ryan-Foster same_journey / different_journey branch
-BranchContext
-NodeQueue
-NodeSolver
-TreeSolver
-Global LB / UB ledger
-Branch completeness fallback
-Node infeasibility taxonomy
+1. B1 root proof semantics redlines pass.
+2. B2 either:
+   a. accepted as pricing-tail improvement, or
+   b. explicitly not accepted and best_accepted_baseline is reset to B1.
+3. There is at least one real or controlled instance where root LP is fractional or tree closure is required.
+4. Direct-DP/BPC objective alignment remains valid on 5-scale.
+```
+
+If all real 5-scale roots are integral, B3 must include a controlled fractional fixture plus 10/20 real diagnostics. It cannot claim performance improvement solely on a fixture.
+
+---
+
+## 2. B3 核心目标
+
+B3 must improve over the previous accepted baseline in one of these ways:
+
+```text
+1. Convert BPC_NODE_LP_CERTIFIED + fractional root into BPC_TREE_OPTIMAL.
+2. Close branch nodes that previous baseline left incomplete.
+3. Reduce integer optimality gap by valid branch-and-bound.
+4. Provide clearer branch-incomplete classification without certificate leakage.
+```
+
+B3 must not:
+
+```text
+change root objective
+weaken B1/B2 certificate scope
+use direct-DP optimum as BPC proof
+use GAT branch score
+enable cuts
+enable route-order branch by default
 ```
 
 ---
 
-## 3. 第一版 Branch 语义
+## 3. B3 子模式
 
-第一版使用：
+### 3.1 B3A_full_universe_tree_audit
+
+Purpose:
+
+```text
+Verify branch-context semantics with a full fixed-graph column universe.
+```
+
+Allowed:
+
+```text
+preload full universe per node for audit
+check same/different_journey filters
+verify branch children partition fractional solution
+verify no branch-infeasible column enters node RMP
+```
+
+Not allowed:
+
+```text
+use this as scalable performance claim
+claim BPC tree scalability from full-universe preload
+```
+
+### 3.2 B3B_seeded_branch_price_tree
+
+Main B3 candidate.
+
+Use:
+
+```text
+seeded root columns
+B2-style addability-aware pricing-tail if B2 accepted;
+otherwise B1 seeded-CG plus required minimal addability checks
+```
+
+This is the real branch-and-price tree path.
+
+### 3.3 B3C_branch_diagnostic_only
+
+For 20/30 if tree closure is not feasible:
+
+```text
+run root/first-child branch probe
+report branch pair
+child RMP status
+child pricing status
+fail-closed reason
+no certificate upgrade
+```
+
+---
+
+## 4. Required modules
+
+```text
+exact/bpc/branching/ryan_foster.py
+exact/bpc/branching/branch_selector.py
+exact/bpc/branching/branch_fallback.py
+exact/bpc/branching/branch_context.py
+exact/bpc/solver/node_solver.py
+exact/bpc/solver/tree_solver.py
+exact/bpc/solver/incumbent.py
+exact/bpc/solver/tree_ledger.py
+runners/b3_branch_price_ablation.py
+```
+
+---
+
+## 5. Branch semantics
+
+First live branch type:
 
 ```text
 same_journey(i, j)
 different_journey(i, j)
 ```
 
-这里的 `journey` 是：
-
-```text
-一台 rover 的 multi-sortie schedule
-```
-
-不是单次 sortie。
-
-第一版不实现：
-
-```text
-same_sortie / different_sortie
-route-order / precedence branch
-```
-
----
-
-## 4. Ryan-Foster fractional mass 公式
-
-必须明确：
+Formula:
 
 ```text
 same_mass(i,j) = sum_p lambda_p * 1[i in S_p and j in S_p]
 ```
 
-其中：
+Branch candidate is fractional if:
 
 ```text
-lambda_p 来自当前 node RMP primal LP solution
-S_p 是 journey column 覆盖的 task set
+eps < same_mass(i,j) < 1 - eps
 ```
 
-候选 pair 通常选择：
+Hard tests:
 
 ```text
-0 < same_mass(i,j) < 1
-且 closest to 0.5
-```
-
-测试：
-
-```text
-test_same_journey_fractional_mass_matches_primal_solution
-test_rf_branch_children_partition_current_fractional_solution
-```
-
----
-
-## 5. BranchContext 对 pricing 的要求
-
-same child：
-
-```text
-i and j must appear in the same journey column, or neither appears.
-```
-
-不同 child：
-
-```text
-i and j may not appear in the same journey column.
-```
-
-所有 pricing 生成的 columns 必须先经过 branch context 过滤：
-
-```text
-price candidate
-  -> branch_context.is_column_allowed(column)
-  -> only allowed columns can enter ReducedCost / Harvest
-```
-
-测试：
-
-```text
-test_same_child_pricing_filters_columns
-test_different_child_pricing_filters_columns
-test_branch_filtered_generated_columns_all_satisfy_context
+test_same_mass_matches_primal_solution
+test_same_child_allows_only_columns_with_both_or_neither_together
+test_different_child_forbids_columns_with_both_tasks
+test_child_contexts_partition_parent_fractional_mass
 ```
 
 ---
 
 ## 6. Branch completeness fallback
 
-硬规则：
+Hard rule:
 
 ```text
 NO_FRACTIONAL_RF_PAIR != NODE_INTEGRAL
 ```
 
-原因：journey master 允许同一 task set 下保留多个 route/path/timing/resource representative。LP 可能在这些 representative 之间 fractional，而 Ryan-Foster task-pair relation 完全一样。
-
-Fallback 顺序：
+Fallback order:
 
 ```text
-1. same_journey / different_journey Ryan-Foster branch
-2. journey signature family / route signature branch
-3. exact column-signature forbid branch
-4. aggregation certificate
+1. Ryan-Foster same/different journey pair.
+2. route / journey signature family branch.
+3. exact column-signature forbid branch.
+4. aggregation certificate proving representative-level fractionality harmless.
 ```
 
-第一版不建议实现强 `lambda_p = 1` branch。若需要 column branch，先实现：
+First implementation should avoid strong `lambda_p = 1` branch unless pricing can enforce it. Preferred fallback:
 
 ```text
-forbid exact ColumnSemanticSignature branch
+forbid exact ColumnSemanticSignature
 ```
 
-因为它更容易 pricing-compatible。
+Because it is pricing-compatible if signature matching is exact and audited.
 
 ---
 
-## 7. Column-signature branch 约束
+## 7. Node solver requirements
 
-如果使用 exact column-signature forbid branch：
-
-```text
-left child forbids exact ColumnSemanticSignature
-right child follows original candidate selection path or requires aggregation proof
-```
-
-禁止实现无法被 pricing 支持的 branch rule。
-
-任何 branch rule 都必须回答：
-
-```text
-Can pricing filter future generated columns by this BranchContext?
-Can ColumnPool.addability_check enforce it?
-Can reduced-cost audit see the same context?
-```
-
-否则只能 diagnostic。
-
----
-
-## 8. Node infeasibility taxonomy
-
-必须区分：
-
-```text
-NO_COLUMN_COVER_IN_POOL:
-    当前 restricted pool 无法 cover；diagnostic only。
-
-NODE_RMP_INFEASIBLE_UNCERTIFIED:
-    当前 node RMP infeasible，但 pricing 可能生成修复列。
-
-BPC_INFEASIBLE_CERTIFIED:
-    complete pricing / column-universe coverage 证明没有 feasible cover。
-```
-
-禁止把 restricted pool no-cover 当成 infeasible certificate。
-
----
-
-## 9. Global Tree Ledger
-
-每个 node 必须记录：
+Each node must have:
 
 ```text
 node_id
-parent_id
+parent_node_id
+depth
 branch_context
-rmp_status
-pricing_state
+inherited_column_pool_id
+current_master_view_id
+incumbent_at_entry
 node_lp_bound
 node_lp_bound_official
+pricing_state
 certificate_scope
-incumbent_objective_at_entry
-incumbent_objective_at_exit
-node_status:
-    OPEN
-    BRANCHED
-    NODE_LP_CERTIFIED
-    PRUNED_BY_BOUND
-    INTEGER_INCUMBENT
-    INCOMPLETE
-    INFEASIBLE_CERTIFIED
-    INFEASIBLE_UNCERTIFIED
+proof_debt_state
+child_generation_reason
+node_status
 ```
 
-全局必须记录：
+Node statuses:
 
 ```text
-global_ub
-global_lb
+NODE_LP_CERTIFIED
+INTEGER_INCUMBENT
+PRUNED_BY_BOUND
+BRANCHED
+INCOMPLETE_LIMIT
+NO_FRACTIONAL_RF_PAIR_UNRESOLVED
+NODE_RMP_INFEASIBLE_UNCERTIFIED
+BPC_INFEASIBLE_CERTIFIED
+```
+
+Restricted pool no cover must never become infeasibility certificate.
+
+---
+
+## 8. B3 消融实验设计
+
+Every B3 result must compare to previous best accepted baseline.
+
+### 8.1 5-scale full
+
+Run all 20 real instances:
+
+```text
+previous_best_baseline
+B3A_full_universe_tree_audit
+B3B_seeded_branch_price_tree
+```
+
+Expected:
+
+```text
+No certificate regression.
+If previous root was integral, B3 should match previous result and report no branch needed.
+If fractional root exists, B3 should either close tree or report precise incomplete reason.
+```
+
+### 8.2 10-scale selected then full
+
+Run selected 5 first. Then full 20 if feasible.
+
+Metrics:
+
+```text
+BPC_TREE_OPTIMAL_count
+BPC_NODE_LP_CERTIFIED_count
+integer_incumbent_count
+open_node_count
+incomplete_node_count
+node_count
+tree_depth
+branch_count
+mean wall
+p90 wall
+```
+
+B3 must improve at least one:
+
+```text
+BPC_TREE_OPTIMAL_count
+integer gap
+open node count
+certificate explanation quality
+```
+
+without proof regression.
+
+### 8.3 20-scale
+
+Run both:
+
+```text
+20 fail-closed guard
+20 selected branch-tree probe
+```
+
+Selected probe modes:
+
+```text
+B0_pure_direct_dp
+previous_best_baseline
+B3A_full_universe_tree_audit
+B3B_seeded_branch_price_tree
+```
+
+Purpose:
+
+```text
+If B0 direct-DP solves but previous baseline only has root LP / incomplete, B3 should show whether branch tree is the next bottleneck or root pricing remains the bottleneck.
+```
+
+### 8.4 30-scale
+
+Diagnostic only unless 20 is stable:
+
+```text
+no certificate leak
+root/child branch diagnostics
+clear fail-closed reason
+```
+
+---
+
+## 9. Required output fields
+
+```text
+scale
+instance_id
+mode
+previous_baseline_mode
+algorithm_status
+certificate_scope
+tree_certificate_scope
+uses_true_dual_bpc_certificate
+BPC_TREE_OPTIMAL
+BPC_NODE_LP_CERTIFIED_count
+node_count
 open_node_count
 closed_node_count
-pruned_node_count
-incomplete_node_count
-integer_incumbent_source
-certificate_scope
-```
-
----
-
-## 10. BPC_TREE_OPTIMAL 条件
-
-只有满足：
-
-```text
-integer incumbent exists
-all nodes closed / pruned / infeasible-certified
-all node lower bounds official
-no incomplete nodes remain
-global lower bound == incumbent within tolerance
-all certificate ledgers valid
-```
-
-才能输出：
-
-```text
-certificate_scope = BPC_TREE_OPTIMAL
-```
-
----
-
-## 11. B3 消融实验
-
-对比：
-
-```text
-B3 = B2 + branch-and-price tree
-vs
-B2 = root-only BPC + tail optimization
-```
-
-只在 root LP fractional instances 上评估 branch contribution。
-
-消融开关：
-
-```text
-branching off
-Ryan-Foster branch on
-Ryan-Foster + fallback diagnostic
-Ryan-Foster + exact signature forbid branch opt-in
-```
-
----
-
-## 12. B3 验收指标
-
-```text
-root_integral_count
-root_fractional_count
-branch_node_count
-node_lp_certified_count
-integer_incumbent_count
 pruned_by_bound_count
+branched_node_count
 incomplete_node_count
+max_depth_reached
+branch_count
+selected_branch_pair
+selected_branch_source
 no_fractional_rf_pair_count
+no_fractional_rf_pair_treated_as_integral
 fallback_branch_count
-bpc_tree_optimal_count
-objective_match_direct_dp_count
-```
-
-必须报告：
-
-```text
-BPC_TREE_OPTIMAL count
-BPC_NODE_LP_CERTIFIED count
-NODE_INCOMPLETE count
-NO_FRACTIONAL_RF_PAIR fallback count
-```
-
----
-
-## 13. B3 通过标准
-
-进入 B4 前，必须满足：
-
-```text
-1. 5/10 小规模能完成 BPC_TREE_OPTIMAL 或明确 incomplete reason。
-2. direct-DP closed small instances 与 BPC tree integer incumbent objective 对齐。
-3. NO_FRACTIONAL_RF_PAIR 不被当成 integrality proof。
-4. branch-filtered pricing columns 全部满足 node BranchContext。
-5. Global LB / UB ledger 可解释每个 node。
-6. B2 和 B3 在 root integral instances 上结果一致。
+column_signature_branch_count
+node_rmp_infeasible_uncertified_count
+BPC_infeasible_certified_count
+incumbent_objective
+global_lower_bound
+global_gap
+direct_dp_objective
+bpc_tree_objective_matches_direct_dp
+manual_rc_audit_pass
+pricing_rc_audit_pass
+proof_debt_unreleased_count
+wall_time
+fail_closed_reason
 ```
 
 ---
 
-## 14. B3 失败标准
+## 10. B3 pass / fail rules
 
-任一情况失败：
+### Hard redlines
 
 ```text
-1. root LP fractional 但输出 BPC_TREE_OPTIMAL。
-2. NO_FRACTIONAL_RF_PAIR 被当成 NODE_INTEGRAL。
-3. pricing 生成违反 branch context 的 column。
-4. NODE_RMP_INFEASIBLE_UNCERTIFIED 被写成 BPC_INFEASIBLE_CERTIFIED。
-5. open / incomplete node 存在时输出 tree optimal。
-6. column signature branch 不能被 pricing enforce。
+no_fractional_rf_pair_treated_as_integral = 0
+certificate_scope_regression_count = 0
+objective_mismatch_count = 0
+manual_rc_fail_count = 0
+pricing_rc_fail_count = 0
+proof_debt_unreleased_count = 0 for certified rows
+direct_dp_used_as_bpc_tree_certificate = 0
+```
+
+### Improvement requirement
+
+B3 is accepted only if on real 5/10/20/30 ablation it improves over previous accepted baseline in at least one meaningful metric:
+
+```text
+BPC_TREE_OPTIMAL_count increases
+or integer gap decreases
+or open_node_count decreases
+or node closure classification improves without wall-time blowup
+```
+
+If B3 only adds tree scaffolding but no real improvement:
+
+```text
+B3 remains diagnostic.
+Do not enter B4 as an accepted next layer.
 ```
 
 ---
 
-## 15. Codex 禁止事项
+## 11. Report requirements
 
-B3 不准：
+Produce:
 
 ```text
-默认启用 GAT branch score
-默认启用 cuts
-默认启用 route-order branch
-使用 finite-pool child RMP gain 做 official prune
-把 child LP bound 当 official bound，除非 child pricing closure certified
+runs/b3_branch_price_ablation/b3_branch_price_rows.csv
+runs/b3_branch_price_ablation/b3_branch_price_summary.json
+runs/b3_branch_price_ablation/b3_branch_price_report_zh.md
 ```
 
-先把 branch-and-price tree 的证书语义做稳。
+Markdown sections:
+
+```text
+1. Accepted previous baseline used
+2. B3 modes
+3. Redlines
+4. 5/10/20/30 matrix
+5. Branch completeness audit
+6. NO_FRACTIONAL_RF_PAIR audit
+7. Node ledger summary
+8. Direct-DP/BPC tree objective alignment
+9. B3 accepted? yes/no
+10. If no, next bottleneck
+```
+
+---
+
+## 12. Exit statement
+
+B3 is not accepted because a tree solver exists. It is accepted only if:
+
+```text
+it proves integer optimality or improves valid branch-and-price closure behavior
+over the previous accepted baseline on real 5/10/20/30 instances.
+```

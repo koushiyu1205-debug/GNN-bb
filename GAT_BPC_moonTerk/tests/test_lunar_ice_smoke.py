@@ -61,7 +61,11 @@ from lunar_ice_bpc.exact.bpc.solver.gat_guidance_solver import (
     run_b5_guidance_ablation_suite,
     solve_b5_gat_guidance_shadow_baseline,
 )
-from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import solve_b2_pricing_tail_baseline
+from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
+    B2A_MODE,
+    B2B_MODE,
+    solve_b2_pricing_tail_baseline,
+)
 from lunar_ice_bpc.exact.bpc.solver.root_node_solver import solve_b1_root_node_baseline
 from lunar_ice_bpc.exact.certificates.pricing_certificate import (
     build_pricing_certificate,
@@ -124,6 +128,14 @@ from lunar_ice_bpc.runners.b0_b1_ablation import (
     B1A_MODE,
     B1B_MODE,
     run_b0_b1_ablation,
+)
+from lunar_ice_bpc.runners.b2_pricing_tail_ablation import (
+    _acceptance,
+    _row_from_raw,
+    merge_b2_pricing_tail_reports,
+    render_b2_pricing_tail_markdown,
+    run_b2_pricing_tail_ablation,
+    write_b2_pricing_tail_ablation_artifacts,
 )
 from lunar_ice_bpc.runners.benchmark import run_benchmark
 from lunar_ice_bpc.runners.refactor_audit import _audit_b5_guidance_suite, audit_refactor_state
@@ -509,6 +521,207 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(rows_by_mode[B1B_MODE]["root_lp_bound_official"])
         self.assertEqual(report["redlines"]["direct_root_official_leak_count"], 0)
 
+    def test_b2_pricing_tail_ablation_reports_fast_path_and_keeps_b2b_diagnostic(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        report = run_b2_pricing_tail_ablation([instance], max_direct_tasks=5, b1_max_rounds=8, b2_max_rounds=8)
+
+        self.assertEqual(report["schema_version"], "lunar_ice_bpc.b2_pricing_tail_ablation.v1")
+        self.assertEqual(report["row_count"], 5)
+        self.assertEqual(report["redlines"]["root_bound_gt_B0_violation_count"], 0)
+        self.assertEqual(report["redlines"]["manual_rc_fail_count"], 0)
+        rows_by_mode = {row["candidate_name"]: row for row in report["rows"]}
+        self.assertEqual(rows_by_mode[B2A_MODE]["baseline_name"], B1A_MODE)
+        self.assertEqual(rows_by_mode[B2A_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertIn("final_judge_call_count_lower", rows_by_mode[B2A_MODE]["improvement_reason"])
+        self.assertEqual(rows_by_mode[B2B_MODE]["baseline_name"], B1B_MODE)
+        self.assertEqual(rows_by_mode[B2B_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertFalse(report["acceptance"]["b2_accepted"])
+        self.assertTrue(report["acceptance"]["b2a_fast_path_accepted"])
+        self.assertFalse(report["acceptance"]["b2b_seeded_tail_accepted"])
+
+    def test_b2_pricing_tail_ablation_writes_required_artifacts(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        report = run_b2_pricing_tail_ablation([instance], max_direct_tasks=5)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rows_csv = root / "rows.csv"
+            summary_json = root / "summary.json"
+            report_md = root / "report_zh.md"
+            write_b2_pricing_tail_ablation_artifacts(
+                report,
+                rows_csv=rows_csv,
+                summary_json=summary_json,
+                report_md=report_md,
+            )
+            self.assertTrue(rows_csv.exists())
+            self.assertTrue(summary_json.exists())
+            self.assertTrue(report_md.exists())
+            self.assertIn("B2 Accepted?", report_md.read_text(encoding="utf-8"))
+
+    def test_b2_acceptance_requires_direct20_probe_and_report_disambiguates_guard(self) -> None:
+        redlines = {
+            "root_bound_gt_B0_violation_count": 0,
+            "direct_root_official_leak_count": 0,
+            "manual_rc_fail_count": 0,
+            "pricing_rc_fail_count": 0,
+            "certificate_scope_regression_count": 0,
+            "objective_mismatch_count": 0,
+            "b1_5scale_regression_count": 0,
+            "proof_debt_unreleased_certified_count": 0,
+        }
+        rows = [
+            {
+                "scale": 10,
+                "matrix_group": "10-scale selected5",
+                "candidate_name": B2B_MODE,
+                "improvement_reason": "wall_time_lower",
+            }
+        ]
+        matrix = {
+            "scale10_selected_count": 5,
+            "scale10_total_count": 20,
+            "scale20_fail_closed_count": 20,
+            "scale20_probe_count": 0,
+            "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE],
+            "scale30_count": 20,
+            "notes": ["20-scale fail-closed guard deliberately sets max_direct_tasks below 20."],
+        }
+        acceptance = _acceptance(rows, redlines, matrix=matrix)
+
+        self.assertFalse(acceptance["b2_accepted"])
+        self.assertFalse(acceptance["required_coverage_met"])
+        self.assertIn("20-scale selected direct20", acceptance["reason"])
+
+        rendered = render_b2_pricing_tail_markdown(
+            {
+                "redlines": redlines,
+                "acceptance": acceptance,
+                "matrix": matrix,
+                "summary_rows": [],
+                "totals": {},
+                "duplicate_only_audit_status_counts": {},
+            },
+            rows_csv="rows.csv",
+            summary_json="summary.json",
+        )
+        self.assertIn("proof_debt_unreleased_certified_count", rendered)
+        self.assertIn("not evidence that B0 direct20 failed", rendered)
+        self.assertIn("20-scale selected direct20 probe did not run", rendered)
+
+    def test_b2_duplicate_only_row_exports_audit_status_and_fail_reason(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        row = _row_from_raw(
+            data,
+            mode=B2B_MODE,
+            matrix_group="unit",
+            elapsed=0.1,
+            raw={
+                "algorithm_status": "BPC_INCOMPLETE_PRICING",
+                "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+                "pricing_state": "DUPLICATE_ONLY",
+                "uses_true_dual_bpc_certificate": False,
+                "root_lp_bound": 10.0,
+                "root_lp_bound_official": False,
+                "B0_direct_objective": 12.0,
+                "root_bound_le_direct_dp_integer_objective": True,
+                "pricing_round_count": 1,
+                "final_judge_call_count": 1,
+                "candidate_negative_count": 3,
+                "addable_negative_count": 0,
+                "selected_count": 0,
+                "added_to_master_count": 0,
+                "duplicate_only_count": 1,
+                "duplicate_only_audit_status": "DUPLICATE_ONLY_AUDITED",
+                "manual_rc_audit_pass": False,
+                "pricing_rc_audit_pass": True,
+                "proof_debt_unreleased_count": 0,
+                "fail_closed_reason": "DUPLICATE_ONLY: negative candidates were not master-addable.",
+            },
+        )
+
+        self.assertEqual(row["pricing_state"], "DUPLICATE_ONLY")
+        self.assertEqual(row["duplicate_only_count"], 1)
+        self.assertEqual(row["duplicate_only_audit_status"], "DUPLICATE_ONLY_AUDITED")
+        self.assertIn("DUPLICATE_ONLY", row["fail_closed_reason"])
+
+    def test_b2_direct20_only_report_can_merge_into_existing_matrix(self) -> None:
+        def row(mode: str, *, wall_time: float, fail_reason: str = "") -> dict:
+            return {
+                "matrix_group": "20-scale selected direct20 probe",
+                "scale": 20,
+                "instance_id": "instance_020_probe",
+                "baseline_name": B1B_MODE if mode == B2B_MODE else "accepted_B1",
+                "candidate_name": mode,
+                "algorithm_status": "BPC_INCOMPLETE_PRICING" if mode != B0_MODE else "DIRECT_DP_BASELINE_OPTIMAL",
+                "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "uses_true_dual_bpc_certificate": False,
+                "official_lower_bound_source": "",
+                "official_lower_bound_scope": "",
+                "B0_direct_objective": 100.0,
+                "root_lp_bound": "",
+                "root_lp_bound_official": False,
+                "root_bound_le_B0_objective": None,
+                "pricing_round_count": 0,
+                "final_judge_call_count": 0,
+                "candidate_negative_count": 0,
+                "addable_negative_count": 0,
+                "duplicate_in_current_master_count": 0,
+                "in_pool_not_master_count": 0,
+                "forbidden_signature_count": 0,
+                "branch_filtered_count": 0,
+                "cut_filtered_count": 0,
+                "selected_count": 0,
+                "added_to_master_count": 0,
+                "added_column_count": 0,
+                "duplicate_only_count": 0,
+                "duplicate_only_audit_status": "",
+                "hidden_negative_count": 0,
+                "replacement_only_round_count": 0,
+                "manual_rc_audit_pass": None,
+                "pricing_rc_audit_pass": None,
+                "proof_debt_unreleased_count": 0,
+                "wall_time": wall_time,
+                "fail_closed_reason": fail_reason,
+                "certificate_scope_regression": False,
+                "objective_mismatch": False,
+                "improvement_reason": "",
+            }
+
+        base = {
+            "rows": [],
+            "matrix": {
+                "scale10_selected_count": 5,
+                "scale20_probe_count": 0,
+                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE],
+                "notes": [],
+            },
+        }
+        extra = {
+            "rows": [
+                row(B0_MODE, wall_time=5.0),
+                row(B1A_MODE, wall_time=60.0, fail_reason="row_time_limit_sec=60 exceeded"),
+                row(B1B_MODE, wall_time=60.0, fail_reason="row_time_limit_sec=60 exceeded"),
+                row(B2A_MODE, wall_time=1.0, fail_reason=""),
+                row(B2B_MODE, wall_time=10.0, fail_reason="clearer_fail_closed_reason"),
+            ],
+            "matrix": {
+                "scale20_probe_count": 1,
+                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE],
+                "direct20_probe_time_limit_sec": 60.0,
+                "notes": ["direct20-only unit test"],
+            },
+        }
+        merged = merge_b2_pricing_tail_reports(base, extra)
+
+        self.assertEqual(merged["matrix"]["scale20_probe_count"], 1)
+        self.assertTrue(merged["acceptance"]["required_coverage_met"])
+        self.assertTrue(merged["acceptance"]["b2b_seeded_tail_accepted"])
+        self.assertEqual(merged["redlines"]["root_bound_gt_B0_violation_count"], 0)
+        b2b_row = next(row for row in merged["rows"] if row["candidate_name"] == B2B_MODE)
+        self.assertIn("wall_time_lower", b2b_row["improvement_reason"])
+
     def test_b1_alignment_costs_and_reduced_costs_match_b0_oracle(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -577,21 +790,26 @@ class LunarIceSmokeTests(unittest.TestCase):
                     offenders.append((str(path.relative_to(bpc_root)), line.strip()))
         self.assertEqual(offenders, [])
 
-    def test_b2_pricing_tail_matches_b1_scope_and_objective(self) -> None:
+    def test_b2_pricing_tail_defaults_to_seeded_cg_without_preloaded_universe(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
         b2 = solve_b2_pricing_tail_baseline(data, max_direct_tasks=5, max_rounds=8)
 
+        self.assertEqual(b2["b2_mode"], B2B_MODE)
+        self.assertFalse(b2["full_universe_preloaded"])
+        self.assertEqual(b2["seed_mode"], "b0_incumbent_plus_singletons")
         self.assertEqual(b2["algorithm_status"], "BPC_GAP_AVAILABLE")
         self.assertEqual(b2["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
         self.assertEqual(b2["pricing_state"], "CERTIFIED_NO_NEGATIVE")
         self.assertEqual(b2["exact_status"], "BPC_NODE_LP_CERTIFIED")
         self.assertTrue(b2["root_lp_bound_official"])
-        self.assertEqual(b2["objective_diff_vs_B1"], 0.0)
+        self.assertIsNone(b2["objective_diff_vs_B1"])
         self.assertEqual(b2["certificate_scope_diff_vs_B1"], "")
-        self.assertEqual(b2["b1_ablation"]["objective_diff_vs_B1"], 0.0)
-        self.assertEqual(b2["b1_ablation"]["certificate_scope_diff_vs_B1"], "")
-        self.assertLessEqual(b2["final_judge_call_count"], b2["b1_ablation"]["final_judge_call_count_vs_B1"] + 1)
+        self.assertGreater(b2["final_judge_call_count"], 0)
+        self.assertGreater(b2["candidate_negative_count"], 0)
+        self.assertGreater(b2["addable_negative_count"], 0)
+        self.assertEqual(b2["selected_count"], b2["harvest_selected_count"])
+        self.assertEqual(b2["added_to_master_count"], b2["added_column_count"])
         self.assertEqual(b2["harvest_selected_count"], b2["harvest_addable_candidate_count"])
         self.assertEqual(b2["duplicate_only_count"], 0)
         self.assertEqual(b2["hidden_negative_count"], 0)
@@ -599,6 +817,24 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(b2["completion_bound_policy"]["pruning_enabled"])
         self.assertFalse(b2["completion_bound_policy"]["can_certify_no_negative"])
         self.assertEqual(b2["proof_debt_unreleased_count"], 0)
+
+    def test_b2a_full_universe_rc_audit_fast_path_is_explicit(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b2a = solve_b2_pricing_tail_baseline(data, max_direct_tasks=5, max_rounds=8, mode=B2A_MODE)
+
+        self.assertEqual(b2a["b2_mode"], B2A_MODE)
+        self.assertTrue(b2a["full_universe_preloaded"])
+        self.assertEqual(b2a["algorithm_status"], "BPC_GAP_AVAILABLE")
+        self.assertEqual(b2a["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(b2a["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+        self.assertEqual(b2a["final_judge_call_count"], 0)
+        self.assertEqual(b2a["manual_rc_audit"]["status"], "FULL_UNIVERSE_RC_AUDIT_PASS")
+        self.assertTrue(b2a["manual_rc_audit"]["full_universe_complete"])
+        self.assertTrue(b2a["manual_rc_audit"]["all_columns_in_master"])
+        self.assertTrue(b2a["manual_rc_audit_pass"])
+        self.assertTrue(b2a["pricing_rc_audit_pass"])
+        self.assertTrue(b2a["root_lp_bound_official"])
 
     def test_b3_root_integral_node_closes_branch_price_tree(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)

@@ -1,87 +1,176 @@
-# B5：GAT Guidance Layer
+<!--
+Lunar-GAT-BPC-Exact 可消融 baseline 递增路线文档。
+原则：每一层都是一个可运行 candidate baseline；只有在真实 5/10/20/30 规模消融中优于当前 best accepted baseline，才可晋级。
+-->
+# 06_B5_GAT_Guidance_Layer
 
-## 1. 目标
+## 0. 定位
 
-B5 在 B4 的 proof-safe BPC baseline 上加入 GAT guidance。
-
-GAT 的目标是：
+B5 是独立的 guidance 候选层：
 
 ```text
-减少 search workload；
-优化 pricing candidate ordering；
-优化 branch pair ordering；
-优化 harvest candidate ordering；
-减少无效 worker / final-judge 压力；
-但不改变 exact result 和 certificate semantics。
+B5 = best_accepted_exact_baseline + GAT guidance
 ```
 
-GAT 不是 proof component。
+B5 cannot be used to repair a broken exact baseline. If B2/B3/B4 were not accepted, B5 compares against the current best accepted exact baseline.
+
+GAT's role:
+
+```text
+ordering
+priority
+finite delay advice
+shadow diagnostics
+probe-budget allocation
+```
+
+GAT never provides:
+
+```text
+official lower bound
+certificate
+fathom
+prune
+permanent rejection of true-RC negative
+```
 
 ---
 
-## 2. GAT 允许做什么
+## 1. B5 core objective
 
-GAT 可以输出：
+B5 must show real workload improvement while preserving exact behavior:
 
 ```text
-candidate priority
-branch pair priority
-harvest priority
-finite delay hint
+same objective
+same certificate scope
+same proof debt clearance
+same true-dual no-negative semantics
+less work or faster closure
+```
+
+B5 must not change:
+
+```text
+mathematical model
+pricing universe
+cut validity
+branch feasibility
+certificate ledger
+node bound semantics
+```
+
+---
+
+## 2. B5 rollout modes
+
+### 2.1 B5A_shadow_only
+
+Default first mode.
+
+```text
+GAT computes scores
+scores are logged
+solver ignores scores
+objective/certificate identical by construction
+```
+
+Purpose:
+
+```text
+collect labels
+measure top-K recall
+measure false-safe risk
+audit OOD / uncertainty
+```
+
+### 2.2 B5B_pricing_ordering_opt_in
+
+GAT can reorder pricing candidates or worker seeds.
+
+Hard rules:
+
+```text
+no candidate true-RC negative can be permanently dropped
+delayed negative enters ProofDebtQueue
+final judge still runs before certificate
+```
+
+### 2.3 B5C_branch_ordering_opt_in
+
+GAT can reorder branch pair candidates.
+
+Hard rules:
+
+```text
+branch candidate must be feasible under branch context
+NO_FRACTIONAL_RF_PAIR is still not integrality proof
+GAT cannot skip branch fallback
+```
+
+### 2.4 B5D_harvest_ordering_opt_in
+
+GAT can reorder already true-RC negative candidates after addability check.
+
+Hard rules:
+
+```text
+would_enter_master == true first
+GAT priority tie-breaker only in MVP
+proof debt blocks certificate if delayed
+```
+
+### 2.5 B5E_all_guidance_opt_in
+
+Only after B5B/B5C/B5D individually pass do-no-harm.
+
+---
+
+## 3. Context compatibility
+
+GuidanceHint must include:
+
+```text
+candidate_id
+candidate_signature
+priority
 uncertainty
-OOD / confidence diagnostics
+source
+diagnostic_only
+finite_delay_budget
+branch_context_signature
+cut_context_signature
+path_option_universe_signature
+reduced_cost_context_fingerprint
+model_id
+feature_schema_version
 ```
 
-GAT 可以影响：
+Hard rule:
 
 ```text
-pricing search order
-worker seed order
-branch candidate order
-harvest tie-breaker
-finite delay queue ordering
+If branch/cut/path universe/reduced-cost context mismatches training or shadow validation scope,
+GAT must fall back to shadow-only.
 ```
 
 ---
 
-## 3. GAT 禁止做什么
+## 4. ProofDebtQueue integration
 
-GAT 不允许：
-
-```text
-产生 official lower bound
-产生 no-negative certificate
-prune / fathom node
-永久 reject true-RC negative column
-mutate ColumnPool / MasterColumnView / CertificateLedger
-改变 reduced-cost formula
-决定 cut validity
-```
-
----
-
-## 4. ProofDebtQueue 集成
-
-GAT 延迟 true-RC negative 时，必须进入 proof debt：
+Whenever GAT delays a true-RC negative candidate:
 
 ```text
-if candidate.true_rc < -eps and GAT delays:
-    ProofDebtQueue.add(candidate)
+ProofDebtQueue.add(candidate)
 ```
 
-certificate 前必须：
+Before any certificate:
 
 ```text
 ProofDebtQueue.release_all_before_certificate()
+or reprice all delayed candidates
+or block certificate
 ```
 
-如果仍有未释放 proof debt：
-
-```text
-certificate blocked
-```
-
-记录：
+Required counters:
 
 ```text
 delayed_negative_count
@@ -94,124 +183,18 @@ delayed_negative_caused_extra_cg_round_count
 
 ---
 
-## 5. Typed GuidanceHint
+## 5. GAT labels
 
-exact/bpc 只能消费不可变 typed hint：
-
-```text
-GuidanceHint:
-    candidate_id
-    priority
-    source
-    finite_delay_budget
-    uncertainty
-    diagnostic_only
-    model_version
-    feature_schema_version
-```
-
-`exact/bpc/` 不得 import：
-
-```text
-torch
-checkpoint loader
-GAT model
-OOD model
-guidance policy implementation
-```
-
-测试：
-
-```text
-test_exact_bpc_has_no_torch_import
-test_guidance_cannot_construct_certificate
-test_guidance_cannot_mutate_exact_state
-```
-
----
-
-## 6. GAT 输入图
-
-GAT 必须保留 directed logical graph 与 path options。
-
-节点特征：
-
-```text
-depot/task flag
-xy
-operation_mode
-science_weight
-demand
-service_time
-service_energy
-time window
-shadow indicator
-thermal indicator
-```
-
-有向 pair 特征：
-
-```text
-source
-target
-relative geometry
-pair distance
-sector relation
-```
-
-path option 特征：
-
-```text
-path_type
-travel_time
-energy
-risk
-shadow_exposure
-distance
-```
-
-`i -> j` 和 `j -> i` 必须区分。
-
----
-
-## 7. GAT 输出头
-
-第一版三个 head：
-
-```text
-pricing_priority_head:
-    task / task-set / path-option priority
-
-branch_priority_head:
-    candidate pair priority
-
-harvest_priority_head:
-    already true-RC negative candidate ordering
-```
-
-可选后续 head：
-
-```text
-proof_tail_risk_head
-candidate_addability_head
-delayed_negative_debt_head
-phase2_pricing_pressure_head
-```
-
----
-
-## 8. GAT labels
-
-第一批 shadow labels 必须服务 solver ROI，不只看分类指标。
-
-必须记录：
+Shadow data must include:
 
 ```text
 observed true-RC negative found by final judge
 hidden-negative miss
 harvest selected / not selected
 candidate addability accepted / rejected
-delayed negative became proof debt / released / repriced
+reject reason
+delayed negative became proof debt
+delayed negative released / repriced
 active support changed
 child proof CPU
 branch pair win/loss under same context
@@ -220,179 +203,212 @@ certificate time
 no-harvest CPU
 ```
 
-两个必须第一批就有的 label：
+Splits:
 
 ```text
-candidate_addability_label:
-    final judge found candidate; ColumnPool accepted/rejected; reject reason.
-
-delayed_negative_debt_label:
-    GAT delayed true-RC negative; later released/repriced before certificate.
+split by instance
+split by scale
+split by seed family
+random-row split cannot be main claim
 ```
 
 ---
 
-## 9. Split 规则
+## 6. B5 消融实验设计
 
-主 split 必须按：
+B5 must compare to current best accepted exact baseline.
+
+### 6.1 5-scale full
+
+Run all 20:
 
 ```text
-instance
+previous_best_exact_baseline
+B5A_shadow_only
+B5B_pricing_ordering_opt_in
+B5C_branch_ordering_opt_in if branch tree exists
+B5D_harvest_ordering_opt_in if harvest baseline exists
+```
+
+Required:
+
+```text
+objective identical
+certificate_scope identical
+proof_debt_empty
+no additional incomplete rows
+```
+
+### 6.2 10-scale selected then full
+
+Selected 5 first, full if stable.
+
+Metrics:
+
+```text
+wall time
+pricing calls
+final judge calls
+RMP iterations
+generated labels
+added columns
+node count
+certificate time
+top-K recall
+proof debt counters
+```
+
+B5 should improve workload without changing exact result.
+
+### 6.3 20-scale
+
+Run:
+
+```text
+20 fail-closed guard
+20 selected direct20/proof-tail probe
+```
+
+Purpose:
+
+```text
+show whether GAT reduces pricing/branch/harvest workload on hard rows
+without creating certificate leakage
+```
+
+If previous baseline cannot close 20, B5 cannot claim optimal improvement. It may claim diagnostic workload improvement only if exact-safe.
+
+### 6.4 30-scale
+
+Diagnostic / gap workload only unless previous exact baseline can run.
+
+Required:
+
+```text
+no certificate leak
+guidance fallback if context incompatible
+shadow metrics present
+```
+
+---
+
+## 7. Required output fields
+
+```text
 scale
-seed family
-```
-
-禁止把 random-row split 作为主结论。
-
-random-row split 只能是 debug，不是论文 claim。
-
----
-
-## 10. Do-no-harm gate
-
-GAT 进入 opt-in 行为前，必须先通过 shadow / opt-in do-no-harm gate。
-
-要求：
-
-```text
-1. objective identical to B4 no-GAT baseline
-2. certificate scope identical to B4 no-GAT baseline
-3. no true-RC negative permanently dropped
-4. proof_debt_queue empty before certificate
-5. no additional BPC_INCOMPLETE caused by GAT delay
-6. delayed true-negative release rate reported
-7. false-safe rate reported
-```
-
-只有 do-no-harm 通过后，才允许讨论：
-
-```text
-wall time improvement
-pricing-call reduction
-final-judge-call reduction
-node-count reduction
-```
-
----
-
-## 11. B5 消融实验
-
-对比：
-
-```text
-B5 = B4 + GAT guidance
-vs
-B4 = exact BPC without GAT
-```
-
-A/B：
-
-```text
-GAT shadow only
-GAT pricing ordering opt-in
-GAT branch ordering opt-in
-GAT harvest ordering opt-in
-GAT all-guidance opt-in
-```
-
-每个 A/B 都必须独立报告：
-
-```text
-objective_diff
-certificate_scope_diff
-BPC_TREE_OPTIMAL count diff
-BPC_INCOMPLETE count diff
-wall_time_diff
-pricing_call_diff
-final_judge_call_diff
-generated_label_diff
-RMP_iteration_diff
-node_count_diff
-proof_debt_metrics
+instance_id
+mode
+previous_baseline_mode
+gat_mode
+model_id
+feature_schema_version
+guidance_context_compatible
+algorithm_status
+certificate_scope
+previous_certificate_scope
+objective
+previous_objective
+objective_identical
+certificate_scope_identical
+uses_true_dual_bpc_certificate
+pricing_state
+proof_debt_unreleased_count
+delayed_negative_count
+released_before_certificate_count
+delay_budget_exhausted_count
+pricing_call_count
+final_judge_call_count
+RMP_iteration_count
+generated_label_count
+added_column_count
+node_count
+certificate_time
+wall_time
+wall_time_delta
+topK_recall_for_final_judge_negatives
+false_safe_count
+permanent_drop_count
+do_no_harm_pass
+fallback_reason
 ```
 
 ---
 
-## 12. 成功标准
+## 8. Do-no-harm gate
 
-GAT 成功必须满足两层。
-
-### Safety success
+B5 cannot be accepted unless:
 
 ```text
-objective unchanged
-certificate scope unchanged
-no permanent negative drop
-no extra incomplete caused by delay
-proof debt cleared before certificate
+objective_mismatch_count = 0
+certificate_scope_regression_count = 0
+permanent_drop_count = 0
+proof_debt_unreleased_count = 0 for certified rows
+additional_incomplete_count = 0
+false_certificate_count = 0
 ```
 
-### Performance success
+Then performance can be evaluated.
 
-在 safety success 之后，再看：
+---
+
+## 9. Improvement requirement
+
+B5 is accepted only if it improves over previous accepted exact baseline on real 5/10/20/30 ablation:
 
 ```text
 wall time decreases
-pricing calls decrease
-final judge calls decrease
-generated labels decrease
-RMP iterations decrease
-BPC_TREE_OPTIMAL count increases or remains same with workload reduction
+or pricing calls decrease
+or final judge calls decrease
+or generated labels decrease
+or RMP iterations decrease
+or node count decreases
+or certificate time decreases
+```
+
+without do-no-harm failure.
+
+If B5 only logs shadow data:
+
+```text
+B5A may be accepted as data-collection mode,
+but B5 guidance layer is not accepted as optimization.
 ```
 
 ---
 
-## 13. 失败标准
+## 10. Report requirements
 
-任一情况失败：
+Produce:
 
 ```text
-1. GAT 改变 objective。
-2. GAT 改变 certificate scope。
-3. GAT 延迟 true-RC negative 后 certificate 前未释放。
-4. GAT 造成更多 BPC_INCOMPLETE。
-5. GAT 直接修改 ColumnPool / MasterColumnView / CertificateLedger。
-6. exact/bpc import torch / checkpoint / model。
-7. random-row split 被用作主结论。
+runs/b5_gat_guidance_ablation/b5_gat_rows.csv
+runs/b5_gat_guidance_ablation/b5_gat_summary.json
+runs/b5_gat_guidance_ablation/b5_gat_report_zh.md
+```
+
+Markdown sections:
+
+```text
+1. Previous accepted exact baseline
+2. GAT modes
+3. Do-no-harm redlines
+4. 5/10/20/30 matrix
+5. Workload deltas
+6. Proof debt audit
+7. Top-K recall / false-safe audit
+8. Context compatibility / fallback audit
+9. B5 accepted? yes/no
+10. If no, model/data/feature/schema repair target
 ```
 
 ---
 
-## 14. Codex 禁止事项
+## 11. Exit statement
 
-Codex 不得：
-
-```text
-先写 GAT 再补 ProofDebtQueue
-让 GAT reject true-RC negative
-让 GAT 生成 certificate
-把 GAT shadow metric 写成 exact improvement
-只报告 F1 / AUC，不报告 solver ROI
-在 no-GAT baseline 不稳定时训练 GAT
-```
-
----
-
-## 15. 为什么 GAT 放最后
-
-GAT 学的是 solver search policy。
-
-如果前面的：
+B5 is not accepted because GAT was run. B5 is accepted only if:
 
 ```text
-reduced cost
-ColumnPool addability
-harvesting semantics
-branch context
-cut context
-certificate ledger
-```
-
-还不稳定，GAT 学到的是移动靶。
-
-因此顺序必须是：
-
-```text
-先固定 exact solver 语义，
-再让 GAT 学怎么加速它。
+GAT preserves exact proof semantics
+and measurably reduces search workload over the previous accepted exact baseline
+on real 5/10/20/30 ablation.
 ```
