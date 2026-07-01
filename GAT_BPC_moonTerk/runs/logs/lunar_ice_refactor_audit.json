@@ -8,7 +8,558 @@
   "project_root": "/home/kai/work/GAT_BPC_moonTerk",
   "schema_version": "lunar_ice_bpc.refactor_audit.v1",
   "sections": {
+    "b5_guidance_suite": {
+      "incomplete": [],
+      "issues": [],
+      "matrix_summary": {
+        "all_suites_do_no_harm_pass": true,
+        "all_suites_workload_observed": true,
+        "any_performance_success": false,
+        "enabled_ordering_modes_by_mode": {
+          "all_ordering_opt_in": [
+            "pricing",
+            "branch",
+            "harvest"
+          ],
+          "branch_ordering_opt_in": [
+            "branch"
+          ],
+          "harvest_ordering_opt_in": [
+            "harvest"
+          ],
+          "pricing_ordering_opt_in": [
+            "pricing"
+          ],
+          "shadow_only": []
+        },
+        "expected_suite_count": 5,
+        "missing_ab_modes": [],
+        "observed_ab_modes": [
+          "shadow_only",
+          "all_ordering_opt_in",
+          "pricing_ordering_opt_in",
+          "branch_ordering_opt_in",
+          "harvest_ordering_opt_in"
+        ],
+        "observed_suite_count": 5,
+        "performance_claim_allowed": false,
+        "performance_claim_status": "NO_IMPROVEMENT_DRY_RUN",
+        "performance_success_count_by_mode": {
+          "all_ordering_opt_in": 0,
+          "branch_ordering_opt_in": 0,
+          "harvest_ordering_opt_in": 0,
+          "pricing_ordering_opt_in": 0,
+          "shadow_only": 0
+        },
+        "random_row_split_is_main_claim": false,
+        "required_ab_modes": [
+          "shadow_only",
+          "all_ordering_opt_in",
+          "pricing_ordering_opt_in",
+          "branch_ordering_opt_in",
+          "harvest_ordering_opt_in"
+        ],
+        "row_counts_by_mode": {
+          "all_ordering_opt_in": 40,
+          "branch_ordering_opt_in": 40,
+          "harvest_ordering_opt_in": 40,
+          "pricing_ordering_opt_in": 40,
+          "shadow_only": 40
+        },
+        "scale_counts_by_mode": {
+          "all_ordering_opt_in": {
+            "10": 20,
+            "5": 20
+          },
+          "branch_ordering_opt_in": {
+            "10": 20,
+            "5": 20
+          },
+          "harvest_ordering_opt_in": {
+            "10": 20,
+            "5": 20
+          },
+          "pricing_ordering_opt_in": {
+            "10": 20,
+            "5": 20
+          },
+          "shadow_only": {
+            "10": 20,
+            "5": 20
+          }
+        },
+        "schema_version": "lunar_ice_bpc.b5_guidance_ab_matrix_summary.v1",
+        "workload_observed_by_mode": {
+          "all_ordering_opt_in": 40,
+          "branch_ordering_opt_in": 40,
+          "harvest_ordering_opt_in": 40,
+          "pricing_ordering_opt_in": 40,
+          "shadow_only": 40
+        }
+      },
+      "status": "PASS",
+      "summaries": [
+        {
+          "ab_mode": "shadow_only",
+          "additional_bpc_incomplete_count": 0,
+          "certificate_scope_counts": {
+            "BPC_NODE_LP_CERTIFIED": 1,
+            "BPC_TREE_OPTIMAL": 19,
+            "FEASIBLE_INCUMBENT_ONLY": 20
+          },
+          "certificate_scope_diff_count": 0,
+          "do_no_harm_fail_count": 0,
+          "expected_count": 40,
+          "mode_counts": {
+            "shadow_only": 40
+          },
+          "path": "runs/logs/b5_guidance_suite_summary.json",
+          "row_count": 40,
+          "runner": {
+            "can_certify": false,
+            "diagnostic_policy_version": "deterministic_shadow_policy_v1",
+            "enabled_ordering_modes": [],
+            "exact_status_effect": "none",
+            "guidance_mode": "shadow_only",
+            "instance_count": 40,
+            "instance_paths": [
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json"
+            ],
+            "mutates_solver": false,
+            "note": "Runner builds deterministic shadow guidance heads; B5 suite remains audit-only guidance.",
+            "output_json": "/home/kai/work/GAT_BPC_moonTerk/runs/logs/b5_guidance_suite_summary.json",
+            "schema_version": "lunar_ice_bpc.b5_guidance_suite_runner.v1"
+          },
+          "scale_counts": {
+            "10": 20,
+            "5": 20
+          },
+          "suite_do_no_harm_pass": true,
+          "suite_performance_success_count": 0,
+          "workload_observed_count": 40
+        },
+        {
+          "ab_mode": "all_ordering_opt_in",
+          "additional_bpc_incomplete_count": 0,
+          "certificate_scope_counts": {
+            "BPC_NODE_LP_CERTIFIED": 1,
+            "BPC_TREE_OPTIMAL": 19,
+            "FEASIBLE_INCUMBENT_ONLY": 20
+          },
+          "certificate_scope_diff_count": 0,
+          "do_no_harm_fail_count": 0,
+          "expected_count": 40,
+          "mode_counts": {
+            "ordering_opt_in": 40
+          },
+          "path": "runs/logs/b5_guidance_ordering_suite_summary.json",
+          "row_count": 40,
+          "runner": {
+            "can_certify": false,
+            "diagnostic_policy_version": "deterministic_shadow_policy_v1",
+            "enabled_ordering_modes": [
+              "pricing",
+              "branch",
+              "harvest"
+            ],
+            "exact_status_effect": "none",
+            "guidance_mode": "ordering_opt_in",
+            "instance_count": 40,
+            "instance_paths": [
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json"
+            ],
+            "mutates_solver": false,
+            "note": "Runner builds deterministic shadow guidance heads; B5 suite remains audit-only guidance.",
+            "output_json": "/home/kai/work/GAT_BPC_moonTerk/runs/logs/b5_guidance_ordering_suite_summary.json",
+            "schema_version": "lunar_ice_bpc.b5_guidance_suite_runner.v1"
+          },
+          "scale_counts": {
+            "10": 20,
+            "5": 20
+          },
+          "suite_do_no_harm_pass": true,
+          "suite_performance_success_count": 0,
+          "workload_observed_count": 40
+        },
+        {
+          "ab_mode": "pricing_ordering_opt_in",
+          "additional_bpc_incomplete_count": 0,
+          "certificate_scope_counts": {
+            "BPC_NODE_LP_CERTIFIED": 1,
+            "BPC_TREE_OPTIMAL": 19,
+            "FEASIBLE_INCUMBENT_ONLY": 20
+          },
+          "certificate_scope_diff_count": 0,
+          "do_no_harm_fail_count": 0,
+          "expected_count": 40,
+          "mode_counts": {
+            "ordering_opt_in": 40
+          },
+          "path": "runs/logs/b5_guidance_pricing_ordering_suite_summary.json",
+          "row_count": 40,
+          "runner": {
+            "can_certify": false,
+            "diagnostic_policy_version": "deterministic_shadow_policy_v1",
+            "enabled_ordering_modes": [
+              "pricing"
+            ],
+            "exact_status_effect": "none",
+            "guidance_mode": "ordering_opt_in",
+            "instance_count": 40,
+            "instance_paths": [
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json"
+            ],
+            "mutates_solver": false,
+            "note": "Runner builds deterministic shadow guidance heads; B5 suite remains audit-only guidance.",
+            "output_json": "/home/kai/work/GAT_BPC_moonTerk/runs/logs/b5_guidance_pricing_ordering_suite_summary.json",
+            "schema_version": "lunar_ice_bpc.b5_guidance_suite_runner.v1"
+          },
+          "scale_counts": {
+            "10": 20,
+            "5": 20
+          },
+          "suite_do_no_harm_pass": true,
+          "suite_performance_success_count": 0,
+          "workload_observed_count": 40
+        },
+        {
+          "ab_mode": "branch_ordering_opt_in",
+          "additional_bpc_incomplete_count": 0,
+          "certificate_scope_counts": {
+            "BPC_NODE_LP_CERTIFIED": 1,
+            "BPC_TREE_OPTIMAL": 19,
+            "FEASIBLE_INCUMBENT_ONLY": 20
+          },
+          "certificate_scope_diff_count": 0,
+          "do_no_harm_fail_count": 0,
+          "expected_count": 40,
+          "mode_counts": {
+            "ordering_opt_in": 40
+          },
+          "path": "runs/logs/b5_guidance_branch_ordering_suite_summary.json",
+          "row_count": 40,
+          "runner": {
+            "can_certify": false,
+            "diagnostic_policy_version": "deterministic_shadow_policy_v1",
+            "enabled_ordering_modes": [
+              "branch"
+            ],
+            "exact_status_effect": "none",
+            "guidance_mode": "ordering_opt_in",
+            "instance_count": 40,
+            "instance_paths": [
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json"
+            ],
+            "mutates_solver": false,
+            "note": "Runner builds deterministic shadow guidance heads; B5 suite remains audit-only guidance.",
+            "output_json": "/home/kai/work/GAT_BPC_moonTerk/runs/logs/b5_guidance_branch_ordering_suite_summary.json",
+            "schema_version": "lunar_ice_bpc.b5_guidance_suite_runner.v1"
+          },
+          "scale_counts": {
+            "10": 20,
+            "5": 20
+          },
+          "suite_do_no_harm_pass": true,
+          "suite_performance_success_count": 0,
+          "workload_observed_count": 40
+        },
+        {
+          "ab_mode": "harvest_ordering_opt_in",
+          "additional_bpc_incomplete_count": 0,
+          "certificate_scope_counts": {
+            "BPC_NODE_LP_CERTIFIED": 1,
+            "BPC_TREE_OPTIMAL": 19,
+            "FEASIBLE_INCUMBENT_ONLY": 20
+          },
+          "certificate_scope_diff_count": 0,
+          "do_no_harm_fail_count": 0,
+          "expected_count": 40,
+          "mode_counts": {
+            "ordering_opt_in": 40
+          },
+          "path": "runs/logs/b5_guidance_harvest_ordering_suite_summary.json",
+          "row_count": 40,
+          "runner": {
+            "can_certify": false,
+            "diagnostic_policy_version": "deterministic_shadow_policy_v1",
+            "enabled_ordering_modes": [
+              "harvest"
+            ],
+            "exact_status_effect": "none",
+            "guidance_mode": "ordering_opt_in",
+            "instance_count": 40,
+            "instance_paths": [
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json",
+              "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json"
+            ],
+            "mutates_solver": false,
+            "note": "Runner builds deterministic shadow guidance heads; B5 suite remains audit-only guidance.",
+            "output_json": "/home/kai/work/GAT_BPC_moonTerk/runs/logs/b5_guidance_harvest_ordering_suite_summary.json",
+            "schema_version": "lunar_ice_bpc.b5_guidance_suite_runner.v1"
+          },
+          "scale_counts": {
+            "10": 20,
+            "5": 20
+          },
+          "suite_do_no_harm_pass": true,
+          "suite_performance_success_count": 0,
+          "workload_observed_count": 40
+        }
+      ]
+    },
     "benchmark_evidence": {
+      "closure_gap_summary": {
+        "all_scalable_diagnostic_evidence_complete": true,
+        "blockers": {
+          "030": {
+            "audit_status": "FAIL",
+            "bpc_certificate_status_counts": {
+              "NOT_PORTED_TRUE_DUAL_BPC": 20
+            },
+            "exact_count_target_met": false,
+            "exact_optimal_count": 0,
+            "missing_exact_optimal_count": 15,
+            "next_required_evidence": "produce true-dual no-negative closure and exact optimal rows; diagnostic gap/workload evidence alone is insufficient",
+            "required_exact_optimal_count": 15,
+            "run_count": 20,
+            "scalable_diagnostic_evidence_complete": true,
+            "true_dual_bpc_certificate_count": 0,
+            "true_dual_pricing_tail_certified_count": 0,
+            "true_dual_pricing_tail_status_counts": {
+              "TRUE_DUAL_PRICING_TAIL_NEGATIVE_FOUND": 20
+            },
+            "true_dual_readiness_status_counts": {
+              "BLOCKED_BY_NEGATIVE_REDUCED_COST": 20
+            }
+          },
+          "050": {
+            "audit_status": "FAIL",
+            "bpc_certificate_status_counts": {
+              "NOT_PORTED_TRUE_DUAL_BPC": 20
+            },
+            "exact_count_target_met": false,
+            "exact_optimal_count": 0,
+            "missing_exact_optimal_count": 3,
+            "next_required_evidence": "produce true-dual no-negative closure and exact optimal rows; diagnostic gap/workload evidence alone is insufficient",
+            "required_exact_optimal_count": 3,
+            "run_count": 20,
+            "scalable_diagnostic_evidence_complete": true,
+            "true_dual_bpc_certificate_count": 0,
+            "true_dual_pricing_tail_certified_count": 0,
+            "true_dual_pricing_tail_status_counts": {
+              "TRUE_DUAL_PRICING_TAIL_NEGATIVE_FOUND": 20
+            },
+            "true_dual_readiness_status_counts": {
+              "BLOCKED_BY_NEGATIVE_REDUCED_COST": 20
+            }
+          }
+        },
+        "blocking_scale_labels": [
+          "030",
+          "050"
+        ],
+        "diagnostic_gap_can_complete_project": false,
+        "schema_version": "lunar_ice_bpc.benchmark_closure_gap_summary.v1",
+        "target_scale_labels": [
+          "030",
+          "050"
+        ],
+        "total_missing_exact_optimal_count": 18
+      },
       "incomplete": [
         "030: final exact closure target is not met yet",
         "050: final exact closure target is not met yet"
@@ -17,6 +568,19 @@
       "scales": {
         "005": {
           "audit_status": "PASS",
+          "bpc_certificate_status_counts": {
+            "CERTIFIED_NO_NEGATIVE": 20
+          },
+          "checks": {
+            "all_instances_exact": true,
+            "exact_count_target_met": true,
+            "mean_optimal_time_target_met": true,
+            "run_count_matches_expected": true,
+            "scalable_report_complete": true,
+            "time_limit_not_exceeded": true,
+            "timeout_reason_reported_when_needed": true,
+            "valid_gap_reported": true
+          },
           "completion_bound_consistency_pass_count": 20,
           "exact_optimal_count": 20,
           "fixed_graph_pricing_closure_closed_count": 20,
@@ -24,6 +588,9 @@
           "incomplete_reason_reported_count": 20,
           "mean_optimal_wall_time_sec": 0.020173,
           "path": "runs/csv/lunar_ice_005_label_dp_benchmark_audit.json",
+          "pricing_certificate_status_counts": {
+            "CERTIFIED_NO_NEGATIVE": 20
+          },
           "pricing_workload_reported_count": 20,
           "required_exact_optimal_count": 20,
           "run_count": 20,
@@ -31,11 +598,30 @@
           "true_dual_pricing_tail_certified_count": 20,
           "true_dual_pricing_tail_dual_vector_bound_count": 20,
           "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_pricing_tail_status_counts": {
+            "TRUE_DUAL_PRICING_TAIL_CERTIFIED": 20
+          },
+          "true_dual_readiness_status_counts": {
+            "TRUE_DUAL_CERTIFICATE_READY": 20
+          },
           "true_dual_readiness_waiting_true_dual_count": 0,
           "valid_gap_count": 20
         },
         "010": {
           "audit_status": "PASS",
+          "bpc_certificate_status_counts": {
+            "CERTIFIED_NO_NEGATIVE": 20
+          },
+          "checks": {
+            "all_instances_exact": true,
+            "exact_count_target_met": true,
+            "mean_optimal_time_target_met": true,
+            "run_count_matches_expected": true,
+            "scalable_report_complete": true,
+            "time_limit_not_exceeded": true,
+            "timeout_reason_reported_when_needed": true,
+            "valid_gap_reported": true
+          },
           "completion_bound_consistency_pass_count": 0,
           "exact_optimal_count": 20,
           "fixed_graph_pricing_closure_closed_count": 0,
@@ -43,6 +629,9 @@
           "incomplete_reason_reported_count": 20,
           "mean_optimal_wall_time_sec": 4.254416,
           "path": "runs/csv/lunar_ice_010_label_dp_benchmark_audit.json",
+          "pricing_certificate_status_counts": {
+            "CERTIFIED_NO_NEGATIVE": 20
+          },
           "pricing_workload_reported_count": 20,
           "required_exact_optimal_count": 20,
           "run_count": 20,
@@ -50,11 +639,30 @@
           "true_dual_pricing_tail_certified_count": 20,
           "true_dual_pricing_tail_dual_vector_bound_count": 20,
           "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_pricing_tail_status_counts": {
+            "TRUE_DUAL_PRICING_TAIL_CERTIFIED": 20
+          },
+          "true_dual_readiness_status_counts": {
+            "TRUE_DUAL_CERTIFICATE_READY": 20
+          },
           "true_dual_readiness_waiting_true_dual_count": 0,
           "valid_gap_count": 20
         },
         "020": {
           "audit_status": "PASS",
+          "bpc_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
+          "checks": {
+            "all_instances_exact": true,
+            "exact_count_target_met": true,
+            "mean_optimal_time_target_met": true,
+            "run_count_matches_expected": true,
+            "scalable_report_complete": true,
+            "time_limit_not_exceeded": true,
+            "timeout_reason_reported_when_needed": true,
+            "valid_gap_reported": true
+          },
           "completion_bound_consistency_pass_count": 0,
           "exact_optimal_count": 20,
           "fixed_graph_pricing_closure_closed_count": 0,
@@ -62,6 +670,9 @@
           "incomplete_reason_reported_count": 20,
           "mean_optimal_wall_time_sec": 7.908368,
           "path": "runs/csv/lunar_ice_020_direct20_benchmark_audit.json",
+          "pricing_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
           "pricing_workload_reported_count": 20,
           "required_exact_optimal_count": 20,
           "run_count": 20,
@@ -69,11 +680,29 @@
           "true_dual_pricing_tail_certified_count": 0,
           "true_dual_pricing_tail_dual_vector_bound_count": 0,
           "true_dual_pricing_tail_not_ported_count": 20,
+          "true_dual_pricing_tail_status_counts": {
+            "TRUE_DUAL_PRICING_TAIL_NOT_PORTED": 20
+          },
+          "true_dual_readiness_status_counts": {
+            "BLOCKED_BY_RMP_STATUS": 20
+          },
           "true_dual_readiness_waiting_true_dual_count": 0,
           "valid_gap_count": 20
         },
         "030": {
           "audit_status": "FAIL",
+          "bpc_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
+          "checks": {
+            "exact_count_target_met": false,
+            "mean_optimal_time_target_met": false,
+            "run_count_matches_expected": true,
+            "scalable_report_complete": true,
+            "time_limit_not_exceeded": true,
+            "timeout_reason_reported_when_needed": true,
+            "valid_gap_reported": true
+          },
           "completion_bound_consistency_pass_count": 0,
           "exact_optimal_count": 0,
           "fixed_graph_pricing_closure_closed_count": 0,
@@ -81,6 +710,9 @@
           "incomplete_reason_reported_count": 20,
           "mean_optimal_wall_time_sec": null,
           "path": "runs/csv/lunar_ice_030_default_benchmark_audit.json",
+          "pricing_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
           "pricing_workload_reported_count": 20,
           "required_exact_optimal_count": 15,
           "run_count": 20,
@@ -88,11 +720,29 @@
           "true_dual_pricing_tail_certified_count": 0,
           "true_dual_pricing_tail_dual_vector_bound_count": 20,
           "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_pricing_tail_status_counts": {
+            "TRUE_DUAL_PRICING_TAIL_NEGATIVE_FOUND": 20
+          },
+          "true_dual_readiness_status_counts": {
+            "BLOCKED_BY_NEGATIVE_REDUCED_COST": 20
+          },
           "true_dual_readiness_waiting_true_dual_count": 0,
           "valid_gap_count": 20
         },
         "050": {
           "audit_status": "FAIL",
+          "bpc_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
+          "checks": {
+            "exact_count_target_met": false,
+            "mean_optimal_time_target_met": true,
+            "run_count_matches_expected": true,
+            "scalable_report_complete": true,
+            "time_limit_not_exceeded": true,
+            "timeout_reason_reported_when_needed": true,
+            "valid_gap_reported": true
+          },
           "completion_bound_consistency_pass_count": 0,
           "exact_optimal_count": 0,
           "fixed_graph_pricing_closure_closed_count": 0,
@@ -100,6 +750,9 @@
           "incomplete_reason_reported_count": 20,
           "mean_optimal_wall_time_sec": null,
           "path": "runs/csv/lunar_ice_050_default_benchmark_audit.json",
+          "pricing_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
           "pricing_workload_reported_count": 20,
           "required_exact_optimal_count": 3,
           "run_count": 20,
@@ -107,11 +760,29 @@
           "true_dual_pricing_tail_certified_count": 0,
           "true_dual_pricing_tail_dual_vector_bound_count": 20,
           "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_pricing_tail_status_counts": {
+            "TRUE_DUAL_PRICING_TAIL_NEGATIVE_FOUND": 20
+          },
+          "true_dual_readiness_status_counts": {
+            "BLOCKED_BY_NEGATIVE_REDUCED_COST": 20
+          },
           "true_dual_readiness_waiting_true_dual_count": 0,
           "valid_gap_count": 20
         },
         "100": {
           "audit_status": "PASS",
+          "bpc_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
+          "checks": {
+            "exact_count_target_met": true,
+            "mean_optimal_time_target_met": true,
+            "run_count_matches_expected": true,
+            "scalable_report_complete": true,
+            "time_limit_not_exceeded": true,
+            "timeout_reason_reported_when_needed": true,
+            "valid_gap_reported": true
+          },
           "completion_bound_consistency_pass_count": 0,
           "exact_optimal_count": 0,
           "fixed_graph_pricing_closure_closed_count": 0,
@@ -119,6 +790,9 @@
           "incomplete_reason_reported_count": 20,
           "mean_optimal_wall_time_sec": null,
           "path": "runs/csv/lunar_ice_100_default_benchmark_audit.json",
+          "pricing_certificate_status_counts": {
+            "NOT_PORTED_TRUE_DUAL_BPC": 20
+          },
           "pricing_workload_reported_count": 20,
           "required_exact_optimal_count": 0,
           "run_count": 20,
@@ -126,6 +800,12 @@
           "true_dual_pricing_tail_certified_count": 0,
           "true_dual_pricing_tail_dual_vector_bound_count": 20,
           "true_dual_pricing_tail_not_ported_count": 0,
+          "true_dual_pricing_tail_status_counts": {
+            "TRUE_DUAL_PRICING_TAIL_NEGATIVE_FOUND": 20
+          },
+          "true_dual_readiness_status_counts": {
+            "BLOCKED_BY_NEGATIVE_REDUCED_COST": 20
+          },
           "true_dual_readiness_waiting_true_dual_count": 0,
           "valid_gap_count": 20
         }
@@ -167,10 +847,17 @@
     },
     "manifest": {
       "accepted_total_count": 120,
+      "existing_instance_validation_count": 4,
       "instance_samples_per_scale": 1,
       "issues": [],
       "manifest_path": "/home/kai/work/GAT_BPC_moonTerk/data/manifests/lunar_ice_benchmark_manifest.json",
-      "missing_paths": [],
+      "missing_paths": [
+        "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_050/instance_001_logical_graph.json",
+        "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_100/instance_001_logical_graph.json"
+      ],
+      "missing_selected_instance_count": 2,
+      "path_option_policy_id": "three_path_low_time_energy_risk_v1",
+      "risk_schema_version": "lunar_ice_risk_v1",
       "scale_instance_counts": {
         "005": 20,
         "010": 20,
@@ -180,12 +867,13 @@
         "100": 20
       },
       "status": "PASS",
+      "time_window_policy_id": "canonical_lunar_ice_ref_tight_v2",
       "validate_all_instances": false,
       "validated_instance_count": 6,
       "validation_issues": []
     },
     "runtime_legacy_link_scan": {
-      "files_scanned": 71,
+      "files_scanned": 117,
       "occurrence_count": 0,
       "occurrences": [],
       "scan_roots": [

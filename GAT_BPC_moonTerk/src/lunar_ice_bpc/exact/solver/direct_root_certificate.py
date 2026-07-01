@@ -71,11 +71,12 @@ def build_direct_root_certificate(
     integer_objective: float | None = None,
     gap_eps: float = 1.0e-6,
 ) -> DirectRootCertificate:
-    """Certify the direct fixed-graph root LP for small task counts.
+    """Audit the direct fixed-graph root LP for small task counts.
 
     The certificate scans the exhaustive direct journey-column universe produced
-    by the current three-path logical graph. It is scoped to the root LP without
-    cuts or branching.
+    by the current three-path logical graph. This artifact is deliberately kept
+    diagnostic: B0 direct-DP proves only the fixed-graph oracle objective, not a
+    true-dual BPC node certificate.
     """
 
     task_count = len(data.task_ids)
@@ -178,9 +179,9 @@ def build_direct_root_certificate(
         fleet_dual=rmp.duals.fleet_limit,
         task_cover_duals=dict(rmp.duals.cover),
         integer_matches_root_lp=integer_matches_root_lp,
-        uses_true_dual_bpc_certificate=True,
+        uses_true_dual_bpc_certificate=False,
         note=(
-            "Certified only for the exhaustive direct journey-column universe of the fixed three-path "
-            "logical graph at the root LP; no cuts or branching."
+            "Audited only for the exhaustive direct journey-column universe of the fixed three-path "
+            "logical graph at the root LP; direct-DP is not a true-dual BPC certificate."
         ),
     )

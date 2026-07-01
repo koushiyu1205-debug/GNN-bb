@@ -124,6 +124,11 @@ python scripts/audit_lunar_ice_benchmark.py --results-csv runs/csv/lunar_ice_005
 python scripts/audit_lunar_ice_refactor.py --output-json runs/logs/lunar_ice_refactor_audit.json --instance-samples-per-scale 1
 python scripts/run_lunar_ice_gat_shadow.py --instance data/instances/lunar_ice_005/instance_001_logical_graph.json
 python scripts/run_lunar_ice_gat_shadow.py --config configs/experiments/lunar_ice_20_gat_shadow.yaml
+python scripts/run_lunar_ice_b5_guidance_suite.py --config configs/base/b5_guidance_suite_base.yaml
+python scripts/run_lunar_ice_b5_guidance_suite.py --config configs/base/b5_guidance_ordering_suite_base.yaml
+python scripts/run_lunar_ice_b5_guidance_suite.py --config configs/base/b5_guidance_pricing_ordering_suite_base.yaml
+python scripts/run_lunar_ice_b5_guidance_suite.py --config configs/base/b5_guidance_branch_ordering_suite_base.yaml
+python scripts/run_lunar_ice_b5_guidance_suite.py --config configs/base/b5_guidance_harvest_ordering_suite_base.yaml
 python scripts/draw_lunar_ice_instance.py --instance data/instances/lunar_ice_005/instance_001_logical_graph.json
 python scripts/download_lunar_real_maps.py --dry-run --print-curl
 python scripts/download_lunar_real_maps.py --layers lola_avg_solar_visibility
@@ -199,9 +204,9 @@ branch-node queue 的每个 evaluated node 也会写入 fail-closed `pricing_cer
 
 `audit_lunar_ice_refactor.py` 是项目级边界审计：扫描运行代码/配置中的禁用旧链路字段，检查 120 实例 manifest、样本 instance schema、GAT shadow summary，以及 5/10/20/30/50/100 benchmark audit 证据。当前输出仍为 `IN_PROGRESS` 而不是 `COMPLETE`，因为 30/50 exact closure 未完成；这不是脚本失败，而是防止提前宣称最终重构完成。
 
-direct baseline 超时时保持 fail closed：`status=DIRECT_DP_BASELINE_TIME_LIMIT`、`exact_status=NOT_SOLVED`、不输出 incumbent 或 certificate；但会保留已完成的 partial enumeration counts，方便比较 30/50 exact-safe 优化是否真正推进了 journey label DP。
+direct baseline 超时时保持 fail closed：`status=DIRECT_DP_TIME_LIMIT`、`exact_status=NOT_SOLVED`、不输出 incumbent 或 BPC certificate；但会保留已完成的 partial enumeration counts，方便比较 30/50 exact-safe 优化是否真正推进了 journey label DP。
 
-`configs/base/` 放 exact-safe 默认配置，`configs/experiments/` 放显式实验配置。`run_lunar_ice_gat_shadow.py --config ...` 只接受 `guidance_mode: shadow_only` 且 `journey_gat_optin_enabled: false`；如果拿 opt-in/mutating 配置运行 shadow CLI，会直接报错。
+`configs/base/` 放 exact-safe 默认配置，`configs/experiments/` 放显式实验配置。`run_lunar_ice_gat_shadow.py --config ...` 只接受 `guidance_mode: shadow_only` 且 `journey_gat_optin_enabled: false`；如果拿 opt-in/mutating 配置运行 shadow CLI，会直接报错。`run_lunar_ice_b5_guidance_suite.py --config ...` 输出 B5 do-no-harm / ordering suite JSON；它只接受 shadow-only 或 dry-run ordering opt-in，拒绝 `mutates_solver`、`can_certify`、prune/fathom-capable 配置。当前 B5 suite 的 workload observation 是 `dry_run_no_solver_mutation_zero_diff`，只能证明 dry-run ordering 没有额外 workload 或证书副作用，不能声明性能收益。
 
 ## exact
 

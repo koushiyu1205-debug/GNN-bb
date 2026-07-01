@@ -16,6 +16,8 @@ def build_shadow_report(instance: dict[str, Any]) -> dict[str, Any]:
     idx_drill = node_schema.index("mode_drill")
     scored_nodes = []
     for node in graph["nodes"]:
+        if str(node.get("id")) == "depot":
+            continue
         features = node["features"]
         score = (
             0.45 * float(features[idx_science])
@@ -38,5 +40,7 @@ def build_shadow_report(instance: dict[str, Any]) -> dict[str, Any]:
         "task_priority": scored_nodes,
         "edge_count": len(graph["edges"]),
         "node_count": len(graph["nodes"]),
+        "task_node_count": graph.get("task_node_count", len(scored_nodes)),
+        "depot_node_count": graph.get("depot_node_count", 0),
         "note": "Diagnostic shadow guidance only; not a pricing oracle, lower bound, or certificate.",
     }

@@ -92,6 +92,7 @@ def _audit_scale(scale: int, rows: list[dict[str, str]], *, expected_per_scale: 
     timeout_rows = [row for row in rows if str(row.get("time_limit_exceeded") or "") == "True"]
     timeout_reason_rows = [row for row in timeout_rows if str(row.get("timeout_reason") or "").strip()]
     exact_scope_counts = _count_values(rows, "exact_claim_scope")
+    certificate_scope_counts = _count_values(rows, "certificate_scope")
     bpc_certificate_status_counts = _count_values(rows, "bpc_certificate_status")
     direct_baseline_status_counts = _count_values(rows, "direct_baseline_status")
     pricing_certificate_status_counts = _count_values(rows, "pricing_certificate_status")
@@ -184,6 +185,7 @@ def _audit_scale(scale: int, rows: list[dict[str, str]], *, expected_per_scale: 
         "node_count_reported_count": len(node_rows),
         "incomplete_reason_reported_count": len(incomplete_rows),
         "exact_claim_scope_counts": exact_scope_counts,
+        "certificate_scope_counts": certificate_scope_counts,
         "bpc_certificate_status_counts": bpc_certificate_status_counts,
         "direct_baseline_status_counts": direct_baseline_status_counts,
         "pricing_certificate_status_counts": pricing_certificate_status_counts,

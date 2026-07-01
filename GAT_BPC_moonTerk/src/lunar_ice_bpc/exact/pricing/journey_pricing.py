@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from itertools import combinations, permutations, product
 
 from lunar_ice_bpc.domain.scenario import PATH_TYPES
+from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
 from lunar_ice_bpc.exact.core.columns import TimedSortie, build_timed_sortie
 from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
 from lunar_ice_bpc.exact.core.cuts import FLEET_LOWER_BOUND_CUT, SUBSET_ROW_CUT, CutContext
@@ -57,7 +58,8 @@ class DirectPricingCache:
             self.reused_sortie_attempt_count += cached[1]
             return candidate_key, cached[0], cached[1], True
 
-        task_to_bit = {task_id: 1 << index for index, task_id in enumerate(candidate_key)}
+        task_index = TaskIndexMap(candidate_key)
+        task_to_bit = {task_id: task_index.mask_of(task_id) for task_id in task_index.external_ids}
         templates_by_mask, attempt_count = _enumerate_direct_sortie_templates(data, candidate_key, task_to_bit)
         self.templates_by_candidate[key] = (templates_by_mask, attempt_count)
         self.miss_count += 1
@@ -286,7 +288,8 @@ def price_direct_journey_columns(
     for candidate_task_ids in candidate_sets:
         if cache is None:
             priced_candidate_task_ids = tuple(sorted(candidate_task_ids))
-            task_to_bit = {task_id: 1 << index for index, task_id in enumerate(priced_candidate_task_ids)}
+            task_index = TaskIndexMap(priced_candidate_task_ids)
+            task_to_bit = {task_id: task_index.mask_of(task_id) for task_id in task_index.external_ids}
             templates_by_mask, attempts = _enumerate_direct_sortie_templates(
                 data,
                 priced_candidate_task_ids,
@@ -802,9 +805,10 @@ def _best_direct_label(
     completion_bound_enabled: bool = True,
     cut_context: CutContext | None = None,
 ) -> tuple[_DirectJourneyLabel | None, _DirectJourneyLabel | None, int, dict]:
-    full_mask = (1 << len(candidate_task_ids)) - 1
+    task_index = TaskIndexMap(candidate_task_ids)
+    full_mask = task_index.full_mask
     context = cut_context or CutContext()
-    task_by_bit = {1 << index: task_id for index, task_id in enumerate(candidate_task_ids)}
+    task_by_bit = {task_index.mask_of(task_id): task_id for task_id in task_index.external_ids}
     completion_bound = build_positive_cover_completion_bound(candidate_task_ids, duals.cover)
     completion_payload = completion_bound.to_payload()
     completion_payload["enabled"] = bool(completion_bound_enabled)
@@ -988,11 +992,8 @@ def _label_cut_dual_penalty(
 ) -> float:
     if cut_context is None or cut_context.empty or not duals.cuts:
         return 0.0
-    tasks = {
-        str(task_id)
-        for index, task_id in enumerate(candidate_task_ids)
-        if label.task_mask & (1 << index)
-    }
+    task_index = TaskIndexMap(candidate_task_ids)
+    tasks = set(task_index.ids_from_mask(label.task_mask))
     if not tasks:
         return 0.0
     penalty = 0.0

@@ -10,6 +10,7 @@ from time import perf_counter
 from typing import Iterable
 
 from lunar_ice_bpc.domain.scenario import SOLVE_TIME_LIMIT_SEC_BY_SCALE
+from lunar_ice_bpc.exact.bpc.pricing.status import is_direct_dp_time_limit_status
 from lunar_ice_bpc.io.instance_io import read_json, write_json
 from lunar_ice_bpc.runners.solve import solve_reference
 
@@ -131,8 +132,10 @@ def _solve_one(
         "solution_path": str(solution_path),
         "instance_id": result.get("instance_id"),
         "status": result.get("status"),
+        "algorithm_status": result.get("algorithm_status", result.get("status")),
         "exact_status": result.get("exact_status"),
         "exact_claim_scope": result.get("exact_claim_scope"),
+        "certificate_scope": result.get("certificate_scope"),
         "bpc_certificate_status": result.get("bpc_certificate_status"),
         "uses_true_dual_bpc_certificate": result.get("uses_true_dual_bpc_certificate"),
         "pricing_certificate_status": pricing_certificate.get("status"),
@@ -197,8 +200,13 @@ def _solve_one(
         "best_diagnostic_bound_scope": result.get("best_diagnostic_bound_scope"),
         "canonical_baseline_status": canonical_baseline.get("status"),
         "canonical_baseline_exact_status": canonical_baseline.get("exact_status"),
+        "canonical_baseline_certificate_scope": canonical_baseline.get("certificate_scope"),
         "direct_baseline_status": direct_exact_baseline.get("status"),
         "direct_baseline_exact_status": direct_exact_baseline.get("exact_status"),
+        "direct_baseline_certificate_scope": direct_exact_baseline.get("certificate_scope"),
+        "path_option_dominance_policy": result.get("path_option_dominance_policy"),
+        "path_option_dominance_filtered_count": result.get("path_option_dominance_filtered_count"),
+        "infeasibility_scope_if_any": result.get("infeasibility_scope_if_any"),
         "canonical_objective": result.get("canonical_objective"),
         "direct_exact_objective": result.get("direct_exact_objective"),
         "direct_root_certificate_status": direct_root_certificate.get("status"),
@@ -431,7 +439,7 @@ def _incomplete_reason(result: dict) -> str:
     if result.get("status") == "DIRECT_DP_BASELINE_OPTIMAL":
         return "exact_direct_dp_baseline_not_true_dual_bpc_certificate"
     direct_baseline = result.get("direct_exact_baseline") or {}
-    if direct_baseline.get("status") == "DIRECT_DP_BASELINE_TIME_LIMIT":
+    if is_direct_dp_time_limit_status(str(direct_baseline.get("status") or "")):
         return "direct_baseline_time_limit_reference_fallback"
     if result.get("status") == "CANONICAL_DP_BASELINE_OPTIMAL":
         direct = ((result.get("restricted_rmp") or {}).get("direct_pricing") or {})
@@ -512,8 +520,10 @@ def run_benchmark(
         "solution_path",
         "instance_id",
         "status",
+        "algorithm_status",
         "exact_status",
         "exact_claim_scope",
+        "certificate_scope",
         "bpc_certificate_status",
         "uses_true_dual_bpc_certificate",
         "pricing_certificate_status",
@@ -568,8 +578,13 @@ def run_benchmark(
         "best_diagnostic_bound_scope",
         "canonical_baseline_status",
         "canonical_baseline_exact_status",
+        "canonical_baseline_certificate_scope",
         "direct_baseline_status",
         "direct_baseline_exact_status",
+        "direct_baseline_certificate_scope",
+        "path_option_dominance_policy",
+        "path_option_dominance_filtered_count",
+        "infeasibility_scope_if_any",
         "canonical_objective",
         "direct_exact_objective",
         "direct_root_certificate_status",
@@ -763,6 +778,7 @@ def _summary(rows: list[dict]) -> dict:
     status_counts: dict[str, int] = {}
     exact_counts: dict[str, int] = {}
     exact_scope_counts: dict[str, int] = {}
+    certificate_scope_counts: dict[str, int] = {}
     bpc_certificate_counts: dict[str, int] = {}
     pricing_frontier_counts: dict[str, int] = {}
     true_dual_tail_counts: dict[str, int] = {}
@@ -778,6 +794,7 @@ def _summary(rows: list[dict]) -> dict:
         status_counts[str(row["status"])] = status_counts.get(str(row["status"]), 0) + 1
         exact_counts[str(row["exact_status"])] = exact_counts.get(str(row["exact_status"]), 0) + 1
         exact_scope = str(row.get("exact_claim_scope") or "missing")
+        certificate_scope = str(row.get("certificate_scope") or "missing")
         certificate_status = str(row.get("bpc_certificate_status") or "missing")
         frontier_status = str(row.get("pricing_frontier_status") or "missing")
         true_dual_tail_status = str(row.get("true_dual_pricing_tail_status") or "missing")
@@ -790,6 +807,7 @@ def _summary(rows: list[dict]) -> dict:
         cut_probe_status = str(row.get("cut_probe_status") or "missing")
         direct_baseline_status = str(row.get("direct_baseline_status") or "missing")
         exact_scope_counts[exact_scope] = exact_scope_counts.get(exact_scope, 0) + 1
+        certificate_scope_counts[certificate_scope] = certificate_scope_counts.get(certificate_scope, 0) + 1
         bpc_certificate_counts[certificate_status] = bpc_certificate_counts.get(certificate_status, 0) + 1
         pricing_frontier_counts[frontier_status] = pricing_frontier_counts.get(frontier_status, 0) + 1
         true_dual_tail_counts[true_dual_tail_status] = true_dual_tail_counts.get(true_dual_tail_status, 0) + 1
@@ -825,6 +843,7 @@ def _summary(rows: list[dict]) -> dict:
         "status_counts": status_counts,
         "exact_status_counts": exact_counts,
         "exact_claim_scope_counts": exact_scope_counts,
+        "certificate_scope_counts": certificate_scope_counts,
         "bpc_certificate_status_counts": bpc_certificate_counts,
         "pricing_frontier_status_counts": pricing_frontier_counts,
         "true_dual_pricing_tail_status_counts": true_dual_tail_counts,

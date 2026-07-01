@@ -15,6 +15,7 @@ from lunar_ice_bpc.exact.certificates.pricing_certificate import (
     select_effective_pricing_certificate,
 )
 from lunar_ice_bpc.exact.certificates.true_dual_pricing_tail import build_true_dual_pricing_tail
+from lunar_ice_bpc.exact.bpc.pricing.status import is_direct_dp_time_limit_status
 from lunar_ice_bpc.exact.core.cuts import CutContext
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.master.journey_rmp import solve_restricted_journey_rmp
@@ -155,8 +156,13 @@ def solve_reference(
             "schema_version": "lunar_ice_bpc.solution.v1",
             "instance_id": instance["instance_id"],
             "status": baseline.status,
+            "algorithm_status": baseline.status,
             "exact_status": baseline.exact_status,
             "exact_claim_scope": _exact_claim_scope(baseline.status),
+            "certificate_scope": baseline.certificate_scope,
+            "path_option_dominance_policy": baseline.path_option_dominance_policy,
+            "path_option_dominance_filtered_count": baseline.path_option_dominance_filtered_count,
+            "infeasibility_scope_if_any": baseline.infeasibility_scope_if_any,
             "bpc_certificate_status": pricing_certificate["status"],
             "uses_true_dual_bpc_certificate": pricing_certificate["uses_true_dual_bpc_certificate"],
             "pricing_certificate": pricing_certificate,
@@ -287,8 +293,13 @@ def solve_reference(
         "schema_version": "lunar_ice_bpc.solution.v1",
         "instance_id": instance["instance_id"],
         "status": reference.get("status", "NO_REFERENCE_SOLUTION"),
+        "algorithm_status": reporting_baseline.status,
         "exact_status": reporting_baseline.exact_status,
         "exact_claim_scope": _exact_claim_scope(reporting_baseline.status),
+        "certificate_scope": reporting_baseline.certificate_scope,
+        "path_option_dominance_policy": reporting_baseline.path_option_dominance_policy,
+        "path_option_dominance_filtered_count": reporting_baseline.path_option_dominance_filtered_count,
+        "infeasibility_scope_if_any": reporting_baseline.infeasibility_scope_if_any,
         "bpc_certificate_status": pricing_certificate["status"],
         "uses_true_dual_bpc_certificate": pricing_certificate["uses_true_dual_bpc_certificate"],
         "pricing_certificate": pricing_certificate,
@@ -488,7 +499,7 @@ def _fallback_baseline_for_reporting(
     direct_baseline: JourneyBaselineResult,
     canonical_baseline: JourneyBaselineResult,
 ) -> JourneyBaselineResult:
-    if direct_baseline.status == "DIRECT_DP_BASELINE_TIME_LIMIT":
+    if is_direct_dp_time_limit_status(direct_baseline.status):
         return direct_baseline
     direct_work = (
         int(direct_baseline.generated_journey_count)
@@ -607,7 +618,9 @@ def _timings_payload(
 def _baseline_payload(result: JourneyBaselineResult) -> dict:
     return {
         "status": result.status,
+        "algorithm_status": result.status,
         "exact_status": result.exact_status,
+        "certificate_scope": result.certificate_scope,
         "objective": result.objective,
         "wall_time_sec": result.wall_time_sec,
         "generated_journey_count": result.generated_journey_count,
@@ -615,6 +628,9 @@ def _baseline_payload(result: JourneyBaselineResult) -> dict:
         "route_template_count": result.route_template_count,
         "pareto_label_count": result.pareto_label_count,
         "set_partition_state_count": result.set_partition_state_count,
+        "path_option_dominance_policy": result.path_option_dominance_policy,
+        "path_option_dominance_filtered_count": result.path_option_dominance_filtered_count,
+        "infeasibility_scope_if_any": result.infeasibility_scope_if_any,
         "note": result.note,
     }
 

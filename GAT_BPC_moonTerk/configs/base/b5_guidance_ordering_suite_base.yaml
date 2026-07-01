@@ -1,0 +1,20 @@
+guidance_mode: "ordering_opt_in"
+journey_gat_shadow_enabled: true
+journey_gat_optin_enabled: false
+mutates_solver: false
+can_certify: false
+can_prune: false
+can_fathom: false
+exact_status_effect: "none"
+
+manifest: "data/manifests/lunar_ice_sp50_real_benchmark_manifest.json"
+scales: [5, 10]
+enabled_ordering_modes: [pricing, branch, harvest]
+output_json: "runs/logs/b5_guidance_ordering_suite_summary.json"
+
+max_direct_tasks: 5
+max_rounds: 8
+negative_eps: 1.0e-6
+diagnostic_policy_version: "deterministic_shadow_policy_v1"
+
+note: "B5 ordering suite enables pricing/branch/harvest ordering in dry-run opt-in mode only; it is not a pricing oracle, lower bound, prune rule, fathom rule, or certificate."

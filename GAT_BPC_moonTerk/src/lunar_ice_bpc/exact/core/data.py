@@ -58,6 +58,7 @@ class LunarIceData:
     recharge_power_proxy_per_min: float
     max_shadow_exposure_per_sortie: float
     objective: ObjectiveWeights
+    path_option_policy_id: str = ""
 
     @property
     def task_ids(self) -> tuple[str, ...]:
@@ -125,5 +126,5 @@ def load_lunar_ice_data(instance: dict[str, Any]) -> LunarIceData:
             gamma_lunar_ice_risk=float(objective_payload["gamma_lunar_ice_risk"]),
             delta_energy=float(objective_payload["delta_energy"]),
         ),
+        path_option_policy_id=str(instance.get("logical_graph", {}).get("path_option_policy_id") or ""),
     )
-

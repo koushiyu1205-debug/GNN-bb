@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 
 
@@ -39,7 +40,8 @@ def select_journey_column_pool(
             state_count=1,
             note="No tasks were supplied.",
         )
-    task_to_bit = {task_id: 1 << index for index, task_id in enumerate(ordered_tasks)}
+    task_index = TaskIndexMap(ordered_tasks)
+    task_to_bit = {task_id: task_index.mask_of(task_id) for task_id in task_index.external_ids}
     best_by_mask: dict[int, JourneyColumn] = {}
     candidate_count = 0
     for column in columns:
@@ -60,7 +62,7 @@ def select_journey_column_pool(
         if old is None or column.objective < old.objective - 1.0e-9:
             best_by_mask[mask] = column
 
-    full_mask = (1 << len(ordered_tasks)) - 1
+    full_mask = task_index.full_mask
     available_masks = tuple(sorted(best_by_mask))
     layers: list[dict[int, float]] = [{0: 0.0}]
     predecessor: dict[tuple[int, int], tuple[int, int]] = {}

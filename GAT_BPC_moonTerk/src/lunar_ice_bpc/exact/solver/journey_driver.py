@@ -14,7 +14,13 @@ from itertools import permutations, product
 from time import perf_counter
 from typing import Iterable
 
-from lunar_ice_bpc.domain.scenario import PATH_TYPES
+from lunar_ice_bpc.domain.scenario import PATH_OPTION_POLICY_ID, PATH_TYPES
+from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
+from lunar_ice_bpc.exact.bpc.pricing.status import (
+    AlgorithmStatus,
+    CertificateScope,
+    certificate_scope_for_algorithm_status,
+)
 from lunar_ice_bpc.exact.core.columns import SortieLeg, TimedSortie, build_timed_sortie
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn, build_journey_column
@@ -41,6 +47,10 @@ class JourneyBaselineResult:
     set_partition_state_count: int
     note: str
     wall_time_sec: float | None = None
+    certificate_scope: str = CertificateScope.FEASIBLE_INCUMBENT_ONLY.value
+    path_option_dominance_policy: str = PATH_OPTION_POLICY_ID
+    path_option_dominance_filtered_count: int = 0
+    infeasibility_scope_if_any: str = ""
 
 
 @dataclass(frozen=True)
@@ -119,10 +129,19 @@ class DirectBaselineTimeLimitExceeded(RuntimeError):
         self.set_partition_state_count = int(set_partition_state_count)
 
 
+def _task_to_bit_mapping(task_index: TaskIndexMap) -> dict[str, int]:
+    return {task_id: task_index.mask_of(task_id) for task_id in task_index.external_ids}
+
+
+def _full_task_mask(data: LunarIceData) -> int:
+    return TaskIndexMap(data.task_ids).full_mask
+
+
 def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 10) -> JourneyBaselineResult:
     """Solve a small instance over the restricted canonical-path universe."""
 
     start = perf_counter()
+    dominance_audit = path_option_dominance_audit(data)
     if len(data.task_ids) > int(max_exact_tasks):
         return JourneyBaselineResult(
             status="SKIPPED_TOO_LARGE_FOR_ENUM_BASELINE",
@@ -136,6 +155,8 @@ def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 1
             set_partition_state_count=0,
             note=f"task_count={len(data.task_ids)} exceeds max_exact_tasks={max_exact_tasks}",
             wall_time_sec=_elapsed_sec(start),
+            path_option_dominance_policy=str(dominance_audit["policy"]),
+            path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
         )
     universe = enumerate_canonical_journey_columns(data, max_exact_tasks=int(max_exact_tasks))
     best_labels, state_count = _select_vehicle_partition(data, universe.best_label_by_mask)
@@ -152,6 +173,9 @@ def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 1
             set_partition_state_count=state_count,
             note="No cover was found in the restricted canonical-path journey universe.",
             wall_time_sec=_elapsed_sec(start),
+            path_option_dominance_policy=str(dominance_audit["policy"]),
+            path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
+            infeasibility_scope_if_any="NO_COLUMN_COVER_IN_POOL",
         )
     best = tuple(build_journey_column(data, label.sorties) for label in best_labels)
     return JourneyBaselineResult(
@@ -169,6 +193,8 @@ def solve_small_journey_baseline(data: LunarIceData, *, max_exact_tasks: int = 1
             f"{tuple(PATH_TYPES)}; no true-dual BPC certificate."
         ),
         wall_time_sec=_elapsed_sec(start),
+        path_option_dominance_policy=str(dominance_audit["policy"]),
+        path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
     )
 
 
@@ -181,6 +207,7 @@ def solve_direct_journey_baseline(
     """Solve a small instance over all fixed logical-graph path options."""
 
     start = perf_counter()
+    dominance_audit = path_option_dominance_audit(data)
     if len(data.task_ids) > int(max_exact_tasks):
         return JourneyBaselineResult(
             status="SKIPPED_TOO_LARGE_FOR_DIRECT_DP_BASELINE",
@@ -194,13 +221,18 @@ def solve_direct_journey_baseline(
             set_partition_state_count=0,
             note=f"task_count={len(data.task_ids)} exceeds max_exact_tasks={max_exact_tasks}",
             wall_time_sec=_elapsed_sec(start),
+            certificate_scope=certificate_scope_for_algorithm_status(
+                AlgorithmStatus.SKIPPED_TOO_LARGE_FOR_DIRECT_DP_BASELINE
+            ).value,
+            path_option_dominance_policy=str(dominance_audit["policy"]),
+            path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
         )
     deadline = _deadline_from_limit(wall_time_limit_sec)
     try:
         universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_exact_tasks), deadline=deadline)
     except DirectBaselineTimeLimitExceeded as exc:
         return JourneyBaselineResult(
-            status="DIRECT_DP_BASELINE_TIME_LIMIT",
+            status=AlgorithmStatus.DIRECT_DP_TIME_LIMIT.value,
             exact_status="NOT_SOLVED",
             objective=None,
             journeys=tuple(),
@@ -214,6 +246,9 @@ def solve_direct_journey_baseline(
                 f"during {exc.stage}; partial counts are diagnostic only."
             ),
             wall_time_sec=_elapsed_sec(start),
+            certificate_scope=certificate_scope_for_algorithm_status(AlgorithmStatus.DIRECT_DP_TIME_LIMIT).value,
+            path_option_dominance_policy=str(dominance_audit["policy"]),
+            path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
         )
     try:
         best_labels, state_count = _select_vehicle_partition(
@@ -223,7 +258,7 @@ def solve_direct_journey_baseline(
         )
     except DirectBaselineTimeLimitExceeded as exc:
         return JourneyBaselineResult(
-            status="DIRECT_DP_BASELINE_TIME_LIMIT",
+            status=AlgorithmStatus.DIRECT_DP_TIME_LIMIT.value,
             exact_status="NOT_SOLVED",
             objective=None,
             journeys=tuple(),
@@ -237,10 +272,13 @@ def solve_direct_journey_baseline(
                 f"during {exc.stage}; partial counts are diagnostic only."
             ),
             wall_time_sec=_elapsed_sec(start),
+            certificate_scope=certificate_scope_for_algorithm_status(AlgorithmStatus.DIRECT_DP_TIME_LIMIT).value,
+            path_option_dominance_policy=str(dominance_audit["policy"]),
+            path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
         )
     if best_labels is None:
         return JourneyBaselineResult(
-            status="NO_COLUMN_COVER_IN_DIRECT_DP_UNIVERSE",
+            status=AlgorithmStatus.DIRECT_DP_NO_COVER.value,
             exact_status="NOT_SOLVED",
             objective=None,
             journeys=tuple(),
@@ -251,6 +289,10 @@ def solve_direct_journey_baseline(
             set_partition_state_count=state_count,
             note="No cover was found in the exhaustive direct-path journey universe.",
             wall_time_sec=_elapsed_sec(start),
+            certificate_scope=certificate_scope_for_algorithm_status(AlgorithmStatus.DIRECT_DP_NO_COVER).value,
+            path_option_dominance_policy=str(dominance_audit["policy"]),
+            path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
+            infeasibility_scope_if_any=CertificateScope.DIRECT_DP_NO_COVER.value,
         )
     best = tuple(build_journey_column(data, label.sorties) for label in best_labels)
     return JourneyBaselineResult(
@@ -268,6 +310,9 @@ def solve_direct_journey_baseline(
             "and exhaustive direct DP; this is an exact baseline, not a true-dual BPC certificate."
         ),
         wall_time_sec=_elapsed_sec(start),
+        certificate_scope=certificate_scope_for_algorithm_status(AlgorithmStatus.DIRECT_DP_BASELINE_OPTIMAL).value,
+        path_option_dominance_policy=str(dominance_audit["policy"]),
+        path_option_dominance_filtered_count=int(dominance_audit["filtered_count"]),
     )
 
 
@@ -276,7 +321,7 @@ def enumerate_canonical_journey_columns(data: LunarIceData, *, max_exact_tasks: 
 
     if len(data.task_ids) > int(max_exact_tasks):
         raise ValueError(f"task_count={len(data.task_ids)} exceeds max_exact_tasks={max_exact_tasks}")
-    task_to_bit = {task_id: 1 << index for index, task_id in enumerate(data.task_ids)}
+    task_to_bit = _task_to_bit_mapping(TaskIndexMap(data.task_ids))
     templates_by_mask, sortie_count = _enumerate_sortie_templates(data, task_to_bit, mode="canonical")
     best_label_by_mask, pareto_label_count = _build_single_vehicle_journeys(data, templates_by_mask)
     columns = tuple(
@@ -303,7 +348,7 @@ def enumerate_direct_journey_columns(
     if len(data.task_ids) > int(max_exact_tasks):
         raise ValueError(f"task_count={len(data.task_ids)} exceeds max_exact_tasks={max_exact_tasks}")
     _raise_if_deadline_exceeded(deadline)
-    task_to_bit = {task_id: 1 << index for index, task_id in enumerate(data.task_ids)}
+    task_to_bit = _task_to_bit_mapping(TaskIndexMap(data.task_ids))
     best_label_by_mask, sortie_count, route_template_count, pareto_label_count = _build_direct_journeys_label_dp(
         data,
         task_to_bit,
@@ -331,7 +376,7 @@ def enumerate_direct_journey_columns_by_template(
 
     if len(data.task_ids) > int(max_exact_tasks):
         raise ValueError(f"task_count={len(data.task_ids)} exceeds max_exact_tasks={max_exact_tasks}")
-    task_to_bit = {task_id: 1 << index for index, task_id in enumerate(data.task_ids)}
+    task_to_bit = _task_to_bit_mapping(TaskIndexMap(data.task_ids))
     templates_by_mask, sortie_count = _enumerate_sortie_templates(data, task_to_bit, mode="direct")
     best_label_by_mask, pareto_label_count = _build_single_vehicle_journeys(data, templates_by_mask)
     columns = tuple(
@@ -353,7 +398,7 @@ def _build_direct_journeys_label_dp(
     *,
     deadline: float | None = None,
 ) -> tuple[dict[int, _JourneyLabel], int, int, int]:
-    full_mask = (1 << len(data.task_ids)) - 1
+    full_mask = _full_task_mask(data)
     path_type_cache = _nondominated_path_type_cache(data)
     labels_by_mask: dict[int, list[_JourneyLabel]] = {
         0: [_JourneyLabel(task_mask=0, sorties=tuple(), end_time=0.0, base_cost=0.0)]
@@ -591,6 +636,19 @@ def _nondominated_path_type_cache(data: LunarIceData) -> dict[tuple[str, str], t
     }
 
 
+def path_option_dominance_audit(data: LunarIceData) -> dict:
+    cache = _nondominated_path_type_cache(data)
+    filtered_count = sum(max(0, len(PATH_TYPES) - len(kept)) for kept in cache.values())
+    kept_count = sum(len(kept) for kept in cache.values())
+    return {
+        "policy": str(data.path_option_policy_id or PATH_OPTION_POLICY_ID),
+        "path_types": tuple(PATH_TYPES),
+        "arc_count": len(cache),
+        "kept_count": int(kept_count),
+        "filtered_count": int(filtered_count),
+    }
+
+
 def _close_partial_sortie_label(
     data: LunarIceData,
     label: _PartialSortieLabel,
@@ -729,7 +787,7 @@ def _build_single_vehicle_journeys(
     data: LunarIceData,
     templates_by_mask: dict[int, list[_SortieTemplate]],
 ) -> tuple[dict[int, _JourneyLabel], int]:
-    full_mask = (1 << len(data.task_ids)) - 1
+    full_mask = _full_task_mask(data)
     labels_by_mask: dict[int, list[_JourneyLabel]] = {
         0: [_JourneyLabel(task_mask=0, sorties=tuple(), end_time=0.0, base_cost=0.0)]
     }
@@ -793,7 +851,7 @@ def _select_vehicle_partition(
     *,
     deadline: float | None = None,
 ) -> tuple[tuple[_JourneyLabel, ...] | None, int]:
-    full_mask = (1 << len(data.task_ids)) - 1
+    full_mask = _full_task_mask(data)
     if not best_label_by_mask:
         return None, 1
     cost_by_mask = {mask: label.objective(data) for mask, label in best_label_by_mask.items()}
