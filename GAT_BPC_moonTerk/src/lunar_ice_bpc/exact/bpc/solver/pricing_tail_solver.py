@@ -29,7 +29,8 @@ from lunar_ice_bpc.exact.bpc.solver.root_node_solver import build_b1_seed_column
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import manual_journey_reduced_cost
-from lunar_ice_bpc.exact.pricing.journey_pricing import DirectPricingCache
+from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals
+from lunar_ice_bpc.exact.pricing.journey_pricing import DirectPricingCache, price_direct_journey_columns
 from lunar_ice_bpc.exact.solver.journey_driver import (
     enumerate_direct_journey_columns,
     solve_direct_journey_baseline,
@@ -38,6 +39,9 @@ from lunar_ice_bpc.exact.solver.journey_driver import (
 
 B2A_MODE = "B2A_full_universe_rc_audit_fast_path"
 B2B_MODE = "B2B_seeded_tail_CG"
+B2C_MODE = "B2C_limited_pricing_diagnostic"
+B2D_MODE = "B2D_proof_tail_kernel_profile"
+B2_PRODUCT_MODE = "B2_PRODUCT_EXACT_SOLVER"
 
 
 @dataclass(frozen=True)
@@ -80,6 +84,19 @@ def solve_b2_pricing_tail_baseline(
     into the current master and a full-universe manual RC audit passes.
     """
 
+    if mode == B2_PRODUCT_MODE:
+        return solve_b2_product_exact_solver(data, max_direct_tasks=int(max_direct_tasks))
+    if mode in {B2C_MODE, B2D_MODE}:
+        diagnostic_b0 = solve_direct_journey_baseline(data, max_exact_tasks=min(int(max_direct_tasks), 10))
+        return _solve_limited_pricing_diagnostic(
+            data,
+            b0_direct=diagnostic_b0,
+            mode=str(mode),
+            max_candidate_sets=max_columns_per_round,
+            negative_eps=negative_eps,
+            kernel_profile=(mode == B2D_MODE),
+        )
+
     completion_policy = build_completion_bound_tail_policy(pruning_opt_in=False)
     b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
     if len(data.task_ids) > int(max_direct_tasks):
@@ -115,6 +132,142 @@ def solve_b2_pricing_tail_baseline(
         worker_payload=worker_payload,
         seed_mode=seed_mode,
     )
+
+
+def solve_b2_product_exact_solver(
+    data: LunarIceData,
+    *,
+    max_direct_tasks: int = 20,
+    wall_time_limit_sec: float | None = None,
+) -> dict:
+    """Return the fixed-graph exact product solution without a BPC certificate."""
+
+    direct = solve_direct_journey_baseline(
+        data,
+        max_exact_tasks=int(max_direct_tasks),
+        wall_time_limit_sec=wall_time_limit_sec,
+    )
+    solved = direct.certificate_scope == CertificateScope.DIRECT_DP_FIXED_GRAPH_OPTIMAL.value
+    return {
+        "schema_version": "lunar_ice_bpc.b2_product_exact_solver.v1",
+        "instance_id": data.instance_id,
+        "task_count": len(data.task_ids),
+        "b2_mode": B2_PRODUCT_MODE,
+        "algorithm_status": direct.status,
+        "certificate_scope": direct.certificate_scope,
+        "pricing_state": PricingState.NOT_PRICED.value,
+        "uses_true_dual_bpc_certificate": False,
+        "root_lp_bound": None,
+        "root_lp_bound_official": False,
+        "root_bound_le_direct_dp_integer_objective": None,
+        "B0_direct_objective": direct.objective,
+        "product_exact_objective": direct.objective,
+        "product_exact_solution_scope": direct.certificate_scope if solved else "",
+        "product_exact_solution_count": 1 if solved else 0,
+        "direct_dp_fallback_used": True,
+        "direct_dp_fallback_count": 1 if solved else 0,
+        "generated_journey_count": direct.generated_journey_count,
+        "generated_sortie_count": direct.generated_sortie_count,
+        "route_template_count": direct.route_template_count,
+        "pareto_label_count": direct.pareto_label_count,
+        "set_partition_state_count": direct.set_partition_state_count,
+        "pricing_round_count": 0,
+        "final_judge_call_count": 0,
+        "manual_rc_audit_pass": None,
+        "pricing_rc_audit_pass": None,
+        "proof_debt_unreleased_count": 0,
+        "completion_bound_policy": build_completion_bound_tail_policy(pruning_opt_in=False),
+        "completion_bound_pruning_enabled": False,
+        "exact_status": direct.exact_status,
+        "fail_closed_reason": "" if solved else direct.note,
+        "note": (
+            "B2 product exact solver returned a fixed-graph exact product solution; this is not a BPC root/tree certificate."
+            if solved
+            else direct.note
+        ),
+    }
+
+
+def _solve_limited_pricing_diagnostic(
+    data: LunarIceData,
+    *,
+    b0_direct,
+    mode: str,
+    max_candidate_sets: int,
+    negative_eps: float,
+    kernel_profile: bool,
+) -> dict:
+    """Run a bounded pricing diagnostic without certificate authority."""
+
+    from time import perf_counter
+
+    cache = DirectPricingCache()
+    limited_task_cap = min(8, max(1, len(data.task_ids) - 1)) if len(data.task_ids) > 5 else len(data.task_ids)
+    duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+    start = perf_counter()
+    pricing, columns = price_direct_journey_columns(
+        data,
+        duals,
+        negative_eps=negative_eps,
+        max_direct_tasks=limited_task_cap,
+        allow_partial=True,
+        cache=cache,
+        max_candidate_sets=max(1, min(8, int(max_candidate_sets))),
+        completion_bound_enabled=False,
+    )
+    elapsed = perf_counter() - start
+    negative = bool(pricing.get("negative_found"))
+    cache_stats = cache.stats()
+    diagnostic_scope = CertificateScope.DIAGNOSTIC_PRICING_FRONTIER
+    pricing_state = PricingState.FOUND_NEGATIVE if negative else PricingState.LOCAL_NO_COLUMN_UNCERTIFIED
+    return {
+        "schema_version": "lunar_ice_bpc.b2_limited_pricing_diagnostic.v1",
+        "instance_id": data.instance_id,
+        "task_count": len(data.task_ids),
+        "b2_mode": mode,
+        "algorithm_status": AlgorithmStatus.BPC_INCOMPLETE_PRICING.value,
+        "certificate_scope": diagnostic_scope.value,
+        "pricing_state": pricing_state.value,
+        "uses_true_dual_bpc_certificate": False,
+        "root_lp_bound": None,
+        "root_lp_bound_official": False,
+        "root_bound_le_direct_dp_integer_objective": None,
+        "B0_direct_objective": b0_direct.objective,
+        "pricing_round_count": 0,
+        "final_judge_call_count": 0,
+        "candidate_negative_count": int(pricing.get("negative_column_count") or 0),
+        "addable_negative_count": 0,
+        "selected_count": 0,
+        "added_to_master_count": 0,
+        "added_column_count": 0,
+        "duplicate_only_count": 0,
+        "hidden_negative_count": 0,
+        "replacement_only_round_count": 0,
+        "manual_rc_audit_pass": None,
+        "pricing_rc_audit_pass": None,
+        "proof_debt_unreleased_count": 0,
+        "completion_bound_policy": build_completion_bound_tail_policy(pruning_opt_in=False),
+        "completion_bound_pruning_enabled": False,
+        "limited_pricing": pricing,
+        "time_to_first_negative": round(elapsed, 6) if negative else None,
+        "labels_generated": int(pricing.get("pareto_label_count") or 0),
+        "sortie_templates": int(pricing.get("feasible_sortie_template_count") or 0),
+        "journey_labels": len(columns),
+        "candidate_sequences": int(pricing.get("candidate_round_count") or 0),
+        "path_option_assignments": int(pricing.get("sortie_attempt_count") or 0),
+        "cache_hit_count": int(cache_stats.get("hit_count") or 0),
+        "cache_miss_count": int(cache_stats.get("miss_count") or 0),
+        "proof_tail_kernel_profile": {
+            "enabled": bool(kernel_profile),
+            "pruning_enabled": False,
+            "positive_dual_ordering_profiled": bool(kernel_profile),
+            "addable_negative_early_stop_enabled": False,
+            "changes_certificate_semantics": False,
+        },
+        "exact_status": "DIAGNOSTIC_ONLY",
+        "fail_closed_reason": f"{mode}: limited pricing diagnostic cannot certify no-negative or provide an official bound.",
+        "note": f"{mode} recorded bounded pricing/proof-tail diagnostics only; no certificate semantics changed.",
+    }
 
 
 def _solve_b2a_full_universe_audit(
@@ -825,4 +978,3 @@ def _empty_harvest_totals() -> dict[str, int]:
 def _accumulate_harvest_totals(totals: dict[str, int], payload: dict) -> None:
     for key in list(totals):
         totals[key] += int(payload.get(key) or 0)
-

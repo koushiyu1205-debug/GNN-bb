@@ -64,6 +64,9 @@ from lunar_ice_bpc.exact.bpc.solver.gat_guidance_solver import (
 from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2A_MODE,
     B2B_MODE,
+    B2C_MODE,
+    B2D_MODE,
+    B2_PRODUCT_MODE,
     solve_b2_pricing_tail_baseline,
 )
 from lunar_ice_bpc.exact.bpc.solver.root_node_solver import solve_b1_root_node_baseline
@@ -526,7 +529,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         report = run_b2_pricing_tail_ablation([instance], max_direct_tasks=5, b1_max_rounds=8, b2_max_rounds=8)
 
         self.assertEqual(report["schema_version"], "lunar_ice_bpc.b2_pricing_tail_ablation.v1")
-        self.assertEqual(report["row_count"], 5)
+        self.assertEqual(report["row_count"], 8)
         self.assertEqual(report["redlines"]["root_bound_gt_B0_violation_count"], 0)
         self.assertEqual(report["redlines"]["manual_rc_fail_count"], 0)
         rows_by_mode = {row["candidate_name"]: row for row in report["rows"]}
@@ -535,6 +538,11 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertIn("final_judge_call_count_lower", rows_by_mode[B2A_MODE]["improvement_reason"])
         self.assertEqual(rows_by_mode[B2B_MODE]["baseline_name"], B1B_MODE)
         self.assertEqual(rows_by_mode[B2B_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(rows_by_mode[B2_PRODUCT_MODE]["certificate_scope"], "DIRECT_DP_FIXED_GRAPH_OPTIMAL")
+        self.assertEqual(rows_by_mode[B2_PRODUCT_MODE]["product_exact_solution_count"], 1)
+        self.assertEqual(rows_by_mode[B2C_MODE]["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertEqual(rows_by_mode[B2D_MODE]["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertFalse(rows_by_mode[B2_PRODUCT_MODE]["root_lp_bound_official"])
         self.assertFalse(report["acceptance"]["b2_accepted"])
         self.assertTrue(report["acceptance"]["b2a_fast_path_accepted"])
         self.assertFalse(report["acceptance"]["b2b_seeded_tail_accepted"])
@@ -644,6 +652,36 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(row["duplicate_only_count"], 1)
         self.assertEqual(row["duplicate_only_audit_status"], "DUPLICATE_ONLY_AUDITED")
         self.assertIn("DUPLICATE_ONLY", row["fail_closed_reason"])
+
+    def test_b2_product_exact_solver_keeps_direct_scope_separate_from_bpc_certificate(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        product = solve_b2_pricing_tail_baseline(data, max_direct_tasks=5, mode=B2_PRODUCT_MODE)
+
+        self.assertEqual(product["algorithm_status"], "DIRECT_DP_BASELINE_OPTIMAL")
+        self.assertEqual(product["certificate_scope"], "DIRECT_DP_FIXED_GRAPH_OPTIMAL")
+        self.assertEqual(product["product_exact_solution_scope"], "DIRECT_DP_FIXED_GRAPH_OPTIMAL")
+        self.assertEqual(product["product_exact_solution_count"], 1)
+        self.assertTrue(product["direct_dp_fallback_used"])
+        self.assertFalse(product["uses_true_dual_bpc_certificate"])
+        self.assertFalse(product["root_lp_bound_official"])
+        self.assertIsNone(product["root_lp_bound"])
+
+    def test_b2c_b2d_limited_diagnostics_never_create_official_bound(self) -> None:
+        instance = generate_instance(10, seed=629101, index=1)
+        data = load_lunar_ice_data(instance)
+        for mode in (B2C_MODE, B2D_MODE):
+            diagnostic = solve_b2_pricing_tail_baseline(data, max_direct_tasks=10, mode=mode, max_columns_per_round=4)
+            self.assertEqual(diagnostic["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+            self.assertEqual(diagnostic["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+            self.assertFalse(diagnostic["uses_true_dual_bpc_certificate"])
+            self.assertFalse(diagnostic["root_lp_bound_official"])
+            self.assertFalse(diagnostic["completion_bound_pruning_enabled"])
+            self.assertGreaterEqual(diagnostic["labels_generated"], 0)
+            self.assertGreaterEqual(diagnostic["candidate_sequences"], 0)
+        self.assertTrue(
+            solve_b2_pricing_tail_baseline(data, max_direct_tasks=10, mode=B2D_MODE)["proof_tail_kernel_profile"]["enabled"]
+        )
 
     def test_b2_direct20_only_report_can_merge_into_existing_matrix(self) -> None:
         def row(mode: str, *, wall_time: float, fail_reason: str = "") -> dict:

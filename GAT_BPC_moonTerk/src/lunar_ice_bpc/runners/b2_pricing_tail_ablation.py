@@ -10,7 +10,14 @@ from statistics import mean
 from time import perf_counter
 from typing import Callable, Iterable
 
-from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import B2A_MODE, B2B_MODE, solve_b2_pricing_tail_baseline
+from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
+    B2A_MODE,
+    B2B_MODE,
+    B2C_MODE,
+    B2D_MODE,
+    B2_PRODUCT_MODE,
+    solve_b2_pricing_tail_baseline,
+)
 from lunar_ice_bpc.exact.bpc.solver.root_node_solver import solve_b1_root_node_baseline
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.solver.journey_driver import solve_direct_journey_baseline
@@ -18,7 +25,7 @@ from lunar_ice_bpc.io.instance_io import read_json
 from lunar_ice_bpc.runners.b0_b1_ablation import B0_MODE, B1A_MODE, B1B_MODE
 
 
-B2_MODES = (B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE)
+B2_MODES = (B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE, B2_PRODUCT_MODE, B2C_MODE, B2D_MODE)
 
 CSV_COLUMNS = (
     "matrix_group",
@@ -55,6 +62,21 @@ CSV_COLUMNS = (
     "manual_rc_audit_pass",
     "pricing_rc_audit_pass",
     "proof_debt_unreleased_count",
+    "product_exact_solution_scope",
+    "product_exact_solution_count",
+    "product_exact_objective",
+    "direct_dp_fallback_used",
+    "direct_dp_fallback_count",
+    "time_to_first_negative",
+    "labels_generated",
+    "sortie_templates",
+    "journey_labels",
+    "candidate_sequences",
+    "path_option_assignments",
+    "cache_hit_count",
+    "cache_miss_count",
+    "completion_bound_pruning_enabled",
+    "proof_tail_kernel_profile_enabled",
     "wall_time",
     "fail_closed_reason",
     "certificate_scope_regression",
@@ -171,7 +193,7 @@ def run_b2_pricing_tail_ablation_matrix(
             )["rows"]
         )
         notes.append(
-            f"20-scale selected direct20 probe used {len(scale20_probe)} instance(s), modes B0/B1A/B1B/B2A/B2B, "
+            f"20-scale selected direct20 probe used {len(scale20_probe)} instance(s), modes {','.join(B2_MODES)}, "
             f"with per-row timeout {direct20_probe_time_limit_sec}s."
         )
 
@@ -251,7 +273,7 @@ def run_b2_pricing_tail_direct20_probe(
         "direct20_probe_time_limit_sec": float(direct20_probe_time_limit_sec),
         "notes": [
             "This artifact contains only the 20-scale selected direct20 probe rows.",
-            f"20-scale selected direct20 probe used {len(scale20_probe)} instance(s) from offset {offset}, modes B0/B1A/B1B/B2A/B2B.",
+            f"20-scale selected direct20 probe used {len(scale20_probe)} instance(s) from offset {offset}, modes {','.join(B2_MODES)}.",
         ],
     }
     report["acceptance"] = _acceptance(report["rows"], report["redlines"], matrix=report["matrix"])
@@ -389,8 +411,11 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
     ]
     if direct20_rows:
         b0_direct20 = [row for row in direct20_rows if row.get("candidate_name") == B0_MODE]
-        bpc_direct20 = [row for row in direct20_rows if row.get("candidate_name") != B0_MODE]
+        product_direct20 = [row for row in direct20_rows if row.get("candidate_name") == B2_PRODUCT_MODE]
+        bpc_root_modes = {B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE}
+        bpc_direct20 = [row for row in direct20_rows if row.get("candidate_name") in bpc_root_modes]
         b0_solved = sum(1 for row in b0_direct20 if row.get("algorithm_status") == "DIRECT_DP_BASELINE_OPTIMAL")
+        product_solved = sum(1 for row in product_direct20 if int(row.get("product_exact_solution_count") or 0) == 1)
         bpc_timeouts = sum(1 for row in bpc_direct20 if "row_time_limit_sec" in str(row.get("fail_closed_reason") or ""))
         b2b_improved = acceptance.get("b2b_real_scale_improvement_count", 0)
         lines.extend([
@@ -398,6 +423,7 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
             "## 20-Scale Direct20 Probe Interpretation",
             "",
             f"- B0 direct20 solved rows: {b0_solved}/{len(b0_direct20)}。",
+            f"- B2_PRODUCT direct20 fixed-graph exact solved rows: {product_solved}/{len(product_direct20)}。",
             f"- B1/B2 direct20 timeout rows: {bpc_timeouts}/{len(bpc_direct20)}。",
             "- 若 B0 direct20 闭合而 B1/B2 root rows timeout，本组应解释为 BPC root proof-tail 成本问题，不是 B0 direct-DP 失败。",
             f"- B2B real-scale improvement rows: {b2b_improved}。",
@@ -423,10 +449,19 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
         "",
         f"- hidden_negative_count: {report.get('totals', {}).get('hidden_negative_count', 0)}。",
         "",
+        "## Product Exact / Diagnostic Metrics",
+        "",
+        f"- product_exact_solution_count_by_scope: {acceptance.get('product_exact_solution_count_by_scope', {})}。",
+        f"- direct_dp_fallback_count: {report.get('totals', {}).get('direct_dp_fallback_count', 0)}。",
+        f"- labels_generated: {report.get('totals', {}).get('labels_generated', 0)}。",
+        f"- time_to_first_negative rows are diagnostic only; no B2C/B2D row can create an official lower bound。",
+        "",
         "## B2 Accepted?",
         "",
         f"- B2 accepted: {acceptance.get('b2_accepted')}。",
+        f"- B2 product exact accepted as fixed-graph product fallback: {acceptance.get('b2_product_exact_accepted')}。",
         f"- required coverage met: {acceptance.get('required_coverage_met')}。",
+        f"- product exact required coverage met: {acceptance.get('product_exact_required_coverage_met')}。",
         f"- B2A fast path accepted as full-universe audit optimization: {acceptance.get('b2a_fast_path_accepted')}。",
         f"- B2B seeded tail accepted as next baseline: {acceptance.get('b2b_seeded_tail_accepted')}。",
         f"- improvement_count: {acceptance.get('improvement_count')}。",
@@ -559,11 +594,22 @@ def _run_mode(
         row = _row_from_raw(data, mode=mode, raw=result, matrix_group=matrix_group, elapsed=perf_counter() - start)
         row["_raw_result"] = result
         return row
+    if mode in {B2_PRODUCT_MODE, B2C_MODE, B2D_MODE}:
+        result = solve_b2_pricing_tail_baseline(
+            data,
+            max_direct_tasks=max_direct_tasks,
+            max_rounds=b2_max_rounds,
+            mode=mode,
+        )
+        row = _row_from_raw(data, mode=mode, raw=result, matrix_group=matrix_group, elapsed=perf_counter() - start)
+        row["_raw_result"] = result
+        return row
     raise ValueError(f"unsupported mode={mode!r}")
 
 
 def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: float) -> dict:
     certified = raw.get("certificate_scope") == "BPC_NODE_LP_CERTIFIED"
+    product_exact = raw.get("certificate_scope") == "DIRECT_DP_FIXED_GRAPH_OPTIMAL"
     root_official = bool(raw.get("root_lp_bound_official"))
     root_le_b0 = raw.get("root_bound_le_direct_dp_integer_objective")
     if root_le_b0 is None:
@@ -614,8 +660,25 @@ def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: flo
         "manual_rc_audit_pass": raw.get("manual_rc_audit_pass"),
         "pricing_rc_audit_pass": raw.get("pricing_rc_audit_pass"),
         "proof_debt_unreleased_count": int(raw.get("proof_debt_unreleased_count") or 0),
+        "product_exact_solution_scope": raw.get("product_exact_solution_scope") or (
+            raw.get("certificate_scope") if product_exact and mode == B2_PRODUCT_MODE else ""
+        ),
+        "product_exact_solution_count": int(raw.get("product_exact_solution_count") or (1 if product_exact and mode == B2_PRODUCT_MODE else 0)),
+        "product_exact_objective": raw.get("product_exact_objective"),
+        "direct_dp_fallback_used": bool(raw.get("direct_dp_fallback_used")),
+        "direct_dp_fallback_count": int(raw.get("direct_dp_fallback_count") or 0),
+        "time_to_first_negative": raw.get("time_to_first_negative"),
+        "labels_generated": int(raw.get("labels_generated") or raw.get("pareto_label_count") or 0),
+        "sortie_templates": int(raw.get("sortie_templates") or raw.get("feasible_sortie_template_count") or 0),
+        "journey_labels": int(raw.get("journey_labels") or raw.get("generated_journey_count") or 0),
+        "candidate_sequences": int(raw.get("candidate_sequences") or 0),
+        "path_option_assignments": int(raw.get("path_option_assignments") or raw.get("route_template_count") or 0),
+        "cache_hit_count": int(raw.get("cache_hit_count") or 0),
+        "cache_miss_count": int(raw.get("cache_miss_count") or 0),
+        "completion_bound_pruning_enabled": bool(raw.get("completion_bound_pruning_enabled")),
+        "proof_tail_kernel_profile_enabled": bool((raw.get("proof_tail_kernel_profile") or {}).get("enabled")),
         "wall_time": round(elapsed, 6),
-        "fail_closed_reason": "" if certified else str(raw.get("fail_closed_reason") or raw.get("note") or ""),
+        "fail_closed_reason": "" if certified or product_exact else str(raw.get("fail_closed_reason") or raw.get("note") or ""),
         "certificate_scope_regression": False,
         "objective_mismatch": False,
         "improvement_reason": "",
@@ -630,7 +693,7 @@ def _timeout_row(data, *, mode: str, max_direct_tasks: int, matrix_group: str, r
         "instance_id": data.instance_id,
         "baseline_name": _baseline_name(mode),
         "candidate_name": mode,
-        "algorithm_status": "DIRECT_DP_TIME_LIMIT" if mode == B0_MODE else "BPC_INCOMPLETE_PRICING",
+        "algorithm_status": "DIRECT_DP_TIME_LIMIT" if mode in {B0_MODE, B2_PRODUCT_MODE} else "BPC_INCOMPLETE_PRICING",
         "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
         "pricing_state": "INCOMPLETE_LIMIT",
         "uses_true_dual_bpc_certificate": False,
@@ -659,6 +722,21 @@ def _timeout_row(data, *, mode: str, max_direct_tasks: int, matrix_group: str, r
         "manual_rc_audit_pass": None,
         "pricing_rc_audit_pass": None,
         "proof_debt_unreleased_count": 0,
+        "product_exact_solution_scope": "",
+        "product_exact_solution_count": 0,
+        "product_exact_objective": None,
+        "direct_dp_fallback_used": mode == B2_PRODUCT_MODE,
+        "direct_dp_fallback_count": 0,
+        "time_to_first_negative": None,
+        "labels_generated": 0,
+        "sortie_templates": 0,
+        "journey_labels": 0,
+        "candidate_sequences": 0,
+        "path_option_assignments": 0,
+        "cache_hit_count": 0,
+        "cache_miss_count": 0,
+        "completion_bound_pruning_enabled": False,
+        "proof_tail_kernel_profile_enabled": False,
         "wall_time": round(float(row_time_limit_sec), 6),
         "fail_closed_reason": f"row_time_limit_sec={row_time_limit_sec} exceeded at max_direct_tasks={max_direct_tasks}",
         "certificate_scope_regression": False,
@@ -743,6 +821,10 @@ def _summary_rows(rows: list[dict]) -> list[dict]:
                 "addable_negative_count": sum(int(row.get("addable_negative_count") or 0) for row in group),
                 "duplicate_only_count": sum(int(row.get("duplicate_only_count") or 0) for row in group),
                 "hidden_negative_count": sum(int(row.get("hidden_negative_count") or 0) for row in group),
+                "product_exact_solution_count": sum(int(row.get("product_exact_solution_count") or 0) for row in group),
+                "direct_dp_fallback_count": sum(int(row.get("direct_dp_fallback_count") or 0) for row in group),
+                "labels_generated": sum(int(row.get("labels_generated") or 0) for row in group),
+                "mean_time_to_first_negative": _mean_optional_float(group, "time_to_first_negative"),
             }
         )
     return out
@@ -781,6 +863,15 @@ def _totals(rows: list[dict]) -> dict:
         "added_to_master_count",
         "duplicate_only_count",
         "hidden_negative_count",
+        "product_exact_solution_count",
+        "direct_dp_fallback_count",
+        "labels_generated",
+        "sortie_templates",
+        "journey_labels",
+        "candidate_sequences",
+        "path_option_assignments",
+        "cache_hit_count",
+        "cache_miss_count",
     )
     return {key: sum(int(row.get(key) or 0) for row in rows) for key in keys}
 
@@ -809,6 +900,8 @@ def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) ->
     )
     b2a_ok = bool(redlines_ok and b2a_improvements)
     b2b_ok = bool(redlines_ok and coverage_met and b2b_real_scale_improvements)
+    product_scope_counts = _count_product_scopes(rows)
+    product_required_ok = _product_exact_required_coverage(rows)
     accepted = bool(b2b_ok)
     if accepted:
         reason = "B2B improves seeded root tail on required 10/20 scale coverage without redline violations."
@@ -820,7 +913,10 @@ def _acceptance(rows: list[dict], redlines: dict, matrix: dict | None = None) ->
         "b2_accepted": accepted,
         "b2a_fast_path_accepted": b2a_ok,
         "b2b_seeded_tail_accepted": b2b_ok,
+        "b2_product_exact_accepted": bool(redlines_ok and product_required_ok),
         "required_coverage_met": coverage_met,
+        "product_exact_required_coverage_met": product_required_ok,
+        "product_exact_solution_count_by_scope": product_scope_counts,
         "improvement_count": len(b2a_improvements) + len(b2b_improvements),
         "b2a_improvement_count": len(b2a_improvements),
         "b2b_improvement_count": len(b2b_improvements),
@@ -854,6 +950,10 @@ def _baseline_name(mode: str) -> str:
         return B1A_MODE
     if mode == B2B_MODE:
         return B1B_MODE
+    if mode == B2_PRODUCT_MODE:
+        return "fixed_graph_direct_dp_product_exact"
+    if mode in {B2C_MODE, B2D_MODE}:
+        return "diagnostic_only_no_certificate"
     if mode in {B1A_MODE, B1B_MODE}:
         return "accepted_B1"
     if mode == B0_MODE:
@@ -880,6 +980,35 @@ def _count(rows: list[dict], key: str) -> dict[str, int]:
     return counts
 
 
+def _count_product_scopes(rows: list[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        if row.get("candidate_name") != B2_PRODUCT_MODE:
+            continue
+        solved_count = int(row.get("product_exact_solution_count") or 0)
+        if solved_count <= 0:
+            continue
+        scope = str(row.get("product_exact_solution_scope") or row.get("certificate_scope") or "")
+        counts[scope] = counts.get(scope, 0) + solved_count
+    return counts
+
+
+def _product_exact_required_coverage(rows: list[dict]) -> bool:
+    required_scales = {5, 10, 20}
+    solved_scales: set[int] = set()
+    for scale in required_scales:
+        relevant = [
+            row for row in rows
+            if row.get("candidate_name") == B2_PRODUCT_MODE
+            and int(row.get("scale") or 0) == scale
+            and "fail-closed" not in str(row.get("matrix_group") or "")
+            and "diagnostic" not in str(row.get("matrix_group") or "")
+        ]
+        if relevant and all(int(row.get("product_exact_solution_count") or 0) == 1 for row in relevant):
+            solved_scales.add(scale)
+    return solved_scales == required_scales
+
+
 def _row_identity(row: dict) -> tuple[str, str, str, str]:
     return (
         str(row.get("matrix_group") or ""),
@@ -891,6 +1020,11 @@ def _row_identity(row: dict) -> tuple[str, str, str, str]:
 
 def _mean_int(rows: list[dict], key: str) -> float:
     return round(mean([int(row.get(key) or 0) for row in rows]), 6) if rows else 0.0
+
+
+def _mean_optional_float(rows: list[dict], key: str) -> float | None:
+    values = [_float(row.get(key)) for row in rows if _float(row.get(key)) is not None]
+    return round(mean(values), 6) if values else None
 
 
 def _p90(values: list[float]) -> float | None:
