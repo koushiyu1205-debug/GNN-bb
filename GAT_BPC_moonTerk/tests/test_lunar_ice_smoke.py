@@ -64,6 +64,7 @@ from lunar_ice_bpc.exact.bpc.solver.gat_guidance_solver import (
 from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2A_MODE,
     B2B_MODE,
+    B2B_R2_MODE,
     B2C_MODE,
     B2D_MODE,
     B2_PRODUCT_MODE,
@@ -137,6 +138,7 @@ from lunar_ice_bpc.runners.b2_pricing_tail_ablation import (
     _row_from_raw,
     merge_b2_pricing_tail_reports,
     render_b2_pricing_tail_markdown,
+    run_b2_pricing_tail_b2b_r2_incremental,
     run_b2_pricing_tail_ablation,
     write_b2_pricing_tail_ablation_artifacts,
 )
@@ -426,7 +428,9 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertIsInstance(b1["integral_root"], bool)
         self.assertGreaterEqual(b1["rmp_iteration_count"], 1)
         self.assertEqual(b1["pricing_round_count"], b1["round_count"])
-        self.assertEqual(b1["final_judge_status"], "EXHAUSTIVE_DIRECT_LABEL_PRICED")
+        self.assertEqual(b1["final_judge_status"], "COMPLETE_DIRECT_UNIVERSE_RC_AUDITED")
+        self.assertEqual(b1["final_judge"]["complete_universe_source"], "provided_complete_universe_cache")
+        self.assertEqual(b1["final_judge"]["manual_priced_column_count"], b1["full_universe_column_count"])
         self.assertEqual(b1["final_judge_min_reduced_cost"], b1["final_judge"]["best_reduced_cost"])
         self.assertTrue(b1["manual_rc_audit_pass"])
         self.assertTrue(b1["pricing_rc_audit_pass"])
@@ -529,15 +533,24 @@ class LunarIceSmokeTests(unittest.TestCase):
         report = run_b2_pricing_tail_ablation([instance], max_direct_tasks=5, b1_max_rounds=8, b2_max_rounds=8)
 
         self.assertEqual(report["schema_version"], "lunar_ice_bpc.b2_pricing_tail_ablation.v1")
-        self.assertEqual(report["row_count"], 8)
+        self.assertEqual(report["row_count"], 9)
         self.assertEqual(report["redlines"]["root_bound_gt_B0_violation_count"], 0)
         self.assertEqual(report["redlines"]["manual_rc_fail_count"], 0)
+        self.assertEqual(report["redlines"]["selected_harvest_addability_fail_count"], 0)
         rows_by_mode = {row["candidate_name"]: row for row in report["rows"]}
         self.assertEqual(rows_by_mode[B2A_MODE]["baseline_name"], B1A_MODE)
         self.assertEqual(rows_by_mode[B2A_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
         self.assertIn("final_judge_call_count_lower", rows_by_mode[B2A_MODE]["improvement_reason"])
         self.assertEqual(rows_by_mode[B2B_MODE]["baseline_name"], B1B_MODE)
         self.assertEqual(rows_by_mode[B2B_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(rows_by_mode[B2B_R2_MODE]["baseline_name"], B1B_MODE)
+        self.assertEqual(rows_by_mode[B2B_R2_MODE]["seed_builder"], "b2b_r2_lightweight_no_full_universe_enumeration")
+        self.assertFalse(rows_by_mode[B2B_R2_MODE]["full_universe_preloaded"])
+        self.assertEqual(rows_by_mode[B2B_R2_MODE]["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertTrue(rows_by_mode[B2B_R2_MODE]["selected_all_would_enter_master"])
+        self.assertGreater(rows_by_mode[B2B_R2_MODE]["worker_call_count"], 0)
+        self.assertGreater(rows_by_mode[B2B_R2_MODE]["final_judge_call_count"], 0)
+        self.assertFalse(rows_by_mode[B2B_R2_MODE]["exact_first_step_bound_pruning_enabled"])
         self.assertEqual(rows_by_mode[B2_PRODUCT_MODE]["certificate_scope"], "DIRECT_DP_FIXED_GRAPH_OPTIMAL")
         self.assertEqual(rows_by_mode[B2_PRODUCT_MODE]["product_exact_solution_count"], 1)
         self.assertEqual(rows_by_mode[B2C_MODE]["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
@@ -546,6 +559,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(report["acceptance"]["b2_accepted"])
         self.assertTrue(report["acceptance"]["b2a_fast_path_accepted"])
         self.assertFalse(report["acceptance"]["b2b_seeded_tail_accepted"])
+        self.assertFalse(report["acceptance"]["b2b_r2_seeded_tail_accepted"])
 
     def test_b2_pricing_tail_ablation_writes_required_artifacts(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -564,7 +578,9 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertTrue(rows_csv.exists())
             self.assertTrue(summary_json.exists())
             self.assertTrue(report_md.exists())
-            self.assertIn("B2 Accepted?", report_md.read_text(encoding="utf-8"))
+            text = report_md.read_text(encoding="utf-8")
+            self.assertIn("B2 Accepted?", text)
+            self.assertIn("B2 Round2 Answers", text)
 
     def test_b2_acceptance_requires_direct20_probe_and_report_disambiguates_guard(self) -> None:
         redlines = {
@@ -581,7 +597,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             {
                 "scale": 10,
                 "matrix_group": "10-scale selected5",
-                "candidate_name": B2B_MODE,
+                "candidate_name": B2B_R2_MODE,
                 "improvement_reason": "wall_time_lower",
             }
         ]
@@ -590,7 +606,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             "scale10_total_count": 20,
             "scale20_fail_closed_count": 20,
             "scale20_probe_count": 0,
-            "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE],
+            "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE],
             "scale30_count": 20,
             "notes": ["20-scale fail-closed guard deliberately sets max_direct_tasks below 20."],
         }
@@ -684,12 +700,20 @@ class LunarIceSmokeTests(unittest.TestCase):
         )
 
     def test_b2_direct20_only_report_can_merge_into_existing_matrix(self) -> None:
-        def row(mode: str, *, wall_time: float, fail_reason: str = "") -> dict:
+        def row(
+            mode: str,
+            *,
+            wall_time: float,
+            fail_reason: str = "",
+            instance_id: str = "instance_020_probe",
+            scale: int = 20,
+            matrix_group: str = "20-scale selected direct20 probe",
+        ) -> dict:
             return {
-                "matrix_group": "20-scale selected direct20 probe",
-                "scale": 20,
-                "instance_id": "instance_020_probe",
-                "baseline_name": B1B_MODE if mode == B2B_MODE else "accepted_B1",
+                "matrix_group": matrix_group,
+                "scale": scale,
+                "instance_id": instance_id,
+                "baseline_name": B1B_MODE if mode in {B2B_MODE, B2B_R2_MODE} else "accepted_B1",
                 "candidate_name": mode,
                 "algorithm_status": "BPC_INCOMPLETE_PRICING" if mode != B0_MODE else "DIRECT_DP_BASELINE_OPTIMAL",
                 "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
@@ -720,6 +744,11 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "manual_rc_audit_pass": None,
                 "pricing_rc_audit_pass": None,
                 "proof_debt_unreleased_count": 0,
+                "worker_call_count": 0,
+                "worker_found_addable_negative_count": 0,
+                "final_judge_wall_time": None,
+                "time_to_first_addable_negative": None,
+                "exact_first_step_bound_pruning_enabled": False,
                 "wall_time": wall_time,
                 "fail_closed_reason": fail_reason,
                 "certificate_scope_regression": False,
@@ -728,37 +757,99 @@ class LunarIceSmokeTests(unittest.TestCase):
             }
 
         base = {
-            "rows": [],
+            "rows": [
+                row(
+                    B1B_MODE,
+                    wall_time=30.0,
+                    fail_reason="row_time_limit_sec=30 exceeded",
+                    instance_id="instance_010_selected",
+                    scale=10,
+                    matrix_group="10-scale selected5",
+                ),
+                row(
+                    B2B_R2_MODE,
+                    wall_time=3.0,
+                    fail_reason="",
+                    instance_id="instance_010_selected",
+                    scale=10,
+                    matrix_group="10-scale selected5",
+                ),
+            ],
             "matrix": {
                 "scale10_selected_count": 5,
                 "scale20_probe_count": 0,
-                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE],
+                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE],
                 "notes": [],
             },
         }
+        extra_rows = []
+        for index in range(5):
+            instance_id = f"instance_020_probe_{index + 1:03d}"
+            extra_rows.extend(
+                [
+                    row(B0_MODE, wall_time=5.0, instance_id=instance_id),
+                    row(B1A_MODE, wall_time=60.0, fail_reason="row_time_limit_sec=60 exceeded", instance_id=instance_id),
+                    row(B1B_MODE, wall_time=60.0, fail_reason="row_time_limit_sec=60 exceeded", instance_id=instance_id),
+                    row(B2_PRODUCT_MODE, wall_time=5.0, instance_id=instance_id),
+                    row(B2A_MODE, wall_time=10.0, instance_id=instance_id),
+                    row(B2B_R2_MODE, wall_time=10.0, fail_reason="worker diagnostic", instance_id=instance_id),
+                    row(B2C_MODE, wall_time=1.0, instance_id=instance_id),
+                    row(B2D_MODE, wall_time=1.0, instance_id=instance_id),
+                ]
+            )
         extra = {
-            "rows": [
-                row(B0_MODE, wall_time=5.0),
-                row(B1A_MODE, wall_time=60.0, fail_reason="row_time_limit_sec=60 exceeded"),
-                row(B1B_MODE, wall_time=60.0, fail_reason="row_time_limit_sec=60 exceeded"),
-                row(B2A_MODE, wall_time=1.0, fail_reason=""),
-                row(B2B_MODE, wall_time=10.0, fail_reason="clearer_fail_closed_reason"),
-            ],
+            "rows": extra_rows,
             "matrix": {
-                "scale20_probe_count": 1,
-                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2A_MODE, B2B_MODE],
+                "scale20_probe_count": 5,
+                "scale20_probe_modes": [B0_MODE, B1A_MODE, B1B_MODE, B2_PRODUCT_MODE, B2A_MODE, B2B_R2_MODE, B2C_MODE, B2D_MODE],
                 "direct20_probe_time_limit_sec": 60.0,
                 "notes": ["direct20-only unit test"],
             },
         }
         merged = merge_b2_pricing_tail_reports(base, extra)
 
-        self.assertEqual(merged["matrix"]["scale20_probe_count"], 1)
+        self.assertEqual(merged["matrix"]["scale20_probe_count"], 5)
         self.assertTrue(merged["acceptance"]["required_coverage_met"])
-        self.assertTrue(merged["acceptance"]["b2b_seeded_tail_accepted"])
+        self.assertTrue(merged["acceptance"]["b2b_r2_seeded_tail_accepted"])
         self.assertEqual(merged["redlines"]["root_bound_gt_B0_violation_count"], 0)
-        b2b_row = next(row for row in merged["rows"] if row["candidate_name"] == B2B_MODE)
+        b2b_row = next(row for row in merged["rows"] if row["candidate_name"] == B2B_R2_MODE)
         self.assertIn("wall_time_lower", b2b_row["improvement_reason"])
+
+    def test_b2b_r2_incremental_report_runs_only_b2b_r2_groups(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_rows = []
+            for scale, seed in ((5, 629001), (10, 629101), (20, 629201), (30, 629301)):
+                instance = generate_instance(scale, seed=seed, index=1)
+                path = root / f"instance_{scale:03d}.json"
+                write_json(path, instance)
+                manifest_rows.append({"task_count": scale, "path": str(path)})
+            manifest_path = root / "manifest.json"
+            write_json(manifest_path, {"instances": manifest_rows})
+
+            report = run_b2_pricing_tail_b2b_r2_incremental(
+                manifest_path=manifest_path,
+                project_root=root,
+                scale10_limit=1,
+                scale10_row_time_limit_sec=10.0,
+                scale20_probe_limit=0,
+                fail_closed_max_direct_tasks=10,
+                b2_max_rounds=1,
+            )
+
+        self.assertEqual({row["candidate_name"] for row in report["rows"]}, {B2B_R2_MODE})
+        self.assertEqual(report["matrix"]["scale20_probe_count"], 0)
+        self.assertIn("5-scale full", {row["matrix_group"] for row in report["rows"]})
+        self.assertIn("10-scale full", {row["matrix_group"] for row in report["rows"]})
+        self.assertIn("20-scale fail-closed guard", {row["matrix_group"] for row in report["rows"]})
+        self.assertIn("30-scale fail-closed diagnostic", {row["matrix_group"] for row in report["rows"]})
+        fail_closed_rows = [
+            row for row in report["rows"]
+            if row["matrix_group"] in {"20-scale fail-closed guard", "30-scale fail-closed diagnostic"}
+        ]
+        self.assertTrue(fail_closed_rows)
+        self.assertTrue(all(row["certificate_scope"] == "FEASIBLE_INCUMBENT_ONLY" for row in fail_closed_rows))
+        self.assertTrue(all(row["root_lp_bound_official"] is False for row in fail_closed_rows))
 
     def test_b1_alignment_costs_and_reduced_costs_match_b0_oracle(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -847,6 +938,8 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertGreater(b2["candidate_negative_count"], 0)
         self.assertGreater(b2["addable_negative_count"], 0)
         self.assertEqual(b2["selected_count"], b2["harvest_selected_count"])
+        self.assertEqual(b2["selected_count"], b2["selected_would_enter_master_count"])
+        self.assertTrue(b2["selected_all_would_enter_master"])
         self.assertEqual(b2["added_to_master_count"], b2["added_column_count"])
         self.assertEqual(b2["harvest_selected_count"], b2["harvest_addable_candidate_count"])
         self.assertEqual(b2["duplicate_only_count"], 0)
@@ -855,6 +948,34 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(b2["completion_bound_policy"]["pruning_enabled"])
         self.assertFalse(b2["completion_bound_policy"]["can_certify_no_negative"])
         self.assertEqual(b2["proof_debt_unreleased_count"], 0)
+
+    def test_b2b_r2_worker_found_negative_does_not_certify_without_final_judge(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b2 = solve_b2_pricing_tail_baseline(
+            data,
+            max_direct_tasks=5,
+            max_rounds=1,
+            mode=B2B_R2_MODE,
+        )
+
+        self.assertEqual(b2["b2_mode"], B2B_R2_MODE)
+        self.assertEqual(b2["seed_builder"], "b2b_r2_lightweight_no_full_universe_enumeration")
+        self.assertFalse(b2["full_universe_preloaded"])
+        self.assertEqual(b2["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(b2["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertEqual(b2["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertFalse(b2["root_lp_bound_official"])
+        self.assertFalse(b2["uses_true_dual_bpc_certificate"])
+        self.assertEqual(b2["final_judge_call_count"], 0)
+        self.assertGreater(b2["worker_found_addable_negative_count"], 0)
+        self.assertEqual(
+            b2["final_judge_saved_by_worker_count"],
+            sum(1 for row in b2["history"] if row.get("final_judge_called") is False and int(row.get("added_to_master_count") or 0) > 0),
+        )
+        self.assertEqual(b2["selected_count"], b2["harvest_selected_count"])
+        self.assertEqual(b2["added_to_master_count"], b2["added_column_count"])
+        self.assertFalse(b2["exact_first_step_bound_profile"]["exact_first_step_bound_pruning_enabled"])
 
     def test_b2a_full_universe_rc_audit_fast_path_is_explicit(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)

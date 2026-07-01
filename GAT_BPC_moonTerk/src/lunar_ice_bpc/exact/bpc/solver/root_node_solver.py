@@ -27,10 +27,11 @@ def solve_b1_root_node_baseline(
     data: LunarIceData,
     *,
     initial_columns: Iterable[JourneyColumn] | None = None,
+    b0_direct=None,
     max_direct_tasks: int = 5,
     max_rounds: int = 8,
     negative_eps: float = 1.0e-6,
-    max_columns_per_round: int = 64,
+    max_columns_per_round: int = 512,
     seed_mode: str = "full_universe",
 ) -> dict:
     """Solve the root BPC baseline on the fixed logical graph.
@@ -39,7 +40,8 @@ def solve_b1_root_node_baseline(
     completion-bound pruning in the final pricing judge.
     """
 
-    b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
+    if b0_direct is None:
+        b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
     if len(data.task_ids) > int(max_direct_tasks):
         return _incomplete_payload(
             data=data,
@@ -99,6 +101,8 @@ def solve_b1_root_node_baseline(
             max_direct_tasks=int(max_direct_tasks),
             negative_eps=negative_eps,
             cache=cache,
+            complete_universe_columns=seed_report.get("_full_universe_columns"),
+            complete_universe_counts=seed_report.get("_full_universe_counts"),
         )
         last_judge = judge
         added = _add_negative_columns(
@@ -182,7 +186,8 @@ def build_b1_seed_columns(
 ) -> tuple[tuple[JourneyColumn, ...], dict]:
     """Build B1 root seed columns without conflating audit and CG modes."""
 
-    full_universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
+    full_universe_result = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks))
+    full_universe = full_universe_result.columns
     if initial_columns is not None:
         resolved_mode = "custom_initial_columns"
         columns = tuple(initial_columns)
@@ -215,6 +220,12 @@ def build_b1_seed_columns(
         "initial_column_count": len(columns),
         "full_universe_column_count": len(full_universe),
         "full_universe_preloaded": full_universe_preloaded,
+        "_full_universe_columns": tuple(full_universe),
+        "_full_universe_counts": {
+            "generated_sortie_count": full_universe_result.generated_sortie_count,
+            "route_template_count": full_universe_result.route_template_count,
+            "pareto_label_count": full_universe_result.pareto_label_count,
+        },
     }
 
 

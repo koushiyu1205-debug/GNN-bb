@@ -25,7 +25,7 @@ def main() -> int:
     parser.add_argument("--scale10-limit", type=int, default=5)
     parser.add_argument("--scale10-row-time-limit", type=float, default=60.0)
     parser.add_argument("--scale20-probe-limit", type=int, default=5)
-    parser.add_argument("--direct20-probe-time-limit", type=float, default=60.0)
+    parser.add_argument("--direct20-probe-time-limit", type=float, default=120.0)
     parser.add_argument("--fail-closed-max-direct-tasks", type=int, default=10)
     parser.add_argument("--b1-max-rounds", type=int, default=8)
     parser.add_argument("--max-workers", type=int, default=1)

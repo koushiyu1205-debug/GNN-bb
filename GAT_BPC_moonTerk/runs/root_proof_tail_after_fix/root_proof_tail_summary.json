@@ -1,0 +1,77 @@
+{
+  "row_count": 40,
+  "selected_counts": {
+    "5": 5,
+    "10": 5,
+    "20": 5,
+    "30": 5
+  },
+  "by_scale_mode": {
+    "5:B0_pure_direct_dp": {
+      "runs": 5,
+      "direct_optimal_count": 5,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 0,
+      "mean_wall_time": 0.00402,
+      "max_wall_time": 0.005044
+    },
+    "5:B1B_seeded_root_CG": {
+      "runs": 5,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 5,
+      "incomplete_count": 0,
+      "mean_wall_time": 0.010148,
+      "max_wall_time": 0.012708
+    },
+    "10:B0_pure_direct_dp": {
+      "runs": 5,
+      "direct_optimal_count": 5,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 0,
+      "mean_wall_time": 0.092237,
+      "max_wall_time": 0.125672
+    },
+    "10:B1B_seeded_root_CG": {
+      "runs": 5,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 5,
+      "incomplete_count": 0,
+      "mean_wall_time": 0.216015,
+      "max_wall_time": 0.288667
+    },
+    "20:B0_pure_direct_dp": {
+      "runs": 5,
+      "direct_optimal_count": 5,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 0,
+      "mean_wall_time": 10.283416,
+      "max_wall_time": 19.945939
+    },
+    "20:B1B_seeded_root_CG": {
+      "runs": 5,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 5,
+      "incomplete_count": 0,
+      "mean_wall_time": 39.203863,
+      "max_wall_time": 54.005663
+    },
+    "30:B0_pure_direct_dp": {
+      "runs": 5,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 5,
+      "mean_wall_time": 0.002041,
+      "max_wall_time": 0.00244
+    },
+    "30:B1B_seeded_root_CG": {
+      "runs": 5,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 5,
+      "mean_wall_time": 0.001577,
+      "max_wall_time": 0.001769
+    }
+  },
+  "max_rss_mb": 263.8,
+  "accepted_10_20_b1b_selected5": true
+}

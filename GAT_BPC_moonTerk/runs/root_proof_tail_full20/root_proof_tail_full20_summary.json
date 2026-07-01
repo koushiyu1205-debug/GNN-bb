@@ -1,0 +1,124 @@
+{
+  "schema_version": "root_proof_tail_full20.v1",
+  "row_count": 160,
+  "selected_counts": {
+    "5": 20,
+    "10": 20,
+    "20": 20,
+    "30": 20
+  },
+  "by_scale_mode": {
+    "5:B0_pure_direct_dp": {
+      "runs": 20,
+      "direct_optimal_count": 20,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 0,
+      "official_root_bound_count": 0,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 0.005309,
+      "max_wall_time": 0.010848
+    },
+    "5:B1B_seeded_root_CG": {
+      "runs": 20,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 20,
+      "incomplete_count": 0,
+      "official_root_bound_count": 20,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 0.007318,
+      "max_wall_time": 0.013105
+    },
+    "10:B0_pure_direct_dp": {
+      "runs": 20,
+      "direct_optimal_count": 20,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 0,
+      "official_root_bound_count": 0,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 0.150652,
+      "max_wall_time": 0.338536
+    },
+    "10:B1B_seeded_root_CG": {
+      "runs": 20,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 20,
+      "incomplete_count": 0,
+      "official_root_bound_count": 20,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 0.199415,
+      "max_wall_time": 0.412064
+    },
+    "20:B0_pure_direct_dp": {
+      "runs": 20,
+      "direct_optimal_count": 20,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 0,
+      "official_root_bound_count": 0,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 13.29037,
+      "max_wall_time": 31.588598
+    },
+    "20:B1B_seeded_root_CG": {
+      "runs": 20,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 20,
+      "incomplete_count": 0,
+      "official_root_bound_count": 20,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 30.057448,
+      "max_wall_time": 42.321256
+    },
+    "30:B0_pure_direct_dp": {
+      "runs": 20,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 20,
+      "official_root_bound_count": 0,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 0.002087,
+      "max_wall_time": 0.003505
+    },
+    "30:B1B_seeded_root_CG": {
+      "runs": 20,
+      "direct_optimal_count": 0,
+      "bpc_node_lp_certified_count": 0,
+      "incomplete_count": 20,
+      "official_root_bound_count": 0,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "proof_debt_unreleased_certified_count": 0,
+      "mean_wall_time": 2.8e-05,
+      "max_wall_time": 6.7e-05
+    }
+  },
+  "elapsed_sec": 881.068068,
+  "max_rss_mb": 347.7,
+  "notes": [
+    "B1B is seeded root column generation with complete fixed-universe RC final judge at root.",
+    "20-scale B1A full-universe RMP is intentionally excluded from this full20 run due observed high memory use.",
+    "30-scale uses max_direct_tasks=20 and is expected to fail closed; this report does not claim 30-scale root closure."
+  ],
+  "accepted_10_full20_b1b": true,
+  "accepted_20_full20_b1b": true,
+  "accepted_10_20_full20_b1b": true,
+  "redlines": {
+    "root_bound_gt_B0_violation_count": 0,
+    "manual_rc_fail_count": 0,
+    "pricing_rc_fail_count": 0,
+    "proof_debt_unreleased_certified_count": 0
+  }
+}

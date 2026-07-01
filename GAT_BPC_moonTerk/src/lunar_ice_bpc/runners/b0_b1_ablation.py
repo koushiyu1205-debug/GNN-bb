@@ -117,7 +117,7 @@ def run_b0_b1_ablation_matrix(
     scale10_limit: int = 5,
     scale10_row_time_limit_sec: float | None = 60.0,
     scale20_probe_limit: int = 5,
-    direct20_probe_time_limit_sec: float = 60.0,
+    direct20_probe_time_limit_sec: float = 120.0,
     fail_closed_max_direct_tasks: int = 10,
     b1_max_rounds: int = 8,
     max_workers: int = 1,

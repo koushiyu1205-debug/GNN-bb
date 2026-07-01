@@ -125,6 +125,8 @@ def harvest_addable_negative_columns(
         "branch_filtered_count": int(branch_filtered_count),
         "cut_filtered_count": int(cut_filtered_count),
         "selected_count": len(selected),
+        "selected_would_enter_master_count": len(selected),
+        "selected_all_would_enter_master": True,
         "harvest_candidate_negative_count": int(negative_count),
         "harvest_addable_candidate_count": len(addable),
         "harvest_selected_count": len(selected),
