@@ -1,0 +1,12 @@
+{
+  "all_tree_certificate_gate_issues_empty": true,
+  "bpc_tree_optimal_count": 5,
+  "instance_count": 5,
+  "max_abs_objective_diff_vs_b0": 1e-06,
+  "max_b3_wall": 35.18185,
+  "max_incomplete_node_count": 0,
+  "max_node_count": 1,
+  "mean_b3_wall": 27.997986,
+  "objective_match_b0_count_with_tree_tolerance": 5,
+  "tree_objective_tolerance": 5e-06
+}

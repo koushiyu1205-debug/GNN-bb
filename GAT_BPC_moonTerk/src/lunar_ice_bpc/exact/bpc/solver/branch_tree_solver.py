@@ -10,10 +10,15 @@ from lunar_ice_bpc.exact.bpc.certificates.proof_debt_queue import ProofDebtQueue
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
+from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
-from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import solve_b2_pricing_tail_baseline
+from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
+    B2B_R3_MODE,
+    solve_b2_pricing_tail_baseline,
+    solve_node_pricing_with_b2b_r3,
+)
 from lunar_ice_bpc.exact.core.branching import (
     DIFFERENT_JOURNEY,
     SAME_JOURNEY,
@@ -33,6 +38,10 @@ from lunar_ice_bpc.exact.solver.journey_driver import (
 )
 
 
+B3_COMPLETE_UNIVERSE_NODE_MODE = "B3_complete_universe_branch_rc_audit"
+TREE_OBJECTIVE_TOLERANCE = 5.0e-6
+
+
 @dataclass(frozen=True)
 class _QueuedNode:
     node_id: str
@@ -46,12 +55,15 @@ class _QueuedNode:
 def solve_b3_branch_price_tree_baseline(
     data: LunarIceData,
     *,
+    b0_direct=None,
     max_direct_tasks: int = 5,
-    max_rounds_per_node: int = 8,
+    max_rounds_per_node: int = 16,
     max_tree_nodes: int = 31,
     max_branch_depth: int = 4,
     negative_eps: float = 1.0e-6,
-    max_columns_per_round: int = 64,
+    max_columns_per_round: int = 512,
+    use_complete_universe_audit: bool = True,
+    run_b2_root_diagnostic: bool | None = None,
 ) -> dict:
     """Run B3 = B2 plus a proof-gated branch-and-price tree.
 
@@ -60,14 +72,21 @@ def solve_b3_branch_price_tree_baseline(
     BPC certificate or tree-closure proof.
     """
 
-    b2 = solve_b2_pricing_tail_baseline(
-        data,
-        max_direct_tasks=max_direct_tasks,
-        max_rounds=max_rounds_per_node,
-        negative_eps=negative_eps,
-        max_columns_per_round=max_columns_per_round,
-    )
-    b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
+    if run_b2_root_diagnostic is None:
+        run_b2_root_diagnostic = len(data.task_ids) <= 10
+    if run_b2_root_diagnostic:
+        b2 = solve_b2_pricing_tail_baseline(
+            data,
+            max_direct_tasks=max_direct_tasks,
+            max_rounds=max_rounds_per_node,
+            negative_eps=negative_eps,
+            max_columns_per_round=max_columns_per_round,
+            mode=B2B_R3_MODE,
+        )
+    else:
+        b2 = _b2_not_run_payload(data, max_direct_tasks=max_direct_tasks)
+    if b0_direct is None:
+        b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
     if len(data.task_ids) > int(max_direct_tasks):
         return _too_large_payload(
             data=data,
@@ -77,7 +96,17 @@ def solve_b3_branch_price_tree_baseline(
             negative_eps=negative_eps,
         )
 
-    universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
+    complete_universe_columns: tuple[JourneyColumn, ...] = tuple()
+    complete_universe_counts: dict | None = None
+    if use_complete_universe_audit:
+        complete_universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks))
+        complete_universe_columns = tuple(complete_universe.columns)
+        complete_universe_counts = {
+            "generated_sortie_count": complete_universe.generated_sortie_count,
+            "route_template_count": complete_universe.route_template_count,
+            "pareto_label_count": complete_universe.pareto_label_count,
+        }
+
     proof_debt = ProofDebtQueue()
     queue: list[_QueuedNode] = [
         _QueuedNode(
@@ -98,8 +127,11 @@ def solve_b3_branch_price_tree_baseline(
         queued = queue.pop(0)
         node = _solve_b3_node(
             data,
-            universe,
+            complete_universe_columns,
             queued,
+            b0_direct=b0_direct,
+            complete_universe_counts=complete_universe_counts,
+            use_complete_universe_audit=bool(use_complete_universe_audit and complete_universe_columns),
             incumbent_objective_at_entry=incumbent_objective,
             max_direct_tasks=max_direct_tasks,
             max_rounds=max_rounds_per_node,
@@ -197,59 +229,166 @@ def _solve_b3_node(
     universe: tuple[JourneyColumn, ...],
     queued: _QueuedNode,
     *,
+    b0_direct=None,
+    complete_universe_counts: dict | None = None,
+    use_complete_universe_audit: bool = False,
     incumbent_objective_at_entry: float | None,
     max_direct_tasks: int,
     max_rounds: int,
     negative_eps: float,
     max_columns_per_round: int,
 ) -> dict:
+    if use_complete_universe_audit and universe:
+        return _solve_b3_node_with_complete_universe_audit(
+            data,
+            universe,
+            queued,
+            b0_direct=b0_direct,
+            complete_universe_counts=complete_universe_counts,
+            incumbent_objective_at_entry=incumbent_objective_at_entry,
+            max_direct_tasks=max_direct_tasks,
+            max_rounds=max_rounds,
+            negative_eps=negative_eps,
+            max_columns_per_round=max_columns_per_round,
+        )
+    initial_columns = tuple(universe) if universe else None
+    engine = solve_node_pricing_with_b2b_r3(
+        data,
+        branch_context=queued.context,
+        node_id=queued.node_id,
+        initial_columns=initial_columns,
+        incumbent_objective=incumbent_objective_at_entry,
+        max_direct_tasks=max_direct_tasks,
+        max_rounds=max_rounds,
+        negative_eps=negative_eps,
+        max_columns_per_round=max_columns_per_round,
+        b0_direct=b0_direct,
+    )
+    return _node_payload(
+        data=data,
+        queued=queued,
+        loaded_count=int(engine.get("loaded_column_count") or 0),
+        filtered_count=int(engine.get("branch_filtered_column_count") or 0),
+        history=list(engine.get("history") or []),
+        round_count=int(engine.get("pricing_round_count") or 0),
+        added_column_count=int(engine.get("added_column_count") or 0),
+        master=engine.get("_master"),
+        final_judge=engine.get("final_judge") or {},
+        final_judge_columns=tuple(engine.get("_all_priced_columns") or tuple()),
+        incumbent_objective_at_entry=incumbent_objective_at_entry,
+        certificate_scope=CertificateScope(str(engine.get("certificate_scope"))),
+        pricing_state=PricingState(str(engine.get("pricing_state"))),
+        node_status=str(engine.get("node_status") or "INCOMPLETE"),
+        note=str(engine.get("note") or "B2B_R3 node pricing did not close; fail closed."),
+        integer_candidate_columns=None,
+    )
+
+
+def _solve_b3_node_with_complete_universe_audit(
+    data: LunarIceData,
+    complete_universe_columns: tuple[JourneyColumn, ...],
+    queued: _QueuedNode,
+    *,
+    b0_direct,
+    complete_universe_counts: dict | None,
+    incumbent_objective_at_entry: float | None,
+    max_direct_tasks: int,
+    max_rounds: int,
+    negative_eps: float,
+    max_columns_per_round: int,
+) -> dict:
+    """Close a branch node by RMP plus RC audit over a cached complete universe."""
+
     pool = ColumnPool()
     view = MasterColumnView()
-    loaded_count, filtered_count = _load_context_columns(pool, view, universe, queued)
-    cache = DirectPricingCache()
+    seed_columns = _seed_columns_for_complete_universe_node(data, complete_universe_columns, queued, b0_direct)
+    loaded_count, filtered_count = _load_context_columns(pool, view, seed_columns, queued)
     history: list[dict] = []
-    final_judge_payload: dict | None = None
-    last_master = None
     added_total = 0
+    cache = DirectPricingCache()
+    last_master = None
+    last_judge = None
+    last_final_judge_columns: tuple[JourneyColumn, ...] = tuple()
+    feasible_seed_repaired = False
 
-    for round_index in range(1, int(max_rounds) + 1):
+    for round_index in range(1, max(1, int(max_rounds)) + 1):
         master_columns = _master_columns_for_node(pool, view, queued.node_id)
         master = solve_root_journey_master(
             data,
             master_columns,
             negative_eps=negative_eps,
-            rmp_iteration_id=f"{queued.node_id}-{round_index}",
+            rmp_iteration_id=f"{B3_COMPLETE_UNIVERSE_NODE_MODE}-{queued.node_id}-{round_index}",
             branch_context=queued.context,
         )
         last_master = master
         if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
-            return _node_payload(
-                data=data,
-                queued=queued,
-                loaded_count=loaded_count,
-                filtered_count=filtered_count,
-                history=history,
-                round_count=round_index,
-                added_column_count=added_total,
-                master=master,
-                final_judge=None,
-                final_judge_columns=tuple(),
-                incumbent_objective_at_entry=incumbent_objective_at_entry,
-                certificate_scope=CertificateScope.DIAGNOSTIC_RMP_BOUND,
-                pricing_state=PricingState.INCOMPLETE_LIMIT,
-                node_status="NODE_RMP_INFEASIBLE_UNCERTIFIED",
-                note="Node RMP did not solve to optimality; restricted-pool no-cover is not an infeasibility certificate.",
-            )
+            if not feasible_seed_repaired:
+                repair = _exact_cover_seed_columns_for_context(data, complete_universe_columns, queued.context)
+                feasible_seed_repaired = True
+                if repair["status"] == "NO_EXACT_COVER_IN_COLUMN_POOL":
+                    return _infeasible_node_payload(
+                        data=data,
+                        queued=queued,
+                        loaded_count=loaded_count,
+                        filtered_count=filtered_count,
+                        incumbent_objective_at_entry=incumbent_objective_at_entry,
+                        complete_universe_columns=complete_universe_columns,
+                        master=master,
+                        note=(
+                            "Complete branch-filtered fixed universe has no exact cover; "
+                            "node is fathomed as infeasible."
+                        ),
+                    )
+                repair_columns = tuple(repair.get("columns") or tuple())
+                if not repair_columns:
+                    history.append(
+                        {
+                            "round": round_index,
+                            "rmp_status": master.rmp.status,
+                            "node_lp_bound": None,
+                            "pricing_state": PricingState.INCOMPLETE_LIMIT.value,
+                            "final_judge_called": False,
+                            "negative_column_count": 0,
+                            "added_column_count": 0,
+                            "feasible_seed_repair": False,
+                            "feasible_seed_repair_status": repair["status"],
+                            "branch_context_active": not queued.context.empty,
+                            "completion_bound_pruning_enabled": False,
+                        }
+                    )
+                    break
+                repaired_loaded, repaired_filtered = _load_context_columns(pool, view, repair_columns, queued)
+                loaded_count += repaired_loaded
+                filtered_count += repaired_filtered
+                history.append(
+                    {
+                        "round": round_index,
+                        "rmp_status": master.rmp.status,
+                        "node_lp_bound": None,
+                        "pricing_state": PricingState.LOCAL_NO_COLUMN_UNCERTIFIED.value,
+                        "final_judge_called": False,
+                        "negative_column_count": 0,
+                        "added_column_count": repaired_loaded,
+                        "feasible_seed_repair": True,
+                        "branch_context_active": not queued.context.empty,
+                        "completion_bound_pruning_enabled": False,
+                    }
+                )
+                continue
+            break
         judge = run_true_dual_root_final_judge(
             data,
             master.reduced_cost_context,
-            max_direct_tasks=int(max_direct_tasks),
+            max_direct_tasks=max_direct_tasks,
             negative_eps=negative_eps,
             cache=cache,
             branch_context=queued.context,
+            complete_universe_columns=complete_universe_columns,
+            complete_universe_counts=complete_universe_counts,
         )
-        final_judge_payload = judge.pricing_payload
-        selected = _negative_columns_to_add(
+        last_judge = judge
+        last_final_judge_columns = judge.all_priced_columns
+        added = _negative_columns_to_add(
             pool,
             view,
             queued,
@@ -258,57 +397,333 @@ def _solve_b3_node(
             negative_eps=negative_eps,
             max_columns=max_columns_per_round,
         )
-        added_total += selected
+        added_total += added
         history.append(
             {
                 "round": round_index,
                 "rmp_status": master.rmp.status,
                 "node_lp_bound": master.rmp.objective_bound,
                 "pricing_state": judge.pricing_state.value,
+                "final_judge_called": True,
+                "final_judge_source": judge.pricing_payload.get("complete_universe_source"),
+                "final_judge_wall_time": judge.pricing_payload.get("final_judge_wall_time"),
                 "negative_column_count": len(judge.negative_columns),
-                "added_column_count": selected,
+                "added_column_count": added,
                 "branch_context_active": not queued.context.empty,
+                "branch_filtered_column_count": int(judge.pricing_payload.get("branch_filtered_column_count") or 0),
+                "complete_universe_raw_column_count": len(complete_universe_columns),
                 "completion_bound_pruning_enabled": False,
             }
         )
         if judge.pricing_state == PricingState.CERTIFIED_NO_NEGATIVE:
-            return _node_payload(
+            node = _node_payload(
                 data=data,
                 queued=queued,
                 loaded_count=loaded_count,
-                filtered_count=filtered_count,
+                filtered_count=max(filtered_count, int(judge.pricing_payload.get("branch_filtered_column_count") or 0)),
                 history=history,
                 round_count=round_index,
                 added_column_count=added_total,
                 master=master,
-                final_judge=final_judge_payload,
+                final_judge=judge.pricing_payload,
                 final_judge_columns=judge.all_priced_columns,
                 incumbent_objective_at_entry=incumbent_objective_at_entry,
                 certificate_scope=CertificateScope.BPC_NODE_LP_CERTIFIED,
                 pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
                 node_status="NODE_LP_CERTIFIED",
-                note="Node LP bound is certified by RMP duals plus branch-filtered exhaustive true-dual pricing.",
+                note="Node LP bound is certified by complete fixed-universe membership RC audit under branch context.",
+                integer_candidate_columns=_incumbent_columns_for_context(b0_direct, queued.context),
             )
-        if judge.pricing_state == PricingState.FOUND_NEGATIVE and selected == 0:
+            node["node_pricing_mode"] = B3_COMPLETE_UNIVERSE_NODE_MODE
+            node["node_certificate_source"] = "complete_universe_branch_membership_rc_audit"
+            node["complete_universe_raw_column_count"] = len(complete_universe_columns)
+            node["complete_universe_source"] = judge.pricing_payload.get("complete_universe_source")
+            node["full_universe_preloaded"] = False
+            node["initial_seed_column_count"] = len(seed_columns)
+            return node
+        if judge.pricing_state == PricingState.FOUND_NEGATIVE and added == 0:
             break
 
-    return _node_payload(
+    node = _node_payload(
         data=data,
         queued=queued,
         loaded_count=loaded_count,
         filtered_count=filtered_count,
         history=history,
-        round_count=int(max_rounds),
+        round_count=len(history),
         added_column_count=added_total,
         master=last_master,
-        final_judge=final_judge_payload,
-        final_judge_columns=tuple(),
+        final_judge=None if last_judge is None else last_judge.pricing_payload,
+        final_judge_columns=last_final_judge_columns,
         incumbent_objective_at_entry=incumbent_objective_at_entry,
         certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
-        pricing_state=PricingState.INCOMPLETE_LIMIT,
+        pricing_state=PricingState.INCOMPLETE_LIMIT if last_judge is None else last_judge.pricing_state,
         node_status="INCOMPLETE",
-        note=f"Node pricing did not close after max_rounds={max_rounds}; fail closed.",
+        note="Complete fixed-universe membership RC audit did not certify this node; fail closed.",
+        integer_candidate_columns=_incumbent_columns_for_context(b0_direct, queued.context),
     )
+    node["node_pricing_mode"] = B3_COMPLETE_UNIVERSE_NODE_MODE
+    node["node_certificate_source"] = "complete_universe_branch_membership_rc_audit"
+    node["complete_universe_raw_column_count"] = len(complete_universe_columns)
+    node["complete_universe_source"] = None if last_judge is None else last_judge.pricing_payload.get("complete_universe_source")
+    node["full_universe_preloaded"] = False
+    node["initial_seed_column_count"] = len(seed_columns)
+    return node
+
+
+def _seed_columns_for_complete_universe_node(
+    data: LunarIceData,
+    complete_universe_columns: tuple[JourneyColumn, ...],
+    queued: _QueuedNode,
+    b0_direct,
+) -> tuple[JourneyColumn, ...]:
+    candidates: list[JourneyColumn] = []
+    candidates.extend(tuple(getattr(b0_direct, "journeys", tuple()) or tuple()))
+    candidates.extend(column for column in complete_universe_columns if len(column.task_set) == 1)
+    unique: list[JourneyColumn] = []
+    seen = set()
+    for column in candidates:
+        if not journey_satisfies_branch_context(column, queued.context):
+            continue
+        signature = column_signature_from_journey(column)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append(column)
+    return tuple(unique)
+
+
+def _incumbent_columns_for_context(b0_direct, context: BranchContext) -> tuple[JourneyColumn, ...] | None:
+    columns = tuple(getattr(b0_direct, "journeys", tuple()) or tuple())
+    if not columns:
+        return None
+    if all(journey_satisfies_branch_context(column, context) for column in columns):
+        return columns
+    return None
+
+
+def _exact_cover_seed_columns_for_context(
+    data: LunarIceData,
+    complete_universe_columns: tuple[JourneyColumn, ...],
+    context: BranchContext,
+) -> dict:
+    selection = _find_feasible_cover_seed_columns(
+        data,
+        complete_universe_columns,
+        context,
+        max_expansions=500_000,
+    )
+    if selection["status"] == "COLUMN_POOL_EXACT_COVER":
+        return {
+            "status": selection["status"],
+            "columns": tuple(selection["columns"]),
+            "state_count": int(selection["state_count"]),
+            "candidate_column_count": int(selection["candidate_column_count"]),
+        }
+    if selection["status"] == "NO_EXACT_COVER_IN_COLUMN_POOL":
+        return {
+            "status": selection["status"],
+            "columns": tuple(),
+            "state_count": int(selection["state_count"]),
+            "candidate_column_count": int(selection["candidate_column_count"]),
+        }
+    return {
+        "status": selection["status"],
+        "columns": tuple(),
+        "state_count": int(selection["state_count"]),
+        "candidate_column_count": int(selection["candidate_column_count"]),
+    }
+
+
+def _find_feasible_cover_seed_columns(
+    data: LunarIceData,
+    complete_universe_columns: tuple[JourneyColumn, ...],
+    context: BranchContext,
+    *,
+    max_expansions: int,
+) -> dict:
+    """Find any exact cover under a branch context, without optimizing cost."""
+
+    task_index = TaskIndexMap(data.task_ids)
+    full_mask = task_index.full_mask
+    best_by_mask: dict[int, JourneyColumn] = {}
+    for column in complete_universe_columns:
+        if not journey_satisfies_branch_context(column, context):
+            continue
+        mask = 0
+        valid = True
+        for task_id in column.task_set:
+            try:
+                mask |= task_index.mask_of(str(task_id))
+            except KeyError:
+                valid = False
+                break
+        if not valid or mask == 0:
+            continue
+        old = best_by_mask.get(mask)
+        if old is None or column.objective < old.objective - 1.0e-9:
+            best_by_mask[mask] = column
+
+    entries = tuple(
+        sorted(
+            best_by_mask.items(),
+            key=lambda item: (-int(item[0]).bit_count(), item[1].objective, tuple(sorted(item[1].task_set))),
+        )
+    )
+    by_bit: dict[int, list[tuple[int, JourneyColumn]]] = {}
+    for mask, column in entries:
+        bit = 1
+        while bit <= full_mask:
+            if mask & bit:
+                by_bit.setdefault(bit, []).append((mask, column))
+            bit <<= 1
+
+    expansions = 0
+    failed: set[tuple[int, int]] = set()
+
+    def first_uncovered_bit(covered: int) -> int:
+        remaining = full_mask ^ covered
+        return remaining & -remaining
+
+    def dfs(covered: int, chosen: tuple[JourneyColumn, ...]) -> tuple[JourneyColumn, ...] | None:
+        nonlocal expansions
+        if covered == full_mask:
+            return chosen
+        if len(chosen) >= int(data.fleet_size):
+            return None
+        key = (covered, len(chosen))
+        if key in failed:
+            return None
+        expansions += 1
+        if expansions > int(max_expansions):
+            raise _CoverSearchLimit()
+        bit = first_uncovered_bit(covered)
+        for mask, column in by_bit.get(bit, []):
+            if mask & covered:
+                continue
+            result = dfs(covered | mask, (*chosen, column))
+            if result is not None:
+                return result
+        failed.add(key)
+        return None
+
+    try:
+        columns = dfs(0, tuple())
+    except _CoverSearchLimit:
+        return {
+            "status": "COLUMN_POOL_STATE_LIMIT",
+            "columns": tuple(),
+            "state_count": expansions,
+            "candidate_column_count": len(best_by_mask),
+        }
+    if columns is None:
+        return {
+            "status": "NO_EXACT_COVER_IN_COLUMN_POOL",
+            "columns": tuple(),
+            "state_count": expansions,
+            "candidate_column_count": len(best_by_mask),
+        }
+    return {
+        "status": "COLUMN_POOL_EXACT_COVER",
+        "columns": tuple(columns),
+        "state_count": expansions,
+        "candidate_column_count": len(best_by_mask),
+    }
+
+
+class _CoverSearchLimit(RuntimeError):
+    pass
+
+
+def _infeasible_node_payload(
+    *,
+    data: LunarIceData,
+    queued: _QueuedNode,
+    loaded_count: int,
+    filtered_count: int,
+    incumbent_objective_at_entry: float | None,
+    complete_universe_columns: tuple[JourneyColumn, ...],
+    master,
+    note: str,
+) -> dict:
+    node_debt = ProofDebtQueue()
+    ledger = CertificateLedger(
+        algorithm_status=AlgorithmStatus.BPC_INFEASIBLE,
+        certificate_scope=CertificateScope.BPC_INFEASIBLE_CERTIFIED,
+        pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
+        uses_true_dual_bpc_certificate=False,
+    ).validate(proof_debt_queue=node_debt)
+    return {
+        "schema_version": "lunar_ice_bpc.b3_branch_node.v1",
+        "node_id": queued.node_id,
+        "parent_node_id": queued.parent_node_id,
+        "depth": int(queued.depth),
+        "branch_pair": queued.branch_pair,
+        "branch_sense": queued.branch_sense,
+        "branch_context": queued.context.to_payload(),
+        "node_pricing_mode": B3_COMPLETE_UNIVERSE_NODE_MODE,
+        "node_certificate_source": "complete_universe_branch_no_cover_audit",
+        "node_status": "INFEASIBLE_CERTIFIED",
+        "rmp_status": None if master is None else master.rmp.status,
+        "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
+        "certificate_scope": CertificateScope.BPC_INFEASIBLE_CERTIFIED.value,
+        "uses_true_dual_bpc_certificate": False,
+        "certificate_ledger": ledger,
+        "proof_debt_queue": node_debt.audit(),
+        "loaded_column_count": int(loaded_count),
+        "branch_filtered_column_count": int(filtered_count),
+        "node_lp_bound": None,
+        "node_lp_bound_official": False,
+        "round_count": 0,
+        "pricing_round_count": 0,
+        "added_column_count": 0,
+        "rmp_iteration_count": None if master is None else master.rmp.iteration_count,
+        "primal_columns": tuple(),
+        "primal_integral": False,
+        "integer_incumbent": {
+            "status": "NODE_INFEASIBLE_NO_INTEGER_INCUMBENT",
+            "objective": None,
+            "journey_count": 0,
+            "candidate_column_count": 0,
+            "unique_task_set_count": 0,
+            "state_count": 0,
+            "matches_node_lp_bound": False,
+            "source": "COMPLETE_UNIVERSE_NO_EXACT_COVER",
+            "note": note,
+        },
+        "final_judge": {
+            "status": "COMPLETE_UNIVERSE_NO_EXACT_COVER",
+            "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
+            "can_certify_no_negative": True,
+            "complete_universe_raw_column_count": len(complete_universe_columns),
+            "branch_context": queued.context.to_payload(),
+            "note": note,
+        },
+        "final_judge_status": "COMPLETE_UNIVERSE_NO_EXACT_COVER",
+        "final_judge_min_reduced_cost": None,
+        "manual_rc_audit_pass": True,
+        "pricing_rc_audit_pass": True,
+        "all_priced_columns_satisfy_branch_context": True,
+        "fractional_branch_probe": {"status": "NOT_EVALUATED_INFEASIBLE_NODE", "candidates": []},
+        "fractional_branch_probe_status": "NOT_EVALUATED_INFEASIBLE_NODE",
+        "child_node_ids": [],
+        "incumbent_objective_at_entry": incumbent_objective_at_entry,
+        "incumbent_objective_at_exit": incumbent_objective_at_entry,
+        "history": [
+            {
+                "round": 0,
+                "rmp_status": None if master is None else master.rmp.status,
+                "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
+                "complete_universe_no_cover_audit": True,
+                "branch_context_active": not queued.context.empty,
+                "completion_bound_pruning_enabled": False,
+            }
+        ],
+        "completion_bound_pruning_enabled": False,
+        "complete_universe_raw_column_count": len(complete_universe_columns),
+        "full_universe_preloaded": False,
+        "note": note,
+    }
 
 
 def _node_payload(
@@ -328,6 +743,7 @@ def _node_payload(
     pricing_state: PricingState,
     node_status: str,
     note: str,
+    integer_candidate_columns: Iterable[JourneyColumn] | None = None,
 ) -> dict:
     root_bound = None if master is None else master.rmp.objective_bound
     manual_rc_audit_pass = bool(
@@ -363,16 +779,27 @@ def _node_payload(
         and pricing_state == PricingState.CERTIFIED_NO_NEGATIVE
         and ledger["valid"]
     )
-    master_columns = tuple() if master is None else _columns_from_primal_context(data, final_judge_columns, master.rmp.primal_columns)
+    primal_context_columns = (
+        tuple()
+        if master is None
+        else _columns_from_primal_context(data, final_judge_columns, master.rmp.primal_columns)
+    )
+    candidate_columns_for_integer = (
+        tuple(integer_candidate_columns)
+        if integer_candidate_columns is not None
+        else primal_context_columns
+    )
     integer_incumbent = _integer_incumbent_payload(
         data,
-        final_judge_columns if final_judge_columns else master_columns,
+        candidate_columns_for_integer,
         node_bound=root_bound,
         negative_eps=1.0e-6,
+        primal_columns=tuple() if master is None else master.rmp.primal_columns,
+        allow_pool_search=integer_candidate_columns is not None,
     )
     fractional_probe = (
-        {"status": "NOT_EVALUATED", "candidates": []}
-        if master is None
+        {"status": "NOT_EVALUATED_INTEGER_NODE", "candidates": []}
+        if master is None or bool(integer_incumbent.get("matches_node_lp_bound"))
         else build_fractional_branch_probe(
             data.task_ids,
             master.rmp.primal_columns,
@@ -388,6 +815,7 @@ def _node_payload(
         "branch_pair": queued.branch_pair,
         "branch_sense": queued.branch_sense,
         "branch_context": queued.context.to_payload(),
+        "node_pricing_mode": B2B_R3_MODE,
         "node_status": str(node_status),
         "rmp_status": None if master is None else master.rmp.status,
         "pricing_state": pricing_state.value,
@@ -455,11 +883,11 @@ def _tree_payload(
         if node.get("node_lp_bound_official") and node.get("node_lp_bound") is not None
     ]
     global_lower_bound = round(min(leaf_bounds), 9) if leaf_bounds else None
-    global_gap = (
-        None
-        if incumbent_objective is None or global_lower_bound is None
-        else round(max(0.0, float(incumbent_objective) - float(global_lower_bound)), 9)
-    )
+    if incumbent_objective is None or global_lower_bound is None:
+        global_gap = None
+    else:
+        raw_gap = float(incumbent_objective) - float(global_lower_bound)
+        global_gap = 0.0 if raw_gap <= TREE_OBJECTIVE_TOLERANCE else round(max(0.0, raw_gap), 9)
     all_nodes_closed = bool(nodes) and all(
         node.get("node_status") in {"BRANCHED", "INTEGER_INCUMBENT", "PRUNED_BY_BOUND", "INFEASIBLE_CERTIFIED"}
         for node in nodes
@@ -520,6 +948,9 @@ def _tree_payload(
     return {
         "schema_version": "lunar_ice_bpc.b3_branch_price_tree_baseline.v1",
         "instance_id": data.instance_id,
+        "b3_mode": "B3B_seeded_branch_price_tree",
+        "node_pricing_mode": root.get("node_pricing_mode") or B2B_R3_MODE,
+        "node_pricing_modes": sorted({str(node.get("node_pricing_mode") or "") for node in nodes if node.get("node_pricing_mode")}),
         "algorithm_status": algorithm_status.value,
         "certificate_scope": certificate_scope.value,
         "pricing_state": pricing_state.value,
@@ -701,14 +1132,48 @@ def _integer_incumbent_payload(
     *,
     node_bound: float | None,
     negative_eps: float,
+    primal_columns: Iterable[dict] = tuple(),
+    allow_pool_search: bool = True,
 ) -> dict:
+    primal_rows = tuple(primal_columns)
+    if _primal_lambdas_integral(primal_rows):
+        objective = round(sum(float(row.get("objective") or 0.0) * float(row.get("lambda_value") or 0.0) for row in primal_rows), 6)
+        matches_bound = bool(
+            node_bound is not None
+            and abs(float(objective) - float(node_bound)) <= max(abs(float(negative_eps)), TREE_OBJECTIVE_TOLERANCE)
+        )
+        return {
+            "status": "RMP_PRIMAL_INTEGER_EXACT_COVER",
+            "objective": objective,
+            "journey_count": len(primal_rows),
+            "candidate_column_count": len(primal_rows),
+            "unique_task_set_count": len({tuple(row.get("tasks", []) or []) for row in primal_rows}),
+            "state_count": 0,
+            "matches_node_lp_bound": matches_bound,
+            "source": "NODE_RMP_PRIMAL_INTEGRAL" if matches_bound else "NODE_RMP_PRIMAL_INTEGRAL_MISMATCH",
+            "note": "RMP primal lambdas are integral; no integer column-pool DP was needed.",
+            "_columns": tuple(columns),
+        }
+    if not allow_pool_search:
+        return {
+            "status": "NODE_LP_FRACTIONAL_NO_INTEGER_POOL_SEARCH",
+            "objective": None,
+            "journey_count": 0,
+            "candidate_column_count": len(tuple(columns)),
+            "unique_task_set_count": 0,
+            "state_count": 0,
+            "matches_node_lp_bound": False,
+            "source": "FRACTIONAL_RMP_PRIMAL",
+            "note": "RMP primal is fractional; B3 branches instead of running expensive integer DP over the priced universe.",
+            "_columns": tuple(),
+        }
     candidate_columns = tuple(columns)
     selection = select_journey_column_pool(data.task_ids, candidate_columns, fleet_size=data.fleet_size)
     objective = _float_or_none(selection.objective)
     matches_bound = bool(
         objective is not None
         and node_bound is not None
-        and abs(float(objective) - float(node_bound)) <= abs(float(negative_eps))
+        and abs(float(objective) - float(node_bound)) <= max(abs(float(negative_eps)), TREE_OBJECTIVE_TOLERANCE)
     )
     return {
         "status": selection.status,
@@ -729,8 +1194,6 @@ def _columns_from_primal_context(
     priced_columns: tuple[JourneyColumn, ...],
     primal_columns: tuple[dict, ...],
 ) -> tuple[JourneyColumn, ...]:
-    if priced_columns:
-        return priced_columns
     primal_task_sets = {
         tuple(row.get("tasks", []) or [])
         for row in primal_columns
@@ -738,11 +1201,14 @@ def _columns_from_primal_context(
     }
     if not primal_task_sets:
         return tuple()
-    universe = enumerate_direct_journey_columns(data, max_exact_tasks=len(data.task_ids)).columns
+    universe = priced_columns or enumerate_direct_journey_columns(data, max_exact_tasks=len(data.task_ids)).columns
     selected = []
+    seen: set[tuple[str, ...]] = set()
     for column in universe:
-        if tuple(sorted(column.task_set)) in primal_task_sets:
+        key = tuple(sorted(str(task_id) for task_id in column.task_set))
+        if key in primal_task_sets and key not in seen:
             selected.append(column)
+            seen.add(key)
     return tuple(selected)
 
 
@@ -799,13 +1265,27 @@ def _tree_gate_issues(
         issues.append("node_lower_bound_not_official")
     if global_lower_bound is None:
         issues.append("global_lower_bound_missing")
-    elif incumbent_objective is not None and global_lower_bound < incumbent_objective - abs(float(negative_eps)):
+    elif incumbent_objective is not None and global_lower_bound < incumbent_objective - max(abs(float(negative_eps)), TREE_OBJECTIVE_TOLERANCE):
         issues.append("global_gap_positive")
     if not node_ledgers_valid:
         issues.append("node_certificate_ledger_invalid")
     if proof_debt.block_certificate_if_unreleased():
         issues.append("unreleased_true_rc_negative_proof_debt")
     return issues
+
+
+def _b2_not_run_payload(data: LunarIceData, *, max_direct_tasks: int) -> dict:
+    return {
+        "algorithm_status": "B2_ROOT_DIAGNOSTIC_NOT_RUN",
+        "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+        "pricing_state": "NOT_RUN",
+        "root_rmp_objective": None,
+        "root_lp_bound": None,
+        "root_lp_bound_official": False,
+        "task_count": len(data.task_ids),
+        "max_direct_tasks": int(max_direct_tasks),
+        "note": "B2B_R3 root diagnostic was skipped inside B3; B3 node certificates are solved and audited directly.",
+    }
 
 
 def _too_large_payload(

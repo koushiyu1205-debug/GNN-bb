@@ -10,6 +10,7 @@ from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.pricing.profiling import PruningCounter
+from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 
 
@@ -40,6 +41,7 @@ def harvest_addable_negative_columns(
     max_selected: int = 64,
     forbidden_signatures: set | None = None,
     active_task_sets: set[frozenset[str]] | None = None,
+    branch_context: BranchContext | None = None,
     profiling: PruningCounter | None = None,
 ) -> tuple[tuple[JourneyColumn, ...], dict]:
     """Select true-RC negative candidates that can actually enter the master."""
@@ -67,6 +69,7 @@ def harvest_addable_negative_columns(
         if signature in seen_signatures:
             duplicate_signature_count += 1
         seen_signatures.add(signature)
+        branch_allowed = journey_satisfies_branch_context(column, branch_context)
         bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
         report = pool.addability_check(
             bpc_column,
@@ -75,6 +78,7 @@ def harvest_addable_negative_columns(
                 "node_id": node_id,
                 "forbidden_signatures": forbidden_signatures or set(),
                 "active_task_sets": active_task_sets or set(),
+                "is_allowed_by_branch": branch_allowed,
             },
         )
         if report.is_forbidden_signature:

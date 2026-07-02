@@ -52,11 +52,13 @@ def run_true_dual_root_final_judge(
         fleet_limit=context.fleet_dual,
         cuts=context.cut_duals,
     )
-    if active_branch_context.empty and active_cut_context.empty:
+    if active_cut_context.empty and (active_branch_context.empty or complete_universe_columns is not None):
         return _run_complete_universe_rc_final_judge(
             data,
             duals,
             context=context,
+            branch_context=active_branch_context,
+            cut_context=active_cut_context,
             max_direct_tasks=max_direct_tasks,
             negative_eps=negative_eps,
             cache=cache,
@@ -135,6 +137,8 @@ def _run_complete_universe_rc_final_judge(
     duals: JourneyDuals,
     *,
     context: ReducedCostContext,
+    branch_context: BranchContext,
+    cut_context: CutContext,
     max_direct_tasks: int,
     negative_eps: float,
     cache: DirectPricingCache | None,
@@ -160,8 +164,8 @@ def _run_complete_universe_rc_final_judge(
             cache=cache,
         )
         payload["dual_fingerprint"] = context.dual_fingerprint
-        payload["branch_context"] = BranchContext().to_payload()
-        payload["cut_context"] = CutContext().to_payload()
+        payload["branch_context"] = branch_context.to_payload()
+        payload["cut_context"] = cut_context.to_payload()
         return FinalJudgeResult(
             pricing_state=PricingState.INCOMPLETE_LIMIT,
             pricing_payload=payload,
@@ -197,26 +201,28 @@ def _run_complete_universe_rc_final_judge(
                 pareto_label_count=exc.pareto_label_count,
             )
             payload["dual_fingerprint"] = context.dual_fingerprint
-            payload["branch_context"] = BranchContext().to_payload()
-            payload["cut_context"] = CutContext().to_payload()
+            payload["branch_context"] = branch_context.to_payload()
+            payload["cut_context"] = cut_context.to_payload()
             return FinalJudgeResult(
                 pricing_state=PricingState.INCOMPLETE_LIMIT,
                 pricing_payload=payload,
                 negative_columns=tuple(),
                 all_priced_columns=tuple(),
             )
-        columns = tuple(universe.columns)
+        raw_columns = tuple(universe.columns)
         generated_sortie_count = int(universe.generated_sortie_count)
         route_template_count = int(universe.route_template_count)
         pareto_label_count = int(universe.pareto_label_count)
         universe_source = "enumerated"
     else:
-        columns = tuple(complete_universe_columns)
+        raw_columns = tuple(complete_universe_columns)
         generated_sortie_count = int(complete_universe_counts.get("generated_sortie_count") or 0)
         route_template_count = int(complete_universe_counts.get("route_template_count") or 0)
         pareto_label_count = int(complete_universe_counts.get("pareto_label_count") or 0)
         universe_source = "provided_complete_universe_cache"
-    rc_values = tuple(_manual_reduced_cost(column, duals, CutContext()) for column in columns)
+    columns = tuple(column for column in raw_columns if journey_satisfies_branch_context(column, branch_context))
+    branch_filtered_column_count = len(raw_columns) - len(columns)
+    rc_values = tuple(_manual_reduced_cost(column, duals, cut_context) for column in columns)
     min_reduced_cost = min(rc_values) if rc_values else None
     negative_pairs = tuple(
         sorted(
@@ -260,6 +266,7 @@ def _run_complete_universe_rc_final_judge(
         "pricing_complete_for_all_task_subsets": True,
         "exhaustive_candidate_set_count": len(columns),
         "generated_journey_count": len(columns),
+        "complete_universe_raw_column_count": len(raw_columns),
         "sortie_attempt_count": int(route_template_count),
         "feasible_sortie_template_count": int(generated_sortie_count),
         "route_template_count": int(route_template_count),
@@ -267,11 +274,11 @@ def _run_complete_universe_rc_final_judge(
         "best_reduced_cost": min_reduced_cost,
         "negative_found": bool(negative_columns),
         "negative_column_count": len(negative_columns),
-        "cut_context_active": False,
-        "cut_count": 0,
-        "branch_context_active": False,
-        "branch_decision_count": 0,
-        "branch_filtered_column_count": 0,
+        "cut_context_active": not cut_context.empty,
+        "cut_count": len(cut_context.cuts),
+        "branch_context_active": not branch_context.empty,
+        "branch_decision_count": len(branch_context.pair_decisions),
+        "branch_filtered_column_count": branch_filtered_column_count,
         "completion_bound": _disabled_completion_bound_payload(),
         "completion_bound_pruning_enabled": False,
         "sortie_template_cache": _cache_payload(cache),
@@ -279,13 +286,16 @@ def _run_complete_universe_rc_final_judge(
         "can_certify_no_negative": bool(certified),
         "uses_true_dual_bpc_certificate": bool(certified),
         "dual_fingerprint": context.dual_fingerprint,
-        "branch_context": BranchContext().to_payload(),
-        "cut_context": CutContext().to_payload(),
+        "branch_context": branch_context.to_payload(),
+        "cut_context": cut_context.to_payload(),
         "manual_best_reduced_cost": min_reduced_cost,
         "pricing_best_reduced_cost": min_reduced_cost,
         "pricing_rc_audit_pass": pricing_rc_audit_pass,
         "manual_priced_column_count": len(rc_values),
-        "all_priced_columns_satisfy_branch_context": True,
+        "all_priced_columns_satisfy_branch_context": all(
+            journey_satisfies_branch_context(column, branch_context)
+            for column in columns
+        ),
         "final_judge_wall_time": round(perf_counter() - start, 6),
         "complete_universe_source": universe_source,
         "note": (

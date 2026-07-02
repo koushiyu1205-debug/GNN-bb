@@ -52,6 +52,7 @@ from lunar_ice_bpc.exact.bpc.pricing.duplicate_only_audit import build_duplicate
 from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
 from lunar_ice_bpc.exact.bpc.solver.branch_tree_solver import (
+    B3_COMPLETE_UNIVERSE_NODE_MODE,
     _QueuedNode,
     _solve_b3_node,
     solve_b3_branch_price_tree_baseline,
@@ -69,6 +70,7 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2C_MODE,
     B2D_MODE,
     B2_PRODUCT_MODE,
+    solve_node_pricing_with_b2b_r3,
     solve_b2_pricing_tail_baseline,
 )
 from lunar_ice_bpc.exact.bpc.solver.root_node_solver import solve_b1_root_node_baseline
@@ -1115,6 +1117,76 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertGreater(node["final_judge"]["branch_filtered_column_count"], 0)
         self.assertEqual(node["final_judge"]["pricing_state"], "CERTIFIED_NO_NEGATIVE")
         self.assertTrue(node["final_judge"]["all_priced_columns_satisfy_branch_context"])
+
+    def test_b3_uses_complete_universe_node_pricing_audit(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b3 = solve_b3_branch_price_tree_baseline(data, max_direct_tasks=5, max_rounds_per_node=8)
+
+        self.assertEqual(b3["b3_mode"], "B3B_seeded_branch_price_tree")
+        self.assertEqual(b3["node_pricing_mode"], B3_COMPLETE_UNIVERSE_NODE_MODE)
+        self.assertEqual(b3["nodes"][0]["node_pricing_mode"], B3_COMPLETE_UNIVERSE_NODE_MODE)
+        self.assertEqual(
+            b3["nodes"][0]["node_certificate_source"],
+            "complete_universe_branch_membership_rc_audit",
+        )
+        self.assertEqual(b3["nodes"][0]["complete_universe_source"], "provided_complete_universe_cache")
+        self.assertFalse(b3["nodes"][0]["full_universe_preloaded"])
+        self.assertFalse(b3["b0_ablation"]["direct_dp_used_as_bpc_certificate"])
+
+    def test_b2b_r3_node_engine_worker_no_column_is_not_certificate(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        node = solve_node_pricing_with_b2b_r3(
+            data,
+            node_id="node_probe",
+            max_direct_tasks=5,
+            max_rounds=1,
+            max_columns_per_round=1,
+        )
+
+        worker_rounds = [row for row in node["history"] if not row.get("final_judge_called")]
+        for row in worker_rounds:
+            self.assertNotEqual(row["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+            self.assertFalse(row["rmp_dual_diagnostic"]["can_certify_no_negative"])
+        if node["certificate_scope"] == "BPC_NODE_LP_CERTIFIED":
+            self.assertGreater(node["final_judge_call_count"], 0)
+            self.assertEqual(node["final_judge"]["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+
+    def test_b2b_r3_node_engine_harvest_respects_branch_context(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        task_a, task_b = data.task_ids[:2]
+        same_context = BranchContext((PairBranchDecision(task_a, task_b, SAME_JOURNEY),))
+        one_only = next(column for column in universe.columns if task_a in column.task_set and task_b not in column.task_set)
+        both_or_neither = next(column for column in universe.columns if journey_satisfies_branch_context(column, same_context))
+
+        selected, payload = harvest_addable_negative_columns(
+            ((-10.0, one_only), (-5.0, both_or_neither)),
+            pool=ColumnPool(),
+            view=MasterColumnView(),
+            node_id="node_same",
+            negative_eps=1.0e-6,
+            max_selected=10,
+            branch_context=same_context,
+        )
+
+        self.assertEqual(selected, (both_or_neither,))
+        self.assertEqual(payload["branch_filtered_count"], 1)
+        rejected = [row for row in payload["reports"] if row["task_set"] == sorted(one_only.task_set)]
+        self.assertEqual(rejected[0]["reject_reason"], "branch_infeasible")
+        self.assertFalse(rejected[0]["is_allowed_by_branch"])
+
+    def test_b3_direct_dp_incumbent_does_not_create_tree_certificate(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b3 = solve_b3_branch_price_tree_baseline(data, max_direct_tasks=4, max_rounds_per_node=1)
+
+        self.assertNotEqual(b3["certificate_scope"], "BPC_TREE_OPTIMAL")
+        self.assertFalse(b3["uses_true_dual_bpc_certificate"])
+        self.assertFalse(b3["b0_ablation"]["direct_dp_used_as_bpc_certificate"])
+        self.assertIn("task_count_exceeds_exhaustive_pricing_limit", b3["tree_certificate_gate_issues"])
 
     def test_no_fractional_rf_pair_is_not_integrality_proof(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)

@@ -1,0 +1,20 @@
+{
+  "all_tree_certificate_gate_issues_empty": true,
+  "bpc_optimal_status_count": 20,
+  "bpc_tree_optimal_count": 20,
+  "branching_instance_count": 2,
+  "instance_count": 20,
+  "max_abs_objective_diff_vs_b0": 1e-06,
+  "max_b3_wall": 123.490706,
+  "max_b3_wall_instance": "lunar_ice_sp50_020_012_seed829012",
+  "max_incomplete_node_count": 0,
+  "max_node_count": 7,
+  "max_node_count_instance": "lunar_ice_sp50_020_012_seed829012",
+  "max_open_node_count": 0,
+  "mean_b0_wall": 13.229097,
+  "mean_b3_wall": 36.054461,
+  "missing_instances": [],
+  "objective_match_tolerance_count": 20,
+  "total_expanded_node_count": 5,
+  "tree_objective_tolerance": 5e-06
+}

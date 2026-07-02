@@ -28,6 +28,7 @@ from lunar_ice_bpc.exact.bpc.pricing.profiling import PruningCounter
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
 from lunar_ice_bpc.exact.bpc.pricing.worker_seed_catalog import WorkerSeedCatalog
 from lunar_ice_bpc.exact.bpc.solver.root_node_solver import build_b1_seed_columns
+from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import manual_journey_reduced_cost
@@ -213,6 +214,428 @@ def solve_b2_product_exact_solver(
             else direct.note
         ),
     }
+
+
+def solve_node_pricing_with_b2b_r3(
+    data: LunarIceData,
+    *,
+    branch_context: BranchContext | None = None,
+    node_id: str = "root",
+    initial_columns: Iterable[JourneyColumn] | None = None,
+    incumbent_objective: float | None = None,
+    max_direct_tasks: int = 5,
+    max_rounds: int = 8,
+    negative_eps: float = 1.0e-6,
+    max_columns_per_round: int = 64,
+    b0_direct=None,
+    seed_mode: str = "b0_incumbent_plus_singletons",
+) -> dict:
+    """Solve one B3 branch node with the accepted B2B_R3 pricing order."""
+
+    active_context = branch_context or BranchContext()
+    active_node_id = str(node_id)
+    completion_policy = build_completion_bound_tail_policy(pruning_opt_in=False)
+    proof_debt = ProofDebtQueue()
+    profiling = PruningCounter()
+    if b0_direct is None:
+        b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
+    if len(data.task_ids) > int(max_direct_tasks):
+        return _node_engine_payload(
+            data=data,
+            node_id=active_node_id,
+            branch_context=active_context,
+            incumbent_objective=incumbent_objective,
+            completion_policy=completion_policy,
+            proof_debt=proof_debt,
+            profiling=profiling,
+            history=[],
+            harvest_totals=_empty_harvest_totals(),
+            profile_totals=_empty_profile_totals(),
+            seed_report=_seed_report(
+                mode=B2B_R3_MODE,
+                seed_mode="none_over_task_limit",
+                initial_column_count=0,
+                full_universe_column_count=0,
+                full_universe_preloaded=False,
+            ),
+            loaded_column_count=0,
+            seed_branch_filtered_column_count=0,
+            master=None,
+            final_judge=None,
+            final_judge_columns=tuple(),
+            final_judge_call_count=0,
+            duplicate_only_count=0,
+            hidden_negative_count=0,
+            replacement_only_round_count=0,
+            added_to_master_count=0,
+            algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+            certificate_scope=CertificateScope.FEASIBLE_INCUMBENT_ONLY,
+            pricing_state=PricingState.INCOMPLETE_LIMIT,
+            node_status="NODE_INCOMPLETE",
+            note=f"task_count={len(data.task_ids)} exceeds B2B_R3 node max_direct_tasks={max_direct_tasks}; fail closed.",
+        )
+
+    if initial_columns is None:
+        seed_columns, seed_report = _build_b2b_r2_lightweight_seed_columns(
+            data,
+            b0_direct=b0_direct,
+            seed_mode=seed_mode,
+            max_direct_tasks=max_direct_tasks,
+            mode=B2B_R3_MODE,
+        )
+    else:
+        seed_columns = tuple(initial_columns)
+        seed_report = {
+            "b1_mode": "B1B_seeded_root_CG",
+            "b2_mode": B2B_R3_MODE,
+            "seed_mode": "provided_node_initial_columns",
+            "seed_builder": "b3_node_inherited_seed_columns",
+            "initial_column_count": len(seed_columns),
+            "full_universe_column_count": None,
+            "full_universe_preloaded": False,
+        }
+
+    pool = ColumnPool()
+    view = MasterColumnView()
+    loaded_count, seed_branch_filtered_count = _load_columns_for_node(
+        pool,
+        view,
+        seed_columns,
+        node_id=active_node_id,
+        branch_context=active_context,
+    )
+    cache = DirectPricingCache()
+    seed_catalog = WorkerSeedCatalog()
+    history: list[dict] = []
+    harvest_totals = _empty_harvest_totals()
+    profile_totals = _empty_profile_totals()
+    final_judge_call_count = 0
+    duplicate_only_count = 0
+    replacement_only_round_count = 0
+    hidden_negative_count = 0
+    added_total = 0
+    last_master = None
+    last_judge_payload: dict | None = None
+    last_final_judge_columns: tuple[JourneyColumn, ...] = tuple()
+    last_duplicate_audit: dict | None = None
+    last_hidden_audit: dict | None = None
+    worker_only_success_count = 0
+
+    for round_index in range(1, max(1, int(max_rounds)) + 1):
+        master_columns = _master_columns(pool, view, node_id=active_node_id)
+        rmp_start = perf_counter()
+        master = solve_root_journey_master(
+            data,
+            master_columns,
+            negative_eps=negative_eps,
+            rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}",
+            branch_context=active_context,
+        )
+        profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
+        last_master = master
+        if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
+            profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL"
+            return _node_engine_payload(
+                data=data,
+                node_id=active_node_id,
+                branch_context=active_context,
+                incumbent_objective=incumbent_objective,
+                completion_policy=completion_policy,
+                proof_debt=proof_debt,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                profile_totals=profile_totals,
+                seed_report=seed_report,
+                loaded_column_count=loaded_count,
+                seed_branch_filtered_column_count=seed_branch_filtered_count,
+                master=master,
+                final_judge=last_judge_payload,
+                final_judge_columns=last_final_judge_columns,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_RMP_BOUND,
+                pricing_state=PricingState.INCOMPLETE_LIMIT,
+                node_status="NODE_RMP_INFEASIBLE_UNCERTIFIED",
+                note="Node RMP did not solve to optimality; restricted-pool no-cover is not an infeasibility certificate.",
+            )
+
+        worker = _run_negative_search_worker(
+            data,
+            master=master,
+            reduced_cost_context=master.reduced_cost_context,
+            master_columns=master_columns,
+            b0_direct=b0_direct,
+            pool=pool,
+            view=view,
+            cache=cache,
+            seed_catalog=seed_catalog,
+            profiling=profiling,
+            round_index=round_index,
+            max_direct_tasks=max_direct_tasks,
+            max_candidate_sets=max_columns_per_round,
+            negative_eps=negative_eps,
+            max_selected=max_columns_per_round,
+            node_id=active_node_id,
+            branch_context=active_context,
+        )
+        _accumulate_worker_profile(profile_totals, worker.payload)
+        if worker.status == PricingState.FOUND_NEGATIVE and worker.selected_columns:
+            added = _add_selected_to_pool_and_master(
+                pool,
+                view,
+                worker.selected_columns,
+                node_id=active_node_id,
+                branch_context=active_context,
+            )
+            harvest_payload = dict(worker.harvest_payload)
+            harvest_payload["added_to_master_count"] = int(added)
+            _accumulate_harvest_totals(harvest_totals, harvest_payload)
+            added_total += added
+            if added > 0:
+                worker_only_success_count += 1
+            defer_final_judge = bool(
+                added > 0
+                and (
+                    int(max_rounds) <= 1
+                    or (
+                        worker_only_success_count < _b2b_r2_worker_only_round_limit(max_rounds)
+                        and round_index < int(max_rounds)
+                    )
+                )
+            )
+            if defer_final_judge:
+                history.append(
+                    {
+                        "round": round_index,
+                        "node_id": active_node_id,
+                        "node_lp_bound": master.rmp.objective_bound,
+                        "pricing_state": PricingState.FOUND_NEGATIVE.value,
+                        "worker_status": worker.status.value,
+                        "worker_exit_reason": worker.payload.get("exit_reason"),
+                        "worker_wall_time": worker.payload.get("worker_wall_time"),
+                        **_worker_round_diagnostic_fields(worker.payload),
+                        "final_judge_called": False,
+                        "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
+                        "addable_negative_count": int(harvest_payload["addable_negative_count"]),
+                        "selected_count": int(harvest_payload["selected_count"]),
+                        "added_to_master_count": int(added),
+                        "added_column_count": int(added),
+                        "branch_context_active": not active_context.empty,
+                        "branch_filtered_count": int(harvest_payload.get("branch_filtered_count") or 0),
+                        "completion_bound_pruning_enabled": False,
+                    }
+                )
+                profile_totals["final_judge_saved_by_worker_count"] += 1
+                profile_totals["exit_reason"] = "WORKER_FOUND_ADDABLE_NEGATIVE"
+                continue
+
+        worker_only_success_count = 0
+        master_columns = _master_columns(pool, view, node_id=active_node_id)
+        rmp_start = perf_counter()
+        master = solve_root_journey_master(
+            data,
+            master_columns,
+            negative_eps=negative_eps,
+            rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}-closure",
+            branch_context=active_context,
+        )
+        profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
+        last_master = master
+        if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
+            profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL_BEFORE_FINAL_JUDGE"
+            continue
+
+        judge_start = perf_counter()
+        judge = run_true_dual_root_final_judge(
+            data,
+            master.reduced_cost_context,
+            max_direct_tasks=max_direct_tasks,
+            negative_eps=negative_eps,
+            cache=cache,
+            branch_context=active_context,
+        )
+        judge_wall_time = perf_counter() - judge_start
+        profile_totals["final_judge_wall_time"] += judge_wall_time
+        profile_totals["final_judge_call_count_profiled"] += 1
+        final_judge_call_count += 1
+        last_judge_payload = judge.pricing_payload
+        last_final_judge_columns = judge.all_priced_columns
+        profiling.merge_completion_payload(judge.pricing_payload)
+        _accumulate_pricing_profile(profile_totals, judge.pricing_payload)
+        negative_pairs = _manual_negative_pairs(
+            judge.all_priced_columns,
+            duals=master.rmp.duals,
+            negative_eps=negative_eps,
+            branch_context=active_context,
+        )
+        hidden_audit = build_hidden_negative_audit(
+            worker_payload=worker.payload,
+            final_judge_payload=judge.pricing_payload,
+            negative_candidates=negative_pairs,
+            node_id=active_node_id,
+            cg_iter=round_index,
+        )
+        last_hidden_audit = hidden_audit
+        hidden_negative_count += int(hidden_audit.get("hidden_negative_count") or 0)
+        seed_catalog.record_hidden_negative_audit(hidden_audit)
+        selected, harvest_payload = harvest_addable_negative_columns(
+            negative_pairs,
+            pool=pool,
+            view=view,
+            node_id=active_node_id,
+            negative_eps=negative_eps,
+            max_selected=max_columns_per_round,
+            active_task_sets={frozenset(column.task_set) for column in master_columns},
+            branch_context=active_context,
+            profiling=profiling,
+        )
+        added = _add_selected_to_pool_and_master(
+            pool,
+            view,
+            selected,
+            node_id=active_node_id,
+            branch_context=active_context,
+        )
+        harvest_payload["added_to_master_count"] = int(added)
+        _accumulate_harvest_totals(harvest_totals, harvest_payload)
+        added_total += added
+        duplicate_audit = None
+        duplicate_only_round = bool(negative_pairs and added == 0)
+        if duplicate_only_round:
+            duplicate_only_count += 1
+            replacement_only_round_count += 1
+            duplicate_audit = build_duplicate_only_audit(
+                negative_pairs,
+                pool=pool,
+                view=view,
+                duals=master.rmp.duals,
+                negative_eps=negative_eps,
+            )
+            last_duplicate_audit = duplicate_audit
+        profile_totals["exit_reason"] = (
+            "FINAL_JUDGE_CERTIFIED_NO_NEGATIVE"
+            if judge.pricing_state == PricingState.CERTIFIED_NO_NEGATIVE
+            else "FINAL_JUDGE_FOUND_NEGATIVE"
+            if judge.pricing_state == PricingState.FOUND_NEGATIVE
+            else "FINAL_JUDGE_INCOMPLETE_LIMIT"
+        )
+        history.append(
+            {
+                "round": round_index,
+                "node_id": active_node_id,
+                "node_lp_bound": master.rmp.objective_bound,
+                "pricing_state": judge.pricing_state.value,
+                "worker_status": worker.status.value,
+                "worker_exit_reason": worker.payload.get("exit_reason"),
+                "worker_wall_time": worker.payload.get("worker_wall_time"),
+                **_worker_round_diagnostic_fields(worker.payload),
+                "final_judge_called": True,
+                "final_judge_wall_time": round(judge_wall_time, 6),
+                "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
+                "addable_negative_count": int(harvest_payload["addable_negative_count"]),
+                "selected_count": int(harvest_payload["selected_count"]),
+                "added_to_master_count": int(added),
+                "added_column_count": int(added),
+                "duplicate_only_audit_status": None if duplicate_audit is None else duplicate_audit.get("status"),
+                "branch_context_active": not active_context.empty,
+                "branch_filtered_count": int(harvest_payload.get("branch_filtered_count") or 0),
+                "completion_bound_pruning_enabled": False,
+            }
+        )
+        if judge.pricing_state == PricingState.CERTIFIED_NO_NEGATIVE:
+            return _node_engine_payload(
+                data=data,
+                node_id=active_node_id,
+                branch_context=active_context,
+                incumbent_objective=incumbent_objective,
+                completion_policy=completion_policy,
+                proof_debt=proof_debt,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                profile_totals=profile_totals,
+                seed_report=seed_report,
+                loaded_column_count=loaded_count,
+                seed_branch_filtered_column_count=seed_branch_filtered_count,
+                master=master,
+                final_judge=judge.pricing_payload,
+                final_judge_columns=judge.all_priced_columns,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                algorithm_status=AlgorithmStatus.BPC_GAP_AVAILABLE,
+                certificate_scope=CertificateScope.BPC_NODE_LP_CERTIFIED,
+                pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
+                node_status="NODE_LP_CERTIFIED",
+                note="B2B_R3 node LP certificate came only from the branch-aware true-dual final judge.",
+            )
+        if duplicate_only_round:
+            profile_totals["exit_reason"] = "DUPLICATE_ONLY"
+            return _node_engine_payload(
+                data=data,
+                node_id=active_node_id,
+                branch_context=active_context,
+                incumbent_objective=incumbent_objective,
+                completion_policy=completion_policy,
+                proof_debt=proof_debt,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                profile_totals=profile_totals,
+                seed_report=seed_report,
+                loaded_column_count=loaded_count,
+                seed_branch_filtered_column_count=seed_branch_filtered_count,
+                master=master,
+                final_judge=judge.pricing_payload,
+                final_judge_columns=judge.all_priced_columns,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+                pricing_state=PricingState.DUPLICATE_ONLY,
+                node_status="DUPLICATE_ONLY",
+                note="DUPLICATE_ONLY: branch-aware true-RC negative candidates were found but none entered the node master.",
+            )
+
+    profile_totals["exit_reason"] = str(profile_totals.get("exit_reason") or "WORKER_INCOMPLETE_LIMIT")
+    return _node_engine_payload(
+        data=data,
+        node_id=active_node_id,
+        branch_context=active_context,
+        incumbent_objective=incumbent_objective,
+        completion_policy=completion_policy,
+        proof_debt=proof_debt,
+        profiling=profiling,
+        history=history,
+        harvest_totals=harvest_totals,
+        profile_totals=profile_totals,
+        seed_report=seed_report,
+        loaded_column_count=loaded_count,
+        seed_branch_filtered_column_count=seed_branch_filtered_count,
+        master=last_master,
+        final_judge=last_judge_payload,
+        final_judge_columns=last_final_judge_columns,
+        final_judge_call_count=final_judge_call_count,
+        duplicate_only_count=duplicate_only_count,
+        hidden_negative_count=hidden_negative_count,
+        replacement_only_round_count=replacement_only_round_count,
+        added_to_master_count=added_total,
+        algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+        certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+        pricing_state=PricingState.INCOMPLETE_LIMIT,
+        node_status="NODE_INCOMPLETE",
+        note=f"Stopped after max_rounds={max_rounds}; B2B_R3 node proof is incomplete.",
+    )
 
 
 def _solve_limited_pricing_diagnostic(
@@ -1101,6 +1524,8 @@ def _run_negative_search_worker(
     max_candidate_sets: int,
     negative_eps: float,
     max_selected: int,
+    node_id: str = "root",
+    branch_context: BranchContext | None = None,
 ) -> _NegativeSearchWorkerResult:
     worker_start = perf_counter()
     duals = _duals_from_reduced_cost_context(reduced_cost_context)
@@ -1124,20 +1549,23 @@ def _run_negative_search_worker(
         cache=cache,
         max_candidate_sets=max(1, int(max_candidate_sets)),
         completion_bound_enabled=False,
+        branch_context=branch_context,
     )
     negative_pairs = _manual_negative_pairs(
         priced_columns,
         duals=duals,
         negative_eps=negative_eps,
+        branch_context=branch_context,
     )
     selected, harvest_payload = harvest_addable_negative_columns(
         negative_pairs,
         pool=pool,
         view=view,
-        node_id="root",
+        node_id=node_id,
         negative_eps=negative_eps,
         max_selected=max_selected,
         active_task_sets={frozenset(column.task_set) for column in master_columns},
+        branch_context=branch_context,
         profiling=profiling,
     )
     worker_wall_time = perf_counter() - worker_start
@@ -1301,10 +1729,13 @@ def _manual_negative_pairs(
     *,
     duals: JourneyDuals,
     negative_eps: float,
+    branch_context: BranchContext | None = None,
 ) -> tuple[tuple[float, JourneyColumn], ...]:
     pairs: list[tuple[float, JourneyColumn]] = []
     threshold = -abs(float(negative_eps))
     for column in columns:
+        if not journey_satisfies_branch_context(column, branch_context):
+            continue
         rc = manual_journey_reduced_cost(column, duals)
         if rc < threshold:
             pairs.append((rc, column))
@@ -1452,17 +1883,42 @@ def _manual_full_universe_rc_audit(
 
 
 def _load_columns(pool: ColumnPool, view: MasterColumnView, columns: Iterable[JourneyColumn]) -> None:
+    _load_columns_for_node(pool, view, columns, node_id="root", branch_context=None)
+
+
+def _load_columns_for_node(
+    pool: ColumnPool,
+    view: MasterColumnView,
+    columns: Iterable[JourneyColumn],
+    *,
+    node_id: str = "root",
+    branch_context: BranchContext | None = None,
+) -> tuple[int, int]:
+    loaded = 0
+    branch_filtered = 0
     for column in columns:
+        allowed = journey_satisfies_branch_context(column, branch_context)
+        if not allowed:
+            branch_filtered += 1
+            continue
         signature = column_signature_from_journey(column)
         bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
-        pool.add(bpc_column)
+        pool.add(
+            bpc_column,
+            {
+                "master_view": view,
+                "node_id": node_id,
+                "is_allowed_by_branch": allowed,
+            },
+        )
         stored = pool.get(signature)
-        if stored is not None:
-            view.add_from_pool(stored, node_id="root", pool=pool)
+        if stored is not None and view.add_from_pool(stored, node_id=node_id, pool=pool):
+            loaded += 1
+    return loaded, branch_filtered
 
 
-def _master_columns(pool: ColumnPool, view: MasterColumnView) -> tuple[JourneyColumn, ...]:
-    signatures = view.signatures_by_node.get("root", set())
+def _master_columns(pool: ColumnPool, view: MasterColumnView, *, node_id: str = "root") -> tuple[JourneyColumn, ...]:
+    signatures = view.signatures_by_node.get(str(node_id), set())
     columns = []
     for signature in sorted(signatures, key=repr):
         column = pool.get(signature)
@@ -1471,16 +1927,161 @@ def _master_columns(pool: ColumnPool, view: MasterColumnView) -> tuple[JourneyCo
     return tuple(columns)
 
 
-def _add_selected_to_pool_and_master(pool: ColumnPool, view: MasterColumnView, columns: tuple[JourneyColumn, ...]) -> int:
+def _add_selected_to_pool_and_master(
+    pool: ColumnPool,
+    view: MasterColumnView,
+    columns: tuple[JourneyColumn, ...],
+    *,
+    node_id: str = "root",
+    branch_context: BranchContext | None = None,
+) -> int:
     added = 0
     for column in columns:
+        allowed = journey_satisfies_branch_context(column, branch_context)
+        if not allowed:
+            continue
         signature = column_signature_from_journey(column)
         bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
-        pool.add(bpc_column, {"master_view": view, "node_id": "root"})
+        pool.add(
+            bpc_column,
+            {
+                "master_view": view,
+                "node_id": node_id,
+                "is_allowed_by_branch": allowed,
+            },
+        )
         stored = pool.get(signature)
-        if stored is not None and view.add_from_pool(stored, node_id="root", pool=pool):
+        if stored is not None and view.add_from_pool(stored, node_id=node_id, pool=pool):
             added += 1
     return added
+
+
+def _node_engine_payload(
+    *,
+    data: LunarIceData,
+    node_id: str,
+    branch_context: BranchContext,
+    incumbent_objective: float | None,
+    completion_policy: dict,
+    proof_debt: ProofDebtQueue,
+    profiling: PruningCounter,
+    history: list[dict],
+    harvest_totals: dict[str, int],
+    profile_totals: dict,
+    seed_report: dict,
+    loaded_column_count: int,
+    seed_branch_filtered_column_count: int,
+    master,
+    final_judge: dict | None,
+    final_judge_columns: tuple[JourneyColumn, ...],
+    final_judge_call_count: int,
+    duplicate_only_count: int,
+    hidden_negative_count: int,
+    replacement_only_round_count: int,
+    added_to_master_count: int,
+    algorithm_status: AlgorithmStatus,
+    certificate_scope: CertificateScope,
+    pricing_state: PricingState,
+    node_status: str,
+    note: str,
+) -> dict:
+    node_bound = None if master is None else master.rmp.objective_bound
+    manual_rc_audit_pass = _manual_rc_audit_pass(master, None)
+    pricing_rc_audit_pass = bool(final_judge and final_judge.get("pricing_rc_audit_pass") is True)
+    branch_pricing_audit_pass = bool(
+        final_judge is None
+        or final_judge.get("all_priced_columns_satisfy_branch_context") is True
+    )
+    gate_issues: list[str] = []
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not manual_rc_audit_pass:
+        gate_issues.append("manual_reduced_cost_audit_failed")
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not pricing_rc_audit_pass:
+        gate_issues.append("pricing_reduced_cost_audit_failed")
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not branch_pricing_audit_pass:
+        gate_issues.append("branch_filtered_pricing_audit_failed")
+    ledger = CertificateLedger(
+        algorithm_status=algorithm_status,
+        certificate_scope=certificate_scope,
+        pricing_state=pricing_state,
+        uses_true_dual_bpc_certificate=certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED,
+        issues=gate_issues,
+    ).validate(proof_debt_queue=proof_debt)
+    node_lp_bound_official = bool(
+        certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED
+        and pricing_state == PricingState.CERTIFIED_NO_NEGATIVE
+        and ledger["valid"]
+    )
+    candidate_negative_count = int(harvest_totals.get("candidate_negative_count") or 0)
+    addable_negative_count = int(harvest_totals.get("addable_negative_count") or 0)
+    selected_count = int(harvest_totals.get("selected_count") or 0)
+    selected_would_enter_master_count = int(harvest_totals.get("selected_would_enter_master_count") or 0)
+    profile_payload = _profile_payload(profile_totals, profiling, final_judge)
+    branch_filtered_count = max(
+        int(seed_branch_filtered_column_count),
+        int((final_judge or {}).get("branch_filtered_column_count") or 0),
+        int(harvest_totals.get("branch_filtered_count") or 0),
+    )
+    return {
+        "schema_version": "lunar_ice_bpc.b2b_r3_node_pricing_engine.v1",
+        "node_id": str(node_id),
+        "node_pricing_mode": B2B_R3_MODE,
+        "b2_mode": B2B_R3_MODE,
+        "task_count": len(data.task_ids),
+        "branch_context": branch_context.to_payload(),
+        "branch_context_active": not branch_context.empty,
+        "branch_decision_count": len(branch_context.pair_decisions),
+        "incumbent_objective_at_entry": incumbent_objective,
+        "algorithm_status": algorithm_status.value,
+        "certificate_scope": certificate_scope.value,
+        "pricing_state": pricing_state.value,
+        "node_status": str(node_status),
+        "uses_true_dual_bpc_certificate": ledger["uses_true_dual_bpc_certificate"],
+        "certificate_ledger": ledger,
+        "proof_debt_queue": proof_debt.audit(),
+        "proof_debt_unreleased_count": len(proof_debt.unreleased),
+        "completion_bound_policy": completion_policy,
+        "completion_bound_pruning_enabled": False,
+        "seed_mode": seed_report.get("seed_mode"),
+        "seed_builder": seed_report.get("seed_builder") or "",
+        "initial_column_count": int(seed_report.get("initial_column_count") or 0),
+        "full_universe_preloaded": bool(seed_report.get("full_universe_preloaded")),
+        "loaded_column_count": int(loaded_column_count),
+        "branch_filtered_column_count": int(branch_filtered_count),
+        "seed_branch_filtered_column_count": int(seed_branch_filtered_column_count),
+        "rmp_status": None if master is None else master.rmp.status,
+        "node_lp_bound": node_bound,
+        "node_lp_bound_official": node_lp_bound_official,
+        "rmp_iteration_count": 0 if master is None else master.rmp.iteration_count,
+        "pricing_round_count": len(history),
+        "final_judge_call_count": int(final_judge_call_count),
+        "final_judge": final_judge or {},
+        "history": list(history),
+        "manual_rc_audit_pass": manual_rc_audit_pass,
+        "pricing_rc_audit_pass": pricing_rc_audit_pass,
+        "branch_pricing_audit_pass": branch_pricing_audit_pass,
+        "candidate_negative_count": candidate_negative_count,
+        "addable_negative_count": addable_negative_count,
+        "selected_count": selected_count,
+        "selected_would_enter_master_count": selected_would_enter_master_count,
+        "selected_all_would_enter_master": selected_would_enter_master_count == selected_count,
+        "selected_harvest_addability_fail_count": 0 if selected_would_enter_master_count == selected_count else 1,
+        "added_to_master_count": int(added_to_master_count),
+        "added_column_count": int(added_to_master_count),
+        "duplicate_only_count": int(duplicate_only_count),
+        "hidden_negative_count": int(hidden_negative_count),
+        "replacement_only_round_count": int(replacement_only_round_count),
+        **profile_payload,
+        **harvest_totals,
+        "exact_status": (
+            "BPC_NODE_LP_CERTIFIED"
+            if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and ledger["valid"]
+            else "NOT_SOLVED"
+        ),
+        "fail_closed_reason": "" if node_lp_bound_official else note,
+        "note": note,
+        "_master": master,
+        "_all_priced_columns": tuple(final_judge_columns),
+    }
 
 
 def _payload(
