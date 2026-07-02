@@ -8,6 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from lunar_ice_bpc.io.config import apply_overrides, load_config
 from lunar_ice_bpc.domain.scenario import (
@@ -53,8 +54,10 @@ from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_col
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
 from lunar_ice_bpc.exact.bpc.solver.branch_tree_solver import (
     B3_COMPLETE_UNIVERSE_NODE_MODE,
+    TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
     _QueuedNode,
     _solve_b3_node,
+    _tree_payload,
     solve_b3_branch_price_tree_baseline,
 )
 from lunar_ice_bpc.exact.bpc.solver.cut_formulation_solver import solve_b4_cut_formulation_baseline
@@ -1103,6 +1106,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             max_rounds=8,
             negative_eps=1.0e-6,
             max_columns_per_round=64,
+            use_complete_universe_audit=True,
         )
 
         self.assertEqual(node["schema_version"], "lunar_ice_bpc.b3_branch_node.v1")
@@ -1117,6 +1121,11 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertGreater(node["final_judge"]["branch_filtered_column_count"], 0)
         self.assertEqual(node["final_judge"]["pricing_state"], "CERTIFIED_NO_NEGATIVE")
         self.assertTrue(node["final_judge"]["all_priced_columns_satisfy_branch_context"])
+        self.assertEqual(
+            node["final_judge"]["column_universe_semantics"],
+            TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
+        )
+        self.assertFalse(node["final_judge"]["complete_universe_contains_all_route_variants"])
 
     def test_b3_uses_complete_universe_node_pricing_audit(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -1131,8 +1140,67 @@ class LunarIceSmokeTests(unittest.TestCase):
             "complete_universe_branch_membership_rc_audit",
         )
         self.assertEqual(b3["nodes"][0]["complete_universe_source"], "provided_complete_universe_cache")
+        self.assertEqual(
+            b3["nodes"][0]["column_universe_semantics"],
+            TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
+        )
+        self.assertFalse(b3["nodes"][0]["complete_universe_contains_all_route_variants"])
         self.assertFalse(b3["nodes"][0]["full_universe_preloaded"])
         self.assertFalse(b3["b0_ablation"]["direct_dp_used_as_bpc_certificate"])
+
+    def test_b3_tree_gate_downgrades_if_tree_ledger_validation_fails(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        direct = solve_direct_journey_baseline(data, max_exact_tasks=5)
+        node = {
+            "node_id": "node_000",
+            "node_status": "INTEGER_INCUMBENT",
+            "node_lp_bound": direct.objective,
+            "node_lp_bound_official": True,
+            "child_node_ids": [],
+            "certificate_ledger": {"valid": True},
+            "integer_incumbent": {"matches_node_lp_bound": True},
+        }
+
+        class FlakyTreeLedger:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            def validate(self, proof_debt_queue=None):
+                if str(self.kwargs["certificate_scope"]) == "BPC_TREE_OPTIMAL":
+                    return {
+                        "algorithm_status": str(self.kwargs["algorithm_status"]),
+                        "certificate_scope": "BPC_TREE_OPTIMAL",
+                        "pricing_state": str(self.kwargs["pricing_state"]),
+                        "uses_true_dual_bpc_certificate": True,
+                        "certificate_status": "INVALID_CERTIFICATE_SCOPE",
+                        "issues": ["forced_tree_ledger_invalid"],
+                        "valid": False,
+                    }
+                return CertificateLedger(**self.kwargs).validate(proof_debt_queue=proof_debt_queue)
+
+        with patch("lunar_ice_bpc.exact.bpc.solver.branch_tree_solver.CertificateLedger", FlakyTreeLedger):
+            payload = _tree_payload(
+                data=data,
+                b2={"root_rmp_objective": direct.objective, "certificate_scope": "BPC_NODE_LP_CERTIFIED"},
+                b0_direct=direct,
+                nodes=[node],
+                open_node_count=0,
+                incumbent_objective=direct.objective,
+                incumbent_source="B3_INTEGER_NODE:node_000",
+                incumbent_columns=tuple(direct.journeys),
+                proof_debt=ProofDebtQueue(),
+                node_limit_hit=False,
+                max_tree_nodes=31,
+                max_branch_depth=4,
+                negative_eps=1.0e-6,
+            )
+
+        self.assertEqual(payload["algorithm_status"], "BPC_GAP_AVAILABLE")
+        self.assertEqual(payload["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(payload["exact_status"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(payload["bpc_tree_optimal_count"], 0)
+        self.assertIn("forced_tree_ledger_invalid", payload["tree_certificate_gate_issues"])
 
     def test_b2b_r3_node_engine_worker_no_column_is_not_certificate(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)

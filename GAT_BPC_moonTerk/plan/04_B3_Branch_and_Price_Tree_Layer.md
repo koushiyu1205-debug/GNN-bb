@@ -2,13 +2,31 @@
 
 ## 0. 当前定位
 
-B3 的目标不是重新证明 direct-DP，也不是继续做 root pricing-tail。B3 的唯一核心任务是：
+B3 的目标不是重新证明 direct-DP，也不是继续做 root pricing-tail。当前 accepted B3B 的核心任务是：
 
 ```text
-在已接受的 B2B_R3 root-pricing baseline 之上，
-把 root-level true-dual pricing closure 推广到 branch node，
-用 branch-and-price tree 把 BPC_NODE_LP_CERTIFIED 推进到 BPC_TREE_OPTIMAL。
+在 fixed-graph direct journey universe 的任务集合代表列上，
+用 branch-context-aware reduced-cost audit 给 node LP official bound，
+再用 branch-and-price tree gate 把 node LP certificates 推进到 BPC_TREE_OPTIMAL。
 ```
+
+当前 accepted B3B 不是纯 B2B_R3 worker-tail。它使用：
+
+```text
+best-task-subset representative universe
+  -> small seeded node RMP
+  -> branch-context-aware membership RC audit
+  -> tree gate: integer incumbent / bound pruning / infeasible-node audit
+```
+
+这里的 `complete universe` 是历史兼容名，准确语义是：
+
+```text
+每个非空 task subset 保留一条 fixed-graph objective-best representative journey。
+它不是同一个 task subset 下所有 route variants 的全集。
+```
+
+该压缩表示在 B3 中是 exact-safe 的原因是：B3 只启用 Ryan-Foster same/different-journey branching，不启用 cuts 或 route-order branch；同一 task subset 的不同路线变体只会改变 objective，不会改变覆盖、fleet 使用或 branch membership。
 
 当前可接受前置状态：
 
@@ -29,53 +47,50 @@ B2B_R3:
     accepted root-level BPC seeded-CG baseline。
     使用 true-dual negative-search worker + worker-before-final-judge policy。
     worker 不能 certificate；final judge 仍是唯一 CERTIFIED_NO_NEGATIVE 来源。
+
+B3B:
+    accepted exact tree baseline for current 5/10/20 fixed-graph instances。
+    使用 best-task-subset representative universe + branch RC audit + tree gate。
+    20-scale current dataset: BPC_TREE_OPTIMAL 20/20。
 ```
 
-B3 必须以 **B2B_R3** 为 node pricing engine 的基础，而不是回退到旧的 B2B 或 full-universe node pricing。
+B2B_R3 仍保留为 root-pricing baseline 和 fallback/diagnostic node engine；当前 20-scale accepted closure 以 B3B representative-universe audit path 为准。
 
 ---
 
-## 1. 为什么当前 B3 文档/代码需要修改
+## 1. 为什么当前 B3 文档需要澄清
 
-当前 B3 scaffold 有两个主要问题。
+早期 B3 计划要求把 B2B_R3 worker-tail 抽成 node engine。后续实验证明，20-scale 的主要 blocker 不是 branch tree 本身，而是 root/node proof-tail 的重复枚举、过大 seed pool 和 fractional node 上的 expensive integer pool search。因此当前 accepted B3B 改成了更窄、更可证的路径。
 
-### 1.1 B3 入口没有显式使用 B2B_R3
-
-现有 B3 solver 如果只是调用：
-
-```python
-solve_b2_pricing_tail_baseline(...)
-```
-
-而不指定：
-
-```python
-mode=B2B_R3_true_dual_negative_search_worker
-```
-
-就会落回旧默认模式，导致 B3 没有继承 B2B_R3 已经验证有效的 worker-before-final-judge 结构。
-
-B3 必须显式使用 accepted baseline：
+### 1.1 当前 accepted B3B
 
 ```text
-B2B_R3_true_dual_negative_search_worker
+B3B_seeded_branch_price_tree
+node_pricing_mode = B3_complete_universe_branch_rc_audit
+column_universe_semantics = best_task_subset_representative_fixed_graph_columns
 ```
 
-作为 root/node pricing engine。
-
-### 1.2 当前 B3 node 仍偏 full-universe + final judge loop
-
-B3 node 不能默认在每个 node 预装 context-filtered full universe，然后直接跑 final judge。那样只能验证 branch filter / full-universe audit，不能验证真正的 branch-and-price scalability。
-
-B3 node 应该继承 B2B_R3 的思想：
+它不是“预装所有列然后直接结束”。实际流程是：
 
 ```text
-node seed pool
-  -> node RMP
-  -> branch-context-aware true-dual negative-search worker
-  -> addability-aware harvest
-  -> re-solve node RMP
-  -> only when closure needed, run branch-filtered true-dual final judge
+B0-compatible columns + singleton seed columns
+  -> solve node RMP
+  -> final judge audits cached task-subset representative universe under BranchContext
+  -> add negative columns in batches
+  -> repeat until no negative RC
+  -> if RMP primal integral, promote node to INTEGER_INCUMBENT
+  -> if fractional, branch or prune
+```
+
+### 1.2 B2B_R3 的当前角色
+
+```text
+B2B_R3 remains:
+    root-pricing baseline;
+    diagnostic comparison;
+    fallback node engine when representative-universe audit is disabled.
+
+B2B_R3 is not the accepted 20-scale closure path.
 ```
 
 ---
@@ -162,35 +177,36 @@ BranchContext
 inherited column pool / seed columns
 incumbent objective
 node limit / depth limit
-B2B_R3 node pricing config
+B3 representative-universe audit config
 ```
 
 ### 4.2 Node pricing engine
 
-B3 必须抽取一个 branch-context-aware node pricing engine，例如：
+当前 accepted B3B node engine 是：
 
 ```text
-solve_node_pricing_with_b2b_r3(
+solve_b3_node_with_task_subset_representative_audit(
     data,
     branch_context,
     node_id,
-    initial_columns,
+    b0-compatible seed columns + singleton seed columns,
+    cached task-subset representative universe,
     incumbent_objective,
     max_rounds,
     max_columns_per_round,
 )
 ```
 
-该 engine 应复用 B2B_R3 的核心逻辑：
+核心逻辑：
 
 ```text
 1. solve node RMP
-2. run true-dual negative-search worker using node RMP duals
-3. worker respects BranchContext
-4. worker found addable negative -> add and re-solve
-5. final judge only when closure is needed
-6. final judge respects BranchContext
-7. only final judge can return CERTIFIED_NO_NEGATIVE
+2. final judge audits all task-subset representative columns satisfying BranchContext
+3. add addable negative columns in batches
+4. re-solve node RMP
+5. certify no-negative only by final judge membership RC audit
+6. if RMP seed is infeasible, repair from the same representative universe
+7. never treat B0/direct-DP as BPC certificate
 ```
 
 输出：
@@ -211,7 +227,7 @@ Tree loop：
 initialize root node
 load feasible incumbent from B0 / B2_PRODUCT, certificate scope remains DIRECT_DP_FIXED_GRAPH_OPTIMAL
 while queue not empty and node limit not hit:
-    solve node pricing with B2B_R3 node engine
+    solve node pricing with representative-universe audit engine
     if node LP not certified:
         mark node incomplete
         continue
@@ -343,12 +359,15 @@ Direct-DP incumbent 不等于 BPC_TREE_OPTIMAL。
 
 ## 7. Required code changes
 
-### 7.1 Refactor B2B_R3 into reusable node engine
+### 7.1 Accepted B3B node engine
 
-Extract B2B_R3 logic so B3 can call it with branch context:
+Current accepted B3B uses a representative-universe node engine:
 
 ```text
-solve_node_pricing_with_b2b_r3(...)
+solve node RMP
+-> audit cached best-task-subset representative universe under BranchContext
+-> add negative representative columns
+-> re-solve until CERTIFIED_NO_NEGATIVE or fail-closed
 ```
 
 Required support:
@@ -356,38 +375,49 @@ Required support:
 ```text
 branch_context parameter
 node_id parameter
-initial/inherited columns
+small seed columns
+cached representative universe
 incumbent objective
 node-local ColumnPool/MasterColumnView
 node-local profiling
 node-local proof debt audit
 ```
 
+The B2B_R3 node engine remains available as fallback/diagnostic code, but it is not the accepted 20-scale closure path.
+
 ### 7.2 Update B3 entry
 
-B3 must not call B2 with default mode. It must call:
-
 ```text
-mode=B2B_R3_true_dual_negative_search_worker
+B3B default:
+    use_complete_universe_audit = True
+    column_universe_semantics = best_task_subset_representative_fixed_graph_columns
+
+B2 root diagnostic:
+    may call mode=B2B_R3_true_dual_negative_search_worker for comparison,
+    but should be skipped on larger cases when it would only consume row timeout.
 ```
 
-or call the refactored node engine directly.
+### 7.3 Name the universe boundary explicitly
 
-### 7.3 Replace full-universe default node solve
-
-B3 may keep full-universe node audit as explicit diagnostic:
+Do not describe the accepted B3B universe as "all route variants". The compatible payload key may still say `complete_universe_*`, but the proof boundary is:
 
 ```text
-B3A_full_universe_branch_audit
+one objective-best fixed-graph journey per nonempty task subset
+no route-dependent cuts
+no route-order branch
+Ryan-Foster task-set membership branch only
 ```
 
-But accepted B3 baseline must use:
-
-```text
-B3B_seeded_branch_price_tree_with_B2B_R3_node_engine
-```
+This path is exact for current B3. If B4 adds route-dependent cuts or route-order branching, B4 must extend the pricing universe or fall back to route-variant pricing.
 
 ### 7.4 Add branch-aware harvesting/addability
+
+```text
+harvest negative representative columns
+reject branch-infeasible columns
+record branch_filtered_count
+do not treat rejected negative columns as proof debt once they are branch-infeasible
+```
 
 Harvest selected columns must satisfy:
 
@@ -551,19 +581,20 @@ B3B can be accepted only if:
 ```text
 1. All redlines = 0.
 2. 5-scale full: BPC_TREE_OPTIMAL on 20/20, objective equals B0 direct-DP objective.
-3. 10-scale selected5: no regression versus B2B_R3; if root is integral, B3 promotes to BPC_TREE_OPTIMAL quickly; if branching needed, tree ledger explains closure/pruning.
-4. B3 never uses direct-DP as BPC certificate.
-5. All BPC_TREE_OPTIMAL rows have all node ledgers valid and no incomplete/open nodes.
+3. 10-scale full: BPC_TREE_OPTIMAL on 20/20, objective equals B0 direct-DP objective.
+4. 20-scale full: BPC_TREE_OPTIMAL on 20/20 under current fixed-graph data.
+5. B3 never uses direct-DP as BPC certificate.
+6. All BPC_TREE_OPTIMAL rows have all node ledgers valid and no incomplete/open nodes.
 ```
 
 Optional stronger acceptance:
 
 ```text
-10-scale full BPC_TREE_OPTIMAL improves over B2B_R3 root-only status.
-20-scale selected direct20 has fewer incomplete root/tree cases or better diagnostic depth.
+more root-fractional / branch-heavy fixtures close with nontrivial branching.
+runtime improves without weakening tree certificate gates.
 ```
 
-If B3 fails 5-scale full BPC_TREE_OPTIMAL, B3 remains diagnostic and cannot enter B4.
+If B3 fails 5/10/20 current fixed-graph BPC_TREE_OPTIMAL or leaks a tree certificate with invalid ledgers/open nodes, B3 remains diagnostic and cannot enter B4.
 
 ---
 
@@ -593,7 +624,9 @@ Only enter B4 if:
 B3B_seeded_branch_price_tree accepted = true
 redlines all zero
 5-scale full BPC_TREE_OPTIMAL = 20/20
-10-scale selected5 no regression and meaningful tree status improvement
+10-scale full BPC_TREE_OPTIMAL = 20/20
+20-scale full BPC_TREE_OPTIMAL = 20/20 under current fixed-graph data
+30-scale remains explicit fail-closed diagnostic unless a larger exact universe is implemented
 ```
 
 If not, continue B3. Do not use cuts to hide branch-context or tree-certificate bugs.
@@ -602,11 +635,11 @@ If not, continue B3. Do not use cuts to hide branch-context or tree-certificate 
 
 ## 13. 2026-07-02 20-scale closure update
 
-Current B3 implementation adds a formal complete-universe branch RC audit path:
+Current B3 implementation adds a formal task-subset representative branch RC audit path:
 
 ```text
 small seeded node RMP
--> true-dual final judge over cached complete fixed universe
+-> true-dual final judge over cached best-task-subset representative universe
 -> add negative columns in batches
 -> certify no-negative by membership RC audit
 -> promote root-integral node to BPC_TREE_OPTIMAL
@@ -617,7 +650,8 @@ Important proof boundary:
 ```text
 B0 direct-DP is only a feasible incumbent / objective comparison.
 B0 direct-DP is not used as the BPC certificate.
-Node LP certificates still require complete fixed-universe reduced-cost audit.
+Node LP certificates still require representative-universe reduced-cost audit.
+The compatible `complete_universe_*` payload fields mean one best fixed-graph column per task subset, not all route variants.
 ```
 
 Verified selected5 supplemental result:
@@ -655,9 +689,9 @@ Implementation changes that closed 012:
 
 ```text
 1. Branch nodes no longer seed the RMP with every <=4-task column; they start from B0-compatible columns plus singleton columns.
-2. If a branch seed is infeasible, exact-cover repair searches the complete branch-filtered fixed universe and adds only a small feasible cover.
-3. Complete-universe final judge still performs the official no-negative reduced-cost audit.
-4. Integer witness generation first checks whether the RMP primal is already integral; if it is fractional, B3 branches/prunes instead of running integer DP over the complete priced universe.
+2. If a branch seed is infeasible, exact-cover repair searches the branch-filtered representative universe and adds only a small feasible cover.
+3. Representative-universe final judge still performs the official no-negative reduced-cost audit.
+4. Integer witness generation first checks whether the RMP primal is already integral; if it is fractional, B3 branches/prunes instead of running integer DP over the representative priced universe.
 ```
 
 Full20 sweep result:

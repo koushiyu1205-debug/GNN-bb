@@ -22,6 +22,9 @@ from lunar_ice_bpc.exact.solver.journey_driver import (
 )
 
 
+TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS = "best_task_subset_representative_fixed_graph_columns"
+
+
 @dataclass(frozen=True)
 class FinalJudgeResult:
     pricing_state: PricingState
@@ -43,7 +46,12 @@ def run_true_dual_root_final_judge(
     complete_universe_columns: tuple[JourneyColumn, ...] | None = None,
     complete_universe_counts: dict | None = None,
 ) -> FinalJudgeResult:
-    """Run exhaustive fixed-graph pricing with completion-bound pruning disabled."""
+    """Run exhaustive fixed-graph pricing with completion-bound pruning disabled.
+
+    ``complete_universe_columns`` is a legacy name for the compressed fixed-graph
+    universe: one objective-best representative journey per nonempty task subset.
+    It is not the set of all route variants.
+    """
 
     active_branch_context = branch_context or _branch_context_from_reduced_cost_context(context)
     active_cut_context = cut_context or _cut_context_from_reduced_cost_context(context)
@@ -146,13 +154,14 @@ def _run_complete_universe_rc_final_judge(
     complete_universe_columns: tuple[JourneyColumn, ...] | None,
     complete_universe_counts: dict | None,
 ) -> FinalJudgeResult:
-    """Price root columns by complete fixed-universe enumeration plus manual RC audit.
+    """Price columns by task-subset representative enumeration plus manual RC audit.
 
     At the root without branch/cut context, reduced cost differs across columns
     only by the fixed journey objective for a given task set. The direct journey
     universe enumerator already returns the objective-best fixed-graph column
-    for every nonempty task subset, so a manual RC audit over that complete
-    universe is an exact no-negative proof path without re-pricing every subset.
+    for every nonempty task subset. Under Ryan-Foster task-set branching and no
+    cuts, a manual RC audit over these representatives is an exact no-negative
+    proof path without re-pricing every route variant.
     """
 
     if len(data.task_ids) > int(max_direct_tasks):
@@ -267,6 +276,8 @@ def _run_complete_universe_rc_final_judge(
         "exhaustive_candidate_set_count": len(columns),
         "generated_journey_count": len(columns),
         "complete_universe_raw_column_count": len(raw_columns),
+        "column_universe_semantics": TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
+        "complete_universe_contains_all_route_variants": False,
         "sortie_attempt_count": int(route_template_count),
         "feasible_sortie_template_count": int(generated_sortie_count),
         "route_template_count": int(route_template_count),
@@ -299,8 +310,9 @@ def _run_complete_universe_rc_final_judge(
         "final_judge_wall_time": round(perf_counter() - start, 6),
         "complete_universe_source": universe_source,
         "note": (
-            "Root final judge used complete fixed-universe enumeration plus manual reduced-cost audit; "
-            "certificate authority is granted only when all audited RC values are nonnegative."
+            "Final judge used the objective-best fixed-graph representative for each task subset "
+            "plus manual reduced-cost audit; certificate authority is granted only when all audited "
+            "RC values are nonnegative. This is not an all-route-variant universe."
         ),
     }
     return FinalJudgeResult(

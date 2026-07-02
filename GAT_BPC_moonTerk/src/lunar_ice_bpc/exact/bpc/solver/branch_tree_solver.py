@@ -39,6 +39,7 @@ from lunar_ice_bpc.exact.solver.journey_driver import (
 
 
 B3_COMPLETE_UNIVERSE_NODE_MODE = "B3_complete_universe_branch_rc_audit"
+TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS = "best_task_subset_representative_fixed_graph_columns"
 TREE_OBJECTIVE_TOLERANCE = 5.0e-6
 
 
@@ -70,6 +71,11 @@ def solve_b3_branch_price_tree_baseline(
     The first B3 version uses Ryan-Foster same/different-journey branching only.
     Direct DP may supply a feasible incumbent for pruning, but never supplies a
     BPC certificate or tree-closure proof.
+
+    ``complete_universe`` is a compatibility name. The audited column set is the
+    objective-best fixed-graph representative for every nonempty task subset,
+    not every route variant for that subset. That representation is exact here
+    because B3 has no route-dependent cuts or route-order branching.
     """
 
     if run_b2_root_diagnostic is None:
@@ -297,7 +303,7 @@ def _solve_b3_node_with_complete_universe_audit(
     negative_eps: float,
     max_columns_per_round: int,
 ) -> dict:
-    """Close a branch node by RMP plus RC audit over a cached complete universe."""
+    """Close a branch node by RMP plus RC audit over task-subset representatives."""
 
     pool = ColumnPool()
     view = MasterColumnView()
@@ -335,7 +341,7 @@ def _solve_b3_node_with_complete_universe_audit(
                         complete_universe_columns=complete_universe_columns,
                         master=master,
                         note=(
-                            "Complete branch-filtered fixed universe has no exact cover; "
+                            "Branch-filtered task-subset representative universe has no exact cover; "
                             "node is fathomed as infeasible."
                         ),
                     )
@@ -412,6 +418,7 @@ def _solve_b3_node_with_complete_universe_audit(
                 "branch_context_active": not queued.context.empty,
                 "branch_filtered_column_count": int(judge.pricing_payload.get("branch_filtered_column_count") or 0),
                 "complete_universe_raw_column_count": len(complete_universe_columns),
+                "column_universe_semantics": TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
                 "completion_bound_pruning_enabled": False,
             }
         )
@@ -431,13 +438,15 @@ def _solve_b3_node_with_complete_universe_audit(
                 certificate_scope=CertificateScope.BPC_NODE_LP_CERTIFIED,
                 pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
                 node_status="NODE_LP_CERTIFIED",
-                note="Node LP bound is certified by complete fixed-universe membership RC audit under branch context.",
+                note="Node LP bound is certified by task-subset representative membership RC audit under branch context.",
                 integer_candidate_columns=_incumbent_columns_for_context(b0_direct, queued.context),
             )
             node["node_pricing_mode"] = B3_COMPLETE_UNIVERSE_NODE_MODE
             node["node_certificate_source"] = "complete_universe_branch_membership_rc_audit"
             node["complete_universe_raw_column_count"] = len(complete_universe_columns)
             node["complete_universe_source"] = judge.pricing_payload.get("complete_universe_source")
+            node["column_universe_semantics"] = TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS
+            node["complete_universe_contains_all_route_variants"] = False
             node["full_universe_preloaded"] = False
             node["initial_seed_column_count"] = len(seed_columns)
             return node
@@ -466,6 +475,8 @@ def _solve_b3_node_with_complete_universe_audit(
     node["node_certificate_source"] = "complete_universe_branch_membership_rc_audit"
     node["complete_universe_raw_column_count"] = len(complete_universe_columns)
     node["complete_universe_source"] = None if last_judge is None else last_judge.pricing_payload.get("complete_universe_source")
+    node["column_universe_semantics"] = TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS
+    node["complete_universe_contains_all_route_variants"] = False
     node["full_universe_preloaded"] = False
     node["initial_seed_column_count"] = len(seed_columns)
     return node
@@ -696,6 +707,8 @@ def _infeasible_node_payload(
             "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
             "can_certify_no_negative": True,
             "complete_universe_raw_column_count": len(complete_universe_columns),
+            "column_universe_semantics": TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
+            "complete_universe_contains_all_route_variants": False,
             "branch_context": queued.context.to_payload(),
             "note": note,
         },
@@ -721,6 +734,8 @@ def _infeasible_node_payload(
         ],
         "completion_bound_pruning_enabled": False,
         "complete_universe_raw_column_count": len(complete_universe_columns),
+        "column_universe_semantics": TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
+        "complete_universe_contains_all_route_variants": False,
         "full_universe_preloaded": False,
         "note": note,
     }
@@ -933,7 +948,24 @@ def _tree_payload(
         issues=[] if tree_optimal else [],
     ).validate(proof_debt_queue=proof_debt)
     if tree_optimal and not ledger["valid"]:
-        tree_gate_issues.extend(ledger["issues"])
+        for issue in ledger["issues"]:
+            if issue not in tree_gate_issues:
+                tree_gate_issues.append(issue)
+        tree_optimal = False
+        if root.get("node_lp_bound_official"):
+            algorithm_status = AlgorithmStatus.BPC_GAP_AVAILABLE
+            certificate_scope = CertificateScope.BPC_NODE_LP_CERTIFIED
+            pricing_state = PricingState.CERTIFIED_NO_NEGATIVE
+        else:
+            algorithm_status = AlgorithmStatus.BPC_INCOMPLETE_PRICING
+            certificate_scope = CertificateScope.DIAGNOSTIC_PRICING_FRONTIER
+            pricing_state = PricingState.INCOMPLETE_LIMIT
+        ledger = CertificateLedger(
+            algorithm_status=algorithm_status,
+            certificate_scope=certificate_scope,
+            pricing_state=pricing_state,
+            uses_true_dual_bpc_certificate=certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED,
+        ).validate(proof_debt_queue=proof_debt)
     root_objective = _float_or_none(root.get("node_lp_bound"))
     b2_objective = _float_or_none(b2.get("root_rmp_objective"))
     direct_objective = _float_or_none(b0_direct.objective)
