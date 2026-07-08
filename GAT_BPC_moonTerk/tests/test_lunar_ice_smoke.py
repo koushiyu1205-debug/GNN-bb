@@ -54,6 +54,12 @@ from lunar_ice_bpc.exact.bpc.pricing.duplicate_only_audit import build_duplicate
 from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import _run_compact_single_journey_pricing_final_judge
+from lunar_ice_bpc.exact.bpc.cuts.cut_audit import (
+    audit_cut_reduced_cost_consistency,
+    build_cut_dominance_compatibility_report,
+    cut_aware_column_signature_from_journey,
+    cut_coefficient_vector_hash,
+)
 from lunar_ice_bpc.exact.bpc.solver.branch_tree_solver import (
     B3_COMPLETE_UNIVERSE_NODE_MODE,
     TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
@@ -99,6 +105,7 @@ from lunar_ice_bpc.exact.core.branching import (
     journey_satisfies_branch_context,
 )
 from lunar_ice_bpc.exact.core.cuts import (
+    CutDefinition,
     CutContext,
     cut_coefficients_for_journey,
     cut_context_from_payload,
@@ -146,6 +153,20 @@ from lunar_ice_bpc.runners.audit import audit_benchmark_csv
 import lunar_ice_bpc.runners.b0_b1_ablation as b0_b1_ablation_module
 import lunar_ice_bpc.runners.b2_pricing_tail_ablation as b2_pricing_tail_ablation_module
 import lunar_ice_bpc.runners.b3_branch_tree_ablation as b3_branch_tree_ablation_module
+from lunar_ice_bpc.runners.b4_cut_formulation_ablation import (
+    B4A_MODE,
+    B4B_MODE,
+    run_b4_cut_formulation_ablation,
+    write_b4_cut_formulation_artifacts,
+)
+from lunar_ice_bpc.runners.b4_pricing_formulation_diagnostic import (
+    b4_pricing_matrix_row_key,
+    build_b4_pricing_formulation_report_from_rows,
+    iter_b4_pricing_formulation_matrix_rows_from_probe,
+    run_b4_pricing_formulation_diagnostic_from_json,
+    run_b4_pricing_formulation_matrix_from_probe,
+    write_b4_pricing_formulation_artifacts,
+)
 from lunar_ice_bpc.runners.b0_b1_ablation import (
     B0_MODE,
     B1A_MODE,
@@ -688,6 +709,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 max_tree_nodes=1,
                 max_branch_depth=1,
                 allow_b3a_full_universe=True,
+                row_time_limit_sec=10.0,
                 b0_direct=None,
                 b2b_r3=None,
             )
@@ -1417,6 +1439,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             incumbent_objective_at_entry=None,
             max_direct_tasks=5,
             max_rounds=8,
+            wall_time_limit_sec=30.0,
             negative_eps=1.0e-6,
             max_columns_per_round=64,
             use_complete_universe_audit=True,
@@ -1677,6 +1700,26 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(b4["cut_added_count"], 0)
         self.assertEqual(b4["b3_ablation"]["certificate_scope_diff_vs_B3"], "FEASIBLE_INCUMBENT_ONLY->FEASIBLE_INCUMBENT_ONLY")
         self.assertIn("exceeds max_direct_tasks", b4["note"])
+
+    def test_b4_memory_guard_uses_restricted_pool_cut_diagnostic_without_certificate(self) -> None:
+        instance = generate_instance(20, seed=829001, index=1)
+        data = load_lunar_ice_data(instance)
+        b4 = solve_b4_cut_formulation_baseline(data, max_direct_tasks=20, max_rounds=8)
+
+        self.assertTrue(b4["rmp_memory_precheck_failed"])
+        self.assertEqual(b4["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertEqual(b4["exact_status"], "NOT_SOLVED")
+        self.assertFalse(b4["uses_true_dual_bpc_certificate"])
+        self.assertEqual(
+            b4["restricted_pool_cut_diagnostic"]["status"],
+            "RESTRICTED_POOL_CUT_DIAGNOSTIC_READY",
+        )
+        self.assertEqual(
+            b4["cut_probe"]["evaluation_scope"],
+            "safe_restricted_seed_pool_only",
+        )
+        self.assertFalse(b4["cut_probe"]["can_certify"])
+        self.assertFalse(b4["diagnostic_cut_separation_round"]["can_certify"])
 
     def test_b5_shadow_guidance_preserves_b4_do_no_harm_after_debt_release(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -2513,6 +2556,37 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertAlmostEqual(compact["manual_best_reduced_cost"], expected, delta=1.0e-6)
             self.assertTrue(compact["pricing_rc_audit_pass"])
 
+    def test_highs_compact_single_journey_formulation_switches_are_reported(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+        compact = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=False,
+            mtz_endpoint_order_cuts=False,
+            pair_adjacency_cuts=False,
+            latest_service_start_slot_bound=False,
+            time_window_arc_pruning=False,
+        )
+
+        self.assertEqual(compact["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertFalse(compact["latest_service_start_slot_bound_enabled"])
+        self.assertFalse(compact["time_window_arc_pruning_enabled"])
+        self.assertEqual(compact["time_window_impossible_arc_option_count"], 0)
+        self.assertFalse(compact["mtz_endpoint_order_cuts_enabled"])
+        self.assertFalse(compact["pair_adjacency_cuts_enabled"])
+
     def test_highs_compact_single_journey_negative_feasibility_search(self) -> None:
         try:
             import highspy  # noqa: F401
@@ -2957,6 +3031,144 @@ class LunarIceSmokeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             CutContext((subset_row_cut("dup", tasks), subset_row_cut("dup", tasks)))
 
+    def test_subset_row_coefficient_overlap_floor_divisor(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+        cut = subset_row_cut("sri_floor", tasks, divisor=2)
+
+        self.assertEqual(cut.coefficient(journey), 1.0)
+
+    def test_subset_row_rhs_floor_size_divisor(self) -> None:
+        cut = subset_row_cut("sri_rhs", ("a", "b", "c"), divisor=2)
+
+        self.assertEqual(cut.rhs, 1.0)
+
+    def test_cut_coefficients_for_journey_stable_order(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+        context = CutContext(
+            (
+                subset_row_cut("z_cut", tasks, divisor=2),
+                subset_row_cut("a_cut", tasks, divisor=2),
+            )
+        )
+
+        first = cut_coefficients_for_journey(journey, context)
+        second = cut_coefficients_for_journey(journey, cut_context_from_payload(context.to_payload()))
+
+        self.assertEqual(first, second)
+
+    def test_cut_coefficient_vector_hash_changes_when_cut_active(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+
+        self.assertEqual(cut_coefficient_vector_hash(journey, CutContext()), "")
+        self.assertNotEqual(
+            cut_coefficient_vector_hash(journey, CutContext((subset_row_cut("sri_hash", tasks),))),
+            "",
+        )
+
+    def test_manual_rc_with_subset_row_cut_matches_pricing_rc(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+        context = CutContext((subset_row_cut("sri_rc", tasks),))
+        duals = JourneyDuals(cover={}, fleet_limit=0.0, cuts={"sri_rc": -0.5})
+        manual = manual_journey_reduced_cost(journey, duals, cut_coefficients=context.coefficients_for(journey))
+
+        audit = audit_cut_reduced_cost_consistency(
+            (journey,),
+            duals,
+            context,
+            {"best_reduced_cost": manual},
+        )
+
+        self.assertTrue(audit["manual_rc_cut_consistency_pass"])
+        self.assertTrue(audit["manual_rc_with_cuts_matches_pricing_rc"])
+
+    def test_cut_dual_sign_for_subset_row_is_nonpositive(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+        context = CutContext((subset_row_cut("sri_sign", tasks),))
+        duals = JourneyDuals(cover={}, fleet_limit=0.0, cuts={"sri_sign": -1.0})
+        manual = manual_journey_reduced_cost(journey, duals, cut_coefficients=context.coefficients_for(journey))
+
+        audit = audit_cut_reduced_cost_consistency((journey,), duals, context, {"best_reduced_cost": manual})
+
+        self.assertTrue(audit["cut_dual_sign_audit_pass"])
+        self.assertEqual(audit["cut_dual_sign_audit"]["rows"][0]["expected_sign"], "<= 0")
+
+    def test_cut_context_empty_does_not_change_rc(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        duals = JourneyDuals(cover={}, fleet_limit=0.0, cuts={})
+
+        self.assertEqual(
+            manual_journey_reduced_cost(journey, duals),
+            manual_journey_reduced_cost(journey, duals, cut_coefficients=CutContext().coefficients_for(journey)),
+        )
+
+    def test_live_cut_fails_closed_when_pricing_audit_missing(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+        context = CutContext((subset_row_cut("sri_bad_pricing", tasks),))
+        duals = JourneyDuals(cover={}, fleet_limit=0.0, cuts={"sri_bad_pricing": -0.5})
+        manual = manual_journey_reduced_cost(journey, duals, cut_coefficients=context.coefficients_for(journey))
+
+        audit = audit_cut_reduced_cost_consistency(
+            (journey,),
+            duals,
+            context,
+            {"best_reduced_cost": manual + 1.0},
+        )
+
+        self.assertFalse(audit["manual_rc_cut_consistency_pass"])
+        self.assertFalse(audit["manual_rc_with_cuts_matches_pricing_rc"])
+
+    def test_cut_aware_signature_includes_cut_hash(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+        signature = cut_aware_column_signature_from_journey(
+            journey,
+            cut_context=CutContext((subset_row_cut("sri_signature", tasks),)),
+        )
+
+        self.assertTrue(signature.cut_coefficient_vector_hash)
+
+    def test_task_set_dominance_not_enabled_under_active_resource_sensitive_cut(self) -> None:
+        with self.assertRaises(ValueError):
+            CutDefinition("resource_sensitive", "resource_profile", tasks=("a", "b"), rhs=1.0)
+
+    def test_completion_bound_pruning_disabled_under_active_cut(self) -> None:
+        policy = build_completion_bound_tail_policy(pruning_opt_in=True, cut_context_active=True)
+
+        self.assertFalse(policy["pruning_enabled"])
+        self.assertTrue(policy["cut_context_active"])
+        self.assertFalse(policy["can_certify_no_negative"])
+
+    def test_fleet_lower_bound_cut_diagnostic_only(self) -> None:
+        report = build_cut_dominance_compatibility_report(
+            CutContext((fleet_lower_bound_cut("fleet_diag", min_vehicles=1),))
+        )
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(report["rows"][0]["diagnostic_only"])
+        self.assertFalse(report["rows"][0]["live_supported"])
+
     def test_restricted_rmp_accepts_active_cut_context_as_diagnostic_rows(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -3003,6 +3215,21 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(probe["mutates_solver"])
         self.assertFalse(probe["can_certify"])
         self.assertEqual(probe["exact_status_effect"], "none")
+        self.assertIn("max_violation", probe)
+        self.assertIn("mean_violation", probe)
+        self.assertIn("violated_subset_size_histogram", probe)
+        self.assertIn("affected_column_count", probe)
+        self.assertIn("active_support_overlap", probe)
+        top = probe["subset_candidates"][0]
+        self.assertEqual(top["cut_kind"], "subset_row")
+        self.assertEqual(top["sense"], "<=")
+        self.assertEqual(top["coefficient_dependency"], "task_set")
+        self.assertTrue(top["pricing_supported"])
+        self.assertFalse(top["completion_bound_supported"])
+        self.assertTrue(top["dominance_compatible"])
+        self.assertIn("coefficient_vector_hash", top)
+        self.assertIn("would_bind_on_current_rmp", top)
+        self.assertIn("would_change_dual_support", top)
 
     def test_cut_separation_round_re_solves_restricted_rmp_but_cannot_certify(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -3044,6 +3271,371 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(forced_round["mutates_solver"])
         self.assertFalse(forced_round["can_certify"])
         self.assertEqual(forced_round["exact_status_effect"], "none")
+        self.assertFalse(forced_round["restricted_pricing_claimed_no_negative"])
+        self.assertEqual(forced_round["selected_cut_diagnostics"][0]["cut_kind"], "subset_row")
+
+    def test_b4_cut_formulation_runner_writes_diagnostic_artifacts(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        report = run_b4_cut_formulation_ablation(
+            [instance],
+            modes=(B4A_MODE,),
+            max_direct_tasks=5,
+            max_rounds=8,
+            matrix_group="smoke",
+        )
+
+        self.assertEqual(report["schema_version"], "lunar_ice_bpc.b4_cut_formulation_ablation.v1")
+        self.assertEqual(report["row_count"], 1)
+        row = report["rows"][0]
+        self.assertEqual(row["mode"], B4A_MODE)
+        self.assertEqual(row["cut_probe_status"], "CUT_PROBE_READY")
+        self.assertGreaterEqual(row["cut_candidate_count"], 1)
+        self.assertFalse(row["diagnostic_lower_bound_official"])
+        self.assertFalse(row["diagnostic_can_certify"])
+        self.assertEqual(report["redlines"]["restricted_pricing_claimed_no_negative_count"], 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            write_b4_cut_formulation_artifacts(
+                report,
+                rows_csv=out / "b4_cut_rows.csv",
+                summary_json=out / "b4_cut_summary.json",
+                report_md=out / "b4_cut_report_zh.md",
+            )
+            with (out / "b4_cut_rows.csv").open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]["mode"], B4A_MODE)
+            summary = json.loads((out / "b4_cut_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["row_count"], 1)
+            self.assertIn("B4 Cut/Formulation", (out / "b4_cut_report_zh.md").read_text(encoding="utf-8"))
+
+    def test_b4_diagnostic_does_not_change_certificate_scope(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b4 = solve_b4_cut_formulation_baseline(data, max_direct_tasks=5, max_rounds=8)
+
+        self.assertFalse(b4["cut_rows_active"])
+        self.assertEqual(b4["b3_ablation"]["certificate_scope_diff_vs_B3"], "")
+
+    def test_5_scale_b3b_objective_unchanged_with_b4a(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b4 = solve_b4_cut_formulation_baseline(data, max_direct_tasks=5, max_rounds=8)
+
+        self.assertTrue(b4["final_integer_optimum_unchanged_vs_B3"])
+        self.assertEqual(b4["b3_ablation"]["objective_diff_vs_B3"], 0.0)
+
+    def test_10_scale_b3b_objective_unchanged_with_b4a(self) -> None:
+        instance = generate_instance(10, seed=729101, index=1)
+        data = load_lunar_ice_data(instance)
+        b4 = solve_b4_cut_formulation_baseline(data, max_direct_tasks=10, max_rounds=8)
+
+        self.assertTrue(b4["final_integer_optimum_unchanged_vs_B3"])
+        self.assertEqual(b4["b3_ablation"]["objective_diff_vs_B3"], 0.0)
+
+    def test_20_scale_b3b_objective_unchanged_with_b4a(self) -> None:
+        instance = generate_instance(20, seed=829001, index=1)
+        data = load_lunar_ice_data(instance)
+        b4 = solve_b4_cut_formulation_baseline(data, max_direct_tasks=20, max_rounds=8)
+
+        self.assertTrue(b4["rmp_memory_precheck_failed"])
+        self.assertFalse(b4["uses_true_dual_bpc_certificate"])
+        self.assertFalse(b4["restricted_pool_cut_diagnostic"]["can_certify"])
+
+    def test_b4b_live_subset_row_no_regression_on_smoke(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        b4 = solve_b4_cut_formulation_baseline(
+            data,
+            max_direct_tasks=5,
+            max_rounds=8,
+            live_subset_rows=True,
+            max_live_cuts=1,
+            add_violated_only=False,
+        )
+
+        self.assertEqual(b4["certificate_scope"], "BPC_TREE_OPTIMAL")
+        self.assertTrue(b4["final_integer_optimum_unchanged_vs_B3"])
+        self.assertTrue(b4["cut_reduced_cost_audit"]["manual_rc_cut_consistency_pass"])
+
+    def test_b4_pricing_formulation_diagnostic_from_probe_json_keeps_certificate_boundary(self) -> None:
+        payload = {
+            "instance_id": "lunar_ice_sp50_030_001_seed929001",
+            "pricing_round_count": 1,
+            "history": [
+                {
+                    "round": 1,
+                    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+                    "exact_status": "NOT_SOLVED",
+                    "best_reduced_cost": -0.01,
+                    "dual_bound": -0.02,
+                    "mip_gap": 1.0,
+                    "negative_column_count": 1,
+                    "added_column_count": 1,
+                    "active_column_count": 294,
+                    "pool_column_count": 296,
+                    "wall_time_sec": 12.5,
+                    "can_certify_no_negative": False,
+                    "pricing_complete_by_compact_milp": False,
+                    "negative_feasibility_search_enabled": False,
+                    "mtz_endpoint_order_cuts_enabled": True,
+                    "mtz_endpoint_order_cut_count": 10,
+                    "pair_adjacency_cuts_enabled": True,
+                    "pair_adjacency_cut_count": 20,
+                    "sortie_slots_per_journey": 7,
+                    "sortie_slot_bound_source": "latest_service_start_min_active_sortie_duration_bound",
+                    "sortie_slot_horizon_count_bound": 10,
+                    "sortie_slot_latest_start_count_bound": 7,
+                    "time_window_arc_pruning_enabled": True,
+                    "time_window_arc_option_count": 100,
+                    "time_window_impossible_arc_option_count": 30,
+                    "variable_count": 1000,
+                    "constraint_count": 2000,
+                }
+            ],
+            "final_judge": {
+                "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+                "exact_status": "NOT_SOLVED",
+                "dual_bound": -0.02,
+                "can_certify_no_negative": False,
+                "negative_feasibility_search_enabled": False,
+            },
+            "merged_replay_column": {
+                "added": True,
+                "replay_best_reduced_cost": -0.01,
+                "replay_dual_bound": -0.02,
+                "after_active_column_count": 297,
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "probe.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            report = run_b4_pricing_formulation_diagnostic_from_json([path])
+            self.assertEqual(report["schema_version"], "lunar_ice_bpc.b4_pricing_formulation_diagnostic.v1")
+            self.assertGreaterEqual(report["row_count"], 2)
+            self.assertEqual(report["redlines"]["positive_incumbent_rc_claimed_certificate_count"], 0)
+            self.assertTrue(report["acceptance"]["b4_pricing_formulation_diagnostic_accepted"])
+            self.assertEqual(report["acceptance"]["no_negative_certified_row_count"], 0)
+            out = Path(tmp) / "out"
+            write_b4_pricing_formulation_artifacts(
+                report,
+                rows_csv=out / "b4_pricing_rows.csv",
+                summary_json=out / "b4_pricing_summary.json",
+                report_md=out / "b4_pricing_report_zh.md",
+            )
+            with (out / "b4_pricing_rows.csv").open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]["variant"], "V4_combined_endpoint_pair_latest_start_time_window")
+            self.assertIn("B4C/B4D", (out / "b4_pricing_report_zh.md").read_text(encoding="utf-8"))
+
+    def test_b4_pricing_formulation_diagnostic_from_replay_json_honors_explicit_variant(self) -> None:
+        payload = {
+            "schema_version": "lunar_ice_bpc.compact_pricing_replay.v1",
+            "instance_id": "diagnostic",
+            "selected_history_round": 3,
+            "replay_config": {
+                "b4_variant": "V1_endpoint_order_plus_pair_adjacency",
+                "b4_formulation_kind": "endpoint_order+pair_adjacency",
+            },
+            "result": {
+                "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+                "exact_status": "NOT_SOLVED",
+                "best_reduced_cost": -0.01,
+                "dual_bound": -0.03,
+                "negative_column_count": 1,
+                "added_column_count": 1,
+                "can_certify_no_negative": False,
+                "mtz_endpoint_order_cuts_enabled": True,
+                "mtz_endpoint_order_cut_count": 10,
+                "pair_adjacency_cuts_enabled": True,
+                "pair_adjacency_cut_count": 20,
+                "latest_service_start_slot_bound_enabled": False,
+                "time_window_arc_pruning_enabled": False,
+                "variable_count": 100,
+                "constraint_count": 200,
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "replay.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            report = run_b4_pricing_formulation_diagnostic_from_json([path])
+
+        self.assertEqual(report["row_count"], 1)
+        self.assertEqual(report["rows"][0]["variant"], "V1_endpoint_order_plus_pair_adjacency")
+        self.assertEqual(report["rows"][0]["formulation_kind"], "endpoint_order+pair_adjacency")
+        self.assertIn("V0_current_compact_pricing", report["acceptance"]["missing_variants"])
+
+    def test_b4_pricing_formulation_matrix_runner_suppresses_negative_feasibility_certificate(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        with tempfile.TemporaryDirectory() as tmp:
+            instance_path = Path(tmp) / "instance.json"
+            instance_path.write_text(json.dumps(instance), encoding="utf-8")
+            probe_path = Path(tmp) / "probe.json"
+            probe_path.write_text(
+                json.dumps(
+                    {
+                        "instance_path": str(instance_path),
+                        "instance_id": data.instance_id,
+                        "history": [
+                            {
+                                "round": 1,
+                                "dual_context": {
+                                    "task_duals": {
+                                        task_id: 0.05 * (index + 1)
+                                        for index, task_id in enumerate(data.task_ids)
+                                    },
+                                    "fleet_dual": 0.0,
+                                    "cut_duals": {},
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report = run_b4_pricing_formulation_matrix_from_probe(
+                probe_path,
+                variants=("V0_current_compact_pricing",),
+                negative_feasibility_time_limit_sec=30.0,
+                optimization_proof_time_limit_sec=0.0,
+            )
+
+        self.assertEqual(report["row_count"], 1)
+        self.assertEqual(report["rows"][0]["variant"], "V0_current_compact_pricing")
+        self.assertEqual(report["rows"][0]["phase"], "negative_feasibility")
+        self.assertFalse(report["rows"][0]["can_certify_no_negative"])
+        self.assertEqual(report["acceptance"]["no_negative_certified_row_count"], 0)
+
+    def test_b4_pricing_formulation_matrix_iterator_skips_existing_row_key(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        with tempfile.TemporaryDirectory() as tmp:
+            instance_path = Path(tmp) / "instance.json"
+            instance_path.write_text(json.dumps(instance), encoding="utf-8")
+            probe_path = Path(tmp) / "probe.json"
+            probe_path.write_text(
+                json.dumps(
+                    {
+                        "instance_path": str(instance_path),
+                        "instance_id": data.instance_id,
+                        "history": [
+                            {
+                                "round": 1,
+                                "dual_context": {
+                                    "task_duals": {task_id: 0.0 for task_id in data.task_ids},
+                                    "fleet_dual": 0.0,
+                                    "cut_duals": {},
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            existing = {
+                b4_pricing_matrix_row_key(
+                    {
+                        "source_json": str(probe_path),
+                        "round": 1,
+                        "variant": "V0_current_compact_pricing",
+                        "phase": "negative_feasibility",
+                    }
+                )
+            }
+            rows = list(
+                iter_b4_pricing_formulation_matrix_rows_from_probe(
+                    probe_path,
+                    variants=("V0_current_compact_pricing",),
+                    negative_feasibility_time_limit_sec=30.0,
+                    optimization_proof_time_limit_sec=0.0,
+                    skip_keys=existing,
+                )
+            )
+
+        self.assertEqual(rows, [])
+        report = build_b4_pricing_formulation_report_from_rows(rows)
+        self.assertEqual(report["row_count"], 0)
+        self.assertFalse(report["acceptance"]["b4_pricing_formulation_diagnostic_accepted"])
+
+    def test_b4_pricing_formulation_improvement_requires_same_source_and_round(self) -> None:
+        source = "/tmp/probe.json"
+        rows = [
+            {
+                "source_json": source,
+                "round": "3",
+                "variant": "V0_current_compact_pricing",
+                "phase": "optimization_proof",
+                "compact_pricing_dual_bound": -0.008,
+                "new_negative_columns_found": 1,
+            },
+            {
+                "source_json": source,
+                "round": "",
+                "variant": "V4_combined_endpoint_pair_latest_start_time_window",
+                "phase": "staged_frontier_merge",
+                "compact_pricing_dual_bound": -0.007,
+                "new_negative_columns_found": 1,
+            },
+            {"source_json": source, "round": "3", "variant": "V1_endpoint_order_plus_pair_adjacency", "phase": "negative_feasibility"},
+            {"source_json": source, "round": "3", "variant": "V2_latest_service_start_slot_bound", "phase": "negative_feasibility"},
+            {"source_json": source, "round": "3", "variant": "V3_time_window_arc_pruning", "phase": "negative_feasibility"},
+            {"source_json": source, "round": "3", "variant": "V5_subset_row_master_diagnostic_only", "phase": "diagnostic"},
+        ]
+
+        report = build_b4_pricing_formulation_report_from_rows(rows)
+        self.assertEqual(report["acceptance"]["measurable_improvement_row_count"], 0)
+        self.assertFalse(report["acceptance"]["b4e_pricing_formulation_accepted"])
+
+        rows[1]["round"] = "3"
+        report = build_b4_pricing_formulation_report_from_rows(rows)
+        self.assertEqual(report["acceptance"]["measurable_improvement_row_count"], 1)
+        self.assertTrue(report["acceptance"]["b4e_pricing_formulation_accepted"])
+
+    def test_restricted_negative_feasibility_cannot_certify_no_negative(self) -> None:
+        payload = {
+            "instance_id": "diagnostic",
+            "history": [
+                {
+                    "status": "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE",
+                    "exact_status": "NOT_SOLVED",
+                    "negative_feasibility_search_enabled": True,
+                    "forbidden_arc_patterns_can_certify_full_space": False,
+                    "can_certify_no_negative": True,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "probe.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            report = run_b4_pricing_formulation_diagnostic_from_json([path])
+
+        self.assertEqual(report["redlines"]["restricted_negative_feasibility_claimed_certificate_count"], 1)
+
+    def test_positive_best_rc_with_negative_dual_bound_is_not_certificate(self) -> None:
+        payload = {
+            "instance_id": "diagnostic",
+            "history": [
+                {
+                    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+                    "exact_status": "NOT_SOLVED",
+                    "best_reduced_cost": 0.01,
+                    "dual_bound": -0.5,
+                    "can_certify_no_negative": True,
+                    "negative_feasibility_search_enabled": False,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "probe.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            report = run_b4_pricing_formulation_diagnostic_from_json([path])
+
+        self.assertEqual(report["redlines"]["positive_incumbent_rc_claimed_certificate_count"], 1)
 
     def test_pricing_certificate_is_fail_closed_until_true_dual_complete(self) -> None:
         frontier = build_pricing_frontier_ledger(

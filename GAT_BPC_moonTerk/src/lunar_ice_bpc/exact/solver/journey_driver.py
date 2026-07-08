@@ -1656,7 +1656,7 @@ def _build_cover_dual_vector(
         for index, mask in enumerate(supports):
             if index % 4096 == 0:
                 _raise_if_deadline_exceeded(deadline)
-        slack_by_mask[mask] = float(slack_by_mask[mask]) - increase
+            slack_by_mask[mask] = float(slack_by_mask[mask]) - increase
     return tuple(max(0.0, dual_by_bit[bit]) for bit in bits)
 
 

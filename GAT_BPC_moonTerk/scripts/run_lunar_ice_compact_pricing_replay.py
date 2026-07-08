@@ -31,6 +31,8 @@ def main() -> int:
     parser.add_argument("--flow-connectivity", action="store_true")
     parser.add_argument("--no-mtz-endpoint-order-cuts", action="store_true")
     parser.add_argument("--pair-adjacency-cuts", action="store_true")
+    parser.add_argument("--disable-latest-service-start-slot-bound", action="store_true")
+    parser.add_argument("--disable-time-window-arc-pruning", action="store_true")
     parser.add_argument("--negative-feasibility-search", action="store_true")
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--output-md", required=True)
@@ -65,6 +67,8 @@ def main() -> int:
         mtz_connectivity=bool(args.mtz_connectivity),
         mtz_endpoint_order_cuts=not bool(args.no_mtz_endpoint_order_cuts),
         pair_adjacency_cuts=bool(args.pair_adjacency_cuts),
+        latest_service_start_slot_bound=not bool(args.disable_latest_service_start_slot_bound),
+        time_window_arc_pruning=not bool(args.disable_time_window_arc_pruning),
         negative_feasibility_search=bool(args.negative_feasibility_search),
     )
     payload = {
@@ -90,6 +94,8 @@ def main() -> int:
             "flow_connectivity": bool(args.flow_connectivity),
             "mtz_endpoint_order_cuts": not bool(args.no_mtz_endpoint_order_cuts),
             "pair_adjacency_cuts": bool(args.pair_adjacency_cuts),
+            "latest_service_start_slot_bound": not bool(args.disable_latest_service_start_slot_bound),
+            "time_window_arc_pruning": not bool(args.disable_time_window_arc_pruning),
             "negative_feasibility_search": bool(args.negative_feasibility_search),
         },
         "result": _json_safe_result(result),
@@ -185,6 +191,8 @@ def _render_markdown(payload: dict) -> str:
         f"- flow connectivity: `{config['flow_connectivity']}`",
         f"- MTZ endpoint order cuts: `{config['mtz_endpoint_order_cuts']}`",
         f"- pair adjacency cuts: `{config['pair_adjacency_cuts']}`",
+        f"- latest-service-start slot bound: `{config['latest_service_start_slot_bound']}`",
+        f"- time-window arc pruning: `{config['time_window_arc_pruning']}`",
         "",
         "## Result",
         "",
@@ -198,6 +206,10 @@ def _render_markdown(payload: dict) -> str:
         f"- can certify no-negative: `{result.get('can_certify_no_negative')}`",
         f"- MTZ endpoint order cut count: `{result.get('mtz_endpoint_order_cut_count')}`",
         f"- pair adjacency cut count: `{result.get('pair_adjacency_cut_count')}`",
+        f"- latest-service-start slot bound enabled: `{result.get('latest_service_start_slot_bound_enabled')}`",
+        f"- sortie slot bound source: `{result.get('sortie_slot_bound_source')}`",
+        f"- time-window arc pruning enabled: `{result.get('time_window_arc_pruning_enabled')}`",
+        f"- time-window impossible arc options: `{result.get('time_window_impossible_arc_option_count')}`",
         f"- variable count: `{result.get('variable_count')}`",
         f"- constraint count: `{result.get('constraint_count')}`",
         f"- wall time: `{result.get('wall_time_sec')}`",

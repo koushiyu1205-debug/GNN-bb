@@ -68,6 +68,8 @@ def run_restricted_cut_separation_round(
             "cut_rmp_bound_delta": None,
             "cut_rmp_min_reduced_cost": None,
             "primal_cut_violation_max": None,
+            "selected_cuts": [],
+            "restricted_pricing_claimed_no_negative": False,
             "lower_bound_official": False,
             "mutates_solver": False,
             "can_certify": False,
@@ -105,6 +107,8 @@ def run_restricted_cut_separation_round(
         "primal_cut_activities": list(cut_rmp.primal_cut_activities),
         "primal_cut_violation_max": cut_rmp.primal_cut_violation_max,
         "selected_cuts": list(selected_cut_payloads),
+        "selected_cut_diagnostics": _selected_cut_diagnostics(probe, selected_cut_payloads),
+        "restricted_pricing_claimed_no_negative": False,
         "lower_bound_official": False,
         "mutates_solver": False,
         "can_certify": False,
@@ -175,6 +179,20 @@ def _candidate_count(cut_probe: Mapping[str, object], *, include_fleet_lower_bou
     if include_fleet_lower_bound and cut_probe.get("fleet_lower_bound_candidate"):
         count += 1
     return count
+
+
+def _selected_cut_diagnostics(cut_probe: Mapping[str, object], selected_cut_payloads: tuple[dict, ...]) -> list[dict]:
+    by_id: dict[str, dict] = {}
+    for candidate in cut_probe.get("subset_candidates", []) or []:
+        payload = candidate.get("cut_context") if isinstance(candidate, Mapping) else None
+        if isinstance(payload, Mapping):
+            by_id[str(payload.get("cut_id") or "")] = dict(candidate)
+    fleet = cut_probe.get("fleet_lower_bound_candidate") or {}
+    if isinstance(fleet, Mapping):
+        payload = fleet.get("cut_context")
+        if isinstance(payload, Mapping):
+            by_id[str(payload.get("cut_id") or "")] = dict(fleet)
+    return [by_id.get(str(row.get("cut_id") or ""), {"cut_key": row.get("cut_id")}) for row in selected_cut_payloads]
 
 
 def _bound_delta(root_bound: float | None, cut_bound: float | None) -> float | None:

@@ -72,7 +72,7 @@ def estimate_gurobi_compact_size(
     }
 
 
-def _safe_sortie_slot_bound(data: LunarIceData) -> dict:
+def _safe_sortie_slot_bound(data: LunarIceData, *, latest_service_start_bound: bool = True) -> dict:
     tasks = tuple(data.task_ids)
     if not tasks:
         return {
@@ -112,16 +112,21 @@ def _safe_sortie_slot_bound(data: LunarIceData) -> dict:
         1,
         int(math.floor((latest_service_start - min_outbound + 1.0e-9) / min_duration)) + 1,
     )
-    slot_count = min(len(tasks), horizon_slot_count, latest_start_slot_count)
-    if slot_count == len(tasks):
-        source = "task_count_bound"
-    elif slot_count == latest_start_slot_count and latest_start_slot_count <= horizon_slot_count:
-        source = "latest_service_start_min_active_sortie_duration_bound"
+    if latest_service_start_bound:
+        slot_count = min(len(tasks), horizon_slot_count, latest_start_slot_count)
+        if slot_count == len(tasks):
+            source = "task_count_bound"
+        elif slot_count == latest_start_slot_count and latest_start_slot_count <= horizon_slot_count:
+            source = "latest_service_start_min_active_sortie_duration_bound"
+        else:
+            source = "horizon_min_active_sortie_duration_bound"
     else:
-        source = "horizon_min_active_sortie_duration_bound"
+        slot_count = min(len(tasks), horizon_slot_count)
+        source = "task_count_bound" if slot_count == len(tasks) else "horizon_min_active_sortie_duration_bound"
     return {
         "slot_count": int(slot_count),
         "source": source,
+        "latest_service_start_slot_bound_enabled": bool(latest_service_start_bound),
         "horizon_slot_count_bound": int(min(len(tasks), horizon_slot_count)),
         "latest_start_slot_count_bound": int(min(len(tasks), latest_start_slot_count)),
         "latest_service_start_upper_bound": round(float(latest_service_start), 9),
@@ -201,6 +206,22 @@ def _arc_option_time_window_impossible(
     latest_target_start = _latest_task_service_start(data, target)
     earliest_target_start = earliest_source_start + float(source_task.service_time) + travel
     return earliest_target_start > latest_target_start + 1.0e-9
+
+
+def _pricing_path_type_cache(
+    data: LunarIceData,
+    *,
+    time_window_arc_pruning: bool = True,
+) -> tuple[dict[tuple[str, str], tuple[str, ...]], dict]:
+    base = _nondominated_path_type_cache(data)
+    if time_window_arc_pruning:
+        return _time_window_feasible_path_type_cache(data, base)
+    total_count = sum(len(path_types) for path_types in base.values())
+    return base, {
+        "time_window_arc_pruning_enabled": False,
+        "time_window_arc_option_count": int(total_count),
+        "time_window_impossible_arc_option_count": 0,
+    }
 
 
 def _earliest_task_service_start_lower_bound(data: LunarIceData, task_id: str) -> float:
@@ -1005,6 +1026,8 @@ def solve_highs_compact_single_journey_pricing(
     mtz_connectivity: bool = False,
     mtz_endpoint_order_cuts: bool = True,
     pair_adjacency_cuts: bool = False,
+    latest_service_start_slot_bound: bool = True,
+    time_window_arc_pruning: bool = True,
     negative_feasibility_search: bool = False,
     forbidden_arc_patterns: Iterable[Iterable[tuple[int, str, str, str]]] | None = None,
     forbidden_task_sets: Iterable[Iterable[str]] | None = None,
@@ -1049,7 +1072,10 @@ def solve_highs_compact_single_journey_pricing(
             "note": "Empty instance has no nonempty journey columns.",
         }
 
-    slot_bound = _safe_sortie_slot_bound(data)
+    slot_bound = _safe_sortie_slot_bound(
+        data,
+        latest_service_start_bound=bool(latest_service_start_slot_bound),
+    )
     sortie_slots = (
         int(max_sorties_per_journey)
         if max_sorties_per_journey is not None
@@ -1059,7 +1085,10 @@ def solve_highs_compact_single_journey_pricing(
     min_active_duration = float(slot_bound["min_duration_lower_bound"])
     min_out_return_travel = float(slot_bound["min_out_return_travel_lower_bound"])
     nodes = ("depot", *tasks)
-    path_type_cache, pruning = _time_window_feasible_path_type_cache(data, _nondominated_path_type_cache(data))
+    path_type_cache, pruning = _pricing_path_type_cache(
+        data,
+        time_window_arc_pruning=bool(time_window_arc_pruning),
+    )
     forbidden_patterns = tuple(_normalize_forbidden_arc_pattern(row) for row in (forbidden_arc_patterns or tuple()))
     forbidden_patterns = tuple(row for row in forbidden_patterns if row)
     forbidden_task_sets_normalized = tuple(
@@ -1542,6 +1571,9 @@ def solve_highs_compact_single_journey_pricing(
         "forbidden_task_sets_can_certify_full_space": bool(forbidden_task_set_count == 0),
         "sortie_slots_per_journey": sortie_slots,
         "sortie_slot_bound_source": slot_bound["source"] if max_sorties_per_journey is None else "explicit",
+        "latest_service_start_slot_bound_enabled": bool(latest_service_start_slot_bound)
+        if max_sorties_per_journey is None
+        else False,
         "sortie_slot_horizon_count_bound": slot_bound["horizon_slot_count_bound"],
         "sortie_slot_latest_start_count_bound": slot_bound["latest_start_slot_count_bound"],
         "sortie_slot_latest_service_start_upper_bound": slot_bound["latest_service_start_upper_bound"],

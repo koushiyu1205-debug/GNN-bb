@@ -1,0 +1,87 @@
+{
+  "acceptance": {
+    "b4_pricing_formulation_diagnostic_accepted": true,
+    "b4e_pricing_formulation_accepted": true,
+    "full_variant_matrix_complete": true,
+    "measurable_improvement_row_count": 2,
+    "measurable_progress_row_count": 17,
+    "missing_variants": [],
+    "no_negative_certified_row_count": 0,
+    "tested_variants": [
+      "V0_current_compact_pricing",
+      "V1_endpoint_order_plus_pair_adjacency",
+      "V2_latest_service_start_slot_bound",
+      "V3_time_window_arc_pruning",
+      "V4_combined_endpoint_pair_latest_start_time_window",
+      "V5_subset_row_master_diagnostic_only"
+    ]
+  },
+  "redlines": {
+    "positive_incumbent_rc_claimed_certificate_count": 0,
+    "restricted_negative_feasibility_claimed_certificate_count": 0
+  },
+  "row_count": 23,
+  "schema_version": "lunar_ice_bpc.b4_pricing_formulation_diagnostic.v1",
+  "summary_rows": [
+    {
+      "best_dual_bound": -0.008003885,
+      "best_negative_rc": -0.0080034,
+      "can_certify_no_negative_count": 0,
+      "cut_violated_count": 0,
+      "mean_wall_time": 534.420204,
+      "negative_column_count": 2,
+      "row_count": 2,
+      "variant": "V0_current_compact_pricing"
+    },
+    {
+      "best_dual_bound": -0.103574356,
+      "best_negative_rc": -0.00788215,
+      "can_certify_no_negative_count": 0,
+      "cut_violated_count": 0,
+      "mean_wall_time": 676.971032,
+      "negative_column_count": 2,
+      "row_count": 2,
+      "variant": "V1_endpoint_order_plus_pair_adjacency"
+    },
+    {
+      "best_dual_bound": -0.008003885,
+      "best_negative_rc": -0.011314348,
+      "can_certify_no_negative_count": 0,
+      "cut_violated_count": 0,
+      "mean_wall_time": 288.681643,
+      "negative_column_count": 4,
+      "row_count": 3,
+      "variant": "V2_latest_service_start_slot_bound"
+    },
+    {
+      "best_dual_bound": -0.008003885,
+      "best_negative_rc": -0.0080034,
+      "can_certify_no_negative_count": 0,
+      "cut_violated_count": 0,
+      "mean_wall_time": 650.02078,
+      "negative_column_count": 1,
+      "row_count": 2,
+      "variant": "V3_time_window_arc_pruning"
+    },
+    {
+      "best_dual_bound": -0.007881834,
+      "best_negative_rc": -0.0545346,
+      "can_certify_no_negative_count": 0,
+      "cut_violated_count": 0,
+      "mean_wall_time": 285.563242,
+      "negative_column_count": 7,
+      "row_count": 11,
+      "variant": "V4_combined_endpoint_pair_latest_start_time_window"
+    },
+    {
+      "best_dual_bound": null,
+      "best_negative_rc": null,
+      "can_certify_no_negative_count": 0,
+      "cut_violated_count": 10,
+      "mean_wall_time": null,
+      "negative_column_count": 0,
+      "row_count": 3,
+      "variant": "V5_subset_row_master_diagnostic_only"
+    }
+  ]
+}

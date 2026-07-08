@@ -1,0 +1,91 @@
+{
+  "acceptance": {
+    "b4a_diagnostic_safe": true,
+    "b4b_root_live_subset_row_accepted": false,
+    "b4e_accepted_candidate": false,
+    "measurable_improvement_row_count": 0
+  },
+  "redlines": {
+    "certificate_scope_regression_count": 0,
+    "completion_bound_unsafe_with_cuts_count": 0,
+    "cut_coefficient_audit_fail_count": 0,
+    "cut_dominance_compatibility_fail_count": 0,
+    "cut_dual_sign_audit_fail_count": 0,
+    "direct_dp_certificate_leak_count": 0,
+    "fleet_lower_bound_live_enabled_without_proof_count": 0,
+    "manual_rc_with_cuts_fail_count": 0,
+    "objective_mismatch_count": 0,
+    "positive_incumbent_rc_claimed_certificate_count": 0,
+    "pricing_rc_with_cuts_fail_count": 0,
+    "restricted_pricing_claimed_no_negative_count": 0
+  },
+  "row_count": 62,
+  "schema_version": "lunar_ice_bpc.b4_cut_formulation_ablation.v1",
+  "summary_rows": [
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 1,
+      "BPC_TREE_OPTIMAL_count": 1,
+      "cut_candidate_count": 11,
+      "cut_violated_count": 0,
+      "fail_closed_count": 0,
+      "matrix_group": "5-scale B4B live subset-row smoke",
+      "max_violation": 0.0,
+      "mean_wall_time": 0.192997,
+      "mode": "B4B_root_live_subset_row",
+      "run_count": 1,
+      "scale": 5
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 20,
+      "BPC_TREE_OPTIMAL_count": 20,
+      "cut_candidate_count": 220,
+      "cut_violated_count": 0,
+      "fail_closed_count": 0,
+      "matrix_group": "5-scale full B4A diagnostic",
+      "max_violation": 0.0,
+      "mean_wall_time": 0.384671,
+      "mode": "B4A_cut_diagnostic_only",
+      "run_count": 20,
+      "scale": 5
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 20,
+      "BPC_TREE_OPTIMAL_count": 20,
+      "cut_candidate_count": 220,
+      "cut_violated_count": 33,
+      "fail_closed_count": 0,
+      "matrix_group": "10-scale full B4A diagnostic",
+      "max_violation": 0.5,
+      "mean_wall_time": 2.394534,
+      "mode": "B4A_cut_diagnostic_only",
+      "run_count": 20,
+      "scale": 10
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 0,
+      "BPC_TREE_OPTIMAL_count": 0,
+      "cut_candidate_count": 220,
+      "cut_violated_count": 0,
+      "fail_closed_count": 20,
+      "matrix_group": "20-scale full B4A restricted-pool diagnostic",
+      "max_violation": 0.0,
+      "mean_wall_time": 0.033709,
+      "mode": "B4A_cut_diagnostic_only",
+      "run_count": 20,
+      "scale": 20
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 0,
+      "BPC_TREE_OPTIMAL_count": 0,
+      "cut_candidate_count": 11,
+      "cut_violated_count": 0,
+      "fail_closed_count": 1,
+      "matrix_group": "30-scale selected B4A restricted-pool diagnostic",
+      "max_violation": 0.0,
+      "mean_wall_time": 0.103617,
+      "mode": "B4A_cut_diagnostic_only",
+      "run_count": 1,
+      "scale": 30
+    }
+  ]
+}

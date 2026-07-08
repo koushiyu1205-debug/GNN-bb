@@ -14,6 +14,12 @@ from lunar_ice_bpc.exact.bpc.pricing.completion_bounds import build_completion_b
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
 from lunar_ice_bpc.exact.bpc.solver.branch_tree_solver import solve_b3_branch_price_tree_baseline
+from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (
+    _reference_seed_direct_placeholder,
+    build_b1_seed_columns,
+    dense_rmp_memory_precheck,
+    representative_universe_column_count,
+)
 from lunar_ice_bpc.exact.core.cuts import CutContext, cut_context_from_payload
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.pricing.journey_pricing import DirectPricingCache
@@ -35,14 +41,34 @@ def solve_b4_cut_formulation_baseline(
 ) -> dict:
     """Run B4 = B3 plus subset-row cut diagnostics and opt-in live cuts."""
 
+    fail_closed_b3 = _fail_closed_b3_placeholder()
+    if len(data.task_ids) > int(max_direct_tasks):
+        return _too_large_payload(data=data, b3=fail_closed_b3, max_direct_tasks=max_direct_tasks)
+    estimated_columns = representative_universe_column_count(len(data.task_ids))
+    precheck = dense_rmp_memory_precheck(
+        data,
+        active_column_count=estimated_columns,
+        cut_count=max(0, int(max_live_cuts) if live_subset_rows else 0),
+        stage="b4_direct_universe_cut_diagnostic_rmp",
+    )
+    if precheck["rmp_memory_precheck_failed"]:
+        return _restricted_pool_cut_diagnostic_payload(
+            data=data,
+            b3=fail_closed_b3,
+            max_direct_tasks=max_direct_tasks,
+            max_live_cuts=max_live_cuts,
+            negative_eps=negative_eps,
+            add_violated_only=add_violated_only,
+            estimated_columns=estimated_columns,
+            precheck=precheck,
+        )
+
     b3 = solve_b3_branch_price_tree_baseline(
         data,
         max_direct_tasks=max_direct_tasks,
         max_rounds_per_node=max_rounds,
         negative_eps=negative_eps,
     )
-    if len(data.task_ids) > int(max_direct_tasks):
-        return _too_large_payload(data=data, b3=b3, max_direct_tasks=max_direct_tasks)
 
     universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
     root_no_cut = solve_root_journey_master(
@@ -360,6 +386,151 @@ def _too_large_payload(*, data: LunarIceData, b3: dict, max_direct_tasks: int) -
             "certificate_scope_diff_vs_B3": f"{b3.get('certificate_scope')}->{CertificateScope.FEASIBLE_INCUMBENT_ONLY.value}",
         },
         "note": f"task_count={len(data.task_ids)} exceeds max_direct_tasks={max_direct_tasks}; B4 fails closed.",
+    }
+
+
+def _memory_precheck_payload(
+    *,
+    data: LunarIceData,
+    b3: dict,
+    max_direct_tasks: int,
+    estimated_columns: int,
+    precheck: dict,
+) -> dict:
+    payload = _too_large_payload(data=data, b3=b3, max_direct_tasks=max_direct_tasks)
+    payload.update(
+        {
+            "full_universe_column_count": int(estimated_columns),
+            "rmp_memory_precheck_failed": bool(precheck.get("rmp_memory_precheck_failed")),
+            "rmp_memory_precheck_stage": precheck.get("rmp_memory_precheck_stage"),
+            "rmp_memory_precheck_reason": precheck.get("rmp_memory_precheck_reason"),
+            "rmp_memory_precheck_estimated_column_count": precheck.get("rmp_memory_precheck_estimated_column_count"),
+            "rmp_memory_precheck_estimated_tableau_cells": precheck.get("rmp_memory_precheck_estimated_tableau_cells"),
+            "rmp_memory_precheck_cell_limit": precheck.get("rmp_memory_precheck_cell_limit"),
+            "note": (
+                "B4 direct-universe cut diagnostic failed closed before column enumeration; "
+                + str(precheck.get("rmp_memory_precheck_reason") or "")
+            ),
+        }
+    )
+    return payload
+
+
+def _restricted_pool_cut_diagnostic_payload(
+    *,
+    data: LunarIceData,
+    b3: dict,
+    max_direct_tasks: int,
+    max_live_cuts: int,
+    negative_eps: float,
+    add_violated_only: bool,
+    estimated_columns: int,
+    precheck: dict,
+) -> dict:
+    seed_columns, seed_report = build_b1_seed_columns(
+        data,
+        b0_direct=_reference_seed_direct_placeholder(data),
+        seed_mode="b0_incumbent_plus_singletons",
+        max_direct_tasks=int(max_direct_tasks),
+    )
+    if not seed_columns:
+        payload = _memory_precheck_payload(
+            data=data,
+            b3=b3,
+            max_direct_tasks=max_direct_tasks,
+            estimated_columns=estimated_columns,
+            precheck=precheck,
+        )
+        payload["restricted_pool_cut_diagnostic"] = {
+            "status": "NO_SAFE_RESTRICTED_SEED_POOL",
+            "evaluation_scope": "safe_restricted_seed_pool_only",
+            "can_certify": False,
+        }
+        return payload
+    root_restricted = solve_root_journey_master(
+        data,
+        seed_columns,
+        negative_eps=negative_eps,
+        rmp_iteration_id="b4-memory-guard-restricted-pool-no-cut",
+    )
+    cut_probe = build_cut_probe(
+        data.task_ids,
+        seed_columns,
+        root_restricted.rmp.primal_columns,
+        fleet_size=data.fleet_size,
+        violation_eps=negative_eps,
+    )
+    cut_probe = dict(cut_probe)
+    cut_probe["evaluation_scope"] = "safe_restricted_seed_pool_only"
+    cut_probe["lower_bound_official"] = False
+    cut_probe["can_certify"] = False
+    diagnostic_round = run_restricted_cut_separation_round(
+        data.task_ids,
+        seed_columns,
+        fleet_size=data.fleet_size,
+        root_rmp=root_restricted.rmp,
+        cut_probe=cut_probe,
+        max_rows=max_live_cuts,
+        violation_eps=negative_eps,
+        include_fleet_lower_bound=False,
+        add_violated_only=add_violated_only,
+    )
+    completion_policy = build_completion_bound_tail_policy(
+        pruning_opt_in=False,
+        cut_context_active=False,
+    )
+    dominance_report = build_cut_dominance_compatibility_report(CutContext())
+    payload = _diagnostic_payload(
+        data=data,
+        b3=b3,
+        root_no_cut=root_restricted,
+        cut_probe=cut_probe,
+        diagnostic_round=diagnostic_round,
+        completion_policy=completion_policy,
+        dominance_report=dominance_report,
+        live_requested=False,
+        note=(
+            "B4A used a safe restricted seed-pool cut diagnostic because full direct-universe "
+            "diagnostics failed dense RMP memory precheck. This is diagnostic only and cannot certify."
+        ),
+    )
+    payload.update(
+        {
+            "certificate_scope": CertificateScope.DIAGNOSTIC_PRICING_FRONTIER.value,
+            "exact_status": "NOT_SOLVED",
+            "uses_true_dual_bpc_certificate": False,
+            "root_lp_bound_official": False,
+            "restricted_pool_cut_diagnostic": {
+                "status": "RESTRICTED_POOL_CUT_DIAGNOSTIC_READY",
+                "evaluation_scope": "safe_restricted_seed_pool_only",
+                "seed_mode": seed_report.get("seed_mode"),
+                "seed_builder": "reference_incumbent_plus_singletons",
+                "seed_column_count": len(seed_columns),
+                "root_rmp_status": root_restricted.rmp.status,
+                "root_restricted_objective_bound": root_restricted.rmp.objective_bound,
+                "lower_bound_official": False,
+                "can_certify": False,
+            },
+            "full_universe_column_count": int(estimated_columns),
+            "rmp_memory_precheck_failed": bool(precheck.get("rmp_memory_precheck_failed")),
+            "rmp_memory_precheck_stage": precheck.get("rmp_memory_precheck_stage"),
+            "rmp_memory_precheck_reason": precheck.get("rmp_memory_precheck_reason"),
+            "rmp_memory_precheck_estimated_column_count": precheck.get("rmp_memory_precheck_estimated_column_count"),
+            "rmp_memory_precheck_estimated_tableau_cells": precheck.get("rmp_memory_precheck_estimated_tableau_cells"),
+            "rmp_memory_precheck_cell_limit": precheck.get("rmp_memory_precheck_cell_limit"),
+        }
+    )
+    return payload
+
+
+def _fail_closed_b3_placeholder() -> dict:
+    return {
+        "algorithm_status": AlgorithmStatus.BPC_INCOMPLETE_PRICING.value,
+        "certificate_scope": CertificateScope.FEASIBLE_INCUMBENT_ONLY.value,
+        "pricing_state": PricingState.INCOMPLETE_LIMIT.value,
+        "uses_true_dual_bpc_certificate": False,
+        "root_lp_bound": None,
+        "incumbent_objective": None,
     }
 
 
