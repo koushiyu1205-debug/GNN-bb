@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import gc
 import json
 from pathlib import Path
 import signal
@@ -22,9 +23,10 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
 )
 from lunar_ice_bpc.exact.bpc.solver.root_node_solver import solve_b1_root_node_baseline
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
+from lunar_ice_bpc.exact.core.objective import flatten_objective_payload, objective_metadata
 from lunar_ice_bpc.exact.solver.journey_driver import solve_direct_journey_baseline
 from lunar_ice_bpc.io.instance_io import read_json
-from lunar_ice_bpc.runners.b0_b1_ablation import B0_MODE, B1A_MODE, B1B_MODE
+from lunar_ice_bpc.runners.b0_b1_ablation import B0_MODE, B1A_MODE, B1B_MODE, OBJECTIVE_CSV_COLUMNS
 
 
 B2_MODES = (
@@ -44,6 +46,7 @@ CSV_COLUMNS = (
     "matrix_group",
     "scale",
     "instance_id",
+    "mode",
     "baseline_name",
     "candidate_name",
     "seed_builder",
@@ -57,6 +60,12 @@ CSV_COLUMNS = (
     "official_lower_bound_source",
     "official_lower_bound_scope",
     "B0_direct_objective",
+    "reference_solution_upper_bound",
+    "reference_solution_upper_bound_source",
+    "direct_bound_pruning_root_bound",
+    "direct_bound_pruning_active",
+    "journey_label_bound_pruned_count",
+    *OBJECTIVE_CSV_COLUMNS,
     "root_lp_bound",
     "root_lp_bound_official",
     "root_bound_le_B0_objective",
@@ -127,6 +136,14 @@ CSV_COLUMNS = (
     "proof_tail_kernel_profile_enabled",
     "wall_time",
     "fail_closed_reason",
+    "attempted_exception_type",
+    "attempted_max_direct_tasks",
+    "rmp_memory_precheck_failed",
+    "rmp_memory_precheck_stage",
+    "rmp_memory_precheck_reason",
+    "rmp_memory_precheck_estimated_column_count",
+    "rmp_memory_precheck_estimated_tableau_cells",
+    "rmp_memory_precheck_cell_limit",
     "certificate_scope_regression",
     "objective_mismatch",
     "improvement_reason",
@@ -160,6 +177,8 @@ def run_b2_pricing_tail_ablation(
                 row_time_limit_sec=row_time_limit_sec,
             )
             rows.append(row)
+            if mode == B0_MODE and row.get("_b0_direct_object") is not None:
+                baseline_cache["_b0_direct_object"] = row["_b0_direct_object"]
             if mode in {B1A_MODE, B1B_MODE}:
                 baseline_cache[mode] = dict(row.get("_raw_result") or {})
         _annotate_instance_improvements(rows)
@@ -580,6 +599,12 @@ def render_b2_pricing_tail_markdown(report: dict, *, rows_csv: str | Path, summa
         "- B2A_full_universe_rc_audit_fast_path 只作为显式 full-universe audit fast path。",
         "- completion-bound pruning 默认关闭；只保留 audit / ordering / profiling 语义。",
         "",
+        "## Objective Boundary",
+        "",
+        "- Official objective: `1.0 * normalized_operating_cost + 1.0 * normalized_risk + 0.4 * normalized_weighted_completion_time`。",
+        "- `makespan` 只作为 report/evaluation metric，不进入 pricing objective 或 reduced cost。",
+        "- `BPC_NODE_LP_CERTIFIED` 只证明 normalized additive objective 的 root LP closure。",
+        "",
         "## Artifacts",
         "",
         f"- CSV rows: `{rows_csv}`",
@@ -797,20 +822,47 @@ def _run_guarded_mode(
         b1_max_rounds=b1_max_rounds,
         b2_max_rounds=b2_max_rounds,
         matrix_group=matrix_group,
+        row_time_limit_sec=row_time_limit_sec,
     )
     if row_time_limit_sec is None:
         return fn()
+    data = load_lunar_ice_data(instance)
+    start = perf_counter()
     try:
         return _with_timeout(fn, float(row_time_limit_sec))
     except TimeoutError:
-        data = load_lunar_ice_data(instance)
         return _timeout_row(
             data,
             mode=mode,
             max_direct_tasks=max_direct_tasks,
             matrix_group=matrix_group,
             row_time_limit_sec=float(row_time_limit_sec),
+            wall_time=float(row_time_limit_sec),
+            exception_type="TimeoutError",
         )
+    except MemoryError:
+        gc.collect()
+        return _timeout_row(
+            data,
+            mode=mode,
+            max_direct_tasks=max_direct_tasks,
+            matrix_group=matrix_group,
+            row_time_limit_sec=float(row_time_limit_sec),
+            wall_time=perf_counter() - start,
+            reason=(
+                "row failed closed after MemoryError while attempting strict rerun "
+                f"at max_direct_tasks={max_direct_tasks}"
+            ),
+            exception_type="MemoryError",
+        )
+
+
+def _inner_direct_wall_time_limit(row_time_limit_sec: float | None) -> float | None:
+    if row_time_limit_sec is None:
+        return None
+    limit = float(row_time_limit_sec)
+    reserve = min(30.0, max(10.0, 0.02 * limit))
+    return max(0.001, limit - reserve)
 
 
 def _run_mode(
@@ -822,11 +874,17 @@ def _run_mode(
     b1_max_rounds: int,
     b2_max_rounds: int,
     matrix_group: str,
+    row_time_limit_sec: float | None,
 ) -> dict:
     data = load_lunar_ice_data(instance)
     start = perf_counter()
+    direct_wall_time_limit_sec = _inner_direct_wall_time_limit(row_time_limit_sec)
     if mode == B0_MODE:
-        result = solve_direct_journey_baseline(data, max_exact_tasks=max_direct_tasks)
+        result = solve_direct_journey_baseline(
+            data,
+            max_exact_tasks=max_direct_tasks,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
+        )
         raw = {
             "algorithm_status": result.status,
             "certificate_scope": result.certificate_scope,
@@ -835,9 +893,20 @@ def _run_mode(
             "root_lp_bound": None,
             "root_lp_bound_official": False,
             "B0_direct_objective": result.objective,
+            "reference_solution_upper_bound": result.reference_solution_upper_bound,
+            "reference_solution_upper_bound_source": result.reference_solution_upper_bound_source,
+            "direct_bound_pruning_root_bound": result.direct_bound_pruning_root_bound,
+            "direct_bound_pruning_active": result.direct_bound_pruning_active,
+            "journey_label_bound_pruned_count": result.journey_label_bound_pruned_count,
+            "objective_breakdown": result.objective_breakdown,
             "root_bound_le_B0_objective": None,
             "pricing_round_count": 0,
             "final_judge_call_count": 0,
+            "generated_journey_count": result.generated_journey_count,
+            "generated_sortie_count": result.generated_sortie_count,
+            "route_template_count": result.route_template_count,
+            "pareto_label_count": result.pareto_label_count,
+            "set_partition_state_count": result.set_partition_state_count,
             "manual_rc_audit_pass": None,
             "pricing_rc_audit_pass": None,
             "proof_debt_unreleased_count": 0,
@@ -845,17 +914,27 @@ def _run_mode(
         }
         row = _row_from_raw(data, mode=mode, raw=raw, matrix_group=matrix_group, elapsed=perf_counter() - start)
         row["_raw_result"] = raw
+        row["_b0_direct_object"] = result
         return row
     if mode == B1A_MODE:
-        result = solve_b1_root_node_baseline(data, max_direct_tasks=max_direct_tasks, max_rounds=b1_max_rounds, seed_mode="full_universe")
+        result = solve_b1_root_node_baseline(
+            data,
+            b0_direct=baseline_cache.get("_b0_direct_object"),
+            max_direct_tasks=max_direct_tasks,
+            max_rounds=b1_max_rounds,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
+            seed_mode="full_universe",
+        )
         row = _row_from_raw(data, mode=mode, raw=result, matrix_group=matrix_group, elapsed=perf_counter() - start)
         row["_raw_result"] = result
         return row
     if mode == B1B_MODE:
         result = solve_b1_root_node_baseline(
             data,
+            b0_direct=baseline_cache.get("_b0_direct_object"),
             max_direct_tasks=max_direct_tasks,
             max_rounds=b1_max_rounds,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             seed_mode="b0_incumbent_plus_singletons",
         )
         row = _row_from_raw(data, mode=mode, raw=result, matrix_group=matrix_group, elapsed=perf_counter() - start)
@@ -864,8 +943,10 @@ def _run_mode(
     if mode == B2A_MODE:
         result = solve_b2_pricing_tail_baseline(
             data,
+            b0_direct=baseline_cache.get("_b0_direct_object"),
             max_direct_tasks=max_direct_tasks,
             max_rounds=b2_max_rounds,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             mode=B2A_MODE,
             previous_baseline=baseline_cache.get(B1A_MODE),
         )
@@ -875,8 +956,10 @@ def _run_mode(
     if mode == B2B_MODE:
         result = solve_b2_pricing_tail_baseline(
             data,
+            b0_direct=baseline_cache.get("_b0_direct_object"),
             max_direct_tasks=max_direct_tasks,
             max_rounds=b2_max_rounds,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             mode=B2B_MODE,
             previous_baseline=baseline_cache.get(B1B_MODE),
         )
@@ -886,8 +969,10 @@ def _run_mode(
     if mode == B2B_R2_MODE:
         result = solve_b2_pricing_tail_baseline(
             data,
+            b0_direct=baseline_cache.get("_b0_direct_object"),
             max_direct_tasks=max_direct_tasks,
             max_rounds=b2_max_rounds,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             mode=B2B_R2_MODE,
             previous_baseline=baseline_cache.get(B1B_MODE),
         )
@@ -897,8 +982,10 @@ def _run_mode(
     if mode == B2B_R3_MODE:
         result = solve_b2_pricing_tail_baseline(
             data,
+            b0_direct=baseline_cache.get("_b0_direct_object"),
             max_direct_tasks=max_direct_tasks,
             max_rounds=b2_max_rounds,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             mode=B2B_R3_MODE,
             previous_baseline=baseline_cache.get(B1B_MODE),
         )
@@ -908,8 +995,10 @@ def _run_mode(
     if mode in {B2_PRODUCT_MODE, B2C_MODE, B2D_MODE}:
         result = solve_b2_pricing_tail_baseline(
             data,
+            b0_direct=baseline_cache.get("_b0_direct_object"),
             max_direct_tasks=max_direct_tasks,
             max_rounds=b2_max_rounds,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             mode=mode,
         )
         row = _row_from_raw(data, mode=mode, raw=result, matrix_group=matrix_group, elapsed=perf_counter() - start)
@@ -928,6 +1017,9 @@ def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: flo
     b0_obj = raw.get("B0_direct_objective")
     if b0_obj is None:
         b0_obj = (raw.get("b0_ablation") or {}).get("direct_dp_objective")
+    objective_breakdown = raw.get("objective_breakdown") or (raw.get("b0_ablation") or {}).get(
+        "direct_dp_objective_breakdown"
+    )
     baseline_name = _baseline_name(mode)
     candidate_name = mode
     exact_first_step = raw.get("exact_first_step_bound_profile") or {}
@@ -935,6 +1027,7 @@ def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: flo
         "matrix_group": matrix_group,
         "scale": len(data.task_ids),
         "instance_id": data.instance_id,
+        "mode": mode,
         "baseline_name": baseline_name,
         "candidate_name": candidate_name,
         "seed_builder": raw.get("seed_builder") or "",
@@ -948,6 +1041,23 @@ def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: flo
         "official_lower_bound_source": _official_lower_bound_source(mode, raw),
         "official_lower_bound_scope": "BPC_NODE_LP_CERTIFIED" if root_official else "",
         "B0_direct_objective": b0_obj,
+        "reference_solution_upper_bound": raw.get("reference_solution_upper_bound")
+        or (raw.get("b0_ablation") or {}).get("reference_solution_upper_bound"),
+        "reference_solution_upper_bound_source": raw.get("reference_solution_upper_bound_source")
+        or (raw.get("b0_ablation") or {}).get("reference_solution_upper_bound_source")
+        or "",
+        "direct_bound_pruning_root_bound": raw.get("direct_bound_pruning_root_bound")
+        or (raw.get("b0_ablation") or {}).get("direct_bound_pruning_root_bound"),
+        "direct_bound_pruning_active": bool(
+            raw.get("direct_bound_pruning_active")
+            or (raw.get("b0_ablation") or {}).get("direct_bound_pruning_active")
+            or False
+        ),
+        "journey_label_bound_pruned_count": int(
+            raw.get("journey_label_bound_pruned_count")
+            or (raw.get("b0_ablation") or {}).get("journey_label_bound_pruned_count")
+            or 0
+        ),
         "root_lp_bound": raw.get("root_lp_bound"),
         "root_lp_bound_official": root_official,
         "root_bound_le_B0_objective": root_le_b0,
@@ -997,11 +1107,16 @@ def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: flo
         "labels_generated": int(raw.get("labels_generated") or raw.get("pareto_label_count") or 0),
         "labels_generated_before_first_negative": raw.get("labels_generated_before_first_negative"),
         "labels_generated_total": int(raw.get("labels_generated_total") or raw.get("labels_generated") or raw.get("pareto_label_count") or 0),
-        "labels_extended": int(raw.get("labels_extended") or 0),
-        "sortie_templates": int(raw.get("sortie_templates") or raw.get("feasible_sortie_template_count") or 0),
+        "labels_extended": int(raw.get("labels_extended") or raw.get("generated_sortie_count") or 0),
+        "sortie_templates": int(
+            raw.get("sortie_templates")
+            or raw.get("feasible_sortie_template_count")
+            or raw.get("route_template_count")
+            or 0
+        ),
         "journey_labels": int(raw.get("journey_labels") or raw.get("generated_journey_count") or 0),
         "candidate_sequences": int(raw.get("candidate_sequences") or 0),
-        "path_option_assignments": int(raw.get("path_option_assignments") or raw.get("route_template_count") or 0),
+        "path_option_assignments": int(raw.get("path_option_assignments") or raw.get("generated_sortie_count") or 0),
         "resource_prune_count": int(raw.get("resource_prune_count") or 0),
         "time_window_prune_count": int(raw.get("time_window_prune_count") or 0),
         "dominance_prune_count": int(raw.get("dominance_prune_count") or 0),
@@ -1037,18 +1152,37 @@ def _row_from_raw(data, *, mode: str, raw: dict, matrix_group: str, elapsed: flo
         "proof_tail_kernel_profile_enabled": bool((raw.get("proof_tail_kernel_profile") or {}).get("enabled")),
         "wall_time": round(elapsed, 6),
         "fail_closed_reason": "" if certified or product_exact else str(raw.get("fail_closed_reason") or raw.get("note") or ""),
+        "rmp_memory_precheck_failed": bool(raw.get("rmp_memory_precheck_failed")),
+        "rmp_memory_precheck_stage": raw.get("rmp_memory_precheck_stage") or "",
+        "rmp_memory_precheck_reason": raw.get("rmp_memory_precheck_reason") or "",
+        "rmp_memory_precheck_estimated_column_count": raw.get("rmp_memory_precheck_estimated_column_count"),
+        "rmp_memory_precheck_estimated_tableau_cells": raw.get("rmp_memory_precheck_estimated_tableau_cells"),
+        "rmp_memory_precheck_cell_limit": raw.get("rmp_memory_precheck_cell_limit"),
         "certificate_scope_regression": False,
         "objective_mismatch": False,
         "improvement_reason": "",
     }
+    row.update(flatten_objective_payload(objective_metadata(data), prefix="objective"))
+    row.update(flatten_objective_payload(objective_breakdown, prefix="solution"))
     return row
 
 
-def _timeout_row(data, *, mode: str, max_direct_tasks: int, matrix_group: str, row_time_limit_sec: float) -> dict:
-    return {
+def _timeout_row(
+    data,
+    *,
+    mode: str,
+    max_direct_tasks: int,
+    matrix_group: str,
+    row_time_limit_sec: float,
+    wall_time: float | None = None,
+    reason: str | None = None,
+    exception_type: str = "TimeoutError",
+) -> dict:
+    row = {
         "matrix_group": matrix_group,
         "scale": len(data.task_ids),
         "instance_id": data.instance_id,
+        "mode": mode,
         "baseline_name": _baseline_name(mode),
         "candidate_name": mode,
         "seed_builder": "",
@@ -1062,6 +1196,11 @@ def _timeout_row(data, *, mode: str, max_direct_tasks: int, matrix_group: str, r
         "official_lower_bound_source": "",
         "official_lower_bound_scope": "",
         "B0_direct_objective": None,
+        "reference_solution_upper_bound": None,
+        "reference_solution_upper_bound_source": "",
+        "direct_bound_pruning_root_bound": None,
+        "direct_bound_pruning_active": False,
+        "journey_label_bound_pruned_count": 0,
         "root_lp_bound": None,
         "root_lp_bound_official": False,
         "root_bound_le_B0_objective": None,
@@ -1130,12 +1269,23 @@ def _timeout_row(data, *, mode: str, max_direct_tasks: int, matrix_group: str, r
         "would_prune_count_if_enabled": 0,
         "completion_bound_pruning_enabled": False,
         "proof_tail_kernel_profile_enabled": False,
-        "wall_time": round(float(row_time_limit_sec), 6),
-        "fail_closed_reason": f"row_time_limit_sec={row_time_limit_sec} exceeded at max_direct_tasks={max_direct_tasks}",
+        "wall_time": round(float(row_time_limit_sec if wall_time is None else wall_time), 6),
+        "fail_closed_reason": reason
+        or f"row_time_limit_sec={row_time_limit_sec} exceeded at max_direct_tasks={max_direct_tasks}",
+        "attempted_exception_type": str(exception_type),
+        "attempted_max_direct_tasks": int(max_direct_tasks),
+        "rmp_memory_precheck_failed": False,
+        "rmp_memory_precheck_stage": "",
+        "rmp_memory_precheck_reason": "",
+        "rmp_memory_precheck_estimated_column_count": None,
+        "rmp_memory_precheck_estimated_tableau_cells": None,
+        "rmp_memory_precheck_cell_limit": None,
         "certificate_scope_regression": False,
         "objective_mismatch": False,
         "improvement_reason": "",
     }
+    row.update(flatten_objective_payload(objective_metadata(data), prefix="objective"))
+    return row
 
 
 def _annotate_instance_improvements(rows: list[dict]) -> None:
@@ -1184,7 +1334,12 @@ def _compare_candidate(by_mode: dict[str, dict], *, baseline: str, candidate: st
 
 
 def _report_from_rows(rows: list[dict]) -> dict:
-    clean_rows = [{key: value for key, value in row.items() if not key.startswith("_")} for row in rows]
+    clean_rows = []
+    for row in rows:
+        clean = {key: value for key, value in row.items() if not key.startswith("_")}
+        if clean.get("mode") in {None, ""} and clean.get("candidate_name") not in {None, ""}:
+            clean["mode"] = clean.get("candidate_name")
+        clean_rows.append(clean)
     summary_rows = _summary_rows(clean_rows)
     redlines = _redlines(clean_rows)
     return {

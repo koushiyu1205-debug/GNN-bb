@@ -34,11 +34,18 @@ class PositiveCoverCompletionBound:
         beta_journey_end_time: float,
         remaining_task_ids: Iterable[str],
     ) -> float:
-        """Bound any extension of a label, excluding the fleet dual term."""
+        """Bound any extension of a label, excluding fleet/cut/branch dual terms.
+
+        ``current_end_time`` and ``beta_journey_end_time`` are kept only for
+        call-site compatibility with the legacy makespan-in-cost objective. The
+        normalized official objective does not put journey end time or makespan
+        into pricing, so this exact-safe tail bound ignores those values.
+        """
+
+        _ = (current_end_time, beta_journey_end_time)
 
         return round(
             float(current_reduced_base)
-            + float(beta_journey_end_time) * max(0.0, float(current_end_time))
             + self.remaining_lower_bound(remaining_task_ids),
             9,
         )
@@ -53,11 +60,12 @@ class PositiveCoverCompletionBound:
             "includes_fleet_dual": False,
             "includes_cut_duals": False,
             "includes_branch_duals": False,
+            "includes_legacy_beta_journey_end_time": False,
             "pruning_is_exact_safe": True,
             "can_certify_no_negative": False,
             "note": (
-                "Optimistic completion bound for label pruning only; official "
-                "no-negative certificates still require complete true-dual pricing."
+                "Optimistic completion bound for label pruning only. Legacy beta/end-time terms are ignored "
+                "because makespan is a report metric, not an official pricing objective term."
             ),
         }
 

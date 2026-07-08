@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import gc
 import json
 from pathlib import Path
 import signal
@@ -15,6 +16,10 @@ from lunar_ice_bpc.exact.bpc.solver.branch_tree_solver import (
     _solve_b3_node,
     solve_b3_branch_price_tree_baseline,
 )
+from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (
+    dense_rmp_memory_precheck,
+    representative_universe_column_count,
+)
 from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2B_R3_MODE,
     B2_PRODUCT_MODE,
@@ -23,12 +28,13 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
 )
 from lunar_ice_bpc.exact.core.branching import BranchContext
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
+from lunar_ice_bpc.exact.core.objective import flatten_objective_payload, objective_metadata
 from lunar_ice_bpc.exact.solver.journey_driver import (
     enumerate_direct_journey_columns,
     solve_direct_journey_baseline,
 )
 from lunar_ice_bpc.io.instance_io import read_json
-from lunar_ice_bpc.runners.b0_b1_ablation import B0_MODE
+from lunar_ice_bpc.runners.b0_b1_ablation import B0_MODE, OBJECTIVE_CSV_COLUMNS
 
 
 B3A_MODE = "B3A_full_universe_branch_audit"
@@ -52,6 +58,12 @@ CSV_COLUMNS = (
     "pricing_state",
     "uses_true_dual_bpc_certificate",
     "B0_direct_objective",
+    "reference_solution_upper_bound",
+    "reference_solution_upper_bound_source",
+    "direct_bound_pruning_root_bound",
+    "direct_bound_pruning_active",
+    "journey_label_bound_pruned_count",
+    *OBJECTIVE_CSV_COLUMNS,
     "B2B_R3_root_lp_bound",
     "B3_global_lb",
     "B3_global_ub",
@@ -89,6 +101,14 @@ CSV_COLUMNS = (
     "incomplete_node_but_tree_optimal",
     "wall_time",
     "fail_closed_reason",
+    "attempted_exception_type",
+    "attempted_max_direct_tasks",
+    "rmp_memory_precheck_failed",
+    "rmp_memory_precheck_stage",
+    "rmp_memory_precheck_reason",
+    "rmp_memory_precheck_estimated_column_count",
+    "rmp_memory_precheck_estimated_tableau_cells",
+    "rmp_memory_precheck_cell_limit",
 )
 
 
@@ -314,6 +334,7 @@ def _run_guarded_row(
 ) -> tuple[dict, dict | None]:
     scale = int(instance.get("scale") or len(instance.get("tasks") or []))
     instance_id = str(instance.get("instance_id") or "")
+    data = load_lunar_ice_data(instance)
     start = perf_counter()
     try:
         raw = _call_with_timeout(
@@ -326,6 +347,7 @@ def _run_guarded_row(
                 max_tree_nodes=max_tree_nodes,
                 max_branch_depth=max_branch_depth,
                 allow_b3a_full_universe=allow_b3a_full_universe,
+                row_time_limit_sec=row_time_limit_sec,
                 b0_direct=b0_direct,
                 b2b_r3=b2b_r3,
             ),
@@ -338,6 +360,7 @@ def _run_guarded_row(
             matrix_group=matrix_group,
             scale=scale,
             instance_id=instance_id,
+            data=data,
             wall_time=wall,
         )
         cache_value = raw if mode in {B0_MODE, B2B_R3_MODE} else None
@@ -349,8 +372,29 @@ def _run_guarded_row(
             matrix_group=matrix_group,
             scale=scale,
             instance_id=instance_id,
+            data=data,
             wall_time=wall,
             reason=f"row_time_limit_sec={row_time_limit_sec}",
+            exception_type="TimeoutError",
+            max_direct_tasks=max_direct_tasks,
+        )
+        return row, None
+    except MemoryError:
+        gc.collect()
+        wall = perf_counter() - start
+        row = _fail_closed_row(
+            mode=mode,
+            matrix_group=matrix_group,
+            scale=scale,
+            instance_id=instance_id,
+            data=data,
+            wall_time=wall,
+            reason=(
+                "row failed closed after MemoryError while attempting strict rerun "
+                f"at max_direct_tasks={max_direct_tasks}"
+            ),
+            exception_type="MemoryError",
+            max_direct_tasks=max_direct_tasks,
         )
         return row, None
 
@@ -365,56 +409,127 @@ def _run_mode(
     max_tree_nodes: int,
     max_branch_depth: int,
     allow_b3a_full_universe: bool,
+    row_time_limit_sec: float | None,
     b0_direct,
     b2b_r3,
 ) -> dict:
     data = load_lunar_ice_data(instance)
+    direct_wall_time_limit_sec = _inner_direct_wall_time_limit(row_time_limit_sec)
     if mode == B0_MODE:
-        result = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
+        result = solve_direct_journey_baseline(
+            data,
+            max_exact_tasks=int(max_direct_tasks),
+            wall_time_limit_sec=direct_wall_time_limit_sec,
+        )
         return {
             "algorithm_status": result.status,
             "certificate_scope": result.certificate_scope,
             "pricing_state": "NOT_PRICED",
             "uses_true_dual_bpc_certificate": False,
             "B0_direct_objective": result.objective,
+            "objective_breakdown": result.objective_breakdown,
+            "reference_solution_upper_bound": result.reference_solution_upper_bound,
+            "reference_solution_upper_bound_source": result.reference_solution_upper_bound_source,
+            "direct_bound_pruning_root_bound": result.direct_bound_pruning_root_bound,
+            "direct_bound_pruning_active": result.direct_bound_pruning_active,
+            "journey_label_bound_pruned_count": result.journey_label_bound_pruned_count,
             "fail_closed_reason": "" if result.objective is not None else result.note,
         }
     if mode == B2_PRODUCT_MODE:
-        product = solve_b2_product_exact_solver(data, max_direct_tasks=int(max_direct_tasks))
+        product = solve_b2_product_exact_solver(
+            data,
+            max_direct_tasks=int(max_direct_tasks),
+            wall_time_limit_sec=direct_wall_time_limit_sec,
+        )
         return {**product, "B0_direct_objective": product.get("product_exact_objective")}
     if mode == B2B_R3_MODE:
         return solve_b2_pricing_tail_baseline(
             data,
             max_direct_tasks=int(max_direct_tasks),
             max_rounds=int(b2_max_rounds),
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             max_columns_per_round=512,
             mode=B2B_R3_MODE,
             previous_baseline=None,
         )
     if mode == B3A_MODE:
         if not allow_b3a_full_universe:
+            b0_payload = b0_direct if isinstance(b0_direct, dict) else {}
             return {
                 "algorithm_status": "BPC_INCOMPLETE_PRICING",
                 "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
                 "pricing_state": "INCOMPLETE_LIMIT",
                 "uses_true_dual_bpc_certificate": False,
+                "B0_direct_objective": b0_payload.get("B0_direct_objective"),
+                "objective_breakdown": b0_payload.get("objective_breakdown"),
                 "fail_closed_reason": "B3A full-universe branch audit is disabled for this resource-guarded group.",
             }
+        estimated_columns = representative_universe_column_count(len(data.task_ids))
+        precheck = dense_rmp_memory_precheck(
+            data,
+            active_column_count=estimated_columns,
+            stage="b3a_full_universe_node_active_rmp",
+        )
+        if precheck["rmp_memory_precheck_failed"]:
+            b0_payload = b0_direct if isinstance(b0_direct, dict) else {}
+            b0_objective = (
+                b0_payload.get("B0_direct_objective")
+                if b0_payload
+                else getattr(b0_direct, "objective", None)
+            )
+            objective_breakdown = (
+                b0_payload.get("objective_breakdown")
+                if b0_payload
+                else getattr(b0_direct, "objective_breakdown", None)
+            )
+            return {
+                "algorithm_status": "BPC_INCOMPLETE_PRICING",
+                "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "uses_true_dual_bpc_certificate": False,
+                "B0_direct_objective": b0_objective,
+                "objective_breakdown": objective_breakdown,
+                "B3_global_lb": None,
+                "B3_global_ub": b0_objective,
+                "B3_tree_closed": False,
+                "node_count": 0,
+                "evaluated_node_count": 0,
+                "BPC_NODE_LP_CERTIFIED_count": 0,
+                "fail_closed_reason": str(precheck["rmp_memory_precheck_reason"]),
+                "note": str(precheck["rmp_memory_precheck_reason"]),
+                **precheck,
+            }
+        b0_baseline = _b0_baseline_or_solve(
+            data,
+            b0_direct=b0_direct,
+            max_direct_tasks=max_direct_tasks,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
+        )
         universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
         node = _solve_b3_node(
             data,
             universe,
             _QueuedNode("node_000", None, 0, BranchContext()),
-            b0_direct=b0_direct,
+            b0_direct=b0_baseline,
             incumbent_objective_at_entry=None,
             max_direct_tasks=int(max_direct_tasks),
             max_rounds=int(b3_max_rounds_per_node),
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             negative_eps=1.0e-6,
             max_columns_per_round=512,
         )
         return {
             **node,
             "algorithm_status": "BPC_GAP_AVAILABLE" if node.get("node_lp_bound_official") else "BPC_INCOMPLETE_PRICING",
+            "B0_direct_objective": getattr(b0_baseline, "objective", None),
+            "objective_breakdown": getattr(b0_baseline, "objective_breakdown", None),
+            "reference_solution_upper_bound": getattr(b0_baseline, "reference_solution_upper_bound", None),
+            "reference_solution_upper_bound_source": getattr(
+                b0_baseline, "reference_solution_upper_bound_source", ""
+            ),
+            "direct_bound_pruning_root_bound": getattr(b0_baseline, "direct_bound_pruning_root_bound", None),
+            "direct_bound_pruning_active": getattr(b0_baseline, "direct_bound_pruning_active", False),
+            "journey_label_bound_pruned_count": getattr(b0_baseline, "journey_label_bound_pruned_count", 0),
             "B3_global_lb": node.get("node_lp_bound"),
             "B3_global_ub": None,
             "B3_tree_closed": False,
@@ -424,16 +539,41 @@ def _run_mode(
             "fail_closed_reason": "" if node.get("node_lp_bound_official") else node.get("note"),
         }
     if mode == B3B_MODE:
-        return solve_b3_branch_price_tree_baseline(
+        b0_baseline = _b0_baseline_or_solve(
             data,
             b0_direct=b0_direct,
+            max_direct_tasks=max_direct_tasks,
+            wall_time_limit_sec=direct_wall_time_limit_sec,
+        )
+        return solve_b3_branch_price_tree_baseline(
+            data,
+            b0_direct=b0_baseline,
             max_direct_tasks=int(max_direct_tasks),
             max_rounds_per_node=int(b3_max_rounds_per_node),
+            wall_time_limit_sec=direct_wall_time_limit_sec,
             max_tree_nodes=int(max_tree_nodes),
             max_branch_depth=int(max_branch_depth),
             max_columns_per_round=512,
         )
     raise ValueError(f"unsupported B3 mode={mode!r}")
+
+
+def _inner_direct_wall_time_limit(row_time_limit_sec: float | None) -> float | None:
+    if row_time_limit_sec is None:
+        return None
+    limit = float(row_time_limit_sec)
+    reserve = min(30.0, max(10.0, 0.02 * limit))
+    return max(0.001, limit - reserve)
+
+
+def _b0_baseline_or_solve(data, *, b0_direct, max_direct_tasks: int, wall_time_limit_sec: float | None = None):
+    if b0_direct is not None and hasattr(b0_direct, "objective") and hasattr(b0_direct, "journeys"):
+        return b0_direct
+    return solve_direct_journey_baseline(
+        data,
+        max_exact_tasks=int(max_direct_tasks),
+        wall_time_limit_sec=wall_time_limit_sec,
+    )
 
 
 def _row_from_raw(
@@ -443,6 +583,7 @@ def _row_from_raw(
     matrix_group: str,
     scale: int,
     instance_id: str,
+    data,
     wall_time: float,
 ) -> dict:
     b0 = raw.get("b0_ablation") if isinstance(raw.get("b0_ablation"), dict) else {}
@@ -451,6 +592,7 @@ def _row_from_raw(
         if raw.get("B0_direct_objective") is not None
         else b0.get("direct_dp_objective")
     )
+    objective_breakdown = raw.get("objective_breakdown") or b0.get("direct_dp_objective_breakdown")
     root_bound = _float_or_none(raw.get("root_lp_bound") or raw.get("root_rmp_objective") or raw.get("node_lp_bound"))
     global_ub = _float_or_none(raw.get("global_ub") or raw.get("incumbent_objective"))
     comparison_objective = _first_float(
@@ -496,6 +638,19 @@ def _row_from_raw(
         "pricing_state": raw.get("pricing_state") or "",
         "uses_true_dual_bpc_certificate": bool(raw.get("uses_true_dual_bpc_certificate")),
         "B0_direct_objective": direct_objective,
+        "reference_solution_upper_bound": raw.get("reference_solution_upper_bound")
+        or b0.get("reference_solution_upper_bound"),
+        "reference_solution_upper_bound_source": raw.get("reference_solution_upper_bound_source")
+        or b0.get("reference_solution_upper_bound_source")
+        or "",
+        "direct_bound_pruning_root_bound": raw.get("direct_bound_pruning_root_bound")
+        or b0.get("direct_bound_pruning_root_bound"),
+        "direct_bound_pruning_active": bool(
+            raw.get("direct_bound_pruning_active") or b0.get("direct_bound_pruning_active") or False
+        ),
+        "journey_label_bound_pruned_count": int(
+            raw.get("journey_label_bound_pruned_count") or b0.get("journey_label_bound_pruned_count") or 0
+        ),
         "B2B_R3_root_lp_bound": root_bound if mode == B2B_R3_MODE else None,
         "B3_global_lb": _float_or_none(raw.get("global_lower_bound") or raw.get("global_lb") or raw.get("B3_global_lb")),
         "B3_global_ub": global_ub,
@@ -538,7 +693,15 @@ def _row_from_raw(
         "incomplete_node_but_tree_optimal": int(incomplete_nodes > 0 and tree_optimal),
         "wall_time": round(float(wall_time), 6),
         "fail_closed_reason": fail_closed_reason,
+        "rmp_memory_precheck_failed": bool(raw.get("rmp_memory_precheck_failed")),
+        "rmp_memory_precheck_stage": raw.get("rmp_memory_precheck_stage") or "",
+        "rmp_memory_precheck_reason": raw.get("rmp_memory_precheck_reason") or "",
+        "rmp_memory_precheck_estimated_column_count": raw.get("rmp_memory_precheck_estimated_column_count"),
+        "rmp_memory_precheck_estimated_tableau_cells": raw.get("rmp_memory_precheck_estimated_tableau_cells"),
+        "rmp_memory_precheck_cell_limit": raw.get("rmp_memory_precheck_cell_limit"),
     }
+    row.update(flatten_objective_payload(objective_metadata(data), prefix="objective"))
+    row.update(flatten_objective_payload(objective_breakdown, prefix="solution"))
     return row
 
 
@@ -601,8 +764,12 @@ def _report_from_rows(rows: list[dict]) -> dict:
         and all(int(row.get("selected_harvest_addability_fail_count") or 0) == 0 for row in scale20_selected_b3b)
         and all(int(row.get("branch_pricing_audit_fail") or 0) == 0 for row in scale20_selected_b3b)
     )
+    b3b_rows = [row for row in rows if row["mode"] == B3B_MODE]
+    local_b3b_tree_optimal_count = sum(int(row.get("BPC_TREE_OPTIMAL_count") or 0) for row in b3b_rows)
+    cross_scale_acceptance_evaluated = bool(scale5_b3b and scale10_b3b and scale20_selected_b3b)
     accepted = bool(
-        scale5_b3b
+        cross_scale_acceptance_evaluated
+        and scale5_b3b
         and len(scale5_b3b) == 20
         and all(int(row.get("BPC_TREE_OPTIMAL_count") or 0) == 1 for row in scale5_b3b)
         and scale10_no_regression
@@ -628,6 +795,12 @@ def _report_from_rows(rows: list[dict]) -> dict:
             ),
             "scale20_selected_direct20_clean_diagnostics": scale20_selected_clean,
             "can_enter_b4": accepted,
+            "cross_scale_acceptance_evaluated": cross_scale_acceptance_evaluated,
+            "local_b3b_tree_optimal_count": local_b3b_tree_optimal_count,
+            "local_b3b_run_count": len(b3b_rows),
+            "local_b3b_all_tree_optimal": bool(
+                b3b_rows and local_b3b_tree_optimal_count == len(b3b_rows)
+            ),
         },
         "notes": [],
     }
@@ -636,6 +809,12 @@ def _report_from_rows(rows: list[dict]) -> dict:
 def _markdown_report(report: dict, *, rows_csv: Path, summary_json: Path) -> str:
     lines = [
         "# B3 Branch-and-Price Tree 消融报告",
+        "",
+        "## Objective Boundary",
+        "",
+        "- Official objective: `1.0 * normalized_operating_cost + 1.0 * normalized_risk + 0.4 * normalized_weighted_completion_time`。",
+        "- `makespan` 只作为 report/evaluation metric，不进入 pricing objective 或 reduced cost。",
+        "- `BPC_TREE_OPTIMAL` 只证明 normalized additive objective 的 exact optimum，不证明 makespan-in-objective optimum。",
         "",
         "## Artifacts",
         "",
@@ -668,23 +847,29 @@ def _markdown_report(report: dict, *, rows_csv: Path, summary_json: Path) -> str
             )
         )
     acceptance = report["acceptance"]
-    lines.extend(
-        [
-            "",
-            "## B3 Accepted?",
-            "",
-            f"- B3B accepted: {acceptance['b3b_seeded_branch_price_tree_accepted']}.",
-            f"- 5-scale full B3B BPC_TREE_OPTIMAL: {acceptance['scale5_full_b3b_tree_optimal_count']}/{acceptance['scale5_full_b3b_run_count']}.",
-            f"- 10-scale selected no-regression vs B2B_R3: {acceptance['scale10_selected_no_regression_vs_b2b_r3']} "
-            f"(regressions={acceptance['scale10_selected_regression_count']}, runs={acceptance['scale10_selected_b3b_run_count']}).",
-            f"- 20-scale selected direct20 clean diagnostics: {acceptance['scale20_selected_direct20_clean_diagnostics']} "
-            f"(unique instances={acceptance['scale20_selected_direct20_unique_instance_count']}).",
-            f"- Can enter B4: {acceptance['can_enter_b4']}.",
-            "",
-            "## Notes",
-            "",
-        ]
-    )
+    lines.extend(["", "## Acceptance Scope", ""])
+    if acceptance.get("cross_scale_acceptance_evaluated"):
+        lines.extend(
+            [
+                f"- Cross-scale B3B accepted: {acceptance['b3b_seeded_branch_price_tree_accepted']}.",
+                f"- 5-scale full B3B BPC_TREE_OPTIMAL: {acceptance['scale5_full_b3b_tree_optimal_count']}/{acceptance['scale5_full_b3b_run_count']}.",
+                f"- 10-scale selected no-regression vs B2B_R3: {acceptance['scale10_selected_no_regression_vs_b2b_r3']} "
+                f"(regressions={acceptance['scale10_selected_regression_count']}, runs={acceptance['scale10_selected_b3b_run_count']}).",
+                f"- 20-scale selected direct20 clean diagnostics: {acceptance['scale20_selected_direct20_clean_diagnostics']} "
+                f"(unique instances={acceptance['scale20_selected_direct20_unique_instance_count']}).",
+                f"- Can enter B4: {acceptance['can_enter_b4']}.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "- Cross-scale B3 acceptance is not evaluated in this artifact; this report may contain only one scale or one batch.",
+                f"- Local B3B BPC_TREE_OPTIMAL: {acceptance['local_b3b_tree_optimal_count']}/{acceptance['local_b3b_run_count']}.",
+                f"- Local B3B all tree optimal: {acceptance['local_b3b_all_tree_optimal']}.",
+                "- Use the master normalized objective report for cross-scale B0/B3B alignment and final acceptance boundaries.",
+            ]
+        )
+    lines.extend(["", "## Notes", ""])
     for note in report.get("notes") or []:
         lines.append(f"- {note}")
     lines.append("")
@@ -733,10 +918,13 @@ def _fail_closed_row(
     matrix_group: str,
     scale: int,
     instance_id: str,
+    data,
     wall_time: float,
     reason: str,
+    exception_type: str = "",
+    max_direct_tasks: int | None = None,
 ) -> dict:
-    return {
+    row = {
         "matrix_group": matrix_group,
         "scale": int(scale),
         "instance_id": instance_id,
@@ -749,7 +937,17 @@ def _fail_closed_row(
         "BPC_NODE_LP_CERTIFIED_count": 0,
         "wall_time": round(float(wall_time), 6),
         "fail_closed_reason": reason,
+        "attempted_exception_type": str(exception_type or ""),
+        "attempted_max_direct_tasks": max_direct_tasks,
+        "rmp_memory_precheck_failed": False,
+        "rmp_memory_precheck_stage": "",
+        "rmp_memory_precheck_reason": "",
+        "rmp_memory_precheck_estimated_column_count": None,
+        "rmp_memory_precheck_estimated_tableau_cells": None,
+        "rmp_memory_precheck_cell_limit": None,
     }
+    row.update(flatten_objective_payload(objective_metadata(data), prefix="objective"))
+    return row
 
 
 def _csv_value(value):

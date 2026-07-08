@@ -27,7 +27,11 @@ from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_n
 from lunar_ice_bpc.exact.bpc.pricing.profiling import PruningCounter
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
 from lunar_ice_bpc.exact.bpc.pricing.worker_seed_catalog import WorkerSeedCatalog
-from lunar_ice_bpc.exact.bpc.solver.root_node_solver import build_b1_seed_columns
+from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (
+    build_b1_seed_columns,
+    dense_rmp_memory_precheck,
+    representative_universe_column_count,
+)
 from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
@@ -81,8 +85,10 @@ class _NegativeSearchWorkerResult:
 def solve_b2_pricing_tail_baseline(
     data: LunarIceData,
     *,
+    b0_direct=None,
     max_direct_tasks: int = 5,
     max_rounds: int = 8,
+    wall_time_limit_sec: float | None = None,
     negative_eps: float = 1.0e-6,
     max_columns_per_round: int = 64,
     worker_payload: dict | None = None,
@@ -99,9 +105,19 @@ def solve_b2_pricing_tail_baseline(
     """
 
     if mode == B2_PRODUCT_MODE:
-        return solve_b2_product_exact_solver(data, max_direct_tasks=int(max_direct_tasks))
+        if b0_direct is not None:
+            return _product_payload_from_direct(data, b0_direct)
+        return solve_b2_product_exact_solver(
+            data,
+            max_direct_tasks=int(max_direct_tasks),
+            wall_time_limit_sec=wall_time_limit_sec,
+        )
     if mode in {B2C_MODE, B2D_MODE}:
-        diagnostic_b0 = solve_direct_journey_baseline(data, max_exact_tasks=min(int(max_direct_tasks), 10))
+        diagnostic_b0 = b0_direct or solve_direct_journey_baseline(
+            data,
+            max_exact_tasks=min(int(max_direct_tasks), 10),
+            wall_time_limit_sec=wall_time_limit_sec,
+        )
         return _solve_limited_pricing_diagnostic(
             data,
             b0_direct=diagnostic_b0,
@@ -112,8 +128,12 @@ def solve_b2_pricing_tail_baseline(
         )
 
     completion_policy = build_completion_bound_tail_policy(pruning_opt_in=False)
-    b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
     if len(data.task_ids) > int(max_direct_tasks):
+        b0_direct = b0_direct or solve_direct_journey_baseline(
+            data,
+            max_exact_tasks=int(max_direct_tasks),
+            wall_time_limit_sec=wall_time_limit_sec,
+        )
         return _incomplete_payload(
             data=data,
             b0_direct=b0_direct,
@@ -130,8 +150,14 @@ def solve_b2_pricing_tail_baseline(
             previous_baseline=previous_baseline,
             completion_policy=completion_policy,
             max_direct_tasks=int(max_direct_tasks),
+            wall_time_limit_sec=wall_time_limit_sec,
             negative_eps=negative_eps,
         )
+    b0_direct = b0_direct or solve_direct_journey_baseline(
+        data,
+        max_exact_tasks=int(max_direct_tasks),
+        wall_time_limit_sec=wall_time_limit_sec,
+    )
     if mode in {B2B_R2_MODE, B2B_R3_MODE}:
         return _solve_b2b_r2_worker_before_final_judge(
             data,
@@ -175,6 +201,10 @@ def solve_b2_product_exact_solver(
         max_exact_tasks=int(max_direct_tasks),
         wall_time_limit_sec=wall_time_limit_sec,
     )
+    return _product_payload_from_direct(data, direct)
+
+
+def _product_payload_from_direct(data: LunarIceData, direct) -> dict:
     solved = direct.certificate_scope == CertificateScope.DIRECT_DP_FIXED_GRAPH_OPTIMAL.value
     return {
         "schema_version": "lunar_ice_bpc.b2_product_exact_solver.v1",
@@ -189,6 +219,12 @@ def solve_b2_product_exact_solver(
         "root_lp_bound_official": False,
         "root_bound_le_direct_dp_integer_objective": None,
         "B0_direct_objective": direct.objective,
+        "objective_breakdown": getattr(direct, "objective_breakdown", None),
+        "reference_solution_upper_bound": getattr(direct, "reference_solution_upper_bound", None),
+        "reference_solution_upper_bound_source": getattr(direct, "reference_solution_upper_bound_source", ""),
+        "direct_bound_pruning_root_bound": getattr(direct, "direct_bound_pruning_root_bound", None),
+        "direct_bound_pruning_active": getattr(direct, "direct_bound_pruning_active", False),
+        "journey_label_bound_pruned_count": getattr(direct, "journey_label_bound_pruned_count", 0),
         "product_exact_objective": direct.objective,
         "product_exact_solution_scope": direct.certificate_scope if solved else "",
         "product_exact_solution_count": 1 if solved else 0,
@@ -225,6 +261,7 @@ def solve_node_pricing_with_b2b_r3(
     incumbent_objective: float | None = None,
     max_direct_tasks: int = 5,
     max_rounds: int = 8,
+    wall_time_limit_sec: float | None = None,
     negative_eps: float = 1.0e-6,
     max_columns_per_round: int = 64,
     b0_direct=None,
@@ -238,7 +275,11 @@ def solve_node_pricing_with_b2b_r3(
     proof_debt = ProofDebtQueue()
     profiling = PruningCounter()
     if b0_direct is None:
-        b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
+        b0_direct = solve_direct_journey_baseline(
+            data,
+            max_exact_tasks=int(max_direct_tasks),
+            wall_time_limit_sec=wall_time_limit_sec,
+        )
     if len(data.task_ids) > int(max_direct_tasks):
         return _node_engine_payload(
             data=data,
@@ -714,6 +755,12 @@ def _solve_limited_pricing_diagnostic(
         "root_lp_bound_official": False,
         "root_bound_le_direct_dp_integer_objective": None,
         "B0_direct_objective": b0_direct.objective,
+        "objective_breakdown": getattr(b0_direct, "objective_breakdown", None),
+        "reference_solution_upper_bound": getattr(b0_direct, "reference_solution_upper_bound", None),
+        "reference_solution_upper_bound_source": getattr(b0_direct, "reference_solution_upper_bound_source", ""),
+        "direct_bound_pruning_root_bound": getattr(b0_direct, "direct_bound_pruning_root_bound", None),
+        "direct_bound_pruning_active": getattr(b0_direct, "direct_bound_pruning_active", False),
+        "journey_label_bound_pruned_count": getattr(b0_direct, "journey_label_bound_pruned_count", 0),
         "pricing_round_count": 0,
         "final_judge_call_count": 0,
         "candidate_negative_count": int(pricing.get("negative_column_count") or 0),
@@ -775,8 +822,56 @@ def _solve_b2a_full_universe_audit(
     previous_baseline: dict | None,
     completion_policy: dict,
     max_direct_tasks: int,
+    wall_time_limit_sec: float | None,
     negative_eps: float,
 ) -> dict:
+    estimated_columns = representative_universe_column_count(len(data.task_ids))
+    precheck = dense_rmp_memory_precheck(
+        data,
+        active_column_count=estimated_columns,
+        stage="b2a_full_universe_active_rmp",
+    )
+    if precheck["rmp_memory_precheck_failed"]:
+        proof_debt = ProofDebtQueue()
+        return _payload(
+            data=data,
+            b0_direct=b0_direct,
+            previous_baseline=previous_baseline,
+            proof_debt=proof_debt,
+            completion_policy=completion_policy,
+            profiling=PruningCounter(),
+            history=[],
+            harvest_totals=_empty_harvest_totals(),
+            final_judge_call_count=0,
+            duplicate_only_count=0,
+            hidden_negative_count=0,
+            replacement_only_round_count=0,
+            added_to_master_count=0,
+            master=None,
+            final_judge=None,
+            duplicate_audit=None,
+            hidden_audit=None,
+            seed_catalog=WorkerSeedCatalog(),
+            manual_rc_audit=None,
+            mode=B2A_MODE,
+            seed_report=_seed_report(
+                mode=B2A_MODE,
+                seed_mode="full_universe",
+                initial_column_count=0,
+                full_universe_column_count=estimated_columns,
+                full_universe_preloaded=False,
+            ),
+            algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+            certificate_scope=CertificateScope.FEASIBLE_INCUMBENT_ONLY,
+            pricing_state=PricingState.INCOMPLETE_LIMIT,
+            note=str(precheck["rmp_memory_precheck_reason"]),
+            extra=precheck,
+        )
+    b0_direct = b0_direct or solve_direct_journey_baseline(
+        data,
+        max_exact_tasks=int(max_direct_tasks),
+        wall_time_limit_sec=wall_time_limit_sec,
+    )
     full_universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks)).columns
     pool = ColumnPool()
     view = MasterColumnView()
@@ -2112,9 +2207,10 @@ def _payload(
     pricing_state: PricingState,
     note: str,
     profile_totals: dict | None = None,
+    extra: dict | None = None,
 ) -> dict:
     root_objective = None if master is None else master.rmp.objective_bound
-    b0_objective = b0_direct.objective
+    b0_objective = None if b0_direct is None else b0_direct.objective
     root_le_b0 = (
         None
         if root_objective is None or b0_objective is None
@@ -2236,9 +2332,25 @@ def _payload(
         **harvest_totals,
         "b0_ablation": {
             "baseline": "B0_DIRECT_DP_FIXED_GRAPH_ORACLE",
-            "direct_dp_status": b0_direct.status,
-            "direct_dp_certificate_scope": b0_direct.certificate_scope,
+            "direct_dp_status": None if b0_direct is None else b0_direct.status,
+            "direct_dp_certificate_scope": None if b0_direct is None else b0_direct.certificate_scope,
             "direct_dp_objective": b0_objective,
+            "direct_dp_objective_breakdown": None if b0_direct is None else getattr(b0_direct, "objective_breakdown", None),
+            "reference_solution_upper_bound": None
+            if b0_direct is None
+            else getattr(b0_direct, "reference_solution_upper_bound", None),
+            "reference_solution_upper_bound_source": ""
+            if b0_direct is None
+            else getattr(b0_direct, "reference_solution_upper_bound_source", ""),
+            "direct_bound_pruning_root_bound": None
+            if b0_direct is None
+            else getattr(b0_direct, "direct_bound_pruning_root_bound", None),
+            "direct_bound_pruning_active": False
+            if b0_direct is None
+            else getattr(b0_direct, "direct_bound_pruning_active", False),
+            "journey_label_bound_pruned_count": 0
+            if b0_direct is None
+            else getattr(b0_direct, "journey_label_bound_pruned_count", 0),
             "root_lp_bound": root_objective,
             "root_lp_vs_direct_dp_gap": root_gap,
             "root_bound_le_direct_dp_integer_objective": root_le_b0,
@@ -2250,6 +2362,7 @@ def _payload(
         ),
         "fail_closed_reason": "" if root_lp_bound_official else note,
         "note": note,
+        **(extra or {}),
     }
 
 

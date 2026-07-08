@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import csv
+import gc
 import json
 from pathlib import Path
 import signal
@@ -12,8 +13,13 @@ from statistics import mean
 from time import perf_counter
 from typing import Callable, Iterable
 
-from lunar_ice_bpc.exact.bpc.solver.root_node_solver import solve_b1_root_node_baseline
+from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (
+    build_b1_seed_columns,
+    solve_b1_root_node_baseline,
+    _reference_seed_direct_placeholder,
+)
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
+from lunar_ice_bpc.exact.core.objective import flatten_objective_payload, objective_metadata
 from lunar_ice_bpc.exact.solver.journey_driver import solve_direct_journey_baseline
 from lunar_ice_bpc.io.instance_io import read_json, write_json
 
@@ -21,6 +27,28 @@ from lunar_ice_bpc.io.instance_io import read_json, write_json
 B0_MODE = "B0_pure_direct_dp"
 B1A_MODE = "B1A_full_universe_root_audit"
 B1B_MODE = "B1B_seeded_root_CG"
+
+OBJECTIVE_CSV_COLUMNS = (
+    "objective_schema_version",
+    "objective_mode",
+    "objective_reference_cost",
+    "objective_reference_risk",
+    "objective_reference_completion",
+    "objective_reference_makespan_metric",
+    "objective_makespan_enters_pricing_objective",
+    "solution_raw_operating_cost",
+    "solution_raw_risk",
+    "solution_raw_weighted_completion_time",
+    "solution_raw_makespan",
+    "solution_raw_objective_unscaled_weighted_sum",
+    "solution_normalized_operating_cost",
+    "solution_normalized_risk",
+    "solution_normalized_weighted_completion_time",
+    "solution_normalized_makespan_metric",
+    "solution_normalized_objective",
+    "solution_official_objective",
+    "solution_makespan_enters_pricing_objective",
+)
 
 CSV_COLUMNS = (
     "matrix_group",
@@ -36,6 +64,12 @@ CSV_COLUMNS = (
     "official_lower_bound_scope",
     "best_diagnostic_bound_source",
     "B0_direct_objective",
+    "reference_solution_upper_bound",
+    "reference_solution_upper_bound_source",
+    "direct_bound_pruning_root_bound",
+    "direct_bound_pruning_active",
+    "journey_label_bound_pruned_count",
+    *OBJECTIVE_CSV_COLUMNS,
     "B1_root_lp_bound",
     "root_lp_bound_official",
     "root_lp_bound_le_direct_dp_integer_objective",
@@ -43,15 +77,80 @@ CSV_COLUMNS = (
     "integral_root",
     "pricing_round_count",
     "added_column_count",
+    "final_judge_status",
+    "final_judge_exact_status",
+    "final_judge_compact_pricing_phase",
+    "final_judge_negative_search_status",
+    "final_judge_negative_search_wall_time",
+    "final_judge_negative_search_best_reduced_cost",
+    "final_judge_negative_search_dual_bound",
+    "final_judge_negative_search_negative_found",
+    "final_judge_compact_negative_batch_found_count",
+    "final_judge_compact_negative_batch_search_call_count",
+    "final_judge_compact_negative_no_good_scope",
+    "final_judge_forbidden_task_set_count",
+    "final_judge_optimization_proof_status",
+    "final_judge_optimization_proof_wall_time",
+    "final_judge_optimization_proof_best_reduced_cost",
+    "final_judge_optimization_proof_dual_bound",
+    "final_judge_call_count",
+    "final_judge_total_wall_time",
+    "final_judge_found_negative_count",
+    "final_judge_best_negative_reduced_cost",
+    "final_judge_incomplete_count",
+    "final_judge_certified_no_negative_count",
+    "pricing_history_json",
+    "final_judge_wall_time",
+    "final_judge_generated_journey_count",
+    "final_judge_generated_sortie_count",
+    "final_judge_route_template_count",
+    "final_judge_pareto_label_count",
+    "final_judge_best_reduced_cost",
+    "final_judge_dual_bound",
+    "final_judge_mip_gap",
+    "final_judge_solver_backend",
+    "final_judge_model_status_name",
+    "final_judge_variable_count",
+    "final_judge_constraint_count",
+    "final_judge_pricing_complete_by_compact_milp",
+    "final_judge_negative_feasibility_search_enabled",
+    "final_judge_mtz_connectivity_enabled",
+    "final_judge_mtz_endpoint_order_cuts_enabled",
+    "final_judge_mtz_endpoint_order_cut_count",
+    "final_judge_pair_adjacency_cuts_enabled",
+    "final_judge_pair_adjacency_cut_count",
+    "final_judge_sortie_slots_per_journey",
+    "final_judge_sortie_slot_bound_source",
+    "final_judge_sortie_slot_horizon_count_bound",
+    "final_judge_sortie_slot_latest_start_count_bound",
+    "final_judge_time_window_arc_pruning_enabled",
+    "final_judge_time_window_arc_option_count",
+    "final_judge_time_window_impossible_arc_option_count",
+    "final_judge_representative_universe_total_count",
+    "final_judge_representative_universe_audited_count",
+    "final_judge_representative_universe_completion_ratio",
+    "final_judge_representative_universe_remaining_count",
     "manual_rc_audit_pass",
     "pricing_rc_audit_pass",
     "proof_debt_unreleased_count",
     "wall_time",
     "fail_closed_reason",
+    "attempted_exception_type",
+    "attempted_max_direct_tasks",
+    "rmp_memory_precheck_failed",
+    "rmp_memory_precheck_stage",
+    "rmp_memory_precheck_reason",
+    "rmp_memory_precheck_estimated_column_count",
+    "rmp_memory_precheck_estimated_tableau_cells",
+    "rmp_memory_precheck_cell_limit",
     "direct_root_official_leak",
     "b1_mode",
     "seed_mode",
+    "solve_b0_direct_first",
     "initial_column_count",
+    "feasible_incumbent_seed_source",
+    "feasible_incumbent_seed_column_count",
+    "feasible_incumbent_seed_used_as_certificate",
     "full_universe_column_count",
     "full_universe_preloaded",
 )
@@ -66,6 +165,7 @@ def run_b0_b1_ablation(
     matrix_group: str = "",
     row_time_limit_sec: float | None = None,
     max_workers: int = 1,
+    b1_solve_b0_direct_first: bool = True,
 ) -> dict:
     selected_modes = tuple(modes)
     jobs: list[dict] = []
@@ -80,6 +180,7 @@ def run_b0_b1_ablation(
                     max_rounds=b1_max_rounds,
                     matrix_group=matrix_group,
                     row_time_limit_sec=row_time_limit_sec,
+                    solve_b0_direct_first=b1_solve_b0_direct_first,
                 )
             )
         if B1A_MODE in selected_modes:
@@ -92,6 +193,7 @@ def run_b0_b1_ablation(
                     max_rounds=b1_max_rounds,
                     matrix_group=matrix_group,
                     row_time_limit_sec=row_time_limit_sec,
+                    solve_b0_direct_first=b1_solve_b0_direct_first,
                 )
             )
         if B1B_MODE in selected_modes:
@@ -104,6 +206,7 @@ def run_b0_b1_ablation(
                     max_rounds=b1_max_rounds,
                     matrix_group=matrix_group,
                     row_time_limit_sec=row_time_limit_sec,
+                    solve_b0_direct_first=b1_solve_b0_direct_first,
                 )
             )
     rows = _run_jobs(jobs, max_workers=max_workers)
@@ -257,6 +360,14 @@ def render_b0_b1_ablation_markdown(report: dict, *, rows_csv: str | Path, summar
         "- B2/B3/B4/B5 文件若存在，仅视为 scaffold / preliminary module，不纳入当前完成状态。",
         "- 本报告不启用 harvesting、GAT、cuts 或 full branch tree。",
         "",
+        "## Objective Boundary",
+        "",
+        "- Official objective: `1.0 * normalized_operating_cost + 1.0 * normalized_risk + 0.4 * normalized_weighted_completion_time`。",
+        "- `makespan` 只作为 report/evaluation metric，不进入 pricing objective 或 reduced cost。",
+        "- CSV 中 `objective_*` 为 per-instance reference；`solution_*` 为 incumbent/direct-DP 解的 raw/normalized 分解。",
+        "- `solution_normalized_objective`/`solution_official_objective` 是本轮 official objective；"
+        "`solution_raw_objective_unscaled_weighted_sum` 只用于尺度诊断，不参与 reduced cost 或证书判定。",
+        "",
         "## 产物",
         "",
         f"- CSV rows: `{rows_csv}`",
@@ -387,10 +498,21 @@ def _report_from_rows(rows: list[dict]) -> dict:
     }
 
 
-def _run_b0_row(instance: dict, *, max_direct_tasks: int, matrix_group: str = "") -> dict:
+def _run_b0_row(
+    instance: dict,
+    *,
+    max_direct_tasks: int,
+    matrix_group: str = "",
+    wall_time_limit_sec: float | None = None,
+    solve_b0_direct_first: bool = True,
+) -> dict:
     data = load_lunar_ice_data(instance)
     start = perf_counter()
-    b0 = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
+    b0 = solve_direct_journey_baseline(
+        data,
+        max_exact_tasks=int(max_direct_tasks),
+        wall_time_limit_sec=wall_time_limit_sec,
+    )
     elapsed = perf_counter() - start
     fail_reason = "" if b0.status == "DIRECT_DP_BASELINE_OPTIMAL" else b0.note
     row = _base_row(data, mode=B0_MODE, matrix_group=matrix_group)
@@ -405,6 +527,11 @@ def _run_b0_row(instance: dict, *, max_direct_tasks: int, matrix_group: str = ""
             "official_lower_bound_scope": "global_relaxation" if b0.objective is not None else None,
             "best_diagnostic_bound_source": "direct_fixed_graph_root_lp" if b0.objective is not None else None,
             "B0_direct_objective": b0.objective,
+            "reference_solution_upper_bound": b0.reference_solution_upper_bound,
+            "reference_solution_upper_bound_source": b0.reference_solution_upper_bound_source,
+            "direct_bound_pruning_root_bound": b0.direct_bound_pruning_root_bound,
+            "direct_bound_pruning_active": b0.direct_bound_pruning_active,
+            "journey_label_bound_pruned_count": b0.journey_label_bound_pruned_count,
             "B1_root_lp_bound": None,
             "root_lp_bound_official": False,
             "root_lp_bound_le_direct_dp_integer_objective": None,
@@ -420,7 +547,42 @@ def _run_b0_row(instance: dict, *, max_direct_tasks: int, matrix_group: str = ""
             "direct_root_official_leak": False,
         }
     )
+    row.update(flatten_objective_payload(b0.objective_breakdown, prefix="solution"))
     return row
+
+
+def _compact_negative_phase_summary(compact_phases: dict) -> dict:
+    direct = compact_phases.get("negative_feasibility_search")
+    if isinstance(direct, dict) and direct:
+        return direct
+    rows = [
+        value
+        for key, value in sorted(compact_phases.items())
+        if str(key).startswith("negative_feasibility_search_") and isinstance(value, dict)
+    ]
+    if not rows:
+        return {}
+    best_values = [_float_or_none(row.get("best_reduced_cost")) for row in rows]
+    best_values = [value for value in best_values if value is not None]
+    dual_bounds = [_float_or_none(row.get("dual_bound")) for row in rows]
+    dual_bounds = [value for value in dual_bounds if value is not None]
+    wall_times = [_float_or_none(row.get("wall_time_sec")) for row in rows]
+    return {
+        "status": rows[-1].get("status"),
+        "wall_time_sec": round(sum(value for value in wall_times if value is not None), 6),
+        "best_reduced_cost": min(best_values) if best_values else None,
+        "dual_bound": min(dual_bounds) if dual_bounds else None,
+        "negative_found": any(bool(row.get("negative_found")) for row in rows),
+    }
+
+
+def _float_or_none(value) -> float | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _run_b1_row(
@@ -431,6 +593,8 @@ def _run_b1_row(
     max_direct_tasks: int,
     max_rounds: int,
     matrix_group: str = "",
+    wall_time_limit_sec: float | None = None,
+    solve_b0_direct_first: bool = True,
 ) -> dict:
     data = load_lunar_ice_data(instance)
     start = perf_counter()
@@ -438,7 +602,9 @@ def _run_b1_row(
         data,
         max_direct_tasks=int(max_direct_tasks),
         max_rounds=int(max_rounds),
+        wall_time_limit_sec=wall_time_limit_sec,
         seed_mode=seed_mode,
+        solve_b0_direct_first=solve_b0_direct_first,
     )
     elapsed = perf_counter() - start
     certified = result.get("certificate_scope") == "BPC_NODE_LP_CERTIFIED"
@@ -448,6 +614,10 @@ def _run_b1_row(
     if result.get("root_rmp_status") is None and result.get("final_judge_status") is None:
         manual_rc_audit_pass = None
         pricing_rc_audit_pass = None
+    final_judge = result.get("final_judge") or {}
+    compact_phases = final_judge.get("compact_pricing_phase_payloads") or {}
+    negative_phase = _compact_negative_phase_summary(compact_phases)
+    optimization_phase = compact_phases.get("optimization_proof") or {}
     row = _base_row(data, mode=mode, matrix_group=matrix_group)
     row.update(
         {
@@ -460,6 +630,19 @@ def _run_b1_row(
             "official_lower_bound_scope": "BPC_NODE_LP_CERTIFIED" if official else None,
             "best_diagnostic_bound_source": None if official else "b1_restricted_root_rmp",
             "B0_direct_objective": (result.get("b0_ablation") or {}).get("direct_dp_objective"),
+            "reference_solution_upper_bound": (result.get("b0_ablation") or {}).get("reference_solution_upper_bound"),
+            "reference_solution_upper_bound_source": (result.get("b0_ablation") or {}).get(
+                "reference_solution_upper_bound_source"
+            ),
+            "direct_bound_pruning_root_bound": (result.get("b0_ablation") or {}).get(
+                "direct_bound_pruning_root_bound"
+            ),
+            "direct_bound_pruning_active": (result.get("b0_ablation") or {}).get(
+                "direct_bound_pruning_active"
+            ),
+            "journey_label_bound_pruned_count": (result.get("b0_ablation") or {}).get(
+                "journey_label_bound_pruned_count"
+            ),
             "B1_root_lp_bound": result.get("root_lp_bound"),
             "root_lp_bound_official": official,
             "root_lp_bound_le_direct_dp_integer_objective": (result.get("b0_ablation") or {}).get(
@@ -469,6 +652,81 @@ def _run_b1_row(
             "integral_root": result.get("integral_root"),
             "pricing_round_count": result.get("pricing_round_count"),
             "added_column_count": result.get("added_column_count"),
+            "final_judge_status": result.get("final_judge_status"),
+            "final_judge_exact_status": final_judge.get("exact_status"),
+            "final_judge_compact_pricing_phase": final_judge.get("compact_pricing_phase"),
+            "final_judge_negative_search_status": negative_phase.get("status"),
+            "final_judge_negative_search_wall_time": negative_phase.get("wall_time_sec"),
+            "final_judge_negative_search_best_reduced_cost": negative_phase.get("best_reduced_cost"),
+            "final_judge_negative_search_dual_bound": negative_phase.get("dual_bound"),
+            "final_judge_negative_search_negative_found": negative_phase.get("negative_found"),
+            "final_judge_compact_negative_batch_found_count": final_judge.get("compact_negative_batch_found_count"),
+            "final_judge_compact_negative_batch_search_call_count": final_judge.get(
+                "compact_negative_batch_search_call_count"
+            ),
+            "final_judge_compact_negative_no_good_scope": final_judge.get("compact_negative_no_good_scope"),
+            "final_judge_forbidden_task_set_count": final_judge.get("forbidden_task_set_count"),
+            "final_judge_optimization_proof_status": optimization_phase.get("status"),
+            "final_judge_optimization_proof_wall_time": optimization_phase.get("wall_time_sec"),
+            "final_judge_optimization_proof_best_reduced_cost": optimization_phase.get("best_reduced_cost"),
+            "final_judge_optimization_proof_dual_bound": optimization_phase.get("dual_bound"),
+            "final_judge_call_count": result.get("final_judge_call_count"),
+            "final_judge_total_wall_time": result.get("final_judge_total_wall_time"),
+            "final_judge_found_negative_count": result.get("final_judge_found_negative_count"),
+            "final_judge_best_negative_reduced_cost": result.get("final_judge_best_negative_reduced_cost"),
+            "final_judge_incomplete_count": result.get("final_judge_incomplete_count"),
+            "final_judge_certified_no_negative_count": result.get("final_judge_certified_no_negative_count"),
+            "pricing_history_json": json.dumps(result.get("history") or [], ensure_ascii=False, separators=(",", ":")),
+            "final_judge_wall_time": final_judge.get("final_judge_wall_time"),
+            "final_judge_generated_journey_count": final_judge.get("generated_journey_count"),
+            "final_judge_generated_sortie_count": final_judge.get("feasible_sortie_template_count"),
+            "final_judge_route_template_count": final_judge.get("route_template_count"),
+            "final_judge_pareto_label_count": final_judge.get("pareto_label_count"),
+            "final_judge_best_reduced_cost": final_judge.get("best_reduced_cost"),
+            "final_judge_dual_bound": final_judge.get("dual_bound", final_judge.get("bound")),
+            "final_judge_mip_gap": final_judge.get("gap"),
+            "final_judge_solver_backend": final_judge.get("solver_backend", ""),
+            "final_judge_model_status_name": final_judge.get("model_status_name", ""),
+            "final_judge_variable_count": final_judge.get("variable_count"),
+            "final_judge_constraint_count": final_judge.get("constraint_count"),
+            "final_judge_pricing_complete_by_compact_milp": bool(
+                final_judge.get("pricing_complete_by_compact_milp")
+            ),
+            "final_judge_negative_feasibility_search_enabled": bool(
+                final_judge.get("negative_feasibility_search_enabled")
+            ),
+            "final_judge_mtz_connectivity_enabled": bool(final_judge.get("mtz_connectivity_enabled")),
+            "final_judge_mtz_endpoint_order_cuts_enabled": bool(
+                final_judge.get("mtz_endpoint_order_cuts_enabled")
+            ),
+            "final_judge_mtz_endpoint_order_cut_count": final_judge.get("mtz_endpoint_order_cut_count"),
+            "final_judge_pair_adjacency_cuts_enabled": bool(final_judge.get("pair_adjacency_cuts_enabled")),
+            "final_judge_pair_adjacency_cut_count": final_judge.get("pair_adjacency_cut_count"),
+            "final_judge_sortie_slots_per_journey": final_judge.get("sortie_slots_per_journey"),
+            "final_judge_sortie_slot_bound_source": final_judge.get("sortie_slot_bound_source"),
+            "final_judge_sortie_slot_horizon_count_bound": final_judge.get("sortie_slot_horizon_count_bound"),
+            "final_judge_sortie_slot_latest_start_count_bound": final_judge.get(
+                "sortie_slot_latest_start_count_bound"
+            ),
+            "final_judge_time_window_arc_pruning_enabled": bool(
+                final_judge.get("time_window_arc_pruning_enabled")
+            ),
+            "final_judge_time_window_arc_option_count": final_judge.get("time_window_arc_option_count"),
+            "final_judge_time_window_impossible_arc_option_count": final_judge.get(
+                "time_window_impossible_arc_option_count"
+            ),
+            "final_judge_representative_universe_total_count": final_judge.get(
+                "representative_universe_total_count"
+            ),
+            "final_judge_representative_universe_audited_count": final_judge.get(
+                "representative_universe_audited_count"
+            ),
+            "final_judge_representative_universe_completion_ratio": final_judge.get(
+                "representative_universe_completion_ratio"
+            ),
+            "final_judge_representative_universe_remaining_count": final_judge.get(
+                "representative_universe_remaining_count"
+            ),
             "manual_rc_audit_pass": manual_rc_audit_pass,
             "pricing_rc_audit_pass": pricing_rc_audit_pass,
             "proof_debt_unreleased_count": result.get("proof_debt_unreleased_count"),
@@ -477,10 +735,28 @@ def _run_b1_row(
             "direct_root_official_leak": False,
             "b1_mode": result.get("b1_mode"),
             "seed_mode": result.get("seed_mode"),
+            "solve_b0_direct_first": bool(result.get("solve_b0_direct_first", True)),
             "initial_column_count": result.get("initial_column_count"),
+            "feasible_incumbent_seed_source": result.get("feasible_incumbent_seed_source") or "",
+            "feasible_incumbent_seed_column_count": result.get("feasible_incumbent_seed_column_count"),
+            "feasible_incumbent_seed_used_as_certificate": bool(
+                result.get("feasible_incumbent_seed_used_as_certificate")
+            ),
             "full_universe_column_count": result.get("full_universe_column_count"),
             "full_universe_preloaded": result.get("full_universe_preloaded"),
+            "rmp_memory_precheck_failed": bool(result.get("rmp_memory_precheck_failed")),
+            "rmp_memory_precheck_stage": result.get("rmp_memory_precheck_stage") or "",
+            "rmp_memory_precheck_reason": result.get("rmp_memory_precheck_reason") or "",
+            "rmp_memory_precheck_estimated_column_count": result.get("rmp_memory_precheck_estimated_column_count"),
+            "rmp_memory_precheck_estimated_tableau_cells": result.get("rmp_memory_precheck_estimated_tableau_cells"),
+            "rmp_memory_precheck_cell_limit": result.get("rmp_memory_precheck_cell_limit"),
         }
+    )
+    row.update(
+        flatten_objective_payload(
+            (result.get("b0_ablation") or {}).get("direct_dp_objective_breakdown"),
+            prefix="solution",
+        )
     )
     return row
 
@@ -494,6 +770,7 @@ def _job(
     max_rounds: int,
     matrix_group: str,
     row_time_limit_sec: float | None,
+    solve_b0_direct_first: bool = True,
 ) -> dict:
     return {
         "item": item,
@@ -503,6 +780,7 @@ def _job(
         "max_rounds": int(max_rounds),
         "matrix_group": str(matrix_group),
         "row_time_limit_sec": row_time_limit_sec,
+        "solve_b0_direct_first": bool(solve_b0_direct_first),
     }
 
 
@@ -532,6 +810,7 @@ def _run_job(job: dict) -> dict:
                 instance,
                 max_direct_tasks=int(job["max_direct_tasks"]),
                 matrix_group=str(job["matrix_group"]),
+                wall_time_limit_sec=_inner_direct_wall_time_limit(job["row_time_limit_sec"]),
             ),
         )
     return _run_guarded_row(
@@ -547,6 +826,15 @@ def _run_job(job: dict) -> dict:
             max_direct_tasks=int(job["max_direct_tasks"]),
             max_rounds=int(job["max_rounds"]),
             matrix_group=str(job["matrix_group"]),
+            wall_time_limit_sec=_inner_direct_wall_time_limit(job["row_time_limit_sec"]),
+            solve_b0_direct_first=bool(job.get("solve_b0_direct_first", True)),
+        ),
+        fallback_extra=_b1_reference_seed_fallback_fields(
+            instance,
+            mode=mode,
+            seed_mode=str(job["seed_mode"]),
+            max_direct_tasks=int(job["max_direct_tasks"]),
+            solve_b0_direct_first=bool(job.get("solve_b0_direct_first", True)),
         ),
     )
 
@@ -559,34 +847,177 @@ def _run_guarded_row(
     max_direct_tasks: int,
     row_time_limit_sec: float | None,
     fn: Callable[[], dict],
+    fallback_extra: dict | None = None,
 ) -> dict:
     if row_time_limit_sec is None:
         return fn()
+    fallback_row = _base_row(load_lunar_ice_data(instance), mode=mode, matrix_group=matrix_group)
     start = perf_counter()
     try:
         return _with_timeout(fn, float(row_time_limit_sec))
     except TimeoutError:
-        data = load_lunar_ice_data(instance)
-        row = _base_row(data, mode=mode, matrix_group=matrix_group)
-        row.update(
-            {
-                "algorithm_status": "BPC_INCOMPLETE_PRICING" if mode != B0_MODE else "DIRECT_DP_TIME_LIMIT",
-                "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
-                "pricing_state": "INCOMPLETE_LIMIT" if mode != B0_MODE else "",
-                "uses_true_dual_bpc_certificate": False,
-                "bpc_certificate_status": "NOT_PORTED_TRUE_DUAL_BPC",
-                "root_lp_bound_official": False,
-                "pricing_round_count": 0,
-                "added_column_count": 0,
-                "manual_rc_audit_pass": None,
-                "pricing_rc_audit_pass": None,
-                "proof_debt_unreleased_count": 0,
-                "wall_time": round(perf_counter() - start, 6),
-                "fail_closed_reason": f"row_time_limit_sec={row_time_limit_sec} exceeded at max_direct_tasks={max_direct_tasks}",
-                "direct_root_official_leak": False,
-            }
+        return _fail_closed_attempt_row(
+            fallback_row,
+            mode=mode,
+            max_direct_tasks=max_direct_tasks,
+            elapsed=perf_counter() - start,
+            reason=f"row_time_limit_sec={row_time_limit_sec} exceeded at max_direct_tasks={max_direct_tasks}",
+            exception_type="TimeoutError",
+            extra=fallback_extra,
         )
-        return row
+    except MemoryError:
+        gc.collect()
+        return _fail_closed_attempt_row(
+            fallback_row,
+            mode=mode,
+            max_direct_tasks=max_direct_tasks,
+            elapsed=perf_counter() - start,
+            reason=(
+                "row failed closed after MemoryError while attempting strict rerun "
+                f"at max_direct_tasks={max_direct_tasks}"
+            ),
+            exception_type="MemoryError",
+            extra=fallback_extra,
+        )
+
+
+def _inner_direct_wall_time_limit(row_time_limit_sec: float | None) -> float | None:
+    if row_time_limit_sec is None:
+        return None
+    limit = float(row_time_limit_sec)
+    reserve = min(30.0, max(10.0, 0.02 * limit))
+    return max(0.001, limit - reserve)
+
+
+def _fail_closed_attempt_row(
+    base_row: dict,
+    *,
+    mode: str,
+    max_direct_tasks: int,
+    elapsed: float,
+    reason: str,
+    exception_type: str,
+    extra: dict | None = None,
+) -> dict:
+    row = dict(base_row)
+    row.update(
+        {
+            "algorithm_status": "BPC_INCOMPLETE_PRICING" if mode != B0_MODE else "DIRECT_DP_TIME_LIMIT",
+            "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
+            "pricing_state": "INCOMPLETE_LIMIT" if mode != B0_MODE else "",
+            "uses_true_dual_bpc_certificate": False,
+            "bpc_certificate_status": "NOT_PORTED_TRUE_DUAL_BPC",
+            "root_lp_bound_official": False,
+            "pricing_round_count": 0,
+            "added_column_count": 0,
+            "final_judge_status": None,
+            "final_judge_exact_status": None,
+            "final_judge_compact_pricing_phase": None,
+            "final_judge_negative_search_status": None,
+            "final_judge_negative_search_wall_time": None,
+            "final_judge_negative_search_best_reduced_cost": None,
+            "final_judge_negative_search_dual_bound": None,
+            "final_judge_negative_search_negative_found": None,
+            "final_judge_optimization_proof_status": None,
+            "final_judge_optimization_proof_wall_time": None,
+            "final_judge_optimization_proof_best_reduced_cost": None,
+            "final_judge_optimization_proof_dual_bound": None,
+            "final_judge_call_count": 0,
+            "final_judge_total_wall_time": 0.0,
+            "final_judge_found_negative_count": 0,
+            "final_judge_best_negative_reduced_cost": None,
+            "final_judge_incomplete_count": 0,
+            "final_judge_certified_no_negative_count": 0,
+            "pricing_history_json": "[]",
+            "final_judge_wall_time": None,
+            "final_judge_generated_journey_count": None,
+            "final_judge_generated_sortie_count": None,
+            "final_judge_route_template_count": None,
+            "final_judge_pareto_label_count": None,
+            "final_judge_best_reduced_cost": None,
+            "final_judge_dual_bound": None,
+            "final_judge_mip_gap": None,
+            "final_judge_solver_backend": "",
+            "final_judge_model_status_name": "",
+            "final_judge_variable_count": None,
+            "final_judge_constraint_count": None,
+            "final_judge_pricing_complete_by_compact_milp": False,
+            "final_judge_negative_feasibility_search_enabled": False,
+            "final_judge_mtz_connectivity_enabled": False,
+            "final_judge_mtz_endpoint_order_cuts_enabled": False,
+            "final_judge_mtz_endpoint_order_cut_count": None,
+            "final_judge_pair_adjacency_cuts_enabled": False,
+            "final_judge_pair_adjacency_cut_count": None,
+            "final_judge_sortie_slots_per_journey": None,
+            "final_judge_sortie_slot_bound_source": "",
+            "final_judge_sortie_slot_horizon_count_bound": None,
+            "final_judge_sortie_slot_latest_start_count_bound": None,
+            "final_judge_time_window_arc_pruning_enabled": False,
+            "final_judge_time_window_arc_option_count": None,
+            "final_judge_time_window_impossible_arc_option_count": None,
+            "final_judge_representative_universe_total_count": None,
+            "final_judge_representative_universe_audited_count": None,
+            "final_judge_representative_universe_completion_ratio": None,
+            "final_judge_representative_universe_remaining_count": None,
+            "manual_rc_audit_pass": None,
+            "pricing_rc_audit_pass": None,
+            "proof_debt_unreleased_count": 0,
+            "wall_time": round(float(elapsed), 6),
+            "fail_closed_reason": str(reason),
+            "attempted_exception_type": str(exception_type),
+            "attempted_max_direct_tasks": int(max_direct_tasks),
+            "rmp_memory_precheck_failed": False,
+            "rmp_memory_precheck_stage": "",
+            "rmp_memory_precheck_reason": "",
+            "rmp_memory_precheck_estimated_column_count": None,
+            "rmp_memory_precheck_estimated_tableau_cells": None,
+            "rmp_memory_precheck_cell_limit": None,
+            "direct_root_official_leak": False,
+        }
+    )
+    row.update(extra or {})
+    return row
+
+
+def _b1_reference_seed_fallback_fields(
+    instance: dict,
+    *,
+    mode: str,
+    seed_mode: str,
+    max_direct_tasks: int,
+    solve_b0_direct_first: bool,
+) -> dict:
+    if mode == B0_MODE or bool(solve_b0_direct_first):
+        return {}
+    data = load_lunar_ice_data(instance)
+    placeholder = _reference_seed_direct_placeholder(data)
+    try:
+        _, seed_report = build_b1_seed_columns(
+            data,
+            b0_direct=placeholder,
+            seed_mode=seed_mode,
+            max_direct_tasks=int(max_direct_tasks),
+        )
+    except Exception:
+        return {
+            "solve_b0_direct_first": False,
+            "reference_solution_upper_bound": placeholder.reference_solution_upper_bound,
+            "reference_solution_upper_bound_source": placeholder.reference_solution_upper_bound_source,
+        }
+    return {
+        "solve_b0_direct_first": False,
+        "seed_mode": seed_report.get("seed_mode"),
+        "initial_column_count": seed_report.get("initial_column_count"),
+        "feasible_incumbent_seed_source": seed_report.get("feasible_incumbent_seed_source", ""),
+        "feasible_incumbent_seed_column_count": seed_report.get("feasible_incumbent_seed_column_count", 0),
+        "feasible_incumbent_seed_used_as_certificate": bool(
+            seed_report.get("feasible_incumbent_seed_used_as_certificate", False)
+        ),
+        "full_universe_column_count": seed_report.get("full_universe_column_count"),
+        "full_universe_preloaded": seed_report.get("full_universe_preloaded"),
+        "reference_solution_upper_bound": placeholder.reference_solution_upper_bound,
+        "reference_solution_upper_bound_source": placeholder.reference_solution_upper_bound_source,
+    }
 
 
 def _with_timeout(fn: Callable[[], dict], seconds: float) -> dict:
@@ -603,7 +1034,7 @@ def _with_timeout(fn: Callable[[], dict], seconds: float) -> dict:
 
 
 def _base_row(data, *, mode: str, matrix_group: str) -> dict:
-    return {
+    row = {
         "matrix_group": matrix_group,
         "scale": len(data.task_ids),
         "instance_id": data.instance_id,
@@ -617,6 +1048,11 @@ def _base_row(data, *, mode: str, matrix_group: str) -> dict:
         "official_lower_bound_scope": None,
         "best_diagnostic_bound_source": None,
         "B0_direct_objective": None,
+        "reference_solution_upper_bound": None,
+        "reference_solution_upper_bound_source": "",
+        "direct_bound_pruning_root_bound": None,
+        "direct_bound_pruning_active": False,
+        "journey_label_bound_pruned_count": 0,
         "B1_root_lp_bound": None,
         "root_lp_bound_official": False,
         "root_lp_bound_le_direct_dp_integer_objective": None,
@@ -624,6 +1060,55 @@ def _base_row(data, *, mode: str, matrix_group: str) -> dict:
         "integral_root": None,
         "pricing_round_count": None,
         "added_column_count": None,
+        "final_judge_status": None,
+        "final_judge_exact_status": None,
+        "final_judge_compact_pricing_phase": None,
+        "final_judge_negative_search_status": None,
+        "final_judge_negative_search_wall_time": None,
+        "final_judge_negative_search_best_reduced_cost": None,
+        "final_judge_negative_search_dual_bound": None,
+        "final_judge_negative_search_negative_found": None,
+        "final_judge_optimization_proof_status": None,
+        "final_judge_optimization_proof_wall_time": None,
+        "final_judge_optimization_proof_best_reduced_cost": None,
+        "final_judge_optimization_proof_dual_bound": None,
+        "final_judge_call_count": 0,
+        "final_judge_total_wall_time": 0.0,
+        "final_judge_found_negative_count": 0,
+        "final_judge_best_negative_reduced_cost": None,
+        "final_judge_incomplete_count": 0,
+        "final_judge_certified_no_negative_count": 0,
+        "pricing_history_json": "[]",
+        "final_judge_wall_time": None,
+        "final_judge_generated_journey_count": None,
+        "final_judge_generated_sortie_count": None,
+        "final_judge_route_template_count": None,
+        "final_judge_pareto_label_count": None,
+        "final_judge_best_reduced_cost": None,
+        "final_judge_dual_bound": None,
+        "final_judge_mip_gap": None,
+        "final_judge_solver_backend": "",
+        "final_judge_model_status_name": "",
+        "final_judge_variable_count": None,
+        "final_judge_constraint_count": None,
+        "final_judge_pricing_complete_by_compact_milp": False,
+        "final_judge_negative_feasibility_search_enabled": False,
+        "final_judge_mtz_connectivity_enabled": False,
+        "final_judge_mtz_endpoint_order_cuts_enabled": False,
+        "final_judge_mtz_endpoint_order_cut_count": None,
+        "final_judge_pair_adjacency_cuts_enabled": False,
+        "final_judge_pair_adjacency_cut_count": None,
+        "final_judge_sortie_slots_per_journey": None,
+        "final_judge_sortie_slot_bound_source": "",
+        "final_judge_sortie_slot_horizon_count_bound": None,
+        "final_judge_sortie_slot_latest_start_count_bound": None,
+        "final_judge_time_window_arc_pruning_enabled": False,
+        "final_judge_time_window_arc_option_count": None,
+        "final_judge_time_window_impossible_arc_option_count": None,
+        "final_judge_representative_universe_total_count": None,
+        "final_judge_representative_universe_audited_count": None,
+        "final_judge_representative_universe_completion_ratio": None,
+        "final_judge_representative_universe_remaining_count": None,
         "manual_rc_audit_pass": None,
         "pricing_rc_audit_pass": None,
         "proof_debt_unreleased_count": None,
@@ -635,7 +1120,15 @@ def _base_row(data, *, mode: str, matrix_group: str) -> dict:
         "initial_column_count": None,
         "full_universe_column_count": None,
         "full_universe_preloaded": None,
+        "rmp_memory_precheck_failed": False,
+        "rmp_memory_precheck_stage": "",
+        "rmp_memory_precheck_reason": "",
+        "rmp_memory_precheck_estimated_column_count": None,
+        "rmp_memory_precheck_estimated_tableau_cells": None,
+        "rmp_memory_precheck_cell_limit": None,
     }
+    row.update(flatten_objective_payload(objective_metadata(data), prefix="objective"))
+    return row
 
 
 def _summary_rows(rows: list[dict]) -> list[dict]:

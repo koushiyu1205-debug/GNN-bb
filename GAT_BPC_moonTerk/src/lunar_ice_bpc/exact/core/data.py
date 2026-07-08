@@ -40,6 +40,11 @@ class ObjectiveWeights:
     beta_journey_end_time: float
     gamma_lunar_ice_risk: float
     delta_energy: float
+    weight_operating_cost: float = 1.0
+    weight_risk: float = 1.0
+    weight_completion: float = 0.4
+    weight_makespan_metric_only: float = 0.3
+    mode: str = "normalized_operating_cost_risk_weighted_completion"
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,7 @@ class LunarIceData:
     max_shadow_exposure_per_sortie: float
     objective: ObjectiveWeights
     path_option_policy_id: str = ""
+    reference_solution: dict[str, Any] | None = None
 
     @property
     def task_ids(self) -> tuple[str, ...]:
@@ -121,10 +127,25 @@ def load_lunar_ice_data(instance: dict[str, Any]) -> LunarIceData:
         recharge_power_proxy_per_min=float(vehicle["recharge_power_proxy_per_min"]),
         max_shadow_exposure_per_sortie=float(vehicle["max_shadow_exposure_per_sortie"]),
         objective=ObjectiveWeights(
-            alpha_discovery_completion=float(objective_payload["alpha_discovery_completion"]),
-            beta_journey_end_time=float(objective_payload["beta_journey_end_time"]),
-            gamma_lunar_ice_risk=float(objective_payload["gamma_lunar_ice_risk"]),
-            delta_energy=float(objective_payload["delta_energy"]),
+            alpha_discovery_completion=float(objective_payload.get("alpha_discovery_completion", 1.0)),
+            beta_journey_end_time=float(objective_payload.get("beta_journey_end_time", 0.05)),
+            gamma_lunar_ice_risk=float(objective_payload.get("gamma_lunar_ice_risk", 0.1)),
+            delta_energy=float(objective_payload.get("delta_energy", 0.01)),
+            weight_operating_cost=float(
+                objective_payload.get("weight_operating_cost", objective_payload.get("w_cost", 1.0))
+            ),
+            weight_risk=float(objective_payload.get("weight_risk", objective_payload.get("w_risk", 1.0))),
+            weight_completion=float(
+                objective_payload.get("weight_completion", objective_payload.get("w_completion", 0.4))
+            ),
+            weight_makespan_metric_only=float(
+                objective_payload.get(
+                    "weight_makespan_metric_only",
+                    objective_payload.get("w_makespan_metric_only", objective_payload.get("w_makespan", 0.3)),
+                )
+            ),
+            mode=str(objective_payload.get("mode") or "normalized_operating_cost_risk_weighted_completion"),
         ),
         path_option_policy_id=str(instance.get("logical_graph", {}).get("path_option_policy_id") or ""),
+        reference_solution=instance.get("reference_solution") if isinstance(instance.get("reference_solution"), dict) else None,
     )

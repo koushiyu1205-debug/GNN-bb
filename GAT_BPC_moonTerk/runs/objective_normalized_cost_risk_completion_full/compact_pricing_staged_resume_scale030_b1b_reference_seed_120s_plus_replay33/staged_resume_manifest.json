@@ -1,0 +1,35 @@
+{
+  "schema_version": "lunar_ice_bpc.compact_pricing_staged_resume.v1",
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/compact_pricing_staged_resume_scale030_b1b_reference_seed_120s_plus_replay33",
+  "config": {
+    "stage_time_limit_sec": 900.0,
+    "max_rounds_per_stage": 4,
+    "max_direct_tasks": 30,
+    "seed_mode": "reference_incumbent_plus_singletons",
+    "batch_target": 10,
+    "negative_search_cap_sec": 60.0
+  },
+  "latest_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/compact_pricing_staged_resume_scale030_b1b_reference_seed_120s_plus_replay33/stage_001/probe.json",
+  "stages": [
+    {
+      "stage_index": 1,
+      "probe_path": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/compact_pricing_staged_resume_scale030_b1b_reference_seed_120s_plus_replay33/stage_001/probe.json",
+      "stage_time_limit_sec": 900.0,
+      "max_rounds_per_stage": 4,
+      "batch_target": 10,
+      "negative_search_cap_sec": 60.0,
+      "elapsed_sec": 900.740716,
+      "algorithm_status": "BPC_INCOMPLETE_PRICING",
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "pricing_round_count": 3,
+      "added_column_count": 2,
+      "active_column_count": 209,
+      "resume_initial_column_count": 207,
+      "final_judge_found_negative_count": 2,
+      "final_judge_incomplete_count": 1,
+      "best_negative_reduced_cost": -0.074788921
+    }
+  ]
+}

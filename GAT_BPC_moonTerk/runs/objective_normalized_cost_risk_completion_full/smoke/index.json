@@ -1,0 +1,60 @@
+{
+  "schema_version": "lunar_ice_bpc.normalized_objective_full_ablation_index.v1",
+  "objective_mode": "normalized_operating_cost_risk_weighted_completion",
+  "makespan_enters_pricing_objective": false,
+  "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke",
+  "manifest": "/home/kai/work/GAT_BPC_moonTerk/data/manifests/lunar_ice_sp50_real_benchmark_manifest.json",
+  "families_requested": [
+    "b0b1",
+    "b2",
+    "b3"
+  ],
+  "scales_requested": [
+    5
+  ],
+  "limit_per_scale": 1,
+  "entries": [
+    {
+      "family": "b0b1",
+      "scale": 5,
+      "status": "DONE",
+      "expected_instance_count": 1,
+      "completed_instance_count": 1,
+      "row_time_limit_sec": 600.0,
+      "rows_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b0b1_scale005_rows.csv",
+      "summary_json": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b0b1_scale005_summary.json",
+      "report_md": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b0b1_scale005_report_zh.md",
+      "resume_rows_json": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b0b1_scale005_resume_rows.json",
+      "row_count": 3,
+      "wall_time_sec": 0.067018
+    },
+    {
+      "family": "b2",
+      "scale": 5,
+      "status": "DONE",
+      "expected_instance_count": 1,
+      "completed_instance_count": 1,
+      "row_time_limit_sec": 600.0,
+      "rows_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b2_scale005_rows.csv",
+      "summary_json": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b2_scale005_summary.json",
+      "report_md": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b2_scale005_report_zh.md",
+      "resume_rows_json": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b2_scale005_resume_rows.json",
+      "row_count": 10,
+      "wall_time_sec": 0.504738
+    },
+    {
+      "family": "b3",
+      "scale": 5,
+      "status": "DONE",
+      "expected_instance_count": 1,
+      "completed_instance_count": 1,
+      "row_time_limit_sec": 600.0,
+      "rows_csv": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b3_scale005_rows.csv",
+      "summary_json": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b3_scale005_summary.json",
+      "report_md": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b3_scale005_report_zh.md",
+      "resume_rows_json": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/smoke/b3_scale005_resume_rows.json",
+      "row_count": 5,
+      "wall_time_sec": 0.457133
+    }
+  ]
+}

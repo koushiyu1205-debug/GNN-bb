@@ -1,0 +1,397 @@
+{
+  "schema_version": "lunar_ice_bpc.compact_pricing_replay.v1",
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "instance_id": "lunar_ice_sp50_030_001_seed929001",
+  "source_mode": "",
+  "source_algorithm_status": "BPC_INCOMPLETE_PRICING",
+  "source_certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "source_pricing_round_count": 3,
+  "source_added_column_count": 2,
+  "selected_history_round": 3,
+  "selected_history_pricing_state": "INCOMPLETE_LIMIT",
+  "selected_history_best_reduced_cost": 0.136422772,
+  "selected_history_dual_bound": -0.632214454,
+  "selected_history_added_column_count": 0,
+  "dual_context": {
+    "dual_fingerprint": "e1ce6137e285be4345a072548b33f03f1edb7a8c5a0dd8fdafd3e0fb69f10e7d",
+    "rmp_iteration_id": "root-3",
+    "fleet_dual": -0.463978836,
+    "task_duals": {
+      "ice_site_001": 0.147006765,
+      "ice_site_002": 0.09820639,
+      "ice_site_003": 0.12147005,
+      "ice_site_004": 0.048647445,
+      "ice_site_005": 0.108854295,
+      "ice_site_006": 0.236174017,
+      "ice_site_007": 0.327892421,
+      "ice_site_008": 0.123405537,
+      "ice_site_009": 0.101165538,
+      "ice_site_010": 0.152187673,
+      "ice_site_011": 0.241097547,
+      "ice_site_012": 0.138393838,
+      "ice_site_013": 0.082937316,
+      "ice_site_014": 0.059634289,
+      "ice_site_015": 0.099198799,
+      "ice_site_016": 0.119767015,
+      "ice_site_017": 0.095566404,
+      "ice_site_018": 0.016225674,
+      "ice_site_019": 0.163930146,
+      "ice_site_020": 0.116720745,
+      "ice_site_021": 0.03802674,
+      "ice_site_022": 0.127985597,
+      "ice_site_023": 0.060049455,
+      "ice_site_024": 0.051362453,
+      "ice_site_025": 0.123210746,
+      "ice_site_026": 0.053325027,
+      "ice_site_027": 0.042366901,
+      "ice_site_028": 0.130384228,
+      "ice_site_029": 0.185143177,
+      "ice_site_030": 0.055610546
+    },
+    "cut_duals": {}
+  },
+  "replay_config": {
+    "time_limit_sec": 600.0,
+    "threads": 1,
+    "negative_eps": 1e-06,
+    "mtz_connectivity": true,
+    "flow_connectivity": false,
+    "mtz_endpoint_order_cuts": true,
+    "pair_adjacency_cuts": true,
+    "negative_feasibility_search": true
+  },
+  "result": {
+    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "algorithm_status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "exact_status": "NOT_SOLVED",
+    "pricing_state": "FOUND_NEGATIVE",
+    "task_count": 30,
+    "solver_backend": "HiGHS compact single-journey pricing MILP",
+    "pricing_complete_by_compact_milp": false,
+    "pricing_complete_for_all_tasks": false,
+    "pricing_complete_for_all_task_subsets": false,
+    "best_reduced_cost": -0.078614681,
+    "model_objective": -0.078614846,
+    "manual_best_reduced_cost": -0.078614681,
+    "pricing_best_reduced_cost": -0.078614681,
+    "dual_bound": -0.296753536,
+    "bound": -0.296753536,
+    "gap": 2.774777309,
+    "negative_found": true,
+    "negative_column_count": 1,
+    "can_certify_no_negative": false,
+    "uses_true_dual_bpc_certificate": false,
+    "pricing_rc_audit_pass": true,
+    "journey_count": 1,
+    "has_feasible_incumbent": true,
+    "best_column": {
+      "task_count": 9,
+      "tasks": [
+        "ice_site_003",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_014",
+        "ice_site_019",
+        "ice_site_024",
+        "ice_site_025",
+        "ice_site_030"
+      ],
+      "objective": 0.431224,
+      "end_time": 1060.556801,
+      "sortie_count": 3,
+      "legs": [
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_003",
+            "path_type": "low_energy"
+          },
+          {
+            "from": "ice_site_003",
+            "to": "ice_site_030",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_030",
+            "to": "ice_site_019",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_019",
+            "to": "ice_site_024",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_024",
+            "to": "depot",
+            "path_type": "low_time"
+          }
+        ],
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_014",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_014",
+            "to": "ice_site_005",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_005",
+            "to": "ice_site_004",
+            "path_type": "low_risk"
+          },
+          {
+            "from": "ice_site_004",
+            "to": "ice_site_025",
+            "path_type": "low_energy"
+          },
+          {
+            "from": "ice_site_025",
+            "to": "depot",
+            "path_type": "low_time"
+          }
+        ],
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_011",
+            "path_type": "low_energy"
+          },
+          {
+            "from": "ice_site_011",
+            "to": "depot",
+            "path_type": "low_time"
+          }
+        ]
+      ]
+    },
+    "model_status_code": 13,
+    "model_status_name": "TIME_LIMIT_REACHED",
+    "solver_info": {
+      "valid": true,
+      "objective_function_value": -0.07861484586736153,
+      "mip_dual_bound": -0.2967535363076058,
+      "mip_gap": 2.774777308706887,
+      "mip_node_count": 28557,
+      "simplex_iteration_count": 1143761,
+      "ipm_iteration_count": -1,
+      "pdlp_iteration_count": -1,
+      "primal_solution_status": 2,
+      "dual_solution_status": 0,
+      "max_primal_infeasibility": 2.4868995751603507e-14,
+      "max_dual_infeasibility": null,
+      "max_integrality_violation": 0.0,
+      "primal_dual_integral": 4938.828790342414
+    },
+    "flow_connectivity_enabled": false,
+    "mtz_connectivity_enabled": true,
+    "mtz_endpoint_order_cuts_enabled": true,
+    "mtz_endpoint_order_cut_count": 2898,
+    "pair_adjacency_cuts_enabled": true,
+    "pair_adjacency_cut_count": 8043,
+    "negative_feasibility_search_enabled": true,
+    "forbidden_arc_pattern_count": 0,
+    "forbidden_arc_patterns_can_certify_full_space": true,
+    "forbidden_task_set_count": 0,
+    "forbidden_task_sets_can_certify_full_space": true,
+    "sortie_slots_per_journey": 21,
+    "sortie_slot_bound_source": "latest_service_start_min_active_sortie_duration_bound",
+    "sortie_slot_horizon_count_bound": 30,
+    "sortie_slot_latest_start_count_bound": 21,
+    "sortie_slot_latest_service_start_upper_bound": 974.526396,
+    "sortie_slot_min_depot_outbound_travel_lower_bound": 13.185903,
+    "sortie_slot_min_duration_lower_bound": 46.355995,
+    "sortie_slot_min_return_duration_lower_bound": 38.355995,
+    "sortie_slot_min_out_return_travel_lower_bound": 27.597005,
+    "time_window_arc_pruning_enabled": true,
+    "time_window_arc_option_count": 2247,
+    "time_window_impossible_arc_option_count": 1193,
+    "variable_count": 24109,
+    "constraint_count": 57087,
+    "wall_time_sec": 549.51315,
+    "note": "Compact HiGHS single-journey pricing stopped before an exact pricing proof.",
+    "best_solution_payload": {
+      "vehicle_id": "compact_replay_best",
+      "sorties": [
+        {
+          "tasks": [
+            "ice_site_003",
+            "ice_site_030",
+            "ice_site_019",
+            "ice_site_024"
+          ],
+          "legs": [
+            {
+              "from": "depot",
+              "to": "ice_site_003",
+              "path_type": "low_energy"
+            },
+            {
+              "from": "ice_site_003",
+              "to": "ice_site_030",
+              "path_type": "low_time"
+            },
+            {
+              "from": "ice_site_030",
+              "to": "ice_site_019",
+              "path_type": "low_time"
+            },
+            {
+              "from": "ice_site_019",
+              "to": "ice_site_024",
+              "path_type": "low_time"
+            },
+            {
+              "from": "ice_site_024",
+              "to": "depot",
+              "path_type": "low_time"
+            }
+          ],
+          "start_time": 0.0,
+          "service_starts": {
+            "ice_site_003": 47.498111,
+            "ice_site_030": 101.650818,
+            "ice_site_019": 137.913844,
+            "ice_site_024": 181.493186
+          },
+          "return_time": 210.586919,
+          "recharge_time": 71.47401,
+          "end_time": 282.060929,
+          "travel_time": 149.173514,
+          "distance_km": 58.648232,
+          "energy_proxy": 253.896039,
+          "risk_integral": 11.153322,
+          "service_cost": 2.321059,
+          "shadow_exposure_min": 23.842298,
+          "demand": 2.0,
+          "task_completion_times": {
+            "ice_site_003": 61.621518,
+            "ice_site_030": 117.946485,
+            "ice_site_019": 154.225544,
+            "ice_site_024": 196.175817
+          },
+          "feasible": true
+        },
+        {
+          "tasks": [
+            "ice_site_014",
+            "ice_site_005",
+            "ice_site_004",
+            "ice_site_025"
+          ],
+          "legs": [
+            {
+              "from": "depot",
+              "to": "ice_site_014",
+              "path_type": "low_time"
+            },
+            {
+              "from": "ice_site_014",
+              "to": "ice_site_005",
+              "path_type": "low_time"
+            },
+            {
+              "from": "ice_site_005",
+              "to": "ice_site_004",
+              "path_type": "low_risk"
+            },
+            {
+              "from": "ice_site_004",
+              "to": "ice_site_025",
+              "path_type": "low_energy"
+            },
+            {
+              "from": "ice_site_025",
+              "to": "depot",
+              "path_type": "low_time"
+            }
+          ],
+          "start_time": 282.060929,
+          "service_starts": {
+            "ice_site_014": 319.553884,
+            "ice_site_005": 400.0,
+            "ice_site_004": 465.723477,
+            "ice_site_025": 600.0
+          },
+          "return_time": 663.946061,
+          "recharge_time": 108.342558,
+          "end_time": 772.288619,
+          "travel_time": 186.562014,
+          "distance_km": 64.426407,
+          "energy_proxy": 401.370231,
+          "risk_integral": 17.17985,
+          "service_cost": 5.515932,
+          "shadow_exposure_min": 134.027188,
+          "demand": 3.5,
+          "task_completion_times": {
+            "ice_site_014": 338.67919,
+            "ice_site_005": 441.261607,
+            "ice_site_004": 506.654534,
+            "ice_site_025": 626.420785
+          },
+          "feasible": true
+        },
+        {
+          "tasks": [
+            "ice_site_011"
+          ],
+          "legs": [
+            {
+              "from": "depot",
+              "to": "ice_site_011",
+              "path_type": "low_energy"
+            },
+            {
+              "from": "ice_site_011",
+              "to": "depot",
+              "path_type": "low_time"
+            }
+          ],
+          "start_time": 772.288619,
+          "service_starts": {
+            "ice_site_011": 848.284065
+          },
+          "return_time": 967.3811,
+          "recharge_time": 93.175701,
+          "end_time": 1060.556801,
+          "travel_time": 157.943253,
+          "distance_km": 45.983766,
+          "energy_proxy": 340.702805,
+          "risk_integral": 18.29842,
+          "service_cost": 1.732885,
+          "shadow_exposure_min": 92.144462,
+          "demand": 1.0,
+          "task_completion_times": {
+            "ice_site_011": 885.433293
+          },
+          "feasible": true
+        }
+      ],
+      "objective_breakdown": {
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "raw_operating_cost": 1174.597356,
+        "raw_risk": 46.631592,
+        "raw_weighted_completion_time": 2346.183514,
+        "raw_makespan": 885.433293,
+        "normalized_operating_cost": 0.161091235,
+        "normalized_risk": 0.180385393,
+        "normalized_weighted_completion_time": 0.224368018,
+        "normalized_makespan": 0.527043627,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0,
+        "weight_completion": 0.4,
+        "objective": 0.431224,
+        "normalized_objective": 0.431224,
+        "official_objective": 0.431224,
+        "raw_objective_unscaled_weighted_sum": 2159.702354,
+        "makespan_enters_pricing_objective": false,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only."
+      }
+    }
+  }
+}

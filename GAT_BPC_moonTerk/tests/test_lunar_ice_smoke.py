@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -52,6 +53,7 @@ from lunar_ice_bpc.exact.bpc.pricing.completion_bounds import build_completion_b
 from lunar_ice_bpc.exact.bpc.pricing.duplicate_only_audit import build_duplicate_only_audit
 from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
+from lunar_ice_bpc.exact.bpc.pricing.final_judge import _run_compact_single_journey_pricing_final_judge
 from lunar_ice_bpc.exact.bpc.solver.branch_tree_solver import (
     B3_COMPLETE_UNIVERSE_NODE_MODE,
     TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS,
@@ -103,6 +105,9 @@ from lunar_ice_bpc.exact.core.cuts import (
     fleet_lower_bound_cut,
     subset_row_cut,
 )
+from lunar_ice_bpc.exact.core.columns import build_timed_sortie
+from lunar_ice_bpc.exact.core.journey import journey_column_from_solution_payload
+import lunar_ice_bpc.exact.core.objective as objective_module
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost, solve_restricted_journey_rmp
 from lunar_ice_bpc.exact.pricing.completion_bounds import build_positive_cover_completion_bound
 from lunar_ice_bpc.exact.pricing.journey_pricing import (
@@ -122,6 +127,11 @@ from lunar_ice_bpc.exact.solver.journey_driver import (
     solve_direct_journey_baseline,
     solve_small_journey_baseline,
 )
+from lunar_ice_bpc.exact.solver.gurobi_compact import (
+    solve_highs_compact_fixed_graph,
+    solve_highs_compact_single_journey_pricing,
+)
+import lunar_ice_bpc.exact.solver.gurobi_compact as gurobi_compact_module
 from lunar_ice_bpc.exact.solver.column_pool import select_journey_column_pool
 from lunar_ice_bpc.exact.solver.branch_probe import build_branch_probe, build_fractional_branch_probe
 from lunar_ice_bpc.exact.solver.branch_node_queue import run_restricted_branch_node_queue
@@ -133,6 +143,9 @@ from lunar_ice_bpc.guidance.graph_builder import build_guidance_graph
 from lunar_ice_bpc.guidance.shadow_policy import build_shadow_report
 from lunar_ice_bpc.io.instance_io import validate_instance, write_json
 from lunar_ice_bpc.runners.audit import audit_benchmark_csv
+import lunar_ice_bpc.runners.b0_b1_ablation as b0_b1_ablation_module
+import lunar_ice_bpc.runners.b2_pricing_tail_ablation as b2_pricing_tail_ablation_module
+import lunar_ice_bpc.runners.b3_branch_tree_ablation as b3_branch_tree_ablation_module
 from lunar_ice_bpc.runners.b0_b1_ablation import (
     B0_MODE,
     B1A_MODE,
@@ -476,6 +489,8 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(b1b["history"][0]["pricing_state"], "FOUND_NEGATIVE")
         self.assertGreater(b1b["history"][0]["negative_column_count"], 0)
         self.assertGreater(b1b["history"][0]["added_column_count"], 0)
+        self.assertEqual(b1b["history"][0]["dual_context"]["rmp_iteration_id"], "root-1")
+        self.assertEqual(set(b1b["history"][0]["dual_context"]["task_duals"]), set(data.task_ids))
         self.assertEqual(b1b["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
         self.assertEqual(b1b["pricing_state"], "CERTIFIED_NO_NEGATIVE")
         self.assertEqual(b1b["exact_status"], "BPC_NODE_LP_CERTIFIED")
@@ -533,6 +548,156 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(rows_by_mode[B1B_MODE]["uses_true_dual_bpc_certificate"])
         self.assertFalse(rows_by_mode[B1B_MODE]["root_lp_bound_official"])
         self.assertEqual(report["redlines"]["direct_root_official_leak_count"], 0)
+
+    def test_b0_b1_guarded_row_records_memory_error_attempt(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        row = b0_b1_ablation_module._run_guarded_row(
+            instance,
+            mode=B1A_MODE,
+            matrix_group="memory-error-test",
+            max_direct_tasks=5,
+            row_time_limit_sec=10.0,
+            fn=lambda: (_ for _ in ()).throw(MemoryError()),
+        )
+
+        self.assertEqual(row["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(row["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertEqual(row["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertEqual(row["attempted_exception_type"], "MemoryError")
+        self.assertEqual(row["attempted_max_direct_tasks"], 5)
+        self.assertIn("MemoryError", row["fail_closed_reason"])
+        self.assertFalse(row["root_lp_bound_official"])
+
+    def test_b1a_full_universe_rmp_memory_precheck_fails_closed_before_b0(self) -> None:
+        instance = generate_instance(20, seed=829001, index=1)
+        data = load_lunar_ice_data(instance)
+        with patch(
+            "lunar_ice_bpc.exact.bpc.solver.root_node_solver.solve_direct_journey_baseline",
+            side_effect=AssertionError("B0 should not run before B1A RMP memory precheck"),
+        ):
+            b1a = solve_b1_root_node_baseline(
+                data,
+                max_direct_tasks=20,
+                max_rounds=1,
+                seed_mode="full_universe",
+            )
+
+        self.assertEqual(b1a["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(b1a["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertFalse(b1a["root_lp_bound_official"])
+        self.assertTrue(b1a["rmp_memory_precheck_failed"])
+        self.assertEqual(b1a["rmp_memory_precheck_stage"], "b1a_full_universe_active_rmp")
+        self.assertEqual(b1a["full_universe_column_count"], (1 << 20) - 1)
+        self.assertGreater(
+            b1a["rmp_memory_precheck_estimated_tableau_cells"],
+            b1a["rmp_memory_precheck_cell_limit"],
+        )
+        self.assertIsNone(b1a["b0_ablation"]["direct_dp_objective"])
+
+    def test_b2_guarded_mode_records_memory_error_attempt(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        with patch.object(
+            b2_pricing_tail_ablation_module,
+            "_run_mode",
+            side_effect=MemoryError(),
+        ):
+            row = b2_pricing_tail_ablation_module._run_guarded_mode(
+                instance,
+                mode=B2A_MODE,
+                baseline_cache={},
+                max_direct_tasks=5,
+                b1_max_rounds=1,
+                b2_max_rounds=1,
+                matrix_group="memory-error-test",
+                row_time_limit_sec=10.0,
+            )
+
+        self.assertEqual(row["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(row["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertEqual(row["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertEqual(row["attempted_exception_type"], "MemoryError")
+        self.assertEqual(row["attempted_max_direct_tasks"], 5)
+        self.assertIn("MemoryError", row["fail_closed_reason"])
+        self.assertFalse(row["root_lp_bound_official"])
+
+    def test_b2a_full_universe_rmp_memory_precheck_fails_closed_before_b0(self) -> None:
+        instance = generate_instance(20, seed=829001, index=1)
+        data = load_lunar_ice_data(instance)
+        with patch(
+            "lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver.solve_direct_journey_baseline",
+            side_effect=AssertionError("B0 should not run before B2A RMP memory precheck"),
+        ):
+            b2a = solve_b2_pricing_tail_baseline(
+                data,
+                max_direct_tasks=20,
+                max_rounds=1,
+                mode=B2A_MODE,
+            )
+
+        self.assertEqual(b2a["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(b2a["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertFalse(b2a["root_lp_bound_official"])
+        self.assertTrue(b2a["rmp_memory_precheck_failed"])
+        self.assertEqual(b2a["rmp_memory_precheck_stage"], "b2a_full_universe_active_rmp")
+        self.assertEqual(b2a["full_universe_column_count"], (1 << 20) - 1)
+        self.assertIsNone(b2a["b0_ablation"]["direct_dp_objective"])
+
+    def test_b3_guarded_row_records_memory_error_attempt(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        with patch.object(
+            b3_branch_tree_ablation_module,
+            "_run_mode",
+            side_effect=MemoryError(),
+        ):
+            row, cache_value = b3_branch_tree_ablation_module._run_guarded_row(
+                instance,
+                mode=b3_branch_tree_ablation_module.B3A_MODE,
+                max_direct_tasks=5,
+                b2_max_rounds=1,
+                b3_max_rounds_per_node=1,
+                max_tree_nodes=1,
+                max_branch_depth=1,
+                matrix_group="memory-error-test",
+                row_time_limit_sec=10.0,
+                allow_b3a_full_universe=True,
+                b0_direct=None,
+                b2b_r3=None,
+            )
+
+        self.assertIsNone(cache_value)
+        self.assertEqual(row["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(row["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertEqual(row["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertEqual(row["attempted_exception_type"], "MemoryError")
+        self.assertEqual(row["attempted_max_direct_tasks"], 5)
+        self.assertIn("MemoryError", row["fail_closed_reason"])
+
+    def test_b3a_full_universe_rmp_memory_precheck_fails_closed_before_b0(self) -> None:
+        instance = generate_instance(20, seed=829001, index=1)
+        with patch.object(
+            b3_branch_tree_ablation_module,
+            "solve_direct_journey_baseline",
+            side_effect=AssertionError("B0 should not run before B3A RMP memory precheck"),
+        ):
+            raw = b3_branch_tree_ablation_module._run_mode(
+                instance,
+                mode=b3_branch_tree_ablation_module.B3A_MODE,
+                max_direct_tasks=20,
+                b2_max_rounds=1,
+                b3_max_rounds_per_node=1,
+                max_tree_nodes=1,
+                max_branch_depth=1,
+                allow_b3a_full_universe=True,
+                b0_direct=None,
+                b2b_r3=None,
+            )
+
+        self.assertEqual(raw["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(raw["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertFalse(raw["B3_tree_closed"])
+        self.assertTrue(raw["rmp_memory_precheck_failed"])
+        self.assertEqual(raw["rmp_memory_precheck_stage"], "b3a_full_universe_node_active_rmp")
+        self.assertEqual(raw["rmp_memory_precheck_estimated_column_count"], (1 << 20) - 1)
 
     def test_b2_pricing_tail_ablation_reports_fast_path_and_keeps_b2b_diagnostic(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -602,6 +767,36 @@ class LunarIceSmokeTests(unittest.TestCase):
             text = report_md.read_text(encoding="utf-8")
             self.assertIn("B2 Accepted?", text)
             self.assertIn("B2 Round3 Answers", text)
+
+    def test_b2_report_backfills_mode_from_legacy_candidate_name(self) -> None:
+        legacy_report = b2_pricing_tail_ablation_module._report_from_rows(
+            [
+                {
+                    "matrix_group": "legacy",
+                    "scale": 20,
+                    "instance_id": "legacy_instance",
+                    "baseline_name": B1B_MODE,
+                    "candidate_name": B2B_R3_MODE,
+                    "algorithm_status": "BPC_INCOMPLETE_PRICING",
+                    "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+                    "pricing_state": "INCOMPLETE_LIMIT",
+                    "wall_time": 1.0,
+                }
+            ]
+        )
+
+        self.assertEqual(legacy_report["rows"][0]["mode"], B2B_R3_MODE)
+        with tempfile.TemporaryDirectory() as tmp:
+            rows_csv = Path(tmp) / "rows.csv"
+            write_b2_pricing_tail_ablation_artifacts(
+                legacy_report,
+                rows_csv=rows_csv,
+                summary_json=Path(tmp) / "summary.json",
+                report_md=Path(tmp) / "report_zh.md",
+            )
+            with rows_csv.open(newline="", encoding="utf-8") as fh:
+                rows = list(csv.DictReader(fh))
+        self.assertEqual(rows[0]["mode"], B2B_R3_MODE)
 
     def test_b2_acceptance_requires_direct20_probe_and_report_disambiguates_guard(self) -> None:
         redlines = {
@@ -898,14 +1093,21 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertAlmostEqual(one_column_rmp.objective_bound, full_cover_column.objective, places=6)
 
         one_sortie_column = next(column for column in universe.columns if len(column.sorties) == 1)
-        sortie = one_sortie_column.sorties[0]
-        sortie_cost = (
-            data.objective.alpha_discovery_completion * sortie.discovery_completion_term
-            + data.objective.beta_journey_end_time * sortie.end_time
-            + data.objective.gamma_lunar_ice_risk * sortie.risk_integral
-            + data.objective.delta_energy * sortie.energy_proxy
+        breakdown = one_sortie_column.objective_breakdown
+        expected_objective = (
+            data.objective.weight_operating_cost * breakdown["normalized_operating_cost"]
+            + data.objective.weight_risk * breakdown["normalized_risk"]
+            + data.objective.weight_completion * breakdown["normalized_weighted_completion_time"]
         )
-        self.assertAlmostEqual(one_sortie_column.objective, round(sortie_cost, 6), places=6)
+        self.assertAlmostEqual(one_sortie_column.objective, round(expected_objective, 6), places=6)
+        self.assertAlmostEqual(
+            breakdown["normalized_objective"],
+            round(expected_objective, 6),
+            places=6,
+        )
+        self.assertEqual(breakdown["official_objective"], breakdown["normalized_objective"])
+        self.assertGreater(breakdown["raw_objective_unscaled_weighted_sum"], breakdown["official_objective"])
+        self.assertFalse(breakdown["makespan_enters_pricing_objective"])
 
         columns_by_signature = {column_signature_from_journey(column): column for column in universe.columns}
         for journey in b0.journeys:
@@ -935,6 +1137,75 @@ class LunarIceSmokeTests(unittest.TestCase):
             b1["final_judge"]["manual_best_reduced_cost"],
             b1["final_judge"]["pricing_best_reduced_cost"],
         )
+
+    def test_b1_active_column_payload_can_seed_resume_without_certificate_leak(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        first = solve_b1_root_node_baseline(
+            data,
+            max_direct_tasks=5,
+            max_rounds=8,
+            seed_mode="b0_incumbent_plus_singletons",
+            return_active_columns_payload=True,
+        )
+
+        self.assertIn("active_columns", first)
+        self.assertGreater(len(first["active_columns"]), 0)
+        resumed_columns = tuple(
+            journey_column_from_solution_payload(data, row)
+            for row in first["active_columns"]
+        )
+        self.assertEqual(
+            len({column_signature_from_journey(column) for column in resumed_columns}),
+            len(resumed_columns),
+        )
+
+        resumed = solve_b1_root_node_baseline(
+            data,
+            initial_columns=resumed_columns,
+            max_direct_tasks=5,
+            max_rounds=8,
+            solve_b0_direct_first=False,
+        )
+
+        self.assertEqual(resumed["seed_mode"], "custom_initial_columns")
+        self.assertFalse(resumed["solve_b0_direct_first"])
+        self.assertIsNotNone(resumed["b0_ablation"]["reference_solution_upper_bound"])
+        self.assertEqual(resumed["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
+        self.assertEqual(resumed["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+        self.assertAlmostEqual(resumed["root_lp_bound"], first["root_lp_bound"], places=6)
+
+    def test_objective_reference_cache_rejects_reused_object_id_entries(self) -> None:
+        first = load_lunar_ice_data(generate_instance(5, seed=629001, index=1))
+        second = load_lunar_ice_data(generate_instance(5, seed=679123, index=17))
+        first_refs = objective_module.objective_references(first)
+        second_refs = objective_module.objective_references(second)
+        self.assertNotEqual(first_refs, second_refs)
+
+        objective_module._REFERENCE_CACHE[id(second)] = (objective_module.weakref.ref(first), first_refs)
+        recovered_refs = objective_module.objective_references(second)
+
+        self.assertEqual(recovered_refs, second_refs)
+        cached_data_ref, cached_refs = objective_module._REFERENCE_CACHE[id(second)]
+        self.assertIs(cached_data_ref(), second)
+        self.assertEqual(cached_refs, second_refs)
+
+    def test_path_choice_keeps_all_path_metrics(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        task_id = data.task_ids[0]
+        for path_type in ("low_time", "low_risk"):
+            sortie = build_timed_sortie(
+                data,
+                (task_id,),
+                (path_type, path_type),
+                start_time=0.0,
+            )
+            self.assertTrue(sortie.feasible)
+            self.assertGreater(sortie.travel_time, 0.0)
+            self.assertGreater(sortie.distance_km, 0.0)
+            self.assertGreater(sortie.energy_proxy, 0.0)
+            self.assertGreater(sortie.risk_integral, 0.0)
 
     def test_exact_bpc_modules_do_not_import_guidance_or_ml_stack(self) -> None:
         bpc_root = Path(__file__).resolve().parents[1] / "src" / "lunar_ice_bpc" / "exact" / "bpc"
@@ -1090,6 +1361,48 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertTrue(root_node["certificate_ledger"]["valid"])
         self.assertTrue(root_node["all_priced_columns_satisfy_branch_context"])
         self.assertFalse(root_node["completion_bound_pruning_enabled"])
+
+    def test_b3_fail_closed_records_reference_incumbent_without_certificate(self) -> None:
+        instance = generate_instance(10, seed=729001, index=1)
+        data = load_lunar_ice_data(instance)
+        b0_timeout = SimpleNamespace(
+            status="DIRECT_DP_TIME_LIMIT",
+            certificate_scope="FEASIBLE_INCUMBENT_ONLY",
+            objective=None,
+            journeys=tuple(),
+            objective_breakdown=None,
+            reference_solution_upper_bound=None,
+            reference_solution_upper_bound_source="",
+            direct_bound_pruning_root_bound=None,
+            direct_bound_pruning_active=False,
+            journey_label_bound_pruned_count=0,
+            note="synthetic direct timeout",
+        )
+
+        b3 = solve_b3_branch_price_tree_baseline(
+            data,
+            b0_direct=b0_timeout,
+            max_direct_tasks=10,
+            max_rounds_per_node=1,
+            max_tree_nodes=1,
+            max_branch_depth=0,
+            run_b2_root_diagnostic=False,
+        )
+
+        self.assertEqual(b3["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(b3["certificate_scope"], "FEASIBLE_INCUMBENT_ONLY")
+        self.assertEqual(b3["exact_status"], "NOT_SOLVED")
+        self.assertFalse(b3["uses_true_dual_bpc_certificate"])
+        self.assertIn("direct_dp_incumbent_missing", b3["tree_certificate_gate_issues"])
+        self.assertIsNotNone(b3["reference_solution_upper_bound"])
+        self.assertEqual(b3["reference_solution_upper_bound_source"], "instance_reference_solution_best_path_repair")
+        self.assertEqual(b3["global_ub"], b3["reference_solution_upper_bound"])
+        self.assertEqual(b3["incumbent_objective"], b3["reference_solution_upper_bound"])
+        self.assertTrue(str(b3["feasible_incumbent_source"]).startswith("REFERENCE_FEASIBLE_INCUMBENT"))
+        self.assertFalse(b3["feasible_incumbent_used_as_bpc_certificate"])
+        self.assertIsNotNone(b3["objective_breakdown"])
+        self.assertEqual(b3["b0_ablation"]["direct_dp_objective"], None)
+        self.assertFalse(b3["b0_ablation"]["direct_dp_used_as_bpc_certificate"])
 
     def test_b3_node_final_judge_respects_branch_context(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -2079,6 +2392,30 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertGreater(direct.generated_sortie_count, 0)
         self.assertGreater(direct.route_template_count, 0)
 
+    def test_reference_solution_upper_bound_does_not_change_direct_dp_optimum(self) -> None:
+        instance = generate_instance(10, seed=729001, index=1)
+        with_reference = solve_direct_journey_baseline(load_lunar_ice_data(instance), max_exact_tasks=10)
+        without_reference_payload = json.loads(json.dumps(instance))
+        without_reference_payload.pop("reference_solution", None)
+        without_reference = solve_direct_journey_baseline(
+            load_lunar_ice_data(without_reference_payload),
+            max_exact_tasks=10,
+        )
+
+        self.assertEqual(with_reference.status, "DIRECT_DP_BASELINE_OPTIMAL")
+        self.assertEqual(without_reference.status, "DIRECT_DP_BASELINE_OPTIMAL")
+        self.assertAlmostEqual(with_reference.objective, without_reference.objective, delta=1.0e-6)
+        self.assertIsNotNone(with_reference.reference_solution_upper_bound)
+        self.assertEqual(
+            with_reference.reference_solution_upper_bound_source,
+            "instance_reference_solution_best_path_repair",
+        )
+        self.assertIsNotNone(with_reference.direct_bound_pruning_root_bound)
+        self.assertIsInstance(with_reference.direct_bound_pruning_active, bool)
+        self.assertIsNone(without_reference.reference_solution_upper_bound)
+        self.assertIsNone(without_reference.direct_bound_pruning_root_bound)
+        self.assertFalse(without_reference.direct_bound_pruning_active)
+
     def test_remaining_aware_direct_dp_matches_template_universe_on_small_instance(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -2106,6 +2443,246 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(direct_baseline.status, "DIRECT_DP_BASELINE_OPTIMAL")
         self.assertEqual(selection.status, "COLUMN_POOL_EXACT_COVER")
         self.assertAlmostEqual(selection.objective, direct_baseline.objective, delta=1.0e-6)
+
+    def test_highs_compact_oracle_matches_direct_dp_on_small_instance_when_available(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        direct_baseline = solve_direct_journey_baseline(data, max_exact_tasks=5)
+        compact = solve_highs_compact_fixed_graph(
+            data,
+            time_limit_sec=30.0,
+            threads=1,
+            reference_solution=instance.get("reference_solution"),
+        )
+
+        self.assertEqual(direct_baseline.status, "DIRECT_DP_BASELINE_OPTIMAL")
+        self.assertEqual(compact["algorithm_status"], "HIGHS_COMPACT_OPTIMAL")
+        self.assertEqual(compact["certificate_scope"], "DIRECT_DP_FIXED_GRAPH_OPTIMAL")
+        self.assertTrue(compact["has_feasible_incumbent"])
+        self.assertTrue(compact["mip_start"]["enabled"])
+        self.assertIn(compact["mip_start"]["status"], {"OK", "NO_FEASIBLE_SINGLETON_SCHEDULE"})
+        self.assertIn("solver_info", compact)
+        self.assertIn("mip_node_count", compact["solver_info"])
+        self.assertAlmostEqual(compact["objective"], direct_baseline.objective, delta=1.0e-6)
+        self.assertIn("not a BPC certificate", compact["note"])
+
+    def test_highs_compact_single_journey_pricing_matches_exhaustive_reduced_cost(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        expected = min(manual_journey_reduced_cost(column, duals) for column in universe.columns)
+        connectivity_variants = (
+            {"flow_connectivity": False, "mtz_connectivity": False},
+            {"flow_connectivity": True, "mtz_connectivity": False},
+            {"flow_connectivity": False, "mtz_connectivity": True},
+            {"flow_connectivity": False, "mtz_connectivity": True, "pair_adjacency_cuts": True},
+        )
+        for variant in connectivity_variants:
+            compact = solve_highs_compact_single_journey_pricing(
+                data,
+                duals,
+                time_limit_sec=30.0,
+                threads=1,
+                **variant,
+            )
+
+            self.assertEqual(compact["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+            self.assertEqual(compact["pricing_complete_by_compact_milp"], True)
+            self.assertEqual(compact["flow_connectivity_enabled"], variant["flow_connectivity"])
+            self.assertEqual(compact["mtz_connectivity_enabled"], variant["mtz_connectivity"])
+            self.assertEqual(compact["pair_adjacency_cuts_enabled"], bool(variant.get("pair_adjacency_cuts", False)))
+            self.assertEqual(
+                compact["mtz_endpoint_order_cuts_enabled"],
+                bool(variant["mtz_connectivity"]),
+            )
+            self.assertAlmostEqual(compact["best_reduced_cost"], expected, delta=1.0e-6)
+            self.assertAlmostEqual(compact["manual_best_reduced_cost"], expected, delta=1.0e-6)
+            self.assertTrue(compact["pricing_rc_audit_pass"])
+
+    def test_highs_compact_single_journey_negative_feasibility_search(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+
+        no_negative_duals = JourneyDuals(cover=cover_duals, fleet_limit=0.0)
+        no_negative_expected = min(manual_journey_reduced_cost(column, no_negative_duals) for column in universe.columns)
+        self.assertGreater(no_negative_expected, 0.0)
+        no_negative = solve_highs_compact_single_journey_pricing(
+            data,
+            no_negative_duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            negative_feasibility_search=True,
+        )
+        self.assertEqual(no_negative["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+        self.assertEqual(no_negative["exact_status"], "EXACT_NEGATIVE_FEASIBILITY_INFEASIBLE")
+        self.assertTrue(no_negative["can_certify_no_negative"])
+        self.assertTrue(no_negative["negative_feasibility_search_enabled"])
+        self.assertTrue(no_negative["mtz_connectivity_enabled"])
+
+        negative_duals = JourneyDuals(cover=cover_duals, fleet_limit=2.0)
+        negative_expected = min(manual_journey_reduced_cost(column, negative_duals) for column in universe.columns)
+        self.assertLess(negative_expected, -1.0e-6)
+        negative = solve_highs_compact_single_journey_pricing(
+            data,
+            negative_duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            negative_feasibility_search=True,
+        )
+        self.assertEqual(negative["pricing_state"], "FOUND_NEGATIVE")
+        self.assertTrue(negative["negative_found"])
+        self.assertLess(negative["manual_best_reduced_cost"], -1.0e-6)
+        self.assertTrue(negative["pricing_rc_audit_pass"])
+        forbidden_pattern = tuple(
+            (slot, leg.source, leg.target, leg.path_type)
+            for slot, sortie in enumerate(negative["journeys"][0].sorties)
+            for leg in sortie.legs
+        )
+        restricted_no_negative = solve_highs_compact_single_journey_pricing(
+            data,
+            no_negative_duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            negative_feasibility_search=True,
+            forbidden_arc_patterns=(forbidden_pattern,),
+        )
+        self.assertEqual(restricted_no_negative["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertFalse(restricted_no_negative["can_certify_no_negative"])
+        self.assertFalse(restricted_no_negative["pricing_complete_for_all_task_subsets"])
+        self.assertEqual(
+            restricted_no_negative["exact_status"],
+            "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE",
+        )
+        restricted_task_set_no_negative = solve_highs_compact_single_journey_pricing(
+            data,
+            no_negative_duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            negative_feasibility_search=True,
+            forbidden_task_sets=(tuple(sorted(negative["journeys"][0].task_set)),),
+        )
+        self.assertEqual(restricted_task_set_no_negative["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertFalse(restricted_task_set_no_negative["can_certify_no_negative"])
+        self.assertFalse(restricted_task_set_no_negative["pricing_complete_for_all_task_subsets"])
+        self.assertEqual(restricted_task_set_no_negative["forbidden_task_set_count"], 1)
+        self.assertEqual(
+            restricted_task_set_no_negative["exact_status"],
+            "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE",
+        )
+
+    def test_compact_final_judge_hybrid_uses_negative_search_for_negative_columns(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=2.0,
+            dual_fingerprint="compact-hybrid-test",
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_NEGATIVE_BATCH_TARGET": "2",
+                "LUNAR_ICE_COMPACT_NEGATIVE_SEARCH_CAP_SEC": "30",
+                "LUNAR_ICE_COMPACT_NEGATIVE_NO_GOOD_SCOPE": "task_set",
+            },
+        ):
+            result = _run_compact_single_journey_pricing_final_judge(
+                data,
+                JourneyDuals(cover=cover_duals, fleet_limit=2.0),
+                context=context,
+                branch_context=BranchContext(),
+                cut_context=CutContext(),
+                negative_eps=1.0e-6,
+                wall_time_limit_sec=30.0,
+            )
+
+        self.assertEqual(result.pricing_state, PricingState.FOUND_NEGATIVE)
+        self.assertGreater(len(result.negative_columns), 0)
+        self.assertEqual(result.pricing_payload["compact_pricing_phase"], "negative_feasibility_batch")
+        self.assertTrue(result.pricing_payload["negative_found"])
+        self.assertFalse(result.pricing_payload["mtz_connectivity_enabled"])
+        self.assertEqual(result.pricing_payload["sortie_slots_per_journey"], len(data.task_ids))
+        self.assertEqual(result.pricing_payload["sortie_slot_bound_source"], "task_count_bound")
+        self.assertTrue(result.pricing_payload["time_window_arc_pruning_enabled"])
+        self.assertGreater(result.pricing_payload["time_window_arc_option_count"], 0)
+        self.assertGreaterEqual(result.pricing_payload["time_window_impossible_arc_option_count"], 0)
+        phase_payloads = result.pricing_payload["compact_pricing_phase_payloads"]
+        first_phase = phase_payloads["negative_feasibility_search_1"]
+        self.assertEqual(first_phase["sortie_slots_per_journey"], len(data.task_ids))
+        self.assertTrue(first_phase["time_window_arc_pruning_enabled"])
+        self.assertGreater(first_phase["time_window_arc_option_count"], 0)
+        self.assertTrue(result.pricing_payload["pricing_rc_audit_pass"])
+        self.assertFalse(result.pricing_payload["can_certify_no_negative"])
+        self.assertEqual(result.pricing_payload["compact_negative_batch_target"], 2)
+        self.assertEqual(result.pricing_payload["compact_negative_no_good_scope"], "task_set")
+        self.assertEqual(result.pricing_payload["compact_negative_search_cap_sec"], 30.0)
+        self.assertGreaterEqual(result.pricing_payload["compact_negative_batch_search_call_count"], 1)
+        self.assertEqual(
+            result.pricing_payload["compact_negative_batch_found_count"],
+            len(result.negative_columns),
+        )
+        self.assertEqual(
+            result.pricing_payload["forbidden_task_set_count"],
+            len({tuple(sorted(column.task_set)) for column in result.negative_columns}),
+        )
+        self.assertLess(
+            manual_journey_reduced_cost(result.negative_columns[0], JourneyDuals(cover=cover_duals, fleet_limit=2.0)),
+            -1.0e-6,
+        )
+
+    def test_compact_reference_warm_start_repairs_shifted_sortie_start_times(self) -> None:
+        instance = generate_instance(20, seed=829001, index=1)
+        reference_solution = json.loads(json.dumps(instance["reference_solution"]))
+        journey = next(row for row in reference_solution["journeys"] if len(row.get("sorties", [])) >= 2)
+        journey["sorties"][1]["start_time"] = 0.0
+        data = load_lunar_ice_data(instance)
+        schedule, failure = gurobi_compact_module._build_reference_warm_start_schedule(
+            data,
+            tasks=tuple(data.task_ids),
+            reference_solution=reference_solution,
+            path_type_cache=journey_driver_module._nondominated_path_type_cache(data),
+            vehicle_count=data.fleet_size,
+            sortie_slots=len(data.task_ids),
+        )
+
+        self.assertEqual(failure, "")
+        self.assertIsNotNone(schedule)
+        repaired_journey = next(row for row in schedule if len(row) >= 2)
+        self.assertGreaterEqual(repaired_journey[1].start_time, repaired_journey[0].end_time)
+        covered = {task_id for sorties in schedule for sortie in sorties for task_id in sortie.tasks}
+        self.assertEqual(covered, set(data.task_ids))
 
     def test_direct_baseline_time_limit_fails_closed(self) -> None:
         instance = generate_instance(10, seed=729001, index=1)
@@ -2149,6 +2726,106 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(direct.pareto_label_count, 17)
         self.assertIn("journey_label_dp", direct.note)
         self.assertIn("diagnostic only", direct.note)
+
+    def test_direct_sortie_generation_can_be_restricted_to_remaining_tasks(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        task_to_bit = journey_driver_module._task_to_bit_mapping(TaskIndexMap(data.task_ids))
+        full_mask = journey_driver_module._full_task_mask(data)
+        served_bit = task_to_bit[data.task_ids[0]]
+        remaining_mask = full_mask ^ served_bit
+        path_type_cache = journey_driver_module._nondominated_path_type_cache(data)
+
+        full_candidates, _, _, _ = journey_driver_module._direct_sortie_candidates_from_start(
+            data,
+            task_to_bit,
+            remaining_mask=full_mask,
+            start_time=0.0,
+            path_type_cache=path_type_cache,
+        )
+        remaining_candidates, _, _, _ = journey_driver_module._direct_sortie_candidates_from_start(
+            data,
+            task_to_bit,
+            remaining_mask=remaining_mask,
+            start_time=0.0,
+            path_type_cache=path_type_cache,
+        )
+
+        filtered = [candidate for candidate in full_candidates if candidate.task_mask & served_bit == 0]
+        full_by_signature = {
+            (
+                candidate.task_mask,
+                candidate.sortie.tasks,
+                tuple(leg.path_type for leg in candidate.sortie.legs),
+                candidate.sortie.end_time,
+                candidate.base_cost,
+            )
+            for candidate in filtered
+        }
+        remaining_by_signature = {
+            (
+                candidate.task_mask,
+                candidate.sortie.tasks,
+                tuple(leg.path_type for leg in candidate.sortie.legs),
+                candidate.sortie.end_time,
+                candidate.base_cost,
+            )
+            for candidate in remaining_candidates
+        }
+        self.assertEqual(remaining_by_signature, full_by_signature)
+
+    def test_path_option_dominance_keeps_shorter_distance_tradeoff(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        source, target = next(
+            (source, target)
+            for (source, target), options in data.arcs.items()
+            if options["low_time"].travel_time_min <= options["low_energy"].travel_time_min + 1.0e-9
+        )
+        low_time = data.arcs[(source, target)]["low_time"]
+        low_energy = data.arcs[(source, target)]["low_energy"]
+        patched = json.loads(json.dumps(instance))
+        for edge in patched["logical_graph"]["edges"]:
+            if str(edge["from"]) == str(source) and str(edge["to"]) == str(target):
+                for option in edge["path_options"]:
+                    if option["path_type"] == "low_time":
+                        option["travel_time_min"] = low_energy.travel_time_min
+                        option["energy_proxy"] = low_energy.energy_proxy
+                        option["risk_integral"] = low_energy.risk_integral
+                        option["shadow_exposure_min"] = low_energy.shadow_exposure_min
+                        option["path_distance_km"] = max(0.0, low_energy.distance_km - 1.0)
+                    elif option["path_type"] == "low_energy":
+                        option["travel_time_min"] = low_energy.travel_time_min
+                        option["energy_proxy"] = low_energy.energy_proxy
+                        option["risk_integral"] = low_energy.risk_integral
+                        option["shadow_exposure_min"] = low_energy.shadow_exposure_min
+                        option["path_distance_km"] = low_energy.distance_km
+                break
+        patched_data = load_lunar_ice_data(patched)
+
+        kept = journey_driver_module._nondominated_path_types(patched_data, source, target)
+
+        self.assertIn("low_time", kept)
+        self.assertNotIn("low_energy", kept)
+
+    def test_time_aware_return_lower_bound_stays_below_reference_upper_bound(self) -> None:
+        instance = generate_instance(10, seed=729001, index=1)
+        data = load_lunar_ice_data(instance)
+        full_mask = journey_driver_module._full_task_mask(data)
+        task_visit = journey_driver_module._remaining_task_visit_lower_bound_fn(data)
+        return_lb = journey_driver_module._remaining_return_path_lower_bound_fn(data)
+        endpoint_lb = journey_driver_module._remaining_endpoint_path_lower_bound_fn(data)
+        reference = journey_driver_module._reference_solution_upper_bound(data)
+
+        self.assertIsNotNone(reference)
+        root_lb = task_visit(full_mask, 0.0) + return_lb(full_mask)
+        endpoint_root_lb = task_visit(full_mask, 0.0) + endpoint_lb(full_mask)
+        delayed_lb = task_visit(full_mask, 120.0) + return_lb(full_mask)
+
+        self.assertGreaterEqual(delayed_lb, root_lb - 1.0e-9)
+        self.assertGreaterEqual(endpoint_root_lb, root_lb - 1.0e-9)
+        self.assertLessEqual(root_lb, reference.objective + 1.0e-6)
+        self.assertLessEqual(endpoint_root_lb, reference.objective + 1.0e-6)
 
     def test_partition_cover_dual_lower_bound_is_column_feasible(self) -> None:
         cost_by_mask = {
@@ -2916,7 +3593,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 beta_journey_end_time=0.5,
                 remaining_task_ids=("a", "c"),
             ),
-            13.0,
+            3.0,
         )
         self.assertFalse(payload["includes_fleet_dual"])
         self.assertFalse(payload["includes_cut_duals"])

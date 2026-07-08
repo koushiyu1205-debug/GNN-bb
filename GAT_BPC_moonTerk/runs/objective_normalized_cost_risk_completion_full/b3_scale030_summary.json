@@ -1,0 +1,97 @@
+{
+  "acceptance": {
+    "b3b_seeded_branch_price_tree_accepted": false,
+    "can_enter_b4": false,
+    "cross_scale_acceptance_evaluated": false,
+    "local_b3b_all_tree_optimal": false,
+    "local_b3b_run_count": 20,
+    "local_b3b_tree_optimal_count": 0,
+    "scale10_selected_b3b_run_count": 0,
+    "scale10_selected_no_regression_vs_b2b_r3": false,
+    "scale10_selected_regression_count": 0,
+    "scale20_selected_direct20_b3b_run_count": 0,
+    "scale20_selected_direct20_clean_diagnostics": false,
+    "scale20_selected_direct20_unique_instance_count": 0,
+    "scale5_full_b3b_run_count": 0,
+    "scale5_full_b3b_tree_optimal_count": 0
+  },
+  "notes": [],
+  "redlines": {
+    "NO_FRACTIONAL_RF_PAIR_treated_as_integral_count": 0,
+    "branch_pricing_audit_fail_count": 0,
+    "certificate_scope_regression_count": 0,
+    "direct_dp_certificate_leak_count": 0,
+    "incomplete_node_but_tree_optimal_count": 0,
+    "manual_rc_fail_count": 0,
+    "open_node_but_tree_optimal_count": 0,
+    "pricing_rc_fail_count": 0,
+    "proof_debt_unreleased_certified_count": 0,
+    "root_bound_gt_B0_violation_count": 0,
+    "selected_harvest_addability_fail_count": 0,
+    "tree_incumbent_diff_vs_B0_count": 0
+  },
+  "row_count": 100,
+  "schema_version": "lunar_ice_bpc.b3_branch_tree_ablation_report.v1",
+  "summary_rows": [
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 0,
+      "BPC_TREE_OPTIMAL_count": 0,
+      "fail_closed_count": 20,
+      "incomplete_node_count": 20,
+      "matrix_group": "30-scale full normalized objective",
+      "mean_node_count": 0,
+      "mean_wall": 0.0,
+      "mode": "B0_pure_direct_dp",
+      "runs": 20,
+      "scale": 30
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 0,
+      "BPC_TREE_OPTIMAL_count": 0,
+      "fail_closed_count": 20,
+      "incomplete_node_count": 20,
+      "matrix_group": "30-scale full normalized objective",
+      "mean_node_count": 0,
+      "mean_wall": 0.0,
+      "mode": "B2B_R3_true_dual_negative_search_worker",
+      "runs": 20,
+      "scale": 30
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 0,
+      "BPC_TREE_OPTIMAL_count": 0,
+      "fail_closed_count": 20,
+      "incomplete_node_count": 20,
+      "matrix_group": "30-scale full normalized objective",
+      "mean_node_count": 0,
+      "mean_wall": 0.0,
+      "mode": "B2_PRODUCT_EXACT_SOLVER",
+      "runs": 20,
+      "scale": 30
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 0,
+      "BPC_TREE_OPTIMAL_count": 0,
+      "fail_closed_count": 20,
+      "incomplete_node_count": 20,
+      "matrix_group": "30-scale full normalized objective",
+      "mean_node_count": 0,
+      "mean_wall": 0.0,
+      "mode": "B3A_full_universe_branch_audit",
+      "runs": 20,
+      "scale": 30
+    },
+    {
+      "BPC_NODE_LP_CERTIFIED_count": 0,
+      "BPC_TREE_OPTIMAL_count": 0,
+      "fail_closed_count": 20,
+      "incomplete_node_count": 20,
+      "matrix_group": "30-scale full normalized objective",
+      "mean_node_count": 0,
+      "mean_wall": 0.0,
+      "mode": "B3B_seeded_branch_price_tree",
+      "runs": 20,
+      "scale": 30
+    }
+  ]
+}

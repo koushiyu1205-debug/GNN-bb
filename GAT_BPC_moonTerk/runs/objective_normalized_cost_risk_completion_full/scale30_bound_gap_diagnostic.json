@@ -1,0 +1,185 @@
+{
+  "schema_version": "lunar_ice_bpc.bound_gap_diagnostic.v1",
+  "objective_schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+  "objective_mode": "normalized_operating_cost_risk_weighted_completion",
+  "instance_id": "lunar_ice_sp50_030_001_seed929001",
+  "scale": 30,
+  "task_count": 30,
+  "reference_upper_bound": 1.919465,
+  "reference_upper_bound_source": "instance_reference_solution_best_path_repair",
+  "objective_references": {
+    "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+    "mode": "normalized_operating_cost_risk_weighted_completion",
+    "reference_cost": 7291.503821,
+    "reference_risk": 258.51090966,
+    "reference_completion": 10456.853580727,
+    "reference_makespan": 1680.0,
+    "task_count": 30,
+    "infeasible_single_task_reference_count": 0
+  },
+  "task_visit_lower_bound": {
+    "raw_operating_cost": 1104.982567,
+    "raw_risk": 51.12534866,
+    "raw_weighted_completion_time": 10427.987356172,
+    "normalized_operating_cost": 0.151543851,
+    "normalized_risk": 0.197768631,
+    "normalized_weighted_completion_time": 0.997239492,
+    "weighted_normalized_completion": 0.398895797,
+    "objective": 0.748208279,
+    "function_value": 0.748208279,
+    "per_task_count": 30,
+    "largest_task_terms": [
+      {
+        "index": 0,
+        "task_id": "ice_site_001",
+        "cost": 38.304457,
+        "risk": 3.06318383,
+        "weighted_completion": 858.473055048,
+        "min_inbound_distance": 5.455635,
+        "min_inbound_energy": 17.147071,
+        "min_inbound_risk": 2.334293
+      },
+      {
+        "index": 14,
+        "task_id": "ice_site_015",
+        "cost": 33.272423,
+        "risk": 2.32727004,
+        "weighted_completion": 847.630841702,
+        "min_inbound_distance": 3.887006,
+        "min_inbound_energy": 12.836698,
+        "min_inbound_risk": 1.872534
+      },
+      {
+        "index": 8,
+        "task_id": "ice_site_009",
+        "cost": 35.423932,
+        "risk": 1.92879313,
+        "weighted_completion": 834.436856337,
+        "min_inbound_distance": 3.1,
+        "min_inbound_energy": 11.459967,
+        "min_inbound_risk": 1.473736
+      },
+      {
+        "index": 1,
+        "task_id": "ice_site_002",
+        "cost": 42.254616,
+        "risk": 2.78095641,
+        "weighted_completion": 778.102151896,
+        "min_inbound_distance": 5.455635,
+        "min_inbound_energy": 17.12813,
+        "min_inbound_risk": 2.290978
+      },
+      {
+        "index": 27,
+        "task_id": "ice_site_028",
+        "cost": 42.497333,
+        "risk": 1.26424811,
+        "weighted_completion": 770.945049683,
+        "min_inbound_distance": 6.484062,
+        "min_inbound_energy": 15.694242,
+        "min_inbound_risk": 0.717137
+      }
+    ]
+  },
+  "return_path_lower_bound": {
+    "function_value": 0.00784008,
+    "scope": "at_least_one_return_to_depot_path"
+  },
+  "endpoint_path_lower_bound": {
+    "function_value": 0.093757606,
+    "scope": "minimum_future_sortie_starts_and_returns"
+  },
+  "outgoing_task_visit_lower_bound": {
+    "function_value": 0.764262836,
+    "scope": "service_plus_min_outgoing_path_metrics"
+  },
+  "start_path_lower_bound": {
+    "function_value": 0.057834069,
+    "scope": "minimum_future_sortie_depot_starts"
+  },
+  "future_tail_lower_bound": {
+    "function_value": 0.841965885,
+    "inbound_tail_bound": 0.841965885,
+    "outgoing_tail_bound": 0.822096905,
+    "scope": "max_of_safe_inbound_and_outgoing_future_sortie_tail_bounds"
+  },
+  "analytic_lower_bound": {
+    "status": "ANALYTIC_RELAXATION_BOUND",
+    "exact_status": "RELAXATION_LOWER_BOUND",
+    "bound": 0.470407,
+    "completion_term_bound": 10456.853581,
+    "service_energy_bound": 232.89622,
+    "service_risk_bound": 8.437356,
+    "task_count": 30,
+    "note": "Conservative non-BPC relaxation lower bound; ignores nonnegative routing, return, recharge, fleet, capacity, shadow, and all makespan/report-only terms."
+  },
+  "compact_bound_rows": [
+    {
+      "source_name": "compact_bound_probe_scale030_300s",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/compact_bound_probe_scale030_300s/compact_product_scale030_rows.csv",
+      "algorithm_status": "HIGHS_COMPACT_TIME_LIMIT_REACHED",
+      "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
+      "has_feasible_incumbent": "True",
+      "objective": 1.9146,
+      "bound": 1.259623395,
+      "gap": 0.342096147,
+      "simplex_iteration_count": 48718.0,
+      "mip_node_count": 0.0
+    },
+    {
+      "source_name": "compact_tight_m_probe_scale030_300s",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/compact_tight_m_probe_scale030_300s/compact_product_scale030_rows.csv",
+      "algorithm_status": "HIGHS_COMPACT_TIME_LIMIT_REACHED",
+      "certificate_scope": "FEASIBLE_INCUMBENT_ONLY",
+      "has_feasible_incumbent": "True",
+      "objective": 1.9146,
+      "bound": 1.259623395,
+      "gap": 0.342096147,
+      "simplex_iteration_count": 48354.0,
+      "mip_node_count": 0.0
+    }
+  ],
+  "bounds": [
+    {
+      "name": "analytic_relaxation",
+      "bound": 0.470407,
+      "source": "ANALYTIC_RELAXATION_BOUND",
+      "note": "Conservative non-BPC relaxation lower bound; ignores nonnegative routing, return, recharge, fleet, capacity, shadow, and all makespan/report-only terms.",
+      "ratio_to_reference_upper_bound": 0.245071934,
+      "gap_vs_reference_upper_bound": 0.754928066
+    },
+    {
+      "name": "task_visit_lower_bound",
+      "bound": 0.748208279,
+      "source": "service_plus_min_inbound_path_metrics",
+      "note": "Safe per-task bound used by direct-DP pruning; it relaxes routing order, return, fleet coupling, capacity interactions, and recharge sequencing.",
+      "ratio_to_reference_upper_bound": 0.389800428,
+      "gap_vs_reference_upper_bound": 0.610199572
+    },
+    {
+      "name": "direct_dp_root_pruning_bound",
+      "bound": 0.841965885,
+      "source": "max(inbound_tail_bound,outgoing_tail_bound)",
+      "note": "Current direct-DP pruning bound at root; it takes the stronger of a safe inbound task-visit formulation and a safe outgoing task-visit formulation.",
+      "ratio_to_reference_upper_bound": 0.438646125,
+      "gap_vs_reference_upper_bound": 0.561353875
+    },
+    {
+      "name": "compact_product_bound:compact_bound_probe_scale030_300s",
+      "bound": 1.259623395,
+      "source": "HiGHS compact product LP/MIP dual bound",
+      "note": "Product-oracle diagnostic bound; useful for scale diagnosis but not a BPC tree certificate.",
+      "ratio_to_reference_upper_bound": 0.656236709,
+      "gap_vs_reference_upper_bound": 0.343763291
+    },
+    {
+      "name": "compact_product_bound:compact_tight_m_probe_scale030_300s",
+      "bound": 1.259623395,
+      "source": "HiGHS compact product LP/MIP dual bound",
+      "note": "Product-oracle diagnostic bound; useful for scale diagnosis but not a BPC tree certificate.",
+      "ratio_to_reference_upper_bound": 0.656236709,
+      "gap_vs_reference_upper_bound": 0.343763291
+    }
+  ],
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json"
+}

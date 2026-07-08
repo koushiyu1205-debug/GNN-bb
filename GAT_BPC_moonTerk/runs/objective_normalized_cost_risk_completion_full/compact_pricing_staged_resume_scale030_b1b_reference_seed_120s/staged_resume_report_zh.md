@@ -1,0 +1,33 @@
+# Compact Pricing Staged Resume Report
+
+该 staged run 只复用 active column pool；每个 stage 都重新解 RMP 和 final judge。
+因此 staged resume 不是证书放松，也不会把上一阶段 dual/certificate 带入下一阶段。
+
+- instance: `/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json`
+- latest_probe: `/home/kai/work/GAT_BPC_moonTerk/runs/objective_normalized_cost_risk_completion_full/compact_pricing_staged_resume_scale030_b1b_reference_seed_120s/stage_022/probe.json`
+- stage_count: `22`
+
+| stage | batch | round cap | resume cols | active cols | added | rounds | state | scope | best RC | elapsed s |
+|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|
+| 1 |  |  | 38 | 40 | 2 | 2 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.952375 | 123.249065 |
+| 2 |  |  | 40 | 42 | 2 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -1.0603265 | 111.482533 |
+| 3 |  |  | 42 | 44 | 2 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.85725425 | 114.205451 |
+| 4 |  |  | 44 | 46 | 2 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -1.3303848 | 113.26266 |
+| 5 |  |  | 46 | 48 | 2 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.967444356 | 110.568398 |
+| 6 | 5 | 1 | 48 | 53 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.797018614 | 285.247372 |
+| 7 | 5 | 1 | 53 | 58 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.844821092 | 279.268974 |
+| 8 | 5 | 1 | 58 | 63 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.8057868 | 286.291303 |
+| 9 | 5 | 1 | 63 | 68 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.765386463 | 286.491497 |
+| 10 | 5 | 1 | 68 | 73 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.650613318 | 283.193178 |
+| 11 | 5 | 1 | 73 | 78 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -1.30752969 | 284.414108 |
+| 12 | 5 | 1 | 78 | 83 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.334192797 | 277.467121 |
+| 13 | 5 | 1 | 83 | 84 | 1 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.113712323 | 116.738808 |
+| 14 | 5 | 1 | 84 | 87 | 3 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.652961427 | 223.63388 |
+| 15 | 5 | 1 | 87 | 88 | 1 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.471208376 | 281.660664 |
+| 16 | 5 | 1 | 88 | 93 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.403507357 | 286.463533 |
+| 17 | 5 | 1 | 93 | 98 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.674262194 | 286.721067 |
+| 18 | 5 | 1 | 98 | 103 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.051781231 | 283.980536 |
+| 19 | 5 | 1 | 103 | 108 | 5 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.423840484 | 286.933474 |
+| 20 | 5 | 1 | 108 | 111 | 3 | 1 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.398323933 | 227.38203 |
+| 21 | 5 | 2 | 111 | 114 | 3 | 2 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.301112735 | 283.602766 |
+| 22 | 5 | 4 | 114 | 115 | 1 | 2 | INCOMPLETE_LIMIT | DIAGNOSTIC_PRICING_FRONTIER | -0.349796168 | 901.954949 |

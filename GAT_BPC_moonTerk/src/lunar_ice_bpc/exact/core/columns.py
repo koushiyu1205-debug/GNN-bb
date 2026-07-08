@@ -27,9 +27,11 @@ class TimedSortie:
     distance_km: float
     energy_proxy: float
     risk_integral: float
+    service_cost: float
     shadow_exposure_min: float
     demand: float
     discovery_completion_term: float
+    task_completion_times: dict[str, float]
     feasible: bool
     infeasible_reason: str = ""
 
@@ -60,7 +62,9 @@ def build_timed_sortie(
     risk = 0.0
     shadow = 0.0
     demand = 0.0
+    service_cost = 0.0
     completion_term = 0.0
+    task_completion_times: dict[str, float] = {}
     service_starts: dict[str, float] = {}
     legs: list[SortieLeg] = []
 
@@ -82,7 +86,9 @@ def build_timed_sortie(
         risk += task.local_thermal_risk * task.service_time * 0.01
         shadow += task.local_shadow_score * task.service_time
         demand += task.demand
+        service_cost += task.service_cost
         completion_term += task.science_weight * elapsed
+        task_completion_times[task_id] = elapsed
         legs.append(SortieLeg(source=current, target=task_id, path_type=path_types[index]))
         current = task_id
 
@@ -119,9 +125,11 @@ def build_timed_sortie(
         distance_km=round(distance, 6),
         energy_proxy=round(energy, 6),
         risk_integral=round(risk, 6),
+        service_cost=round(service_cost, 6),
         shadow_exposure_min=round(shadow, 6),
         demand=round(demand, 6),
         discovery_completion_term=round(completion_term, 6),
+        task_completion_times={key: round(value, 6) for key, value in task_completion_times.items()},
         feasible=True,
     )
 
@@ -147,10 +155,11 @@ def _infeasible(sequence: tuple[str, ...], path_types: tuple[str, ...], start_ti
         distance_km=0.0,
         energy_proxy=0.0,
         risk_integral=0.0,
+        service_cost=0.0,
         shadow_exposure_min=0.0,
         demand=0.0,
         discovery_completion_term=0.0,
+        task_completion_times={},
         feasible=False,
         infeasible_reason=reason,
     )
-

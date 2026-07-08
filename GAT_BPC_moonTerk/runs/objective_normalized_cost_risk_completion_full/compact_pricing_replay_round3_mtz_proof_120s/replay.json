@@ -1,0 +1,189 @@
+{
+  "schema_version": "lunar_ice_bpc.compact_pricing_replay.v1",
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "instance_id": "lunar_ice_sp50_030_001_seed929001",
+  "source_mode": "B1B_seeded_root_CG",
+  "source_algorithm_status": "BPC_INCOMPLETE_PRICING",
+  "source_certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "source_pricing_round_count": 3,
+  "source_added_column_count": 2,
+  "selected_history_round": 3,
+  "selected_history_pricing_state": "INCOMPLETE_LIMIT",
+  "selected_history_best_reduced_cost": null,
+  "selected_history_dual_bound": null,
+  "selected_history_added_column_count": 0,
+  "dual_context": {
+    "dual_fingerprint": "a36cb640d0c9b7763254f82683544024e630b31ac6e201f08c5ee693f721bf61",
+    "rmp_iteration_id": "root-3",
+    "fleet_dual": -0.069947857,
+    "task_duals": {
+      "ice_site_001": 0.198646857,
+      "ice_site_002": 0.172890857,
+      "ice_site_003": 0.126032857,
+      "ice_site_004": 0.021159286,
+      "ice_site_005": 0.154024857,
+      "ice_site_006": 0.0,
+      "ice_site_007": 0.173103857,
+      "ice_site_008": 0.118753857,
+      "ice_site_009": 0.075386286,
+      "ice_site_010": 0.097748571,
+      "ice_site_011": 0.222020857,
+      "ice_site_012": 0.203795857,
+      "ice_site_013": 0.136923857,
+      "ice_site_014": 0.0,
+      "ice_site_015": 0.206231857,
+      "ice_site_016": -0.072836571,
+      "ice_site_017": 0.018640714,
+      "ice_site_018": 0.112375857,
+      "ice_site_019": 0.120121857,
+      "ice_site_020": 0.0,
+      "ice_site_021": 0.114234857,
+      "ice_site_022": 0.0,
+      "ice_site_023": 0.0,
+      "ice_site_024": 0.0,
+      "ice_site_025": 0.0,
+      "ice_site_026": 0.0,
+      "ice_site_027": 0.0,
+      "ice_site_028": 0.0,
+      "ice_site_029": 0.0,
+      "ice_site_030": 0.0
+    },
+    "cut_duals": {}
+  },
+  "replay_config": {
+    "time_limit_sec": 120.0,
+    "threads": 1,
+    "negative_eps": 1e-06,
+    "mtz_connectivity": true,
+    "flow_connectivity": false,
+    "negative_feasibility_search": false
+  },
+  "result": {
+    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "algorithm_status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "exact_status": "NOT_SOLVED",
+    "pricing_state": "FOUND_NEGATIVE",
+    "task_count": 30,
+    "solver_backend": "HiGHS compact single-journey pricing MILP",
+    "pricing_complete_by_compact_milp": false,
+    "pricing_complete_for_all_tasks": false,
+    "pricing_complete_for_all_task_subsets": false,
+    "best_reduced_cost": -0.583636142,
+    "model_objective": -0.583635736,
+    "manual_best_reduced_cost": -0.583636142,
+    "pricing_best_reduced_cost": -0.583636142,
+    "dual_bound": -1.004836772,
+    "bound": -1.004836772,
+    "gap": 0.721684793,
+    "negative_found": true,
+    "negative_column_count": 1,
+    "can_certify_no_negative": false,
+    "uses_true_dual_bpc_certificate": false,
+    "pricing_rc_audit_pass": true,
+    "journey_count": 1,
+    "has_feasible_incumbent": true,
+    "best_column": {
+      "task_count": 7,
+      "tasks": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_021"
+      ],
+      "objective": 0.394515,
+      "end_time": 1161.858389,
+      "sortie_count": 3,
+      "legs": [
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_003",
+            "path_type": "low_risk"
+          },
+          {
+            "from": "ice_site_003",
+            "to": "ice_site_019",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_019",
+            "to": "ice_site_018",
+            "path_type": "low_energy"
+          },
+          {
+            "from": "ice_site_018",
+            "to": "depot",
+            "path_type": "low_time"
+          }
+        ],
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_021",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_021",
+            "to": "ice_site_012",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_012",
+            "to": "depot",
+            "path_type": "low_energy"
+          }
+        ],
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_002",
+            "path_type": "low_energy"
+          },
+          {
+            "from": "ice_site_002",
+            "to": "ice_site_001",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_001",
+            "to": "depot",
+            "path_type": "low_time"
+          }
+        ]
+      ]
+    },
+    "model_status_code": 13,
+    "model_status_name": "TIME_LIMIT_REACHED",
+    "solver_info": {
+      "valid": true,
+      "objective_function_value": -0.5836357363576721,
+      "mip_dual_bound": -1.0048367717994617,
+      "mip_gap": 0.72168479276201,
+      "mip_node_count": 0,
+      "simplex_iteration_count": 21182,
+      "ipm_iteration_count": -1,
+      "pdlp_iteration_count": -1,
+      "primal_solution_status": 2,
+      "dual_solution_status": 0,
+      "max_primal_infeasibility": 6.821210263296962e-13,
+      "max_dual_infeasibility": null,
+      "max_integrality_violation": 2.9976021664879227e-15,
+      "primal_dual_integral": 350.9423168297292
+    },
+    "flow_connectivity_enabled": false,
+    "mtz_connectivity_enabled": true,
+    "negative_feasibility_search_enabled": false,
+    "sortie_slots_per_journey": 30,
+    "sortie_slot_bound_source": "horizon_min_active_sortie_duration_bound",
+    "sortie_slot_min_duration_lower_bound": 46.355995,
+    "sortie_slot_min_return_duration_lower_bound": 38.355995,
+    "sortie_slot_min_out_return_travel_lower_bound": 27.597005,
+    "variable_count": 70231,
+    "constraint_count": 137489,
+    "wall_time_sec": 112.518276,
+    "note": "Compact HiGHS single-journey pricing stopped before an exact pricing proof."
+  }
+}

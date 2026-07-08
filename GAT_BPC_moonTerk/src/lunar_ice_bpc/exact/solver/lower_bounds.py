@@ -7,6 +7,7 @@ import heapq
 
 from lunar_ice_bpc.domain.scenario import PATH_TYPES
 from lunar_ice_bpc.exact.core.data import LunarIceData
+from lunar_ice_bpc.exact.core.objective import additive_objective_value, operating_cost_value, service_risk_value
 
 
 @dataclass(frozen=True)
@@ -52,11 +53,16 @@ def compute_analytic_lower_bound(data: LunarIceData) -> AnalyticLowerBound:
         earliest_start = max(float(task.ready_time), float(earliest_arrival))
         completion_term += float(task.science_weight) * (earliest_start + float(task.service_time))
         service_energy += float(task.service_energy)
-        service_risk += float(task.local_thermal_risk) * float(task.service_time) * 0.01
-    bound = (
-        data.objective.alpha_discovery_completion * completion_term
-        + data.objective.gamma_lunar_ice_risk * service_risk
-        + data.objective.delta_energy * service_energy
+        service_risk += service_risk_value(task)
+    bound = additive_objective_value(
+        data,
+        operating_cost=operating_cost_value(
+            service_cost=sum(float(data.tasks[task_id].service_cost) for task_id in data.task_ids),
+            distance_km=0.0,
+            energy_proxy=service_energy,
+        ),
+        risk_integral=service_risk,
+        weighted_completion_time=completion_term,
     )
     return AnalyticLowerBound(
         status="ANALYTIC_RELAXATION_BOUND",
@@ -68,7 +74,7 @@ def compute_analytic_lower_bound(data: LunarIceData) -> AnalyticLowerBound:
         task_count=len(data.task_ids),
         note=(
             "Conservative non-BPC relaxation lower bound; ignores nonnegative routing, return, recharge, "
-            "fleet, capacity, shadow, and beta journey-end terms."
+            "fleet, capacity, shadow, and all makespan/report-only terms."
         ),
     )
 

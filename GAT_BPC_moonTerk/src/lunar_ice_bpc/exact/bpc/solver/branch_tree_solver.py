@@ -28,12 +28,15 @@ from lunar_ice_bpc.exact.core.branching import (
 )
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
+from lunar_ice_bpc.exact.core.objective import aggregate_journey_objective_breakdown
 from lunar_ice_bpc.exact.master.journey_rmp import manual_journey_reduced_cost
 from lunar_ice_bpc.exact.pricing.journey_pricing import DirectPricingCache
 from lunar_ice_bpc.exact.solver.branch_probe import build_fractional_branch_probe
 from lunar_ice_bpc.exact.solver.column_pool import select_journey_column_pool
 from lunar_ice_bpc.exact.solver.journey_driver import (
+    DirectBaselineTimeLimitExceeded,
     enumerate_direct_journey_columns,
+    _reference_solution_upper_bound,
     solve_direct_journey_baseline,
 )
 
@@ -59,6 +62,7 @@ def solve_b3_branch_price_tree_baseline(
     b0_direct=None,
     max_direct_tasks: int = 5,
     max_rounds_per_node: int = 16,
+    wall_time_limit_sec: float | None = None,
     max_tree_nodes: int = 31,
     max_branch_depth: int = 4,
     negative_eps: float = 1.0e-6,
@@ -85,6 +89,7 @@ def solve_b3_branch_price_tree_baseline(
             data,
             max_direct_tasks=max_direct_tasks,
             max_rounds=max_rounds_per_node,
+            wall_time_limit_sec=wall_time_limit_sec,
             negative_eps=negative_eps,
             max_columns_per_round=max_columns_per_round,
             mode=B2B_R3_MODE,
@@ -92,7 +97,11 @@ def solve_b3_branch_price_tree_baseline(
     else:
         b2 = _b2_not_run_payload(data, max_direct_tasks=max_direct_tasks)
     if b0_direct is None:
-        b0_direct = solve_direct_journey_baseline(data, max_exact_tasks=int(max_direct_tasks))
+        b0_direct = solve_direct_journey_baseline(
+            data,
+            max_exact_tasks=int(max_direct_tasks),
+            wall_time_limit_sec=wall_time_limit_sec,
+        )
     if len(data.task_ids) > int(max_direct_tasks):
         return _too_large_payload(
             data=data,
@@ -100,12 +109,54 @@ def solve_b3_branch_price_tree_baseline(
             b0_direct=b0_direct,
             max_direct_tasks=max_direct_tasks,
             negative_eps=negative_eps,
+            issue="task_count_exceeds_exhaustive_pricing_limit",
+            note=f"task_count={len(data.task_ids)} exceeds max_direct_tasks={max_direct_tasks}; B3 fails closed.",
+        )
+    if _float_or_none(b0_direct.objective) is None:
+        return _too_large_payload(
+            data=data,
+            b2=b2,
+            b0_direct=b0_direct,
+            max_direct_tasks=max_direct_tasks,
+            negative_eps=negative_eps,
+            issue="direct_dp_incumbent_missing",
+            note=(
+                "B3 fails closed before representative-universe enumeration because "
+                f"direct DP did not produce a fixed-graph incumbent: {getattr(b0_direct, 'note', '')}"
+            ),
         )
 
     complete_universe_columns: tuple[JourneyColumn, ...] = tuple()
     complete_universe_counts: dict | None = None
     if use_complete_universe_audit:
-        complete_universe = enumerate_direct_journey_columns(data, max_exact_tasks=int(max_direct_tasks))
+        deadline = None
+        if wall_time_limit_sec is not None:
+            from time import perf_counter
+
+            deadline = perf_counter() + max(0.001, float(wall_time_limit_sec))
+        try:
+            complete_universe = enumerate_direct_journey_columns(
+                data,
+                max_exact_tasks=int(max_direct_tasks),
+                deadline=deadline,
+            )
+        except DirectBaselineTimeLimitExceeded as exc:
+            return _too_large_payload(
+                data=data,
+                b2=b2,
+                b0_direct=b0_direct,
+                max_direct_tasks=max_direct_tasks,
+                negative_eps=negative_eps,
+                issue="representative_universe_enumeration_time_limit",
+                note=(
+                    "B3 fails closed because representative-universe enumeration exceeded "
+                    f"wall_time_limit_sec={wall_time_limit_sec} during {exc.stage}; "
+                    f"generated_journey_count={exc.generated_journey_count}, "
+                    f"generated_sortie_count={exc.generated_sortie_count}, "
+                    f"route_template_count={exc.route_template_count}, "
+                    f"pareto_label_count={exc.pareto_label_count}."
+                ),
+            )
         complete_universe_columns = tuple(complete_universe.columns)
         complete_universe_counts = {
             "generated_sortie_count": complete_universe.generated_sortie_count,
@@ -141,6 +192,7 @@ def solve_b3_branch_price_tree_baseline(
             incumbent_objective_at_entry=incumbent_objective,
             max_direct_tasks=max_direct_tasks,
             max_rounds=max_rounds_per_node,
+            wall_time_limit_sec=wall_time_limit_sec,
             negative_eps=negative_eps,
             max_columns_per_round=max_columns_per_round,
         )
@@ -241,6 +293,7 @@ def _solve_b3_node(
     incumbent_objective_at_entry: float | None,
     max_direct_tasks: int,
     max_rounds: int,
+    wall_time_limit_sec: float | None,
     negative_eps: float,
     max_columns_per_round: int,
 ) -> dict:
@@ -266,6 +319,7 @@ def _solve_b3_node(
         incumbent_objective=incumbent_objective_at_entry,
         max_direct_tasks=max_direct_tasks,
         max_rounds=max_rounds,
+        wall_time_limit_sec=wall_time_limit_sec,
         negative_eps=negative_eps,
         max_columns_per_round=max_columns_per_round,
         b0_direct=b0_direct,
@@ -1072,6 +1126,14 @@ def _tree_payload(
             "direct_dp_status": b0_direct.status,
             "direct_dp_certificate_scope": b0_direct.certificate_scope,
             "direct_dp_objective": direct_objective,
+            "direct_dp_objective_breakdown": getattr(b0_direct, "objective_breakdown", None),
+            "reference_solution_upper_bound": getattr(b0_direct, "reference_solution_upper_bound", None),
+            "reference_solution_upper_bound_source": getattr(
+                b0_direct, "reference_solution_upper_bound_source", ""
+            ),
+            "direct_bound_pruning_root_bound": getattr(b0_direct, "direct_bound_pruning_root_bound", None),
+            "direct_bound_pruning_active": getattr(b0_direct, "direct_bound_pruning_active", False),
+            "journey_label_bound_pruned_count": getattr(b0_direct, "journey_label_bound_pruned_count", 0),
             "direct_dp_used_as_bpc_certificate": False,
             "incumbent_vs_direct_dp_gap": incumbent_vs_direct_gap,
             "objective_match_direct_dp": bool(
@@ -1327,6 +1389,8 @@ def _too_large_payload(
     b0_direct,
     max_direct_tasks: int,
     negative_eps: float,
+    issue: str = "task_count_exceeds_exhaustive_pricing_limit",
+    note: str | None = None,
 ) -> dict:
     proof_debt = ProofDebtQueue()
     ledger = CertificateLedger(
@@ -1335,6 +1399,27 @@ def _too_large_payload(
         pricing_state=PricingState.INCOMPLETE_LIMIT,
         uses_true_dual_bpc_certificate=False,
     ).validate(proof_debt_queue=proof_debt)
+    direct_objective = _float_or_none(getattr(b0_direct, "objective", None))
+    incumbent_objective = direct_objective
+    incumbent_source = "B0_DIRECT_DP_FEASIBLE_INCUMBENT" if direct_objective is not None else ""
+    incumbent_journey_count = len(tuple(getattr(b0_direct, "journeys", tuple()) or tuple()))
+    incumbent_breakdown = getattr(b0_direct, "objective_breakdown", None)
+    reference_incumbent = _reference_solution_upper_bound(data)
+    if incumbent_objective is None and reference_incumbent is not None:
+        incumbent_objective = float(reference_incumbent.objective)
+        incumbent_source = f"REFERENCE_FEASIBLE_INCUMBENT:{reference_incumbent.source}"
+        incumbent_journey_count = len(tuple(reference_incumbent.journeys))
+        incumbent_breakdown = aggregate_journey_objective_breakdown(data, reference_incumbent.journeys)
+    reference_upper_bound = (
+        float(reference_incumbent.objective)
+        if reference_incumbent is not None
+        else getattr(b0_direct, "reference_solution_upper_bound", None)
+    )
+    reference_upper_bound_source = (
+        str(reference_incumbent.source)
+        if reference_incumbent is not None
+        else getattr(b0_direct, "reference_solution_upper_bound_source", "")
+    )
     return {
         "schema_version": "lunar_ice_bpc.b3_branch_price_tree_baseline.v1",
         "instance_id": data.instance_id,
@@ -1345,7 +1430,7 @@ def _too_large_payload(
         "uses_true_dual_bpc_certificate": False,
         "certificate_ledger": ledger,
         "proof_debt_queue": proof_debt.audit(),
-        "tree_certificate_gate_issues": ["task_count_exceeds_exhaustive_pricing_limit"],
+        "tree_certificate_gate_issues": [str(issue)],
         "task_count": len(data.task_ids),
         "max_direct_tasks": int(max_direct_tasks),
         "node_count": 0,
@@ -1353,8 +1438,17 @@ def _too_large_payload(
         "tree_closed": False,
         "all_nodes_fathomed": False,
         "global_lower_bound": None,
-        "global_ub": _float_or_none(b0_direct.objective),
-        "incumbent_objective": _float_or_none(b0_direct.objective),
+        "global_ub": incumbent_objective,
+        "incumbent_objective": incumbent_objective,
+        "objective_breakdown": incumbent_breakdown,
+        "reference_solution_upper_bound": reference_upper_bound,
+        "reference_solution_upper_bound_source": reference_upper_bound_source,
+        "feasible_incumbent_source": incumbent_source,
+        "feasible_incumbent_objective": incumbent_objective,
+        "feasible_incumbent_journey_count": incumbent_journey_count,
+        "feasible_incumbent_used_as_bpc_certificate": False,
+        "integer_incumbent_source": incumbent_source,
+        "integer_incumbent_journey_count": incumbent_journey_count,
         "global_gap": None,
         "root_lp_bound": None,
         "root_lp_bound_official": False,
@@ -1368,11 +1462,17 @@ def _too_large_payload(
             "baseline": "B0_DIRECT_DP_FIXED_GRAPH_ORACLE",
             "direct_dp_status": b0_direct.status,
             "direct_dp_certificate_scope": b0_direct.certificate_scope,
-            "direct_dp_objective": _float_or_none(b0_direct.objective),
+            "direct_dp_objective": direct_objective,
+            "direct_dp_objective_breakdown": getattr(b0_direct, "objective_breakdown", None),
+            "reference_solution_upper_bound": reference_upper_bound,
+            "reference_solution_upper_bound_source": reference_upper_bound_source,
+            "direct_bound_pruning_root_bound": getattr(b0_direct, "direct_bound_pruning_root_bound", None),
+            "direct_bound_pruning_active": getattr(b0_direct, "direct_bound_pruning_active", False),
+            "journey_label_bound_pruned_count": getattr(b0_direct, "journey_label_bound_pruned_count", 0),
             "direct_dp_used_as_bpc_certificate": False,
         },
         "nodes": [],
-        "note": f"task_count={len(data.task_ids)} exceeds max_direct_tasks={max_direct_tasks}; B3 fails closed.",
+        "note": note or f"task_count={len(data.task_ids)} exceeds max_direct_tasks={max_direct_tasks}; B3 fails closed.",
         "negative_eps": float(negative_eps),
     }
 

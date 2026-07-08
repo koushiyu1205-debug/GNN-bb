@@ -12,6 +12,12 @@ from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_
 from lunar_ice_bpc.exact.core.cuts import FLEET_LOWER_BOUND_CUT, SUBSET_ROW_CUT, CutContext
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn, build_journey_column
+from lunar_ice_bpc.exact.core.objective import (
+    additive_objective_value,
+    operating_cost_value,
+    service_risk_value,
+    sortie_objective_value,
+)
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, solve_restricted_journey_rmp, manual_journey_reduced_cost
 from lunar_ice_bpc.exact.pricing.completion_bounds import build_positive_cover_completion_bound
 from lunar_ice_bpc.exact.solver.column_pool import select_journey_column_pool
@@ -95,7 +101,6 @@ class _DirectJourneyLabel:
         cut_penalty = _label_cut_dual_penalty(self, duals, cut_context, candidate_task_ids)
         return round(
             self.reduced_base
-            + data.objective.beta_journey_end_time * self.end_time
             - float(duals.fleet_limit)
             - cut_penalty,
             9,
@@ -837,7 +842,7 @@ def _best_direct_label(
             optimistic_without_fleet = completion_bound.optimistic_label_bound(
                 current_reduced_base=label.reduced_base,
                 current_end_time=label.end_time,
-                beta_journey_end_time=data.objective.beta_journey_end_time,
+                beta_journey_end_time=0.0,
                 remaining_task_ids=remaining_tasks,
             )
             optimistic_with_fleet = round(optimistic_without_fleet - float(duals.fleet_limit), 9)
@@ -955,9 +960,15 @@ def _direct_candidate_primary_score(data: LunarIceData, duals: JourneyDuals, tas
         data.option(depot, task_id, path_type).travel_time_min + data.option(task_id, depot, path_type).travel_time_min
         for path_type in PATH_TYPES
     )
-    rough_cost = (
-        data.objective.alpha_discovery_completion * float(task.science_weight) * (best_out + float(task.service_time))
-        + data.objective.delta_energy * float(task.service_energy)
+    rough_cost = additive_objective_value(
+        data,
+        operating_cost=operating_cost_value(
+            service_cost=float(task.service_cost),
+            distance_km=0.0,
+            energy_proxy=float(task.service_energy),
+        ),
+        risk_integral=service_risk_value(task),
+        weighted_completion_time=float(task.science_weight) * (best_out + float(task.service_time)),
     )
     return float(duals.cover.get(task_id, 0.0)) - 0.01 * rough_cost
 
@@ -970,12 +981,7 @@ def _extend_direct_label(
     task_mask: int,
 ) -> _DirectJourneyLabel:
     cover_reward = sum(float(duals.cover.get(task_id, 0.0)) for task_id in sortie.tasks)
-    add_base = (
-        data.objective.alpha_discovery_completion * sortie.discovery_completion_term
-        + data.objective.gamma_lunar_ice_risk * sortie.risk_integral
-        + data.objective.delta_energy * sortie.energy_proxy
-        - cover_reward
-    )
+    add_base = sortie_objective_value(data, sortie) - cover_reward
     return _DirectJourneyLabel(
         task_mask=label.task_mask | task_mask,
         sorties=(*label.sorties, sortie),

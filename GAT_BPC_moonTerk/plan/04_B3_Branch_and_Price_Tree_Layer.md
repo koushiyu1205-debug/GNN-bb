@@ -28,6 +28,25 @@ best-task-subset representative universe
 
 该压缩表示在 B3 中是 exact-safe 的原因是：B3 只启用 Ryan-Foster same/different-journey branching，不启用 cuts 或 route-order branch；同一 task subset 的不同路线变体只会改变 objective，不会改变覆盖、fleet 使用或 branch membership。
 
+当前 official objective 已切换为 per-instance normalized additive scalar objective：
+
+```text
+minimize
+    1.0 * normalized_operating_cost
+  + 1.0 * normalized_risk
+  + 0.4 * normalized_weighted_completion_time
+```
+
+`makespan = max(task completion time)` 本轮只作为 report/evaluation metric，不进入 pricing objective，也不进入 reduced cost。`BPC_TREE_OPTIMAL` 只能解释为上述 normalized additive objective 的精确最优，不能解释为 makespan-in-objective 的精确最优。
+
+因此旧 B0/B1/B2/B3 报告中的 objective 数值与 acceptance 结论只保留为历史诊断。新目标下必须使用：
+
+```text
+runs/objective_normalized_cost_risk_completion_full/
+```
+
+重新生成全量证据。
+
 当前可接受前置状态：
 
 ```text
@@ -49,12 +68,12 @@ B2B_R3:
     worker 不能 certificate；final judge 仍是唯一 CERTIFIED_NO_NEGATIVE 来源。
 
 B3B:
-    accepted exact tree baseline for current 5/10/20 fixed-graph instances。
+    historical accepted exact tree baseline for previous objective。
     使用 best-task-subset representative universe + branch RC audit + tree gate。
-    20-scale current dataset: BPC_TREE_OPTIMAL 20/20。
+    新 normalized objective 下需重新验证 5/10/20/30。
 ```
 
-B2B_R3 仍保留为 root-pricing baseline 和 fallback/diagnostic node engine；当前 20-scale accepted closure 以 B3B representative-universe audit path 为准。
+B2B_R3 仍保留为 root-pricing baseline 和 fallback/diagnostic node engine；旧 20-scale closure 以 B3B representative-universe audit path 为准，新 objective 下必须重新跑全量消融。
 
 ---
 

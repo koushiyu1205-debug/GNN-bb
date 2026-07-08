@@ -621,6 +621,11 @@ def _baseline_payload(result: JourneyBaselineResult) -> dict:
         "set_partition_state_count": result.set_partition_state_count,
         "path_option_dominance_policy": result.path_option_dominance_policy,
         "path_option_dominance_filtered_count": result.path_option_dominance_filtered_count,
+        "reference_solution_upper_bound": result.reference_solution_upper_bound,
+        "reference_solution_upper_bound_source": result.reference_solution_upper_bound_source,
+        "direct_bound_pruning_root_bound": result.direct_bound_pruning_root_bound,
+        "direct_bound_pruning_active": result.direct_bound_pruning_active,
+        "journey_label_bound_pruned_count": result.journey_label_bound_pruned_count,
         "infeasibility_scope_if_any": result.infeasibility_scope_if_any,
         "note": result.note,
     }
