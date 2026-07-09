@@ -29,10 +29,26 @@ def main() -> int:
     parser.add_argument("--negative-eps", type=float, default=1.0e-6)
     parser.add_argument("--mtz-connectivity", action="store_true")
     parser.add_argument("--flow-connectivity", action="store_true")
+    parser.add_argument("--mtz-endpoint-order-cuts", action="store_true")
     parser.add_argument("--no-mtz-endpoint-order-cuts", action="store_true")
     parser.add_argument("--pair-adjacency-cuts", action="store_true")
     parser.add_argument("--disable-latest-service-start-slot-bound", action="store_true")
+    parser.add_argument("--time-window-arc-pruning", action="store_true")
     parser.add_argument("--disable-time-window-arc-pruning", action="store_true")
+    parser.add_argument("--service-start-depot-travel-lb", action="store_true")
+    parser.add_argument("--task-to-depot-return-travel-lb", action="store_true")
+    parser.add_argument("--pair-route-duration-lb", action="store_true")
+    parser.add_argument("--sortie-slot-position-bounds", action="store_true")
+    parser.add_argument("--demand-cover-cut", action="store_true")
+    parser.add_argument("--single-task-energy-lb", action="store_true")
+    parser.add_argument("--single-task-shadow-lb", action="store_true")
+    parser.add_argument("--pair-energy-lb", action="store_true")
+    parser.add_argument("--pair-energy-infeasible-cut", action="store_true")
+    parser.add_argument("--pair-shadow-infeasible-cut", action="store_true")
+    parser.add_argument("--triple-shadow-infeasible-cut", action="store_true")
+    parser.add_argument("--triple-energy-infeasible-cut", action="store_true")
+    parser.add_argument("--triple-time-window-infeasible-cut", action="store_true")
+    parser.add_argument("--quad-time-window-infeasible-cut", action="store_true")
     parser.add_argument("--negative-feasibility-search", action="store_true")
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--output-md", required=True)
@@ -56,6 +72,8 @@ def main() -> int:
         fleet_limit=float(dual_context.get("fleet_dual") or 0.0),
         cuts={str(key): float(value) for key, value in (dual_context.get("cut_duals") or {}).items()},
     )
+    mtz_endpoint_order_cuts = bool(args.mtz_endpoint_order_cuts and not args.no_mtz_endpoint_order_cuts)
+    time_window_arc_pruning = bool(args.time_window_arc_pruning and not args.disable_time_window_arc_pruning)
     result = solve_highs_compact_single_journey_pricing(
         data,
         duals,
@@ -65,10 +83,24 @@ def main() -> int:
         negative_eps=float(args.negative_eps),
         flow_connectivity=bool(args.flow_connectivity),
         mtz_connectivity=bool(args.mtz_connectivity),
-        mtz_endpoint_order_cuts=not bool(args.no_mtz_endpoint_order_cuts),
+        mtz_endpoint_order_cuts=mtz_endpoint_order_cuts,
         pair_adjacency_cuts=bool(args.pair_adjacency_cuts),
         latest_service_start_slot_bound=not bool(args.disable_latest_service_start_slot_bound),
-        time_window_arc_pruning=not bool(args.disable_time_window_arc_pruning),
+        time_window_arc_pruning=time_window_arc_pruning,
+        service_start_depot_travel_lb=bool(args.service_start_depot_travel_lb),
+        task_to_depot_return_travel_lb=bool(args.task_to_depot_return_travel_lb),
+        pair_route_duration_lb=bool(args.pair_route_duration_lb),
+        sortie_slot_position_bounds=bool(args.sortie_slot_position_bounds),
+        demand_cover_cut=bool(args.demand_cover_cut),
+        single_task_energy_lb=bool(args.single_task_energy_lb),
+        single_task_shadow_lb=bool(args.single_task_shadow_lb),
+        pair_energy_lb=bool(args.pair_energy_lb),
+        pair_energy_infeasible_cut=bool(args.pair_energy_infeasible_cut),
+        pair_shadow_infeasible_cut=bool(args.pair_shadow_infeasible_cut),
+        triple_shadow_infeasible_cut=bool(args.triple_shadow_infeasible_cut),
+        triple_energy_infeasible_cut=bool(args.triple_energy_infeasible_cut),
+        triple_time_window_infeasible_cut=bool(args.triple_time_window_infeasible_cut),
+        quad_time_window_infeasible_cut=bool(args.quad_time_window_infeasible_cut),
         negative_feasibility_search=bool(args.negative_feasibility_search),
     )
     payload = {
@@ -92,10 +124,24 @@ def main() -> int:
             "negative_eps": float(args.negative_eps),
             "mtz_connectivity": bool(args.mtz_connectivity),
             "flow_connectivity": bool(args.flow_connectivity),
-            "mtz_endpoint_order_cuts": not bool(args.no_mtz_endpoint_order_cuts),
+            "mtz_endpoint_order_cuts": mtz_endpoint_order_cuts,
             "pair_adjacency_cuts": bool(args.pair_adjacency_cuts),
             "latest_service_start_slot_bound": not bool(args.disable_latest_service_start_slot_bound),
-            "time_window_arc_pruning": not bool(args.disable_time_window_arc_pruning),
+            "time_window_arc_pruning": time_window_arc_pruning,
+            "service_start_depot_travel_lb": bool(args.service_start_depot_travel_lb),
+            "task_to_depot_return_travel_lb": bool(args.task_to_depot_return_travel_lb),
+            "pair_route_duration_lb": bool(args.pair_route_duration_lb),
+            "sortie_slot_position_bounds": bool(args.sortie_slot_position_bounds),
+            "demand_cover_cut": bool(args.demand_cover_cut),
+            "single_task_energy_lb": bool(args.single_task_energy_lb),
+            "single_task_shadow_lb": bool(args.single_task_shadow_lb),
+            "pair_energy_lb": bool(args.pair_energy_lb),
+            "pair_energy_infeasible_cut": bool(args.pair_energy_infeasible_cut),
+            "pair_shadow_infeasible_cut": bool(args.pair_shadow_infeasible_cut),
+            "triple_shadow_infeasible_cut": bool(args.triple_shadow_infeasible_cut),
+            "triple_energy_infeasible_cut": bool(args.triple_energy_infeasible_cut),
+            "triple_time_window_infeasible_cut": bool(args.triple_time_window_infeasible_cut),
+            "quad_time_window_infeasible_cut": bool(args.quad_time_window_infeasible_cut),
             "negative_feasibility_search": bool(args.negative_feasibility_search),
         },
         "result": _json_safe_result(result),
@@ -193,6 +239,20 @@ def _render_markdown(payload: dict) -> str:
         f"- pair adjacency cuts: `{config['pair_adjacency_cuts']}`",
         f"- latest-service-start slot bound: `{config['latest_service_start_slot_bound']}`",
         f"- time-window arc pruning: `{config['time_window_arc_pruning']}`",
+        f"- service-start depot-travel LB: `{config['service_start_depot_travel_lb']}`",
+        f"- task-to-depot return-travel LB: `{config['task_to_depot_return_travel_lb']}`",
+        f"- pair route-duration LB: `{config['pair_route_duration_lb']}`",
+        f"- sortie slot-position bounds: `{config['sortie_slot_position_bounds']}`",
+        f"- demand cover cut: `{config['demand_cover_cut']}`",
+        f"- single-task energy LB: `{config['single_task_energy_lb']}`",
+        f"- single-task shadow LB: `{config['single_task_shadow_lb']}`",
+        f"- pair energy LB: `{config['pair_energy_lb']}`",
+        f"- pair energy infeasible cut: `{config['pair_energy_infeasible_cut']}`",
+        f"- pair shadow infeasible cut: `{config['pair_shadow_infeasible_cut']}`",
+        f"- triple shadow infeasible cut: `{config['triple_shadow_infeasible_cut']}`",
+        f"- triple energy infeasible cut: `{config['triple_energy_infeasible_cut']}`",
+        f"- triple time-window infeasible cut: `{config['triple_time_window_infeasible_cut']}`",
+        f"- quad time-window infeasible cut: `{config['quad_time_window_infeasible_cut']}`",
         "",
         "## Result",
         "",
@@ -210,6 +270,34 @@ def _render_markdown(payload: dict) -> str:
         f"- sortie slot bound source: `{result.get('sortie_slot_bound_source')}`",
         f"- time-window arc pruning enabled: `{result.get('time_window_arc_pruning_enabled')}`",
         f"- time-window impossible arc options: `{result.get('time_window_impossible_arc_option_count')}`",
+        f"- service-start depot-travel LB enabled: `{result.get('service_start_depot_travel_lb_enabled')}`",
+        f"- service-start depot-travel LB rows: `{result.get('service_start_depot_travel_lb_count')}`",
+        f"- task-to-depot return-travel LB enabled: `{result.get('task_to_depot_return_travel_lb_enabled')}`",
+        f"- task-to-depot return-travel LB rows: `{result.get('task_to_depot_return_travel_lb_count')}`",
+        f"- pair route-duration LB enabled: `{result.get('pair_route_duration_lb_enabled')}`",
+        f"- pair route-duration LB rows: `{result.get('pair_route_duration_lb_count')}`",
+        f"- sortie slot-position bounds enabled: `{result.get('sortie_slot_position_bounds_enabled')}`",
+        f"- sortie slot-position bounds rows: `{result.get('sortie_slot_position_bound_count')}`",
+        f"- demand cover cut enabled: `{result.get('demand_cover_cut_enabled')}`",
+        f"- demand cover cut rows: `{result.get('demand_cover_cut_count')}`",
+        f"- single-task energy LB enabled: `{result.get('single_task_energy_lb_enabled')}`",
+        f"- single-task energy LB rows: `{result.get('single_task_energy_lb_count')}`",
+        f"- single-task shadow LB enabled: `{result.get('single_task_shadow_lb_enabled')}`",
+        f"- single-task shadow LB rows: `{result.get('single_task_shadow_lb_count')}`",
+        f"- pair energy LB enabled: `{result.get('pair_energy_lb_enabled')}`",
+        f"- pair energy LB rows: `{result.get('pair_energy_lb_count')}`",
+        f"- pair energy infeasible cut enabled: `{result.get('pair_energy_infeasible_cut_enabled')}`",
+        f"- pair energy infeasible cut rows: `{result.get('pair_energy_infeasible_cut_count')}`",
+        f"- pair shadow infeasible cut enabled: `{result.get('pair_shadow_infeasible_cut_enabled')}`",
+        f"- pair shadow infeasible cut rows: `{result.get('pair_shadow_infeasible_cut_count')}`",
+        f"- triple shadow infeasible cut enabled: `{result.get('triple_shadow_infeasible_cut_enabled')}`",
+        f"- triple shadow infeasible cut rows: `{result.get('triple_shadow_infeasible_cut_count')}`",
+        f"- triple energy infeasible cut enabled: `{result.get('triple_energy_infeasible_cut_enabled')}`",
+        f"- triple energy infeasible cut rows: `{result.get('triple_energy_infeasible_cut_count')}`",
+        f"- triple time-window infeasible cut enabled: `{result.get('triple_time_window_infeasible_cut_enabled')}`",
+        f"- triple time-window infeasible cut rows: `{result.get('triple_time_window_infeasible_cut_count')}`",
+        f"- quad time-window infeasible cut enabled: `{result.get('quad_time_window_infeasible_cut_enabled')}`",
+        f"- quad time-window infeasible cut rows: `{result.get('quad_time_window_infeasible_cut_count')}`",
         f"- variable count: `{result.get('variable_count')}`",
         f"- constraint count: `{result.get('constraint_count')}`",
         f"- wall time: `{result.get('wall_time_sec')}`",

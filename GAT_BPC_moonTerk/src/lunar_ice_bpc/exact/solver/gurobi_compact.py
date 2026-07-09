@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from itertools import product
+from itertools import combinations, permutations, product
 import math
 from time import perf_counter
 from typing import Iterable
@@ -236,6 +236,628 @@ def _earliest_task_service_start_lower_bound(data: LunarIceData, task_id: str) -
 def _latest_task_service_start(data: LunarIceData, task_id: str) -> float:
     task = data.tasks[str(task_id)]
     return float(task.due_time) - float(task.service_time)
+
+
+def _depot_to_task_shortest_travel_lower_bounds(data: LunarIceData) -> dict[str, float]:
+    """Shortest travel-time lower bound from depot to each task.
+
+    This deliberately computes the shortest path over the full fixed graph
+    instead of using the direct depot-task arc.  The generated path options do
+    not need to satisfy triangle inequality, so direct travel is not always a
+    valid lower bound for reaching a later task through intermediate tasks.
+    """
+
+    return {
+        task_id: value
+        for task_id, value in _single_source_shortest_travel_lower_bounds(data, "depot").items()
+        if task_id in set(data.task_ids)
+    }
+
+
+def _task_to_depot_shortest_travel_lower_bounds(data: LunarIceData) -> dict[str, float]:
+    """Shortest travel-time lower bound from each task back to the depot."""
+
+    distances_to_depot = _single_source_shortest_travel_lower_bounds(data, "depot", reverse=True)
+    return {
+        task_id: max(0.0, float(distances_to_depot.get(task_id, 0.0)))
+        for task_id in data.task_ids
+    }
+
+
+def _pair_route_duration_lower_bounds(data: LunarIceData) -> dict[tuple[str, str], float]:
+    """Lower bound on sortie duration when two tasks are served together."""
+
+    tasks = tuple(data.task_ids)
+    depot_to = _single_source_shortest_travel_lower_bounds(data, "depot")
+    to_depot = _single_source_shortest_travel_lower_bounds(data, "depot", reverse=True)
+    from_task = {
+        task_id: _single_source_shortest_travel_lower_bounds(data, task_id)
+        for task_id in tasks
+    }
+    bounds: dict[tuple[str, str], float] = {}
+    for left_index, left_task in enumerate(tasks):
+        left_service = float(data.tasks[left_task].service_time)
+        for right_task in tasks[left_index + 1 :]:
+            right_service = float(data.tasks[right_task].service_time)
+            left_then_right = (
+                float(depot_to.get(left_task, 0.0))
+                + left_service
+                + float(from_task[left_task].get(right_task, 0.0))
+                + right_service
+                + float(to_depot.get(right_task, 0.0))
+            )
+            right_then_left = (
+                float(depot_to.get(right_task, 0.0))
+                + right_service
+                + float(from_task[right_task].get(left_task, 0.0))
+                + left_service
+                + float(to_depot.get(left_task, 0.0))
+            )
+            bounds[(left_task, right_task)] = max(0.0, min(left_then_right, right_then_left))
+    return bounds
+
+
+def _pair_weighted_completion_lower_bounds(data: LunarIceData) -> dict[tuple[str, str], float]:
+    """Lower bound on weighted service starts when two tasks share a sortie."""
+
+    tasks = tuple(data.task_ids)
+    depot_to = _single_source_shortest_travel_lower_bounds(data, "depot")
+    from_task = {
+        task_id: _single_source_shortest_travel_lower_bounds(data, task_id)
+        for task_id in tasks
+    }
+    bounds: dict[tuple[str, str], float] = {}
+    for left_index, left_task in enumerate(tasks):
+        left = data.tasks[left_task]
+        left_weight = max(0.0, float(left.science_weight))
+        left_service = float(left.service_time)
+        for right_task in tasks[left_index + 1 :]:
+            right = data.tasks[right_task]
+            right_weight = max(0.0, float(right.science_weight))
+            if left_weight + right_weight <= 1.0e-12:
+                continue
+            right_service = float(right.service_time)
+            left_then_right = (
+                left_weight * float(depot_to.get(left_task, 0.0))
+                + right_weight
+                * (
+                    float(depot_to.get(left_task, 0.0))
+                    + left_service
+                    + float(from_task[left_task].get(right_task, 0.0))
+                )
+            )
+            right_then_left = (
+                right_weight * float(depot_to.get(right_task, 0.0))
+                + left_weight
+                * (
+                    float(depot_to.get(right_task, 0.0))
+                    + right_service
+                    + float(from_task[right_task].get(left_task, 0.0))
+                )
+            )
+            bounds[(left_task, right_task)] = max(0.0, min(left_then_right, right_then_left))
+    return bounds
+
+
+def _pair_time_window_infeasible_pairs(data: LunarIceData) -> dict[tuple[str, str], float]:
+    """Task pairs that cannot be served in the same sortie in either order.
+
+    The check uses full-graph shortest travel-time lower bounds and allows
+    waiting, so a detected infeasible pair is safe to cut.  The returned value is
+    the smallest lower-bound violation margin over both orders.
+    """
+
+    tasks = tuple(data.task_ids)
+    depot_to = _single_source_shortest_travel_lower_bounds(data, "depot")
+    to_depot = _single_source_shortest_travel_lower_bounds(data, "depot", reverse=True)
+    from_task = {
+        task_id: _single_source_shortest_travel_lower_bounds(data, task_id)
+        for task_id in tasks
+    }
+    infeasible: dict[tuple[str, str], float] = {}
+    for left_index, left_task in enumerate(tasks):
+        for right_task in tasks[left_index + 1 :]:
+            left_margin = _two_task_time_window_violation_lower_bound(
+                data,
+                first_task=left_task,
+                second_task=right_task,
+                depot_to=depot_to,
+                to_depot=to_depot,
+                from_task=from_task,
+            )
+            right_margin = _two_task_time_window_violation_lower_bound(
+                data,
+                first_task=right_task,
+                second_task=left_task,
+                depot_to=depot_to,
+                to_depot=to_depot,
+                from_task=from_task,
+            )
+            if left_margin > 1.0e-9 and right_margin > 1.0e-9:
+                infeasible[(left_task, right_task)] = round(min(left_margin, right_margin), 9)
+    return infeasible
+
+
+def _pair_time_window_forced_precedence_pairs(data: LunarIceData) -> dict[tuple[str, str], float]:
+    """Task-pair precedence implications from one-way time-window infeasibility.
+
+    Keys are ``(must_precede, must_follow)``.  If the two tasks are selected in
+    the same sortie, the first task in the key must be served before the second.
+    The value is the infeasible-order lower-bound violation margin.
+    """
+
+    tasks = tuple(data.task_ids)
+    depot_to = _single_source_shortest_travel_lower_bounds(data, "depot")
+    to_depot = _single_source_shortest_travel_lower_bounds(data, "depot", reverse=True)
+    from_task = {
+        task_id: _single_source_shortest_travel_lower_bounds(data, task_id)
+        for task_id in tasks
+    }
+    forced: dict[tuple[str, str], float] = {}
+    for left_index, left_task in enumerate(tasks):
+        for right_task in tasks[left_index + 1 :]:
+            left_before_right_margin = _two_task_time_window_violation_lower_bound(
+                data,
+                first_task=left_task,
+                second_task=right_task,
+                depot_to=depot_to,
+                to_depot=to_depot,
+                from_task=from_task,
+            )
+            right_before_left_margin = _two_task_time_window_violation_lower_bound(
+                data,
+                first_task=right_task,
+                second_task=left_task,
+                depot_to=depot_to,
+                to_depot=to_depot,
+                from_task=from_task,
+            )
+            left_before_right_infeasible = left_before_right_margin > 1.0e-9
+            right_before_left_infeasible = right_before_left_margin > 1.0e-9
+            if left_before_right_infeasible and not right_before_left_infeasible:
+                forced[(right_task, left_task)] = round(left_before_right_margin, 9)
+            elif right_before_left_infeasible and not left_before_right_infeasible:
+                forced[(left_task, right_task)] = round(right_before_left_margin, 9)
+    return forced
+
+
+def _triple_time_window_infeasible_triples(
+    data: LunarIceData,
+    *,
+    pair_time_window_infeasible_by_pair: dict[tuple[str, str], float] | None = None,
+) -> dict[tuple[str, str, str], float]:
+    """Task triples that cannot be served in the same sortie in any order.
+
+    The test is deliberately optimistic: every travel leg uses a shortest-path
+    lower bound and the schedule starts each task as early as possible.  If all
+    six optimistic permutations violate a task time window or the horizon return
+    limit, every real fixed-graph route serving the triple in one sortie is
+    infeasible.
+    """
+
+    tasks = tuple(data.task_ids)
+    depot_to = _single_source_shortest_travel_lower_bounds(data, "depot")
+    to_depot = _single_source_shortest_travel_lower_bounds(data, "depot", reverse=True)
+    from_task = {
+        task_id: _single_source_shortest_travel_lower_bounds(data, task_id)
+        for task_id in tasks
+    }
+    pair_infeasible = {
+        tuple(sorted(pair))
+        for pair in (pair_time_window_infeasible_by_pair or {})
+    }
+    infeasible: dict[tuple[str, str, str], float] = {}
+    for triple in combinations(tasks, 3):
+        if any(tuple(sorted(pair)) in pair_infeasible for pair in combinations(triple, 2)):
+            continue
+        permutation_margins = tuple(
+            _task_sequence_time_window_violation_lower_bound(
+                data,
+                task_sequence=ordering,
+                depot_to=depot_to,
+                to_depot=to_depot,
+                from_task=from_task,
+            )
+            for ordering in permutations(triple)
+        )
+        if permutation_margins and min(permutation_margins) > 1.0e-9:
+            infeasible[triple] = round(min(permutation_margins), 9)
+    return infeasible
+
+
+def _quad_time_window_infeasible_quads(
+    data: LunarIceData,
+    *,
+    pair_time_window_infeasible_by_pair: dict[tuple[str, str], float] | None = None,
+    triple_time_window_infeasible_by_triple: dict[tuple[str, str, str], float] | None = None,
+) -> dict[tuple[str, str, str, str], float]:
+    """Task quads that cannot be served in the same sortie in any order."""
+
+    tasks = tuple(data.task_ids)
+    depot_to = _single_source_shortest_travel_lower_bounds(data, "depot")
+    to_depot = _single_source_shortest_travel_lower_bounds(data, "depot", reverse=True)
+    from_task = {
+        task_id: _single_source_shortest_travel_lower_bounds(data, task_id)
+        for task_id in tasks
+    }
+    pair_infeasible = {
+        tuple(sorted(pair))
+        for pair in (pair_time_window_infeasible_by_pair or {})
+    }
+    triple_infeasible = {
+        tuple(sorted(triple))
+        for triple in (triple_time_window_infeasible_by_triple or {})
+    }
+    infeasible: dict[tuple[str, str, str, str], float] = {}
+    for quad in combinations(tasks, 4):
+        if any(tuple(sorted(pair)) in pair_infeasible for pair in combinations(quad, 2)):
+            continue
+        if any(tuple(sorted(triple)) in triple_infeasible for triple in combinations(quad, 3)):
+            continue
+        permutation_margins = tuple(
+            _task_sequence_time_window_violation_lower_bound(
+                data,
+                task_sequence=ordering,
+                depot_to=depot_to,
+                to_depot=to_depot,
+                from_task=from_task,
+            )
+            for ordering in permutations(quad)
+        )
+        if permutation_margins and min(permutation_margins) > 1.0e-9:
+            infeasible[quad] = round(min(permutation_margins), 9)
+    return infeasible
+
+
+def _task_sequence_time_window_violation_lower_bound(
+    data: LunarIceData,
+    *,
+    task_sequence: Iterable[str],
+    depot_to: dict[str, float],
+    to_depot: dict[str, float],
+    from_task: dict[str, dict[str, float]],
+) -> float:
+    sequence = tuple(str(task_id) for task_id in task_sequence)
+    if not sequence:
+        return 0.0
+    first_task = data.tasks[sequence[0]]
+    current_start = max(
+        float(first_task.ready_time),
+        float(depot_to.get(sequence[0], 0.0)),
+    )
+    max_violation = current_start - (float(first_task.due_time) - float(first_task.service_time))
+    previous_task_id = sequence[0]
+    previous_task = first_task
+    for task_id in sequence[1:]:
+        task = data.tasks[task_id]
+        current_start = max(
+            float(task.ready_time),
+            current_start
+            + float(previous_task.service_time)
+            + float(from_task[previous_task_id].get(task_id, 0.0)),
+        )
+        max_violation = max(
+            max_violation,
+            current_start - (float(task.due_time) - float(task.service_time)),
+        )
+        previous_task_id = task_id
+        previous_task = task
+    return_finish = (
+        current_start
+        + float(previous_task.service_time)
+        + float(to_depot.get(previous_task_id, 0.0))
+        + float(data.dock_overhead_min)
+    )
+    return max(max_violation, return_finish - float(data.horizon))
+
+
+def _two_task_time_window_violation_lower_bound(
+    data: LunarIceData,
+    *,
+    first_task: str,
+    second_task: str,
+    depot_to: dict[str, float],
+    to_depot: dict[str, float],
+    from_task: dict[str, dict[str, float]],
+) -> float:
+    first = data.tasks[str(first_task)]
+    second = data.tasks[str(second_task)]
+    first_latest = float(first.due_time) - float(first.service_time)
+    second_latest = float(second.due_time) - float(second.service_time)
+    first_start = max(float(first.ready_time), float(depot_to.get(str(first_task), 0.0)))
+    second_start = max(
+        float(second.ready_time),
+        first_start
+        + float(first.service_time)
+        + float(from_task[str(first_task)].get(str(second_task), 0.0)),
+    )
+    return_finish = (
+        second_start
+        + float(second.service_time)
+        + float(to_depot.get(str(second_task), 0.0))
+        + float(data.dock_overhead_min)
+    )
+    return max(
+        first_start - first_latest,
+        second_start - second_latest,
+        return_finish - float(data.horizon),
+    )
+
+
+def _pair_route_energy_lower_bounds(data: LunarIceData) -> dict[tuple[str, str], float]:
+    """Lower bound on sortie energy when two tasks are served together."""
+
+    tasks = tuple(data.task_ids)
+    energy_distances = _all_source_shortest_arc_attribute_lower_bounds(data, "energy_proxy")
+    return _pair_route_energy_lower_bounds_from_distances(data, energy_distances, tasks=tasks)
+
+
+def _single_task_route_energy_lower_bounds(data: LunarIceData) -> dict[str, float]:
+    """Lower bound on sortie energy when a task is selected."""
+
+    depot_to = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "energy_proxy")
+    to_depot = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "energy_proxy", reverse=True)
+    return {
+        task_id: max(
+            0.0,
+            float(depot_to.get(task_id, 0.0))
+            + float(data.tasks[task_id].service_energy)
+            + float(to_depot.get(task_id, 0.0)),
+        )
+        for task_id in data.task_ids
+    }
+
+
+def _single_task_route_shadow_lower_bounds(data: LunarIceData) -> dict[str, float]:
+    """Lower bound on sortie shadow exposure when a task is selected."""
+
+    depot_to = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "shadow_exposure_min")
+    to_depot = _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        "depot",
+        "shadow_exposure_min",
+        reverse=True,
+    )
+    return {
+        task_id: max(
+            0.0,
+            float(depot_to.get(task_id, 0.0))
+            + float(data.tasks[task_id].local_shadow_score) * float(data.tasks[task_id].service_time)
+            + float(to_depot.get(task_id, 0.0)),
+        )
+        for task_id in data.task_ids
+    }
+
+
+def _pair_route_shadow_lower_bounds(data: LunarIceData) -> dict[tuple[str, str], float]:
+    """Lower bound on sortie shadow exposure when two tasks are served together."""
+
+    tasks = tuple(data.task_ids)
+    shadow_distances = _all_source_shortest_arc_attribute_lower_bounds(data, "shadow_exposure_min")
+    depot_to = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "shadow_exposure_min")
+    to_depot = _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        "depot",
+        "shadow_exposure_min",
+        reverse=True,
+    )
+    bounds: dict[tuple[str, str], float] = {}
+    for left_index, left_task in enumerate(tasks):
+        left_service = float(data.tasks[left_task].local_shadow_score) * float(data.tasks[left_task].service_time)
+        for right_task in tasks[left_index + 1 :]:
+            right_service = float(data.tasks[right_task].local_shadow_score) * float(
+                data.tasks[right_task].service_time
+            )
+            left_then_right = (
+                float(depot_to.get(left_task, 0.0))
+                + left_service
+                + float(shadow_distances[left_task].get(right_task, 0.0))
+                + right_service
+                + float(to_depot.get(right_task, 0.0))
+            )
+            right_then_left = (
+                float(depot_to.get(right_task, 0.0))
+                + right_service
+                + float(shadow_distances[right_task].get(left_task, 0.0))
+                + left_service
+                + float(to_depot.get(left_task, 0.0))
+            )
+            bounds[(left_task, right_task)] = max(0.0, min(left_then_right, right_then_left))
+    return bounds
+
+
+def _triple_route_shadow_infeasible_lower_bounds(
+    data: LunarIceData,
+    pair_shadow_lb_by_pair: dict[tuple[str, str], float],
+) -> dict[tuple[str, str, str], float]:
+    """Shadow-infeasible three-task sets not already dominated by pair cuts."""
+
+    tasks = tuple(data.task_ids)
+    shadow_distances = _all_source_shortest_arc_attribute_lower_bounds(data, "shadow_exposure_min")
+    depot_to = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "shadow_exposure_min")
+    to_depot = _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        "depot",
+        "shadow_exposure_min",
+        reverse=True,
+    )
+    infeasible_triples: dict[tuple[str, str, str], float] = {}
+    limit = float(data.max_shadow_exposure_per_sortie)
+    for triple in combinations(tasks, 3):
+        if any(
+            float(pair_shadow_lb_by_pair.get(tuple(sorted(pair)), 0.0)) > limit + 1.0e-9
+            for pair in combinations(triple, 2)
+        ):
+            continue
+        best = math.inf
+        for order in permutations(triple):
+            shadow = float(depot_to.get(order[0], 0.0))
+            for source, target in zip(order, order[1:]):
+                shadow += float(data.tasks[source].local_shadow_score) * float(data.tasks[source].service_time)
+                shadow += float(shadow_distances[source].get(target, 0.0))
+            shadow += float(data.tasks[order[-1]].local_shadow_score) * float(data.tasks[order[-1]].service_time)
+            shadow += float(to_depot.get(order[-1], 0.0))
+            best = min(best, shadow)
+        if math.isfinite(best) and best > limit + 1.0e-9:
+            infeasible_triples[tuple(sorted(triple))] = max(0.0, float(best))
+    return infeasible_triples
+
+
+def _demand_cover_subsets(
+    data: LunarIceData,
+    *,
+    max_cover_size: int = 5,
+) -> dict[tuple[str, ...], float]:
+    """Minimal demand covers up to a bounded cardinality."""
+
+    tasks = tuple(data.task_ids)
+    limit = float(data.capacity)
+    covers: dict[tuple[str, ...], float] = {}
+    max_size = min(max(2, int(max_cover_size)), len(tasks), int(data.max_tasks_per_trip))
+    task_demand = {task_id: float(data.tasks[task_id].demand) for task_id in tasks}
+    for size in range(2, max_size + 1):
+        for subset in combinations(tasks, size):
+            demand = sum(task_demand[task_id] for task_id in subset)
+            if demand <= limit + 1.0e-9:
+                continue
+            minimal = True
+            for index in range(size):
+                proper = subset[:index] + subset[index + 1 :]
+                if sum(task_demand[task_id] for task_id in proper) > limit + 1.0e-9:
+                    minimal = False
+                    break
+            if minimal:
+                covers[tuple(sorted(subset))] = max(0.0, float(demand))
+    return covers
+
+
+def _pair_route_energy_lower_bounds_from_distances(
+    data: LunarIceData,
+    energy_distances: dict[str, dict[str, float]],
+    *,
+    tasks: tuple[str, ...],
+) -> dict[tuple[str, str], float]:
+    depot_to = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "energy_proxy")
+    to_depot = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "energy_proxy", reverse=True)
+    bounds: dict[tuple[str, str], float] = {}
+    for left_index, left_task in enumerate(tasks):
+        left_service = float(data.tasks[left_task].service_energy)
+        for right_task in tasks[left_index + 1 :]:
+            right_service = float(data.tasks[right_task].service_energy)
+            left_then_right = (
+                float(depot_to.get(left_task, 0.0))
+                + left_service
+                + float(energy_distances[left_task].get(right_task, 0.0))
+                + right_service
+                + float(to_depot.get(right_task, 0.0))
+            )
+            right_then_left = (
+                float(depot_to.get(right_task, 0.0))
+                + right_service
+                + float(energy_distances[right_task].get(left_task, 0.0))
+                + left_service
+                + float(to_depot.get(left_task, 0.0))
+            )
+            bounds[(left_task, right_task)] = max(0.0, min(left_then_right, right_then_left))
+    return bounds
+
+
+def _triple_route_energy_infeasible_lower_bounds(
+    data: LunarIceData,
+    pair_energy_lb_by_pair: dict[tuple[str, str], float],
+) -> dict[tuple[str, str, str], float]:
+    """Energy-infeasible three-task sets not already dominated by pair cuts."""
+
+    tasks = tuple(data.task_ids)
+    energy_distances = _all_source_shortest_arc_attribute_lower_bounds(data, "energy_proxy")
+    depot_to = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "energy_proxy")
+    to_depot = _single_source_shortest_arc_attribute_lower_bounds(data, "depot", "energy_proxy", reverse=True)
+    infeasible_triples: dict[tuple[str, str, str], float] = {}
+    limit = float(data.energy_limit)
+    for triple in combinations(tasks, 3):
+        if any(
+            float(pair_energy_lb_by_pair.get(tuple(sorted(pair)), 0.0)) > limit + 1.0e-9
+            for pair in combinations(triple, 2)
+        ):
+            continue
+        best = math.inf
+        for order in permutations(triple):
+            energy = float(depot_to.get(order[0], 0.0))
+            for source, target in zip(order, order[1:]):
+                energy += float(data.tasks[source].service_energy)
+                energy += float(energy_distances[source].get(target, 0.0))
+            energy += float(data.tasks[order[-1]].service_energy)
+            energy += float(to_depot.get(order[-1], 0.0))
+            best = min(best, energy)
+        if math.isfinite(best) and best > limit + 1.0e-9:
+            infeasible_triples[tuple(sorted(triple))] = max(0.0, float(best))
+    return infeasible_triples
+
+
+def _all_source_shortest_arc_attribute_lower_bounds(
+    data: LunarIceData,
+    arc_attribute: str,
+) -> dict[str, dict[str, float]]:
+    nodes = ("depot", *data.task_ids)
+    return {
+        node: _single_source_shortest_arc_attribute_lower_bounds(data, node, arc_attribute)
+        for node in nodes
+    }
+
+
+def _single_source_shortest_travel_lower_bounds(
+    data: LunarIceData,
+    source_node: str,
+    *,
+    reverse: bool = False,
+) -> dict[str, float]:
+    return _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        source_node,
+        "travel_time_min",
+        reverse=reverse,
+    )
+
+
+def _single_source_shortest_arc_attribute_lower_bounds(
+    data: LunarIceData,
+    source_node: str,
+    arc_attribute: str,
+    *,
+    reverse: bool = False,
+) -> dict[str, float]:
+    tasks = tuple(data.task_ids)
+    nodes = ("depot", *tasks)
+    distances = {node: math.inf for node in nodes}
+    distances[str(source_node)] = 0.0
+    unvisited = set(nodes)
+    min_arc_travel: dict[tuple[str, str], float] = {}
+    for (source, target), options in data.arcs.items():
+        arc_source = str(target) if reverse else str(source)
+        arc_target = str(source) if reverse else str(target)
+        if arc_source not in unvisited or arc_target not in unvisited or arc_source == arc_target:
+            continue
+        values = [float(getattr(option, str(arc_attribute))) for option in options.values()]
+        if values:
+            min_arc_travel[(arc_source, arc_target)] = max(0.0, min(values))
+
+    while unvisited:
+        current = min(unvisited, key=lambda node: distances[node])
+        if not math.isfinite(distances[current]):
+            break
+        unvisited.remove(current)
+        for target in tuple(unvisited):
+            travel = min_arc_travel.get((current, target))
+            if travel is None:
+                continue
+            candidate = distances[current] + travel
+            if candidate < distances[target]:
+                distances[target] = candidate
+
+    return {
+        node: max(0.0, float(distance)) if math.isfinite(distance) else 0.0
+        for node, distance in distances.items()
+    }
 
 
 def solve_gurobi_compact_fixed_graph(
@@ -1028,6 +1650,24 @@ def solve_highs_compact_single_journey_pricing(
     pair_adjacency_cuts: bool = False,
     latest_service_start_slot_bound: bool = True,
     time_window_arc_pruning: bool = True,
+    sortie_slot_position_bounds: bool = False,
+    service_start_depot_travel_lb: bool = False,
+    task_to_depot_return_travel_lb: bool = False,
+    pair_route_duration_lb: bool = False,
+    pair_weighted_completion_lb: bool = False,
+    demand_cover_cut: bool = False,
+    single_task_energy_lb: bool = False,
+    single_task_shadow_lb: bool = False,
+    pair_energy_lb: bool = False,
+    pair_shadow_lb: bool = False,
+    pair_energy_infeasible_cut: bool = False,
+    pair_time_window_infeasible_cut: bool = False,
+    pair_time_window_precedence_cut: bool = False,
+    triple_time_window_infeasible_cut: bool = False,
+    quad_time_window_infeasible_cut: bool = False,
+    pair_shadow_infeasible_cut: bool = False,
+    triple_shadow_infeasible_cut: bool = False,
+    triple_energy_infeasible_cut: bool = False,
     negative_feasibility_search: bool = False,
     forbidden_arc_patterns: Iterable[Iterable[tuple[int, str, str, str]]] | None = None,
     forbidden_task_sets: Iterable[Iterable[str]] | None = None,
@@ -1084,6 +1724,11 @@ def solve_highs_compact_single_journey_pricing(
     min_return_duration = float(slot_bound["min_return_duration_lower_bound"])
     min_active_duration = float(slot_bound["min_duration_lower_bound"])
     min_out_return_travel = float(slot_bound["min_out_return_travel_lower_bound"])
+    latest_sortie_start_upper_bound = max(
+        0.0,
+        float(slot_bound["latest_service_start_upper_bound"])
+        - float(slot_bound["min_depot_outbound_travel_lower_bound"]),
+    )
     nodes = ("depot", *tasks)
     path_type_cache, pruning = _pricing_path_type_cache(
         data,
@@ -1096,6 +1741,94 @@ def solve_highs_compact_single_journey_pricing(
         for row in (forbidden_task_sets or tuple())
     )
     forbidden_task_sets_normalized = tuple(row for row in forbidden_task_sets_normalized if row)
+    service_start_lb_by_task = (
+        _depot_to_task_shortest_travel_lower_bounds(data)
+        if service_start_depot_travel_lb
+        else {task_id: 0.0 for task_id in tasks}
+    )
+    task_return_lb_by_task = (
+        _task_to_depot_shortest_travel_lower_bounds(data)
+        if task_to_depot_return_travel_lb
+        else {task_id: 0.0 for task_id in tasks}
+    )
+    pair_route_duration_lb_by_pair = (
+        _pair_route_duration_lower_bounds(data)
+        if pair_route_duration_lb
+        else {}
+    )
+    pair_weighted_completion_lb_by_pair = (
+        _pair_weighted_completion_lower_bounds(data)
+        if pair_weighted_completion_lb
+        else {}
+    )
+    demand_cover_by_subset = (
+        _demand_cover_subsets(data)
+        if demand_cover_cut
+        else {}
+    )
+    single_task_energy_lb_by_task = (
+        _single_task_route_energy_lower_bounds(data)
+        if single_task_energy_lb
+        else {}
+    )
+    single_task_shadow_lb_by_task = (
+        _single_task_route_shadow_lower_bounds(data)
+        if single_task_shadow_lb
+        else {}
+    )
+    pair_energy_lb_by_pair = (
+        _pair_route_energy_lower_bounds(data)
+        if pair_energy_lb or pair_energy_infeasible_cut or triple_energy_infeasible_cut
+        else {}
+    )
+    pair_time_window_infeasible_by_pair = (
+        _pair_time_window_infeasible_pairs(data)
+        if pair_time_window_infeasible_cut
+        else {}
+    )
+    pair_time_window_precedence_by_pair = (
+        _pair_time_window_forced_precedence_pairs(data)
+        if pair_time_window_precedence_cut and mtz_connectivity
+        else {}
+    )
+    triple_time_window_infeasible_by_triple = (
+        _triple_time_window_infeasible_triples(
+            data,
+            pair_time_window_infeasible_by_pair=pair_time_window_infeasible_by_pair
+            if pair_time_window_infeasible_cut
+            else {},
+        )
+        if triple_time_window_infeasible_cut
+        else {}
+    )
+    quad_time_window_infeasible_by_quad = (
+        _quad_time_window_infeasible_quads(
+            data,
+            pair_time_window_infeasible_by_pair=pair_time_window_infeasible_by_pair
+            if pair_time_window_infeasible_cut
+            else {},
+            triple_time_window_infeasible_by_triple=triple_time_window_infeasible_by_triple
+            if triple_time_window_infeasible_cut
+            else {},
+        )
+        if quad_time_window_infeasible_cut
+        else {}
+    )
+    pair_shadow_lb_by_pair = (
+        _pair_route_shadow_lower_bounds(data)
+        if pair_shadow_lb or pair_shadow_infeasible_cut or triple_shadow_infeasible_cut
+        else {}
+    )
+    triple_shadow_infeasible_lb_by_triple = (
+        _triple_route_shadow_infeasible_lower_bounds(data, pair_shadow_lb_by_pair)
+        if triple_shadow_infeasible_cut
+        else {}
+    )
+    triple_energy_infeasible_lb_by_triple = (
+        _triple_route_energy_infeasible_lower_bounds(data, pair_energy_lb_by_pair)
+        if triple_energy_infeasible_cut
+        else {}
+    )
 
     highs = highspy.Highs()
     highs.setOptionValue("output_flag", bool(output_flag))
@@ -1211,6 +1944,24 @@ def solve_highs_compact_single_journey_pricing(
 
     pair_adjacency_cut_count_total = 0
     mtz_endpoint_order_cut_count_total = 0
+    sortie_slot_position_bound_count_total = 0
+    service_start_depot_travel_lb_count_total = 0
+    task_to_depot_return_travel_lb_count_total = 0
+    pair_route_duration_lb_count_total = 0
+    pair_weighted_completion_lb_count_total = 0
+    demand_cover_cut_count_total = 0
+    single_task_energy_lb_count_total = 0
+    single_task_shadow_lb_count_total = 0
+    pair_energy_lb_count_total = 0
+    pair_shadow_lb_count_total = 0
+    pair_energy_infeasible_cut_count_total = 0
+    pair_time_window_infeasible_cut_count_total = 0
+    pair_time_window_precedence_cut_count_total = 0
+    triple_time_window_infeasible_cut_count_total = 0
+    quad_time_window_infeasible_cut_count_total = 0
+    pair_shadow_infeasible_cut_count_total = 0
+    triple_shadow_infeasible_cut_count_total = 0
+    triple_energy_infeasible_cut_count_total = 0
     for slot in range(sortie_slots):
         z_col = z[vehicle, slot]
         add_le({z_col: 1.0, journey_active: -1.0}, 0.0)
@@ -1219,6 +1970,23 @@ def solve_highs_compact_single_journey_pricing(
         if slot > 0:
             add_ge({sortie_start[vehicle, slot]: 1.0, sortie_end[vehicle, slot - 1]: -1.0}, 0.0)
         add_ge({sortie_end[vehicle, slot]: 1.0, sortie_start[vehicle, slot]: -1.0}, 0.0)
+        if sortie_slot_position_bounds:
+            start_lb = float(slot) * min_active_duration
+            if start_lb > 1.0e-9:
+                add_ge({sortie_start[vehicle, slot]: 1.0, z_col: -start_lb}, 0.0)
+                sortie_slot_position_bound_count_total += 1
+            end_lb = float(slot + 1) * min_active_duration
+            if end_lb > 1.0e-9:
+                add_ge({sortie_end[vehicle, slot]: 1.0, z_col: -end_lb}, 0.0)
+                sortie_slot_position_bound_count_total += 1
+            add_le(
+                {
+                    sortie_start[vehicle, slot]: 1.0,
+                    z_col: float(data.horizon) - latest_sortie_start_upper_bound,
+                },
+                float(data.horizon),
+            )
+            sortie_slot_position_bound_count_total += 1
         min_return_m = float(data.horizon) + min_return_duration
         min_active_m = float(data.horizon) + min_active_duration
         add_ge(
@@ -1276,6 +2044,30 @@ def solve_highs_compact_single_journey_pricing(
                 add_le({order_col: 1.0, y_col: -float(data.max_tasks_per_trip)}, 0.0)
                 add_ge({order_col: 1.0, y_col: -1.0}, 0.0)
             add_ge({start_col: 1.0, y_col: -float(task.ready_time)}, 0.0)
+            depot_travel_lb = float(service_start_lb_by_task.get(str(task_id), 0.0))
+            if service_start_depot_travel_lb and depot_travel_lb > 1.0e-9:
+                time_m = float(data.horizon)
+                add_ge(
+                    {
+                        start_col: 1.0,
+                        sortie_start[vehicle, slot]: -1.0,
+                        y_col: -float(time_m + depot_travel_lb),
+                    },
+                    -time_m,
+                )
+                service_start_depot_travel_lb_count_total += 1
+            task_return_lb = float(task.service_time) + float(task_return_lb_by_task.get(str(task_id), 0.0))
+            if task_to_depot_return_travel_lb and task_return_lb > 1.0e-9:
+                time_m = float(data.horizon)
+                add_ge(
+                    {
+                        sortie_return[vehicle, slot]: 1.0,
+                        start_col: -1.0,
+                        y_col: -float(time_m + task_return_lb),
+                    },
+                    -time_m,
+                )
+                task_to_depot_return_travel_lb_count_total += 1
             add_le({start_col: 1.0, y_col: -(float(task.due_time) - float(task.service_time))}, 0.0)
             energy_coefficients[y_col] = energy_coefficients.get(y_col, 0.0) + float(task.service_energy)
             shadow_coefficients[y_col] = (
@@ -1311,6 +2103,217 @@ def solve_highs_compact_single_journey_pricing(
                     ) - 0.5
                     add_le(coefficients, 0.0)
                     pair_adjacency_cut_count_total += 1
+
+        if pair_route_duration_lb:
+            for (left_task, right_task), duration_lb in pair_route_duration_lb_by_pair.items():
+                pair_lb = float(duration_lb)
+                if pair_lb <= 1.0e-9:
+                    continue
+                time_m = max(float(data.horizon), pair_lb)
+                add_ge(
+                    {
+                        sortie_return[vehicle, slot]: 1.0,
+                        sortie_start[vehicle, slot]: -1.0,
+                        y[vehicle, slot, left_task]: -time_m,
+                        y[vehicle, slot, right_task]: -time_m,
+                    },
+                    pair_lb - (2.0 * time_m),
+                )
+                pair_route_duration_lb_count_total += 1
+
+        if pair_weighted_completion_lb:
+            for (left_task, right_task), completion_lb in pair_weighted_completion_lb_by_pair.items():
+                pair_lb = float(completion_lb)
+                if pair_lb <= 1.0e-9:
+                    continue
+                left_weight = max(0.0, float(data.tasks[left_task].science_weight))
+                right_weight = max(0.0, float(data.tasks[right_task].science_weight))
+                total_weight = left_weight + right_weight
+                if total_weight <= 1.0e-12:
+                    continue
+                time_m = pair_lb + total_weight * float(data.horizon)
+                add_ge(
+                    {
+                        service_start[vehicle, slot, left_task]: left_weight,
+                        service_start[vehicle, slot, right_task]: right_weight,
+                        sortie_start[vehicle, slot]: -total_weight,
+                        y[vehicle, slot, left_task]: -time_m,
+                        y[vehicle, slot, right_task]: -time_m,
+                    },
+                    pair_lb - (2.0 * time_m),
+                )
+                pair_weighted_completion_lb_count_total += 1
+
+        if demand_cover_cut:
+            for cover in demand_cover_by_subset:
+                add_le(
+                    {y[vehicle, slot, task_id]: 1.0 for task_id in cover},
+                    float(len(cover) - 1),
+                )
+                demand_cover_cut_count_total += 1
+
+        if single_task_energy_lb:
+            for task_id, energy_lb in single_task_energy_lb_by_task.items():
+                lb = float(energy_lb)
+                if lb <= 1.0e-9:
+                    continue
+                coefficients = dict(energy_coefficients)
+                y_col = y[vehicle, slot, task_id]
+                coefficients[y_col] = coefficients.get(y_col, 0.0) - lb
+                add_ge(coefficients, 0.0)
+                single_task_energy_lb_count_total += 1
+
+        if single_task_shadow_lb:
+            for task_id, shadow_lb in single_task_shadow_lb_by_task.items():
+                lb = float(shadow_lb)
+                if lb <= 1.0e-9:
+                    continue
+                coefficients = dict(shadow_coefficients)
+                y_col = y[vehicle, slot, task_id]
+                coefficients[y_col] = coefficients.get(y_col, 0.0) - lb
+                add_ge(coefficients, 0.0)
+                single_task_shadow_lb_count_total += 1
+
+        if pair_energy_infeasible_cut:
+            for (left_task, right_task), energy_lb in pair_energy_lb_by_pair.items():
+                if float(energy_lb) <= float(data.energy_limit) + 1.0e-9:
+                    continue
+                add_le(
+                    {
+                        y[vehicle, slot, left_task]: 1.0,
+                        y[vehicle, slot, right_task]: 1.0,
+                    },
+                    1.0,
+                )
+                pair_energy_infeasible_cut_count_total += 1
+
+        if pair_time_window_infeasible_cut:
+            for left_task, right_task in pair_time_window_infeasible_by_pair:
+                add_le(
+                    {
+                        y[vehicle, slot, left_task]: 1.0,
+                        y[vehicle, slot, right_task]: 1.0,
+                    },
+                    1.0,
+                )
+                pair_time_window_infeasible_cut_count_total += 1
+
+        if mtz_connectivity and pair_time_window_precedence_cut:
+            order_m = float(data.max_tasks_per_trip)
+            for must_precede_task, must_follow_task in pair_time_window_precedence_by_pair:
+                add_ge(
+                    {
+                        visit_order[vehicle, slot, must_follow_task]: 1.0,
+                        visit_order[vehicle, slot, must_precede_task]: -1.0,
+                        y[vehicle, slot, must_precede_task]: -order_m,
+                        y[vehicle, slot, must_follow_task]: -order_m,
+                    },
+                    1.0 - (2.0 * order_m),
+                )
+                pair_time_window_precedence_cut_count_total += 1
+
+        if triple_time_window_infeasible_cut:
+            for left_task, middle_task, right_task in triple_time_window_infeasible_by_triple:
+                add_le(
+                    {
+                        y[vehicle, slot, left_task]: 1.0,
+                        y[vehicle, slot, middle_task]: 1.0,
+                        y[vehicle, slot, right_task]: 1.0,
+                    },
+                    2.0,
+                )
+                triple_time_window_infeasible_cut_count_total += 1
+
+        if quad_time_window_infeasible_cut:
+            for quad in quad_time_window_infeasible_by_quad:
+                first_task, second_task, third_task, fourth_task = quad
+                add_le(
+                    {
+                        y[vehicle, slot, first_task]: 1.0,
+                        y[vehicle, slot, second_task]: 1.0,
+                        y[vehicle, slot, third_task]: 1.0,
+                        y[vehicle, slot, fourth_task]: 1.0,
+                    },
+                    3.0,
+                )
+                quad_time_window_infeasible_cut_count_total += 1
+
+        if pair_shadow_infeasible_cut:
+            for (left_task, right_task), shadow_lb in pair_shadow_lb_by_pair.items():
+                if float(shadow_lb) <= float(data.max_shadow_exposure_per_sortie) + 1.0e-9:
+                    continue
+                add_le(
+                    {
+                        y[vehicle, slot, left_task]: 1.0,
+                        y[vehicle, slot, right_task]: 1.0,
+                    },
+                    1.0,
+                )
+                pair_shadow_infeasible_cut_count_total += 1
+
+        if triple_energy_infeasible_cut:
+            for triple in triple_energy_infeasible_lb_by_triple:
+                left_task, middle_task, right_task = triple
+                add_le(
+                    {
+                        y[vehicle, slot, left_task]: 1.0,
+                        y[vehicle, slot, middle_task]: 1.0,
+                        y[vehicle, slot, right_task]: 1.0,
+                    },
+                    2.0,
+                )
+                triple_energy_infeasible_cut_count_total += 1
+
+        if triple_shadow_infeasible_cut:
+            for triple in triple_shadow_infeasible_lb_by_triple:
+                left_task, middle_task, right_task = triple
+                add_le(
+                    {
+                        y[vehicle, slot, left_task]: 1.0,
+                        y[vehicle, slot, middle_task]: 1.0,
+                        y[vehicle, slot, right_task]: 1.0,
+                    },
+                    2.0,
+                )
+                triple_shadow_infeasible_cut_count_total += 1
+
+        if pair_energy_lb:
+            for (left_task, right_task), energy_lb in pair_energy_lb_by_pair.items():
+                pair_lb = float(energy_lb)
+                if pair_lb <= 1.0e-9:
+                    continue
+                energy_m = max(float(data.energy_limit), pair_lb)
+                coefficients = dict(energy_coefficients)
+                coefficients[y[vehicle, slot, left_task]] = (
+                    coefficients.get(y[vehicle, slot, left_task], 0.0) - energy_m
+                )
+                coefficients[y[vehicle, slot, right_task]] = (
+                    coefficients.get(y[vehicle, slot, right_task], 0.0) - energy_m
+                )
+                add_ge(
+                    coefficients,
+                    pair_lb - (2.0 * energy_m),
+                )
+                pair_energy_lb_count_total += 1
+
+        if pair_shadow_lb:
+            for (left_task, right_task), shadow_lb in pair_shadow_lb_by_pair.items():
+                pair_lb = float(shadow_lb)
+                if pair_lb <= 1.0e-9:
+                    continue
+                shadow_m = max(float(data.max_shadow_exposure_per_sortie), pair_lb)
+                coefficients = dict(shadow_coefficients)
+                coefficients[y[vehicle, slot, left_task]] = (
+                    coefficients.get(y[vehicle, slot, left_task], 0.0) - shadow_m
+                )
+                coefficients[y[vehicle, slot, right_task]] = (
+                    coefficients.get(y[vehicle, slot, right_task], 0.0) - shadow_m
+                )
+                add_ge(
+                    coefficients,
+                    pair_lb - (2.0 * shadow_m),
+                )
+                pair_shadow_lb_count_total += 1
 
         add_le({**demand_coefficients, z_col: -float(data.capacity)}, 0.0)
         add_le({**energy_coefficients, z_col: -float(data.energy_limit)}, 0.0)
@@ -1537,6 +2540,7 @@ def solve_highs_compact_single_journey_pricing(
         "pricing_complete_for_all_task_subsets": bool((optimal or infeasible) and not restricted_by_forbidden_patterns),
         "best_reduced_cost": None if best_rc is None else round(float(best_rc), 9),
         "model_objective": None if model_objective is None else round(float(model_objective), 9),
+        "pricing_model_reduced_cost": None if model_objective is None else round(float(model_objective), 9),
         "manual_best_reduced_cost": None if manual_rc is None else round(float(manual_rc), 9),
         "pricing_best_reduced_cost": None if best_rc is None else round(float(best_rc), 9),
         "dual_bound": None if bound is None else round(float(bound), 9),
@@ -1564,6 +2568,201 @@ def solve_highs_compact_single_journey_pricing(
         "mtz_endpoint_order_cut_count": int(mtz_endpoint_order_cut_count_total),
         "pair_adjacency_cuts_enabled": bool(pair_adjacency_cuts),
         "pair_adjacency_cut_count": int(pair_adjacency_cut_count_total),
+        "sortie_slot_position_bounds_enabled": bool(sortie_slot_position_bounds),
+        "sortie_slot_position_bound_count": int(sortie_slot_position_bound_count_total),
+        "sortie_slot_latest_start_upper_bound": round(float(latest_sortie_start_upper_bound), 9),
+        "service_start_depot_travel_lb_enabled": bool(service_start_depot_travel_lb),
+        "service_start_depot_travel_lb_count": int(service_start_depot_travel_lb_count_total),
+        "service_start_depot_travel_lb_min": (
+            round(min(service_start_lb_by_task.values()), 9) if service_start_lb_by_task else None
+        ),
+        "service_start_depot_travel_lb_max": (
+            round(max(service_start_lb_by_task.values()), 9) if service_start_lb_by_task else None
+        ),
+        "task_to_depot_return_travel_lb_enabled": bool(task_to_depot_return_travel_lb),
+        "task_to_depot_return_travel_lb_count": int(task_to_depot_return_travel_lb_count_total),
+        "task_to_depot_return_travel_lb_min": (
+            round(min(task_return_lb_by_task.values()), 9) if task_return_lb_by_task else None
+        ),
+        "task_to_depot_return_travel_lb_max": (
+            round(max(task_return_lb_by_task.values()), 9) if task_return_lb_by_task else None
+        ),
+        "pair_route_duration_lb_enabled": bool(pair_route_duration_lb),
+        "pair_route_duration_lb_count": int(pair_route_duration_lb_count_total),
+        "pair_route_duration_lb_min": (
+            round(min(pair_route_duration_lb_by_pair.values()), 9)
+            if pair_route_duration_lb_by_pair
+            else None
+        ),
+        "pair_route_duration_lb_max": (
+            round(max(pair_route_duration_lb_by_pair.values()), 9)
+            if pair_route_duration_lb_by_pair
+            else None
+        ),
+        "pair_weighted_completion_lb_enabled": bool(pair_weighted_completion_lb),
+        "pair_weighted_completion_lb_count": int(pair_weighted_completion_lb_count_total),
+        "pair_weighted_completion_lb_min": (
+            round(min(pair_weighted_completion_lb_by_pair.values()), 9)
+            if pair_weighted_completion_lb_by_pair
+            else None
+        ),
+        "pair_weighted_completion_lb_max": (
+            round(max(pair_weighted_completion_lb_by_pair.values()), 9)
+            if pair_weighted_completion_lb_by_pair
+            else None
+        ),
+        "demand_cover_cut_enabled": bool(demand_cover_cut),
+        "demand_cover_cut_count": int(demand_cover_cut_count_total),
+        "demand_cover_subset_count": int(len(demand_cover_by_subset)),
+        "demand_cover_max_size": 5 if demand_cover_cut else 0,
+        "demand_cover_min_demand": (
+            round(min(demand_cover_by_subset.values()), 9) if demand_cover_by_subset else None
+        ),
+        "demand_cover_max_demand": (
+            round(max(demand_cover_by_subset.values()), 9) if demand_cover_by_subset else None
+        ),
+        "single_task_energy_lb_enabled": bool(single_task_energy_lb),
+        "single_task_energy_lb_count": int(single_task_energy_lb_count_total),
+        "single_task_energy_lb_min": (
+            round(min(single_task_energy_lb_by_task.values()), 9) if single_task_energy_lb_by_task else None
+        ),
+        "single_task_energy_lb_max": (
+            round(max(single_task_energy_lb_by_task.values()), 9) if single_task_energy_lb_by_task else None
+        ),
+        "single_task_shadow_lb_enabled": bool(single_task_shadow_lb),
+        "single_task_shadow_lb_count": int(single_task_shadow_lb_count_total),
+        "single_task_shadow_lb_min": (
+            round(min(single_task_shadow_lb_by_task.values()), 9) if single_task_shadow_lb_by_task else None
+        ),
+        "single_task_shadow_lb_max": (
+            round(max(single_task_shadow_lb_by_task.values()), 9) if single_task_shadow_lb_by_task else None
+        ),
+        "pair_energy_lb_enabled": bool(pair_energy_lb),
+        "pair_energy_lb_count": int(pair_energy_lb_count_total),
+        "pair_energy_lb_min": (
+            round(min(pair_energy_lb_by_pair.values()), 9) if pair_energy_lb_by_pair else None
+        ),
+        "pair_energy_lb_max": (
+            round(max(pair_energy_lb_by_pair.values()), 9) if pair_energy_lb_by_pair else None
+        ),
+        "pair_energy_lb_exceeds_limit_count": int(
+            sum(1 for value in pair_energy_lb_by_pair.values() if float(value) > float(data.energy_limit) + 1.0e-9)
+        ),
+        "pair_shadow_lb_enabled": bool(pair_shadow_lb),
+        "pair_shadow_lb_count": int(pair_shadow_lb_count_total),
+        "pair_shadow_lb_min": (
+            round(min(pair_shadow_lb_by_pair.values()), 9) if pair_shadow_lb_by_pair else None
+        ),
+        "pair_shadow_lb_max": (
+            round(max(pair_shadow_lb_by_pair.values()), 9) if pair_shadow_lb_by_pair else None
+        ),
+        "pair_shadow_lb_exceeds_limit_count": int(
+            sum(
+                1
+                for value in pair_shadow_lb_by_pair.values()
+                if float(value) > float(data.max_shadow_exposure_per_sortie) + 1.0e-9
+            )
+        ),
+        "pair_energy_infeasible_cut_enabled": bool(pair_energy_infeasible_cut),
+        "pair_energy_infeasible_cut_count": int(pair_energy_infeasible_cut_count_total),
+        "pair_energy_infeasible_pair_count": int(
+            sum(1 for value in pair_energy_lb_by_pair.values() if float(value) > float(data.energy_limit) + 1.0e-9)
+        ),
+        "pair_time_window_infeasible_cut_enabled": bool(pair_time_window_infeasible_cut),
+        "pair_time_window_infeasible_cut_count": int(pair_time_window_infeasible_cut_count_total),
+        "pair_time_window_infeasible_pair_count": int(len(pair_time_window_infeasible_by_pair)),
+        "pair_time_window_infeasible_margin_min": (
+            round(min(pair_time_window_infeasible_by_pair.values()), 9)
+            if pair_time_window_infeasible_by_pair
+            else None
+        ),
+        "pair_time_window_infeasible_margin_max": (
+            round(max(pair_time_window_infeasible_by_pair.values()), 9)
+            if pair_time_window_infeasible_by_pair
+            else None
+        ),
+        "pair_time_window_precedence_cut_enabled": bool(
+            mtz_connectivity and pair_time_window_precedence_cut
+        ),
+        "pair_time_window_precedence_cut_count": int(pair_time_window_precedence_cut_count_total),
+        "pair_time_window_precedence_pair_count": int(len(pair_time_window_precedence_by_pair)),
+        "pair_time_window_precedence_margin_min": (
+            round(min(pair_time_window_precedence_by_pair.values()), 9)
+            if pair_time_window_precedence_by_pair
+            else None
+        ),
+        "pair_time_window_precedence_margin_max": (
+            round(max(pair_time_window_precedence_by_pair.values()), 9)
+            if pair_time_window_precedence_by_pair
+            else None
+        ),
+        "triple_time_window_infeasible_cut_enabled": bool(triple_time_window_infeasible_cut),
+        "triple_time_window_infeasible_cut_count": int(triple_time_window_infeasible_cut_count_total),
+        "triple_time_window_infeasible_triple_count": int(len(triple_time_window_infeasible_by_triple)),
+        "triple_time_window_infeasible_margin_min": (
+            round(min(triple_time_window_infeasible_by_triple.values()), 9)
+            if triple_time_window_infeasible_by_triple
+            else None
+        ),
+        "triple_time_window_infeasible_margin_max": (
+            round(max(triple_time_window_infeasible_by_triple.values()), 9)
+            if triple_time_window_infeasible_by_triple
+            else None
+        ),
+        "quad_time_window_infeasible_cut_enabled": bool(quad_time_window_infeasible_cut),
+        "quad_time_window_infeasible_cut_count": int(quad_time_window_infeasible_cut_count_total),
+        "quad_time_window_infeasible_quad_count": int(len(quad_time_window_infeasible_by_quad)),
+        "quad_time_window_infeasible_margin_min": (
+            round(min(quad_time_window_infeasible_by_quad.values()), 9)
+            if quad_time_window_infeasible_by_quad
+            else None
+        ),
+        "quad_time_window_infeasible_margin_max": (
+            round(max(quad_time_window_infeasible_by_quad.values()), 9)
+            if quad_time_window_infeasible_by_quad
+            else None
+        ),
+        "pair_shadow_infeasible_cut_enabled": bool(pair_shadow_infeasible_cut),
+        "pair_shadow_infeasible_cut_count": int(pair_shadow_infeasible_cut_count_total),
+        "pair_shadow_infeasible_pair_count": int(
+            sum(
+                1
+                for value in pair_shadow_lb_by_pair.values()
+                if float(value) > float(data.max_shadow_exposure_per_sortie) + 1.0e-9
+            )
+        ),
+        "pair_shadow_infeasible_lb_min": (
+            round(min(pair_shadow_lb_by_pair.values()), 9) if pair_shadow_lb_by_pair else None
+        ),
+        "pair_shadow_infeasible_lb_max": (
+            round(max(pair_shadow_lb_by_pair.values()), 9) if pair_shadow_lb_by_pair else None
+        ),
+        "triple_shadow_infeasible_cut_enabled": bool(triple_shadow_infeasible_cut),
+        "triple_shadow_infeasible_cut_count": int(triple_shadow_infeasible_cut_count_total),
+        "triple_shadow_infeasible_triple_count": int(len(triple_shadow_infeasible_lb_by_triple)),
+        "triple_shadow_infeasible_lb_min": (
+            round(min(triple_shadow_infeasible_lb_by_triple.values()), 9)
+            if triple_shadow_infeasible_lb_by_triple
+            else None
+        ),
+        "triple_shadow_infeasible_lb_max": (
+            round(max(triple_shadow_infeasible_lb_by_triple.values()), 9)
+            if triple_shadow_infeasible_lb_by_triple
+            else None
+        ),
+        "triple_energy_infeasible_cut_enabled": bool(triple_energy_infeasible_cut),
+        "triple_energy_infeasible_cut_count": int(triple_energy_infeasible_cut_count_total),
+        "triple_energy_infeasible_triple_count": int(len(triple_energy_infeasible_lb_by_triple)),
+        "triple_energy_infeasible_lb_min": (
+            round(min(triple_energy_infeasible_lb_by_triple.values()), 9)
+            if triple_energy_infeasible_lb_by_triple
+            else None
+        ),
+        "triple_energy_infeasible_lb_max": (
+            round(max(triple_energy_infeasible_lb_by_triple.values()), 9)
+            if triple_energy_infeasible_lb_by_triple
+            else None
+        ),
         "negative_feasibility_search_enabled": bool(negative_feasibility_search),
         "forbidden_arc_pattern_count": int(forbidden_pattern_count),
         "forbidden_arc_patterns_can_certify_full_space": bool(forbidden_pattern_count == 0),

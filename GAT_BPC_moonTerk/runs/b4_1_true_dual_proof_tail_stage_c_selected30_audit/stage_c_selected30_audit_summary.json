@@ -1,0 +1,231 @@
+{
+  "all_rows_diagnostic": true,
+  "any_can_certify_no_negative": false,
+  "best_selected_frontier_lb": -0.770056922,
+  "by_instance": [
+    {
+      "best_lb": -0.891977561,
+      "instance_id": "lunar_ice_sp50_030_001_seed929001",
+      "negative_rows": 2,
+      "phases": [
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -0.894535244,
+          "new_negative_columns_found": 1,
+          "phase": "negative_feasibility",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 53.688443
+        },
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -0.891977561,
+          "new_negative_columns_found": 1,
+          "phase": "optimization_proof",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 57.103192
+        }
+      ]
+    },
+    {
+      "best_lb": -1.033680555,
+      "instance_id": "lunar_ice_sp50_030_002_seed929002",
+      "negative_rows": 2,
+      "phases": [
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -1.033680555,
+          "new_negative_columns_found": 1,
+          "phase": "negative_feasibility",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 57.134417
+        },
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -1.092151812,
+          "new_negative_columns_found": 1,
+          "phase": "optimization_proof",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 53.651465
+        }
+      ]
+    },
+    {
+      "best_lb": -0.770056922,
+      "instance_id": "lunar_ice_sp50_030_003_seed929003",
+      "negative_rows": 2,
+      "phases": [
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -0.790056906,
+          "new_negative_columns_found": 1,
+          "phase": "negative_feasibility",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 53.498973
+        },
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -0.770056922,
+          "new_negative_columns_found": 1,
+          "phase": "optimization_proof",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 57.192428
+        }
+      ]
+    },
+    {
+      "best_lb": -1.127205592,
+      "instance_id": "lunar_ice_sp50_030_004_seed929004",
+      "negative_rows": 2,
+      "phases": [
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -1.127205592,
+          "new_negative_columns_found": 1,
+          "phase": "negative_feasibility",
+          "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+          "wall_time": 31.863992
+        },
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -1.127205592,
+          "new_negative_columns_found": 1,
+          "phase": "optimization_proof",
+          "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+          "wall_time": 31.335689
+        }
+      ]
+    },
+    {
+      "best_lb": -2.758521188,
+      "instance_id": "lunar_ice_sp50_030_005_seed929005",
+      "negative_rows": 1,
+      "phases": [
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -2.760247654,
+          "new_negative_columns_found": 1,
+          "phase": "negative_feasibility",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 53.938103
+        },
+        {
+          "can_certify_no_negative": false,
+          "frontier_unsupported_region_count": 1,
+          "lb": -2.758521188,
+          "new_negative_columns_found": 0,
+          "phase": "optimization_proof",
+          "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+          "wall_time": 57.401043
+        }
+      ]
+    }
+  ],
+  "input_probe_count": 5,
+  "input_probes": [
+    {
+      "active_column_count": 37,
+      "added_column_count": 3,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "elapsed_sec": 301.312432,
+      "instance_id": "lunar_ice_sp50_030_001_seed929001",
+      "pricing_round_count": 3,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "probe_path": "runs/b4_1_true_dual_proof_tail_stage_c_selected30_input_probes/instance_001/stage_001/probe.json"
+    },
+    {
+      "active_column_count": 39,
+      "added_column_count": 5,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "elapsed_sec": 301.673772,
+      "instance_id": "lunar_ice_sp50_030_002_seed929002",
+      "pricing_round_count": 2,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "probe_path": "runs/b4_1_true_dual_proof_tail_stage_c_selected30_input_probes/instance_002/stage_001/probe.json"
+    },
+    {
+      "active_column_count": 36,
+      "added_column_count": 2,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "elapsed_sec": 301.512277,
+      "instance_id": "lunar_ice_sp50_030_003_seed929003",
+      "pricing_round_count": 3,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "probe_path": "runs/b4_1_true_dual_proof_tail_stage_c_selected30_input_probes/instance_003/stage_001/probe.json"
+    },
+    {
+      "active_column_count": 40,
+      "added_column_count": 6,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "elapsed_sec": 301.22934,
+      "instance_id": "lunar_ice_sp50_030_004_seed929004",
+      "pricing_round_count": 3,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "probe_path": "runs/b4_1_true_dual_proof_tail_stage_c_selected30_input_probes/instance_004/stage_001/probe.json"
+    },
+    {
+      "active_column_count": 39,
+      "added_column_count": 5,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "elapsed_sec": 301.781144,
+      "instance_id": "lunar_ice_sp50_030_005_seed929005",
+      "pricing_round_count": 2,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "probe_path": "runs/b4_1_true_dual_proof_tail_stage_c_selected30_input_probes/instance_005/stage_001/probe.json"
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.b4_1_stage_c_selected30_audit.v1",
+  "stage_c_row_count": 10,
+  "summary": {
+    "acceptance": {
+      "b4_1_code_path_exercised": true,
+      "b4_1_full_experiment_complete": false,
+      "requires_long_experiment_completion": true,
+      "stage_a_regression_clean": false,
+      "stage_b_diagnostic_clean": false,
+      "stage_c_diagnostic_clean": true
+    },
+    "mode_counts": {
+      "B4.1_selected_30_diagnostic": 10
+    },
+    "redlines": {
+      "certificate_leak_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "exception_fail_closed_count": 0,
+      "manual_rc_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "resource_guard_stopped_count": 0,
+      "stage_a_tree_closure_miss_count": 0
+    },
+    "row_count": 10,
+    "schema_version": "lunar_ice_bpc.b4_1_true_dual_proof_tail.v1",
+    "stage_counts": {
+      "C": 10
+    },
+    "summary_rows": [
+      {
+        "best_global_remaining_rc_lb": -0.770056922,
+        "bpc_tree_optimal_count": 0,
+        "can_certify_no_negative_count": 0,
+        "diagnostic_claimed_certificate_count": 0,
+        "mean_wall_time": 50.680774,
+        "mode": "B4.1_selected_30_diagnostic",
+        "negative_column_count": 9,
+        "row_count": 10,
+        "stage": "C",
+        "variant": "V4_combined_endpoint_pair_latest_start_time_window"
+      }
+    ],
+    "variant_counts": {
+      "V4_combined_endpoint_pair_latest_start_time_window": 10
+    }
+  }
+}

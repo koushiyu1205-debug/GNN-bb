@@ -1,0 +1,57 @@
+{
+  "acceptance": {
+    "b4_1_code_path_exercised": true,
+    "b4_1_full_experiment_complete": false,
+    "requires_long_experiment_completion": true,
+    "stage_a_regression_clean": false,
+    "stage_b_diagnostic_clean": true,
+    "stage_c_diagnostic_clean": false
+  },
+  "mode_counts": {
+    "B4.1_compact_pricing_formulation": 4
+  },
+  "redlines": {
+    "certificate_leak_count": 0,
+    "diagnostic_claimed_certificate_count": 0,
+    "exception_fail_closed_count": 0,
+    "manual_rc_fail_count": 0,
+    "pricing_rc_fail_count": 0,
+    "resource_guard_stopped_count": 0,
+    "stage_a_tree_closure_miss_count": 0
+  },
+  "row_count": 4,
+  "schema_version": "lunar_ice_bpc.b4_1_true_dual_proof_tail.v1",
+  "stage_counts": {
+    "B": 4
+  },
+  "summary_rows": [
+    {
+      "best_global_remaining_rc_lb": -0.432157206,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 58.443408,
+      "mode": "B4.1_compact_pricing_formulation",
+      "negative_column_count": 0,
+      "row_count": 2,
+      "stage": "B",
+      "variant": "V2_latest_service_start_slot_bound"
+    },
+    {
+      "best_global_remaining_rc_lb": -0.198360699,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 53.610464,
+      "mode": "B4.1_compact_pricing_formulation",
+      "negative_column_count": 0,
+      "row_count": 2,
+      "stage": "B",
+      "variant": "V4_combined_endpoint_pair_latest_start_time_window"
+    }
+  ],
+  "variant_counts": {
+    "V2_latest_service_start_slot_bound": 2,
+    "V4_combined_endpoint_pair_latest_start_time_window": 2
+  }
+}

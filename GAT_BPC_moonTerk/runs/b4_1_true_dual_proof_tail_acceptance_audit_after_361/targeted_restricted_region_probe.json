@@ -1,0 +1,462 @@
+{
+  "can_claim_certificate": false,
+  "diagnostic_only": true,
+  "instance_id": "lunar_ice_sp50_030_001_seed929001",
+  "official_certificate_allowed": false,
+  "redlines": {
+    "certificate_claim_count": 0,
+    "restricted_no_good_claimed_certificate_count": 0
+  },
+  "row_count": 2,
+  "rows": [
+    {
+      "best_reduced_cost": 0.119161098,
+      "can_certify_no_negative": false,
+      "can_claim_certificate": false,
+      "constraint_count": 50704,
+      "diagnostic_only": true,
+      "dual_bound": -0.571479122,
+      "dual_bound_delta_vs_source": -0.449696374,
+      "exact_status": "NOT_SOLVED",
+      "forbidden_task_set_count": 2,
+      "forbidden_task_sets": [
+        [
+          "ice_site_008",
+          "ice_site_009",
+          "ice_site_010",
+          "ice_site_016",
+          "ice_site_018",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_008",
+          "ice_site_020",
+          "ice_site_021",
+          "ice_site_023",
+          "ice_site_024",
+          "ice_site_026"
+        ]
+      ],
+      "formulation_kind": "latest_service_start_slot_bound",
+      "frontier_unsupported_region_count": 1,
+      "history_round": 1,
+      "instance_id": "lunar_ice_sp50_030_001_seed929001",
+      "model_status_name": "TIME_LIMIT_REACHED",
+      "negative_column_count": 0,
+      "negative_found": false,
+      "note": "restricted/no-good targeted region; not a full-space no-negative certificate",
+      "official_certificate_allowed": false,
+      "pair_energy_infeasible_cut_enabled": false,
+      "pair_route_duration_lb_enabled": false,
+      "pricing_rc_audit_pass": true,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "region_id": "prefix_2",
+      "service_start_depot_travel_lb_enabled": false,
+      "sortie_slot_position_bounds_enabled": false,
+      "source_bound_improved": false,
+      "source_phase": "optimization_harvest_3",
+      "source_phase_best_reduced_cost": -0.000586,
+      "source_phase_dual_bound": -0.121782748,
+      "source_phase_exact_status": "NOT_SOLVED",
+      "source_phase_status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "source_phase_wall_time_sec": 169.140462,
+      "source_probe_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_1_true_dual_proof_tail_stage_b_30_v4_optimization_harvest_taskset_after_358_600s/stage_001/probe.json",
+      "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "task_to_depot_return_travel_lb_enabled": false,
+      "variable_count": 48532,
+      "variant": "V2_latest_service_start_slot_bound",
+      "wall_time_sec": 28.573405
+    },
+    {
+      "best_reduced_cost": 0.030820431,
+      "can_certify_no_negative": false,
+      "can_claim_certificate": false,
+      "constraint_count": 68322,
+      "diagnostic_only": true,
+      "dual_bound": -0.189663739,
+      "dual_bound_delta_vs_source": -0.067880991,
+      "exact_status": "NOT_SOLVED",
+      "forbidden_task_set_count": 2,
+      "forbidden_task_sets": [
+        [
+          "ice_site_008",
+          "ice_site_009",
+          "ice_site_010",
+          "ice_site_016",
+          "ice_site_018",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_008",
+          "ice_site_020",
+          "ice_site_021",
+          "ice_site_023",
+          "ice_site_024",
+          "ice_site_026"
+        ]
+      ],
+      "formulation_kind": "endpoint_pair_latest_timewindow+service_return_pair_duration+slot_position+pair_energy_infeasible",
+      "frontier_unsupported_region_count": 1,
+      "history_round": 1,
+      "instance_id": "lunar_ice_sp50_030_001_seed929001",
+      "model_status_name": "TIME_LIMIT_REACHED",
+      "negative_column_count": 0,
+      "negative_found": false,
+      "note": "restricted/no-good targeted region; not a full-space no-negative certificate",
+      "official_certificate_allowed": false,
+      "pair_energy_infeasible_cut_enabled": true,
+      "pair_route_duration_lb_enabled": true,
+      "pricing_rc_audit_pass": true,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "region_id": "prefix_2",
+      "service_start_depot_travel_lb_enabled": true,
+      "sortie_slot_position_bounds_enabled": true,
+      "source_bound_improved": false,
+      "source_phase": "optimization_harvest_3",
+      "source_phase_best_reduced_cost": -0.000586,
+      "source_phase_dual_bound": -0.121782748,
+      "source_phase_exact_status": "NOT_SOLVED",
+      "source_phase_status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "source_phase_wall_time_sec": 169.140462,
+      "source_probe_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_1_true_dual_proof_tail_stage_b_30_v4_optimization_harvest_taskset_after_358_600s/stage_001/probe.json",
+      "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "task_to_depot_return_travel_lb_enabled": true,
+      "variable_count": 24109,
+      "variant": "V4_current_strengthening",
+      "wall_time_sec": 27.865564
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.b4_1_targeted_restricted_region_probe.v1",
+  "source_probe_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_1_true_dual_proof_tail_stage_b_30_v4_optimization_harvest_taskset_after_358_600s/stage_001/probe.json",
+  "summary": [
+    {
+      "best_bound_variant": "V4_current_strengthening",
+      "best_dual_bound": -0.189663739,
+      "best_reduced_cost": 0.030820431,
+      "certificate_claim_count": 0,
+      "forbidden_task_set_count": 2,
+      "region_id": "prefix_2",
+      "row_count": 2,
+      "source_bound_improved_count": 0,
+      "source_phase_dual_bound": -0.121782748,
+      "time_limit_row_count": 2
+    }
+  ],
+  "taskset_diagnostic": {
+    "can_claim_certificate": false,
+    "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+    "cluster_summary": {
+      "high_overlap_pairs": [
+        {
+          "intersection_size": 7,
+          "jaccard": 0.777778,
+          "left_id": "H2",
+          "pair": "H2-H3",
+          "right_id": "H3",
+          "shared_tasks": [
+            "ice_site_001",
+            "ice_site_002",
+            "ice_site_008",
+            "ice_site_020",
+            "ice_site_021",
+            "ice_site_023",
+            "ice_site_026"
+          ],
+          "union_size": 9
+        }
+      ],
+      "hot_tasks": [
+        {
+          "count": 3,
+          "task": "ice_site_008"
+        },
+        {
+          "count": 3,
+          "task": "ice_site_026"
+        }
+      ],
+      "incomplete_time_limit_region_count": 2,
+      "max_task_frequency": 3,
+      "negative_time_limit_region_count": 1,
+      "repeated_tasks": [
+        {
+          "count": 3,
+          "task": "ice_site_008"
+        },
+        {
+          "count": 3,
+          "task": "ice_site_026"
+        },
+        {
+          "count": 2,
+          "task": "ice_site_001"
+        },
+        {
+          "count": 2,
+          "task": "ice_site_002"
+        },
+        {
+          "count": 2,
+          "task": "ice_site_020"
+        },
+        {
+          "count": 2,
+          "task": "ice_site_021"
+        },
+        {
+          "count": 2,
+          "task": "ice_site_023"
+        },
+        {
+          "count": 2,
+          "task": "ice_site_024"
+        }
+      ]
+    },
+    "compact_final_judge_phase_mode": "proof_only",
+    "compact_final_judge_profile": "V4",
+    "compact_optimization_harvest_no_good_scope": "task_set",
+    "diagnostic_only": true,
+    "frontier_coverage_complete": false,
+    "frontier_unsupported_region_count": 3,
+    "global_remaining_rc_lb": -0.00770611,
+    "harvest_pricing_rc_audit_pass": true,
+    "harvest_pricing_rc_max_abs_diff": 3.61e-07,
+    "harvest_selected_count": 3,
+    "harvest_selected_new_task_set_count": 3,
+    "harvest_selected_replacement_task_set_count": 0,
+    "harvested_negative_count": 3,
+    "harvested_negatives": [
+      {
+        "current_master_contains_signature": false,
+        "id": "H1",
+        "manual_pricing_rc_abs_diff": 1.49e-07,
+        "pool_contains_signature": false,
+        "pricing_reduced_cost": -0.00770611,
+        "reject_reason": "",
+        "selected_after_addability_audit": true,
+        "task_set": [
+          "ice_site_008",
+          "ice_site_009",
+          "ice_site_010",
+          "ice_site_016",
+          "ice_site_018",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        "task_set_size": 7,
+        "true_reduced_cost": -0.007705961,
+        "would_change_active_support": true,
+        "would_enter_master": true
+      },
+      {
+        "current_master_contains_signature": false,
+        "id": "H2",
+        "manual_pricing_rc_abs_diff": 3.61e-07,
+        "pool_contains_signature": false,
+        "pricing_reduced_cost": -0.002763188,
+        "reject_reason": "",
+        "selected_after_addability_audit": true,
+        "task_set": [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_008",
+          "ice_site_020",
+          "ice_site_021",
+          "ice_site_023",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        "task_set_size": 8,
+        "true_reduced_cost": -0.002763549,
+        "would_change_active_support": true,
+        "would_enter_master": true
+      },
+      {
+        "current_master_contains_signature": false,
+        "id": "H3",
+        "manual_pricing_rc_abs_diff": 2.23e-07,
+        "pool_contains_signature": false,
+        "pricing_reduced_cost": -0.000586223,
+        "reject_reason": "",
+        "selected_after_addability_audit": true,
+        "task_set": [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_008",
+          "ice_site_013",
+          "ice_site_020",
+          "ice_site_021",
+          "ice_site_023",
+          "ice_site_026"
+        ],
+        "task_set_size": 8,
+        "true_reduced_cost": -0.000586,
+        "would_change_active_support": true,
+        "would_enter_master": true
+      }
+    ],
+    "instance_id": "lunar_ice_sp50_030_001_seed929001",
+    "no_negative_certificate_claimed": false,
+    "official_certificate_allowed": false,
+    "pairwise_overlap": [
+      {
+        "intersection_size": 3,
+        "jaccard": 0.25,
+        "left_id": "H1",
+        "pair": "H1-H2",
+        "right_id": "H2",
+        "shared_tasks": [
+          "ice_site_008",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        "union_size": 12
+      },
+      {
+        "intersection_size": 2,
+        "jaccard": 0.153846,
+        "left_id": "H1",
+        "pair": "H1-H3",
+        "right_id": "H3",
+        "shared_tasks": [
+          "ice_site_008",
+          "ice_site_026"
+        ],
+        "union_size": 13
+      },
+      {
+        "intersection_size": 7,
+        "jaccard": 0.777778,
+        "left_id": "H2",
+        "pair": "H2-H3",
+        "right_id": "H3",
+        "shared_tasks": [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_008",
+          "ice_site_020",
+          "ice_site_021",
+          "ice_site_023",
+          "ice_site_026"
+        ],
+        "union_size": 9
+      }
+    ],
+    "pricing_proof_kind": "FRONTIER_BOUND_INCOMPLETE",
+    "recommended_next_actions": [
+      "Keep this diagnostic non-certifying until an unrestricted true-dual no-negative proof closes.",
+      "Target the time-limit restricted regions first; bound movement there is more important than finding more columns.",
+      "Compare V2 and V4 proof rows on the high-overlap task-set cluster before adding more harvest stages.",
+      "Audit resource/time-window bounds around repeated hot tasks: ice_site_008, ice_site_026."
+    ],
+    "restricted_region_rows": [
+      {
+        "best_reduced_cost": -0.007705961,
+        "dual_bound": -0.00770611,
+        "exact_status": "EXACT_PRICING_OPTIMAL",
+        "forbidden_task_set_count": 0,
+        "forbidden_task_sets_can_certify_full_space": true,
+        "model_status_name": "OPTIMAL",
+        "phase": "optimization_proof",
+        "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+        "wall_time_sec": 186.708639
+      },
+      {
+        "best_reduced_cost": -0.002763549,
+        "dual_bound": -0.002763188,
+        "exact_status": "RESTRICTED_PRICING_OPTIMAL",
+        "forbidden_task_set_count": 1,
+        "forbidden_task_sets_can_certify_full_space": false,
+        "model_status_name": "OPTIMAL",
+        "phase": "optimization_harvest_2",
+        "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+        "wall_time_sec": 229.826581
+      },
+      {
+        "best_reduced_cost": -0.000586,
+        "dual_bound": -0.121782748,
+        "exact_status": "NOT_SOLVED",
+        "forbidden_task_set_count": 2,
+        "forbidden_task_sets_can_certify_full_space": false,
+        "model_status_name": "TIME_LIMIT_REACHED",
+        "phase": "optimization_harvest_3",
+        "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+        "wall_time_sec": 169.140462
+      },
+      {
+        "best_reduced_cost": 0.169087764,
+        "dual_bound": -0.317649341,
+        "exact_status": "NOT_SOLVED",
+        "forbidden_task_set_count": 3,
+        "forbidden_task_sets_can_certify_full_space": false,
+        "model_status_name": "TIME_LIMIT_REACHED",
+        "phase": "optimization_harvest_4",
+        "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+        "wall_time_sec": 14.719334
+      }
+    ],
+    "schema_version": "lunar_ice_bpc.b4_1_restricted_region_taskset_diagnostic.v1",
+    "source_probe_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_1_true_dual_proof_tail_stage_b_30_v4_optimization_harvest_taskset_after_358_600s/stage_001/probe.json",
+    "task_frequency": [
+      {
+        "count": 3,
+        "task": "ice_site_008"
+      },
+      {
+        "count": 3,
+        "task": "ice_site_026"
+      },
+      {
+        "count": 2,
+        "task": "ice_site_001"
+      },
+      {
+        "count": 2,
+        "task": "ice_site_002"
+      },
+      {
+        "count": 2,
+        "task": "ice_site_020"
+      },
+      {
+        "count": 2,
+        "task": "ice_site_021"
+      },
+      {
+        "count": 2,
+        "task": "ice_site_023"
+      },
+      {
+        "count": 2,
+        "task": "ice_site_024"
+      },
+      {
+        "count": 1,
+        "task": "ice_site_009"
+      },
+      {
+        "count": 1,
+        "task": "ice_site_010"
+      },
+      {
+        "count": 1,
+        "task": "ice_site_013"
+      },
+      {
+        "count": 1,
+        "task": "ice_site_016"
+      },
+      {
+        "count": 1,
+        "task": "ice_site_018"
+      }
+    ]
+  }
+}

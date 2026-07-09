@@ -1,0 +1,2 @@
+{"elapsed_sec": 56.819813, "algorithm_status": "BPC_INCOMPLETE_PRICING", "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER", "pricing_state": "INCOMPLETE_LIMIT", "pricing_round_count": 1, "added_column_count": 0, "active_column_count": 304}
+report /home/kai/work/GAT_BPC_moonTerk/runs/b4_1_true_dual_proof_tail_stage_b_30_v4_time_and_pair_energy_lb_feasibility_smoke/stage_001/probe_report_zh.md

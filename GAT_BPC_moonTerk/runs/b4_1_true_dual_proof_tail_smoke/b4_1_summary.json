@@ -1,0 +1,71 @@
+{
+  "acceptance": {
+    "b4_1_code_path_exercised": true,
+    "b4_1_full_experiment_complete": false,
+    "requires_long_experiment_completion": true,
+    "stage_a_regression_clean": true,
+    "stage_b_diagnostic_clean": true,
+    "stage_c_diagnostic_clean": true
+  },
+  "mode_counts": {
+    "B4.1_compact_pricing_formulation": 2,
+    "B4.1_selected_30_diagnostic": 2,
+    "stageA_B2B_R2_worker_tail_dual_on": 1
+  },
+  "redlines": {
+    "certificate_leak_count": 0,
+    "diagnostic_claimed_certificate_count": 0,
+    "manual_rc_fail_count": 0,
+    "pricing_rc_fail_count": 0,
+    "resource_guard_stopped_count": 0
+  },
+  "row_count": 5,
+  "schema_version": "lunar_ice_bpc.b4_1_true_dual_proof_tail.v1",
+  "stage_counts": {
+    "A": 1,
+    "B": 2,
+    "C": 2
+  },
+  "summary_rows": [
+    {
+      "best_global_remaining_rc_lb": null,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 0.052558,
+      "mode": "stageA_B2B_R2_worker_tail_dual_on",
+      "negative_column_count": 0,
+      "row_count": 1,
+      "stage": "A",
+      "variant": ""
+    },
+    {
+      "best_global_remaining_rc_lb": 0.250051709,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 0.049129,
+      "mode": "B4.1_compact_pricing_formulation",
+      "negative_column_count": 0,
+      "row_count": 2,
+      "stage": "B",
+      "variant": "V2_latest_service_start_slot_bound"
+    },
+    {
+      "best_global_remaining_rc_lb": 0.250051709,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 0.017108,
+      "mode": "B4.1_selected_30_diagnostic",
+      "negative_column_count": 0,
+      "row_count": 2,
+      "stage": "C",
+      "variant": "V2_latest_service_start_slot_bound"
+    }
+  ],
+  "variant_counts": {
+    "": 1,
+    "V2_latest_service_start_slot_bound": 4
+  }
+}

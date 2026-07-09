@@ -1,0 +1,485 @@
+{
+  "schema_version": "lunar_ice_bpc.b4_1_manifest.v1",
+  "instances": [
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json",
+      "scale": 5,
+      "scale_label": "005",
+      "instance_path": "data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json",
+      "scale": 10,
+      "scale_label": "010",
+      "instance_path": "data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_001_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_001_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_002_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_002_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_003_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_003_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_004_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_004_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_005_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_005_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_006_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_006_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_007_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_007_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_008_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_008_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_009_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_009_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_010_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_010_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_011_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_011_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_012_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_012_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_013_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_013_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_014_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_014_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_015_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_015_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_016_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_016_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_017_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_017_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_018_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_018_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_019_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_019_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_020/instance_020_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020",
+      "instance_path": "data/instances/lunar_ice_sp50_020/instance_020_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_002_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_002_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_003_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_003_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_004_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_004_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_005_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_005_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_006_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_006_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_007_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_007_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_008_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_008_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_009_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_009_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_010_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_010_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_011_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_011_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_012_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_012_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_013_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_013_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_014_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_014_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_015_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_015_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_016_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_016_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_017_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_017_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_018_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_018_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_019_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_019_logical_graph.json"
+    },
+    {
+      "path": "data/instances/lunar_ice_sp50_030/instance_020_logical_graph.json",
+      "scale": 30,
+      "scale_label": "030",
+      "instance_path": "data/instances/lunar_ice_sp50_030/instance_020_logical_graph.json"
+    }
+  ]
+}

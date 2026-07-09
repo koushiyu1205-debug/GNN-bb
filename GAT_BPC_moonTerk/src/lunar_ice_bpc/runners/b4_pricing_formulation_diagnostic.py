@@ -52,6 +52,29 @@ CSV_COLUMNS = (
     "active_columns_after_merge",
     "can_certify_no_negative",
     "certificate_scope",
+    "global_remaining_rc_lb",
+    "frontier_coverage_complete",
+    "frontier_region_count",
+    "frontier_unsupported_region_count",
+    "pending_complete_min_rc",
+    "pricing_proof_kind",
+    "compact_final_judge_profile",
+    "compact_final_judge_formulation_profile",
+    "compact_final_judge_phase_mode",
+    "compact_optimization_harvest_enabled",
+    "compact_optimization_harvest_target",
+    "compact_optimization_harvest_no_good_scope",
+    "compact_optimization_harvest_found_count",
+    "compact_optimization_harvest_search_call_count",
+    "negative_feasibility_skipped_for_proof_only",
+    "negative_feasibility_full_space_proof_attempted",
+    "negative_feasibility_full_space_proof_can_certify",
+    "phase_budget_sec",
+    "negative_feasibility_budget_sec",
+    "optimization_proof_budget_sec",
+    "negative_discovery_budget_exhausted",
+    "feasibility_proof_budget_exhausted",
+    "optimization_proof_missing",
     "pricing_complete_by_compact_milp",
     "negative_feasibility_search_enabled",
     "mtz_endpoint_order_cuts_enabled",
@@ -63,6 +86,36 @@ CSV_COLUMNS = (
     "latest_service_start_slot_bound_enabled",
     "sortie_slot_horizon_count_bound",
     "sortie_slot_latest_start_count_bound",
+    "service_start_depot_travel_lb_enabled",
+    "service_start_depot_travel_lb_count",
+    "task_to_depot_return_travel_lb_enabled",
+    "task_to_depot_return_travel_lb_count",
+    "pair_route_duration_lb_enabled",
+    "pair_route_duration_lb_count",
+    "sortie_slot_position_bounds_enabled",
+    "sortie_slot_position_bound_count",
+    "demand_cover_cut_enabled",
+    "demand_cover_cut_count",
+    "demand_cover_subset_count",
+    "single_task_energy_lb_enabled",
+    "single_task_energy_lb_count",
+    "single_task_shadow_lb_enabled",
+    "single_task_shadow_lb_count",
+    "pair_energy_lb_enabled",
+    "pair_energy_lb_count",
+    "pair_energy_lb_exceeds_limit_count",
+    "pair_energy_infeasible_cut_enabled",
+    "pair_energy_infeasible_cut_count",
+    "pair_energy_infeasible_pair_count",
+    "pair_shadow_infeasible_cut_enabled",
+    "pair_shadow_infeasible_cut_count",
+    "pair_shadow_infeasible_pair_count",
+    "triple_shadow_infeasible_cut_enabled",
+    "triple_shadow_infeasible_cut_count",
+    "triple_shadow_infeasible_triple_count",
+    "triple_energy_infeasible_cut_enabled",
+    "triple_energy_infeasible_cut_count",
+    "triple_energy_infeasible_triple_count",
     "time_window_arc_pruning_enabled",
     "time_window_arc_option_count",
     "time_window_impossible_arc_option_count",
@@ -235,6 +288,9 @@ def iter_b4_pricing_formulation_matrix_rows_from_probe(
             result = dict(result)
             result["b4_variant"] = variant
             result["b4_formulation_kind"] = config["formulation_kind"]
+            result["phase_budget_sec"] = float(time_limit)
+            result["negative_feasibility_budget_sec"] = float(negative_feasibility_time_limit_sec)
+            result["optimization_proof_budget_sec"] = float(optimization_proof_time_limit_sec)
             if negative_feasibility:
                 result["can_certify_no_negative"] = False
                 result["b4_negative_feasibility_certificate_suppressed"] = True
@@ -375,6 +431,9 @@ def render_b4_pricing_formulation_markdown(report: dict, *, rows_csv: str | Path
             f"- Measurable proof-tail progress rows: `{acceptance['measurable_progress_row_count']}`。",
             f"- Measurable improvement vs V0 rows: `{acceptance.get('measurable_improvement_row_count', 0)}`。",
             f"- No-negative certified rows: `{acceptance['no_negative_certified_row_count']}`。",
+            f"- Negative-discovery budget exhausted rows: `{acceptance.get('negative_discovery_budget_exhausted_count', 0)}`。",
+            f"- Feasibility-proof budget exhausted rows: `{acceptance.get('feasibility_proof_budget_exhausted_count', 0)}`。",
+            f"- Missing optimization-proof rows: `{acceptance.get('optimization_proof_missing_count', 0)}`。",
             f"- Tested variants: `{', '.join(acceptance['tested_variants'])}`。",
             f"- Missing variants: `{missing_text}`。",
             "",
@@ -565,6 +624,9 @@ def _row_from_pricing_payload(
     pair_count = int(payload.get("pair_adjacency_cut_count") or 0)
     row_count_added = endpoint_count + pair_count
     impossible_arcs = int(payload.get("time_window_impossible_arc_option_count") or 0)
+    negative_discovery_budget_exhausted = _negative_discovery_budget_exhausted(payload, phase=phase)
+    feasibility_proof_budget_exhausted = _feasibility_proof_budget_exhausted(payload, phase=phase)
+    optimization_proof_missing = _optimization_proof_missing(payload, phase=phase)
     return {
         "matrix_group": matrix_group,
         "source_json": str(source_json),
@@ -596,12 +658,51 @@ def _row_from_pricing_payload(
         "cut_candidate_count": "",
         "cut_violated_count": "",
         "max_violation": "",
-        "active_column_count": payload.get("active_column_count"),
+        "active_column_count": payload.get("active_column_count", active_columns_after_merge),
         "pool_column_count": payload.get("pool_column_count"),
         "columns_added": int(payload.get("added_column_count") or 0),
         "active_columns_after_merge": active_columns_after_merge,
         "can_certify_no_negative": can_certify,
         "certificate_scope": "BPC_NODE_LP_CERTIFIED" if can_certify else "DIAGNOSTIC_PRICING_FRONTIER",
+        "global_remaining_rc_lb": payload.get("global_remaining_rc_lb", payload.get("global_remaining_rc_lower_bound", dual_bound)),
+        "frontier_coverage_complete": bool(payload.get("global_remaining_rc_lb_coverage_complete") or can_certify),
+        "frontier_region_count": payload.get("frontier_region_count", 1 if dual_bound is not None else 0),
+        "frontier_unsupported_region_count": payload.get(
+            "frontier_unsupported_region_count",
+            0 if can_certify else 1,
+        ),
+        "pending_complete_min_rc": payload.get("pending_complete_min_rc", best_rc),
+        "pricing_proof_kind": payload.get(
+            "pricing_proof_kind",
+            "EXHAUSTIVE_NO_NEGATIVE" if can_certify else "FRONTIER_BOUND_INCOMPLETE",
+        ),
+        "compact_final_judge_profile": payload.get("compact_final_judge_profile"),
+        "compact_final_judge_formulation_profile": payload.get("compact_final_judge_formulation_profile"),
+        "compact_final_judge_phase_mode": payload.get("compact_final_judge_phase_mode"),
+        "compact_optimization_harvest_enabled": bool(payload.get("compact_optimization_harvest_enabled")),
+        "compact_optimization_harvest_target": payload.get("compact_optimization_harvest_target"),
+        "compact_optimization_harvest_no_good_scope": payload.get(
+            "compact_optimization_harvest_no_good_scope"
+        ),
+        "compact_optimization_harvest_found_count": payload.get("compact_optimization_harvest_found_count"),
+        "compact_optimization_harvest_search_call_count": payload.get(
+            "compact_optimization_harvest_search_call_count"
+        ),
+        "negative_feasibility_skipped_for_proof_only": bool(
+            payload.get("negative_feasibility_skipped_for_proof_only")
+        ),
+        "negative_feasibility_full_space_proof_attempted": bool(
+            payload.get("negative_feasibility_full_space_proof_attempted")
+        ),
+        "negative_feasibility_full_space_proof_can_certify": bool(
+            payload.get("negative_feasibility_full_space_proof_can_certify")
+        ),
+        "phase_budget_sec": payload.get("phase_budget_sec"),
+        "negative_feasibility_budget_sec": payload.get("negative_feasibility_budget_sec"),
+        "optimization_proof_budget_sec": payload.get("optimization_proof_budget_sec"),
+        "negative_discovery_budget_exhausted": negative_discovery_budget_exhausted,
+        "feasibility_proof_budget_exhausted": feasibility_proof_budget_exhausted,
+        "optimization_proof_missing": optimization_proof_missing,
         "pricing_complete_by_compact_milp": bool(payload.get("pricing_complete_by_compact_milp")),
         "negative_feasibility_search_enabled": negative_feasibility,
         "mtz_endpoint_order_cuts_enabled": bool(payload.get("mtz_endpoint_order_cuts_enabled")),
@@ -613,6 +714,36 @@ def _row_from_pricing_payload(
         "latest_service_start_slot_bound_enabled": payload.get("latest_service_start_slot_bound_enabled"),
         "sortie_slot_horizon_count_bound": payload.get("sortie_slot_horizon_count_bound"),
         "sortie_slot_latest_start_count_bound": payload.get("sortie_slot_latest_start_count_bound"),
+        "service_start_depot_travel_lb_enabled": bool(payload.get("service_start_depot_travel_lb_enabled")),
+        "service_start_depot_travel_lb_count": payload.get("service_start_depot_travel_lb_count"),
+        "task_to_depot_return_travel_lb_enabled": bool(payload.get("task_to_depot_return_travel_lb_enabled")),
+        "task_to_depot_return_travel_lb_count": payload.get("task_to_depot_return_travel_lb_count"),
+        "pair_route_duration_lb_enabled": bool(payload.get("pair_route_duration_lb_enabled")),
+        "pair_route_duration_lb_count": payload.get("pair_route_duration_lb_count"),
+        "sortie_slot_position_bounds_enabled": bool(payload.get("sortie_slot_position_bounds_enabled")),
+        "sortie_slot_position_bound_count": payload.get("sortie_slot_position_bound_count"),
+        "demand_cover_cut_enabled": bool(payload.get("demand_cover_cut_enabled")),
+        "demand_cover_cut_count": payload.get("demand_cover_cut_count"),
+        "demand_cover_subset_count": payload.get("demand_cover_subset_count"),
+        "single_task_energy_lb_enabled": bool(payload.get("single_task_energy_lb_enabled")),
+        "single_task_energy_lb_count": payload.get("single_task_energy_lb_count"),
+        "single_task_shadow_lb_enabled": bool(payload.get("single_task_shadow_lb_enabled")),
+        "single_task_shadow_lb_count": payload.get("single_task_shadow_lb_count"),
+        "pair_energy_lb_enabled": bool(payload.get("pair_energy_lb_enabled")),
+        "pair_energy_lb_count": payload.get("pair_energy_lb_count"),
+        "pair_energy_lb_exceeds_limit_count": payload.get("pair_energy_lb_exceeds_limit_count"),
+        "pair_energy_infeasible_cut_enabled": bool(payload.get("pair_energy_infeasible_cut_enabled")),
+        "pair_energy_infeasible_cut_count": payload.get("pair_energy_infeasible_cut_count"),
+        "pair_energy_infeasible_pair_count": payload.get("pair_energy_infeasible_pair_count"),
+        "pair_shadow_infeasible_cut_enabled": bool(payload.get("pair_shadow_infeasible_cut_enabled")),
+        "pair_shadow_infeasible_cut_count": payload.get("pair_shadow_infeasible_cut_count"),
+        "pair_shadow_infeasible_pair_count": payload.get("pair_shadow_infeasible_pair_count"),
+        "triple_shadow_infeasible_cut_enabled": bool(payload.get("triple_shadow_infeasible_cut_enabled")),
+        "triple_shadow_infeasible_cut_count": payload.get("triple_shadow_infeasible_cut_count"),
+        "triple_shadow_infeasible_triple_count": payload.get("triple_shadow_infeasible_triple_count"),
+        "triple_energy_infeasible_cut_enabled": bool(payload.get("triple_energy_infeasible_cut_enabled")),
+        "triple_energy_infeasible_cut_count": payload.get("triple_energy_infeasible_cut_count"),
+        "triple_energy_infeasible_triple_count": payload.get("triple_energy_infeasible_triple_count"),
         "time_window_arc_pruning_enabled": bool(payload.get("time_window_arc_pruning_enabled")),
         "time_window_arc_option_count": payload.get("time_window_arc_option_count"),
         "time_window_impossible_arc_option_count": impossible_arcs,
@@ -655,6 +786,15 @@ def _report_from_rows(rows: list[dict]) -> dict:
             "measurable_progress_row_count": len(progress_rows),
             "measurable_improvement_row_count": len(improvement_rows),
             "no_negative_certified_row_count": sum(1 for row in rows if row.get("can_certify_no_negative") is True),
+            "negative_discovery_budget_exhausted_count": sum(
+                1 for row in rows if row.get("negative_discovery_budget_exhausted") is True
+            ),
+            "feasibility_proof_budget_exhausted_count": sum(
+                1 for row in rows if row.get("feasibility_proof_budget_exhausted") is True
+            ),
+            "optimization_proof_missing_count": sum(
+                1 for row in rows if row.get("optimization_proof_missing") is True
+            ),
             "tested_variants": tested_variants,
             "missing_variants": missing_variants,
             "full_variant_matrix_complete": not missing_variants,
@@ -747,6 +887,30 @@ def _variant(payload: dict) -> tuple[str, str]:
         kinds.append("latest_service_start_slot_bound")
     if payload.get("time_window_arc_pruning_enabled"):
         kinds.append("time_window_arc_pruning")
+    if payload.get("service_start_depot_travel_lb_enabled"):
+        kinds.append("service_start_depot_travel_lb")
+    if payload.get("task_to_depot_return_travel_lb_enabled"):
+        kinds.append("task_to_depot_return_travel_lb")
+    if payload.get("pair_route_duration_lb_enabled"):
+        kinds.append("pair_route_duration_lb")
+    if payload.get("sortie_slot_position_bounds_enabled"):
+        kinds.append("sortie_slot_position_bounds")
+    if payload.get("demand_cover_cut_enabled"):
+        kinds.append("demand_cover_cut")
+    if payload.get("single_task_energy_lb_enabled"):
+        kinds.append("single_task_energy_lb")
+    if payload.get("single_task_shadow_lb_enabled"):
+        kinds.append("single_task_shadow_lb")
+    if payload.get("pair_energy_lb_enabled"):
+        kinds.append("pair_energy_lb")
+    if payload.get("pair_energy_infeasible_cut_enabled"):
+        kinds.append("pair_energy_infeasible_cut")
+    if payload.get("pair_shadow_infeasible_cut_enabled"):
+        kinds.append("pair_shadow_infeasible_cut")
+    if payload.get("triple_shadow_infeasible_cut_enabled"):
+        kinds.append("triple_shadow_infeasible_cut")
+    if payload.get("triple_energy_infeasible_cut_enabled"):
+        kinds.append("triple_energy_infeasible_cut")
     if not kinds:
         return "V0_current_compact_pricing", "baseline_compact_pricing"
     if set(kinds) >= {"endpoint_order", "pair_adjacency", "latest_service_start_slot_bound", "time_window_arc_pruning"}:
@@ -770,6 +934,39 @@ def _float_or_none(value) -> float | None:
     if value is None or value == "":
         return None
     return float(value)
+
+
+def _negative_discovery_budget_exhausted(payload: dict, *, phase: str) -> bool:
+    phase_name = str(payload.get("compact_pricing_phase") or phase or "")
+    status = str(payload.get("status") or "")
+    if phase_name == "negative_feasibility_proof" or payload.get("negative_feasibility_full_space_proof_attempted"):
+        return False
+    if "negative_feasibility" not in phase_name:
+        return False
+    return "TIME_LIMIT" in status or status.endswith("LIMIT_REACHED")
+
+
+def _feasibility_proof_budget_exhausted(payload: dict, *, phase: str) -> bool:
+    phase_name = str(payload.get("compact_pricing_phase") or phase or "")
+    status = str(payload.get("status") or "")
+    if phase_name != "negative_feasibility_proof" and not payload.get("negative_feasibility_full_space_proof_attempted"):
+        return False
+    return "TIME_LIMIT" in status or status.endswith("LIMIT_REACHED")
+
+
+def _optimization_proof_missing(payload: dict, *, phase: str) -> bool:
+    if str(phase or "") == "negative_feasibility":
+        return False
+    phase_name = str(payload.get("compact_pricing_phase") or phase or "")
+    if phase_name == "optimization_proof":
+        return False
+    phase_payloads = payload.get("compact_pricing_phase_payloads")
+    if isinstance(phase_payloads, dict) and "optimization_proof" in phase_payloads:
+        return False
+    status = str(payload.get("status") or "")
+    exact_status = str(payload.get("exact_status") or "")
+    incomplete = "TIME_LIMIT" in status or exact_status in {"", "NOT_SOLVED"}
+    return bool(incomplete and phase_name in {"negative_feasibility", "negative_feasibility_search", "negative_feasibility_batch"})
 
 
 def _select_history_row(history: list[dict], round_index: int) -> dict:

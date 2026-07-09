@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Iterable
 
 from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateLedger
@@ -59,6 +60,7 @@ class _QueuedNode:
 def solve_b3_branch_price_tree_baseline(
     data: LunarIceData,
     *,
+    initial_columns: Iterable[JourneyColumn] | None = None,
     b0_direct=None,
     max_direct_tasks: int = 5,
     max_rounds_per_node: int = 16,
@@ -69,6 +71,7 @@ def solve_b3_branch_price_tree_baseline(
     max_columns_per_round: int = 512,
     use_complete_universe_audit: bool = True,
     run_b2_root_diagnostic: bool | None = None,
+    solve_b0_direct_first: bool = True,
 ) -> dict:
     """Run B3 = B2 plus a proof-gated branch-and-price tree.
 
@@ -96,12 +99,15 @@ def solve_b3_branch_price_tree_baseline(
         )
     else:
         b2 = _b2_not_run_payload(data, max_direct_tasks=max_direct_tasks)
-    if b0_direct is None:
+    provided_initial_columns = tuple(initial_columns or tuple())
+    if b0_direct is None and bool(solve_b0_direct_first):
         b0_direct = solve_direct_journey_baseline(
             data,
             max_exact_tasks=int(max_direct_tasks),
             wall_time_limit_sec=wall_time_limit_sec,
         )
+    elif b0_direct is None:
+        b0_direct = _bpc_tree_placeholder_direct(data)
     if len(data.task_ids) > int(max_direct_tasks):
         return _too_large_payload(
             data=data,
@@ -112,7 +118,7 @@ def solve_b3_branch_price_tree_baseline(
             issue="task_count_exceeds_exhaustive_pricing_limit",
             note=f"task_count={len(data.task_ids)} exceeds max_direct_tasks={max_direct_tasks}; B3 fails closed.",
         )
-    if _float_or_none(b0_direct.objective) is None:
+    if not provided_initial_columns and _float_or_none(b0_direct.objective) is None:
         return _too_large_payload(
             data=data,
             b2=b2,
@@ -128,7 +134,14 @@ def solve_b3_branch_price_tree_baseline(
 
     complete_universe_columns: tuple[JourneyColumn, ...] = tuple()
     complete_universe_counts: dict | None = None
-    if use_complete_universe_audit:
+    if provided_initial_columns:
+        complete_universe_columns = provided_initial_columns
+        complete_universe_counts = {
+            "provided_initial_column_count": len(provided_initial_columns),
+            "column_universe_semantics": "provided_bpc_tree_initial_columns",
+        }
+        use_complete_universe_audit = False
+    elif use_complete_universe_audit:
         deadline = None
         if wall_time_limit_sec is not None:
             from time import perf_counter
@@ -265,7 +278,7 @@ def solve_b3_branch_price_tree_baseline(
     if queue:
         node_limit_hit = True
 
-    return _tree_payload(
+    payload = _tree_payload(
         data=data,
         b2=b2,
         b0_direct=b0_direct,
@@ -280,6 +293,10 @@ def solve_b3_branch_price_tree_baseline(
         max_branch_depth=max_branch_depth,
         negative_eps=negative_eps,
     )
+    payload["initial_tree_seed_column_count"] = len(provided_initial_columns)
+    payload["tree_seed_source"] = "provided_initial_columns" if provided_initial_columns else "b3_internal_seed"
+    payload["solve_b0_direct_first"] = bool(solve_b0_direct_first)
+    return payload
 
 
 def _solve_b3_node(
@@ -445,6 +462,10 @@ def _solve_b3_node_with_complete_universe_audit(
             branch_context=queued.context,
             complete_universe_columns=complete_universe_columns,
             complete_universe_counts=complete_universe_counts,
+            column_pool=pool,
+            master_view=view,
+            node_id=queued.node_id,
+            active_task_sets={frozenset(column.task_set) for column in master_columns},
         )
         last_judge = judge
         last_final_judge_columns = judge.all_priced_columns
@@ -1366,6 +1387,34 @@ def _tree_gate_issues(
     if proof_debt.block_certificate_if_unreleased():
         issues.append("unreleased_true_rc_negative_proof_debt")
     return issues
+
+
+def _bpc_tree_placeholder_direct(data: LunarIceData) -> SimpleNamespace:
+    """Return a non-certifying direct-baseline placeholder for warm-start trees."""
+
+    return SimpleNamespace(
+        status="NOT_RUN",
+        exact_status="NOT_RUN",
+        objective=None,
+        journeys=tuple(),
+        generated_journey_count=0,
+        generated_sortie_count=0,
+        route_template_count=0,
+        pareto_label_count=0,
+        set_partition_state_count=0,
+        note=(
+            "Direct DP was intentionally not run; B3 tree was warm-started from "
+            "provided active columns."
+        ),
+        certificate_scope=CertificateScope.FEASIBLE_INCUMBENT_ONLY.value,
+        objective_breakdown=None,
+        reference_solution_upper_bound=None,
+        reference_solution_upper_bound_source="",
+        journey_label_bound_pruned_count=0,
+        direct_bound_pruning_root_bound=None,
+        direct_bound_pruning_active=False,
+        instance_id=data.instance_id,
+    )
 
 
 def _b2_not_run_payload(data: LunarIceData, *, max_direct_tasks: int) -> dict:

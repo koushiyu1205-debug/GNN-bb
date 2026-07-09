@@ -195,6 +195,10 @@ def solve_b1_root_node_baseline(
             wall_time_limit_sec=_remaining_wall_time_limit(wall_time_limit_sec, started_at=start),
             complete_universe_columns=seed_report.get("_full_universe_columns"),
             complete_universe_counts=seed_report.get("_full_universe_counts"),
+            column_pool=pool,
+            master_view=view,
+            node_id="root",
+            active_task_sets={frozenset(column.task_set) for column in master_columns},
         )
         last_judge = judge
         added = _add_negative_columns(

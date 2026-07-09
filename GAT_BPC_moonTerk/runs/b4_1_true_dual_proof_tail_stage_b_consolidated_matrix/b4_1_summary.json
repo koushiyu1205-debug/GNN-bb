@@ -1,0 +1,151 @@
+{
+  "acceptance": {
+    "b4_1_code_path_exercised": true,
+    "b4_1_full_experiment_complete": false,
+    "requires_long_experiment_completion": true,
+    "stage_a_regression_clean": false,
+    "stage_b_diagnostic_clean": true,
+    "stage_b_matrix_complete": true,
+    "stage_c_diagnostic_clean": false
+  },
+  "diagnostics": {
+    "feasibility_proof_budget_exhausted_count": 0,
+    "hidden_negative_miss_reason_counts": {},
+    "hidden_negative_pricing_timeout_only_count": 0,
+    "hidden_negative_pruned_by_dominance_count": 0,
+    "hidden_negative_top_miss_reason": "",
+    "hidden_negative_worker_not_generated_count": 0,
+    "negative_discovery_budget_exhausted_count": 0,
+    "optimization_proof_missing_count": 0,
+    "positive_best_rc_negative_bound_count": 4,
+    "stage_b_missing_matrix_cell_count": 0,
+    "stage_b_missing_matrix_cells": [],
+    "stage_b_observed_matrix_cells": [
+      "B4V2_baseline",
+      "B4V2_frontier_ledger_diagnostic",
+      "B4V2_harvesting",
+      "B4V2_harvesting_frontier_ledger_diagnostic",
+      "B4V2_hidden_negative_audit",
+      "B4V4_combined_formulation_diagnostic"
+    ],
+    "stage_b_required_matrix_cells": [
+      "B4V2_baseline",
+      "B4V2_harvesting",
+      "B4V2_hidden_negative_audit",
+      "B4V2_frontier_ledger_diagnostic",
+      "B4V2_harvesting_frontier_ledger_diagnostic",
+      "B4V4_combined_formulation_diagnostic"
+    ],
+    "tail_dual_enabled_count": 0,
+    "tail_dual_no_column_can_certify_count": 0,
+    "tail_dual_official_true_dual_source_count": 0,
+    "tail_dual_true_dual_recomputed_count": 0,
+    "tail_dual_worker_only_count": 0
+  },
+  "mode_counts": {
+    "B4.1_compact_pricing_formulation": 4,
+    "B4.1_probe_final_judge_evidence": 1,
+    "B4.1_worker_tail_hidden_negative_evidence": 1
+  },
+  "redlines": {
+    "certificate_leak_count": 0,
+    "diagnostic_claimed_certificate_count": 0,
+    "exception_fail_closed_count": 0,
+    "manual_rc_fail_count": 0,
+    "pricing_rc_fail_count": 0,
+    "resource_guard_stopped_count": 0,
+    "stage_a_tree_closure_miss_count": 0,
+    "tail_dual_certificate_leak_count": 0
+  },
+  "row_count": 6,
+  "schema_version": "lunar_ice_bpc.b4_1_true_dual_proof_tail.v1",
+  "stage_counts": {
+    "B": 6
+  },
+  "summary_rows": [
+    {
+      "best_global_remaining_rc_lb": -0.432157206,
+      "best_last_best_reduced_cost": 0.002707375,
+      "best_negative_rc": null,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "hidden_negative_count": 0,
+      "hidden_negative_miss_reason_counts": {},
+      "hidden_negative_top_miss_reason": "",
+      "mean_active_column_count": null,
+      "mean_active_columns_after_merge": null,
+      "mean_final_judge_wall_time": 58.443408,
+      "mean_wall_time": 58.443408,
+      "mode": "B4.1_compact_pricing_formulation",
+      "negative_column_count": 0,
+      "row_count": 2,
+      "stage": "B",
+      "variant": "V2_latest_service_start_slot_bound"
+    },
+    {
+      "best_global_remaining_rc_lb": -0.198360699,
+      "best_last_best_reduced_cost": 0.005458125,
+      "best_negative_rc": null,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "hidden_negative_count": 0,
+      "hidden_negative_miss_reason_counts": {},
+      "hidden_negative_top_miss_reason": "",
+      "mean_active_column_count": null,
+      "mean_active_columns_after_merge": null,
+      "mean_final_judge_wall_time": 53.610464,
+      "mean_wall_time": 53.610464,
+      "mode": "B4.1_compact_pricing_formulation",
+      "negative_column_count": 0,
+      "row_count": 2,
+      "stage": "B",
+      "variant": "V4_combined_endpoint_pair_latest_start_time_window"
+    },
+    {
+      "best_global_remaining_rc_lb": null,
+      "best_last_best_reduced_cost": -0.272798,
+      "best_negative_rc": -0.272798,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "hidden_negative_count": 0,
+      "hidden_negative_miss_reason_counts": {},
+      "hidden_negative_top_miss_reason": "",
+      "mean_active_column_count": null,
+      "mean_active_columns_after_merge": null,
+      "mean_final_judge_wall_time": 59.762075,
+      "mean_wall_time": 59.762075,
+      "mode": "B4.1_probe_final_judge_evidence",
+      "negative_column_count": 1,
+      "row_count": 1,
+      "stage": "B",
+      "variant": "V2_latest_service_start_slot_bound"
+    },
+    {
+      "best_global_remaining_rc_lb": null,
+      "best_last_best_reduced_cost": -0.38047,
+      "best_negative_rc": -0.38047,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "hidden_negative_count": 0,
+      "hidden_negative_miss_reason_counts": {},
+      "hidden_negative_top_miss_reason": "",
+      "mean_active_column_count": null,
+      "mean_active_columns_after_merge": null,
+      "mean_final_judge_wall_time": 3.102362,
+      "mean_wall_time": 3.102362,
+      "mode": "B4.1_worker_tail_hidden_negative_evidence",
+      "negative_column_count": 0,
+      "row_count": 1,
+      "stage": "B",
+      "variant": "V2_latest_service_start_slot_bound"
+    }
+  ],
+  "variant_counts": {
+    "V2_latest_service_start_slot_bound": 4,
+    "V4_combined_endpoint_pair_latest_start_time_window": 2
+  }
+}

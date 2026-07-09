@@ -6,10 +6,13 @@ from dataclasses import dataclass
 import os
 from time import perf_counter
 
+from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
+from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
+from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.reduced_cost import ReducedCostContext
 from lunar_ice_bpc.exact.bpc.pricing.status import PricingState
 from lunar_ice_bpc.exact.core.branching import BranchContext, branch_context_from_payload, journey_satisfies_branch_context
-from lunar_ice_bpc.exact.core.cuts import CutContext, cut_context_from_payload
+from lunar_ice_bpc.exact.core.cuts import CutContext, cut_coefficients_for_journey, cut_context_from_payload
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
@@ -27,12 +30,90 @@ from lunar_ice_bpc.exact.solver.gurobi_compact import solve_highs_compact_single
 TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS = "best_task_subset_representative_fixed_graph_columns"
 COMPACT_SINGLE_JOURNEY_PRICING_MIN_TASKS = 25
 COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_CAP_SEC = 60.0
-COMPACT_SINGLE_JOURNEY_NEGATIVE_BATCH_TARGET = 3
+COMPACT_SINGLE_JOURNEY_NEGATIVE_BATCH_TARGET = 5
+COMPACT_SINGLE_JOURNEY_OPTIMIZATION_HARVEST_TARGET = 5
 COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_CAP_ENV = "LUNAR_ICE_COMPACT_NEGATIVE_SEARCH_CAP_SEC"
 COMPACT_SINGLE_JOURNEY_NEGATIVE_BATCH_TARGET_ENV = "LUNAR_ICE_COMPACT_NEGATIVE_BATCH_TARGET"
 COMPACT_SINGLE_JOURNEY_NEGATIVE_NO_GOOD_SCOPE_ENV = "LUNAR_ICE_COMPACT_NEGATIVE_NO_GOOD_SCOPE"
+COMPACT_SINGLE_JOURNEY_OPTIMIZATION_HARVEST_TARGET_ENV = (
+    "LUNAR_ICE_COMPACT_OPTIMIZATION_HARVEST_TARGET"
+)
+COMPACT_SINGLE_JOURNEY_OPTIMIZATION_HARVEST_NO_GOOD_SCOPE_ENV = (
+    "LUNAR_ICE_COMPACT_OPTIMIZATION_HARVEST_NO_GOOD_SCOPE"
+)
+COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PROFILE_ENV = "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE"
+COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_ENV = "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE"
+COMPACT_SINGLE_JOURNEY_SERVICE_START_DEPOT_TRAVEL_LB_ENV = "LUNAR_ICE_COMPACT_SERVICE_START_DEPOT_TRAVEL_LB"
+COMPACT_SINGLE_JOURNEY_TASK_TO_DEPOT_RETURN_TRAVEL_LB_ENV = (
+    "LUNAR_ICE_COMPACT_TASK_TO_DEPOT_RETURN_TRAVEL_LB"
+)
+COMPACT_SINGLE_JOURNEY_PAIR_ROUTE_DURATION_LB_ENV = "LUNAR_ICE_COMPACT_PAIR_ROUTE_DURATION_LB"
+COMPACT_SINGLE_JOURNEY_PAIR_WEIGHTED_COMPLETION_LB_ENV = (
+    "LUNAR_ICE_COMPACT_PAIR_WEIGHTED_COMPLETION_LB"
+)
+COMPACT_SINGLE_JOURNEY_SORTIE_SLOT_POSITION_BOUNDS_ENV = (
+    "LUNAR_ICE_COMPACT_SORTIE_SLOT_POSITION_BOUNDS"
+)
+COMPACT_SINGLE_JOURNEY_DEMAND_COVER_CUT_ENV = "LUNAR_ICE_COMPACT_DEMAND_COVER_CUT"
+COMPACT_SINGLE_JOURNEY_SINGLE_TASK_ENERGY_LB_ENV = "LUNAR_ICE_COMPACT_SINGLE_TASK_ENERGY_LB"
+COMPACT_SINGLE_JOURNEY_SINGLE_TASK_SHADOW_LB_ENV = "LUNAR_ICE_COMPACT_SINGLE_TASK_SHADOW_LB"
+COMPACT_SINGLE_JOURNEY_PAIR_ENERGY_LB_ENV = "LUNAR_ICE_COMPACT_PAIR_ENERGY_LB"
+COMPACT_SINGLE_JOURNEY_PAIR_SHADOW_LB_ENV = "LUNAR_ICE_COMPACT_PAIR_SHADOW_LB"
+COMPACT_SINGLE_JOURNEY_PAIR_ENERGY_INFEASIBLE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_PAIR_ENERGY_INFEASIBLE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_PAIR_TIME_WINDOW_INFEASIBLE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_PAIR_TIME_WINDOW_INFEASIBLE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_PAIR_TIME_WINDOW_PRECEDENCE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_PAIR_TIME_WINDOW_PRECEDENCE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_TRIPLE_TIME_WINDOW_INFEASIBLE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_TRIPLE_TIME_WINDOW_INFEASIBLE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_QUAD_TIME_WINDOW_INFEASIBLE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_QUAD_TIME_WINDOW_INFEASIBLE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_PAIR_SHADOW_INFEASIBLE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_PAIR_SHADOW_INFEASIBLE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_TRIPLE_SHADOW_INFEASIBLE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_TRIPLE_SHADOW_INFEASIBLE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_TRIPLE_ENERGY_INFEASIBLE_CUT_ENV = (
+    "LUNAR_ICE_COMPACT_TRIPLE_ENERGY_INFEASIBLE_CUT"
+)
+COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT = "harvest_then_proof"
 COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_MTZ_CONNECTIVITY = False
 COMPACT_SINGLE_JOURNEY_PROOF_MTZ_CONNECTIVITY = True
+COMPACT_SINGLE_JOURNEY_B4V2_MTZ_ENDPOINT_ORDER_CUTS = False
+COMPACT_SINGLE_JOURNEY_B4V2_PAIR_ADJACENCY_CUTS = False
+COMPACT_SINGLE_JOURNEY_B4V2_LATEST_SERVICE_START_SLOT_BOUND = True
+COMPACT_SINGLE_JOURNEY_B4V2_TIME_WINDOW_ARC_PRUNING = False
+COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PROFILES = {
+    "B4V2": {
+        "name": "B4V2",
+        "formulation_profile": "B4V2_latest_start_only",
+        "negative_mtz_connectivity": COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_MTZ_CONNECTIVITY,
+        "proof_mtz_connectivity": COMPACT_SINGLE_JOURNEY_PROOF_MTZ_CONNECTIVITY,
+        "mtz_endpoint_order_cuts": COMPACT_SINGLE_JOURNEY_B4V2_MTZ_ENDPOINT_ORDER_CUTS,
+        "pair_adjacency_cuts": COMPACT_SINGLE_JOURNEY_B4V2_PAIR_ADJACENCY_CUTS,
+        "latest_service_start_slot_bound": COMPACT_SINGLE_JOURNEY_B4V2_LATEST_SERVICE_START_SLOT_BOUND,
+        "time_window_arc_pruning": COMPACT_SINGLE_JOURNEY_B4V2_TIME_WINDOW_ARC_PRUNING,
+        "official_default": True,
+    },
+    "V4": {
+        "name": "V4",
+        "formulation_profile": "B4V4_endpoint_pair_latest_start_time_window",
+        "negative_mtz_connectivity": True,
+        "proof_mtz_connectivity": True,
+        "mtz_endpoint_order_cuts": True,
+        "pair_adjacency_cuts": True,
+        "latest_service_start_slot_bound": True,
+        "time_window_arc_pruning": True,
+        "official_default": False,
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -55,6 +136,10 @@ def run_true_dual_root_final_judge(
     wall_time_limit_sec: float | None = None,
     complete_universe_columns: tuple[JourneyColumn, ...] | None = None,
     complete_universe_counts: dict | None = None,
+    column_pool: ColumnPool | None = None,
+    master_view: MasterColumnView | None = None,
+    node_id: str = "root",
+    active_task_sets: set[frozenset[str]] | None = None,
 ) -> FinalJudgeResult:
     """Run exhaustive fixed-graph pricing with completion-bound pruning disabled.
 
@@ -84,6 +169,10 @@ def run_true_dual_root_final_judge(
                 cut_context=active_cut_context,
                 negative_eps=negative_eps,
                 wall_time_limit_sec=wall_time_limit_sec,
+                column_pool=column_pool,
+                master_view=master_view,
+                node_id=node_id,
+                active_task_sets=active_task_sets,
             )
         return _run_complete_universe_rc_final_judge(
             data,
@@ -173,6 +262,10 @@ def _run_compact_single_journey_pricing_final_judge(
     cut_context: CutContext,
     negative_eps: float,
     wall_time_limit_sec: float | None,
+    column_pool: ColumnPool | None = None,
+    master_view: MasterColumnView | None = None,
+    node_id: str = "root",
+    active_task_sets: set[frozenset[str]] | None = None,
 ) -> FinalJudgeResult:
     start = perf_counter()
     phase_payloads: dict[str, dict] = {}
@@ -181,12 +274,93 @@ def _run_compact_single_journey_pricing_final_judge(
     seen_patterns: set[tuple[tuple[int, str, str, str], ...]] = set()
     seen_task_sets: set[tuple[str, ...]] = set()
     batch_negative_columns: list[JourneyColumn] = []
+    batch_pricing_rc_by_signature: dict[object, float] = {}
     last_negative_result: dict | None = None
+    profile = _compact_final_judge_profile_from_env()
+    phase_mode = _compact_final_judge_phase_mode_from_env()
+    service_start_depot_travel_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_SERVICE_START_DEPOT_TRAVEL_LB_ENV,
+        default=False,
+    )
+    task_to_depot_return_travel_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_TASK_TO_DEPOT_RETURN_TRAVEL_LB_ENV,
+        default=False,
+    )
+    pair_route_duration_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_ROUTE_DURATION_LB_ENV,
+        default=False,
+    )
+    pair_weighted_completion_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_WEIGHTED_COMPLETION_LB_ENV,
+        default=False,
+    )
+    sortie_slot_position_bounds = _env_bool(
+        COMPACT_SINGLE_JOURNEY_SORTIE_SLOT_POSITION_BOUNDS_ENV,
+        default=False,
+    )
+    demand_cover_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_DEMAND_COVER_CUT_ENV,
+        default=False,
+    )
+    single_task_energy_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_SINGLE_TASK_ENERGY_LB_ENV,
+        default=False,
+    )
+    single_task_shadow_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_SINGLE_TASK_SHADOW_LB_ENV,
+        default=False,
+    )
+    pair_energy_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_ENERGY_LB_ENV,
+        default=False,
+    )
+    pair_shadow_lb = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_SHADOW_LB_ENV,
+        default=False,
+    )
+    pair_energy_infeasible_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_ENERGY_INFEASIBLE_CUT_ENV,
+        default=False,
+    )
+    pair_time_window_infeasible_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_TIME_WINDOW_INFEASIBLE_CUT_ENV,
+        default=False,
+    )
+    pair_time_window_precedence_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_TIME_WINDOW_PRECEDENCE_CUT_ENV,
+        default=False,
+    )
+    triple_time_window_infeasible_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_TRIPLE_TIME_WINDOW_INFEASIBLE_CUT_ENV,
+        default=False,
+    )
+    quad_time_window_infeasible_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_QUAD_TIME_WINDOW_INFEASIBLE_CUT_ENV,
+        default=False,
+    )
+    pair_shadow_infeasible_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_PAIR_SHADOW_INFEASIBLE_CUT_ENV,
+        default=False,
+    )
+    triple_shadow_infeasible_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_TRIPLE_SHADOW_INFEASIBLE_CUT_ENV,
+        default=False,
+    )
+    triple_energy_infeasible_cut = _env_bool(
+        COMPACT_SINGLE_JOURNEY_TRIPLE_ENERGY_INFEASIBLE_CUT_ENV,
+        default=False,
+    )
     batch_target = _env_int(
         COMPACT_SINGLE_JOURNEY_NEGATIVE_BATCH_TARGET_ENV,
         default=COMPACT_SINGLE_JOURNEY_NEGATIVE_BATCH_TARGET,
         minimum=1,
         maximum=32,
+    )
+    optimization_harvest_target = _env_int(
+        COMPACT_SINGLE_JOURNEY_OPTIMIZATION_HARVEST_TARGET_ENV,
+        default=COMPACT_SINGLE_JOURNEY_OPTIMIZATION_HARVEST_TARGET,
+        minimum=1,
+        maximum=16,
     )
     negative_search_cap = _env_float(
         COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_CAP_ENV,
@@ -199,7 +373,76 @@ def _run_compact_single_journey_pricing_final_judge(
         default="arc",
         choices={"arc", "task_set", "arc_and_task_set"},
     )
-    for batch_index in range(1, batch_target + 1):
+    optimization_harvest_no_good_scope = _env_choice(
+        COMPACT_SINGLE_JOURNEY_OPTIMIZATION_HARVEST_NO_GOOD_SCOPE_ENV,
+        default="task_set",
+        choices={"arc", "task_set", "arc_and_task_set"},
+    )
+    if phase_mode == "feasibility_proof_only":
+        remaining = _remaining_compact_time(wall_time_limit_sec, started_at=start)
+        result = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=remaining,
+            threads=1,
+            mip_gap=0.0,
+            negative_eps=negative_eps,
+            mtz_connectivity=bool(profile["proof_mtz_connectivity"]),
+            mtz_endpoint_order_cuts=bool(profile["mtz_endpoint_order_cuts"]),
+            pair_adjacency_cuts=bool(profile["pair_adjacency_cuts"]),
+            latest_service_start_slot_bound=bool(profile["latest_service_start_slot_bound"]),
+            time_window_arc_pruning=bool(profile["time_window_arc_pruning"]),
+            sortie_slot_position_bounds=sortie_slot_position_bounds,
+            service_start_depot_travel_lb=service_start_depot_travel_lb,
+            task_to_depot_return_travel_lb=task_to_depot_return_travel_lb,
+            pair_route_duration_lb=pair_route_duration_lb,
+            pair_weighted_completion_lb=pair_weighted_completion_lb,
+            demand_cover_cut=demand_cover_cut,
+            single_task_energy_lb=single_task_energy_lb,
+            single_task_shadow_lb=single_task_shadow_lb,
+            pair_energy_lb=pair_energy_lb,
+            pair_shadow_lb=pair_shadow_lb,
+            pair_energy_infeasible_cut=pair_energy_infeasible_cut,
+            pair_time_window_infeasible_cut=pair_time_window_infeasible_cut,
+            pair_time_window_precedence_cut=pair_time_window_precedence_cut,
+            triple_time_window_infeasible_cut=triple_time_window_infeasible_cut,
+            quad_time_window_infeasible_cut=quad_time_window_infeasible_cut,
+            pair_shadow_infeasible_cut=pair_shadow_infeasible_cut,
+            triple_shadow_infeasible_cut=triple_shadow_infeasible_cut,
+            triple_energy_infeasible_cut=triple_energy_infeasible_cut,
+            negative_feasibility_search=True,
+        )
+        result = _with_compact_profile_payload(result, profile)
+        result["negative_feasibility_full_space_proof_attempted"] = True
+        result["negative_feasibility_full_space_proof_can_certify"] = bool(
+            result.get("can_certify_no_negative")
+            and not result.get("forbidden_arc_pattern_count")
+            and not result.get("forbidden_task_set_count")
+        )
+        state, negative_columns, can_certify = _compact_result_state(
+            result,
+            duals,
+            cut_context,
+            negative_eps=negative_eps,
+        )
+        return _compact_final_judge_result(
+            data,
+            context=context,
+            branch_context=branch_context,
+            cut_context=cut_context,
+            result=result,
+            state=state,
+            negative_columns=negative_columns,
+            can_certify=can_certify,
+            started_at=start,
+            phase="negative_feasibility_proof",
+            phase_payloads={"negative_feasibility_proof": _compact_phase_summary(result)},
+            profile=profile,
+            phase_mode=phase_mode,
+        )
+
+    negative_batch_range = range(1, batch_target + 1) if phase_mode != "proof_only" else ()
+    for batch_index in negative_batch_range:
         remaining_for_search = _remaining_compact_time(wall_time_limit_sec, started_at=start)
         if remaining_for_search is not None and remaining_for_search <= 0.25:
             break
@@ -218,11 +461,34 @@ def _run_compact_single_journey_pricing_final_judge(
             threads=1,
             mip_gap=0.0,
             negative_eps=negative_eps,
-            mtz_connectivity=COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_MTZ_CONNECTIVITY,
+            mtz_connectivity=bool(profile["negative_mtz_connectivity"]),
+            mtz_endpoint_order_cuts=bool(profile["mtz_endpoint_order_cuts"]),
+            pair_adjacency_cuts=bool(profile["pair_adjacency_cuts"]),
+            latest_service_start_slot_bound=bool(profile["latest_service_start_slot_bound"]),
+            time_window_arc_pruning=bool(profile["time_window_arc_pruning"]),
+            sortie_slot_position_bounds=sortie_slot_position_bounds,
+            service_start_depot_travel_lb=service_start_depot_travel_lb,
+            task_to_depot_return_travel_lb=task_to_depot_return_travel_lb,
+            pair_route_duration_lb=pair_route_duration_lb,
+            pair_weighted_completion_lb=pair_weighted_completion_lb,
+            demand_cover_cut=demand_cover_cut,
+            single_task_energy_lb=single_task_energy_lb,
+            single_task_shadow_lb=single_task_shadow_lb,
+            pair_energy_lb=pair_energy_lb,
+            pair_shadow_lb=pair_shadow_lb,
+            pair_energy_infeasible_cut=pair_energy_infeasible_cut,
+            pair_time_window_infeasible_cut=pair_time_window_infeasible_cut,
+            pair_time_window_precedence_cut=pair_time_window_precedence_cut,
+            triple_time_window_infeasible_cut=triple_time_window_infeasible_cut,
+            quad_time_window_infeasible_cut=quad_time_window_infeasible_cut,
+            pair_shadow_infeasible_cut=pair_shadow_infeasible_cut,
+            triple_shadow_infeasible_cut=triple_shadow_infeasible_cut,
+            triple_energy_infeasible_cut=triple_energy_infeasible_cut,
             negative_feasibility_search=True,
             forbidden_arc_patterns=tuple(forbidden_patterns),
             forbidden_task_sets=tuple(forbidden_task_sets),
         )
+        negative_result = _with_compact_profile_payload(negative_result, profile)
         last_negative_result = negative_result
         phase_payloads[f"negative_feasibility_search_{batch_index}"] = _compact_phase_summary(negative_result)
         negative_state, negative_columns, negative_can_certify = _compact_result_state(
@@ -234,6 +500,7 @@ def _run_compact_single_journey_pricing_final_judge(
         if negative_state == PricingState.FOUND_NEGATIVE:
             added_new = False
             for column in negative_columns:
+                signature = column_signature_from_journey(column)
                 pattern = _journey_forbidden_arc_pattern(column)
                 task_set = _journey_forbidden_task_set(column)
                 pattern_added = False
@@ -249,6 +516,9 @@ def _run_compact_single_journey_pricing_final_judge(
                 if not (pattern_added or task_set_added):
                     continue
                 batch_negative_columns.append(column)
+                pricing_rc = _compact_result_pricing_rc_for_column(negative_result, column_count=len(negative_columns))
+                if pricing_rc is not None:
+                    batch_pricing_rc_by_signature[signature] = pricing_rc
                 added_new = True
             if added_new:
                 continue
@@ -266,60 +536,117 @@ def _run_compact_single_journey_pricing_final_judge(
                 started_at=start,
                 phase="negative_feasibility_search",
                 phase_payloads=phase_payloads,
+                profile=profile,
+                phase_mode=phase_mode,
             )
         break
 
     if batch_negative_columns:
-        manual_best = min(_manual_reduced_cost(column, duals, cut_context) for column in batch_negative_columns)
-        result = dict(last_negative_result or {})
-        result.update(
-            {
-                "status": "COMPACT_HIGHS_PRICING_BATCH_FOUND_NEGATIVE",
-                "algorithm_status": "COMPACT_HIGHS_PRICING_BATCH_FOUND_NEGATIVE",
-                "exact_status": "NOT_SOLVED",
-                "pricing_state": PricingState.FOUND_NEGATIVE.value,
-                "best_reduced_cost": round(float(manual_best), 9),
-                "manual_best_reduced_cost": round(float(manual_best), 9),
-                "pricing_best_reduced_cost": round(float(manual_best), 9),
-                "negative_found": True,
-                "negative_column_count": len(batch_negative_columns),
-                "can_certify_no_negative": False,
-                "uses_true_dual_bpc_certificate": False,
-                "pricing_rc_audit_pass": True,
-                "journeys": tuple(batch_negative_columns),
-                "journey_count": len(batch_negative_columns),
-                "has_feasible_incumbent": True,
-                "compact_negative_batch_enabled": True,
-                "compact_negative_batch_target": batch_target,
-                "compact_negative_no_good_scope": no_good_scope,
-                "compact_negative_search_cap_sec": negative_search_cap,
-                "compact_negative_batch_found_count": len(batch_negative_columns),
-                "compact_negative_batch_search_call_count": len(phase_payloads),
-                "forbidden_arc_pattern_count": len(forbidden_patterns),
-                "forbidden_arc_patterns_can_certify_full_space": False,
-                "forbidden_task_set_count": len(forbidden_task_sets),
-                "forbidden_task_sets_can_certify_full_space": False,
-                "wall_time_sec": round(perf_counter() - start, 6),
-                "note": (
-                    "Compact final judge used restricted negative-feasibility discovery to return "
-                    "multiple audited negative columns. Restricted discovery is not a no-negative "
-                    "certificate; a later unrestricted proof phase is still required for closure."
-                ),
-            }
-        )
-        return _compact_final_judge_result(
-            data,
-            context=context,
+        harvest_payload = _compact_negative_harvest_payload(
+            batch_negative_columns,
+            duals,
+            cut_context,
+            negative_eps=negative_eps,
+            candidate_negative_count=len(batch_negative_columns),
+            max_selected=batch_target,
+            pricing_rc_by_signature=batch_pricing_rc_by_signature,
+            column_pool=column_pool,
+            master_view=master_view,
+            node_id=node_id,
+            active_task_sets=active_task_sets,
             branch_context=branch_context,
-            cut_context=cut_context,
-            result=result,
-            state=PricingState.FOUND_NEGATIVE,
-            negative_columns=tuple(batch_negative_columns),
-            can_certify=False,
-            started_at=start,
-            phase="negative_feasibility_batch",
-            phase_payloads=phase_payloads,
         )
+        selected_columns = tuple(harvest_payload.pop("_selected_columns"))
+        manual_rc_values = tuple(_manual_reduced_cost(column, duals, cut_context) for column in selected_columns)
+        manual_best = min(manual_rc_values) if manual_rc_values else None
+        result = dict(last_negative_result or {})
+        if not selected_columns:
+            result.update(
+                {
+                    "status": "COMPACT_HIGHS_PRICING_BATCH_NO_ADDABLE_NEGATIVE",
+                    "algorithm_status": "COMPACT_HIGHS_PRICING_BATCH_NO_ADDABLE_NEGATIVE",
+                    "exact_status": "NOT_SOLVED",
+                    "pricing_state": PricingState.INCOMPLETE_LIMIT.value,
+                    "negative_found": True,
+                    "negative_column_count": 0,
+                    "can_certify_no_negative": False,
+                    "uses_true_dual_bpc_certificate": False,
+                    "pricing_rc_audit_pass": True,
+                    "journeys": tuple(),
+                    "journey_count": 0,
+                    "compact_negative_batch_enabled": True,
+                    "compact_negative_batch_target": batch_target,
+                    "compact_negative_no_good_scope": no_good_scope,
+                    "compact_negative_search_cap_sec": negative_search_cap,
+                    "compact_negative_batch_found_count": 0,
+                    "compact_negative_batch_search_call_count": len(phase_payloads),
+                    "forbidden_arc_pattern_count": len(forbidden_patterns),
+                    "forbidden_arc_patterns_can_certify_full_space": False,
+                    "forbidden_task_set_count": len(forbidden_task_sets),
+                    "forbidden_task_sets_can_certify_full_space": False,
+                    "wall_time_sec": round(perf_counter() - start, 6),
+                    "note": (
+                        "Compact final judge found true negative candidates, but harvesting "
+                        "rejected all of them as non-addable. This cannot advance the master "
+                        "and cannot certify no-negative, so the runner falls through to the "
+                        "unrestricted proof phase when time remains."
+                    ),
+                    **harvest_payload,
+                }
+            )
+            last_negative_result = result
+        else:
+            result.update(
+                {
+                    "status": "COMPACT_HIGHS_PRICING_BATCH_FOUND_NEGATIVE",
+                    "algorithm_status": "COMPACT_HIGHS_PRICING_BATCH_FOUND_NEGATIVE",
+                    "exact_status": "NOT_SOLVED",
+                    "pricing_state": PricingState.FOUND_NEGATIVE.value,
+                    "best_reduced_cost": None if manual_best is None else round(float(manual_best), 9),
+                    "manual_best_reduced_cost": None if manual_best is None else round(float(manual_best), 9),
+                    "pricing_best_reduced_cost": None if manual_best is None else round(float(manual_best), 9),
+                    "negative_found": True,
+                    "negative_column_count": len(selected_columns),
+                    "can_certify_no_negative": False,
+                    "uses_true_dual_bpc_certificate": False,
+                    "pricing_rc_audit_pass": True,
+                    "journeys": selected_columns,
+                    "journey_count": len(selected_columns),
+                    "has_feasible_incumbent": True,
+                    "compact_negative_batch_enabled": True,
+                    "compact_negative_batch_target": batch_target,
+                    "compact_negative_no_good_scope": no_good_scope,
+                    "compact_negative_search_cap_sec": negative_search_cap,
+                    "compact_negative_batch_found_count": len(selected_columns),
+                    "compact_negative_batch_search_call_count": len(phase_payloads),
+                    "forbidden_arc_pattern_count": len(forbidden_patterns),
+                    "forbidden_arc_patterns_can_certify_full_space": False,
+                    "forbidden_task_set_count": len(forbidden_task_sets),
+                    "forbidden_task_sets_can_certify_full_space": False,
+                    "wall_time_sec": round(perf_counter() - start, 6),
+                    "note": (
+                        "Compact final judge used restricted negative-feasibility discovery to return "
+                        "multiple audited negative columns. Restricted discovery is not a no-negative "
+                        "certificate; a later unrestricted proof phase is still required for closure."
+                    ),
+                    **harvest_payload,
+                }
+            )
+            return _compact_final_judge_result(
+                data,
+                context=context,
+                branch_context=branch_context,
+                cut_context=cut_context,
+                result=result,
+                state=PricingState.FOUND_NEGATIVE,
+                negative_columns=selected_columns,
+                can_certify=False,
+                started_at=start,
+                phase="negative_feasibility_batch",
+                phase_payloads=phase_payloads,
+                profile=profile,
+                phase_mode=phase_mode,
+            )
 
     remaining = _remaining_compact_time(wall_time_limit_sec, started_at=start)
     if remaining is None or remaining > 0.25:
@@ -330,15 +657,223 @@ def _run_compact_single_journey_pricing_final_judge(
             threads=1,
             mip_gap=0.0,
             negative_eps=negative_eps,
-            mtz_connectivity=COMPACT_SINGLE_JOURNEY_PROOF_MTZ_CONNECTIVITY,
-            pair_adjacency_cuts=True,
+            mtz_connectivity=bool(profile["proof_mtz_connectivity"]),
+            mtz_endpoint_order_cuts=bool(profile["mtz_endpoint_order_cuts"]),
+            pair_adjacency_cuts=bool(profile["pair_adjacency_cuts"]),
+            latest_service_start_slot_bound=bool(profile["latest_service_start_slot_bound"]),
+            time_window_arc_pruning=bool(profile["time_window_arc_pruning"]),
+            sortie_slot_position_bounds=sortie_slot_position_bounds,
+        service_start_depot_travel_lb=service_start_depot_travel_lb,
+        task_to_depot_return_travel_lb=task_to_depot_return_travel_lb,
+        pair_route_duration_lb=pair_route_duration_lb,
+        pair_weighted_completion_lb=pair_weighted_completion_lb,
+        demand_cover_cut=demand_cover_cut,
+            single_task_energy_lb=single_task_energy_lb,
+            single_task_shadow_lb=single_task_shadow_lb,
+            pair_energy_lb=pair_energy_lb,
+            pair_shadow_lb=pair_shadow_lb,
+            pair_energy_infeasible_cut=pair_energy_infeasible_cut,
+            pair_time_window_infeasible_cut=pair_time_window_infeasible_cut,
+            pair_time_window_precedence_cut=pair_time_window_precedence_cut,
+            triple_time_window_infeasible_cut=triple_time_window_infeasible_cut,
+            quad_time_window_infeasible_cut=quad_time_window_infeasible_cut,
+            pair_shadow_infeasible_cut=pair_shadow_infeasible_cut,
+            triple_shadow_infeasible_cut=triple_shadow_infeasible_cut,
+            triple_energy_infeasible_cut=triple_energy_infeasible_cut,
         )
+        result = _with_compact_profile_payload(result, profile)
         state, negative_columns, can_certify = _compact_result_state(
             result,
             duals,
             cut_context,
             negative_eps=negative_eps,
         )
+        if state == PricingState.FOUND_NEGATIVE and optimization_harvest_target > 1:
+            optimization_columns: list[JourneyColumn] = list(negative_columns)
+            optimization_pricing_rc_by_signature: dict[object, float] = {}
+            for column in negative_columns:
+                signature = column_signature_from_journey(column)
+                pricing_rc = _compact_result_pricing_rc_for_column(result, column_count=len(negative_columns))
+                if pricing_rc is not None:
+                    optimization_pricing_rc_by_signature[signature] = pricing_rc
+                pattern = _journey_forbidden_arc_pattern(column)
+                task_set = _journey_forbidden_task_set(column)
+                if (
+                    optimization_harvest_no_good_scope in {"arc", "arc_and_task_set"}
+                    and pattern
+                    and pattern not in seen_patterns
+                ):
+                    seen_patterns.add(pattern)
+                    forbidden_patterns.append(pattern)
+                if (
+                    optimization_harvest_no_good_scope in {"task_set", "arc_and_task_set"}
+                    and task_set
+                    and task_set not in seen_task_sets
+                ):
+                    seen_task_sets.add(task_set)
+                    forbidden_task_sets.append(task_set)
+            optimization_phase_payloads = {
+                **phase_payloads,
+                "optimization_proof": _compact_phase_summary(result),
+            }
+            for harvest_index in range(2, optimization_harvest_target + 1):
+                remaining_for_harvest = _remaining_compact_time(wall_time_limit_sec, started_at=start)
+                if remaining_for_harvest is not None and remaining_for_harvest <= 0.25:
+                    break
+                restricted_result = solve_highs_compact_single_journey_pricing(
+                    data,
+                    duals,
+                    time_limit_sec=remaining_for_harvest,
+                    threads=1,
+                    mip_gap=0.0,
+                    negative_eps=negative_eps,
+                    mtz_connectivity=bool(profile["proof_mtz_connectivity"]),
+                    mtz_endpoint_order_cuts=bool(profile["mtz_endpoint_order_cuts"]),
+                    pair_adjacency_cuts=bool(profile["pair_adjacency_cuts"]),
+                    latest_service_start_slot_bound=bool(profile["latest_service_start_slot_bound"]),
+                    time_window_arc_pruning=bool(profile["time_window_arc_pruning"]),
+                    sortie_slot_position_bounds=sortie_slot_position_bounds,
+                    service_start_depot_travel_lb=service_start_depot_travel_lb,
+                    task_to_depot_return_travel_lb=task_to_depot_return_travel_lb,
+                    pair_route_duration_lb=pair_route_duration_lb,
+                    pair_weighted_completion_lb=pair_weighted_completion_lb,
+                    demand_cover_cut=demand_cover_cut,
+                    single_task_energy_lb=single_task_energy_lb,
+                    single_task_shadow_lb=single_task_shadow_lb,
+                    pair_energy_lb=pair_energy_lb,
+                    pair_shadow_lb=pair_shadow_lb,
+                    pair_energy_infeasible_cut=pair_energy_infeasible_cut,
+                    pair_time_window_infeasible_cut=pair_time_window_infeasible_cut,
+                    pair_time_window_precedence_cut=pair_time_window_precedence_cut,
+                    triple_time_window_infeasible_cut=triple_time_window_infeasible_cut,
+                    quad_time_window_infeasible_cut=quad_time_window_infeasible_cut,
+                    pair_shadow_infeasible_cut=pair_shadow_infeasible_cut,
+                    triple_shadow_infeasible_cut=triple_shadow_infeasible_cut,
+                    triple_energy_infeasible_cut=triple_energy_infeasible_cut,
+                    forbidden_arc_patterns=tuple(forbidden_patterns),
+                    forbidden_task_sets=tuple(forbidden_task_sets),
+                )
+                restricted_result = _with_compact_profile_payload(restricted_result, profile)
+                optimization_phase_payloads[f"optimization_harvest_{harvest_index}"] = _compact_phase_summary(
+                    restricted_result
+                )
+                restricted_state, restricted_negative_columns, _restricted_can_certify = _compact_result_state(
+                    restricted_result,
+                    duals,
+                    cut_context,
+                    negative_eps=negative_eps,
+                )
+                if restricted_state != PricingState.FOUND_NEGATIVE:
+                    break
+                added_new = False
+                for column in restricted_negative_columns:
+                    signature = column_signature_from_journey(column)
+                    pattern = _journey_forbidden_arc_pattern(column)
+                    task_set = _journey_forbidden_task_set(column)
+                    pattern_added = False
+                    task_set_added = False
+                    if (
+                        optimization_harvest_no_good_scope in {"arc", "arc_and_task_set"}
+                        and pattern
+                        and pattern not in seen_patterns
+                    ):
+                        seen_patterns.add(pattern)
+                        forbidden_patterns.append(pattern)
+                        pattern_added = True
+                    if (
+                        optimization_harvest_no_good_scope in {"task_set", "arc_and_task_set"}
+                        and task_set
+                        and task_set not in seen_task_sets
+                    ):
+                        seen_task_sets.add(task_set)
+                        forbidden_task_sets.append(task_set)
+                        task_set_added = True
+                    if not (pattern_added or task_set_added):
+                        continue
+                    optimization_columns.append(column)
+                    pricing_rc = _compact_result_pricing_rc_for_column(
+                        restricted_result,
+                        column_count=len(restricted_negative_columns),
+                    )
+                    if pricing_rc is not None:
+                        optimization_pricing_rc_by_signature[signature] = pricing_rc
+                    added_new = True
+                if not added_new:
+                    break
+            harvest_payload = _compact_negative_harvest_payload(
+                optimization_columns,
+                duals,
+                cut_context,
+                negative_eps=negative_eps,
+                candidate_negative_count=len(optimization_columns),
+                max_selected=optimization_harvest_target,
+                source_phase="compact_final_judge_optimization_harvest",
+                pricing_rc_by_signature=optimization_pricing_rc_by_signature,
+                column_pool=column_pool,
+                master_view=master_view,
+                node_id=node_id,
+                active_task_sets=active_task_sets,
+                branch_context=branch_context,
+            )
+            selected_columns = tuple(harvest_payload.pop("_selected_columns"))
+            if selected_columns:
+                manual_rc_values = tuple(_manual_reduced_cost(column, duals, cut_context) for column in selected_columns)
+                manual_best = min(manual_rc_values)
+                result = dict(result)
+                result.update(
+                    {
+                        "status": "COMPACT_HIGHS_PRICING_OPTIMIZATION_HARVEST_FOUND_NEGATIVE",
+                        "algorithm_status": "COMPACT_HIGHS_PRICING_OPTIMIZATION_HARVEST_FOUND_NEGATIVE",
+                        "exact_status": "NOT_SOLVED",
+                        "pricing_state": PricingState.FOUND_NEGATIVE.value,
+                        "best_reduced_cost": round(float(manual_best), 9),
+                        "manual_best_reduced_cost": round(float(manual_best), 9),
+                        "pricing_best_reduced_cost": round(float(manual_best), 9),
+                        "negative_found": True,
+                        "negative_column_count": len(selected_columns),
+                        "can_certify_no_negative": False,
+                        "uses_true_dual_bpc_certificate": False,
+                        "pricing_rc_audit_pass": bool(harvest_payload.get("harvest_pricing_rc_audit_pass")),
+                        "journeys": selected_columns,
+                        "journey_count": len(selected_columns),
+                        "has_feasible_incumbent": True,
+                        "compact_optimization_harvest_enabled": True,
+                        "compact_optimization_harvest_target": int(optimization_harvest_target),
+                        "compact_optimization_harvest_no_good_scope": optimization_harvest_no_good_scope,
+                        "compact_optimization_harvest_found_count": len(selected_columns),
+                        "compact_optimization_harvest_search_call_count": len(
+                            [key for key in optimization_phase_payloads if str(key).startswith("optimization")]
+                        ),
+                        "compact_negative_no_good_scope": no_good_scope,
+                        "restricted_harvest_can_certify_no_negative": False,
+                        "forbidden_arc_pattern_count": len(forbidden_patterns),
+                        "forbidden_arc_patterns_can_certify_full_space": False,
+                        "forbidden_task_set_count": len(forbidden_task_sets),
+                        "forbidden_task_sets_can_certify_full_space": False,
+                        "wall_time_sec": round(perf_counter() - start, 6),
+                        "note": (
+                            "Compact final judge used unrestricted optimization proof followed by "
+                            "restricted no-good optimization harvest. Restricted harvest rows are "
+                            "candidate discovery only and cannot certify no-negative."
+                        ),
+                        **harvest_payload,
+                    }
+                )
+                return _compact_final_judge_result(
+                    data,
+                    context=context,
+                    branch_context=branch_context,
+                    cut_context=cut_context,
+                    result=result,
+                    state=PricingState.FOUND_NEGATIVE,
+                    negative_columns=selected_columns,
+                    can_certify=False,
+                    started_at=start,
+                    phase="optimization_harvest",
+                    phase_payloads=optimization_phase_payloads,
+                    profile=profile,
+                    phase_mode=phase_mode,
+                )
         return _compact_final_judge_result(
             data,
             context=context,
@@ -354,6 +889,8 @@ def _run_compact_single_journey_pricing_final_judge(
                 **phase_payloads,
                 "optimization_proof": _compact_phase_summary(result),
             },
+            profile=profile,
+            phase_mode=phase_mode,
         )
 
     return _compact_final_judge_result(
@@ -368,6 +905,8 @@ def _run_compact_single_journey_pricing_final_judge(
         started_at=start,
         phase="negative_feasibility_search",
         phase_payloads=phase_payloads,
+        profile=profile,
+        phase_mode=phase_mode,
     )
 
 
@@ -399,6 +938,72 @@ def _env_choice(name: str, *, default: str, choices: set[str]) -> str:
     raw = os.environ.get(str(name))
     value = str(raw).strip().lower() if raw not in {None, ""} else str(default)
     return value if value in choices else str(default)
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(str(name))
+    if raw in {None, ""}:
+        return bool(default)
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on", "enabled", "enable"}:
+        return True
+    if value in {"0", "false", "no", "off", "disabled", "disable"}:
+        return False
+    return bool(default)
+
+
+def _compact_final_judge_profile_from_env() -> dict:
+    raw = os.environ.get(COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PROFILE_ENV)
+    value = str(raw or "B4V2").strip().upper()
+    aliases = {
+        "": "B4V2",
+        "DEFAULT": "B4V2",
+        "V2": "B4V2",
+        "B4V2": "B4V2",
+        "LATEST_START": "B4V2",
+        "LATEST_START_ONLY": "B4V2",
+        "V4": "V4",
+        "B4V4": "V4",
+        "COMBINED": "V4",
+        "B4V4_COMBINED": "V4",
+    }
+    key = aliases.get(value, "B4V2")
+    return dict(COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PROFILES[key])
+
+
+def _compact_final_judge_phase_mode_from_env() -> str:
+    raw = os.environ.get(COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_ENV)
+    value = str(raw or COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT).strip().lower()
+    aliases = {
+        "": COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT,
+        "default": COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT,
+        "harvest": COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT,
+        "harvest_then_proof": COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT,
+        "negative_then_proof": COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT,
+        "proof": "proof_only",
+        "proof_only": "proof_only",
+        "optimization_proof": "proof_only",
+        "feasibility_proof": "feasibility_proof_only",
+        "feasibility_proof_only": "feasibility_proof_only",
+        "negative_feasibility_proof": "feasibility_proof_only",
+        "negative_feasibility_proof_only": "feasibility_proof_only",
+    }
+    return aliases.get(value, COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT)
+
+
+def _compact_profile_payload(profile: dict) -> dict:
+    return {
+        "compact_final_judge_profile": str(profile["name"]),
+        "compact_final_judge_formulation_profile": str(profile["formulation_profile"]),
+        "compact_final_judge_profile_env": COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PROFILE_ENV,
+        "compact_final_judge_profile_official_default": bool(profile["official_default"]),
+    }
+
+
+def _with_compact_profile_payload(result: dict, profile: dict) -> dict:
+    merged = dict(result)
+    merged.update(_compact_profile_payload(profile))
+    return merged
 
 
 def _compact_result_state(
@@ -442,14 +1047,35 @@ def _compact_final_judge_result(
     started_at: float,
     phase: str,
     phase_payloads: dict,
+    profile: dict | None = None,
+    phase_mode: str = COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_DEFAULT,
 ) -> FinalJudgeResult:
     columns = tuple(result.get("journeys") or tuple())
+    pricing_proof_kind = _compact_pricing_proof_kind(result, can_certify=can_certify)
+    profile_payload = _compact_profile_payload(profile or _compact_final_judge_profile_from_env())
+    global_remaining_rc_lb = _first_float(
+        result.get("global_remaining_rc_lb"),
+        result.get("global_remaining_rc_lower_bound"),
+        result.get("dual_bound"),
+        result.get("bound"),
+    )
+    unsupported_region_count = _compact_frontier_unsupported_region_count(result, pricing_proof_kind=pricing_proof_kind)
     payload = {
         **{key: value for key, value in result.items() if key != "journeys"},
+        **profile_payload,
         "status": str(result.get("status") or "COMPACT_HIGHS_SINGLE_JOURNEY_PRICING"),
         "exact_status": str(result.get("exact_status") or "NOT_SOLVED"),
         "compact_pricing_phase": str(phase),
         "compact_pricing_phase_payloads": dict(phase_payloads),
+        "compact_final_judge_phase_mode": str(phase_mode),
+        "compact_final_judge_phase_mode_env": COMPACT_SINGLE_JOURNEY_FINAL_JUDGE_PHASE_MODE_ENV,
+        "negative_feasibility_skipped_for_proof_only": bool(str(phase_mode) == "proof_only"),
+        "negative_feasibility_full_space_proof_attempted": bool(
+            result.get("negative_feasibility_full_space_proof_attempted")
+        ),
+        "negative_feasibility_full_space_proof_can_certify": bool(
+            result.get("negative_feasibility_full_space_proof_can_certify")
+        ),
         "task_count": len(data.task_ids),
         "max_direct_tasks": len(data.task_ids),
         "candidate_round_count": int(result.get("candidate_round_count") or result.get("compact_negative_batch_search_call_count") or 1),
@@ -459,7 +1085,7 @@ def _compact_final_judge_result(
         "pricing_state": state.value,
         "can_certify_no_negative": bool(can_certify),
         "uses_true_dual_bpc_certificate": bool(can_certify),
-        "negative_found": bool(negative_columns),
+        "negative_found": bool(negative_columns) or bool(result.get("negative_found")) or state == PricingState.FOUND_NEGATIVE,
         "negative_column_count": len(negative_columns),
         "cut_context_active": not cut_context.empty,
         "cut_count": len(cut_context.cuts),
@@ -477,6 +1103,17 @@ def _compact_final_judge_result(
         "pricing_rc_audit_pass": bool(result.get("pricing_rc_audit_pass") is True),
         "manual_priced_column_count": len(columns),
         "all_priced_columns_satisfy_branch_context": True,
+        "global_remaining_rc_lb": global_remaining_rc_lb,
+        "global_remaining_rc_lb_valid": bool(global_remaining_rc_lb is not None),
+        "global_remaining_rc_lb_coverage_complete": bool(can_certify),
+        "frontier_region_count": int(result.get("frontier_region_count") or (1 if global_remaining_rc_lb is not None else 0)),
+        "frontier_unsupported_region_count": int(unsupported_region_count),
+        "pending_complete_min_rc": _first_float(
+            result.get("pending_complete_min_rc"),
+            result.get("best_reduced_cost"),
+            result.get("manual_best_reduced_cost"),
+        ),
+        "pricing_proof_kind": pricing_proof_kind,
         "final_judge_wall_time": round(perf_counter() - started_at, 6),
         "column_universe_semantics": "compact_single_journey_pricing_fixed_graph_all_task_subsets",
         "compact_pricing_contains_all_route_variants": True,
@@ -500,6 +1137,319 @@ def _compact_final_judge_result(
     )
 
 
+def _compact_negative_harvest_payload(
+    columns: list[JourneyColumn],
+    duals: JourneyDuals,
+    cut_context: CutContext,
+    *,
+    negative_eps: float,
+    candidate_negative_count: int,
+    max_selected: int | None = None,
+    source_phase: str = "compact_final_judge_negative_feasibility_batch",
+    pricing_rc_by_signature: dict[object, float] | None = None,
+    column_pool: ColumnPool | None = None,
+    master_view: MasterColumnView | None = None,
+    node_id: str = "root",
+    active_task_sets: set[frozenset[str]] | None = None,
+    branch_context: BranchContext | None = None,
+) -> dict:
+    audited: list[tuple[float, tuple[str, ...], JourneyColumn]] = []
+    not_addable_count = 0
+    for column in columns:
+        true_rc = _manual_reduced_cost(column, duals, cut_context)
+        if true_rc < -abs(float(negative_eps)):
+            audited.append((float(true_rc), _journey_forbidden_task_set(column), column))
+        else:
+            not_addable_count += 1
+    audited.sort(key=lambda row: (row[0], row[1]))
+    active_task_set_lookup = {
+        tuple(sorted(str(task_id) for task_id in row))
+        for row in (active_task_sets or set())
+    }
+    new_rows: list[tuple[float, tuple[str, ...], JourneyColumn]] = []
+    replacement_rows: list[tuple[float, tuple[str, ...], JourneyColumn]] = []
+    selected_new_task_sets: set[tuple[str, ...]] = set()
+    seen_task_sets: set[tuple[str, ...]] = set()
+    for row in audited:
+        _true_rc, task_set, _column = row
+        seen_before = task_set in seen_task_sets
+        seen_task_sets.add(task_set)
+        if (
+            task_set not in active_task_set_lookup
+            and not seen_before
+            and task_set not in selected_new_task_sets
+        ):
+            new_rows.append(row)
+            selected_new_task_sets.add(task_set)
+        else:
+            replacement_rows.append(row)
+    limit = len(audited) if max_selected is None else max(0, int(max_selected))
+    selected: list[JourneyColumn] = []
+    selected_task_set_rows: list[tuple[tuple[str, ...], bool]] = []
+    addability_reports: list[dict] = []
+    addability_audit_available = bool(column_pool is not None and master_view is not None)
+    addability_rejected_count = 0
+    addability_reject_reasons: dict[str, int] = {}
+    pricing_lookup = pricing_rc_by_signature or {}
+    for true_rc, task_set, column in new_rows + replacement_rows:
+        pricing_rc = _optional_float(pricing_lookup.get(column_signature_from_journey(column)))
+        addability_report = _compact_harvest_addability_report(
+            column,
+            true_rc=true_rc,
+            pricing_rc=pricing_rc,
+            column_pool=column_pool,
+            master_view=master_view,
+            node_id=node_id,
+            active_task_sets=active_task_sets,
+            branch_context=branch_context,
+            cut_context=cut_context,
+        )
+        addability_reports.append(addability_report)
+        if not addability_report["would_enter_master"]:
+            addability_rejected_count += 1
+            reason = str(addability_report.get("reject_reason") or addability_report.get("addability_reason") or "not_addable")
+            addability_reject_reasons[reason] = int(addability_reject_reasons.get(reason, 0)) + 1
+            continue
+        selected.append(column)
+        selected_task_set_rows.append((task_set, task_set not in active_task_set_lookup))
+        if len(selected) >= limit:
+            break
+    selected_new_task_sets_count, replacement_task_set_count = _compact_selected_task_set_counts(
+        selected_task_set_rows,
+        active_task_set_lookup=active_task_set_lookup,
+    )
+    duplicate_count = max(0, len(audited) - len(seen_task_sets))
+    selected_rc_values = tuple(_manual_reduced_cost(column, duals, cut_context) for column in selected)
+    selected_pricing_rc_values = tuple(
+        _optional_float(pricing_lookup.get(column_signature_from_journey(column)))
+        for column in selected
+    )
+    selected_pricing_rc_available = bool(selected) and all(value is not None for value in selected_pricing_rc_values)
+    selected_pricing_diffs = tuple(
+        abs(float(manual_rc) - float(pricing_rc))
+        for manual_rc, pricing_rc in zip(selected_rc_values, selected_pricing_rc_values)
+        if pricing_rc is not None
+    )
+    pricing_rc_audit_pass = bool(
+        selected_pricing_rc_available
+        and len(selected_pricing_diffs) == len(selected_rc_values)
+        and all(diff <= 1.0e-6 for diff in selected_pricing_diffs)
+    )
+    selected_task_set_tuples = tuple(_journey_forbidden_task_set(column) for column in selected)
+    selected_addability_reports = tuple(
+        row for row in addability_reports if row.get("selected_after_addability_audit")
+    )
+    return {
+        "_selected_columns": tuple(selected),
+        "harvest_schema_version": "lunar_ice_bpc.b4_1_final_judge_harvest.v1",
+        "harvest_source_phase": str(source_phase),
+        "harvest_target": None if max_selected is None else int(max_selected),
+        "harvest_candidate_negative_count": int(candidate_negative_count),
+        "harvest_selected_count": len(selected),
+        "harvest_selected_new_task_set_count": int(selected_new_task_sets_count),
+        "harvest_selected_replacement_task_set_count": int(replacement_task_set_count),
+        "harvest_rejected_duplicate_count": int(duplicate_count),
+        "harvest_rejected_not_addable_count": int(not_addable_count + addability_rejected_count),
+        "harvest_addability_audit_available": addability_audit_available,
+        "harvest_selected_all_addability_audited": addability_audit_available,
+        "harvest_selected_all_would_enter_master": all(
+            bool(row.get("would_enter_master")) for row in addability_reports if row.get("selected_after_addability_audit")
+        ),
+        "harvest_addability_reject_reasons": dict(sorted(addability_reject_reasons.items())),
+        "harvest_manual_rc_audit_pass": all(value < -abs(float(negative_eps)) for value in selected_rc_values),
+        "harvest_pricing_rc_audit_available": selected_pricing_rc_available,
+        "harvest_pricing_rc_audit_pass": pricing_rc_audit_pass,
+        "harvest_pricing_rc_max_abs_diff": (
+            None if not selected_pricing_diffs else round(float(max(selected_pricing_diffs)), 9)
+        ),
+        "harvest_branch_context_audit_pass": all(
+            bool(row.get("is_allowed_by_branch")) for row in selected_addability_reports
+        ),
+        "harvest_cut_context_audit_pass": all(
+            bool(row.get("is_allowed_by_cut_context")) for row in selected_addability_reports
+        ),
+        "harvest_addability_audit_pass": (
+            all(bool(row.get("would_enter_master")) for row in selected_addability_reports)
+            if addability_audit_available
+            else None
+        ),
+        "harvest_best_true_rc": None if not selected_rc_values else round(float(min(selected_rc_values)), 9),
+        "harvest_worst_selected_true_rc": None if not selected_rc_values else round(float(max(selected_rc_values)), 9),
+        "harvest_avg_pairwise_jaccard": _avg_pairwise_jaccard(selected_task_set_tuples),
+        "harvest_priority": "prefer_new_task_set_then_true_rc_then_replacements",
+        "restricted_harvest_can_certify_no_negative": False,
+        "harvest_reports": addability_reports,
+    }
+
+
+def _compact_harvest_addability_report(
+    column: JourneyColumn,
+    *,
+    true_rc: float,
+    pricing_rc: float | None = None,
+    column_pool: ColumnPool | None,
+    master_view: MasterColumnView | None,
+    node_id: str,
+    active_task_sets: set[frozenset[str]] | None,
+    branch_context: BranchContext | None,
+    cut_context: CutContext,
+) -> dict:
+    signature = column_signature_from_journey(column)
+    branch_allowed = journey_satisfies_branch_context(column, branch_context)
+    cut_coefficients = cut_coefficients_for_journey(column, cut_context)
+    cut_allowed = True
+    if column_pool is None or master_view is None:
+        return {
+            "task_set": list(signature.task_set),
+            "true_reduced_cost": round(float(true_rc), 9),
+            "pricing_reduced_cost": None if pricing_rc is None else round(float(pricing_rc), 9),
+            "manual_pricing_rc_abs_diff": None
+            if pricing_rc is None
+            else round(abs(float(true_rc) - float(pricing_rc)), 9),
+            "would_enter_master": True,
+            "selected_after_addability_audit": True,
+            "addability_audit_available": False,
+            "addability_reason": "addability_audit_not_available",
+            "reject_reason": "",
+            "pool_contains_signature": False,
+            "current_master_contains_signature": False,
+            "is_allowed_by_branch": bool(branch_allowed),
+            "is_allowed_by_cut_context": bool(cut_allowed),
+            "would_change_active_support": True,
+        }
+    bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
+    report = column_pool.addability_check(
+        bpc_column,
+        {
+            "master_view": master_view,
+            "node_id": str(node_id),
+            "active_task_sets": active_task_sets or set(),
+            "is_allowed_by_branch": branch_allowed,
+            "is_allowed_by_cut_context": cut_allowed,
+            "cut_coefficients": cut_coefficients,
+        },
+    )
+    return {
+        "task_set": list(signature.task_set),
+        "true_reduced_cost": round(float(true_rc), 9),
+        "pricing_reduced_cost": None if pricing_rc is None else round(float(pricing_rc), 9),
+        "manual_pricing_rc_abs_diff": None
+        if pricing_rc is None
+        else round(abs(float(true_rc) - float(pricing_rc)), 9),
+        "would_enter_master": bool(report.would_enter_master),
+        "selected_after_addability_audit": bool(report.would_enter_master),
+        "addability_audit_available": True,
+        "addability_reason": report.reason,
+        "reject_reason": report.reject_reason,
+        "pool_contains_signature": report.pool_contains_signature,
+        "current_master_contains_signature": report.current_master_contains_signature,
+        "is_allowed_by_branch": report.is_allowed_by_branch,
+        "is_allowed_by_cut_context": report.is_allowed_by_cut_context,
+        "would_change_active_support": report.would_change_active_support,
+    }
+
+
+def _compact_selected_task_set_counts(
+    rows: list[tuple[tuple[str, ...], bool]],
+    *,
+    active_task_set_lookup: set[tuple[str, ...]],
+) -> tuple[int, int]:
+    selected_new_task_sets: set[tuple[str, ...]] = set()
+    new_count = 0
+    replacement_count = 0
+    for task_set, candidate_is_new in rows:
+        if candidate_is_new and task_set not in active_task_set_lookup and task_set not in selected_new_task_sets:
+            new_count += 1
+            selected_new_task_sets.add(task_set)
+        else:
+            replacement_count += 1
+    return new_count, replacement_count
+
+
+def _compact_result_pricing_rc_for_column(result: dict, *, column_count: int) -> float | None:
+    if int(column_count) != 1:
+        return None
+    return _optional_float(
+        result.get("pricing_model_reduced_cost"),
+        result.get("model_objective"),
+        result.get("pricing_best_reduced_cost"),
+        result.get("best_reduced_cost"),
+    )
+
+
+def _optional_float(*values: object) -> float | None:
+    for value in values:
+        if value is None or value == "":
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _avg_pairwise_jaccard(task_sets: tuple[tuple[str, ...], ...]) -> float | None:
+    if len(task_sets) < 2:
+        return None
+    total = 0.0
+    count = 0
+    for left_index, left in enumerate(task_sets):
+        left_set = set(left)
+        for right in task_sets[left_index + 1 :]:
+            right_set = set(right)
+            union = left_set | right_set
+            total += 1.0 if not union else len(left_set & right_set) / len(union)
+            count += 1
+    return None if count == 0 else round(float(total / count), 9)
+
+
+def _compact_pricing_proof_kind(result: dict, *, can_certify: bool) -> str:
+    if can_certify:
+        return "EXHAUSTIVE_NO_NEGATIVE"
+    explicit = result.get("pricing_proof_kind")
+    if explicit in {
+        "NONE",
+        "EXHAUSTIVE_NO_NEGATIVE",
+        "FRONTIER_BOUND_INCOMPLETE",
+        "FRONTIER_BOUND_NO_NEGATIVE",
+    }:
+        if explicit in {"EXHAUSTIVE_NO_NEGATIVE", "FRONTIER_BOUND_NO_NEGATIVE"}:
+            return "FRONTIER_BOUND_INCOMPLETE"
+        return str(explicit)
+    if result.get("negative_feasibility_search_enabled") or result.get("compact_negative_batch_enabled"):
+        return "FRONTIER_BOUND_INCOMPLETE"
+    if result.get("pricing_complete_by_compact_milp") and result.get("can_certify_no_negative") is True:
+        return "EXHAUSTIVE_NO_NEGATIVE"
+    return "FRONTIER_BOUND_INCOMPLETE"
+
+
+def _compact_frontier_unsupported_region_count(result: dict, *, pricing_proof_kind: str) -> int:
+    if pricing_proof_kind in {"EXHAUSTIVE_NO_NEGATIVE", "FRONTIER_BOUND_NO_NEGATIVE"}:
+        return 0
+    explicit = result.get("frontier_unsupported_region_count")
+    if explicit is not None:
+        try:
+            explicit_count = max(0, int(explicit))
+            if pricing_proof_kind == "FRONTIER_BOUND_INCOMPLETE":
+                return max(1, explicit_count)
+            return explicit_count
+        except (TypeError, ValueError):
+            pass
+    forbidden_count = int(result.get("forbidden_arc_pattern_count") or 0) + int(result.get("forbidden_task_set_count") or 0)
+    return max(1, forbidden_count)
+
+
+def _first_float(*values: object) -> float | None:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            return round(float(value), 9)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def _compact_phase_summary(result: dict) -> dict:
     return {
         "status": result.get("status"),
@@ -512,6 +1462,26 @@ def _compact_phase_summary(result: dict) -> dict:
         "wall_time_sec": result.get("wall_time_sec"),
         "negative_found": result.get("negative_found"),
         "negative_feasibility_search_enabled": result.get("negative_feasibility_search_enabled"),
+        "compact_final_judge_profile": result.get("compact_final_judge_profile"),
+        "compact_final_judge_formulation_profile": result.get("compact_final_judge_formulation_profile"),
+        "compact_final_judge_profile_official_default": result.get("compact_final_judge_profile_official_default"),
+        "compact_final_judge_phase_mode": result.get("compact_final_judge_phase_mode"),
+        "compact_optimization_harvest_enabled": result.get("compact_optimization_harvest_enabled"),
+        "compact_optimization_harvest_target": result.get("compact_optimization_harvest_target"),
+        "compact_optimization_harvest_no_good_scope": result.get(
+            "compact_optimization_harvest_no_good_scope"
+        ),
+        "compact_optimization_harvest_found_count": result.get("compact_optimization_harvest_found_count"),
+        "compact_optimization_harvest_search_call_count": result.get(
+            "compact_optimization_harvest_search_call_count"
+        ),
+        "negative_feasibility_skipped_for_proof_only": result.get("negative_feasibility_skipped_for_proof_only"),
+        "negative_feasibility_full_space_proof_attempted": result.get(
+            "negative_feasibility_full_space_proof_attempted"
+        ),
+        "negative_feasibility_full_space_proof_can_certify": result.get(
+            "negative_feasibility_full_space_proof_can_certify"
+        ),
         "mtz_connectivity_enabled": result.get("mtz_connectivity_enabled"),
         "mtz_endpoint_order_cuts_enabled": result.get("mtz_endpoint_order_cuts_enabled"),
         "mtz_endpoint_order_cut_count": result.get("mtz_endpoint_order_cut_count"),
@@ -520,6 +1490,7 @@ def _compact_phase_summary(result: dict) -> dict:
         "sortie_slots_per_journey": result.get("sortie_slots_per_journey"),
         "sortie_slot_bound_source": result.get("sortie_slot_bound_source"),
         "sortie_slot_horizon_count_bound": result.get("sortie_slot_horizon_count_bound"),
+        "latest_service_start_slot_bound_enabled": result.get("latest_service_start_slot_bound_enabled"),
         "sortie_slot_latest_start_count_bound": result.get("sortie_slot_latest_start_count_bound"),
         "sortie_slot_latest_service_start_upper_bound": result.get("sortie_slot_latest_service_start_upper_bound"),
         "sortie_slot_min_depot_outbound_travel_lower_bound": result.get(
@@ -533,6 +1504,87 @@ def _compact_phase_summary(result: dict) -> dict:
         "time_window_arc_pruning_enabled": result.get("time_window_arc_pruning_enabled"),
         "time_window_arc_option_count": result.get("time_window_arc_option_count"),
         "time_window_impossible_arc_option_count": result.get("time_window_impossible_arc_option_count"),
+        "sortie_slot_position_bounds_enabled": result.get("sortie_slot_position_bounds_enabled"),
+        "sortie_slot_position_bound_count": result.get("sortie_slot_position_bound_count"),
+        "sortie_slot_latest_start_upper_bound": result.get("sortie_slot_latest_start_upper_bound"),
+        "service_start_depot_travel_lb_enabled": result.get("service_start_depot_travel_lb_enabled"),
+        "service_start_depot_travel_lb_count": result.get("service_start_depot_travel_lb_count"),
+        "service_start_depot_travel_lb_min": result.get("service_start_depot_travel_lb_min"),
+        "service_start_depot_travel_lb_max": result.get("service_start_depot_travel_lb_max"),
+        "task_to_depot_return_travel_lb_enabled": result.get("task_to_depot_return_travel_lb_enabled"),
+        "task_to_depot_return_travel_lb_count": result.get("task_to_depot_return_travel_lb_count"),
+        "task_to_depot_return_travel_lb_min": result.get("task_to_depot_return_travel_lb_min"),
+        "task_to_depot_return_travel_lb_max": result.get("task_to_depot_return_travel_lb_max"),
+        "pair_route_duration_lb_enabled": result.get("pair_route_duration_lb_enabled"),
+        "pair_route_duration_lb_count": result.get("pair_route_duration_lb_count"),
+        "pair_route_duration_lb_min": result.get("pair_route_duration_lb_min"),
+        "pair_route_duration_lb_max": result.get("pair_route_duration_lb_max"),
+        "pair_weighted_completion_lb_enabled": result.get("pair_weighted_completion_lb_enabled"),
+        "pair_weighted_completion_lb_count": result.get("pair_weighted_completion_lb_count"),
+        "pair_weighted_completion_lb_min": result.get("pair_weighted_completion_lb_min"),
+        "pair_weighted_completion_lb_max": result.get("pair_weighted_completion_lb_max"),
+        "demand_cover_cut_enabled": result.get("demand_cover_cut_enabled"),
+        "demand_cover_cut_count": result.get("demand_cover_cut_count"),
+        "demand_cover_subset_count": result.get("demand_cover_subset_count"),
+        "demand_cover_max_size": result.get("demand_cover_max_size"),
+        "demand_cover_min_demand": result.get("demand_cover_min_demand"),
+        "demand_cover_max_demand": result.get("demand_cover_max_demand"),
+        "single_task_energy_lb_enabled": result.get("single_task_energy_lb_enabled"),
+        "single_task_energy_lb_count": result.get("single_task_energy_lb_count"),
+        "single_task_energy_lb_min": result.get("single_task_energy_lb_min"),
+        "single_task_energy_lb_max": result.get("single_task_energy_lb_max"),
+        "single_task_shadow_lb_enabled": result.get("single_task_shadow_lb_enabled"),
+        "single_task_shadow_lb_count": result.get("single_task_shadow_lb_count"),
+        "single_task_shadow_lb_min": result.get("single_task_shadow_lb_min"),
+        "single_task_shadow_lb_max": result.get("single_task_shadow_lb_max"),
+        "pair_energy_lb_enabled": result.get("pair_energy_lb_enabled"),
+        "pair_energy_lb_count": result.get("pair_energy_lb_count"),
+        "pair_energy_lb_min": result.get("pair_energy_lb_min"),
+        "pair_energy_lb_max": result.get("pair_energy_lb_max"),
+        "pair_energy_lb_exceeds_limit_count": result.get("pair_energy_lb_exceeds_limit_count"),
+        "pair_shadow_lb_enabled": result.get("pair_shadow_lb_enabled"),
+        "pair_shadow_lb_count": result.get("pair_shadow_lb_count"),
+        "pair_shadow_lb_min": result.get("pair_shadow_lb_min"),
+        "pair_shadow_lb_max": result.get("pair_shadow_lb_max"),
+        "pair_shadow_lb_exceeds_limit_count": result.get("pair_shadow_lb_exceeds_limit_count"),
+        "pair_energy_infeasible_cut_enabled": result.get("pair_energy_infeasible_cut_enabled"),
+        "pair_energy_infeasible_cut_count": result.get("pair_energy_infeasible_cut_count"),
+        "pair_energy_infeasible_pair_count": result.get("pair_energy_infeasible_pair_count"),
+        "pair_time_window_infeasible_cut_enabled": result.get("pair_time_window_infeasible_cut_enabled"),
+        "pair_time_window_infeasible_cut_count": result.get("pair_time_window_infeasible_cut_count"),
+        "pair_time_window_infeasible_pair_count": result.get("pair_time_window_infeasible_pair_count"),
+        "pair_time_window_infeasible_margin_min": result.get("pair_time_window_infeasible_margin_min"),
+        "pair_time_window_infeasible_margin_max": result.get("pair_time_window_infeasible_margin_max"),
+        "pair_time_window_precedence_cut_enabled": result.get("pair_time_window_precedence_cut_enabled"),
+        "pair_time_window_precedence_cut_count": result.get("pair_time_window_precedence_cut_count"),
+        "pair_time_window_precedence_pair_count": result.get("pair_time_window_precedence_pair_count"),
+        "pair_time_window_precedence_margin_min": result.get("pair_time_window_precedence_margin_min"),
+        "pair_time_window_precedence_margin_max": result.get("pair_time_window_precedence_margin_max"),
+        "triple_time_window_infeasible_cut_enabled": result.get("triple_time_window_infeasible_cut_enabled"),
+        "triple_time_window_infeasible_cut_count": result.get("triple_time_window_infeasible_cut_count"),
+        "triple_time_window_infeasible_triple_count": result.get("triple_time_window_infeasible_triple_count"),
+        "triple_time_window_infeasible_margin_min": result.get("triple_time_window_infeasible_margin_min"),
+        "triple_time_window_infeasible_margin_max": result.get("triple_time_window_infeasible_margin_max"),
+        "quad_time_window_infeasible_cut_enabled": result.get("quad_time_window_infeasible_cut_enabled"),
+        "quad_time_window_infeasible_cut_count": result.get("quad_time_window_infeasible_cut_count"),
+        "quad_time_window_infeasible_quad_count": result.get("quad_time_window_infeasible_quad_count"),
+        "quad_time_window_infeasible_margin_min": result.get("quad_time_window_infeasible_margin_min"),
+        "quad_time_window_infeasible_margin_max": result.get("quad_time_window_infeasible_margin_max"),
+        "pair_shadow_infeasible_cut_enabled": result.get("pair_shadow_infeasible_cut_enabled"),
+        "pair_shadow_infeasible_cut_count": result.get("pair_shadow_infeasible_cut_count"),
+        "pair_shadow_infeasible_pair_count": result.get("pair_shadow_infeasible_pair_count"),
+        "pair_shadow_infeasible_lb_min": result.get("pair_shadow_infeasible_lb_min"),
+        "pair_shadow_infeasible_lb_max": result.get("pair_shadow_infeasible_lb_max"),
+        "triple_shadow_infeasible_cut_enabled": result.get("triple_shadow_infeasible_cut_enabled"),
+        "triple_shadow_infeasible_cut_count": result.get("triple_shadow_infeasible_cut_count"),
+        "triple_shadow_infeasible_triple_count": result.get("triple_shadow_infeasible_triple_count"),
+        "triple_shadow_infeasible_lb_min": result.get("triple_shadow_infeasible_lb_min"),
+        "triple_shadow_infeasible_lb_max": result.get("triple_shadow_infeasible_lb_max"),
+        "triple_energy_infeasible_cut_enabled": result.get("triple_energy_infeasible_cut_enabled"),
+        "triple_energy_infeasible_cut_count": result.get("triple_energy_infeasible_cut_count"),
+        "triple_energy_infeasible_triple_count": result.get("triple_energy_infeasible_triple_count"),
+        "triple_energy_infeasible_lb_min": result.get("triple_energy_infeasible_lb_min"),
+        "triple_energy_infeasible_lb_max": result.get("triple_energy_infeasible_lb_max"),
         "compact_negative_no_good_scope": result.get("compact_negative_no_good_scope"),
         "forbidden_arc_pattern_count": result.get("forbidden_arc_pattern_count"),
         "forbidden_arc_patterns_can_certify_full_space": result.get("forbidden_arc_patterns_can_certify_full_space"),

@@ -1,0 +1,14 @@
+{
+  "instance_id": "b4_1_stage_bc_smoke_005",
+  "instance_path": "data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+  "history": [
+    {
+      "round": 1,
+      "dual_context": {
+        "task_duals": {},
+        "fleet_dual": 0.0,
+        "cut_duals": {}
+      }
+    }
+  ]
+}

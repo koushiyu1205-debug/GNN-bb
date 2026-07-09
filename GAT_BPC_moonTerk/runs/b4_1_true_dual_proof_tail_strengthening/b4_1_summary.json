@@ -1,0 +1,83 @@
+{
+  "acceptance": {
+    "b4_1_code_path_exercised": true,
+    "b4_1_full_experiment_complete": false,
+    "requires_long_experiment_completion": true,
+    "stage_a_regression_clean": true,
+    "stage_b_diagnostic_clean": false,
+    "stage_c_diagnostic_clean": false
+  },
+  "mode_counts": {
+    "stageA_B2B_R2_worker_tail_dual_off": 40,
+    "stageA_B2B_R2_worker_tail_dual_on": 40,
+    "stageA_B3B_accepted_baseline": 40,
+    "stageA_B4V2_default_final_judge_harvesting": 40
+  },
+  "redlines": {
+    "certificate_leak_count": 0,
+    "diagnostic_claimed_certificate_count": 0,
+    "exception_fail_closed_count": 0,
+    "manual_rc_fail_count": 0,
+    "pricing_rc_fail_count": 0,
+    "resource_guard_stopped_count": 0,
+    "stage_a_tree_closure_miss_count": 0
+  },
+  "row_count": 160,
+  "schema_version": "lunar_ice_bpc.b4_1_true_dual_proof_tail.v1",
+  "stage_counts": {
+    "A": 160
+  },
+  "summary_rows": [
+    {
+      "best_global_remaining_rc_lb": null,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 39,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 0.789648,
+      "mode": "stageA_B2B_R2_worker_tail_dual_off",
+      "negative_column_count": 1,
+      "row_count": 40,
+      "stage": "A",
+      "variant": ""
+    },
+    {
+      "best_global_remaining_rc_lb": null,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 39,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 0.788487,
+      "mode": "stageA_B2B_R2_worker_tail_dual_on",
+      "negative_column_count": 11,
+      "row_count": 40,
+      "stage": "A",
+      "variant": ""
+    },
+    {
+      "best_global_remaining_rc_lb": null,
+      "bpc_tree_optimal_count": 40,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 1.056062,
+      "mode": "stageA_B3B_accepted_baseline",
+      "negative_column_count": 0,
+      "row_count": 40,
+      "stage": "A",
+      "variant": ""
+    },
+    {
+      "best_global_remaining_rc_lb": null,
+      "bpc_tree_optimal_count": 40,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 1.056003,
+      "mode": "stageA_B4V2_default_final_judge_harvesting",
+      "negative_column_count": 0,
+      "row_count": 40,
+      "stage": "A",
+      "variant": ""
+    }
+  ],
+  "variant_counts": {
+    "": 160
+  }
+}

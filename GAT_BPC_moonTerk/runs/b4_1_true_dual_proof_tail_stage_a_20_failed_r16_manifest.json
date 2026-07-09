@@ -1,0 +1,70 @@
+{
+  "instances": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_002_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_002_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_003_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_003_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_004_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_004_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_010_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_010_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_012_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_012_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_013_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_013_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_014_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_014_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_015_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_015_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_016_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_016_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_017_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_017_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_019_logical_graph.json",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_020/instance_019_logical_graph.json",
+      "scale": 20,
+      "scale_label": "020"
+    }
+  ]
+}

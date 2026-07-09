@@ -1,0 +1,2 @@
+{"elapsed_sec": 55.019249, "algorithm_status": "BPC_INCOMPLETE_PRICING", "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER", "pricing_state": "INCOMPLETE_LIMIT", "pricing_round_count": 1, "added_column_count": 0, "active_column_count": 306}
+report /home/kai/work/GAT_BPC_moonTerk/runs/b4_1_true_dual_proof_tail_stage_b_30_v4_slot_position_pair_energy_after_single_energy_merge/stage_001/probe_report_zh.md

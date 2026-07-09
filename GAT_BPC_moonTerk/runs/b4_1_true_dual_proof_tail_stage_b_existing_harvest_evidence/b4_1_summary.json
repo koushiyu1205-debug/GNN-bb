@@ -1,0 +1,70 @@
+{
+  "acceptance": {
+    "b4_1_code_path_exercised": true,
+    "b4_1_full_experiment_complete": false,
+    "requires_long_experiment_completion": true,
+    "stage_a_regression_clean": false,
+    "stage_b_diagnostic_clean": true,
+    "stage_b_matrix_complete": false,
+    "stage_c_diagnostic_clean": false
+  },
+  "diagnostics": {
+    "feasibility_proof_budget_exhausted_count": 0,
+    "negative_discovery_budget_exhausted_count": 0,
+    "optimization_proof_missing_count": 0,
+    "positive_best_rc_negative_bound_count": 0,
+    "stage_b_missing_matrix_cell_count": 2,
+    "stage_b_missing_matrix_cells": [
+      "B4V2_hidden_negative_audit",
+      "B4V4_combined_formulation_diagnostic"
+    ],
+    "stage_b_observed_matrix_cells": [
+      "B4V2_baseline",
+      "B4V2_frontier_ledger_diagnostic",
+      "B4V2_harvesting",
+      "B4V2_harvesting_frontier_ledger_diagnostic"
+    ],
+    "stage_b_required_matrix_cells": [
+      "B4V2_baseline",
+      "B4V2_harvesting",
+      "B4V2_hidden_negative_audit",
+      "B4V2_frontier_ledger_diagnostic",
+      "B4V2_harvesting_frontier_ledger_diagnostic",
+      "B4V4_combined_formulation_diagnostic"
+    ]
+  },
+  "mode_counts": {
+    "B4.1_probe_final_judge_evidence": 1
+  },
+  "redlines": {
+    "certificate_leak_count": 0,
+    "diagnostic_claimed_certificate_count": 0,
+    "exception_fail_closed_count": 0,
+    "manual_rc_fail_count": 0,
+    "pricing_rc_fail_count": 0,
+    "resource_guard_stopped_count": 0,
+    "stage_a_tree_closure_miss_count": 0
+  },
+  "row_count": 1,
+  "schema_version": "lunar_ice_bpc.b4_1_true_dual_proof_tail.v1",
+  "stage_counts": {
+    "B": 1
+  },
+  "summary_rows": [
+    {
+      "best_global_remaining_rc_lb": null,
+      "bpc_tree_optimal_count": 0,
+      "can_certify_no_negative_count": 0,
+      "diagnostic_claimed_certificate_count": 0,
+      "mean_wall_time": 59.762075,
+      "mode": "B4.1_probe_final_judge_evidence",
+      "negative_column_count": 1,
+      "row_count": 1,
+      "stage": "B",
+      "variant": "V2_latest_service_start_slot_bound"
+    }
+  ],
+  "variant_counts": {
+    "V2_latest_service_start_slot_bound": 1
+  }
+}

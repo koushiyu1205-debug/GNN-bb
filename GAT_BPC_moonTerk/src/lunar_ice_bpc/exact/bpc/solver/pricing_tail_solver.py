@@ -21,6 +21,10 @@ from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
 from lunar_ice_bpc.exact.bpc.pricing.completion_bounds import build_completion_bound_tail_policy
 from lunar_ice_bpc.exact.bpc.pricing.duplicate_only_audit import build_duplicate_only_audit
+from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
+    build_tail_dual_center,
+    build_worker_duals_with_tail_center,
+)
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
 from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
@@ -95,6 +99,9 @@ def solve_b2_pricing_tail_baseline(
     mode: str = B2B_MODE,
     seed_mode: str = "b0_incumbent_plus_singletons",
     previous_baseline: dict | None = None,
+    tail_dual_stabilization_enabled: bool = False,
+    tail_dual_stabilization_alpha: float = 0.7,
+    tail_dual_stabilization_window: int = 5,
 ) -> dict:
     """Run a B2 root pricing-tail candidate without pre-running B1.
 
@@ -170,7 +177,11 @@ def solve_b2_pricing_tail_baseline(
             max_columns_per_round=int(max_columns_per_round),
             worker_payload=worker_payload,
             seed_mode=seed_mode,
+            wall_time_limit_sec=wall_time_limit_sec,
             mode=str(mode),
+            tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+            tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+            tail_dual_stabilization_window=tail_dual_stabilization_window,
         )
     if mode != B2B_MODE:
         raise ValueError(f"unsupported B2 mode={mode!r}")
@@ -266,6 +277,9 @@ def solve_node_pricing_with_b2b_r3(
     max_columns_per_round: int = 64,
     b0_direct=None,
     seed_mode: str = "b0_incumbent_plus_singletons",
+    tail_dual_stabilization_enabled: bool = False,
+    tail_dual_stabilization_alpha: float = 0.7,
+    tail_dual_stabilization_window: int = 5,
 ) -> dict:
     """Solve one B3 branch node with the accepted B2B_R3 pricing order."""
 
@@ -361,6 +375,7 @@ def solve_node_pricing_with_b2b_r3(
     last_duplicate_audit: dict | None = None
     last_hidden_audit: dict | None = None
     worker_only_success_count = 0
+    tail_dual_history: list[JourneyDuals] = []
 
     for round_index in range(1, max(1, int(max_rounds)) + 1):
         master_columns = _master_columns(pool, view, node_id=active_node_id)
@@ -423,7 +438,16 @@ def solve_node_pricing_with_b2b_r3(
             max_selected=max_columns_per_round,
             node_id=active_node_id,
             branch_context=active_context,
+            tail_dual_history=_tail_dual_history_with_current(
+                tail_dual_history,
+                master.reduced_cost_context,
+                window=tail_dual_stabilization_window,
+            ),
+            tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+            tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+            tail_dual_stabilization_window=tail_dual_stabilization_window,
         )
+        tail_dual_history.append(_duals_from_reduced_cost_context(master.reduced_cost_context))
         _accumulate_worker_profile(profile_totals, worker.payload)
         if worker.status == PricingState.FOUND_NEGATIVE and worker.selected_columns:
             added = _add_selected_to_pool_and_master(
@@ -499,6 +523,10 @@ def solve_node_pricing_with_b2b_r3(
             negative_eps=negative_eps,
             cache=cache,
             branch_context=active_context,
+            column_pool=pool,
+            master_view=view,
+            node_id=active_node_id,
+            active_task_sets={frozenset(column.task_set) for column in master_columns},
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
@@ -534,6 +562,7 @@ def solve_node_pricing_with_b2b_r3(
             active_task_sets={frozenset(column.task_set) for column in master_columns},
             branch_context=active_context,
             profiling=profiling,
+            source_phase="b3_node_post_final_judge_addability_harvest",
         )
         added = _add_selected_to_pool_and_master(
             pool,
@@ -1073,6 +1102,10 @@ def _solve_b2b_seeded_tail_cg(
             max_direct_tasks=max_direct_tasks,
             negative_eps=negative_eps,
             cache=cache,
+            column_pool=pool,
+            master_view=view,
+            node_id="root",
+            active_task_sets={frozenset(column.task_set) for column in master_columns},
         )
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
@@ -1101,6 +1134,7 @@ def _solve_b2b_seeded_tail_cg(
             max_selected=max_columns_per_round,
             active_task_sets={frozenset(column.task_set) for column in master_columns},
             profiling=profiling,
+            source_phase="b2_seeded_tail_post_final_judge_addability_harvest",
         )
         added = _add_selected_to_pool_and_master(pool, view, selected)
         harvest_payload["added_to_master_count"] = int(added)
@@ -1231,8 +1265,13 @@ def _solve_b2b_r2_worker_before_final_judge(
     max_columns_per_round: int,
     worker_payload: dict | None,
     seed_mode: str,
+    wall_time_limit_sec: float | None = None,
     mode: str = B2B_R2_MODE,
+    tail_dual_stabilization_enabled: bool = False,
+    tail_dual_stabilization_alpha: float = 0.7,
+    tail_dual_stabilization_window: int = 5,
 ) -> dict:
+    started_at = perf_counter()
     active_mode = str(mode)
     seed_columns, seed_report = _build_b2b_r2_lightweight_seed_columns(
         data,
@@ -1261,8 +1300,39 @@ def _solve_b2b_r2_worker_before_final_judge(
     last_duplicate_audit: dict | None = None
     last_hidden_audit: dict | None = None
     worker_only_success_count = 0
+    tail_dual_history: list[JourneyDuals] = []
 
     for round_index in range(1, max(1, int(max_rounds)) + 1):
+        if _wall_time_limit_exceeded(wall_time_limit_sec, started_at=started_at):
+            profile_totals["exit_reason"] = "ROW_TIME_LIMIT_BEFORE_ROUND"
+            return _payload(
+                data=data,
+                b0_direct=b0_direct,
+                previous_baseline=previous_baseline,
+                proof_debt=proof_debt,
+                completion_policy=completion_policy,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                master=last_master,
+                final_judge=last_judge_payload,
+                duplicate_audit=last_duplicate_audit,
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
+                manual_rc_audit=None,
+                mode=active_mode,
+                seed_report=seed_report,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+                pricing_state=PricingState.INCOMPLETE_LIMIT,
+                note=f"{active_mode} stopped before round {round_index}: wall_time_limit_sec={wall_time_limit_sec} exhausted.",
+                profile_totals=profile_totals,
+            )
         master_columns = _master_columns(pool, view)
         rmp_start = perf_counter()
         master = solve_root_journey_master(
@@ -1321,7 +1391,16 @@ def _solve_b2b_r2_worker_before_final_judge(
             max_candidate_sets=max_columns_per_round,
             negative_eps=negative_eps,
             max_selected=max_columns_per_round,
+            tail_dual_history=_tail_dual_history_with_current(
+                tail_dual_history,
+                master.reduced_cost_context,
+                window=tail_dual_stabilization_window,
+            ),
+            tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+            tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+            tail_dual_stabilization_window=tail_dual_stabilization_window,
         )
+        tail_dual_history.append(_duals_from_reduced_cost_context(master.reduced_cost_context))
         _accumulate_worker_profile(profile_totals, worker.payload)
         if worker.status == PricingState.FOUND_NEGATIVE and worker.selected_columns:
             added = _add_selected_to_pool_and_master(pool, view, worker.selected_columns)
@@ -1406,13 +1485,49 @@ def _solve_b2b_r2_worker_before_final_judge(
                 worker_only_success_count = 0
 
         worker_only_success_count = 0
+        remaining_for_judge = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
+        if remaining_for_judge is not None and remaining_for_judge <= 0.0:
+            profile_totals["exit_reason"] = "ROW_TIME_LIMIT_BEFORE_FINAL_JUDGE"
+            return _payload(
+                data=data,
+                b0_direct=b0_direct,
+                previous_baseline=previous_baseline,
+                proof_debt=proof_debt,
+                completion_policy=completion_policy,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                master=last_master,
+                final_judge=last_judge_payload,
+                duplicate_audit=last_duplicate_audit,
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
+                manual_rc_audit=None,
+                mode=active_mode,
+                seed_report=seed_report,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+                pricing_state=PricingState.INCOMPLETE_LIMIT,
+                note=f"{active_mode} stopped before final judge: wall_time_limit_sec={wall_time_limit_sec} exhausted.",
+                profile_totals=profile_totals,
+            )
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
             data,
             master.reduced_cost_context,
             max_direct_tasks=max_direct_tasks,
             negative_eps=negative_eps,
+            wall_time_limit_sec=remaining_for_judge,
             cache=cache,
+            column_pool=pool,
+            master_view=view,
+            node_id="root",
+            active_task_sets={frozenset(column.task_set) for column in master_columns},
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
@@ -1445,6 +1560,7 @@ def _solve_b2b_r2_worker_before_final_judge(
             max_selected=max_columns_per_round,
             active_task_sets={frozenset(column.task_set) for column in master_columns},
             profiling=profiling,
+            source_phase="b2b_r2_post_final_judge_addability_harvest",
         )
         added = _add_selected_to_pool_and_master(pool, view, selected)
         harvest_payload["added_to_master_count"] = int(added)
@@ -1598,6 +1714,12 @@ def _worker_round_diagnostic_fields(payload: dict) -> dict:
         "path_option_assignments": int(payload.get("path_option_assignments") or 0),
         "cache_hit_count": int(payload.get("cache_hit_count") or 0),
         "cache_miss_count": int(payload.get("cache_miss_count") or 0),
+        "tail_dual_stabilization": payload.get("tail_dual_stabilization") or {},
+        "worker_dual_source": payload.get("worker_dual_source") or "",
+        "official_dual_source": payload.get("official_dual_source") or "",
+        "worker_dual_only": bool(payload.get("worker_dual_only")),
+        "true_dual_rc_recomputed": bool(payload.get("true_dual_rc_recomputed")),
+        "tail_dual_no_column_can_certify": bool(payload.get("tail_dual_no_column_can_certify")),
         "rmp_dual_diagnostic": payload.get("rmp_dual_diagnostic") or {},
     }
 
@@ -1621,13 +1743,28 @@ def _run_negative_search_worker(
     max_selected: int,
     node_id: str = "root",
     branch_context: BranchContext | None = None,
+    tail_dual_history: tuple[JourneyDuals, ...] = tuple(),
+    tail_dual_stabilization_enabled: bool = False,
+    tail_dual_stabilization_alpha: float = 0.7,
+    tail_dual_stabilization_window: int = 5,
 ) -> _NegativeSearchWorkerResult:
     worker_start = perf_counter()
-    duals = _duals_from_reduced_cost_context(reduced_cost_context)
+    true_duals = _duals_from_reduced_cost_context(reduced_cost_context)
+    tail_center = build_tail_dual_center(
+        tail_dual_history or (true_duals,),
+        window=tail_dual_stabilization_window,
+    )
+    worker_duals, tail_dual_payload = build_worker_duals_with_tail_center(
+        true_duals,
+        tail_dual_center=tail_center,
+        enabled=tail_dual_stabilization_enabled,
+        alpha=tail_dual_stabilization_alpha,
+        window=tail_dual_stabilization_window,
+    )
     worker_task_cap = _worker_task_cap(data, max_direct_tasks)
     seed_task_sets = _negative_worker_seed_task_sets(
         data,
-        duals=duals,
+        duals=worker_duals,
         master_columns=master_columns,
         b0_direct=b0_direct,
         seed_catalog=seed_catalog,
@@ -1636,7 +1773,7 @@ def _run_negative_search_worker(
     )
     pricing, priced_columns = price_direct_journey_columns(
         data,
-        duals,
+        worker_duals,
         negative_eps=negative_eps,
         max_direct_tasks=worker_task_cap,
         allow_partial=True,
@@ -1648,7 +1785,7 @@ def _run_negative_search_worker(
     )
     negative_pairs = _manual_negative_pairs(
         priced_columns,
-        duals=duals,
+        duals=true_duals,
         negative_eps=negative_eps,
         branch_context=branch_context,
     )
@@ -1662,6 +1799,7 @@ def _run_negative_search_worker(
         active_task_sets={frozenset(column.task_set) for column in master_columns},
         branch_context=branch_context,
         profiling=profiling,
+        source_phase="worker_candidate_search_addability_harvest",
     )
     worker_wall_time = perf_counter() - worker_start
     cache_stats = cache.stats()
@@ -1690,7 +1828,18 @@ def _run_negative_search_worker(
         "uses_true_dual_bpc_certificate": False,
         "root_lp_bound_official": False,
         "dual_source": "master.reduced_cost_context",
-        "diagnostic_dual_source": "master.reduced_cost_context",
+        "diagnostic_dual_source": (
+            "tail_dual_stabilized_worker_dual"
+            if tail_dual_payload.get("tail_dual_stabilization_enabled")
+            else "master.reduced_cost_context"
+        ),
+        "worker_dual_source": tail_dual_payload.get("worker_dual_source"),
+        "official_dual_source": tail_dual_payload.get("official_dual_source"),
+        "worker_dual_only": True,
+        "requires_true_dual_rc_recompute": True,
+        "true_dual_rc_recomputed": True,
+        "tail_dual_no_column_can_certify": False,
+        "tail_dual_stabilization": tail_dual_payload,
         "diagnostic_rmp_iteration_id": str(getattr(reduced_cost_context, "rmp_iteration_id", "") or ""),
         "diagnostic_dual_fingerprint": str(getattr(reduced_cost_context, "dual_fingerprint", "") or ""),
         "completion_bound_pruning_enabled": False,
@@ -1843,6 +1992,16 @@ def _duals_from_reduced_cost_context(context) -> JourneyDuals:
         fleet_limit=float(getattr(context, "fleet_dual", 0.0)),
         cuts={str(key): float(value) for key, value in getattr(context, "cut_duals", {}).items()},
     )
+
+
+def _tail_dual_history_with_current(
+    history: list[JourneyDuals],
+    context,
+    *,
+    window: int,
+) -> tuple[JourneyDuals, ...]:
+    current = _duals_from_reduced_cost_context(context)
+    return tuple((list(history) + [current])[-max(1, int(window)) :])
 
 
 def _rmp_dual_diagnostic_payload(
@@ -2468,7 +2627,7 @@ def _incomplete_payload(
     )
 
 
-def _empty_harvest_totals() -> dict[str, int]:
+def _empty_harvest_totals() -> dict:
     return {
         "candidate_negative_count": 0,
         "addable_negative_count": 0,
@@ -2483,6 +2642,10 @@ def _empty_harvest_totals() -> dict[str, int]:
         "harvest_candidate_negative_count": 0,
         "harvest_addable_candidate_count": 0,
         "harvest_selected_count": 0,
+        "harvest_selected_new_task_set_count": 0,
+        "harvest_selected_replacement_task_set_count": 0,
+        "harvest_rejected_duplicate_count": 0,
+        "harvest_rejected_not_addable_count": 0,
         "harvest_duplicate_signature_count": 0,
         "harvest_forbidden_signature_count": 0,
         "harvest_branch_filtered_count": 0,
@@ -2490,12 +2653,56 @@ def _empty_harvest_totals() -> dict[str, int]:
         "harvest_duplicate_in_current_master_count": 0,
         "harvest_in_pool_not_master_count": 0,
         "harvest_dominance_filtered_count": 0,
+        "harvest_best_true_rc": None,
+        "harvest_worst_selected_true_rc": None,
+        "harvest_avg_pairwise_jaccard": None,
     }
 
 
-def _accumulate_harvest_totals(totals: dict[str, int], payload: dict) -> None:
+def _accumulate_harvest_totals(totals: dict, payload: dict) -> None:
+    previous_selected_count = int(totals.get("harvest_selected_count") or 0)
     for key in list(totals):
+        if key in {
+            "harvest_best_true_rc",
+            "harvest_worst_selected_true_rc",
+            "harvest_avg_pairwise_jaccard",
+        }:
+            continue
         totals[key] += int(payload.get(key) or 0)
+    best_rc = _optional_float(payload.get("harvest_best_true_rc"))
+    if best_rc is not None:
+        totals["harvest_best_true_rc"] = (
+            best_rc
+            if totals["harvest_best_true_rc"] is None
+            else min(float(totals["harvest_best_true_rc"]), best_rc)
+        )
+    worst_rc = _optional_float(payload.get("harvest_worst_selected_true_rc"))
+    if worst_rc is not None:
+        totals["harvest_worst_selected_true_rc"] = (
+            worst_rc
+            if totals["harvest_worst_selected_true_rc"] is None
+            else max(float(totals["harvest_worst_selected_true_rc"]), worst_rc)
+        )
+    avg_jaccard = _optional_float(payload.get("harvest_avg_pairwise_jaccard"))
+    selected_count = int(payload.get("harvest_selected_count") or payload.get("selected_count") or 0)
+    if avg_jaccard is not None and selected_count > 0:
+        previous_avg = _optional_float(totals.get("harvest_avg_pairwise_jaccard"))
+        previous_weight = previous_selected_count if previous_avg is not None else 0
+        total_weight = previous_weight + selected_count
+        totals["harvest_avg_pairwise_jaccard"] = (
+            None
+            if total_weight <= 0
+            else round(((previous_avg or 0.0) * previous_weight + avg_jaccard * selected_count) / total_weight, 9)
+        )
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _empty_profile_totals() -> dict:
@@ -2662,6 +2869,17 @@ def _profile_payload(profile_totals: dict | None, profiling: PruningCounter, fin
         ),
     }
     return payload
+
+
+def _remaining_wall_time_limit(wall_time_limit_sec: float | None, *, started_at: float) -> float | None:
+    if wall_time_limit_sec is None:
+        return None
+    return float(wall_time_limit_sec) - (perf_counter() - float(started_at))
+
+
+def _wall_time_limit_exceeded(wall_time_limit_sec: float | None, *, started_at: float) -> bool:
+    remaining = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
+    return bool(remaining is not None and remaining <= 0.0)
 
 
 def _feasibility_cache_payload(cache_stats: dict) -> dict:

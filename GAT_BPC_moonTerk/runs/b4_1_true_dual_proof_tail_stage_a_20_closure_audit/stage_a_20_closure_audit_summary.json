@@ -1,0 +1,28 @@
+{
+  "combined_all_closed": true,
+  "combined_counts": {
+    "stageA_B3B_accepted_baseline|True": 20,
+    "stageA_B4V2_default_final_judge_harvesting|True": 20
+  },
+  "combined_rows": 40,
+  "evidence_files": {
+    "failed_subset_16_round_rows": "runs/b4_1_true_dual_proof_tail_stage_a_20_failed_r16_b3b_b4v2/b4_1_rows.csv",
+    "full_8_round_rows": "runs/b4_1_true_dual_proof_tail_stage_a_20_full_b3b_b4v2/b4_1_rows.csv"
+  },
+  "failed16_counts": {
+    "stageA_B3B_accepted_baseline|True": 11,
+    "stageA_B4V2_default_final_judge_harvesting|True": 11
+  },
+  "full8_counts": {
+    "stageA_B3B_accepted_baseline|False": 11,
+    "stageA_B3B_accepted_baseline|True": 9,
+    "stageA_B4V2_default_final_judge_harvesting|False": 11,
+    "stageA_B4V2_default_final_judge_harvesting|True": 9
+  },
+  "schema_version": "lunar_ice_bpc.b4_1_stage_a_20_closure_audit.v1",
+  "scope_note": "This audit combines a full 20-scale 8-round run with a 16-round recheck of every failed 8-round instance. It is not a single full-r16 replay.",
+  "status_counts": {
+    "closed_after_16_round_recheck": 22,
+    "closed_at_8_rounds": 18
+  }
+}
