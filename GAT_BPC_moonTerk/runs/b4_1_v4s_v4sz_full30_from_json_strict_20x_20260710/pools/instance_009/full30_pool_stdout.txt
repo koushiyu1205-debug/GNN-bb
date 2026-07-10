@@ -1,0 +1,2 @@
+{"stage_count": 1, "latest_stage": 1, "latest_scope": "DIAGNOSTIC_PRICING_FRONTIER", "latest_state": "INCOMPLETE_LIMIT", "latest_compact_final_judge_profile": "V4S", "latest_compact_final_judge_phase_mode": "proof_only", "latest_final_best_reduced_cost": -1.204398, "latest_final_dual_bound": -1.204398003, "latest_active_column_count": 39, "latest_added_column_count": 5}
+report /home/kai/work/GAT_BPC_moonTerk/runs/b4_1_v4s_v4sz_full30_from_json_strict_20x_20260710/pools/instance_009/staged_resume_report_zh.md

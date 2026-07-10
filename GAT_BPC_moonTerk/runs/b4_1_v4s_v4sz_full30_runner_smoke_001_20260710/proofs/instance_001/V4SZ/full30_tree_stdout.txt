@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/b4_1_v4s_v4sz_full30_runner_smoke_001_20260710/proofs/instance_001/V4SZ/b4_1_report_zh.md

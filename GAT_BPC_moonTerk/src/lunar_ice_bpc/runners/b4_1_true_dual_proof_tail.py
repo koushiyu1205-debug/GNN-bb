@@ -22,7 +22,11 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
 )
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.core.journey import journey_column_from_solution_payload
-from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals
+from lunar_ice_bpc.exact.master.journey_rmp import (
+    JourneyDuals,
+    manual_journey_reduced_cost,
+    solve_restricted_journey_rmp,
+)
 from lunar_ice_bpc.exact.solver.gurobi_compact import solve_highs_compact_single_journey_pricing
 from lunar_ice_bpc.exact.solver.journey_driver import solve_direct_journey_baseline
 from lunar_ice_bpc.exact.solver.journey_driver import _reference_solution_upper_bound
@@ -196,6 +200,52 @@ B41_TARGETED_RESTRICTED_REGION_VARIANT_CONFIGS = {
         "triple_shadow_infeasible_cut": False,
         "triple_energy_infeasible_cut": False,
     },
+    "V4_current_dual_task_slot_lb_gate": {
+        **B4D_VARIANT_CONFIGS["V4_combined_endpoint_pair_latest_start_time_window"],
+        "formulation_kind": "endpoint_pair_latest_timewindow+service_return_pair_duration+slot_position+pair_energy_infeasible+pair_timewindow_infeasible+dual_task_slot_lb_gate",
+        "service_start_depot_travel_lb": True,
+        "task_to_depot_return_travel_lb": True,
+        "pair_route_duration_lb": True,
+        "pair_weighted_completion_lb": False,
+        "sortie_slot_position_bounds": True,
+        "demand_cover_cut": False,
+        "single_task_energy_lb": False,
+        "single_task_shadow_lb": False,
+        "pair_energy_lb": False,
+        "pair_shadow_lb": False,
+        "pair_energy_infeasible_cut": True,
+        "pair_time_window_infeasible_cut": True,
+        "pair_time_window_precedence_cut": False,
+        "triple_time_window_infeasible_cut": False,
+        "quad_time_window_infeasible_cut": False,
+        "pair_shadow_infeasible_cut": False,
+        "triple_shadow_infeasible_cut": False,
+        "triple_energy_infeasible_cut": False,
+        "dual_task_slot_lower_bound": True,
+    },
+    "V4_current_pair_conflict_capacity_bound": {
+        **B4D_VARIANT_CONFIGS["V4_combined_endpoint_pair_latest_start_time_window"],
+        "formulation_kind": "endpoint_pair_latest_timewindow+service_return_pair_duration+slot_position+pair_energy_infeasible+pair_timewindow_infeasible+pair_conflict_capacity_bound",
+        "service_start_depot_travel_lb": True,
+        "task_to_depot_return_travel_lb": True,
+        "pair_route_duration_lb": True,
+        "pair_weighted_completion_lb": False,
+        "sortie_slot_position_bounds": True,
+        "demand_cover_cut": False,
+        "single_task_energy_lb": False,
+        "single_task_shadow_lb": False,
+        "pair_energy_lb": False,
+        "pair_shadow_lb": False,
+        "pair_energy_infeasible_cut": True,
+        "pair_time_window_infeasible_cut": True,
+        "pair_time_window_precedence_cut": False,
+        "triple_time_window_infeasible_cut": False,
+        "quad_time_window_infeasible_cut": False,
+        "pair_shadow_infeasible_cut": False,
+        "triple_shadow_infeasible_cut": False,
+        "triple_energy_infeasible_cut": False,
+        "task_slot_pair_conflict_capacity_bound": True,
+    },
 }
 
 CSV_COLUMNS = (
@@ -231,6 +281,40 @@ CSV_COLUMNS = (
     "underlying_certificate_scope",
     "pricing_state",
     "exact_status",
+    "negative_feasibility_search_enabled",
+    "negative_feasibility_zero_objective_enabled",
+    "objective_bound_no_negative_cutoff_enabled",
+    "objective_bound_no_negative_cutoff_value",
+    "objective_bound_no_negative_cutoff_can_certify",
+    "zero_capacity_slot_truncation_enabled",
+    "zero_capacity_slot_truncation_original_slot_count",
+    "zero_capacity_slot_truncation_effective_slot_count",
+    "zero_capacity_slot_truncation_trimmed_slot_count",
+    "zero_capacity_slot_truncation_first_zero_slot",
+    "slot_sequence_capacity_live_bound_enabled",
+    "slot_sequence_capacity_live_bound_tightened_slot_count",
+    "slot_sequence_capacity_live_bound_by_slot",
+    "tight_service_start_bounds_enabled",
+    "tight_service_start_bound_count",
+    "tight_service_start_bound_min",
+    "tight_service_start_bound_max",
+    "tight_time_arc_big_m_enabled",
+    "tight_time_arc_big_m_depot_arc_count",
+    "tight_time_arc_big_m_active_time_bound_count",
+    "tight_time_arc_big_m_max_reduction",
+    "tight_conditional_sequence_big_m_enabled",
+    "tight_conditional_sequence_big_m_count",
+    "tight_conditional_sequence_big_m_max_reduction",
+    "slot_service_start_y_lower_bound_enabled",
+    "slot_service_start_y_lower_bound_count",
+    "slot_service_start_y_lower_bound_max_lift",
+    "slot_service_start_y_lower_bound_min",
+    "slot_service_start_y_lower_bound_max",
+    "sortie_start_upper_bound",
+    "pricing_complete_by_dual_bound",
+    "dual_bound_can_certify_no_negative",
+    "variable_count",
+    "constraint_count",
     "bpc_tree_optimal",
     "b3_objective_diff_vs_b0",
     "manual_rc_fail",
@@ -267,6 +351,26 @@ CSV_COLUMNS = (
     "harvest_best_true_rc",
     "harvest_worst_selected_true_rc",
     "harvest_avg_pairwise_jaccard",
+    "compact_pricing_phase",
+    "route_template_pre_harvest_enabled",
+    "route_template_pre_harvest_status",
+    "route_template_pre_harvest_target",
+    "route_template_pre_harvest_time_cap_sec",
+    "route_template_pre_harvest_max_direct_tasks",
+    "route_template_pre_harvest_max_active_seeds",
+    "route_template_pre_harvest_seed_strategy",
+    "route_template_pre_harvest_neighborhood_enabled",
+    "route_template_pre_harvest_max_neighborhood_seeds",
+    "route_template_pre_harvest_max_candidate_sets",
+    "route_template_pre_harvest_seed_count",
+    "route_template_pre_harvest_candidate_round_count",
+    "route_template_pre_harvest_candidate_round_limit",
+    "route_template_pre_harvest_candidate_negative_count",
+    "route_template_pre_harvest_selected_count",
+    "route_template_pre_harvest_selected_new_task_set_count",
+    "route_template_pre_harvest_selected_replacement_task_set_count",
+    "route_template_pre_harvest_pricing_wall_time_sec",
+    "route_template_pre_harvest_fallback_enabled",
     "compact_optimization_harvest_enabled",
     "compact_optimization_harvest_target",
     "compact_optimization_harvest_no_good_scope",
@@ -300,6 +404,246 @@ CSV_COLUMNS = (
     "compact_final_judge_profile",
     "compact_final_judge_formulation_profile",
     "compact_final_judge_phase_mode",
+    "sortie_slots_per_journey",
+    "sortie_slot_bound_source",
+    "sortie_slot_horizon_count_bound",
+    "sortie_slot_latest_start_count_bound",
+    "sortie_slot_min_duration_lower_bound",
+    "sortie_slot_min_energy_recharge_duration_lower_bound",
+    "slot_task_time_pruning_enabled",
+    "slot_task_time_feasible_assignment_count",
+    "slot_task_time_pruned_assignment_count",
+    "slot_task_time_pruned_due_count",
+    "slot_task_time_pruned_horizon_count",
+    "slot_task_time_total_assignment_count",
+    "slot_task_time_original_total_assignment_count",
+    "slot_task_model_assignment_count",
+    "slot_arc_support_pruning_enabled",
+    "slot_arc_support_feasible_assignment_count",
+    "slot_arc_support_pruned_assignment_count",
+    "slot_arc_support_pruned_unreachable_count",
+    "slot_arc_support_pruned_no_return_count",
+    "slot_arc_support_pruned_option_count",
+    "slot_arc_time_pruned_option_count",
+    "slot_sequence_capacity_arc_pruning_enabled",
+    "slot_sequence_capacity_arc_pruned_option_count",
+    "slot_sequence_capacity_mtz_disabled_slot_count",
+    "single_task_per_active_sortie_arc_pruning_enabled",
+    "single_task_per_active_sortie_arc_pruned_option_count",
+    "single_task_per_active_sortie_mtz_disabled",
+    "mtz_connectivity_effective",
+    "fixed_active_sortie_redundant_constraint_skipped_count",
+    "single_task_per_active_sortie_slot_visit_eq_count",
+    "single_task_per_active_sortie_y_z_link_skipped_count",
+    "resource_arc_pruning_enabled",
+    "resource_arc_pruned_option_count",
+    "resource_arc_energy_pruned_option_count",
+    "resource_arc_shadow_pruned_option_count",
+    "resource_arc_demand_pruned_option_count",
+    "slot_task_sequence_capacity_upper_bound",
+    "slot_task_sequence_capacity_limited_slot_count",
+    "slot_task_sequence_capacity_empty_slot_count",
+    "slot_task_matching_capacity_upper_bound",
+    "single_journey_mip_start_enabled",
+    "single_journey_mip_start_status",
+    "single_journey_mip_start_source",
+    "single_journey_mip_start_entry_count",
+    "single_journey_mip_start_zero_fill_integers",
+    "single_journey_mip_start_zero_fill_integer_entry_count",
+    "single_journey_mip_start_inactive_tail_time_entry_count",
+    "single_journey_mip_start_inactive_tail_time_mode",
+    "single_journey_mip_start_sort_indices",
+    "single_journey_mip_start_sortie_count",
+    "single_journey_mip_start_task_count",
+    "single_journey_mip_start_objective",
+    "single_journey_mip_start_reduced_cost",
+    "required_task_set_enabled",
+    "required_task_set_count",
+    "pricing_model_task_count",
+    "required_task_set_model_reduction_enabled",
+    "required_task_set_model_task_count",
+    "required_task_set_model_task_reduction_count",
+    "required_task_set_region_can_certify_no_negative",
+    "pricing_complete_for_required_task_set",
+    "required_task_set_infeasible_by_feasible_task_count",
+    "required_task_set_infeasible_by_slot_capacity",
+    "required_task_set_infeasible_by_slot_sequence_capacity",
+    "required_task_set_infeasible_by_slot_matching",
+    "required_task_count_enabled",
+    "required_task_count",
+    "required_task_count_region_can_certify_no_negative",
+    "pricing_complete_for_required_task_count",
+    "required_task_count_feasible_task_count",
+    "required_task_count_slot_capacity_task_upper_bound",
+    "required_task_count_slot_sequence_capacity_upper_bound",
+    "required_task_count_slot_matching_capacity_upper_bound",
+    "required_task_count_pair_conflict_capacity_upper_bound",
+    "required_task_count_min_active_sorties",
+    "required_task_count_active_sortie_lb_count",
+    "required_task_count_infeasible_by_feasible_task_count",
+    "required_task_count_infeasible_by_slot_capacity",
+    "required_task_count_infeasible_by_slot_sequence_capacity",
+    "required_task_count_infeasible_by_slot_matching",
+    "required_task_count_infeasible_by_pair_conflict_capacity",
+    "required_task_count_certified_by_dual_task_slot_lower_bound",
+    "required_task_count_infeasible_by_dual_task_slot_lower_bound",
+    "dual_task_slot_lower_bound_enabled",
+    "dual_task_slot_lower_bound_applicable",
+    "dual_task_slot_lower_bound_optimal",
+    "dual_task_slot_lower_bound_status",
+    "dual_task_slot_lower_bound_value",
+    "dual_task_slot_lower_bound_region_infeasible",
+    "dual_task_slot_lower_bound_route_arc_mode",
+    "dual_task_slot_lower_bound_route_arc_value",
+    "dual_task_slot_lower_bound_route_arc_row_count",
+    "dual_task_slot_lower_bound_route_arc_global_constant",
+    "dual_task_slot_lower_bound_route_arc_slot_constant",
+    "dual_task_slot_lower_bound_route_arc_constant",
+    "dual_task_slot_lower_bound_route_arc_slot_outbound_sum",
+    "dual_task_slot_lower_bound_route_arc_slot_return_sum",
+    "dual_task_slot_lower_bound_single_task_route_arc_bound_row_count",
+    "dual_task_slot_lower_bound_single_task_route_arc_bound_min",
+    "dual_task_slot_lower_bound_single_task_route_arc_bound_max",
+    "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_var_count",
+    "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_row_count",
+    "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_pair_count",
+    "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_row_count",
+    "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_iteration_count",
+    "dual_task_slot_lower_bound_pair_route_arc_bound_row_count",
+    "dual_task_slot_lower_bound_pair_route_arc_bound_min",
+    "dual_task_slot_lower_bound_pair_route_arc_bound_max",
+    "dual_task_slot_lower_bound_triple_route_arc_bound_row_count",
+    "dual_task_slot_lower_bound_triple_route_arc_bound_min",
+    "dual_task_slot_lower_bound_triple_route_arc_bound_max",
+    "dual_task_slot_lower_bound_pair_completion_lift_var_count",
+    "dual_task_slot_lower_bound_pair_completion_lift_row_count",
+    "dual_task_slot_lower_bound_pair_completion_lift_min",
+    "dual_task_slot_lower_bound_pair_completion_lift_max",
+    "dual_task_slot_lower_bound_cross_slot_completion_lift_var_count",
+    "dual_task_slot_lower_bound_cross_slot_completion_lift_row_count",
+    "dual_task_slot_lower_bound_cross_slot_pair_completion_separation_row_count",
+    "dual_task_slot_lower_bound_cross_slot_completion_lift_min",
+    "dual_task_slot_lower_bound_cross_slot_completion_lift_max",
+    "dual_task_slot_lower_bound_wall_time_sec",
+    "dual_task_slot_lower_bound_variable_count",
+    "dual_task_slot_lower_bound_constraint_count",
+    "dual_task_slot_lower_bound_pair_conflict_row_count",
+    "dual_task_slot_lower_bound_hyperedge_conflict_row_count",
+    "dual_task_slot_full_space_lower_bound_enabled",
+    "dual_task_slot_full_space_lower_bound_applicable",
+    "dual_task_slot_full_space_lower_bound_early_stop_on_negative",
+    "dual_task_slot_full_space_lower_bound_early_stopped_on_negative",
+    "dual_task_slot_full_space_lower_bound_coverage_complete",
+    "dual_task_slot_full_space_lower_bound_can_certify",
+    "dual_task_slot_full_space_lower_bound_region_count",
+    "dual_task_slot_full_space_lower_bound_optimal_region_count",
+    "dual_task_slot_full_space_lower_bound_infeasible_region_count",
+    "dual_task_slot_full_space_lower_bound_unsupported_region_count",
+    "dual_task_slot_full_space_lower_bound_negative_region_count",
+    "dual_task_slot_full_space_lower_bound_value",
+    "dual_task_slot_full_space_lower_bound_task_count",
+    "dual_task_slot_full_space_lower_bound_active_sortie_count",
+    "dual_task_slot_full_space_lower_bound_wall_time_sec",
+    "dual_task_slot_full_space_lower_bound_status",
+    "task_slot_pair_conflict_capacity_near_matching_cap",
+    "task_slot_pair_conflict_capacity_bound_requested",
+    "task_slot_pair_conflict_capacity_bound_enabled",
+    "task_slot_pair_conflict_capacity_bound_optimal",
+    "task_slot_pair_conflict_capacity_bound_status",
+    "task_slot_pair_conflict_capacity_bound_wall_time_sec",
+    "task_slot_pair_conflict_capacity_bound_variable_count",
+    "task_slot_pair_conflict_capacity_bound_constraint_count",
+    "task_slot_pair_conflict_capacity_pair_count",
+    "task_slot_pair_conflict_capacity_row_count",
+    "task_slot_pair_conflict_capacity_hyperedge_count",
+    "task_slot_pair_conflict_capacity_hyperedge_row_count",
+    "required_active_sortie_count_enabled",
+    "required_active_sortie_count",
+    "required_active_sortie_count_region_can_certify_no_negative",
+    "pricing_complete_for_required_active_sortie_count",
+    "required_active_sortie_count_min",
+    "required_active_sortie_count_max",
+    "required_active_sortie_count_capacity_min",
+    "required_active_sortie_count_expected_counts",
+    "required_active_sortie_count_infeasible",
+    "required_active_sortie_count_infeasible_by_empty_slot",
+    "required_active_sortie_count_infeasible_by_capacity_min",
+    "required_active_sortie_count_slots_fixed",
+    "required_active_sortie_count_fixed_slot_count",
+    "forbidden_task_set_skipped_by_required_task_count",
+    "residual_task_count_partition_enabled",
+    "residual_task_count_region_expected_count",
+    "residual_task_count_region_observed_count",
+    "residual_task_count_region_proven_count",
+    "residual_task_count_region_incomplete_count",
+    "residual_task_count_region_negative_count",
+    "residual_task_count_region_missing_count",
+    "residual_task_count_region_missing_counts",
+    "residual_active_sortie_count_partition_enabled",
+    "residual_active_sortie_count_missing_group_count",
+    "residual_active_sortie_count_duplicate_group_count",
+    "partition_candidate_audit_json",
+    "partition_probe_json",
+    "partition_target_task_set_count",
+    "partition_candidate_gate_pass",
+    "partition_candidate_gate_issue_count",
+    "partition_candidate_gate_issue_codes",
+    "partition_candidate_gate_full_space_partition_valid",
+    "partition_candidate_gate_exact_region_count",
+    "partition_candidate_gate_exact_regions_proven",
+    "partition_candidate_gate_residual_proven",
+    "partition_candidate_can_certify_no_negative",
+    "partition_candidate_redline_fail_count",
+    "partition_candidate_row_certificate_claim_count",
+    "partition_best_region_lb",
+    "partition_bound_gap_to_zero",
+    "partition_negative_region_count",
+    "partition_negative_exact_region_count",
+    "partition_negative_residual_region_count",
+    "partition_negative_payload_available_count",
+    "partition_best_negative_rc",
+    "partition_negative_already_active_count",
+    "partition_negative_replacement_task_set_count",
+    "partition_negative_new_task_set_count",
+    "partition_source_active_column_count",
+    "partition_dual_active_column_count",
+    "partition_dual_source",
+    "partition_dual_refresh_status",
+    "partition_dual_refresh_min_rc",
+    "partition_dual_refresh_negative_count",
+    "partition_dual_refresh_input_column_count",
+    "partition_dual_refresh_rmp_active_column_count",
+    "partition_active_pool_after_dual_delta",
+    "partition_dual_scope_matches_active_pool",
+    "partition_dual_scope_mismatch_count",
+    "partition_negative_manual_rc",
+    "partition_negative_pricing_rc_diff",
+    "partition_negative_rc_audit_pass",
+    "partition_negative_rc_audit_fail_count",
+    "partition_negative_feasibility_fallback_enabled",
+    "partition_negative_feasibility_fallback_run",
+    "partition_negative_feasibility_fallback_used",
+    "partition_negative_feasibility_fallback_status",
+    "partition_negative_feasibility_fallback_exact_status",
+    "partition_optimization_best_reduced_cost",
+    "partition_optimization_dual_bound",
+    "partition_optimization_exact_status",
+    "partition_region_variable_count_max",
+    "partition_region_constraint_count_max",
+    "partition_region_variable_count_mean",
+    "partition_region_constraint_count_mean",
+    "partition_region_slot_task_time_feasible_assignment_count_max",
+    "partition_region_slot_task_time_pruned_assignment_count_sum",
+    "partition_region_slot_arc_time_pruned_option_count_sum",
+    "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum",
+    "partition_region_resource_arc_pruned_option_count_sum",
+    "partition_region_resource_arc_energy_pruned_option_count_sum",
+    "partition_region_resource_arc_shadow_pruned_option_count_sum",
+    "partition_region_resource_arc_demand_pruned_option_count_sum",
+    "partition_region_mip_start_enabled_count",
+    "partition_region_mip_start_ok_count",
+    "partition_exact_region_mip_start_ok_count",
+    "partition_residual_region_mip_start_ok_count",
     "service_start_depot_travel_lb_enabled",
     "service_start_depot_travel_lb_count",
     "task_to_depot_return_travel_lb_enabled",
@@ -656,6 +1000,10 @@ def build_b4_1_report(rows: Iterable[dict]) -> dict:
     variant_counts = _count_by(materialized, "variant")
     hidden_miss_reason_counts = _aggregate_hidden_negative_miss_reason_counts(materialized)
     tail_dual_rows = [row for row in materialized if _bool_value(row.get("tail_dual_stabilization_enabled"))]
+    partition_rows = [
+        row for row in materialized if str(row.get("mode") or "") == "B4.1_partition_candidate_audit"
+    ]
+    partition_issue_counts = _aggregate_partition_candidate_issue_counts(partition_rows)
     redlines = {
         "certificate_leak_count": sum(int(row.get("certificate_leak") or 0) for row in materialized),
         "manual_rc_fail_count": sum(int(row.get("manual_rc_fail") or 0) for row in materialized),
@@ -684,6 +1032,9 @@ def build_b4_1_report(rows: Iterable[dict]) -> dict:
             or not _bool_value(row.get("worker_dual_only"))
             or not _bool_value(row.get("true_dual_rc_recomputed"))
             or str(row.get("official_dual_source") or "") != "current_true_rmp_dual"
+        ),
+        "partition_candidate_certificate_leak_count": sum(
+            int(row.get("partition_candidate_redline_fail_count") or 0) for row in partition_rows
         ),
     }
     stage_a_rows = [row for row in materialized if row.get("stage") == "A"]
@@ -744,6 +1095,139 @@ def build_b4_1_report(rows: Iterable[dict]) -> dict:
             and _bool_value(row.get("underlying_can_certify_no_negative"))
             and str(row.get("underlying_pricing_proof_kind") or "") == "EXHAUSTIVE_NO_NEGATIVE"
         ),
+        "partition_candidate_audit_row_count": len(partition_rows),
+        "partition_candidate_gate_pass_count": sum(
+            1 for row in partition_rows if _bool_value(row.get("partition_candidate_gate_pass"))
+        ),
+        "partition_candidate_gate_fail_count": sum(
+            1 for row in partition_rows if not _bool_value(row.get("partition_candidate_gate_pass"))
+        ),
+        "partition_candidate_can_certify_no_negative_count": sum(
+            1 for row in partition_rows if _bool_value(row.get("partition_candidate_can_certify_no_negative"))
+        ),
+        "partition_candidate_full_space_valid_count": sum(
+            1 for row in partition_rows if _bool_value(row.get("partition_candidate_gate_full_space_partition_valid"))
+        ),
+        "partition_candidate_redline_fail_count": sum(
+            int(row.get("partition_candidate_redline_fail_count") or 0) for row in partition_rows
+        ),
+        "partition_negative_region_count": sum(
+            int(row.get("partition_negative_region_count") or 0) for row in partition_rows
+        ),
+        "partition_negative_payload_available_count": sum(
+            int(row.get("partition_negative_payload_available_count") or 0) for row in partition_rows
+        ),
+        "partition_best_negative_rc": _min_present_float(
+            row.get("partition_best_negative_rc") for row in partition_rows
+        ),
+        "partition_negative_already_active_count": sum(
+            int(row.get("partition_negative_already_active_count") or 0) for row in partition_rows
+        ),
+        "partition_negative_replacement_task_set_count": sum(
+            int(row.get("partition_negative_replacement_task_set_count") or 0) for row in partition_rows
+        ),
+        "partition_negative_new_task_set_count": sum(
+            int(row.get("partition_negative_new_task_set_count") or 0) for row in partition_rows
+        ),
+        "partition_region_variable_count_max": _max_present_int(
+            row.get("partition_region_variable_count_max") for row in partition_rows
+        ),
+        "partition_region_constraint_count_max": _max_present_int(
+            row.get("partition_region_constraint_count_max") for row in partition_rows
+        ),
+        "partition_region_variable_count_mean_max": _max_present_float(
+            row.get("partition_region_variable_count_mean") for row in partition_rows
+        ),
+        "partition_region_constraint_count_mean_max": _max_present_float(
+            row.get("partition_region_constraint_count_mean") for row in partition_rows
+        ),
+        "partition_region_slot_task_time_feasible_assignment_count_max": _max_present_int(
+            row.get("partition_region_slot_task_time_feasible_assignment_count_max")
+            for row in partition_rows
+        ),
+        "partition_region_slot_task_time_pruned_assignment_count_sum": sum(
+            int(row.get("partition_region_slot_task_time_pruned_assignment_count_sum") or 0)
+            for row in partition_rows
+        ),
+        "partition_region_slot_arc_time_pruned_option_count_sum": sum(
+            int(row.get("partition_region_slot_arc_time_pruned_option_count_sum") or 0)
+            for row in partition_rows
+        ),
+        "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum": sum(
+            int(row.get("partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum") or 0)
+            for row in partition_rows
+        ),
+        "partition_region_resource_arc_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_pruned_option_count_sum") or 0)
+            for row in partition_rows
+        ),
+        "partition_region_resource_arc_energy_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_energy_pruned_option_count_sum") or 0)
+            for row in partition_rows
+        ),
+        "partition_region_resource_arc_shadow_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_shadow_pruned_option_count_sum") or 0)
+            for row in partition_rows
+        ),
+        "partition_region_resource_arc_demand_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_demand_pruned_option_count_sum") or 0)
+            for row in partition_rows
+        ),
+        "partition_dual_scope_mismatch_count": sum(
+            int(row.get("partition_dual_scope_mismatch_count") or 0) for row in partition_rows
+        ),
+        "partition_negative_rc_audit_fail_count": sum(
+            int(row.get("partition_negative_rc_audit_fail_count") or 0) for row in partition_rows
+        ),
+        "partition_region_mip_start_enabled_count": sum(
+            int(row.get("partition_region_mip_start_enabled_count") or 0) for row in partition_rows
+        ),
+        "partition_region_mip_start_ok_count": sum(
+            int(row.get("partition_region_mip_start_ok_count") or 0) for row in partition_rows
+        ),
+        "partition_exact_region_mip_start_ok_count": sum(
+            int(row.get("partition_exact_region_mip_start_ok_count") or 0) for row in partition_rows
+        ),
+        "partition_residual_region_mip_start_ok_count": sum(
+            int(row.get("partition_residual_region_mip_start_ok_count") or 0) for row in partition_rows
+        ),
+        "residual_task_count_partition_enabled_count": sum(
+            1 for row in partition_rows if _bool_value(row.get("residual_task_count_partition_enabled"))
+        ),
+        "residual_task_count_region_expected_count": _max_present_int(
+            row.get("residual_task_count_region_expected_count") for row in partition_rows
+        ),
+        "residual_task_count_region_observed_count": _max_present_int(
+            row.get("residual_task_count_region_observed_count") for row in partition_rows
+        ),
+        "residual_task_count_region_proven_count": _max_present_int(
+            row.get("residual_task_count_region_proven_count") for row in partition_rows
+        ),
+        "residual_task_count_region_incomplete_count": _max_present_int(
+            row.get("residual_task_count_region_incomplete_count") for row in partition_rows
+        ),
+        "residual_task_count_region_negative_count": _max_present_int(
+            row.get("residual_task_count_region_negative_count") for row in partition_rows
+        ),
+        "residual_task_count_region_missing_count": _max_present_int(
+            row.get("residual_task_count_region_missing_count") for row in partition_rows
+        ),
+        "partition_active_pool_after_dual_delta_max": _max_present_int(
+            row.get("partition_active_pool_after_dual_delta") for row in partition_rows
+        ),
+        "partition_refreshed_dual_row_count": sum(
+            1
+            for row in partition_rows
+            if str(row.get("partition_dual_source") or "").startswith("refreshed_active_pool")
+        ),
+        "partition_dual_refresh_negative_count": sum(
+            int(row.get("partition_dual_refresh_negative_count") or 0) for row in partition_rows
+        ),
+        "partition_dual_refresh_min_rc": _min_present_float(
+            row.get("partition_dual_refresh_min_rc") for row in partition_rows
+        ),
+        "partition_candidate_issue_counts": partition_issue_counts,
+        "partition_candidate_top_issue": _top_partition_candidate_issue(partition_issue_counts),
     }
     acceptance = {
         "stage_a_regression_clean": bool(stage_a_rows)
@@ -970,6 +1454,9 @@ def run_b4_1_targeted_restricted_region_probe(
                 pair_adjacency_cuts=bool(config["pair_adjacency_cuts"]),
                 latest_service_start_slot_bound=bool(config["latest_service_start_slot_bound"]),
                 time_window_arc_pruning=bool(config["time_window_arc_pruning"]),
+                resource_arc_pruning=bool(config.get("resource_arc_pruning", False)),
+                slot_task_time_pruning=bool(config.get("slot_task_time_pruning", False)),
+                slot_arc_support_pruning=bool(config.get("slot_arc_support_pruning", False)),
                 service_start_depot_travel_lb=bool(config["service_start_depot_travel_lb"]),
                 task_to_depot_return_travel_lb=bool(config["task_to_depot_return_travel_lb"]),
                 pair_route_duration_lb=bool(config["pair_route_duration_lb"]),
@@ -988,6 +1475,10 @@ def run_b4_1_targeted_restricted_region_probe(
                 pair_shadow_infeasible_cut=bool(config["pair_shadow_infeasible_cut"]),
                 triple_shadow_infeasible_cut=bool(config["triple_shadow_infeasible_cut"]),
                 triple_energy_infeasible_cut=bool(config["triple_energy_infeasible_cut"]),
+                task_slot_pair_conflict_capacity_bound=bool(
+                    config.get("task_slot_pair_conflict_capacity_bound", False)
+                ),
+                dual_task_slot_lower_bound=bool(config.get("dual_task_slot_lower_bound", False)),
                 negative_feasibility_search=False,
                 forbidden_task_sets=forbidden_task_sets,
             )
@@ -1041,11 +1532,1210 @@ def write_b4_1_targeted_restricted_region_probe(
     report_path.write_text(render_b4_1_targeted_restricted_region_markdown(report), encoding="utf-8")
 
 
+def run_b4_1_required_task_set_partition_probe(
+    source_probe_json: str | Path,
+    *,
+    variants: Iterable[str] = ("V4_current_strengthening",),
+    history_round: int = -1,
+    time_limit_sec: float = 120.0,
+    threads: int = 1,
+    negative_eps: float = 1.0e-6,
+    max_task_sets: int = 0,
+    refresh_dual_from_active_pool: bool = False,
+    refresh_rmp_max_iterations: int = 100,
+    residual_task_count_partition: bool = False,
+    residual_task_count_min: int = 1,
+    residual_task_count_max: int = 0,
+    residual_task_count_max_regions: int = 0,
+    residual_active_sortie_count_partition: bool = False,
+    residual_active_sortie_count_min: int = 0,
+    residual_active_sortie_count_max: int = 0,
+    residual_active_sortie_adaptive_refinement: bool = False,
+    negative_feasibility_fallback: bool = False,
+) -> dict:
+    """Probe an exact-task-set plus residual partition of harvested negatives.
+
+    For harvested task sets H1..Hk this solves exact-task-set regions H_i and
+    the final residual region that forbids all H_i.  These rows are a candidate
+    partition proof under the same true dual, but remain diagnostic until a
+    final judge/ledger path consumes the complete partition without redlines.
+    """
+
+    source = Path(source_probe_json)
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    diagnostic = build_b4_1_restricted_region_taskset_diagnostic(source)
+    instance_path = payload.get("instance_path")
+    if not instance_path:
+        raise ValueError(f"source probe has no instance_path: {source}")
+    data = load_lunar_ice_data(json.loads(Path(instance_path).read_text(encoding="utf-8")))
+    history = payload.get("history") if isinstance(payload.get("history"), list) else []
+    history_row = _select_history_row(history, int(history_round))
+    dual_context = history_row.get("dual_context")
+    if not isinstance(dual_context, dict):
+        raise ValueError("selected history row has no dual_context")
+    history_duals = JourneyDuals(
+        cover={str(key): float(value) for key, value in (dual_context.get("task_duals") or {}).items()},
+        fleet_limit=float(dual_context.get("fleet_dual") or 0.0),
+        cuts={str(key): float(value) for key, value in (dual_context.get("cut_duals") or {}).items()},
+    )
+    active_payloads = [
+        row for row in (payload.get("active_columns") or []) if isinstance(row, dict)
+    ]
+    active_task_sets = {
+        task_set for task_set in (_solution_payload_task_set(row) for row in active_payloads) if task_set
+    }
+    active_column_keys = {
+        key for key in (_solution_payload_column_key(row) for row in active_payloads) if key
+    }
+    active_mip_start_columns = _partition_mip_start_columns_from_payloads(data, active_payloads)
+    source_active_column_count = len(active_payloads)
+    history_dual_active_column_count = _first_int(
+        history_row.get("active_column_count"),
+        history_row.get("active_columns_after_merge"),
+    )
+    duals = history_duals
+    dual_source = "selected_history_dual"
+    dual_refresh_payload = {
+        "partition_dual_refresh_status": "",
+        "partition_dual_refresh_min_rc": "",
+        "partition_dual_refresh_negative_count": "",
+        "partition_dual_refresh_input_column_count": "",
+        "partition_dual_refresh_rmp_active_column_count": "",
+    }
+    dual_active_column_count = history_dual_active_column_count
+    if refresh_dual_from_active_pool:
+        refresh = _refresh_partition_duals_from_active_pool(
+            data,
+            active_payloads,
+            negative_eps=float(negative_eps),
+            max_iterations=int(refresh_rmp_max_iterations),
+        )
+        duals = refresh["duals"]
+        dual_source = refresh["partition_dual_source"]
+        dual_refresh_payload = refresh["payload"]
+        dual_active_column_count = _first_int(
+            dual_refresh_payload.get("partition_dual_refresh_input_column_count"),
+            dual_refresh_payload.get("partition_dual_refresh_rmp_active_column_count"),
+            history_dual_active_column_count,
+        )
+    task_sets = _unique_harvested_task_sets(diagnostic)
+    if int(max_task_sets) > 0:
+        task_sets = task_sets[: int(max_task_sets)]
+    rows: list[dict] = []
+    adaptive_refinement_attempt_count = 0
+    adaptive_refinement_coarse_accepted_count = 0
+    adaptive_refinement_refined_count = 0
+    adaptive_refinement_discarded_coarse_wall_time_sec = 0.0
+    for index, task_set in enumerate(task_sets, start=1):
+        for variant in tuple(str(item) for item in variants):
+            config = B41_TARGETED_RESTRICTED_REGION_VARIANT_CONFIGS.get(variant)
+            if config is None:
+                raise ValueError(f"unknown B4.1 partition variant: {variant}")
+            mip_start_journey = _select_partition_region_mip_start(
+                active_mip_start_columns,
+                duals=duals,
+                required_task_set=task_set,
+            )
+            start = perf_counter()
+            result = solve_highs_compact_single_journey_pricing(
+                data,
+                duals,
+                time_limit_sec=float(time_limit_sec),
+                threads=int(threads),
+                mip_gap=0.0,
+                negative_eps=float(negative_eps),
+                flow_connectivity=False,
+                mtz_connectivity=bool(config["mtz_connectivity"]),
+                mtz_endpoint_order_cuts=bool(config["mtz_endpoint_order_cuts"]),
+                pair_adjacency_cuts=bool(config["pair_adjacency_cuts"]),
+                latest_service_start_slot_bound=bool(config["latest_service_start_slot_bound"]),
+                time_window_arc_pruning=bool(config["time_window_arc_pruning"]),
+                resource_arc_pruning=bool(config.get("resource_arc_pruning", False)),
+                slot_task_time_pruning=bool(config.get("slot_task_time_pruning", False)),
+                slot_arc_support_pruning=bool(config.get("slot_arc_support_pruning", False)),
+                service_start_depot_travel_lb=bool(config["service_start_depot_travel_lb"]),
+                task_to_depot_return_travel_lb=bool(config["task_to_depot_return_travel_lb"]),
+                pair_route_duration_lb=bool(config["pair_route_duration_lb"]),
+                pair_weighted_completion_lb=bool(config["pair_weighted_completion_lb"]),
+                sortie_slot_position_bounds=bool(config["sortie_slot_position_bounds"]),
+                demand_cover_cut=bool(config["demand_cover_cut"]),
+                single_task_energy_lb=bool(config["single_task_energy_lb"]),
+                single_task_shadow_lb=bool(config["single_task_shadow_lb"]),
+                pair_energy_lb=bool(config["pair_energy_lb"]),
+                pair_shadow_lb=bool(config["pair_shadow_lb"]),
+                pair_energy_infeasible_cut=bool(config["pair_energy_infeasible_cut"]),
+                pair_time_window_infeasible_cut=bool(config["pair_time_window_infeasible_cut"]),
+                pair_time_window_precedence_cut=bool(config["pair_time_window_precedence_cut"]),
+                triple_time_window_infeasible_cut=bool(config["triple_time_window_infeasible_cut"]),
+                quad_time_window_infeasible_cut=bool(config["quad_time_window_infeasible_cut"]),
+                pair_shadow_infeasible_cut=bool(config["pair_shadow_infeasible_cut"]),
+                triple_shadow_infeasible_cut=bool(config["triple_shadow_infeasible_cut"]),
+                triple_energy_infeasible_cut=bool(config["triple_energy_infeasible_cut"]),
+                task_slot_pair_conflict_capacity_bound=bool(
+                    config.get("task_slot_pair_conflict_capacity_bound", False)
+                ),
+                dual_task_slot_lower_bound=bool(config.get("dual_task_slot_lower_bound", False)),
+                negative_feasibility_search=False,
+                required_task_set=task_set,
+                mip_start_journey=mip_start_journey,
+            )
+            rows.append(
+                _partition_probe_row(
+                    result,
+                    source_probe_json=source,
+                    instance_id=str(payload.get("instance_id") or data.instance_id),
+                    history_round=history_row.get("round"),
+                    region_id=f"exact_{index:03d}",
+                    region_kind="exact_task_set",
+                    task_set=task_set,
+                    forbidden_task_sets=tuple(),
+                    variant=variant,
+                    formulation_kind=str(config["formulation_kind"]),
+                    wall_time=perf_counter() - start,
+                    negative_eps=float(negative_eps),
+                    active_task_sets=active_task_sets,
+                    active_column_keys=active_column_keys,
+                    source_active_column_count=source_active_column_count,
+                    dual_active_column_count=dual_active_column_count,
+                    dual_source=dual_source,
+                    dual_refresh_payload=dual_refresh_payload,
+                    data=data,
+                    duals=duals,
+                )
+            )
+    def _solve_residual_task_count_region(
+        config: dict,
+        *,
+        required_count: int,
+        active_sortie_count: int | None,
+        mip_start_journey,
+        negative_feasibility_search: bool,
+    ) -> dict:
+        return solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=float(time_limit_sec),
+            threads=int(threads),
+            mip_gap=0.0,
+            negative_eps=float(negative_eps),
+            flow_connectivity=False,
+            mtz_connectivity=bool(config["mtz_connectivity"]),
+            mtz_endpoint_order_cuts=bool(config["mtz_endpoint_order_cuts"]),
+            pair_adjacency_cuts=bool(config["pair_adjacency_cuts"]),
+            latest_service_start_slot_bound=bool(config["latest_service_start_slot_bound"]),
+            time_window_arc_pruning=bool(config["time_window_arc_pruning"]),
+            resource_arc_pruning=bool(config.get("resource_arc_pruning", False)),
+            slot_task_time_pruning=bool(config.get("slot_task_time_pruning", False)),
+            slot_arc_support_pruning=bool(config.get("slot_arc_support_pruning", False)),
+            service_start_depot_travel_lb=bool(config["service_start_depot_travel_lb"]),
+            task_to_depot_return_travel_lb=bool(config["task_to_depot_return_travel_lb"]),
+            pair_route_duration_lb=bool(config["pair_route_duration_lb"]),
+            pair_weighted_completion_lb=bool(config["pair_weighted_completion_lb"]),
+            sortie_slot_position_bounds=bool(config["sortie_slot_position_bounds"]),
+            demand_cover_cut=bool(config["demand_cover_cut"]),
+            single_task_energy_lb=bool(config["single_task_energy_lb"]),
+            single_task_shadow_lb=bool(config["single_task_shadow_lb"]),
+            pair_energy_lb=bool(config["pair_energy_lb"]),
+            pair_shadow_lb=bool(config["pair_shadow_lb"]),
+            pair_energy_infeasible_cut=bool(config["pair_energy_infeasible_cut"]),
+            pair_time_window_infeasible_cut=bool(config["pair_time_window_infeasible_cut"]),
+            pair_time_window_precedence_cut=bool(config["pair_time_window_precedence_cut"]),
+            triple_time_window_infeasible_cut=bool(config["triple_time_window_infeasible_cut"]),
+            quad_time_window_infeasible_cut=bool(config["quad_time_window_infeasible_cut"]),
+            pair_shadow_infeasible_cut=bool(config["pair_shadow_infeasible_cut"]),
+            triple_shadow_infeasible_cut=bool(config["triple_shadow_infeasible_cut"]),
+            triple_energy_infeasible_cut=bool(config["triple_energy_infeasible_cut"]),
+            task_slot_pair_conflict_capacity_bound=bool(
+                config.get("task_slot_pair_conflict_capacity_bound", False)
+            ),
+            dual_task_slot_lower_bound=bool(config.get("dual_task_slot_lower_bound", False)),
+            negative_feasibility_search=bool(negative_feasibility_search),
+            forbidden_task_sets=task_sets,
+            required_task_count=int(required_count),
+            required_active_sortie_count=active_sortie_count,
+            mip_start_journey=mip_start_journey,
+        )
+
+    if residual_task_count_partition:
+        max_count = int(residual_task_count_max) if int(residual_task_count_max or 0) > 0 else len(data.task_ids)
+        min_count = max(1, int(residual_task_count_min))
+        counts = list(range(min_count, min(max_count, len(data.task_ids)) + 1))
+        if int(residual_task_count_max_regions) > 0:
+            counts = counts[: int(residual_task_count_max_regions)]
+        for required_count in counts:
+            for variant in tuple(str(item) for item in variants):
+                config = B41_TARGETED_RESTRICTED_REGION_VARIANT_CONFIGS.get(variant)
+                if config is None:
+                    raise ValueError(f"unknown B4.1 partition variant: {variant}")
+                if residual_active_sortie_count_partition and residual_active_sortie_adaptive_refinement:
+                    adaptive_refinement_attempt_count += 1
+                    coarse_mip_start_journey = _select_partition_region_mip_start(
+                        active_mip_start_columns,
+                        duals=duals,
+                        forbidden_task_sets=task_sets,
+                        required_task_count=required_count,
+                        required_active_sortie_count=None,
+                    )
+                    coarse_start = perf_counter()
+                    coarse_result = _solve_residual_task_count_region(
+                        config,
+                        required_count=int(required_count),
+                        active_sortie_count=None,
+                        mip_start_journey=coarse_mip_start_journey,
+                        negative_feasibility_search=False,
+                    )
+                    coarse_wall = perf_counter() - coarse_start
+                    coarse_row = _partition_probe_row(
+                        coarse_result,
+                        source_probe_json=source,
+                        instance_id=str(payload.get("instance_id") or data.instance_id),
+                        history_round=history_row.get("round"),
+                        region_id=f"residual_task_count_{required_count:03d}",
+                        region_kind="residual_task_count",
+                        task_set=tuple(),
+                        forbidden_task_sets=tuple(task_sets),
+                        variant=variant,
+                        formulation_kind=str(config["formulation_kind"]),
+                        wall_time=coarse_wall,
+                        negative_eps=float(negative_eps),
+                        active_task_sets=active_task_sets,
+                        active_column_keys=active_column_keys,
+                        source_active_column_count=source_active_column_count,
+                        dual_active_column_count=dual_active_column_count,
+                        dual_source=dual_source,
+                        dual_refresh_payload=dual_refresh_payload,
+                        data=data,
+                        duals=duals,
+                    )
+                    coarse_row["partition_adaptive_active_sortie_refinement_enabled"] = True
+                    coarse_row["partition_adaptive_active_sortie_refinement_role"] = "coarse_accepted"
+                    if (
+                        coarse_row.get("region_pricing_complete") is True
+                        and coarse_row.get("region_can_certify_no_negative") is True
+                        and coarse_row.get("negative_found") is not True
+                    ):
+                        adaptive_refinement_coarse_accepted_count += 1
+                        rows.append(coarse_row)
+                        continue
+                    adaptive_refinement_refined_count += 1
+                    adaptive_refinement_discarded_coarse_wall_time_sec += float(coarse_wall)
+                active_sortie_counts: tuple[int | None, ...]
+                if residual_active_sortie_count_partition:
+                    active_min = max(1, int(residual_active_sortie_count_min or 0) or 1)
+                    active_max = (
+                        min(int(required_count), int(residual_active_sortie_count_max))
+                        if int(residual_active_sortie_count_max or 0) > 0
+                        else int(required_count)
+                    )
+                    active_sortie_counts = (
+                        tuple(range(active_min, active_max + 1))
+                        if active_min <= active_max
+                        else tuple()
+                    )
+                else:
+                    active_sortie_counts = (None,)
+                for active_sortie_count in active_sortie_counts:
+                    mip_start_journey = _select_partition_region_mip_start(
+                        active_mip_start_columns,
+                        duals=duals,
+                        forbidden_task_sets=task_sets,
+                        required_task_count=required_count,
+                        required_active_sortie_count=active_sortie_count,
+                    )
+                    start = perf_counter()
+                    result = _solve_residual_task_count_region(
+                        config,
+                        required_count=int(required_count),
+                        active_sortie_count=active_sortie_count,
+                        mip_start_journey=mip_start_journey,
+                        negative_feasibility_search=False,
+                    )
+                    fallback_result = None
+                    if bool(negative_feasibility_fallback) and _partition_region_needs_negative_feasibility_fallback(
+                        result,
+                        region_kind="residual_task_count",
+                        negative_eps=float(negative_eps),
+                    ):
+                        fallback_result = _solve_residual_task_count_region(
+                            config,
+                            required_count=int(required_count),
+                            active_sortie_count=active_sortie_count,
+                            mip_start_journey=mip_start_journey,
+                            negative_feasibility_search=True,
+                        )
+                    result = _partition_region_merge_negative_feasibility_fallback(
+                        result,
+                        fallback_result,
+                        negative_eps=float(negative_eps),
+                    )
+                    result["partition_negative_feasibility_fallback_enabled"] = bool(
+                        negative_feasibility_fallback
+                    )
+                    result["wall_time_sec"] = round(perf_counter() - start, 6)
+                    active_suffix = (
+                        ""
+                        if active_sortie_count is None
+                        else f"_active_sorties_{int(active_sortie_count):03d}"
+                    )
+                    split_row = _partition_probe_row(
+                        result,
+                        source_probe_json=source,
+                        instance_id=str(payload.get("instance_id") or data.instance_id),
+                        history_round=history_row.get("round"),
+                        region_id=f"residual_task_count_{required_count:03d}{active_suffix}",
+                        region_kind="residual_task_count",
+                        task_set=tuple(),
+                        forbidden_task_sets=tuple(task_sets),
+                        variant=variant,
+                        formulation_kind=str(config["formulation_kind"]),
+                        wall_time=perf_counter() - start,
+                        negative_eps=float(negative_eps),
+                        active_task_sets=active_task_sets,
+                        active_column_keys=active_column_keys,
+                        source_active_column_count=source_active_column_count,
+                        dual_active_column_count=dual_active_column_count,
+                        dual_source=dual_source,
+                        dual_refresh_payload=dual_refresh_payload,
+                        data=data,
+                        duals=duals,
+                    )
+                    if residual_active_sortie_count_partition and residual_active_sortie_adaptive_refinement:
+                        split_row["partition_adaptive_active_sortie_refinement_enabled"] = True
+                        split_row["partition_adaptive_active_sortie_refinement_role"] = "refined_active_sortie"
+                    rows.append(split_row)
+    elif task_sets:
+        for variant in tuple(str(item) for item in variants):
+            config = B41_TARGETED_RESTRICTED_REGION_VARIANT_CONFIGS.get(variant)
+            if config is None:
+                raise ValueError(f"unknown B4.1 partition variant: {variant}")
+            mip_start_journey = _select_partition_region_mip_start(
+                active_mip_start_columns,
+                duals=duals,
+                forbidden_task_sets=task_sets,
+            )
+            start = perf_counter()
+            result = solve_highs_compact_single_journey_pricing(
+                data,
+                duals,
+                time_limit_sec=float(time_limit_sec),
+                threads=int(threads),
+                mip_gap=0.0,
+                negative_eps=float(negative_eps),
+                flow_connectivity=False,
+                mtz_connectivity=bool(config["mtz_connectivity"]),
+                mtz_endpoint_order_cuts=bool(config["mtz_endpoint_order_cuts"]),
+                pair_adjacency_cuts=bool(config["pair_adjacency_cuts"]),
+                latest_service_start_slot_bound=bool(config["latest_service_start_slot_bound"]),
+                time_window_arc_pruning=bool(config["time_window_arc_pruning"]),
+                resource_arc_pruning=bool(config.get("resource_arc_pruning", False)),
+                slot_task_time_pruning=bool(config.get("slot_task_time_pruning", False)),
+                slot_arc_support_pruning=bool(config.get("slot_arc_support_pruning", False)),
+                service_start_depot_travel_lb=bool(config["service_start_depot_travel_lb"]),
+                task_to_depot_return_travel_lb=bool(config["task_to_depot_return_travel_lb"]),
+                pair_route_duration_lb=bool(config["pair_route_duration_lb"]),
+                pair_weighted_completion_lb=bool(config["pair_weighted_completion_lb"]),
+                sortie_slot_position_bounds=bool(config["sortie_slot_position_bounds"]),
+                demand_cover_cut=bool(config["demand_cover_cut"]),
+                single_task_energy_lb=bool(config["single_task_energy_lb"]),
+                single_task_shadow_lb=bool(config["single_task_shadow_lb"]),
+                pair_energy_lb=bool(config["pair_energy_lb"]),
+                pair_shadow_lb=bool(config["pair_shadow_lb"]),
+                pair_energy_infeasible_cut=bool(config["pair_energy_infeasible_cut"]),
+                pair_time_window_infeasible_cut=bool(config["pair_time_window_infeasible_cut"]),
+                pair_time_window_precedence_cut=bool(config["pair_time_window_precedence_cut"]),
+                triple_time_window_infeasible_cut=bool(config["triple_time_window_infeasible_cut"]),
+                quad_time_window_infeasible_cut=bool(config["quad_time_window_infeasible_cut"]),
+                pair_shadow_infeasible_cut=bool(config["pair_shadow_infeasible_cut"]),
+                triple_shadow_infeasible_cut=bool(config["triple_shadow_infeasible_cut"]),
+                triple_energy_infeasible_cut=bool(config["triple_energy_infeasible_cut"]),
+                task_slot_pair_conflict_capacity_bound=bool(
+                    config.get("task_slot_pair_conflict_capacity_bound", False)
+                ),
+                dual_task_slot_lower_bound=bool(config.get("dual_task_slot_lower_bound", False)),
+                negative_feasibility_search=False,
+                forbidden_task_sets=task_sets,
+                mip_start_journey=mip_start_journey,
+            )
+            rows.append(
+                _partition_probe_row(
+                    result,
+                    source_probe_json=source,
+                    instance_id=str(payload.get("instance_id") or data.instance_id),
+                    history_round=history_row.get("round"),
+                    region_id="residual_after_exact_task_sets",
+                    region_kind="residual_after_exact_task_sets",
+                    task_set=tuple(),
+                    forbidden_task_sets=tuple(task_sets),
+                    variant=variant,
+                    formulation_kind=str(config["formulation_kind"]),
+                    wall_time=perf_counter() - start,
+                    negative_eps=float(negative_eps),
+                    active_task_sets=active_task_sets,
+                    active_column_keys=active_column_keys,
+                    source_active_column_count=source_active_column_count,
+                    dual_active_column_count=dual_active_column_count,
+                    dual_source=dual_source,
+                    dual_refresh_payload=dual_refresh_payload,
+                    data=data,
+                    duals=duals,
+                )
+                )
+    summary = _partition_probe_summary(
+        rows,
+        task_sets=task_sets,
+        negative_eps=float(negative_eps),
+        total_task_count=len(data.task_ids),
+    )
+    summary.update(
+        {
+            "partition_adaptive_active_sortie_refinement_enabled": bool(
+                residual_active_sortie_adaptive_refinement
+                and residual_task_count_partition
+                and residual_active_sortie_count_partition
+            ),
+            "partition_adaptive_active_sortie_refinement_attempt_count": int(
+                adaptive_refinement_attempt_count
+            ),
+            "partition_adaptive_active_sortie_refinement_coarse_accepted_count": int(
+                adaptive_refinement_coarse_accepted_count
+            ),
+            "partition_adaptive_active_sortie_refinement_refined_count": int(
+                adaptive_refinement_refined_count
+            ),
+            "partition_adaptive_active_sortie_refinement_discarded_coarse_wall_time_sec": round(
+                float(adaptive_refinement_discarded_coarse_wall_time_sec),
+                6,
+            ),
+            "partition_adaptive_active_sortie_refinement_reported_row_wall_time_sec": round(
+                sum(float(row.get("wall_time_sec") or 0.0) for row in rows),
+                6,
+            ),
+            "partition_adaptive_active_sortie_refinement_total_wall_time_sec": round(
+                sum(float(row.get("wall_time_sec") or 0.0) for row in rows)
+                + float(adaptive_refinement_discarded_coarse_wall_time_sec),
+                6,
+            ),
+        }
+    )
+    return {
+        "schema_version": "lunar_ice_bpc.b4_1_required_task_set_partition_probe.v1",
+        "source_probe_json": str(source),
+        "instance_id": payload.get("instance_id") or data.instance_id,
+        "diagnostic_only": True,
+        "official_certificate_allowed": False,
+        "can_claim_certificate": False,
+        "target_task_sets": [list(row) for row in task_sets],
+        "target_task_set_count": len(task_sets),
+        "rows": rows,
+        "row_count": len(rows),
+        "taskset_diagnostic": diagnostic,
+        "summary": summary,
+        "redlines": {
+            "certificate_claim_count": sum(1 for row in rows if row.get("can_claim_certificate") is True),
+            "official_certificate_claim_count": sum(
+                1 for row in rows if row.get("official_certificate_allowed") is True
+            ),
+            "full_space_certificate_claim_count": int(summary.get("can_claim_certificate") is True),
+        },
+    }
+
+
+def write_b4_1_required_task_set_partition_probe(
+    report: dict,
+    *,
+    summary_json: str | Path,
+    report_md: str | Path,
+) -> None:
+    summary_path = Path(summary_json)
+    report_path = Path(report_md)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    report_path.write_text(render_b4_1_required_task_set_partition_markdown(report), encoding="utf-8")
+
+
+def build_b4_1_partition_candidate_audit(
+    partition_probe_jsons: Iterable[str | Path],
+) -> dict:
+    """Aggregate required-task-set partition probes into a candidate audit.
+
+    This audit is intentionally separate from the Stage A/B/C/D row matrix.  A
+    passing partition gate means the diagnostic regions are internally coherent
+    enough for a future final-judge ledger integration; it still does not claim
+    an official full-space no-negative certificate.
+    """
+
+    rows: list[dict] = []
+    for path_like in partition_probe_jsons:
+        path = Path(path_like)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+        redlines = payload.get("redlines") if isinstance(payload.get("redlines"), dict) else {}
+        payload_rows = [item for item in (payload.get("rows") or []) if isinstance(item, dict)]
+        negative_rows = [item for item in payload_rows if item.get("negative_found") is True]
+        negative_rc_values = [
+            rc
+            for rc in (
+                _first_float(item.get("partition_negative_true_rc"), item.get("best_reduced_cost"))
+                for item in negative_rows
+            )
+            if rc is not None
+        ]
+        already_active_count = sum(
+            1 for item in negative_rows if item.get("partition_negative_already_active") is True
+        )
+        replacement_task_set_count = sum(
+            1
+            for item in negative_rows
+            if str(item.get("partition_negative_replacement_or_new_task_set") or "") == "replacement"
+        )
+        new_task_set_count = sum(
+            1
+            for item in negative_rows
+            if str(item.get("partition_negative_replacement_or_new_task_set") or "") == "new_task_set"
+        )
+        scope_mismatch_count = sum(
+            1 for item in payload_rows if item.get("partition_dual_scope_matches_active_pool") is False
+        )
+        rc_audit_fail_count = sum(
+            1 for item in negative_rows if item.get("partition_negative_rc_audit_pass") is False
+        )
+        mip_start_enabled_count = sum(
+            1 for item in payload_rows if item.get("single_journey_mip_start_enabled") is True
+        )
+        mip_start_ok_count = sum(
+            1 for item in payload_rows if str(item.get("single_journey_mip_start_status") or "") == "OK"
+        )
+        exact_mip_start_ok_count = sum(
+            1
+            for item in payload_rows
+            if str(item.get("region_kind") or "") == "exact_task_set"
+            and str(item.get("single_journey_mip_start_status") or "") == "OK"
+        )
+        residual_mip_start_ok_count = sum(
+            1
+            for item in payload_rows
+            if str(item.get("region_kind") or "")
+            in {"residual_after_exact_task_sets", "residual_task_count"}
+            and str(item.get("single_journey_mip_start_status") or "") == "OK"
+        )
+        model_size_metrics = _partition_probe_model_size_metrics(payload_rows)
+        issue_codes = [
+            str(code)
+            for code in (summary.get("partition_candidate_gate_issue_codes") or [])
+            if str(code)
+        ]
+        row_certificate_claim_count = sum(
+            1
+            for item in payload_rows
+            if (
+                item.get("official_certificate_allowed") is True
+                or item.get("can_claim_certificate") is True
+                or item.get("can_certify_no_negative") is True
+                or item.get("region_can_certify_full_space") is True
+            )
+        )
+        rows.append(
+            {
+                "partition_probe_json": str(path),
+                "schema_version": payload.get("schema_version") or "",
+                "instance_id": payload.get("instance_id") or "",
+                "source_probe_json": payload.get("source_probe_json") or "",
+                "target_task_set_count": _first_int(payload.get("target_task_set_count")),
+                "row_count": _first_int(payload.get("row_count")),
+                "partition_candidate_gate_schema_version": summary.get(
+                    "partition_candidate_gate_schema_version"
+                )
+                or "",
+                "partition_candidate_gate_pass": bool(summary.get("partition_candidate_gate_pass")),
+                "partition_candidate_gate_issue_codes": issue_codes,
+                "partition_candidate_gate_issue_count": len(issue_codes),
+                "partition_candidate_gate_full_space_partition_valid": bool(
+                    summary.get("partition_candidate_gate_full_space_partition_valid")
+                ),
+                "partition_candidate_gate_exact_region_count": _first_int(
+                    summary.get("partition_candidate_gate_exact_region_count")
+                ),
+                "partition_candidate_gate_exact_regions_proven": _first_int(
+                    summary.get("partition_candidate_gate_exact_regions_proven")
+                ),
+                "partition_candidate_gate_residual_proven": bool(
+                    summary.get("partition_candidate_gate_residual_proven")
+                ),
+                "residual_task_count_partition_enabled": bool(
+                    summary.get("residual_task_count_partition_enabled")
+                ),
+                "residual_task_count_region_expected_count": _first_int(
+                    summary.get("residual_task_count_region_expected_count")
+                ),
+                "residual_task_count_region_observed_count": _first_int(
+                    summary.get("residual_task_count_region_observed_count")
+                ),
+                "residual_task_count_region_proven_count": _first_int(
+                    summary.get("residual_task_count_region_proven_count")
+                ),
+                "residual_task_count_region_incomplete_count": _first_int(
+                    summary.get("residual_task_count_region_incomplete_count")
+                ),
+                "residual_task_count_region_negative_count": _first_int(
+                    summary.get("residual_task_count_region_negative_count")
+                ),
+                "residual_task_count_region_missing_count": _first_int(
+                    summary.get("residual_task_count_region_missing_count")
+                ),
+                "residual_task_count_region_missing_counts": summary.get(
+                    "residual_task_count_region_missing_counts"
+                )
+                or [],
+                "residual_active_sortie_count_partition_enabled": bool(
+                    summary.get("residual_active_sortie_count_partition_enabled")
+                ),
+                "residual_active_sortie_count_missing_group_count": _first_int(
+                    summary.get("residual_active_sortie_count_missing_group_count")
+                ),
+                "residual_active_sortie_count_duplicate_group_count": _first_int(
+                    summary.get("residual_active_sortie_count_duplicate_group_count")
+                ),
+                "partition_candidate_gate_variant": summary.get("partition_candidate_gate_variant") or "",
+                "partition_candidate_gate_source_probe_json": summary.get(
+                    "partition_candidate_gate_source_probe_json"
+                )
+                or "",
+                "partition_candidate_gate_history_round": summary.get(
+                    "partition_candidate_gate_history_round"
+                )
+                or "",
+                "partition_candidate_gate_official_certificate_allowed": bool(
+                    summary.get("partition_candidate_gate_official_certificate_allowed")
+                ),
+                "partition_candidate_can_certify_no_negative": bool(
+                    summary.get("partition_candidate_can_certify_no_negative")
+                ),
+                "best_partition_region_lb": _first_float(summary.get("best_partition_region_lb")),
+                "partition_bound_gap_to_zero": _first_float(summary.get("partition_bound_gap_to_zero")),
+                "partition_negative_region_count": len(negative_rows),
+                "partition_negative_exact_region_count": sum(
+                    1 for item in negative_rows if str(item.get("region_kind") or "") == "exact_task_set"
+                ),
+                "partition_negative_residual_region_count": sum(
+                    1
+                    for item in negative_rows
+                    if str(item.get("region_kind") or "")
+                    in {"residual_after_exact_task_sets", "residual_task_count"}
+                ),
+                "partition_negative_payload_available_count": sum(
+                    1 for item in negative_rows if item.get("partition_negative_payload_available") is True
+                ),
+                "partition_best_negative_rc": None if not negative_rc_values else min(negative_rc_values),
+                "partition_negative_already_active_count": already_active_count,
+                "partition_negative_replacement_task_set_count": replacement_task_set_count,
+                "partition_negative_new_task_set_count": new_task_set_count,
+                "partition_region_variable_count_max": _first_int(
+                    summary.get("partition_region_variable_count_max"),
+                    model_size_metrics.get("partition_region_variable_count_max"),
+                ),
+                "partition_region_constraint_count_max": _first_int(
+                    summary.get("partition_region_constraint_count_max"),
+                    model_size_metrics.get("partition_region_constraint_count_max"),
+                ),
+                "partition_region_variable_count_mean": _first_float(
+                    summary.get("partition_region_variable_count_mean"),
+                    model_size_metrics.get("partition_region_variable_count_mean"),
+                ),
+                "partition_region_constraint_count_mean": _first_float(
+                    summary.get("partition_region_constraint_count_mean"),
+                    model_size_metrics.get("partition_region_constraint_count_mean"),
+                ),
+                "partition_region_slot_task_time_feasible_assignment_count_max": _first_int(
+                    summary.get("partition_region_slot_task_time_feasible_assignment_count_max"),
+                    model_size_metrics.get("partition_region_slot_task_time_feasible_assignment_count_max"),
+                ),
+                "partition_region_slot_task_time_pruned_assignment_count_sum": _first_int(
+                    summary.get("partition_region_slot_task_time_pruned_assignment_count_sum"),
+                    model_size_metrics.get("partition_region_slot_task_time_pruned_assignment_count_sum"),
+                ),
+                "partition_region_slot_arc_time_pruned_option_count_sum": _first_int(
+                    summary.get("partition_region_slot_arc_time_pruned_option_count_sum"),
+                    model_size_metrics.get("partition_region_slot_arc_time_pruned_option_count_sum"),
+                ),
+                "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum": _first_int(
+                    summary.get(
+                        "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum"
+                    ),
+                    model_size_metrics.get(
+                        "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum"
+                    ),
+                ),
+                "partition_region_resource_arc_pruned_option_count_sum": _first_int(
+                    summary.get("partition_region_resource_arc_pruned_option_count_sum"),
+                    model_size_metrics.get("partition_region_resource_arc_pruned_option_count_sum"),
+                ),
+                "partition_region_resource_arc_energy_pruned_option_count_sum": _first_int(
+                    summary.get("partition_region_resource_arc_energy_pruned_option_count_sum"),
+                    model_size_metrics.get("partition_region_resource_arc_energy_pruned_option_count_sum"),
+                ),
+                "partition_region_resource_arc_shadow_pruned_option_count_sum": _first_int(
+                    summary.get("partition_region_resource_arc_shadow_pruned_option_count_sum"),
+                    model_size_metrics.get("partition_region_resource_arc_shadow_pruned_option_count_sum"),
+                ),
+                "partition_region_resource_arc_demand_pruned_option_count_sum": _first_int(
+                    summary.get("partition_region_resource_arc_demand_pruned_option_count_sum"),
+                    model_size_metrics.get("partition_region_resource_arc_demand_pruned_option_count_sum"),
+                ),
+                "partition_source_active_column_count": _max_present_int(
+                    item.get("partition_source_active_column_count") for item in payload_rows
+                ),
+                "partition_dual_active_column_count": _max_present_int(
+                    item.get("partition_dual_active_column_count") for item in payload_rows
+                ),
+                "partition_dual_source": _first_present_str(
+                    item.get("partition_dual_source") for item in payload_rows
+                ),
+                "partition_dual_refresh_status": _first_present_str(
+                    item.get("partition_dual_refresh_status") for item in payload_rows
+                ),
+                "partition_dual_refresh_min_rc": _min_present_float(
+                    item.get("partition_dual_refresh_min_rc") for item in payload_rows
+                ),
+                "partition_dual_refresh_negative_count": _max_present_int(
+                    item.get("partition_dual_refresh_negative_count") for item in payload_rows
+                ),
+                "partition_dual_refresh_input_column_count": _max_present_int(
+                    item.get("partition_dual_refresh_input_column_count") for item in payload_rows
+                ),
+                "partition_dual_refresh_rmp_active_column_count": _max_present_int(
+                    item.get("partition_dual_refresh_rmp_active_column_count") for item in payload_rows
+                ),
+                "partition_active_pool_after_dual_delta": _max_present_int(
+                    item.get("partition_active_pool_after_dual_delta") for item in payload_rows
+                ),
+                "partition_dual_scope_mismatch_count": scope_mismatch_count,
+                "partition_negative_rc_audit_fail_count": rc_audit_fail_count,
+                "partition_region_mip_start_enabled_count": mip_start_enabled_count,
+                "partition_region_mip_start_ok_count": mip_start_ok_count,
+                "partition_exact_region_mip_start_ok_count": exact_mip_start_ok_count,
+                "partition_residual_region_mip_start_ok_count": residual_mip_start_ok_count,
+                "official_certificate_allowed": bool(payload.get("official_certificate_allowed")),
+                "can_claim_certificate": bool(payload.get("can_claim_certificate")),
+                "redline_certificate_claim_count": _first_int(redlines.get("certificate_claim_count")) or 0,
+                "redline_official_certificate_claim_count": _first_int(
+                    redlines.get("official_certificate_claim_count")
+                )
+                or 0,
+                "redline_full_space_certificate_claim_count": _first_int(
+                    redlines.get("full_space_certificate_claim_count")
+                )
+                or 0,
+                "row_certificate_claim_count": row_certificate_claim_count,
+                "diagnostic_only": bool(payload.get("diagnostic_only")),
+            }
+        )
+    redlines = {
+        "partition_report_official_certificate_claim_count": sum(
+            1 for row in rows if row.get("official_certificate_allowed") is True
+        ),
+        "partition_report_can_claim_certificate_count": sum(
+            1 for row in rows if row.get("can_claim_certificate") is True
+        ),
+        "partition_row_certificate_claim_count": sum(
+            int(row.get("row_certificate_claim_count") or 0) for row in rows
+        ),
+        "partition_gate_official_certificate_allowed_count": sum(
+            1 for row in rows if row.get("partition_candidate_gate_official_certificate_allowed") is True
+        ),
+        "partition_gate_missing_count": sum(
+            1 for row in rows if not row.get("partition_candidate_gate_schema_version")
+        ),
+    }
+    return {
+        "schema_version": "lunar_ice_bpc.b4_1_partition_candidate_audit.v1",
+        "diagnostic_only": True,
+        "official_certificate_allowed": False,
+        "can_claim_certificate": False,
+        "partition_probe_count": len(rows),
+        "partition_gate_pass_count": sum(1 for row in rows if row.get("partition_candidate_gate_pass") is True),
+        "partition_gate_fail_count": sum(1 for row in rows if row.get("partition_candidate_gate_pass") is not True),
+        "partition_gate_full_space_valid_count": sum(
+            1 for row in rows if row.get("partition_candidate_gate_full_space_partition_valid") is True
+        ),
+        "partition_candidate_can_certify_no_negative_count": sum(
+            1 for row in rows if row.get("partition_candidate_can_certify_no_negative") is True
+        ),
+        "partition_negative_region_count": sum(
+            int(row.get("partition_negative_region_count") or 0) for row in rows
+        ),
+        "partition_negative_payload_available_count": sum(
+            int(row.get("partition_negative_payload_available_count") or 0) for row in rows
+        ),
+        "partition_best_negative_rc": _min_present_float(
+            row.get("partition_best_negative_rc") for row in rows
+        ),
+        "partition_negative_already_active_count": sum(
+            int(row.get("partition_negative_already_active_count") or 0) for row in rows
+        ),
+        "partition_negative_replacement_task_set_count": sum(
+            int(row.get("partition_negative_replacement_task_set_count") or 0) for row in rows
+        ),
+        "partition_negative_new_task_set_count": sum(
+            int(row.get("partition_negative_new_task_set_count") or 0) for row in rows
+        ),
+        "partition_region_variable_count_max": _max_present_int(
+            row.get("partition_region_variable_count_max") for row in rows
+        ),
+        "partition_region_constraint_count_max": _max_present_int(
+            row.get("partition_region_constraint_count_max") for row in rows
+        ),
+        "partition_region_variable_count_mean_max": _max_present_float(
+            row.get("partition_region_variable_count_mean") for row in rows
+        ),
+        "partition_region_constraint_count_mean_max": _max_present_float(
+            row.get("partition_region_constraint_count_mean") for row in rows
+        ),
+        "partition_region_slot_task_time_feasible_assignment_count_max": _max_present_int(
+            row.get("partition_region_slot_task_time_feasible_assignment_count_max") for row in rows
+        ),
+        "partition_region_slot_task_time_pruned_assignment_count_sum": sum(
+            int(row.get("partition_region_slot_task_time_pruned_assignment_count_sum") or 0)
+            for row in rows
+        ),
+        "partition_region_slot_arc_time_pruned_option_count_sum": sum(
+            int(row.get("partition_region_slot_arc_time_pruned_option_count_sum") or 0)
+            for row in rows
+        ),
+        "partition_region_resource_arc_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_pruned_option_count_sum") or 0)
+            for row in rows
+        ),
+        "partition_region_resource_arc_energy_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_energy_pruned_option_count_sum") or 0)
+            for row in rows
+        ),
+        "partition_region_resource_arc_shadow_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_shadow_pruned_option_count_sum") or 0)
+            for row in rows
+        ),
+        "partition_region_resource_arc_demand_pruned_option_count_sum": sum(
+            int(row.get("partition_region_resource_arc_demand_pruned_option_count_sum") or 0)
+            for row in rows
+        ),
+        "partition_dual_scope_mismatch_count": sum(
+            int(row.get("partition_dual_scope_mismatch_count") or 0) for row in rows
+        ),
+        "partition_negative_rc_audit_fail_count": sum(
+            int(row.get("partition_negative_rc_audit_fail_count") or 0) for row in rows
+        ),
+        "partition_region_mip_start_enabled_count": sum(
+            int(row.get("partition_region_mip_start_enabled_count") or 0) for row in rows
+        ),
+        "partition_region_mip_start_ok_count": sum(
+            int(row.get("partition_region_mip_start_ok_count") or 0) for row in rows
+        ),
+        "partition_exact_region_mip_start_ok_count": sum(
+            int(row.get("partition_exact_region_mip_start_ok_count") or 0) for row in rows
+        ),
+        "partition_residual_region_mip_start_ok_count": sum(
+            int(row.get("partition_residual_region_mip_start_ok_count") or 0) for row in rows
+        ),
+        "residual_task_count_partition_enabled_count": sum(
+            1 for row in rows if row.get("residual_task_count_partition_enabled") is True
+        ),
+        "residual_task_count_region_expected_count": _max_present_int(
+            row.get("residual_task_count_region_expected_count") for row in rows
+        ),
+        "residual_task_count_region_observed_count": _max_present_int(
+            row.get("residual_task_count_region_observed_count") for row in rows
+        ),
+        "residual_task_count_region_proven_count": _max_present_int(
+            row.get("residual_task_count_region_proven_count") for row in rows
+        ),
+        "residual_task_count_region_incomplete_count": _max_present_int(
+            row.get("residual_task_count_region_incomplete_count") for row in rows
+        ),
+        "residual_task_count_region_negative_count": _max_present_int(
+            row.get("residual_task_count_region_negative_count") for row in rows
+        ),
+        "residual_task_count_region_missing_count": _max_present_int(
+            row.get("residual_task_count_region_missing_count") for row in rows
+        ),
+        "partition_gate_issue_counts": dict(
+            sorted(Counter(code for row in rows for code in row.get("partition_candidate_gate_issue_codes") or []).items())
+        ),
+        "redlines": redlines,
+        "redline_fail_count": sum(int(value or 0) for value in redlines.values()),
+        "rows": rows,
+    }
+
+
+def write_b4_1_partition_candidate_audit(
+    audit: dict,
+    *,
+    summary_json: str | Path,
+    report_md: str | Path,
+) -> None:
+    summary_path = Path(summary_json)
+    report_path = Path(report_md)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    report_path.write_text(render_b4_1_partition_candidate_audit_markdown(audit), encoding="utf-8")
+
+
+def rows_from_b4_1_partition_candidate_audit(
+    audit_json: str | Path,
+    *,
+    matrix_group: str = "B4.1 Partition candidate audit",
+) -> list[dict]:
+    path = Path(audit_json)
+    audit = json.loads(path.read_text(encoding="utf-8"))
+    rows: list[dict] = []
+    audit_redline_fail_count = int(audit.get("redline_fail_count") or 0)
+    for row in audit.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        issue_codes = [
+            str(code)
+            for code in (row.get("partition_candidate_gate_issue_codes") or [])
+            if str(code)
+        ]
+        candidate_can_certify = bool(row.get("partition_candidate_can_certify_no_negative"))
+        gate_pass = bool(row.get("partition_candidate_gate_pass"))
+        row_redline_fail_count = sum(
+            int(row.get(key) or 0)
+            for key in (
+                "redline_certificate_claim_count",
+                "redline_official_certificate_claim_count",
+                "redline_full_space_certificate_claim_count",
+                "row_certificate_claim_count",
+            )
+        )
+        partition_best_region_lb = _first_float(row.get("best_partition_region_lb"))
+        partition_bound_gap = _first_float(row.get("partition_bound_gap_to_zero"))
+        rows.append(
+            {
+                "stage": "B",
+                "matrix_group": str(matrix_group),
+                "instance_path": "",
+                "source_probe_json": row.get("source_probe_json") or "",
+                "scale": "30" if _path_or_id_looks_30_scale(row.get("source_probe_json"), row.get("instance_id")) else "",
+                "instance_id": row.get("instance_id") or "",
+                "mode": "B4.1_partition_candidate_audit",
+                "variant": row.get("partition_candidate_gate_variant") or "",
+                "b4_1_matrix_cell": "B4.1_partition_candidate_audit",
+                "b4_1_proof_tail_component": "required_task_set_partition_region_proof_candidate",
+                "b4_1_formulation_profile": row.get("partition_candidate_gate_variant") or "",
+                "b4_1_harvesting_enabled": False,
+                "b4_1_hidden_negative_audit_enabled": False,
+                "b4_1_frontier_ledger_enabled": True,
+                "b4_1_official_certificate_allowed": False,
+                "phase": "partition_candidate_audit",
+                "round": row.get("partition_candidate_gate_history_round") or "",
+                "algorithm_status": "PARTITION_CANDIDATE_GATE_PASS" if gate_pass else "PARTITION_CANDIDATE_GATE_FAIL",
+                "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+                "underlying_certificate_scope": "PARTITION_CANDIDATE_NO_NEGATIVE" if candidate_can_certify else "",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "exact_status": "PARTITION_CANDIDATE_GATE_PASS" if gate_pass else "PARTITION_CANDIDATE_GATE_FAIL",
+                "bpc_tree_optimal": False,
+                "manual_rc_fail": 0,
+                "pricing_rc_fail": 0,
+                "certificate_leak": row_redline_fail_count,
+                "hidden_negative_count": "",
+                "hidden_negative_miss_reason_counts": {},
+                "hidden_negative_top_miss_reason": "",
+                "hidden_negative_worker_not_generated_count": 0,
+                "hidden_negative_pruned_by_dominance_count": 0,
+                "hidden_negative_pricing_timeout_only_count": 0,
+                "active_column_count": "",
+                "pool_column_count": "",
+                "columns_added": "",
+                "active_columns_after_merge": "",
+                "new_task_set_count": "",
+                "replacement_task_set_count": "",
+                "best_negative_rc": "",
+                "last_best_reduced_cost": "",
+                "final_judge_wall_time": "",
+                "rmp_round_count": "",
+                "global_remaining_rc_lb": "",
+                "underlying_global_remaining_rc_lb": partition_best_region_lb,
+                "frontier_lb_official": False,
+                "frontier_coverage_complete": False,
+                "underlying_frontier_coverage_complete": gate_pass,
+                "frontier_unsupported_region_count": 1,
+                "underlying_frontier_unsupported_region_count": 0 if gate_pass else 1,
+                "pending_complete_min_rc": "",
+                "underlying_pending_complete_min_rc": partition_best_region_lb,
+                "pricing_proof_kind": "FRONTIER_BOUND_INCOMPLETE",
+                "underlying_pricing_proof_kind": "PARTITION_CANDIDATE_NO_NEGATIVE" if candidate_can_certify else "",
+                "can_certify_no_negative": False,
+                "underlying_can_certify_no_negative": candidate_can_certify,
+                "b4_1_certificate_suppressed": candidate_can_certify,
+                "diagnostic_claimed_certificate": row_redline_fail_count,
+                "partition_candidate_audit_json": str(path),
+                "partition_probe_json": row.get("partition_probe_json") or "",
+                "partition_target_task_set_count": _first_int(row.get("target_task_set_count")),
+                "partition_candidate_gate_pass": gate_pass,
+                "partition_candidate_gate_issue_count": _first_int(row.get("partition_candidate_gate_issue_count")),
+                "partition_candidate_gate_issue_codes": issue_codes,
+                "partition_candidate_gate_full_space_partition_valid": bool(
+                    row.get("partition_candidate_gate_full_space_partition_valid")
+                ),
+                "partition_candidate_gate_exact_region_count": _first_int(
+                    row.get("partition_candidate_gate_exact_region_count")
+                ),
+                "partition_candidate_gate_exact_regions_proven": _first_int(
+                    row.get("partition_candidate_gate_exact_regions_proven")
+                ),
+                "partition_candidate_gate_residual_proven": bool(
+                    row.get("partition_candidate_gate_residual_proven")
+                ),
+                "residual_task_count_partition_enabled": bool(
+                    row.get("residual_task_count_partition_enabled")
+                ),
+                "residual_task_count_region_expected_count": _first_int(
+                    row.get("residual_task_count_region_expected_count")
+                ),
+                "residual_task_count_region_observed_count": _first_int(
+                    row.get("residual_task_count_region_observed_count")
+                ),
+                "residual_task_count_region_proven_count": _first_int(
+                    row.get("residual_task_count_region_proven_count")
+                ),
+                "residual_task_count_region_incomplete_count": _first_int(
+                    row.get("residual_task_count_region_incomplete_count")
+                ),
+                "residual_task_count_region_negative_count": _first_int(
+                    row.get("residual_task_count_region_negative_count")
+                ),
+                "residual_task_count_region_missing_count": _first_int(
+                    row.get("residual_task_count_region_missing_count")
+                ),
+                "residual_task_count_region_missing_counts": row.get(
+                    "residual_task_count_region_missing_counts"
+                )
+                or [],
+                "residual_active_sortie_count_partition_enabled": bool(
+                    row.get("residual_active_sortie_count_partition_enabled")
+                ),
+                "residual_active_sortie_count_missing_group_count": _first_int(
+                    row.get("residual_active_sortie_count_missing_group_count")
+                ),
+                "residual_active_sortie_count_duplicate_group_count": _first_int(
+                    row.get("residual_active_sortie_count_duplicate_group_count")
+                ),
+                "partition_candidate_can_certify_no_negative": candidate_can_certify,
+                "partition_candidate_redline_fail_count": row_redline_fail_count,
+                "partition_candidate_row_certificate_claim_count": _first_int(
+                    row.get("row_certificate_claim_count")
+                )
+                or 0,
+                "partition_best_region_lb": partition_best_region_lb,
+                "partition_bound_gap_to_zero": partition_bound_gap,
+                "partition_negative_region_count": _first_int(row.get("partition_negative_region_count")),
+                "partition_negative_exact_region_count": _first_int(
+                    row.get("partition_negative_exact_region_count")
+                ),
+                "partition_negative_residual_region_count": _first_int(
+                    row.get("partition_negative_residual_region_count")
+                ),
+                "partition_negative_payload_available_count": _first_int(
+                    row.get("partition_negative_payload_available_count")
+                ),
+                "partition_best_negative_rc": _first_float(row.get("partition_best_negative_rc")),
+                "partition_negative_already_active_count": _first_int(
+                    row.get("partition_negative_already_active_count")
+                ),
+                "partition_negative_replacement_task_set_count": _first_int(
+                    row.get("partition_negative_replacement_task_set_count")
+                ),
+                "partition_negative_new_task_set_count": _first_int(
+                    row.get("partition_negative_new_task_set_count")
+                ),
+                "partition_region_variable_count_max": _first_int(
+                    row.get("partition_region_variable_count_max")
+                ),
+                "partition_region_constraint_count_max": _first_int(
+                    row.get("partition_region_constraint_count_max")
+                ),
+                "partition_region_variable_count_mean": _first_float(
+                    row.get("partition_region_variable_count_mean")
+                ),
+                "partition_region_constraint_count_mean": _first_float(
+                    row.get("partition_region_constraint_count_mean")
+                ),
+                "partition_region_slot_task_time_feasible_assignment_count_max": _first_int(
+                    row.get("partition_region_slot_task_time_feasible_assignment_count_max")
+                ),
+                "partition_region_slot_task_time_pruned_assignment_count_sum": _first_int(
+                    row.get("partition_region_slot_task_time_pruned_assignment_count_sum")
+                ),
+                "partition_region_slot_arc_time_pruned_option_count_sum": _first_int(
+                    row.get("partition_region_slot_arc_time_pruned_option_count_sum")
+                ),
+                "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum": _first_int(
+                    row.get("partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum")
+                ),
+                "partition_region_resource_arc_pruned_option_count_sum": _first_int(
+                    row.get("partition_region_resource_arc_pruned_option_count_sum")
+                ),
+                "partition_region_resource_arc_energy_pruned_option_count_sum": _first_int(
+                    row.get("partition_region_resource_arc_energy_pruned_option_count_sum")
+                ),
+                "partition_region_resource_arc_shadow_pruned_option_count_sum": _first_int(
+                    row.get("partition_region_resource_arc_shadow_pruned_option_count_sum")
+                ),
+                "partition_region_resource_arc_demand_pruned_option_count_sum": _first_int(
+                    row.get("partition_region_resource_arc_demand_pruned_option_count_sum")
+                ),
+                "partition_source_active_column_count": _first_int(
+                    row.get("partition_source_active_column_count")
+                ),
+                "partition_dual_active_column_count": _first_int(row.get("partition_dual_active_column_count")),
+                "partition_dual_source": row.get("partition_dual_source") or "",
+                "partition_dual_refresh_status": row.get("partition_dual_refresh_status") or "",
+                "partition_dual_refresh_min_rc": _first_float(row.get("partition_dual_refresh_min_rc")),
+                "partition_dual_refresh_negative_count": _first_int(
+                    row.get("partition_dual_refresh_negative_count")
+                ),
+                "partition_dual_refresh_input_column_count": _first_int(
+                    row.get("partition_dual_refresh_input_column_count")
+                ),
+                "partition_dual_refresh_rmp_active_column_count": _first_int(
+                    row.get("partition_dual_refresh_rmp_active_column_count")
+                ),
+                "partition_active_pool_after_dual_delta": _first_int(
+                    row.get("partition_active_pool_after_dual_delta")
+                ),
+                "partition_dual_scope_mismatch_count": _first_int(
+                    row.get("partition_dual_scope_mismatch_count")
+                ),
+                "partition_negative_rc_audit_fail_count": _first_int(
+                    row.get("partition_negative_rc_audit_fail_count")
+                ),
+                "partition_region_mip_start_enabled_count": _first_int(
+                    row.get("partition_region_mip_start_enabled_count")
+                ),
+                "partition_region_mip_start_ok_count": _first_int(
+                    row.get("partition_region_mip_start_ok_count")
+                ),
+                "partition_exact_region_mip_start_ok_count": _first_int(
+                    row.get("partition_exact_region_mip_start_ok_count")
+                ),
+                "partition_residual_region_mip_start_ok_count": _first_int(
+                    row.get("partition_residual_region_mip_start_ok_count")
+                ),
+                "wall_time": "",
+                "fail_closed_reason": ", ".join(issue_codes),
+                "partition_candidate_audit_redline_fail_count": audit_redline_fail_count,
+            }
+        )
+    return rows
+
+
 def build_b4_1_restricted_region_bound_ledger(
     source_probe_json: str | Path,
     *,
     targeted_probe_jsons: Iterable[str | Path] = (),
     max_regions: int = 0,
+    negative_eps: float = 1.0e-6,
 ) -> dict:
     """Build a diagnostic ledger of the strongest known restricted-region bounds.
 
@@ -1076,6 +2766,16 @@ def build_b4_1_restricted_region_bound_ledger(
         if not selected_bounds
         else round(min(float(value) for value in selected_bounds), 9)
     )
+    coverage = _restricted_region_bound_coverage_summary(
+        rows,
+        best_known_global_lb=best_known_global_lb,
+        negative_eps=negative_eps,
+    )
+    partition_audit = _restricted_region_partition_audit(
+        diagnostic,
+        rows,
+        negative_eps=negative_eps,
+    )
     certificate_claim_count = sum(1 for row in rows if row.get("can_claim_certificate") is True)
     source_reuse_count = sum(1 for row in rows if row.get("source_bound_reused") is True)
     targeted_improvement_count = sum(
@@ -1092,6 +2792,12 @@ def build_b4_1_restricted_region_bound_ledger(
         "no_negative_certificate_claimed": False,
         "certificate_allowed": False,
         "pricing_proof_kind": "FRONTIER_BOUND_INCOMPLETE",
+        "region_coverage_model": "prefix_no_good_regions_diagnostic_not_partition",
+        "region_coverage_complete": False,
+        **partition_audit,
+        "region_bound_gap_to_zero": coverage["region_bound_gap_to_zero"],
+        "region_bound_gap_source_region_id": coverage["region_bound_gap_source_region_id"],
+        "region_bound_gap_source": coverage["region_bound_gap_source"],
         "frontier_coverage_complete": False,
         "frontier_unsupported_region_count": max(1, len(rows)) if rows else 0,
         "best_known_global_remaining_rc_lb": best_known_global_lb,
@@ -1099,6 +2805,12 @@ def build_b4_1_restricted_region_bound_ledger(
         "global_remaining_rc_lb_valid": bool(best_known_global_lb is not None),
         "global_remaining_rc_lb_coverage_complete": False,
         "region_count": len(rows),
+        "supported_bound_region_count": coverage["supported_bound_region_count"],
+        "unsupported_bound_region_count": coverage["unsupported_bound_region_count"],
+        "nonnegative_bound_region_count": coverage["nonnegative_bound_region_count"],
+        "negative_bound_region_count": coverage["negative_bound_region_count"],
+        "time_limit_bound_region_count": coverage["time_limit_bound_region_count"],
+        "exact_bound_region_count": coverage["exact_bound_region_count"],
         "source_bound_reuse_count": source_reuse_count,
         "targeted_bound_improvement_count": targeted_improvement_count,
         "rows": rows,
@@ -1107,6 +2819,8 @@ def build_b4_1_restricted_region_bound_ledger(
             "source_bound_reuse_count": source_reuse_count,
             "targeted_bound_improvement_count": targeted_improvement_count,
             "best_known_global_remaining_rc_lb": best_known_global_lb,
+            **coverage,
+            **partition_audit,
             "selected_bound_sources": dict(
                 Counter(str(row.get("selected_bound_source") or "none") for row in rows)
             ),
@@ -1154,19 +2868,30 @@ def render_b4_1_restricted_region_bound_ledger_markdown(ledger: dict) -> str:
         "",
         f"- pricing_proof_kind: `{ledger.get('pricing_proof_kind')}`",
         f"- best_known_global_remaining_rc_lb: `{ledger.get('best_known_global_remaining_rc_lb')}`",
+        f"- region_bound_gap_to_zero: `{ledger.get('region_bound_gap_to_zero')}`",
+        f"- region_bound_gap_source: `{ledger.get('region_bound_gap_source_region_id')}` / `{ledger.get('region_bound_gap_source')}`",
+        f"- supported / unsupported bound regions: `{ledger.get('supported_bound_region_count')}` / `{ledger.get('unsupported_bound_region_count')}`",
+        f"- nonnegative / negative bound regions: `{ledger.get('nonnegative_bound_region_count')}` / `{ledger.get('negative_bound_region_count')}`",
+        f"- region partition family: `{ledger.get('region_partition_family')}`",
+        f"- observed prefixes: `{ledger.get('region_partition_observed_prefixes')}`",
+        f"- required exact-task-set regions: `{ledger.get('region_partition_required_exact_task_set_region_count')}`",
+        f"- missing exact-task-set regions: `{ledger.get('region_partition_missing_exact_task_set_region_count')}`",
+        f"- residual region: `{ledger.get('region_partition_residual_region_id')}` / `{ledger.get('region_partition_residual_best_known_dual_bound')}`",
+        f"- partition issue codes: `{', '.join(ledger.get('region_partition_issue_codes') or []) or 'none'}`",
         f"- source_bound_reuse_count: `{ledger.get('source_bound_reuse_count')}`",
         f"- targeted_bound_improvement_count: `{ledger.get('targeted_bound_improvement_count')}`",
         "",
-        "| region | forbidden sets | selected source | best known LB | source LB | targeted best LB | targeted variant | cert allowed |",
-        "| --- | ---: | --- | ---: | ---: | ---: | --- | --- |",
+        "| region | forbidden sets | selected source | best known LB | gap to 0 | source LB | targeted best LB | targeted variant | cert allowed |",
+        "| --- | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for row in ledger.get("rows") or []:
         lines.append(
-            "| {region} | {forbidden} | {source} | {best} | {src_lb} | {target_lb} | {variant} | {cert} |".format(
+            "| {region} | {forbidden} | {source} | {best} | {gap} | {src_lb} | {target_lb} | {variant} | {cert} |".format(
                 region=row.get("region_id"),
                 forbidden=row.get("forbidden_task_set_count"),
                 source=row.get("selected_bound_source"),
                 best=row.get("best_known_dual_bound"),
+                gap=row.get("best_known_dual_bound_gap_to_zero"),
                 src_lb=row.get("source_phase_dual_bound"),
                 target_lb=row.get("targeted_best_dual_bound"),
                 variant=row.get("targeted_best_variant"),
@@ -1262,6 +2987,141 @@ def render_b4_1_targeted_restricted_region_markdown(report: dict) -> str:
             )
     lines.extend(["", "## Redlines", "", "| metric | value | required |", "| --- | ---: | ---: |"])
     for key, value in (report.get("redlines") or {}).items():
+        lines.append(f"| {key} | {value} | 0 |")
+    return "\n".join(lines) + "\n"
+
+
+def render_b4_1_required_task_set_partition_markdown(report: dict) -> str:
+    summary = report.get("summary") or {}
+    lines = [
+        "# B4.1 Required Task-Set Partition Probe",
+        "",
+        "## Boundary",
+        "",
+        f"- Source probe: `{report.get('source_probe_json')}`",
+        "- Exact task-set regions plus the residual region form a candidate partition.",
+        "- This report is diagnostic-only; it does not claim an official no-negative certificate.",
+        "",
+        "## Summary",
+        "",
+        f"- target_task_set_count: `{report.get('target_task_set_count')}`",
+        f"- partition_candidate_complete: `{summary.get('partition_candidate_complete')}`",
+        f"- partition_candidate_can_certify_no_negative: `{summary.get('partition_candidate_can_certify_no_negative')}`",
+        f"- partition_candidate_gate_pass: `{summary.get('partition_candidate_gate_pass')}`",
+        f"- partition_candidate_gate_issue_codes: `{summary.get('partition_candidate_gate_issue_codes')}`",
+        f"- official_certificate_allowed: `{report.get('official_certificate_allowed')}`",
+        f"- exact regions proven / incomplete / negative: `{summary.get('exact_region_proven_count')}` / `{summary.get('exact_region_incomplete_count')}` / `{summary.get('exact_region_negative_count')}`",
+        f"- residual observed / proven / negative: `{summary.get('residual_region_observed')}` / `{summary.get('residual_region_proven')}` / `{summary.get('residual_region_negative_found')}`",
+        f"- negative relation counts: already_active `{summary.get('partition_negative_already_active_count')}`; "
+        f"replacement `{summary.get('partition_negative_replacement_task_set_count')}`; "
+        f"new_task_set `{summary.get('partition_negative_new_task_set_count')}`",
+        f"- dual/active scope: source active `{summary.get('partition_source_active_column_count')}`; "
+        f"dual active `{summary.get('partition_dual_active_column_count')}`; "
+        f"delta `{summary.get('partition_active_pool_after_dual_delta')}`; "
+        f"mismatch rows `{summary.get('partition_dual_scope_mismatch_count')}`",
+        f"- dual source: `{summary.get('partition_dual_source')}`; "
+        f"refresh status `{summary.get('partition_dual_refresh_status')}`; "
+        f"refresh min RC `{summary.get('partition_dual_refresh_min_rc')}`; "
+        f"refresh negatives `{summary.get('partition_dual_refresh_negative_count')}`",
+        f"- region MIP-start: enabled `{summary.get('partition_region_mip_start_enabled_count')}`; "
+        f"OK `{summary.get('partition_region_mip_start_ok_count')}`; "
+        f"exact OK `{summary.get('partition_exact_region_mip_start_ok_count')}`; "
+        f"residual OK `{summary.get('partition_residual_region_mip_start_ok_count')}`",
+        f"- negative RC audit fail count: `{summary.get('partition_negative_rc_audit_fail_count')}`",
+        f"- adaptive active-sortie refinement: enabled `{summary.get('partition_adaptive_active_sortie_refinement_enabled')}`; "
+        f"attempts `{summary.get('partition_adaptive_active_sortie_refinement_attempt_count')}`; "
+        f"coarse accepted `{summary.get('partition_adaptive_active_sortie_refinement_coarse_accepted_count')}`; "
+        f"refined `{summary.get('partition_adaptive_active_sortie_refinement_refined_count')}`; "
+        f"discarded coarse wall `{summary.get('partition_adaptive_active_sortie_refinement_discarded_coarse_wall_time_sec')}`; "
+        f"total wall `{summary.get('partition_adaptive_active_sortie_refinement_total_wall_time_sec')}`",
+        "",
+        "| region | kind | variant | status | exact | best RC | manual RC | RC diff | dual cols | source cols | complete | region cert | negative | payload | active | relation |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in report.get("rows") or []:
+        lines.append(
+            "| {region} | {kind} | {variant} | {status} | {exact} | {rc} | {manual_rc} | {rc_diff} | {dual_cols} | {source_cols} | {complete} | {cert} | {neg} | {payload} | {active} | {relation} |".format(
+                region=row.get("region_id"),
+                kind=row.get("region_kind"),
+                variant=row.get("variant"),
+                status=row.get("status"),
+                exact=row.get("exact_status"),
+                rc=row.get("best_reduced_cost"),
+                manual_rc=row.get("partition_negative_manual_rc"),
+                rc_diff=row.get("partition_negative_pricing_rc_diff"),
+                dual_cols=row.get("partition_dual_active_column_count"),
+                source_cols=row.get("partition_source_active_column_count"),
+                complete=row.get("region_pricing_complete"),
+                cert=row.get("region_can_certify_no_negative"),
+                neg=row.get("negative_found"),
+                payload=row.get("partition_negative_payload_available"),
+                active=row.get("partition_negative_already_active"),
+                relation=row.get("partition_negative_replacement_or_new_task_set"),
+            )
+        )
+    lines.extend(["", "## Redlines", "", "| metric | value | required |", "| --- | ---: | ---: |"])
+    for key, value in (report.get("redlines") or {}).items():
+        lines.append(f"| {key} | {value} | 0 |")
+    return "\n".join(lines) + "\n"
+
+
+def render_b4_1_partition_candidate_audit_markdown(audit: dict) -> str:
+    lines = [
+        "# B4.1 Partition Candidate Audit",
+        "",
+        "## Boundary",
+        "",
+        "- This audit summarizes required-task-set partition probe artifacts.",
+        "- A passing partition gate is still diagnostic-only until final judge ledger integration.",
+        "- No official no-negative certificate or `BPC_TREE_OPTIMAL` claim is made here.",
+        "",
+        "## Summary",
+        "",
+        f"- partition_probe_count: `{audit.get('partition_probe_count')}`",
+        f"- partition_gate_pass_count: `{audit.get('partition_gate_pass_count')}`",
+        f"- partition_gate_fail_count: `{audit.get('partition_gate_fail_count')}`",
+        f"- partition_candidate_can_certify_no_negative_count: `{audit.get('partition_candidate_can_certify_no_negative_count')}`",
+        f"- partition_negative_region_count: `{audit.get('partition_negative_region_count')}`",
+        f"- partition_negative_payload_available_count: `{audit.get('partition_negative_payload_available_count')}`",
+        f"- partition_best_negative_rc: `{audit.get('partition_best_negative_rc')}`",
+        f"- partition negative relation counts: already_active `{audit.get('partition_negative_already_active_count')}`; "
+        f"replacement `{audit.get('partition_negative_replacement_task_set_count')}`; "
+        f"new_task_set `{audit.get('partition_negative_new_task_set_count')}`",
+        f"- partition dual/active scope mismatch count: `{audit.get('partition_dual_scope_mismatch_count')}`",
+        f"- partition negative RC audit fail count: `{audit.get('partition_negative_rc_audit_fail_count')}`",
+        f"- redline_fail_count: `{audit.get('redline_fail_count')}`",
+        f"- gate issue counts: `{audit.get('partition_gate_issue_counts')}`",
+        "",
+        "| probe | instance | target sets | gate | issue count | issues | variant | dual source | refresh status | negatives | already active | new task-set | dual/source cols | scope mismatches | RC audit fail | best neg RC | full-space valid | candidate no-neg | official allowed |",
+        "| --- | --- | ---: | --- | ---: | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | --- | --- | --- |",
+    ]
+    for row in audit.get("rows") or []:
+        lines.append(
+            "| {probe} | {instance} | {targets} | {gate} | {issue_count} | {issues} | {variant} | {dual_source} | {refresh_status} | {negatives} | {already} | {new_task_set} | {dual_cols}/{source_cols} | {scope_mismatch} | {rc_fail} | {best_neg} | {full_valid} | {candidate} | {official} |".format(
+                probe=row.get("partition_probe_json"),
+                instance=row.get("instance_id"),
+                targets=row.get("target_task_set_count"),
+                gate=row.get("partition_candidate_gate_pass"),
+                issue_count=row.get("partition_candidate_gate_issue_count"),
+                issues=", ".join(row.get("partition_candidate_gate_issue_codes") or []) or "none",
+                variant=row.get("partition_candidate_gate_variant"),
+                dual_source=row.get("partition_dual_source"),
+                refresh_status=row.get("partition_dual_refresh_status"),
+                negatives=row.get("partition_negative_region_count"),
+                already=row.get("partition_negative_already_active_count"),
+                new_task_set=row.get("partition_negative_new_task_set_count"),
+                dual_cols=row.get("partition_dual_active_column_count"),
+                source_cols=row.get("partition_source_active_column_count"),
+                scope_mismatch=row.get("partition_dual_scope_mismatch_count"),
+                rc_fail=row.get("partition_negative_rc_audit_fail_count"),
+                best_neg=row.get("partition_best_negative_rc"),
+                full_valid=row.get("partition_candidate_gate_full_space_partition_valid"),
+                candidate=row.get("partition_candidate_can_certify_no_negative"),
+                official=row.get("official_certificate_allowed"),
+            )
+        )
+    lines.extend(["", "## Redlines", "", "| metric | value | required |", "| --- | ---: | ---: |"])
+    for key, value in (audit.get("redlines") or {}).items():
         lines.append(f"| {key} | {value} | 0 |")
     return "\n".join(lines) + "\n"
 
@@ -1385,6 +3245,18 @@ def _restricted_region_task_frequency(negatives: list[dict]) -> list[dict]:
         {"task": task, "count": int(count)}
         for task, count in sorted(counter.items(), key=lambda item: (-int(item[1]), str(item[0])))
     ]
+
+
+def _unique_harvested_task_sets(diagnostic: dict) -> list[tuple[str, ...]]:
+    seen: set[tuple[str, ...]] = set()
+    ordered: list[tuple[str, ...]] = []
+    for row in diagnostic.get("harvested_negatives") or []:
+        task_set = tuple(sorted(str(task) for task in (row.get("task_set") or []) if str(task)))
+        if not task_set or task_set in seen:
+            continue
+        seen.add(task_set)
+        ordered.append(task_set)
+    return ordered
 
 
 def _restricted_region_pairwise_overlap(negatives: list[dict]) -> list[dict]:
@@ -1543,6 +3415,1697 @@ def _filter_targeted_restricted_regions(
     return filtered
 
 
+def _partition_mip_start_columns_from_payloads(data, active_payloads: Iterable[dict]) -> tuple:
+    columns = []
+    for payload in active_payloads:
+        if not isinstance(payload, dict):
+            continue
+        try:
+            column = journey_column_from_solution_payload(data, payload)
+        except Exception:
+            continue
+        if not getattr(column, "sorties", None):
+            continue
+        if not all(getattr(sortie, "feasible", False) for sortie in column.sorties):
+            continue
+        columns.append(column)
+    return tuple(columns)
+
+
+def _select_partition_region_mip_start(
+    columns: Iterable,
+    *,
+    duals: JourneyDuals,
+    required_task_set: Iterable[str] | None = None,
+    required_task_count: int | None = None,
+    required_active_sortie_count: int | None = None,
+    forbidden_task_sets: Iterable[Iterable[str]] = tuple(),
+):
+    required = (
+        None
+        if required_task_set is None
+        else tuple(sorted(str(task_id) for task_id in required_task_set))
+    )
+    forbidden = {
+        tuple(sorted(str(task_id) for task_id in task_set))
+        for task_set in forbidden_task_sets
+    }
+    candidates = []
+    for column in columns:
+        task_set = tuple(sorted(str(task_id) for task_id in getattr(column, "task_set", tuple())))
+        if required is not None and task_set != required:
+            continue
+        if required_task_count is not None and len(task_set) != int(required_task_count):
+            continue
+        if required_active_sortie_count is not None and len(getattr(column, "sorties", tuple())) != int(
+            required_active_sortie_count
+        ):
+            continue
+        if task_set in forbidden:
+            continue
+        try:
+            reduced_cost = manual_journey_reduced_cost(column, duals)
+        except Exception:
+            continue
+        candidates.append((float(reduced_cost), len(task_set), column))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], -item[1]))
+    return candidates[0][2]
+
+
+def _partition_probe_row(
+    result: dict,
+    *,
+    source_probe_json: Path,
+    instance_id: str,
+    history_round: object,
+    region_id: str,
+    region_kind: str,
+    task_set: tuple[str, ...],
+    forbidden_task_sets: tuple[tuple[str, ...], ...],
+    variant: str,
+    formulation_kind: str,
+    wall_time: float,
+    negative_eps: float,
+    active_task_sets: set[tuple[str, ...]] | None = None,
+    active_column_keys: set[tuple] | None = None,
+    source_active_column_count: int | None = None,
+    dual_active_column_count: int | None = None,
+    dual_source: str = "selected_history_dual",
+    dual_refresh_payload: dict | None = None,
+    data=None,
+    duals: JourneyDuals | None = None,
+) -> dict:
+    best_rc = _first_float(result.get("best_reduced_cost"), result.get("pricing_best_reduced_cost"))
+    dual_bound = _first_float(result.get("dual_bound"), result.get("bound"))
+    exact_status = str(result.get("exact_status") or "")
+    negative_found = bool(
+        result.get("negative_found")
+        or (best_rc is not None and float(best_rc) < -abs(float(negative_eps)))
+    )
+    negative_task_set = _partition_negative_task_set(result, fallback_task_set=task_set)
+    negative_solution_payload = _targeted_negative_solution_payload(result) if negative_found else None
+    negative_payload_task_set = (
+        _solution_payload_task_set(negative_solution_payload)
+        if isinstance(negative_solution_payload, dict)
+        else tuple()
+    )
+    if negative_payload_task_set:
+        negative_task_set = negative_payload_task_set
+    negative_column_key = (
+        _solution_payload_column_key(negative_solution_payload)
+        if isinstance(negative_solution_payload, dict)
+        else tuple()
+    )
+    active_task_set_lookup = active_task_sets or set()
+    active_column_key_lookup = active_column_keys or set()
+    negative_already_active = bool(
+        negative_found and negative_column_key and negative_column_key in active_column_key_lookup
+    )
+    negative_active_task_set_seen = bool(negative_found and negative_task_set in active_task_set_lookup)
+    if not negative_found:
+        negative_relation = ""
+    elif negative_already_active:
+        negative_relation = "already_active"
+    elif negative_active_task_set_seen:
+        negative_relation = "replacement"
+    else:
+        negative_relation = "new_task_set"
+    source_active_count = int(source_active_column_count or 0)
+    dual_active_count = int(dual_active_column_count or 0)
+    active_pool_after_dual_delta = (
+        source_active_count - dual_active_count
+        if source_active_count > 0 and dual_active_count > 0
+        else ""
+    )
+    dual_scope_matches_active_pool = (
+        bool(source_active_count == dual_active_count)
+        if source_active_count > 0 and dual_active_count > 0
+        else ""
+    )
+    manual_rc_audit = _partition_negative_manual_rc_audit(
+        negative_solution_payload,
+        data=data,
+        duals=duals,
+        pricing_rc=best_rc,
+        negative_eps=negative_eps,
+    )
+    if str(region_kind) == "exact_task_set":
+        region_complete = bool(result.get("pricing_complete_for_required_task_set"))
+        region_can_certify = bool(
+            result.get("required_task_set_region_can_certify_no_negative")
+            and not negative_found
+        )
+    elif str(region_kind) == "residual_task_count":
+        region_complete = bool(result.get("pricing_complete_for_required_task_count"))
+        region_can_certify = bool(
+            result.get("required_task_count_region_can_certify_no_negative")
+            and not negative_found
+        )
+    else:
+        region_complete = exact_status in {
+            "RESTRICTED_PRICING_OPTIMAL",
+            "RESTRICTED_PRICING_INFEASIBLE",
+        }
+        region_can_certify = bool(
+            region_complete
+            and not negative_found
+            and (best_rc is None or float(best_rc) >= -abs(float(negative_eps)))
+        )
+    return {
+        "source_probe_json": str(source_probe_json),
+        "instance_id": instance_id,
+        "history_round": history_round,
+        "region_id": str(region_id),
+        "region_kind": str(region_kind),
+        "required_task_set": list(task_set),
+        "required_task_set_size": len(task_set),
+        "forbidden_task_sets": [list(row) for row in forbidden_task_sets],
+        "forbidden_task_set_count": len(forbidden_task_sets),
+        "variant": variant,
+        "formulation_kind": formulation_kind,
+        "status": result.get("status") or result.get("algorithm_status") or "",
+        "exact_status": exact_status,
+        "pricing_state": result.get("pricing_state") or "",
+        "negative_feasibility_search_enabled": bool(result.get("negative_feasibility_search_enabled")),
+        "negative_feasibility_zero_objective_enabled": bool(
+            result.get("negative_feasibility_zero_objective_enabled")
+        ),
+        "objective_bound_no_negative_cutoff_enabled": bool(
+            result.get("objective_bound_no_negative_cutoff_enabled")
+        ),
+        "objective_bound_no_negative_cutoff_value": result.get(
+            "objective_bound_no_negative_cutoff_value"
+        ),
+        "objective_bound_no_negative_cutoff_can_certify": bool(
+            result.get("objective_bound_no_negative_cutoff_can_certify")
+        ),
+        "zero_capacity_slot_truncation_enabled": bool(
+            result.get("zero_capacity_slot_truncation_enabled")
+        ),
+        "zero_capacity_slot_truncation_original_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_original_slot_count")
+        ),
+        "zero_capacity_slot_truncation_effective_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_effective_slot_count")
+        ),
+        "zero_capacity_slot_truncation_trimmed_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_trimmed_slot_count")
+        ),
+        "zero_capacity_slot_truncation_first_zero_slot": _first_int(
+            result.get("zero_capacity_slot_truncation_first_zero_slot")
+        ),
+        "slot_sequence_capacity_live_bound_enabled": bool(
+            result.get("slot_sequence_capacity_live_bound_enabled")
+        ),
+        "slot_sequence_capacity_live_bound_tightened_slot_count": _first_int(
+            result.get("slot_sequence_capacity_live_bound_tightened_slot_count")
+        ),
+        "slot_sequence_capacity_live_bound_by_slot": result.get(
+            "slot_sequence_capacity_live_bound_by_slot"
+        ),
+        "tight_service_start_bounds_enabled": bool(
+            result.get("tight_service_start_bounds_enabled")
+        ),
+        "tight_service_start_bound_count": _first_int(
+            result.get("tight_service_start_bound_count")
+        ),
+        "tight_service_start_bound_min": _first_float(
+            result.get("tight_service_start_bound_min")
+        ),
+        "tight_service_start_bound_max": _first_float(
+            result.get("tight_service_start_bound_max")
+        ),
+        "tight_time_arc_big_m_enabled": bool(result.get("tight_time_arc_big_m_enabled")),
+        "tight_time_arc_big_m_depot_arc_count": _first_int(
+            result.get("tight_time_arc_big_m_depot_arc_count")
+        ),
+        "tight_time_arc_big_m_active_time_bound_count": _first_int(
+            result.get("tight_time_arc_big_m_active_time_bound_count")
+        ),
+        "tight_time_arc_big_m_max_reduction": _first_float(
+            result.get("tight_time_arc_big_m_max_reduction")
+        ),
+        "tight_conditional_sequence_big_m_enabled": bool(
+            result.get("tight_conditional_sequence_big_m_enabled")
+        ),
+        "tight_conditional_sequence_big_m_count": _first_int(
+            result.get("tight_conditional_sequence_big_m_count")
+        ),
+        "tight_conditional_sequence_big_m_max_reduction": _first_float(
+            result.get("tight_conditional_sequence_big_m_max_reduction")
+        ),
+        "slot_service_start_y_lower_bound_enabled": bool(
+            result.get("slot_service_start_y_lower_bound_enabled")
+        ),
+        "slot_service_start_y_lower_bound_count": _first_int(
+            result.get("slot_service_start_y_lower_bound_count")
+        ),
+        "slot_service_start_y_lower_bound_max_lift": _first_float(
+            result.get("slot_service_start_y_lower_bound_max_lift")
+        ),
+        "slot_service_start_y_lower_bound_min": _first_float(
+            result.get("slot_service_start_y_lower_bound_min")
+        ),
+        "slot_service_start_y_lower_bound_max": _first_float(
+            result.get("slot_service_start_y_lower_bound_max")
+        ),
+        "sortie_start_upper_bound": _first_float(result.get("sortie_start_upper_bound")),
+        "pricing_complete_by_dual_bound": bool(result.get("pricing_complete_by_dual_bound")),
+        "dual_bound_can_certify_no_negative": bool(result.get("dual_bound_can_certify_no_negative")),
+        "best_reduced_cost": best_rc,
+        "dual_bound": dual_bound,
+        "negative_found": negative_found,
+        "negative_column_count": _first_int(result.get("negative_column_count")),
+        "partition_negative_task_set": list(negative_task_set) if negative_found else [],
+        "partition_negative_task_set_size": len(negative_task_set) if negative_found else "",
+        "partition_negative_true_rc": best_rc if negative_found else "",
+        "partition_negative_source_region_id": str(region_id) if negative_found else "",
+        "partition_negative_source_region_kind": str(region_kind) if negative_found else "",
+        "partition_negative_solution_payload": negative_solution_payload,
+        "partition_negative_payload_available": bool(negative_solution_payload),
+        "partition_negative_already_active": negative_already_active,
+        "partition_negative_active_task_set_seen": negative_active_task_set_seen,
+        "partition_negative_replacement_or_new_task_set": negative_relation,
+        "partition_source_active_column_count": source_active_count,
+        "partition_dual_active_column_count": dual_active_count,
+        "partition_dual_source": str(dual_source or ""),
+        **(dual_refresh_payload or {}),
+        "partition_active_pool_after_dual_delta": active_pool_after_dual_delta,
+        "partition_dual_scope_matches_active_pool": dual_scope_matches_active_pool,
+        **manual_rc_audit,
+        "partition_negative_feasibility_fallback_enabled": bool(
+            result.get("partition_negative_feasibility_fallback_enabled")
+        ),
+        "partition_negative_feasibility_fallback_run": bool(
+            result.get("partition_negative_feasibility_fallback_run")
+        ),
+        "partition_negative_feasibility_fallback_used": bool(
+            result.get("partition_negative_feasibility_fallback_used")
+        ),
+        "partition_negative_feasibility_fallback_status": result.get(
+            "partition_negative_feasibility_fallback_status"
+        )
+        or "",
+        "partition_negative_feasibility_fallback_exact_status": result.get(
+            "partition_negative_feasibility_fallback_exact_status"
+        )
+        or "",
+        "partition_optimization_best_reduced_cost": _first_float(
+            result.get("partition_optimization_best_reduced_cost")
+        ),
+        "partition_optimization_dual_bound": _first_float(
+            result.get("partition_optimization_dual_bound")
+        ),
+        "partition_optimization_exact_status": result.get("partition_optimization_exact_status") or "",
+        "region_pricing_complete": region_complete,
+        "region_can_certify_no_negative": region_can_certify,
+        "region_can_certify_full_space": False,
+        "official_certificate_allowed": False,
+        "can_claim_certificate": False,
+        "can_certify_no_negative": False,
+        "diagnostic_only": True,
+        "wall_time_sec": _first_float(result.get("wall_time_sec"), wall_time),
+        "pricing_rc_audit_pass": result.get("pricing_rc_audit_pass"),
+        "model_status_name": result.get("model_status_name") or "",
+        "variable_count": _first_int(result.get("variable_count")),
+        "constraint_count": _first_int(result.get("constraint_count")),
+        "zero_capacity_slot_truncation_enabled": bool(
+            result.get("zero_capacity_slot_truncation_enabled")
+        ),
+        "zero_capacity_slot_truncation_original_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_original_slot_count")
+        ),
+        "zero_capacity_slot_truncation_effective_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_effective_slot_count")
+        ),
+        "zero_capacity_slot_truncation_trimmed_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_trimmed_slot_count")
+        ),
+        "zero_capacity_slot_truncation_first_zero_slot": _first_int(
+            result.get("zero_capacity_slot_truncation_first_zero_slot")
+        ),
+        "slot_sequence_capacity_live_bound_enabled": bool(
+            result.get("slot_sequence_capacity_live_bound_enabled")
+        ),
+        "slot_sequence_capacity_live_bound_tightened_slot_count": _first_int(
+            result.get("slot_sequence_capacity_live_bound_tightened_slot_count")
+        ),
+        "slot_sequence_capacity_live_bound_by_slot": result.get(
+            "slot_sequence_capacity_live_bound_by_slot"
+        ),
+        "tight_service_start_bounds_enabled": bool(
+            result.get("tight_service_start_bounds_enabled")
+        ),
+        "tight_service_start_bound_count": _first_int(
+            result.get("tight_service_start_bound_count")
+        ),
+        "tight_service_start_bound_min": _first_float(
+            result.get("tight_service_start_bound_min")
+        ),
+        "tight_service_start_bound_max": _first_float(
+            result.get("tight_service_start_bound_max")
+        ),
+        "tight_time_arc_big_m_enabled": bool(result.get("tight_time_arc_big_m_enabled")),
+        "tight_time_arc_big_m_depot_arc_count": _first_int(
+            result.get("tight_time_arc_big_m_depot_arc_count")
+        ),
+        "tight_time_arc_big_m_active_time_bound_count": _first_int(
+            result.get("tight_time_arc_big_m_active_time_bound_count")
+        ),
+        "tight_time_arc_big_m_max_reduction": _first_float(
+            result.get("tight_time_arc_big_m_max_reduction")
+        ),
+        "tight_conditional_sequence_big_m_enabled": bool(
+            result.get("tight_conditional_sequence_big_m_enabled")
+        ),
+        "tight_conditional_sequence_big_m_count": _first_int(
+            result.get("tight_conditional_sequence_big_m_count")
+        ),
+        "tight_conditional_sequence_big_m_max_reduction": _first_float(
+            result.get("tight_conditional_sequence_big_m_max_reduction")
+        ),
+        "slot_service_start_y_lower_bound_enabled": bool(
+            result.get("slot_service_start_y_lower_bound_enabled")
+        ),
+        "slot_service_start_y_lower_bound_count": _first_int(
+            result.get("slot_service_start_y_lower_bound_count")
+        ),
+        "slot_service_start_y_lower_bound_max_lift": _first_float(
+            result.get("slot_service_start_y_lower_bound_max_lift")
+        ),
+        "slot_service_start_y_lower_bound_min": _first_float(
+            result.get("slot_service_start_y_lower_bound_min")
+        ),
+        "slot_service_start_y_lower_bound_max": _first_float(
+            result.get("slot_service_start_y_lower_bound_max")
+        ),
+        "sortie_start_upper_bound": _first_float(result.get("sortie_start_upper_bound")),
+        "sortie_slots_per_journey": _first_int(result.get("sortie_slots_per_journey")),
+        "sortie_slot_bound_source": result.get("sortie_slot_bound_source") or "",
+        "sortie_slot_horizon_count_bound": _first_int(result.get("sortie_slot_horizon_count_bound")),
+        "sortie_slot_latest_start_count_bound": _first_int(result.get("sortie_slot_latest_start_count_bound")),
+        "sortie_slot_min_duration_lower_bound": _first_float(result.get("sortie_slot_min_duration_lower_bound")),
+        "sortie_slot_min_energy_recharge_duration_lower_bound": _first_float(
+            result.get("sortie_slot_min_energy_recharge_duration_lower_bound")
+        ),
+        "slot_task_time_pruning_enabled": bool(result.get("slot_task_time_pruning_enabled")),
+        "slot_task_time_feasible_assignment_count": _first_int(
+            result.get("slot_task_time_feasible_assignment_count")
+        ),
+        "slot_task_time_pruned_assignment_count": _first_int(
+            result.get("slot_task_time_pruned_assignment_count")
+        ),
+        "slot_task_time_pruned_due_count": _first_int(result.get("slot_task_time_pruned_due_count")),
+        "slot_task_time_pruned_horizon_count": _first_int(
+            result.get("slot_task_time_pruned_horizon_count")
+        ),
+        "slot_task_time_total_assignment_count": _first_int(
+            result.get("slot_task_time_total_assignment_count")
+        ),
+        "slot_task_time_original_total_assignment_count": _first_int(
+            result.get("slot_task_time_original_total_assignment_count")
+        ),
+        "slot_task_model_assignment_count": _first_int(
+            result.get("slot_task_model_assignment_count")
+        ),
+        "slot_arc_support_pruning_enabled": bool(result.get("slot_arc_support_pruning_enabled")),
+        "slot_arc_support_feasible_assignment_count": _first_int(
+            result.get("slot_arc_support_feasible_assignment_count")
+        ),
+        "slot_arc_support_pruned_assignment_count": _first_int(
+            result.get("slot_arc_support_pruned_assignment_count")
+        ),
+        "slot_arc_support_pruned_unreachable_count": _first_int(
+            result.get("slot_arc_support_pruned_unreachable_count")
+        ),
+        "slot_arc_support_pruned_no_return_count": _first_int(
+            result.get("slot_arc_support_pruned_no_return_count")
+        ),
+        "slot_arc_support_pruned_option_count": _first_int(
+            result.get("slot_arc_support_pruned_option_count")
+        ),
+        "slot_arc_time_pruned_option_count": _first_int(result.get("slot_arc_time_pruned_option_count")),
+        "slot_sequence_capacity_arc_pruning_enabled": bool(
+            result.get("slot_sequence_capacity_arc_pruning_enabled")
+        ),
+        "slot_sequence_capacity_arc_pruned_option_count": _first_int(
+            result.get("slot_sequence_capacity_arc_pruned_option_count")
+        ),
+        "slot_sequence_capacity_mtz_disabled_slot_count": _first_int(
+            result.get("slot_sequence_capacity_mtz_disabled_slot_count")
+        ),
+        "single_task_per_active_sortie_arc_pruning_enabled": bool(
+            result.get("single_task_per_active_sortie_arc_pruning_enabled")
+        ),
+        "single_task_per_active_sortie_arc_pruned_option_count": _first_int(
+            result.get("single_task_per_active_sortie_arc_pruned_option_count")
+        ),
+        "single_task_per_active_sortie_mtz_disabled": bool(
+            result.get("single_task_per_active_sortie_mtz_disabled")
+        ),
+        "mtz_connectivity_effective": bool(result.get("mtz_connectivity_effective")),
+        "fixed_active_sortie_redundant_constraint_skipped_count": _first_int(
+            result.get("fixed_active_sortie_redundant_constraint_skipped_count")
+        ),
+        "single_task_per_active_sortie_slot_visit_eq_count": _first_int(
+            result.get("single_task_per_active_sortie_slot_visit_eq_count")
+        ),
+        "single_task_per_active_sortie_y_z_link_skipped_count": _first_int(
+            result.get("single_task_per_active_sortie_y_z_link_skipped_count")
+        ),
+        "resource_arc_pruning_enabled": bool(result.get("resource_arc_pruning_enabled")),
+        "resource_arc_pruned_option_count": _first_int(result.get("resource_arc_pruned_option_count")),
+        "resource_arc_energy_pruned_option_count": _first_int(
+            result.get("resource_arc_energy_pruned_option_count")
+        ),
+        "resource_arc_shadow_pruned_option_count": _first_int(
+            result.get("resource_arc_shadow_pruned_option_count")
+        ),
+        "resource_arc_demand_pruned_option_count": _first_int(
+            result.get("resource_arc_demand_pruned_option_count")
+        ),
+        "slot_task_sequence_capacity_upper_bound": _first_int(
+            result.get("slot_task_sequence_capacity_upper_bound")
+        ),
+        "slot_task_sequence_capacity_limited_slot_count": _first_int(
+            result.get("slot_task_sequence_capacity_limited_slot_count")
+        ),
+        "slot_task_sequence_capacity_empty_slot_count": _first_int(
+            result.get("slot_task_sequence_capacity_empty_slot_count")
+        ),
+        "slot_task_matching_capacity_upper_bound": _first_int(
+            result.get("slot_task_matching_capacity_upper_bound")
+        ),
+        "required_task_count_certified_by_dual_task_slot_lower_bound": bool(
+            result.get("required_task_count_certified_by_dual_task_slot_lower_bound")
+        ),
+        "required_task_count_infeasible_by_dual_task_slot_lower_bound": bool(
+            result.get("required_task_count_infeasible_by_dual_task_slot_lower_bound")
+        ),
+        "dual_task_slot_lower_bound_enabled": bool(result.get("dual_task_slot_lower_bound_enabled")),
+        "dual_task_slot_lower_bound_applicable": bool(result.get("dual_task_slot_lower_bound_applicable")),
+        "dual_task_slot_lower_bound_optimal": bool(result.get("dual_task_slot_lower_bound_optimal")),
+        "dual_task_slot_lower_bound_status": result.get("dual_task_slot_lower_bound_status") or "",
+        "dual_task_slot_lower_bound_value": _first_float(result.get("dual_task_slot_lower_bound_value")),
+        "dual_task_slot_lower_bound_region_infeasible": bool(
+            result.get("dual_task_slot_lower_bound_region_infeasible")
+        ),
+        "dual_task_slot_lower_bound_route_arc_mode": (
+            result.get("dual_task_slot_lower_bound_route_arc_mode") or ""
+        ),
+        "dual_task_slot_lower_bound_route_arc_value": _first_float(
+            result.get("dual_task_slot_lower_bound_route_arc_value")
+        ),
+        "dual_task_slot_lower_bound_route_arc_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_route_arc_row_count")
+        ),
+        "dual_task_slot_lower_bound_route_arc_global_constant": _first_float(
+            result.get("dual_task_slot_lower_bound_route_arc_global_constant")
+        ),
+        "dual_task_slot_lower_bound_route_arc_slot_constant": _first_float(
+            result.get("dual_task_slot_lower_bound_route_arc_slot_constant")
+        ),
+        "dual_task_slot_lower_bound_route_arc_constant": _first_float(
+            result.get("dual_task_slot_lower_bound_route_arc_constant")
+        ),
+        "dual_task_slot_lower_bound_route_arc_slot_outbound_sum": _first_float(
+            result.get("dual_task_slot_lower_bound_route_arc_slot_outbound_sum")
+        ),
+        "dual_task_slot_lower_bound_route_arc_slot_return_sum": _first_float(
+            result.get("dual_task_slot_lower_bound_route_arc_slot_return_sum")
+        ),
+        "dual_task_slot_lower_bound_single_task_route_arc_bound_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_single_task_route_arc_bound_row_count")
+        ),
+        "dual_task_slot_lower_bound_single_task_route_arc_bound_min": _first_float(
+            result.get("dual_task_slot_lower_bound_single_task_route_arc_bound_min")
+        ),
+        "dual_task_slot_lower_bound_single_task_route_arc_bound_max": _first_float(
+            result.get("dual_task_slot_lower_bound_single_task_route_arc_bound_max")
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_var_count": _first_int(
+            result.get("dual_task_slot_lower_bound_one_pair_rest_single_route_arc_var_count")
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_one_pair_rest_single_route_arc_row_count")
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_pair_count": _first_int(
+            result.get("dual_task_slot_lower_bound_one_pair_rest_single_route_arc_pair_count")
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_row_count")
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_iteration_count": _first_int(
+            result.get("dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_iteration_count")
+        ),
+        "dual_task_slot_lower_bound_pair_route_arc_bound_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_pair_route_arc_bound_row_count")
+        ),
+        "dual_task_slot_lower_bound_pair_route_arc_bound_min": _first_float(
+            result.get("dual_task_slot_lower_bound_pair_route_arc_bound_min")
+        ),
+        "dual_task_slot_lower_bound_pair_route_arc_bound_max": _first_float(
+            result.get("dual_task_slot_lower_bound_pair_route_arc_bound_max")
+        ),
+        "dual_task_slot_lower_bound_triple_route_arc_bound_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_triple_route_arc_bound_row_count")
+        ),
+        "dual_task_slot_lower_bound_triple_route_arc_bound_min": _first_float(
+            result.get("dual_task_slot_lower_bound_triple_route_arc_bound_min")
+        ),
+        "dual_task_slot_lower_bound_triple_route_arc_bound_max": _first_float(
+            result.get("dual_task_slot_lower_bound_triple_route_arc_bound_max")
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_var_count": _first_int(
+            result.get("dual_task_slot_lower_bound_pair_completion_lift_var_count")
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_pair_completion_lift_row_count")
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_min": _first_float(
+            result.get("dual_task_slot_lower_bound_pair_completion_lift_min")
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_max": _first_float(
+            result.get("dual_task_slot_lower_bound_pair_completion_lift_max")
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_var_count": _first_int(
+            result.get("dual_task_slot_lower_bound_cross_slot_completion_lift_var_count")
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_cross_slot_completion_lift_row_count")
+        ),
+        "dual_task_slot_lower_bound_cross_slot_pair_completion_separation_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_cross_slot_pair_completion_separation_row_count")
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_min": _first_float(
+            result.get("dual_task_slot_lower_bound_cross_slot_completion_lift_min")
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_max": _first_float(
+            result.get("dual_task_slot_lower_bound_cross_slot_completion_lift_max")
+        ),
+        "dual_task_slot_lower_bound_wall_time_sec": _first_float(
+            result.get("dual_task_slot_lower_bound_wall_time_sec")
+        ),
+        "dual_task_slot_lower_bound_variable_count": _first_int(
+            result.get("dual_task_slot_lower_bound_variable_count")
+        ),
+        "dual_task_slot_lower_bound_constraint_count": _first_int(
+            result.get("dual_task_slot_lower_bound_constraint_count")
+        ),
+        "dual_task_slot_lower_bound_pair_conflict_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_pair_conflict_row_count")
+        ),
+        "dual_task_slot_lower_bound_hyperedge_conflict_row_count": _first_int(
+            result.get("dual_task_slot_lower_bound_hyperedge_conflict_row_count")
+        ),
+        **_dual_task_slot_full_space_lower_bound_fields(result),
+        **_single_journey_mip_start_fields(result),
+        **_required_task_set_region_fields(result),
+        "note": (
+            "exact task-set region proof candidate; not a full-space certificate"
+            if str(region_kind) == "exact_task_set"
+            else "residual task-count region proof candidate after exact task-set regions; not a full-space certificate"
+            if str(region_kind) == "residual_task_count"
+            else "residual region proof candidate after exact task-set regions; not a full-space certificate"
+        ),
+    }
+
+
+def _partition_negative_task_set(result: dict, *, fallback_task_set: tuple[str, ...]) -> tuple[str, ...]:
+    best_column = result.get("best_column") if isinstance(result.get("best_column"), dict) else {}
+    tasks = best_column.get("tasks")
+    if tasks:
+        return tuple(sorted(str(task) for task in tasks if str(task)))
+    journeys = result.get("journeys")
+    if journeys:
+        try:
+            journey = tuple(journeys)[0]
+        except (TypeError, IndexError):
+            journey = None
+        if journey is not None:
+            task_set = getattr(journey, "task_set", None)
+            if task_set:
+                return tuple(sorted(str(task) for task in task_set if str(task)))
+    return tuple(sorted(str(task) for task in fallback_task_set if str(task)))
+
+
+def _solution_payload_task_set(payload: dict | None) -> tuple[str, ...]:
+    if not isinstance(payload, dict):
+        return tuple()
+    tasks: set[str] = set()
+    for sortie in payload.get("sorties") or []:
+        if not isinstance(sortie, dict):
+            continue
+        for task_id in sortie.get("tasks") or []:
+            task = str(task_id)
+            if task:
+                tasks.add(task)
+    return tuple(sorted(tasks))
+
+
+def _solution_payload_column_key(payload: dict | None) -> tuple:
+    if not isinstance(payload, dict):
+        return tuple()
+    sortie_keys = []
+    for sortie in payload.get("sorties") or []:
+        if not isinstance(sortie, dict):
+            continue
+        tasks = tuple(str(task_id) for task_id in sortie.get("tasks") or [])
+        legs = tuple(
+            (str(leg.get("from")), str(leg.get("to")), str(leg.get("path_type")))
+            for leg in sortie.get("legs") or []
+            if isinstance(leg, dict)
+        )
+        try:
+            start_time = round(float(sortie.get("start_time", 0.0)), 6)
+        except (TypeError, ValueError):
+            start_time = 0.0
+        sortie_keys.append((tasks, legs, start_time))
+    return tuple(sortie_keys)
+
+
+def _partition_negative_manual_rc_audit(
+    payload: dict | None,
+    *,
+    data,
+    duals: JourneyDuals | None,
+    pricing_rc: float | None,
+    negative_eps: float,
+) -> dict:
+    base = {
+        "partition_negative_manual_rc": "",
+        "partition_negative_pricing_rc_diff": "",
+        "partition_negative_rc_audit_pass": "",
+        "partition_negative_rc_audit_error": "",
+    }
+    if not isinstance(payload, dict) or data is None or duals is None or pricing_rc is None:
+        return base
+    try:
+        column = journey_column_from_solution_payload(data, payload)
+        manual_rc = manual_journey_reduced_cost(column, duals)
+        diff = round(float(manual_rc) - float(pricing_rc), 9)
+        base.update(
+            {
+                "partition_negative_manual_rc": manual_rc,
+                "partition_negative_pricing_rc_diff": diff,
+                "partition_negative_rc_audit_pass": abs(diff) <= max(1.0e-7, abs(float(negative_eps))),
+            }
+        )
+    except Exception as exc:  # pragma: no cover - defensive diagnostic path
+        base["partition_negative_rc_audit_pass"] = False
+        base["partition_negative_rc_audit_error"] = str(exc)
+    return base
+
+
+def _refresh_partition_duals_from_active_pool(
+    data,
+    active_payloads: list[dict],
+    *,
+    negative_eps: float,
+    max_iterations: int,
+) -> dict:
+    fallback = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0, cuts={})
+    payload = {
+        "partition_dual_refresh_status": "NOT_RUN",
+        "partition_dual_refresh_min_rc": "",
+        "partition_dual_refresh_negative_count": "",
+        "partition_dual_refresh_input_column_count": len(active_payloads),
+        "partition_dual_refresh_rmp_active_column_count": "",
+        "partition_dual_refresh_error": "",
+    }
+    try:
+        columns = tuple(journey_column_from_solution_payload(data, row) for row in active_payloads)
+        if not columns:
+            payload["partition_dual_refresh_status"] = "NO_ACTIVE_COLUMNS"
+            return {
+                "duals": fallback,
+                "partition_dual_source": "refreshed_active_pool_failed_no_columns",
+                "payload": payload,
+            }
+        rmp = solve_restricted_journey_rmp(
+            data.task_ids,
+            columns,
+            fleet_size=data.fleet_size,
+            negative_eps=float(negative_eps),
+            max_iterations=int(max_iterations),
+        )
+        rc_values = [manual_journey_reduced_cost(column, rmp.duals) for column in columns]
+        payload.update(
+            {
+                "partition_dual_refresh_status": rmp.status,
+                "partition_dual_refresh_min_rc": rmp.min_reduced_cost,
+                "partition_dual_refresh_negative_count": sum(
+                    1 for value in rc_values if float(value) < -abs(float(negative_eps))
+                ),
+                "partition_dual_refresh_rmp_active_column_count": rmp.active_column_count,
+            }
+        )
+        if rmp.status == "RESTRICTED_RMP_OPTIMAL":
+            return {
+                "duals": rmp.duals,
+                "partition_dual_source": "refreshed_active_pool_restricted_rmp",
+                "payload": payload,
+            }
+        payload["partition_dual_refresh_error"] = rmp.note
+    except Exception as exc:  # pragma: no cover - defensive diagnostic path
+        payload["partition_dual_refresh_status"] = "REFRESH_EXCEPTION"
+        payload["partition_dual_refresh_error"] = str(exc)
+    return {
+        "duals": fallback,
+        "partition_dual_source": "refreshed_active_pool_failed_zero_dual",
+        "payload": payload,
+    }
+
+
+def _partition_region_needs_negative_feasibility_fallback(
+    result: dict,
+    *,
+    region_kind: str,
+    negative_eps: float,
+) -> bool:
+    best_rc = _first_float(result.get("best_reduced_cost"), result.get("pricing_best_reduced_cost"))
+    negative_found = bool(
+        result.get("negative_found")
+        or (best_rc is not None and float(best_rc) < -abs(float(negative_eps)))
+    )
+    if negative_found:
+        return False
+    if str(region_kind) == "exact_task_set":
+        region_complete = bool(result.get("pricing_complete_for_required_task_set"))
+    elif str(region_kind) == "residual_task_count":
+        region_complete = bool(result.get("pricing_complete_for_required_task_count"))
+    else:
+        exact_status = str(result.get("exact_status") or "")
+        region_complete = exact_status in {
+            "RESTRICTED_PRICING_OPTIMAL",
+            "RESTRICTED_PRICING_INFEASIBLE",
+        }
+    if region_complete:
+        return False
+    return bool(best_rc is None or float(best_rc) >= -abs(float(negative_eps)))
+
+
+def _partition_region_merge_negative_feasibility_fallback(
+    optimization_result: dict,
+    fallback_result: dict | None,
+    *,
+    negative_eps: float,
+) -> dict:
+    if not fallback_result:
+        result = dict(optimization_result)
+        result["partition_negative_feasibility_fallback_run"] = False
+        result["partition_negative_feasibility_fallback_used"] = False
+        return result
+    fallback_best_rc = _first_float(
+        fallback_result.get("best_reduced_cost"),
+        fallback_result.get("pricing_best_reduced_cost"),
+    )
+    fallback_negative = bool(
+        fallback_result.get("negative_found")
+        or (fallback_best_rc is not None and float(fallback_best_rc) < -abs(float(negative_eps)))
+    )
+    fallback_region_certifies = bool(
+        fallback_result.get("required_task_set_region_can_certify_no_negative")
+        or fallback_result.get("required_task_count_region_can_certify_no_negative")
+    )
+    fallback_used = bool(fallback_negative or fallback_region_certifies)
+    result = dict(fallback_result if fallback_used else optimization_result)
+    result.update(
+        {
+            "partition_negative_feasibility_fallback_run": True,
+            "partition_negative_feasibility_fallback_used": fallback_used,
+            "partition_negative_feasibility_fallback_status": fallback_result.get("status")
+            or fallback_result.get("algorithm_status")
+            or "",
+            "partition_negative_feasibility_fallback_exact_status": fallback_result.get("exact_status") or "",
+            "partition_optimization_best_reduced_cost": _first_float(
+                optimization_result.get("best_reduced_cost"),
+                optimization_result.get("pricing_best_reduced_cost"),
+            ),
+            "partition_optimization_dual_bound": _first_float(
+                optimization_result.get("dual_bound"),
+                optimization_result.get("bound"),
+            ),
+            "partition_optimization_exact_status": optimization_result.get("exact_status") or "",
+        }
+    )
+    return result
+
+
+def _partition_probe_summary(
+    rows: list[dict],
+    *,
+    task_sets: list[tuple[str, ...]],
+    negative_eps: float,
+    total_task_count: int = 0,
+) -> dict:
+    best_by_region = _partition_best_rows_by_region(rows)
+    best_region_rows = list(best_by_region.values())
+    exact_best = [
+        row for row in best_region_rows if row.get("region_kind") == "exact_task_set"
+    ]
+    single_residual_best = [
+        row for row in best_region_rows if row.get("region_kind") == "residual_after_exact_task_sets"
+    ]
+    task_count_residual_best = [
+        row for row in best_region_rows if row.get("region_kind") == "residual_task_count"
+    ]
+    residual_best = task_count_residual_best or single_residual_best
+    residual_row = single_residual_best[0] if single_residual_best else {}
+    exact_region_proven = [
+        row for row in exact_best if row.get("region_can_certify_no_negative") is True
+    ]
+    exact_region_negative = [
+        row for row in exact_best if row.get("negative_found") is True
+    ]
+    exact_region_incomplete = [
+        row for row in exact_best if row.get("region_pricing_complete") is not True
+    ]
+    task_count_group_summary = _residual_task_count_group_summary(
+        task_count_residual_best,
+        total_task_count=int(total_task_count or 0),
+        negative_eps=float(negative_eps),
+    )
+    task_count_expected = task_count_group_summary["expected_counts"]
+    task_count_observed = task_count_group_summary["observed_counts"]
+    task_count_missing = task_count_group_summary["missing_counts"] if task_count_residual_best else []
+    if task_count_residual_best:
+        residual_proven = bool(
+            task_count_expected
+            and not task_count_missing
+            and task_count_group_summary["proven_count"] == len(task_count_expected)
+        )
+        residual_negative = bool(task_count_group_summary["negative_count"] > 0)
+        residual_complete = bool(
+            task_count_expected
+            and not task_count_missing
+            and task_count_group_summary["incomplete_count"] == 0
+        )
+    else:
+        residual_proven = bool(residual_row.get("region_can_certify_no_negative") is True)
+        residual_negative = bool(residual_row.get("negative_found") is True)
+        residual_complete = bool(residual_row.get("region_pricing_complete") is True)
+    negative_rows = [row for row in best_region_rows if row.get("negative_found") is True]
+    negative_rc_values = [
+        value
+        for value in (
+            _first_float(
+                row.get("partition_best_negative_rc"),
+                row.get("partition_negative_true_rc"),
+                row.get("best_reduced_cost"),
+                row.get("dual_bound"),
+            )
+            for row in negative_rows
+        )
+        if value is not None
+    ]
+    gate = _partition_candidate_certificate_gate(
+        rows,
+        task_sets=task_sets,
+        negative_eps=float(negative_eps),
+        total_task_count=int(total_task_count or 0),
+    )
+    partition_candidate_complete = bool(gate.get("partition_candidate_gate_pass") is True)
+    best_bounds = [
+        _first_float(row.get("dual_bound"), row.get("best_reduced_cost"))
+        for row in best_region_rows
+        if _first_float(row.get("dual_bound"), row.get("best_reduced_cost")) is not None
+    ]
+    variable_counts = [
+        value
+        for value in (_first_int(row.get("variable_count")) for row in best_region_rows)
+        if value is not None
+    ]
+    constraint_counts = [
+        value
+        for value in (_first_int(row.get("constraint_count")) for row in best_region_rows)
+        if value is not None
+    ]
+    slot_feasible_assignments = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_time_feasible_assignment_count")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_pruned_assignments = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_time_pruned_assignment_count")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_pruned_arcs = [
+        value
+        for value in (_first_int(row.get("slot_arc_time_pruned_option_count")) for row in best_region_rows)
+        if value is not None
+    ]
+    single_task_per_active_pruned_arcs = [
+        value
+        for value in (
+            _first_int(row.get("single_task_per_active_sortie_arc_pruned_option_count"))
+            for row in best_region_rows
+        )
+        if value is not None
+    ]
+    single_task_per_active_pruned_arcs = [
+        value
+        for value in (
+            _first_int(row.get("single_task_per_active_sortie_arc_pruned_option_count"))
+            for row in best_region_rows
+        )
+        if value is not None
+    ]
+    resource_pruned_arcs = [
+        value
+        for value in (_first_int(row.get("resource_arc_pruned_option_count")) for row in best_region_rows)
+        if value is not None
+    ]
+    resource_energy_pruned_arcs = [
+        value
+        for value in (
+            _first_int(row.get("resource_arc_energy_pruned_option_count")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    resource_shadow_pruned_arcs = [
+        value
+        for value in (
+            _first_int(row.get("resource_arc_shadow_pruned_option_count")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    resource_demand_pruned_arcs = [
+        value
+        for value in (
+            _first_int(row.get("resource_arc_demand_pruned_option_count")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_sequence_caps = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_sequence_capacity_upper_bound")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_matching_caps = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_matching_capacity_upper_bound")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    global_lb = None if not best_bounds else round(min(float(value) for value in best_bounds), 9)
+    return {
+        "partition_model": (
+            "exact_task_set_regions_plus_residual_task_count_regions"
+            if task_count_residual_best
+            else "exact_task_set_regions_plus_final_residual"
+        ),
+        "partition_regions_disjoint": True,
+        "partition_regions_cover_full_space": bool(
+            (task_sets or task_count_residual_best)
+            and (
+                bool(single_residual_best)
+                or bool(task_count_expected and not task_count_missing)
+            )
+        ),
+        "partition_candidate_complete": partition_candidate_complete,
+        "partition_candidate_can_certify_no_negative": partition_candidate_complete,
+        "official_certificate_allowed": False,
+        "can_claim_certificate": False,
+        "target_task_set_count": len(task_sets),
+        "exact_region_observed_count": len(exact_best),
+        "exact_region_proven_count": len(exact_region_proven),
+        "exact_region_negative_count": len(exact_region_negative),
+        "exact_region_incomplete_count": len(exact_region_incomplete),
+        "residual_region_observed": bool(residual_best),
+        "residual_region_complete": residual_complete,
+        "residual_region_proven": residual_proven,
+        "residual_region_negative_found": residual_negative,
+        "residual_task_count_partition_enabled": bool(task_count_residual_best),
+        "residual_task_count_region_expected_count": len(task_count_expected),
+        "residual_task_count_region_observed_count": len(task_count_observed),
+        "residual_task_count_region_proven_count": task_count_group_summary["proven_count"],
+        "residual_task_count_region_incomplete_count": task_count_group_summary["incomplete_count"],
+        "residual_task_count_region_negative_count": task_count_group_summary["negative_count"],
+        "residual_task_count_region_missing_count": len(task_count_missing),
+        "residual_task_count_region_missing_counts": task_count_missing,
+        "residual_active_sortie_count_partition_enabled": bool(
+            task_count_group_summary["active_partition_enabled"]
+        ),
+        "residual_active_sortie_count_missing_group_count": int(
+            task_count_group_summary["missing_active_group_count"]
+        ),
+        "residual_active_sortie_count_duplicate_group_count": int(
+            task_count_group_summary["duplicate_active_group_count"]
+        ),
+        "best_partition_region_lb": global_lb,
+        "partition_bound_gap_to_zero": None if global_lb is None else round(max(0.0, -float(global_lb)), 9),
+        "partition_negative_already_active_count": sum(
+            1 for row in negative_rows if row.get("partition_negative_already_active") is True
+        ),
+        "partition_negative_replacement_task_set_count": sum(
+            1
+            for row in negative_rows
+            if str(row.get("partition_negative_replacement_or_new_task_set") or "") == "replacement"
+        ),
+        "partition_negative_new_task_set_count": sum(
+            1
+            for row in negative_rows
+            if str(row.get("partition_negative_replacement_or_new_task_set") or "") == "new_task_set"
+        ),
+        "partition_best_negative_rc": (
+            None if not negative_rc_values else round(min(float(value) for value in negative_rc_values), 9)
+        ),
+        "partition_region_variable_count_max": max(variable_counts) if variable_counts else 0,
+        "partition_region_constraint_count_max": max(constraint_counts) if constraint_counts else 0,
+        "partition_region_variable_count_mean": (
+            None if not variable_counts else round(float(mean(variable_counts)), 6)
+        ),
+        "partition_region_constraint_count_mean": (
+            None if not constraint_counts else round(float(mean(constraint_counts)), 6)
+        ),
+        "partition_region_slot_task_time_feasible_assignment_count_max": (
+            max(slot_feasible_assignments) if slot_feasible_assignments else 0
+        ),
+        "partition_region_slot_task_time_pruned_assignment_count_sum": sum(slot_pruned_assignments),
+        "partition_region_slot_arc_time_pruned_option_count_sum": sum(slot_pruned_arcs),
+        "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum": sum(
+            single_task_per_active_pruned_arcs
+        ),
+        "partition_region_resource_arc_pruned_option_count_sum": sum(resource_pruned_arcs),
+        "partition_region_resource_arc_energy_pruned_option_count_sum": sum(resource_energy_pruned_arcs),
+        "partition_region_resource_arc_shadow_pruned_option_count_sum": sum(resource_shadow_pruned_arcs),
+        "partition_region_resource_arc_demand_pruned_option_count_sum": sum(resource_demand_pruned_arcs),
+        "partition_region_slot_sequence_capacity_upper_bound_max": (
+            max(slot_sequence_caps) if slot_sequence_caps else 0
+        ),
+        "partition_region_slot_matching_capacity_upper_bound_max": (
+            max(slot_matching_caps) if slot_matching_caps else 0
+        ),
+        "partition_region_infeasible_by_slot_sequence_capacity_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_infeasible_by_slot_sequence_capacity"))
+        ),
+        "partition_region_infeasible_by_slot_matching_count": sum(
+            1 for row in best_region_rows if bool(row.get("required_task_count_infeasible_by_slot_matching"))
+        ),
+        "partition_region_infeasible_by_pair_conflict_capacity_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_infeasible_by_pair_conflict_capacity"))
+        ),
+        "partition_region_certified_by_dual_task_slot_lower_bound_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_certified_by_dual_task_slot_lower_bound"))
+        ),
+        "partition_region_infeasible_by_dual_task_slot_lower_bound_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_infeasible_by_dual_task_slot_lower_bound"))
+        ),
+        "partition_region_dual_task_slot_lower_bound_enabled_count": sum(
+            1 for row in best_region_rows if bool(row.get("dual_task_slot_lower_bound_enabled"))
+        ),
+        "partition_region_dual_task_slot_lower_bound_optimal_count": sum(
+            1 for row in best_region_rows if bool(row.get("dual_task_slot_lower_bound_optimal"))
+        ),
+        "partition_region_pair_conflict_capacity_bound_enabled_count": sum(
+            1 for row in best_region_rows if bool(row.get("task_slot_pair_conflict_capacity_bound_enabled"))
+        ),
+        "partition_region_infeasible_by_empty_active_slot_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_active_sortie_count_infeasible_by_empty_slot"))
+        ),
+        "partition_region_infeasible_by_active_capacity_min_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_active_sortie_count_infeasible_by_capacity_min"))
+        ),
+        "partition_source_active_column_count": _max_present_int(
+            row.get("partition_source_active_column_count") for row in rows
+        ),
+        "partition_dual_active_column_count": _max_present_int(
+            row.get("partition_dual_active_column_count") for row in rows
+        ),
+        "partition_dual_source": _first_present_str(row.get("partition_dual_source") for row in rows),
+        "partition_dual_refresh_status": _first_present_str(
+            row.get("partition_dual_refresh_status") for row in rows
+        ),
+        "partition_dual_refresh_min_rc": _min_present_float(
+            row.get("partition_dual_refresh_min_rc") for row in rows
+        ),
+        "partition_dual_refresh_negative_count": _max_present_int(
+            row.get("partition_dual_refresh_negative_count") for row in rows
+        ),
+        "partition_dual_refresh_input_column_count": _max_present_int(
+            row.get("partition_dual_refresh_input_column_count") for row in rows
+        ),
+        "partition_dual_refresh_rmp_active_column_count": _max_present_int(
+            row.get("partition_dual_refresh_rmp_active_column_count") for row in rows
+        ),
+        "partition_active_pool_after_dual_delta": _max_present_int(
+            row.get("partition_active_pool_after_dual_delta") for row in rows
+        ),
+        "partition_dual_scope_mismatch_count": sum(
+            1 for row in rows if row.get("partition_dual_scope_matches_active_pool") is False
+        ),
+        "partition_negative_rc_audit_fail_count": sum(
+            1 for row in negative_rows if row.get("partition_negative_rc_audit_pass") is False
+        ),
+        "partition_region_mip_start_enabled_count": sum(
+            1 for row in rows if row.get("single_journey_mip_start_enabled") is True
+        ),
+        "partition_region_mip_start_ok_count": sum(
+            1 for row in rows if str(row.get("single_journey_mip_start_status") or "") == "OK"
+        ),
+        "partition_exact_region_mip_start_ok_count": sum(
+            1
+            for row in rows
+            if str(row.get("region_kind") or "") == "exact_task_set"
+            and str(row.get("single_journey_mip_start_status") or "") == "OK"
+        ),
+        "partition_residual_region_mip_start_ok_count": sum(
+            1
+            for row in rows
+            if str(row.get("region_kind") or "")
+            in {"residual_after_exact_task_sets", "residual_task_count"}
+            and str(row.get("single_journey_mip_start_status") or "") == "OK"
+        ),
+        "negative_eps": float(negative_eps),
+        **gate,
+    }
+
+
+def _partition_best_rows_by_region(rows: list[dict]) -> dict[str, dict]:
+    grouped: dict[str, list[dict]] = {}
+    context_keys = {
+        (
+            str(row.get("variant") or ""),
+            str(row.get("formulation_kind") or ""),
+            str(row.get("source_probe_json") or ""),
+            str(row.get("history_round") or ""),
+        )
+        for row in rows
+    }
+    include_context = len(context_keys) > 1
+    for row in rows:
+        region_id = str(row.get("region_id") or "")
+        if include_context:
+            key = "|".join(
+                (
+                    region_id,
+                    str(row.get("variant") or ""),
+                    str(row.get("formulation_kind") or ""),
+                    str(row.get("source_probe_json") or ""),
+                    str(row.get("history_round") or ""),
+                )
+            )
+        else:
+            key = region_id
+        grouped.setdefault(key, []).append(row)
+    best: dict[str, dict] = {}
+    for key, group in grouped.items():
+        best[key] = max(
+            group,
+            key=lambda row: (
+                1 if row.get("region_can_certify_no_negative") is True else 0,
+                _first_float(row.get("dual_bound"), row.get("best_reduced_cost"), -1.0e100) or -1.0e100,
+            ),
+        )
+    return best
+
+
+def _partition_probe_model_size_metrics(rows: list[dict]) -> dict:
+    best_region_rows = list(_partition_best_rows_by_region(rows).values())
+    variable_counts = [
+        value
+        for value in (_first_int(row.get("variable_count")) for row in best_region_rows)
+        if value is not None
+    ]
+    constraint_counts = [
+        value
+        for value in (_first_int(row.get("constraint_count")) for row in best_region_rows)
+        if value is not None
+    ]
+    slot_feasible_assignments = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_time_feasible_assignment_count")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_pruned_assignments = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_time_pruned_assignment_count")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_pruned_arcs = [
+        value
+        for value in (_first_int(row.get("slot_arc_time_pruned_option_count")) for row in best_region_rows)
+        if value is not None
+    ]
+    single_task_per_active_pruned_arcs = [
+        value
+        for value in (
+            _first_int(row.get("single_task_per_active_sortie_arc_pruned_option_count"))
+            for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_sequence_caps = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_sequence_capacity_upper_bound")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    slot_matching_caps = [
+        value
+        for value in (
+            _first_int(row.get("slot_task_matching_capacity_upper_bound")) for row in best_region_rows
+        )
+        if value is not None
+    ]
+    return {
+        "partition_region_variable_count_max": max(variable_counts) if variable_counts else 0,
+        "partition_region_constraint_count_max": max(constraint_counts) if constraint_counts else 0,
+        "partition_region_variable_count_mean": (
+            None if not variable_counts else round(float(mean(variable_counts)), 6)
+        ),
+        "partition_region_constraint_count_mean": (
+            None if not constraint_counts else round(float(mean(constraint_counts)), 6)
+        ),
+        "partition_region_slot_task_time_feasible_assignment_count_max": (
+            max(slot_feasible_assignments) if slot_feasible_assignments else 0
+        ),
+        "partition_region_slot_task_time_pruned_assignment_count_sum": sum(slot_pruned_assignments),
+        "partition_region_slot_arc_time_pruned_option_count_sum": sum(slot_pruned_arcs),
+        "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum": sum(
+            single_task_per_active_pruned_arcs
+        ),
+        "partition_region_slot_sequence_capacity_upper_bound_max": (
+            max(slot_sequence_caps) if slot_sequence_caps else 0
+        ),
+        "partition_region_slot_matching_capacity_upper_bound_max": (
+            max(slot_matching_caps) if slot_matching_caps else 0
+        ),
+        "partition_region_infeasible_by_slot_sequence_capacity_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_infeasible_by_slot_sequence_capacity"))
+        ),
+        "partition_region_infeasible_by_slot_matching_count": sum(
+            1 for row in best_region_rows if bool(row.get("required_task_count_infeasible_by_slot_matching"))
+        ),
+        "partition_region_infeasible_by_pair_conflict_capacity_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_infeasible_by_pair_conflict_capacity"))
+        ),
+        "partition_region_certified_by_dual_task_slot_lower_bound_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_certified_by_dual_task_slot_lower_bound"))
+        ),
+        "partition_region_infeasible_by_dual_task_slot_lower_bound_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_task_count_infeasible_by_dual_task_slot_lower_bound"))
+        ),
+        "partition_region_dual_task_slot_lower_bound_enabled_count": sum(
+            1 for row in best_region_rows if bool(row.get("dual_task_slot_lower_bound_enabled"))
+        ),
+        "partition_region_dual_task_slot_lower_bound_optimal_count": sum(
+            1 for row in best_region_rows if bool(row.get("dual_task_slot_lower_bound_optimal"))
+        ),
+        "partition_region_pair_conflict_capacity_bound_enabled_count": sum(
+            1 for row in best_region_rows if bool(row.get("task_slot_pair_conflict_capacity_bound_enabled"))
+        ),
+        "partition_region_infeasible_by_empty_active_slot_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_active_sortie_count_infeasible_by_empty_slot"))
+        ),
+        "partition_region_infeasible_by_active_capacity_min_count": sum(
+            1
+            for row in best_region_rows
+            if bool(row.get("required_active_sortie_count_infeasible_by_capacity_min"))
+        ),
+    }
+
+
+def _residual_task_count_group_summary(
+    rows: list[dict],
+    *,
+    total_task_count: int,
+    negative_eps: float,
+) -> dict:
+    expected_counts = set(range(1, int(total_task_count) + 1)) if int(total_task_count or 0) > 0 else set()
+    groups: dict[int, list[dict]] = {}
+    for row in rows:
+        value = _optional_positive_int(row.get("required_task_count"))
+        if value is not None:
+            groups.setdefault(value, []).append(row)
+
+    proven_count = 0
+    incomplete_count = 0
+    negative_count = 0
+    negative_bound_count = 0
+    missing_active_group_count = 0
+    duplicate_active_group_count = 0
+    duplicate_direct_group_count = 0
+    active_partition_enabled = False
+    group_details: dict[int, dict] = {}
+    for required_count, group in groups.items():
+        active_rows = [
+            row for row in group if bool(row.get("required_active_sortie_count_enabled"))
+        ]
+        if active_rows:
+            active_partition_enabled = True
+            expected_active: set[int] = set()
+            observed_active: list[int] = []
+            for row in active_rows:
+                for expected_value in row.get("required_active_sortie_count_expected_counts") or []:
+                    parsed_expected = _optional_positive_int(expected_value)
+                    if parsed_expected is not None:
+                        expected_active.add(parsed_expected)
+                value = _optional_positive_int(row.get("required_active_sortie_count"))
+                if value is not None:
+                    observed_active.append(value)
+            if not expected_active:
+                observed_set = set(observed_active)
+                if observed_set:
+                    expected_active = observed_set
+            observed_set = set(observed_active)
+            missing_active = sorted(expected_active - observed_set)
+            duplicate_active = len(observed_set) != len(observed_active)
+            if missing_active:
+                missing_active_group_count += 1
+            if duplicate_active:
+                duplicate_active_group_count += 1
+            group_rows = active_rows
+            group_complete = bool(
+                expected_active
+                and not missing_active
+                and all(row.get("region_pricing_complete") is True for row in group_rows)
+            )
+            group_proven = bool(
+                group_complete
+                and all(row.get("region_can_certify_no_negative") is True for row in group_rows)
+            )
+            group_details[required_count] = {
+                "active_partition": True,
+                "expected_active": sorted(expected_active),
+                "observed_active": sorted(observed_set),
+                "missing_active": missing_active,
+                "duplicate_active": duplicate_active,
+                "complete": group_complete,
+                "proven": group_proven,
+            }
+        else:
+            duplicate_direct = len(group) != 1
+            if duplicate_direct:
+                duplicate_direct_group_count += 1
+            group_rows = group
+            group_complete = bool(
+                len(group_rows) == 1 and group_rows[0].get("region_pricing_complete") is True
+            )
+            group_proven = bool(
+                group_complete and group_rows[0].get("region_can_certify_no_negative") is True
+            )
+            group_details[required_count] = {
+                "active_partition": False,
+                "complete": group_complete,
+                "proven": group_proven,
+                "duplicate_direct": duplicate_direct,
+            }
+        if group_proven:
+            proven_count += 1
+        if not group_complete:
+            incomplete_count += 1
+        if any(row.get("negative_found") is True for row in group_rows):
+            negative_count += 1
+        if any(_row_has_negative_bound(row, negative_eps) for row in group_rows):
+            negative_bound_count += 1
+
+    observed_counts = set(groups)
+    missing_counts = sorted(expected_counts - observed_counts)
+    return {
+        "expected_counts": expected_counts,
+        "observed_counts": observed_counts,
+        "missing_counts": missing_counts,
+        "proven_count": proven_count,
+        "incomplete_count": incomplete_count,
+        "negative_count": negative_count,
+        "negative_bound_count": negative_bound_count,
+        "missing_active_group_count": missing_active_group_count,
+        "duplicate_active_group_count": duplicate_active_group_count,
+        "duplicate_direct_group_count": duplicate_direct_group_count,
+        "active_partition_enabled": active_partition_enabled,
+        "group_details": group_details,
+    }
+
+
+def _partition_candidate_certificate_gate(
+    rows: list[dict],
+    *,
+    task_sets: list[tuple[str, ...]],
+    negative_eps: float,
+    total_task_count: int = 0,
+) -> dict:
+    """Validate whether partition rows form a self-contained no-negative candidate.
+
+    This is deliberately still not an official certificate gate.  It checks that
+    exact task-set regions and the residual region are internally consistent
+    enough to be passed to a future final-judge ledger integration.
+    """
+
+    issues: list[str] = []
+    target_task_sets = [_canonical_task_set(row) for row in task_sets]
+    target_task_set_set = set(target_task_sets)
+    if len(target_task_set_set) != len(target_task_sets):
+        issues.append("duplicate_target_task_sets")
+
+    best_by_region = _partition_best_rows_by_region(rows)
+    exact_best = [
+        row for row in best_by_region.values() if row.get("region_kind") == "exact_task_set"
+    ]
+    single_residual_best = [
+        row for row in best_by_region.values() if row.get("region_kind") == "residual_after_exact_task_sets"
+    ]
+    task_count_residual_best = [
+        row for row in best_by_region.values() if row.get("region_kind") == "residual_task_count"
+    ]
+    if not target_task_sets and not task_count_residual_best:
+        issues.append("no_target_task_sets")
+    exact_best_task_sets = [_canonical_task_set(row.get("required_task_set") or []) for row in exact_best]
+    exact_best_task_set_set = set(exact_best_task_sets)
+
+    missing_exact = sorted(target_task_set_set - exact_best_task_set_set)
+    unexpected_exact = sorted(exact_best_task_set_set - target_task_set_set)
+    duplicate_exact = len(exact_best_task_set_set) != len(exact_best_task_sets)
+    if missing_exact:
+        issues.append("missing_exact_task_set_region")
+    if unexpected_exact:
+        issues.append("unexpected_exact_task_set_region")
+    if duplicate_exact:
+        issues.append("duplicate_exact_task_set_region")
+    if len(exact_best) != len(target_task_sets):
+        issues.append("exact_region_count_mismatch")
+
+    residual_task_count_missing: list[int] = []
+    residual_task_count_observed: set[int] = set()
+    if single_residual_best and task_count_residual_best:
+        issues.append("mixed_residual_partition_models")
+    if task_count_residual_best:
+        task_count_group_summary = _residual_task_count_group_summary(
+            task_count_residual_best,
+            total_task_count=int(total_task_count or 0),
+            negative_eps=float(negative_eps),
+        )
+        expected_counts = task_count_group_summary["expected_counts"]
+        residual_task_count_observed = task_count_group_summary["observed_counts"]
+        residual_task_count_missing = task_count_group_summary["missing_counts"]
+        unexpected_counts = sorted(residual_task_count_observed - expected_counts)
+        if not expected_counts:
+            issues.append("missing_residual_task_count_total")
+        if residual_task_count_missing:
+            issues.append("missing_residual_task_count_region")
+        if unexpected_counts:
+            issues.append("unexpected_residual_task_count_region")
+        if task_count_group_summary["duplicate_direct_group_count"] > 0:
+            issues.append("duplicate_residual_task_count_region")
+        if task_count_group_summary["duplicate_active_group_count"] > 0:
+            issues.append("duplicate_residual_active_sortie_count_region")
+        if task_count_group_summary["missing_active_group_count"] > 0:
+            issues.append("missing_residual_active_sortie_count_region")
+        residual_row = {}
+    elif not single_residual_best:
+        issues.append("missing_residual_region")
+        residual_row: dict = {}
+    elif len(single_residual_best) > 1:
+        issues.append("multiple_residual_regions")
+        residual_row = single_residual_best[0]
+    else:
+        residual_row = single_residual_best[0]
+
+    if residual_row:
+        residual_forbidden_set = {
+            _canonical_task_set(task_set) for task_set in (residual_row.get("forbidden_task_sets") or [])
+        }
+        if residual_forbidden_set != target_task_set_set:
+            issues.append("residual_forbidden_task_sets_do_not_match_exact_regions")
+    for row in task_count_residual_best:
+        residual_forbidden_set = {
+            _canonical_task_set(task_set) for task_set in (row.get("forbidden_task_sets") or [])
+        }
+        if residual_forbidden_set != target_task_set_set:
+            issues.append("residual_task_count_forbidden_task_sets_do_not_match_exact_regions")
+
+    exact_proven_count = 0
+    for row in exact_best:
+        if row.get("region_pricing_complete") is not True:
+            issues.append("incomplete_exact_task_set_region")
+        if row.get("negative_found") is True:
+            issues.append("negative_exact_task_set_region")
+        if row.get("region_can_certify_no_negative") is True:
+            exact_proven_count += 1
+        else:
+            issues.append("unproven_exact_task_set_region")
+        if _row_has_negative_bound(row, negative_eps):
+            issues.append("negative_bound_exact_task_set_region")
+
+    residual_proven = False
+    if task_count_residual_best:
+        if task_count_group_summary["incomplete_count"] > 0:
+            issues.append("incomplete_residual_task_count_region")
+        if task_count_group_summary["negative_count"] > 0:
+            issues.append("negative_residual_task_count_region")
+        if task_count_group_summary["proven_count"] != len(residual_task_count_observed):
+            issues.append("unproven_residual_task_count_region")
+        if task_count_group_summary["negative_bound_count"] > 0:
+            issues.append("negative_bound_residual_task_count_region")
+        residual_proven = bool(
+            task_count_residual_best
+            and task_count_group_summary["proven_count"] == len(expected_counts)
+            and not residual_task_count_missing
+            and "missing_residual_task_count_total" not in issues
+            and "unexpected_residual_task_count_region" not in issues
+            and "duplicate_residual_task_count_region" not in issues
+            and "duplicate_residual_active_sortie_count_region" not in issues
+            and "missing_residual_active_sortie_count_region" not in issues
+        )
+    elif residual_row:
+        if residual_row.get("region_pricing_complete") is not True:
+            issues.append("incomplete_residual_region")
+        if residual_row.get("negative_found") is True:
+            issues.append("negative_residual_region")
+        residual_proven = bool(residual_row.get("region_can_certify_no_negative") is True)
+        if not residual_proven:
+            issues.append("unproven_residual_region")
+        if _row_has_negative_bound(residual_row, negative_eps):
+            issues.append("negative_bound_residual_region")
+
+    candidate_rows = exact_best + task_count_residual_best + ([residual_row] if residual_row else [])
+    variants = {str(row.get("variant") or "") for row in candidate_rows}
+    formulation_kinds = {str(row.get("formulation_kind") or "") for row in candidate_rows}
+    sources = {str(row.get("source_probe_json") or "") for row in candidate_rows}
+    history_rounds = {str(row.get("history_round") or "") for row in candidate_rows}
+    if len(variants) > 1:
+        issues.append("mixed_variant_partition_rows")
+    if len(formulation_kinds) > 1:
+        issues.append("mixed_formulation_partition_rows")
+    if len(sources) > 1:
+        issues.append("mixed_source_probe_partition_rows")
+    if len(history_rounds) > 1:
+        issues.append("mixed_history_round_partition_rows")
+
+    for row in candidate_rows:
+        if row.get("diagnostic_only") is not True:
+            issues.append("non_diagnostic_partition_row")
+        if row.get("official_certificate_allowed") is True:
+            issues.append("partition_row_allows_official_certificate")
+        if row.get("can_claim_certificate") is True:
+            issues.append("partition_row_claims_certificate")
+        if row.get("region_can_certify_full_space") is True or row.get("can_certify_no_negative") is True:
+            issues.append("partition_row_claims_full_space_certificate")
+        if row.get("pricing_rc_audit_pass") is False:
+            issues.append("pricing_rc_audit_failed")
+
+    full_space_partition_valid = bool(
+        (target_task_sets or task_count_residual_best)
+        and not missing_exact
+        and not unexpected_exact
+        and not duplicate_exact
+        and len(exact_best) == len(target_task_sets)
+        and (bool(residual_row) or bool(task_count_residual_best and not residual_task_count_missing))
+        and not any(
+            issue
+            in {
+                "residual_forbidden_task_sets_do_not_match_exact_regions",
+                "residual_task_count_forbidden_task_sets_do_not_match_exact_regions",
+                "multiple_residual_regions",
+                "missing_residual_region",
+                "mixed_residual_partition_models",
+                "missing_residual_task_count_total",
+                "missing_residual_task_count_region",
+                "unexpected_residual_task_count_region",
+                "duplicate_residual_task_count_region",
+                "duplicate_residual_active_sortie_count_region",
+                "missing_residual_active_sortie_count_region",
+            }
+            for issue in issues
+        )
+    )
+    gate_pass = bool(
+        full_space_partition_valid
+        and exact_proven_count == len(target_task_sets)
+        and residual_proven
+        and not issues
+    )
+    unique_issues = sorted(set(issues))
+    return {
+        "partition_candidate_gate_schema_version": "lunar_ice_bpc.b4_1.partition_candidate_gate.v1",
+        "partition_candidate_gate_pass": gate_pass,
+        "partition_candidate_gate_issue_codes": unique_issues,
+        "partition_candidate_gate_issue_count": len(unique_issues),
+        "partition_candidate_gate_exact_region_count": len(exact_best),
+        "partition_candidate_gate_exact_regions_proven": exact_proven_count,
+        "partition_candidate_gate_residual_proven": residual_proven,
+        "partition_candidate_gate_residual_task_count_partition": bool(task_count_residual_best),
+        "partition_candidate_gate_residual_task_count_observed": len(residual_task_count_observed),
+        "partition_candidate_gate_full_space_partition_valid": full_space_partition_valid,
+        "partition_candidate_gate_variant": next(iter(variants)) if len(variants) == 1 else "",
+        "partition_candidate_gate_source_probe_json": next(iter(sources)) if len(sources) == 1 else "",
+        "partition_candidate_gate_history_round": next(iter(history_rounds)) if len(history_rounds) == 1 else "",
+        "partition_candidate_gate_official_certificate_allowed": False,
+        "partition_candidate_gate_note": (
+            "candidate partition is internally valid, but still diagnostic-only until final judge ledger integration"
+            if gate_pass
+            else "candidate partition is incomplete or unsafe; do not use as certificate"
+        ),
+    }
+
+
+def _canonical_task_set(tasks: Iterable[object]) -> tuple[str, ...]:
+    return tuple(sorted(str(task) for task in tasks if str(task)))
+
+
+def _row_has_negative_bound(row: dict, negative_eps: float) -> bool:
+    bound = _first_float(row.get("dual_bound"), row.get("best_reduced_cost"))
+    return bool(bound is not None and float(bound) < -abs(float(negative_eps)))
+
+
 def _targeted_restricted_region_row(
     result: dict,
     *,
@@ -1608,6 +5171,172 @@ def _targeted_restricted_region_row(
         "model_status_name": result.get("model_status_name") or "",
         "variable_count": _first_int(result.get("variable_count")),
         "constraint_count": _first_int(result.get("constraint_count")),
+        "zero_capacity_slot_truncation_enabled": bool(
+            result.get("zero_capacity_slot_truncation_enabled")
+        ),
+        "zero_capacity_slot_truncation_original_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_original_slot_count")
+        ),
+        "zero_capacity_slot_truncation_effective_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_effective_slot_count")
+        ),
+        "zero_capacity_slot_truncation_trimmed_slot_count": _first_int(
+            result.get("zero_capacity_slot_truncation_trimmed_slot_count")
+        ),
+        "zero_capacity_slot_truncation_first_zero_slot": _first_int(
+            result.get("zero_capacity_slot_truncation_first_zero_slot")
+        ),
+        "slot_sequence_capacity_live_bound_enabled": bool(
+            result.get("slot_sequence_capacity_live_bound_enabled")
+        ),
+        "slot_sequence_capacity_live_bound_tightened_slot_count": _first_int(
+            result.get("slot_sequence_capacity_live_bound_tightened_slot_count")
+        ),
+        "slot_sequence_capacity_live_bound_by_slot": result.get(
+            "slot_sequence_capacity_live_bound_by_slot"
+        ),
+        "tight_service_start_bounds_enabled": bool(
+            result.get("tight_service_start_bounds_enabled")
+        ),
+        "tight_service_start_bound_count": _first_int(
+            result.get("tight_service_start_bound_count")
+        ),
+        "tight_service_start_bound_min": _first_float(
+            result.get("tight_service_start_bound_min")
+        ),
+        "tight_service_start_bound_max": _first_float(
+            result.get("tight_service_start_bound_max")
+        ),
+        "tight_time_arc_big_m_enabled": bool(result.get("tight_time_arc_big_m_enabled")),
+        "tight_time_arc_big_m_depot_arc_count": _first_int(
+            result.get("tight_time_arc_big_m_depot_arc_count")
+        ),
+        "tight_time_arc_big_m_active_time_bound_count": _first_int(
+            result.get("tight_time_arc_big_m_active_time_bound_count")
+        ),
+        "tight_time_arc_big_m_max_reduction": _first_float(
+            result.get("tight_time_arc_big_m_max_reduction")
+        ),
+        "tight_conditional_sequence_big_m_enabled": bool(
+            result.get("tight_conditional_sequence_big_m_enabled")
+        ),
+        "tight_conditional_sequence_big_m_count": _first_int(
+            result.get("tight_conditional_sequence_big_m_count")
+        ),
+        "tight_conditional_sequence_big_m_max_reduction": _first_float(
+            result.get("tight_conditional_sequence_big_m_max_reduction")
+        ),
+        "slot_service_start_y_lower_bound_enabled": bool(
+            result.get("slot_service_start_y_lower_bound_enabled")
+        ),
+        "slot_service_start_y_lower_bound_count": _first_int(
+            result.get("slot_service_start_y_lower_bound_count")
+        ),
+        "slot_service_start_y_lower_bound_max_lift": _first_float(
+            result.get("slot_service_start_y_lower_bound_max_lift")
+        ),
+        "slot_service_start_y_lower_bound_min": _first_float(
+            result.get("slot_service_start_y_lower_bound_min")
+        ),
+        "slot_service_start_y_lower_bound_max": _first_float(
+            result.get("slot_service_start_y_lower_bound_max")
+        ),
+        "sortie_start_upper_bound": _first_float(result.get("sortie_start_upper_bound")),
+        "sortie_slots_per_journey": _first_int(result.get("sortie_slots_per_journey")),
+        "sortie_slot_bound_source": result.get("sortie_slot_bound_source") or "",
+        "sortie_slot_horizon_count_bound": _first_int(result.get("sortie_slot_horizon_count_bound")),
+        "sortie_slot_latest_start_count_bound": _first_int(result.get("sortie_slot_latest_start_count_bound")),
+        "sortie_slot_min_duration_lower_bound": _first_float(result.get("sortie_slot_min_duration_lower_bound")),
+        "sortie_slot_min_energy_recharge_duration_lower_bound": _first_float(
+            result.get("sortie_slot_min_energy_recharge_duration_lower_bound")
+        ),
+        "slot_task_time_pruning_enabled": bool(result.get("slot_task_time_pruning_enabled")),
+        "slot_task_time_feasible_assignment_count": _first_int(
+            result.get("slot_task_time_feasible_assignment_count")
+        ),
+        "slot_task_time_pruned_assignment_count": _first_int(
+            result.get("slot_task_time_pruned_assignment_count")
+        ),
+        "slot_task_time_pruned_due_count": _first_int(result.get("slot_task_time_pruned_due_count")),
+        "slot_task_time_pruned_horizon_count": _first_int(
+            result.get("slot_task_time_pruned_horizon_count")
+        ),
+        "slot_task_time_total_assignment_count": _first_int(
+            result.get("slot_task_time_total_assignment_count")
+        ),
+        "slot_task_model_assignment_count": _first_int(
+            result.get("slot_task_model_assignment_count")
+        ),
+        "slot_arc_support_pruning_enabled": bool(result.get("slot_arc_support_pruning_enabled")),
+        "slot_arc_support_feasible_assignment_count": _first_int(
+            result.get("slot_arc_support_feasible_assignment_count")
+        ),
+        "slot_arc_support_pruned_assignment_count": _first_int(
+            result.get("slot_arc_support_pruned_assignment_count")
+        ),
+        "slot_arc_support_pruned_unreachable_count": _first_int(
+            result.get("slot_arc_support_pruned_unreachable_count")
+        ),
+        "slot_arc_support_pruned_no_return_count": _first_int(
+            result.get("slot_arc_support_pruned_no_return_count")
+        ),
+        "slot_arc_support_pruned_option_count": _first_int(
+            result.get("slot_arc_support_pruned_option_count")
+        ),
+        "slot_arc_time_pruned_option_count": _first_int(result.get("slot_arc_time_pruned_option_count")),
+        "slot_sequence_capacity_arc_pruning_enabled": bool(
+            result.get("slot_sequence_capacity_arc_pruning_enabled")
+        ),
+        "slot_sequence_capacity_arc_pruned_option_count": _first_int(
+            result.get("slot_sequence_capacity_arc_pruned_option_count")
+        ),
+        "slot_sequence_capacity_mtz_disabled_slot_count": _first_int(
+            result.get("slot_sequence_capacity_mtz_disabled_slot_count")
+        ),
+        "single_task_per_active_sortie_arc_pruning_enabled": bool(
+            result.get("single_task_per_active_sortie_arc_pruning_enabled")
+        ),
+        "single_task_per_active_sortie_arc_pruned_option_count": _first_int(
+            result.get("single_task_per_active_sortie_arc_pruned_option_count")
+        ),
+        "single_task_per_active_sortie_mtz_disabled": bool(
+            result.get("single_task_per_active_sortie_mtz_disabled")
+        ),
+        "mtz_connectivity_effective": bool(result.get("mtz_connectivity_effective")),
+        "fixed_active_sortie_redundant_constraint_skipped_count": _first_int(
+            result.get("fixed_active_sortie_redundant_constraint_skipped_count")
+        ),
+        "single_task_per_active_sortie_slot_visit_eq_count": _first_int(
+            result.get("single_task_per_active_sortie_slot_visit_eq_count")
+        ),
+        "single_task_per_active_sortie_y_z_link_skipped_count": _first_int(
+            result.get("single_task_per_active_sortie_y_z_link_skipped_count")
+        ),
+        "resource_arc_pruning_enabled": bool(result.get("resource_arc_pruning_enabled")),
+        "resource_arc_pruned_option_count": _first_int(result.get("resource_arc_pruned_option_count")),
+        "resource_arc_energy_pruned_option_count": _first_int(
+            result.get("resource_arc_energy_pruned_option_count")
+        ),
+        "resource_arc_shadow_pruned_option_count": _first_int(
+            result.get("resource_arc_shadow_pruned_option_count")
+        ),
+        "resource_arc_demand_pruned_option_count": _first_int(
+            result.get("resource_arc_demand_pruned_option_count")
+        ),
+        "slot_task_sequence_capacity_upper_bound": _first_int(
+            result.get("slot_task_sequence_capacity_upper_bound")
+        ),
+        "slot_task_sequence_capacity_limited_slot_count": _first_int(
+            result.get("slot_task_sequence_capacity_limited_slot_count")
+        ),
+        "slot_task_sequence_capacity_empty_slot_count": _first_int(
+            result.get("slot_task_sequence_capacity_empty_slot_count")
+        ),
+        "slot_task_matching_capacity_upper_bound": _first_int(
+            result.get("slot_task_matching_capacity_upper_bound")
+        ),
+        **_single_journey_mip_start_fields(result),
+        **_required_task_set_region_fields(result),
         "service_start_depot_travel_lb_enabled": bool(result.get("service_start_depot_travel_lb_enabled")),
         "task_to_depot_return_travel_lb_enabled": bool(result.get("task_to_depot_return_travel_lb_enabled")),
         "pair_route_duration_lb_enabled": bool(result.get("pair_route_duration_lb_enabled")),
@@ -1833,6 +5562,11 @@ def _restricted_region_bound_ledger_row(region: dict, *, targeted_rows: list[dic
     ]
     selected = max(candidates, key=lambda item: float(item["dual_bound"])) if candidates else None
     selected_bound = None if selected is None else _first_float(selected.get("dual_bound"))
+    selected_gap_to_zero = (
+        None
+        if selected_bound is None
+        else round(max(0.0, -float(selected_bound)), 9)
+    )
     source_bound_reused = bool(selected is not None and selected.get("candidate_source") == "source_phase")
     targeted_improved = bool(
         targeted_best is not None
@@ -1859,6 +5593,10 @@ def _restricted_region_bound_ledger_row(region: dict, *, targeted_rows: list[dic
         "targeted_best_probe_json": "" if targeted_best is None else str(targeted_best.get("targeted_probe_json") or ""),
         "targeted_bound_improved_over_source": targeted_improved,
         "best_known_dual_bound": selected_bound,
+        "best_known_dual_bound_gap_to_zero": selected_gap_to_zero,
+        "best_known_dual_bound_nonnegative": bool(
+            selected_bound is not None and float(selected_bound) >= -1.0e-6
+        ),
         "best_known_best_reduced_cost": None
         if selected is None
         else _first_float(selected.get("best_reduced_cost")),
@@ -1876,6 +5614,160 @@ def _restricted_region_bound_ledger_row(region: dict, *, targeted_rows: list[dic
         "can_certify_no_negative": False,
         "diagnostic_only": True,
         "note": "restricted/no-good bound ledger row; not a full-space no-negative certificate",
+    }
+
+
+def _restricted_region_bound_coverage_summary(
+    rows: list[dict],
+    *,
+    best_known_global_lb: float | None,
+    negative_eps: float,
+) -> dict:
+    supported_rows = [
+        row for row in rows if _first_float(row.get("best_known_dual_bound")) is not None
+    ]
+    unsupported_rows = [
+        row for row in rows if _first_float(row.get("best_known_dual_bound")) is None
+    ]
+    nonnegative_rows = [
+        row
+        for row in supported_rows
+        if float(_first_float(row.get("best_known_dual_bound"))) >= -abs(float(negative_eps))
+    ]
+    negative_rows = [
+        row
+        for row in supported_rows
+        if float(_first_float(row.get("best_known_dual_bound"))) < -abs(float(negative_eps))
+    ]
+    time_limit_rows = [
+        row
+        for row in supported_rows
+        if str(row.get("selected_bound_status") or "") == "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED"
+    ]
+    exact_rows = [
+        row
+        for row in supported_rows
+        if str(row.get("selected_bound_exact_status") or "").startswith("RESTRICTED_PRICING_OPTIMAL")
+        or str(row.get("selected_bound_exact_status") or "").startswith("EXACT_PRICING_OPTIMAL")
+    ]
+    gap = None if best_known_global_lb is None else round(max(0.0, -float(best_known_global_lb)), 9)
+    source_region = ""
+    source_kind = ""
+    if best_known_global_lb is not None:
+        worst = min(
+            supported_rows,
+            key=lambda row: float(_first_float(row.get("best_known_dual_bound"))),
+            default=None,
+        )
+        if worst is not None:
+            source_region = str(worst.get("region_id") or "")
+            source_kind = str(worst.get("selected_bound_source") or "")
+    return {
+        "supported_bound_region_count": len(supported_rows),
+        "unsupported_bound_region_count": len(unsupported_rows),
+        "nonnegative_bound_region_count": len(nonnegative_rows),
+        "negative_bound_region_count": len(negative_rows),
+        "time_limit_bound_region_count": len(time_limit_rows),
+        "exact_bound_region_count": len(exact_rows),
+        "region_bound_gap_to_zero": gap,
+        "region_bound_gap_source_region_id": source_region,
+        "region_bound_gap_source": source_kind,
+        "region_bound_diagnostic_complete_for_listed_regions": bool(
+            rows and len(unsupported_rows) == 0
+        ),
+        "region_bound_can_certify_if_partition": bool(
+            rows
+            and len(unsupported_rows) == 0
+            and len(negative_rows) == 0
+            and best_known_global_lb is not None
+            and float(best_known_global_lb) >= -abs(float(negative_eps))
+        ),
+        "region_bound_official_certificate_allowed": False,
+    }
+
+
+def _restricted_region_partition_audit(
+    diagnostic: dict,
+    rows: list[dict],
+    *,
+    negative_eps: float,
+) -> dict:
+    negatives = list(diagnostic.get("harvested_negatives") or [])
+    observed_prefixes = sorted(
+        {
+            _first_int(row.get("forbidden_task_set_count"))
+            for row in rows
+            if _first_int(row.get("forbidden_task_set_count")) > 0
+        }
+    )
+    deepest_prefix = max(observed_prefixes, default=0)
+    residual_rows = [
+        row
+        for row in rows
+        if _first_int(row.get("forbidden_task_set_count")) == deepest_prefix
+    ]
+    residual_row = residual_rows[0] if residual_rows else {}
+    residual_bound = _first_float(residual_row.get("best_known_dual_bound"))
+    required_exact_task_set_regions = max(0, deepest_prefix)
+    observed_exact_task_set_regions = 0
+    missing_exact_task_set_regions = max(
+        0,
+        required_exact_task_set_regions - observed_exact_task_set_regions,
+    )
+    residual_region_required = bool(required_exact_task_set_regions > 0)
+    residual_region_observed = bool(residual_rows)
+    missing_residual_region_count = 0 if (not residual_region_required or residual_region_observed) else 1
+    prefix_regions_nested = bool(len(observed_prefixes) > 1)
+    prefix_regions_disjoint = bool(len(observed_prefixes) <= 1)
+    residual_nonnegative = bool(
+        residual_bound is not None and float(residual_bound) >= -abs(float(negative_eps))
+    )
+    issues: list[str] = []
+    if prefix_regions_nested:
+        issues.append("prefix_no_good_regions_are_nested_not_disjoint")
+    if missing_exact_task_set_regions:
+        issues.append("missing_exact_task_set_region_proofs")
+    if missing_residual_region_count:
+        issues.append("missing_final_residual_region_proof")
+    if residual_region_required and residual_region_observed and not residual_nonnegative:
+        issues.append("final_residual_region_bound_negative_or_missing")
+    if negatives and not rows:
+        issues.append("no_restricted_region_rows")
+    can_certify_if_partition = bool(
+        required_exact_task_set_regions > 0
+        and missing_exact_task_set_regions == 0
+        and missing_residual_region_count == 0
+        and residual_nonnegative
+        and prefix_regions_disjoint
+        and not issues
+    )
+    return {
+        "region_partition_audit_schema_version": "lunar_ice_bpc.b4_1_region_partition_audit.v1",
+        "region_partition_family": "prefix_no_good_residual_regions",
+        "region_partition_required_model": "exact_task_set_regions_plus_final_residual",
+        "region_partition_observed_prefix_count": len(observed_prefixes),
+        "region_partition_observed_prefixes": observed_prefixes,
+        "region_partition_prefix_regions_nested": prefix_regions_nested,
+        "region_partition_regions_disjoint": prefix_regions_disjoint,
+        "region_partition_covers_full_space": False,
+        "region_partition_complete": False,
+        "region_partition_can_certify": False,
+        "region_partition_can_certify_if_all_missing_parts_proven": can_certify_if_partition,
+        "region_partition_required_exact_task_set_region_count": required_exact_task_set_regions,
+        "region_partition_observed_exact_task_set_region_count": observed_exact_task_set_regions,
+        "region_partition_missing_exact_task_set_region_count": missing_exact_task_set_regions,
+        "region_partition_residual_region_required": residual_region_required,
+        "region_partition_residual_region_observed": residual_region_observed,
+        "region_partition_missing_residual_region_count": missing_residual_region_count,
+        "region_partition_residual_region_id": str(residual_row.get("region_id") or ""),
+        "region_partition_residual_best_known_dual_bound": residual_bound,
+        "region_partition_residual_bound_nonnegative": residual_nonnegative,
+        "region_partition_issue_codes": issues,
+        "region_partition_note": (
+            "Prefix no-good rows are nested residual spaces. A full certificate would need "
+            "separate exact-task-set region proofs for each excluded task set plus a final "
+            "residual no-negative proof under the same true dual."
+        ),
     }
 
 
@@ -2038,7 +5930,47 @@ def render_b4_1_markdown(report: dict, *, rows_csv: str | Path, summary_json: st
             f"worker-only `{diagnostics.get('tail_dual_worker_only_count', 0)}`；"
             f"true-dual RC recomputed `{diagnostics.get('tail_dual_true_dual_recomputed_count', 0)}`；"
             f"tail no-column certifies `{diagnostics.get('tail_dual_no_column_can_certify_count', 0)}`。",
-            f"- Stage A observed regression modes: `{', '.join(diagnostics.get('stage_a_observed_regression_modes') or []) or 'none'}`。",
+            f"- Partition candidate audit rows: `{diagnostics.get('partition_candidate_audit_row_count', 0)}`；"
+            f"gate pass `{diagnostics.get('partition_candidate_gate_pass_count', 0)}`；"
+            f"gate fail `{diagnostics.get('partition_candidate_gate_fail_count', 0)}`；"
+            f"candidate no-negative `{diagnostics.get('partition_candidate_can_certify_no_negative_count', 0)}`；"
+            f"redline fail `{diagnostics.get('partition_candidate_redline_fail_count', 0)}`。",
+            f"- Partition candidate top issue: `{diagnostics.get('partition_candidate_top_issue') or 'none'}`；"
+            f"issue counts `{_compact_markdown_json(diagnostics.get('partition_candidate_issue_counts') or {})}`。",
+            f"- Partition negative regions: `{diagnostics.get('partition_negative_region_count', 0)}`；"
+            f"payload available `{diagnostics.get('partition_negative_payload_available_count', 0)}`；"
+            f"best negative RC `{diagnostics.get('partition_best_negative_rc')}`。",
+        f"- Partition negative relation: already active `{diagnostics.get('partition_negative_already_active_count', 0)}`；"
+        f"replacement `{diagnostics.get('partition_negative_replacement_task_set_count', 0)}`；"
+        f"new task-set `{diagnostics.get('partition_negative_new_task_set_count', 0)}`。",
+        f"- Partition model size: max variables `{diagnostics.get('partition_region_variable_count_max', 0)}`；"
+        f"max constraints `{diagnostics.get('partition_region_constraint_count_max', 0)}`；"
+        f"max mean variables `{diagnostics.get('partition_region_variable_count_mean_max')}`；"
+        f"max mean constraints `{diagnostics.get('partition_region_constraint_count_mean_max')}`。",
+        f"- Partition slot pruning: max feasible assignments "
+        f"`{diagnostics.get('partition_region_slot_task_time_feasible_assignment_count_max', 0)}`；"
+        f"pruned assignments sum "
+        f"`{diagnostics.get('partition_region_slot_task_time_pruned_assignment_count_sum', 0)}`；"
+        f"pruned arc options sum "
+        f"`{diagnostics.get('partition_region_slot_arc_time_pruned_option_count_sum', 0)}`。",
+        f"- Partition dual/active scope mismatch rows: `{diagnostics.get('partition_dual_scope_mismatch_count', 0)}`；"
+        f"max active-pool-after-dual delta `{diagnostics.get('partition_active_pool_after_dual_delta_max', 0)}`；"
+        f"negative RC audit fail `{diagnostics.get('partition_negative_rc_audit_fail_count', 0)}`。",
+        f"- Partition region MIP-start: enabled `{diagnostics.get('partition_region_mip_start_enabled_count', 0)}`；"
+        f"OK `{diagnostics.get('partition_region_mip_start_ok_count', 0)}`；"
+        f"exact OK `{diagnostics.get('partition_exact_region_mip_start_ok_count', 0)}`；"
+        f"residual OK `{diagnostics.get('partition_residual_region_mip_start_ok_count', 0)}`。",
+        f"- Residual task-count partition: enabled rows `{diagnostics.get('residual_task_count_partition_enabled_count', 0)}`；"
+        f"expected `{diagnostics.get('residual_task_count_region_expected_count')}`；"
+        f"observed `{diagnostics.get('residual_task_count_region_observed_count')}`；"
+        f"proven `{diagnostics.get('residual_task_count_region_proven_count')}`；"
+        f"incomplete `{diagnostics.get('residual_task_count_region_incomplete_count')}`；"
+        f"negative `{diagnostics.get('residual_task_count_region_negative_count')}`；"
+        f"missing `{diagnostics.get('residual_task_count_region_missing_count')}`。",
+        f"- Partition refreshed dual rows: `{diagnostics.get('partition_refreshed_dual_row_count', 0)}`；"
+        f"refresh negative count `{diagnostics.get('partition_dual_refresh_negative_count', 0)}`；"
+        f"refresh min RC `{diagnostics.get('partition_dual_refresh_min_rc')}`。",
+        f"- Stage A observed regression modes: `{', '.join(diagnostics.get('stage_a_observed_regression_modes') or []) or 'none'}`。",
             f"- Stage A missing regression modes: `{', '.join(diagnostics.get('stage_a_missing_regression_modes') or []) or 'none'}`。",
             f"- Stage B observed matrix cells: `{', '.join(diagnostics.get('stage_b_observed_matrix_cells') or []) or 'none'}`。",
             f"- Stage B missing matrix cells: `{', '.join(diagnostics.get('stage_b_missing_matrix_cells') or []) or 'none'}`。",
@@ -2098,7 +6030,6 @@ def _stage_a_row(
     max_tree_nodes: int | None = None,
     max_branch_depth: int | None = None,
 ) -> dict:
-    final_judge = raw.get("final_judge") if isinstance(raw.get("final_judge"), dict) else {}
     hidden_audit = raw.get("hidden_negative_audit") if isinstance(raw.get("hidden_negative_audit"), dict) else {}
     hidden_miss_reason_counts = _hidden_negative_miss_reason_counts(hidden_audit)
     b0_ablation = raw.get("b0_ablation") if isinstance(raw.get("b0_ablation"), dict) else {}
@@ -2109,6 +6040,9 @@ def _stage_a_row(
     history = raw.get("history") if isinstance(raw.get("history"), list) else []
     nodes = raw.get("nodes") if isinstance(raw.get("nodes"), list) else []
     root_node = nodes[0] if nodes and isinstance(nodes[0], dict) else {}
+    final_judge = raw.get("final_judge") if isinstance(raw.get("final_judge"), dict) else {}
+    if not final_judge and isinstance(root_node.get("final_judge"), dict):
+        final_judge = root_node["final_judge"]
     root_history = root_node.get("history") if isinstance(root_node.get("history"), list) else []
     root_last = root_history[-1] if root_history and isinstance(root_history[-1], dict) else {}
     last_worker = _last_worker_payload(history)
@@ -2128,7 +6062,10 @@ def _stage_a_row(
         "b4_1_matrix_cell": _stage_a_matrix_cell(mode),
         "b4_1_proof_tail_component": _stage_a_component(mode),
         "b4_1_formulation_profile": "B3B_representative_universe_branch_rc_audit",
-        "b4_1_harvesting_enabled": mode == B41_STAGE_A_B4V2_HARVEST,
+        "b4_1_harvesting_enabled": bool(
+            mode == B41_STAGE_A_B4V2_HARVEST
+            or (stage != "A" and _probe_has_final_judge_harvest_telemetry(final_judge))
+        ),
         "b4_1_hidden_negative_audit_enabled": mode in {B41_STAGE_A_B4V2_HARVEST, B41_STAGE_A_TAIL_DUAL_OFF, B41_STAGE_A_TAIL_DUAL_ON},
         "b4_1_frontier_ledger_enabled": False,
         "b4_1_official_certificate_allowed": mode in {B41_STAGE_A_B3B_BASELINE, B41_STAGE_A_B4V2_HARVEST},
@@ -2148,6 +6085,16 @@ def _stage_a_row(
         "certificate_scope": cert_scope,
         "pricing_state": pricing_state,
         "exact_status": raw.get("exact_status") or "",
+        "variable_count": _first_int(
+            final_judge.get("variable_count"),
+            root_last.get("variable_count"),
+            raw.get("variable_count"),
+        ),
+        "constraint_count": _first_int(
+            final_judge.get("constraint_count"),
+            root_last.get("constraint_count"),
+            raw.get("constraint_count"),
+        ),
         "bpc_tree_optimal": cert_scope == CertificateScope.BPC_TREE_OPTIMAL.value,
         "b3_objective_diff_vs_b0": None
         if b0_objective is None or b3_objective is None
@@ -2190,6 +6137,56 @@ def _stage_a_row(
         "harvest_best_true_rc": final_judge.get("harvest_best_true_rc"),
         "harvest_worst_selected_true_rc": final_judge.get("harvest_worst_selected_true_rc"),
         "harvest_avg_pairwise_jaccard": final_judge.get("harvest_avg_pairwise_jaccard", raw.get("harvest_avg_pairwise_jaccard")),
+        "compact_pricing_phase": final_judge.get("compact_pricing_phase"),
+        "route_template_pre_harvest_enabled": bool(final_judge.get("route_template_pre_harvest_enabled")),
+        "route_template_pre_harvest_status": final_judge.get("route_template_pre_harvest_status"),
+        "route_template_pre_harvest_target": final_judge.get("route_template_pre_harvest_target"),
+        "route_template_pre_harvest_time_cap_sec": final_judge.get(
+            "route_template_pre_harvest_time_cap_sec"
+        ),
+        "route_template_pre_harvest_max_direct_tasks": final_judge.get(
+            "route_template_pre_harvest_max_direct_tasks"
+        ),
+        "route_template_pre_harvest_max_active_seeds": final_judge.get(
+            "route_template_pre_harvest_max_active_seeds"
+        ),
+        "route_template_pre_harvest_seed_strategy": final_judge.get(
+            "route_template_pre_harvest_seed_strategy"
+        ),
+        "route_template_pre_harvest_neighborhood_enabled": final_judge.get(
+            "route_template_pre_harvest_neighborhood_enabled"
+        ),
+        "route_template_pre_harvest_max_neighborhood_seeds": final_judge.get(
+            "route_template_pre_harvest_max_neighborhood_seeds"
+        ),
+        "route_template_pre_harvest_max_candidate_sets": final_judge.get(
+            "route_template_pre_harvest_max_candidate_sets"
+        ),
+        "route_template_pre_harvest_seed_count": final_judge.get("route_template_pre_harvest_seed_count"),
+        "route_template_pre_harvest_candidate_round_count": final_judge.get(
+            "route_template_pre_harvest_candidate_round_count"
+        ),
+        "route_template_pre_harvest_candidate_round_limit": final_judge.get(
+            "route_template_pre_harvest_candidate_round_limit"
+        ),
+        "route_template_pre_harvest_candidate_negative_count": final_judge.get(
+            "route_template_pre_harvest_candidate_negative_count"
+        ),
+        "route_template_pre_harvest_selected_count": final_judge.get(
+            "route_template_pre_harvest_selected_count"
+        ),
+        "route_template_pre_harvest_selected_new_task_set_count": final_judge.get(
+            "route_template_pre_harvest_selected_new_task_set_count"
+        ),
+        "route_template_pre_harvest_selected_replacement_task_set_count": final_judge.get(
+            "route_template_pre_harvest_selected_replacement_task_set_count"
+        ),
+        "route_template_pre_harvest_pricing_wall_time_sec": final_judge.get(
+            "route_template_pre_harvest_pricing_wall_time_sec"
+        ),
+        "route_template_pre_harvest_fallback_enabled": final_judge.get(
+            "route_template_pre_harvest_fallback_enabled"
+        ),
         "compact_optimization_harvest_enabled": bool(
             final_judge.get("compact_optimization_harvest_enabled")
         ),
@@ -2216,6 +6213,173 @@ def _stage_a_row(
         "compact_final_judge_profile": final_judge.get("compact_final_judge_profile"),
         "compact_final_judge_formulation_profile": final_judge.get("compact_final_judge_formulation_profile"),
         "compact_final_judge_phase_mode": final_judge.get("compact_final_judge_phase_mode"),
+        "objective_bound_no_negative_cutoff_enabled": bool(
+            final_judge.get("objective_bound_no_negative_cutoff_enabled")
+        ),
+        "objective_bound_no_negative_cutoff_value": final_judge.get(
+            "objective_bound_no_negative_cutoff_value"
+        ),
+        "objective_bound_no_negative_cutoff_can_certify": bool(
+            final_judge.get("objective_bound_no_negative_cutoff_can_certify")
+        ),
+        "zero_capacity_slot_truncation_enabled": bool(
+            final_judge.get("zero_capacity_slot_truncation_enabled")
+        ),
+        "zero_capacity_slot_truncation_original_slot_count": _first_int(
+            final_judge.get("zero_capacity_slot_truncation_original_slot_count")
+        ),
+        "zero_capacity_slot_truncation_effective_slot_count": _first_int(
+            final_judge.get("zero_capacity_slot_truncation_effective_slot_count")
+        ),
+        "zero_capacity_slot_truncation_trimmed_slot_count": _first_int(
+            final_judge.get("zero_capacity_slot_truncation_trimmed_slot_count")
+        ),
+        "zero_capacity_slot_truncation_first_zero_slot": _first_int(
+            final_judge.get("zero_capacity_slot_truncation_first_zero_slot")
+        ),
+        "slot_sequence_capacity_live_bound_enabled": bool(
+            final_judge.get("slot_sequence_capacity_live_bound_enabled")
+        ),
+        "slot_sequence_capacity_live_bound_tightened_slot_count": _first_int(
+            final_judge.get("slot_sequence_capacity_live_bound_tightened_slot_count")
+        ),
+        "slot_sequence_capacity_live_bound_by_slot": final_judge.get(
+            "slot_sequence_capacity_live_bound_by_slot"
+        ),
+        "tight_service_start_bounds_enabled": bool(
+            final_judge.get("tight_service_start_bounds_enabled")
+        ),
+        "tight_service_start_bound_count": _first_int(
+            final_judge.get("tight_service_start_bound_count")
+        ),
+        "tight_service_start_bound_min": _first_float(
+            final_judge.get("tight_service_start_bound_min")
+        ),
+        "tight_service_start_bound_max": _first_float(
+            final_judge.get("tight_service_start_bound_max")
+        ),
+        "tight_time_arc_big_m_enabled": bool(final_judge.get("tight_time_arc_big_m_enabled")),
+        "tight_time_arc_big_m_depot_arc_count": _first_int(
+            final_judge.get("tight_time_arc_big_m_depot_arc_count")
+        ),
+        "tight_time_arc_big_m_active_time_bound_count": _first_int(
+            final_judge.get("tight_time_arc_big_m_active_time_bound_count")
+        ),
+        "tight_time_arc_big_m_max_reduction": _first_float(
+            final_judge.get("tight_time_arc_big_m_max_reduction")
+        ),
+        "tight_conditional_sequence_big_m_enabled": bool(
+            final_judge.get("tight_conditional_sequence_big_m_enabled")
+        ),
+        "tight_conditional_sequence_big_m_count": _first_int(
+            final_judge.get("tight_conditional_sequence_big_m_count")
+        ),
+        "tight_conditional_sequence_big_m_max_reduction": _first_float(
+            final_judge.get("tight_conditional_sequence_big_m_max_reduction")
+        ),
+        "slot_service_start_y_lower_bound_enabled": bool(
+            final_judge.get("slot_service_start_y_lower_bound_enabled")
+        ),
+        "slot_service_start_y_lower_bound_count": _first_int(
+            final_judge.get("slot_service_start_y_lower_bound_count")
+        ),
+        "slot_service_start_y_lower_bound_max_lift": _first_float(
+            final_judge.get("slot_service_start_y_lower_bound_max_lift")
+        ),
+        "slot_service_start_y_lower_bound_min": _first_float(
+            final_judge.get("slot_service_start_y_lower_bound_min")
+        ),
+        "slot_service_start_y_lower_bound_max": _first_float(
+            final_judge.get("slot_service_start_y_lower_bound_max")
+        ),
+        "sortie_start_upper_bound": _first_float(final_judge.get("sortie_start_upper_bound")),
+        "sortie_slots_per_journey": _first_int(final_judge.get("sortie_slots_per_journey")),
+        "sortie_slot_bound_source": final_judge.get("sortie_slot_bound_source") or "",
+        "sortie_slot_horizon_count_bound": _first_int(final_judge.get("sortie_slot_horizon_count_bound")),
+        "sortie_slot_latest_start_count_bound": _first_int(
+            final_judge.get("sortie_slot_latest_start_count_bound")
+        ),
+        "sortie_slot_min_duration_lower_bound": _first_float(
+            final_judge.get("sortie_slot_min_duration_lower_bound")
+        ),
+        "sortie_slot_min_energy_recharge_duration_lower_bound": _first_float(
+            final_judge.get("sortie_slot_min_energy_recharge_duration_lower_bound")
+        ),
+        "slot_task_time_pruning_enabled": bool(final_judge.get("slot_task_time_pruning_enabled")),
+        "slot_task_time_feasible_assignment_count": final_judge.get(
+            "slot_task_time_feasible_assignment_count"
+        ),
+        "slot_task_time_pruned_assignment_count": final_judge.get(
+            "slot_task_time_pruned_assignment_count"
+        ),
+        "slot_task_time_pruned_due_count": final_judge.get("slot_task_time_pruned_due_count"),
+        "slot_task_time_pruned_horizon_count": final_judge.get(
+            "slot_task_time_pruned_horizon_count"
+        ),
+        "slot_task_time_total_assignment_count": final_judge.get("slot_task_time_total_assignment_count"),
+        "slot_task_time_original_total_assignment_count": final_judge.get(
+            "slot_task_time_original_total_assignment_count"
+        ),
+        "slot_task_model_assignment_count": final_judge.get("slot_task_model_assignment_count"),
+        "slot_arc_support_pruning_enabled": bool(final_judge.get("slot_arc_support_pruning_enabled")),
+        "slot_arc_support_feasible_assignment_count": final_judge.get(
+            "slot_arc_support_feasible_assignment_count"
+        ),
+        "slot_arc_support_pruned_assignment_count": final_judge.get(
+            "slot_arc_support_pruned_assignment_count"
+        ),
+        "slot_arc_support_pruned_unreachable_count": final_judge.get(
+            "slot_arc_support_pruned_unreachable_count"
+        ),
+        "slot_arc_support_pruned_no_return_count": final_judge.get(
+            "slot_arc_support_pruned_no_return_count"
+        ),
+        "slot_arc_support_pruned_option_count": final_judge.get(
+            "slot_arc_support_pruned_option_count"
+        ),
+        "slot_arc_time_pruned_option_count": final_judge.get("slot_arc_time_pruned_option_count"),
+        "slot_sequence_capacity_arc_pruning_enabled": bool(
+            final_judge.get("slot_sequence_capacity_arc_pruning_enabled")
+        ),
+        "slot_sequence_capacity_arc_pruned_option_count": final_judge.get(
+            "slot_sequence_capacity_arc_pruned_option_count"
+        ),
+        "slot_sequence_capacity_mtz_disabled_slot_count": final_judge.get(
+            "slot_sequence_capacity_mtz_disabled_slot_count"
+        ),
+        "single_task_per_active_sortie_arc_pruning_enabled": bool(
+            final_judge.get("single_task_per_active_sortie_arc_pruning_enabled")
+        ),
+        "single_task_per_active_sortie_arc_pruned_option_count": final_judge.get(
+            "single_task_per_active_sortie_arc_pruned_option_count"
+        ),
+        "single_task_per_active_sortie_mtz_disabled": bool(
+            final_judge.get("single_task_per_active_sortie_mtz_disabled")
+        ),
+        "mtz_connectivity_effective": bool(final_judge.get("mtz_connectivity_effective")),
+        "fixed_active_sortie_redundant_constraint_skipped_count": final_judge.get(
+            "fixed_active_sortie_redundant_constraint_skipped_count"
+        ),
+        "single_task_per_active_sortie_slot_visit_eq_count": final_judge.get(
+            "single_task_per_active_sortie_slot_visit_eq_count"
+        ),
+        "single_task_per_active_sortie_y_z_link_skipped_count": final_judge.get(
+            "single_task_per_active_sortie_y_z_link_skipped_count"
+        ),
+        "resource_arc_pruning_enabled": bool(final_judge.get("resource_arc_pruning_enabled")),
+        "resource_arc_pruned_option_count": final_judge.get("resource_arc_pruned_option_count"),
+        "resource_arc_energy_pruned_option_count": final_judge.get(
+            "resource_arc_energy_pruned_option_count"
+        ),
+        "resource_arc_shadow_pruned_option_count": final_judge.get(
+            "resource_arc_shadow_pruned_option_count"
+        ),
+        "resource_arc_demand_pruned_option_count": final_judge.get(
+            "resource_arc_demand_pruned_option_count"
+        ),
+        **_dual_task_slot_full_space_lower_bound_fields(final_judge),
+        **_single_journey_mip_start_fields(final_judge),
+        **_required_task_set_region_fields(final_judge),
         "service_start_depot_travel_lb_enabled": bool(
             final_judge.get("service_start_depot_travel_lb_enabled")
         ),
@@ -2447,6 +6611,44 @@ def _stage_probe_row(row: dict, *, stage: str, mode: str, matrix_group: str) -> 
         "compact_final_judge_profile": row.get("compact_final_judge_profile"),
         "compact_final_judge_formulation_profile": row.get("compact_final_judge_formulation_profile"),
         "compact_final_judge_phase_mode": row.get("compact_final_judge_phase_mode"),
+        "sortie_slots_per_journey": row.get("sortie_slots_per_journey"),
+        "sortie_slot_bound_source": row.get("sortie_slot_bound_source"),
+        "sortie_slot_horizon_count_bound": row.get("sortie_slot_horizon_count_bound"),
+        "sortie_slot_latest_start_count_bound": row.get("sortie_slot_latest_start_count_bound"),
+        "sortie_slot_min_duration_lower_bound": row.get("sortie_slot_min_duration_lower_bound"),
+        "sortie_slot_min_energy_recharge_duration_lower_bound": row.get(
+            "sortie_slot_min_energy_recharge_duration_lower_bound"
+        ),
+        "slot_task_time_pruning_enabled": bool(row.get("slot_task_time_pruning_enabled")),
+        "slot_task_time_feasible_assignment_count": row.get("slot_task_time_feasible_assignment_count"),
+        "slot_task_time_pruned_assignment_count": row.get("slot_task_time_pruned_assignment_count"),
+        "slot_task_time_pruned_due_count": row.get("slot_task_time_pruned_due_count"),
+        "slot_task_time_pruned_horizon_count": row.get("slot_task_time_pruned_horizon_count"),
+        "slot_task_time_total_assignment_count": row.get("slot_task_time_total_assignment_count"),
+        "slot_task_model_assignment_count": row.get("slot_task_model_assignment_count"),
+        "slot_arc_support_pruning_enabled": bool(row.get("slot_arc_support_pruning_enabled")),
+        "slot_arc_support_feasible_assignment_count": row.get(
+            "slot_arc_support_feasible_assignment_count"
+        ),
+        "slot_arc_support_pruned_assignment_count": row.get(
+            "slot_arc_support_pruned_assignment_count"
+        ),
+        "slot_arc_support_pruned_unreachable_count": row.get(
+            "slot_arc_support_pruned_unreachable_count"
+        ),
+        "slot_arc_support_pruned_no_return_count": row.get(
+            "slot_arc_support_pruned_no_return_count"
+        ),
+        "slot_arc_support_pruned_option_count": row.get("slot_arc_support_pruned_option_count"),
+        "slot_arc_time_pruned_option_count": row.get("slot_arc_time_pruned_option_count"),
+        "resource_arc_pruning_enabled": bool(row.get("resource_arc_pruning_enabled")),
+        "resource_arc_pruned_option_count": row.get("resource_arc_pruned_option_count"),
+        "resource_arc_energy_pruned_option_count": row.get("resource_arc_energy_pruned_option_count"),
+        "resource_arc_shadow_pruned_option_count": row.get("resource_arc_shadow_pruned_option_count"),
+        "resource_arc_demand_pruned_option_count": row.get("resource_arc_demand_pruned_option_count"),
+        **_dual_task_slot_full_space_lower_bound_fields(row),
+        **_single_journey_mip_start_fields(row),
+        **_required_task_set_region_fields(row),
         "service_start_depot_travel_lb_enabled": bool(row.get("service_start_depot_travel_lb_enabled")),
         "service_start_depot_travel_lb_count": row.get("service_start_depot_travel_lb_count"),
         "task_to_depot_return_travel_lb_enabled": bool(row.get("task_to_depot_return_travel_lb_enabled")),
@@ -2580,6 +6782,164 @@ def _stage_b_probe_evidence_rows(
             "compact_final_judge_profile": final_judge.get("compact_final_judge_profile"),
             "compact_final_judge_formulation_profile": final_judge.get("compact_final_judge_formulation_profile"),
             "compact_final_judge_phase_mode": final_judge.get("compact_final_judge_phase_mode"),
+            "objective_bound_no_negative_cutoff_enabled": bool(
+                final_judge.get("objective_bound_no_negative_cutoff_enabled")
+            ),
+            "objective_bound_no_negative_cutoff_value": final_judge.get(
+                "objective_bound_no_negative_cutoff_value"
+            ),
+            "objective_bound_no_negative_cutoff_can_certify": bool(
+                final_judge.get("objective_bound_no_negative_cutoff_can_certify")
+            ),
+            "zero_capacity_slot_truncation_enabled": bool(
+                final_judge.get("zero_capacity_slot_truncation_enabled")
+            ),
+            "zero_capacity_slot_truncation_original_slot_count": final_judge.get(
+                "zero_capacity_slot_truncation_original_slot_count"
+            ),
+            "zero_capacity_slot_truncation_effective_slot_count": final_judge.get(
+                "zero_capacity_slot_truncation_effective_slot_count"
+            ),
+            "zero_capacity_slot_truncation_trimmed_slot_count": final_judge.get(
+                "zero_capacity_slot_truncation_trimmed_slot_count"
+            ),
+            "zero_capacity_slot_truncation_first_zero_slot": final_judge.get(
+                "zero_capacity_slot_truncation_first_zero_slot"
+            ),
+            "slot_sequence_capacity_live_bound_enabled": bool(
+                final_judge.get("slot_sequence_capacity_live_bound_enabled")
+            ),
+            "slot_sequence_capacity_live_bound_tightened_slot_count": final_judge.get(
+                "slot_sequence_capacity_live_bound_tightened_slot_count"
+            ),
+            "slot_sequence_capacity_live_bound_by_slot": final_judge.get(
+                "slot_sequence_capacity_live_bound_by_slot"
+            ),
+            "tight_service_start_bounds_enabled": bool(
+                final_judge.get("tight_service_start_bounds_enabled")
+            ),
+            "tight_service_start_bound_count": final_judge.get(
+                "tight_service_start_bound_count"
+            ),
+            "tight_service_start_bound_min": final_judge.get(
+                "tight_service_start_bound_min"
+            ),
+            "tight_service_start_bound_max": final_judge.get(
+                "tight_service_start_bound_max"
+            ),
+            "tight_time_arc_big_m_enabled": bool(
+                final_judge.get("tight_time_arc_big_m_enabled")
+            ),
+            "tight_time_arc_big_m_depot_arc_count": final_judge.get(
+                "tight_time_arc_big_m_depot_arc_count"
+            ),
+            "tight_time_arc_big_m_active_time_bound_count": final_judge.get(
+                "tight_time_arc_big_m_active_time_bound_count"
+            ),
+            "tight_time_arc_big_m_max_reduction": final_judge.get(
+                "tight_time_arc_big_m_max_reduction"
+            ),
+            "tight_conditional_sequence_big_m_enabled": bool(
+                final_judge.get("tight_conditional_sequence_big_m_enabled")
+            ),
+            "tight_conditional_sequence_big_m_count": final_judge.get(
+                "tight_conditional_sequence_big_m_count"
+            ),
+            "tight_conditional_sequence_big_m_max_reduction": final_judge.get(
+                "tight_conditional_sequence_big_m_max_reduction"
+            ),
+            "slot_service_start_y_lower_bound_enabled": bool(
+                final_judge.get("slot_service_start_y_lower_bound_enabled")
+            ),
+            "slot_service_start_y_lower_bound_count": final_judge.get(
+                "slot_service_start_y_lower_bound_count"
+            ),
+            "slot_service_start_y_lower_bound_max_lift": final_judge.get(
+                "slot_service_start_y_lower_bound_max_lift"
+            ),
+            "slot_service_start_y_lower_bound_min": final_judge.get(
+                "slot_service_start_y_lower_bound_min"
+            ),
+            "slot_service_start_y_lower_bound_max": final_judge.get(
+                "slot_service_start_y_lower_bound_max"
+            ),
+            "sortie_start_upper_bound": final_judge.get("sortie_start_upper_bound"),
+            "sortie_slots_per_journey": final_judge.get("sortie_slots_per_journey"),
+            "sortie_slot_bound_source": final_judge.get("sortie_slot_bound_source"),
+            "sortie_slot_horizon_count_bound": final_judge.get("sortie_slot_horizon_count_bound"),
+            "sortie_slot_latest_start_count_bound": final_judge.get("sortie_slot_latest_start_count_bound"),
+            "sortie_slot_min_duration_lower_bound": final_judge.get("sortie_slot_min_duration_lower_bound"),
+            "sortie_slot_min_energy_recharge_duration_lower_bound": final_judge.get(
+                "sortie_slot_min_energy_recharge_duration_lower_bound"
+            ),
+            "slot_task_time_pruning_enabled": bool(final_judge.get("slot_task_time_pruning_enabled")),
+            "slot_task_time_feasible_assignment_count": final_judge.get(
+                "slot_task_time_feasible_assignment_count"
+            ),
+            "slot_task_time_pruned_assignment_count": final_judge.get(
+                "slot_task_time_pruned_assignment_count"
+            ),
+            "slot_task_time_pruned_due_count": final_judge.get("slot_task_time_pruned_due_count"),
+            "slot_task_time_pruned_horizon_count": final_judge.get(
+                "slot_task_time_pruned_horizon_count"
+            ),
+            "slot_task_time_total_assignment_count": final_judge.get(
+                "slot_task_time_total_assignment_count"
+            ),
+            "slot_task_model_assignment_count": final_judge.get("slot_task_model_assignment_count"),
+            "slot_arc_support_pruning_enabled": bool(
+                final_judge.get("slot_arc_support_pruning_enabled")
+            ),
+            "slot_arc_support_feasible_assignment_count": final_judge.get(
+                "slot_arc_support_feasible_assignment_count"
+            ),
+            "slot_arc_support_pruned_assignment_count": final_judge.get(
+                "slot_arc_support_pruned_assignment_count"
+            ),
+            "slot_arc_support_pruned_unreachable_count": final_judge.get(
+                "slot_arc_support_pruned_unreachable_count"
+            ),
+            "slot_arc_support_pruned_no_return_count": final_judge.get(
+                "slot_arc_support_pruned_no_return_count"
+            ),
+            "slot_arc_support_pruned_option_count": final_judge.get(
+                "slot_arc_support_pruned_option_count"
+            ),
+            "slot_arc_time_pruned_option_count": final_judge.get(
+                "slot_arc_time_pruned_option_count"
+            ),
+            "single_task_per_active_sortie_arc_pruning_enabled": bool(
+                final_judge.get("single_task_per_active_sortie_arc_pruning_enabled")
+            ),
+            "single_task_per_active_sortie_arc_pruned_option_count": final_judge.get(
+                "single_task_per_active_sortie_arc_pruned_option_count"
+            ),
+            "single_task_per_active_sortie_mtz_disabled": bool(
+                final_judge.get("single_task_per_active_sortie_mtz_disabled")
+            ),
+            "mtz_connectivity_effective": bool(final_judge.get("mtz_connectivity_effective")),
+            "fixed_active_sortie_redundant_constraint_skipped_count": final_judge.get(
+                "fixed_active_sortie_redundant_constraint_skipped_count"
+            ),
+            "single_task_per_active_sortie_slot_visit_eq_count": final_judge.get(
+                "single_task_per_active_sortie_slot_visit_eq_count"
+            ),
+            "single_task_per_active_sortie_y_z_link_skipped_count": final_judge.get(
+                "single_task_per_active_sortie_y_z_link_skipped_count"
+            ),
+            "resource_arc_pruning_enabled": bool(final_judge.get("resource_arc_pruning_enabled")),
+            "resource_arc_pruned_option_count": final_judge.get("resource_arc_pruned_option_count"),
+            "resource_arc_energy_pruned_option_count": final_judge.get(
+                "resource_arc_energy_pruned_option_count"
+            ),
+            "resource_arc_shadow_pruned_option_count": final_judge.get(
+                "resource_arc_shadow_pruned_option_count"
+            ),
+            "resource_arc_demand_pruned_option_count": final_judge.get(
+                "resource_arc_demand_pruned_option_count"
+            ),
+            **_single_journey_mip_start_fields(final_judge),
+            **_required_task_set_region_fields(final_judge),
             "negative_feasibility_skipped_for_proof_only": final_judge.get(
                 "negative_feasibility_skipped_for_proof_only"
             ),
@@ -2818,6 +7178,155 @@ def _stage_b_worker_tail_hidden_negative_evidence_row(
             "compact_final_judge_profile": final_judge.get("compact_final_judge_profile"),
             "compact_final_judge_formulation_profile": final_judge.get("compact_final_judge_formulation_profile"),
             "compact_final_judge_phase_mode": final_judge.get("compact_final_judge_phase_mode"),
+            "objective_bound_no_negative_cutoff_enabled": bool(
+                final_judge.get("objective_bound_no_negative_cutoff_enabled")
+            ),
+            "objective_bound_no_negative_cutoff_value": final_judge.get(
+                "objective_bound_no_negative_cutoff_value"
+            ),
+            "objective_bound_no_negative_cutoff_can_certify": bool(
+                final_judge.get("objective_bound_no_negative_cutoff_can_certify")
+            ),
+            "zero_capacity_slot_truncation_enabled": bool(
+                final_judge.get("zero_capacity_slot_truncation_enabled")
+            ),
+            "zero_capacity_slot_truncation_original_slot_count": final_judge.get(
+                "zero_capacity_slot_truncation_original_slot_count"
+            ),
+            "zero_capacity_slot_truncation_effective_slot_count": final_judge.get(
+                "zero_capacity_slot_truncation_effective_slot_count"
+            ),
+            "zero_capacity_slot_truncation_trimmed_slot_count": final_judge.get(
+                "zero_capacity_slot_truncation_trimmed_slot_count"
+            ),
+            "zero_capacity_slot_truncation_first_zero_slot": final_judge.get(
+                "zero_capacity_slot_truncation_first_zero_slot"
+            ),
+            "slot_sequence_capacity_live_bound_enabled": bool(
+                final_judge.get("slot_sequence_capacity_live_bound_enabled")
+            ),
+            "slot_sequence_capacity_live_bound_tightened_slot_count": final_judge.get(
+                "slot_sequence_capacity_live_bound_tightened_slot_count"
+            ),
+            "slot_sequence_capacity_live_bound_by_slot": final_judge.get(
+                "slot_sequence_capacity_live_bound_by_slot"
+            ),
+            "tight_service_start_bounds_enabled": bool(
+                final_judge.get("tight_service_start_bounds_enabled")
+            ),
+            "tight_service_start_bound_count": final_judge.get(
+                "tight_service_start_bound_count"
+            ),
+            "tight_service_start_bound_min": final_judge.get(
+                "tight_service_start_bound_min"
+            ),
+            "tight_service_start_bound_max": final_judge.get(
+                "tight_service_start_bound_max"
+            ),
+            "tight_time_arc_big_m_enabled": bool(
+                final_judge.get("tight_time_arc_big_m_enabled")
+            ),
+            "tight_time_arc_big_m_depot_arc_count": final_judge.get(
+                "tight_time_arc_big_m_depot_arc_count"
+            ),
+            "tight_time_arc_big_m_active_time_bound_count": final_judge.get(
+                "tight_time_arc_big_m_active_time_bound_count"
+            ),
+            "tight_time_arc_big_m_max_reduction": final_judge.get(
+                "tight_time_arc_big_m_max_reduction"
+            ),
+            "slot_service_start_y_lower_bound_enabled": bool(
+                final_judge.get("slot_service_start_y_lower_bound_enabled")
+            ),
+            "slot_service_start_y_lower_bound_count": final_judge.get(
+                "slot_service_start_y_lower_bound_count"
+            ),
+            "slot_service_start_y_lower_bound_max_lift": final_judge.get(
+                "slot_service_start_y_lower_bound_max_lift"
+            ),
+            "slot_service_start_y_lower_bound_min": final_judge.get(
+                "slot_service_start_y_lower_bound_min"
+            ),
+            "slot_service_start_y_lower_bound_max": final_judge.get(
+                "slot_service_start_y_lower_bound_max"
+            ),
+            "sortie_start_upper_bound": final_judge.get("sortie_start_upper_bound"),
+            "sortie_slots_per_journey": final_judge.get("sortie_slots_per_journey"),
+            "sortie_slot_bound_source": final_judge.get("sortie_slot_bound_source"),
+            "sortie_slot_horizon_count_bound": final_judge.get("sortie_slot_horizon_count_bound"),
+            "sortie_slot_latest_start_count_bound": final_judge.get("sortie_slot_latest_start_count_bound"),
+            "sortie_slot_min_duration_lower_bound": final_judge.get("sortie_slot_min_duration_lower_bound"),
+            "sortie_slot_min_energy_recharge_duration_lower_bound": final_judge.get(
+                "sortie_slot_min_energy_recharge_duration_lower_bound"
+            ),
+            "slot_task_time_pruning_enabled": bool(final_judge.get("slot_task_time_pruning_enabled")),
+            "slot_task_time_feasible_assignment_count": final_judge.get(
+                "slot_task_time_feasible_assignment_count"
+            ),
+            "slot_task_time_pruned_assignment_count": final_judge.get(
+                "slot_task_time_pruned_assignment_count"
+            ),
+            "slot_task_time_pruned_due_count": final_judge.get("slot_task_time_pruned_due_count"),
+            "slot_task_time_pruned_horizon_count": final_judge.get(
+                "slot_task_time_pruned_horizon_count"
+            ),
+            "slot_task_time_total_assignment_count": final_judge.get(
+                "slot_task_time_total_assignment_count"
+            ),
+            "slot_task_model_assignment_count": final_judge.get("slot_task_model_assignment_count"),
+            "slot_arc_support_pruning_enabled": bool(
+                final_judge.get("slot_arc_support_pruning_enabled")
+            ),
+            "slot_arc_support_feasible_assignment_count": final_judge.get(
+                "slot_arc_support_feasible_assignment_count"
+            ),
+            "slot_arc_support_pruned_assignment_count": final_judge.get(
+                "slot_arc_support_pruned_assignment_count"
+            ),
+            "slot_arc_support_pruned_unreachable_count": final_judge.get(
+                "slot_arc_support_pruned_unreachable_count"
+            ),
+            "slot_arc_support_pruned_no_return_count": final_judge.get(
+                "slot_arc_support_pruned_no_return_count"
+            ),
+            "slot_arc_support_pruned_option_count": final_judge.get(
+                "slot_arc_support_pruned_option_count"
+            ),
+            "slot_arc_time_pruned_option_count": final_judge.get(
+                "slot_arc_time_pruned_option_count"
+            ),
+            "single_task_per_active_sortie_arc_pruning_enabled": bool(
+                final_judge.get("single_task_per_active_sortie_arc_pruning_enabled")
+            ),
+            "single_task_per_active_sortie_arc_pruned_option_count": final_judge.get(
+                "single_task_per_active_sortie_arc_pruned_option_count"
+            ),
+            "single_task_per_active_sortie_mtz_disabled": bool(
+                final_judge.get("single_task_per_active_sortie_mtz_disabled")
+            ),
+            "mtz_connectivity_effective": bool(final_judge.get("mtz_connectivity_effective")),
+            "fixed_active_sortie_redundant_constraint_skipped_count": final_judge.get(
+                "fixed_active_sortie_redundant_constraint_skipped_count"
+            ),
+            "single_task_per_active_sortie_slot_visit_eq_count": final_judge.get(
+                "single_task_per_active_sortie_slot_visit_eq_count"
+            ),
+            "single_task_per_active_sortie_y_z_link_skipped_count": final_judge.get(
+                "single_task_per_active_sortie_y_z_link_skipped_count"
+            ),
+            "resource_arc_pruning_enabled": bool(final_judge.get("resource_arc_pruning_enabled")),
+            "resource_arc_pruned_option_count": final_judge.get("resource_arc_pruned_option_count"),
+            "resource_arc_energy_pruned_option_count": final_judge.get(
+                "resource_arc_energy_pruned_option_count"
+            ),
+            "resource_arc_shadow_pruned_option_count": final_judge.get(
+                "resource_arc_shadow_pruned_option_count"
+            ),
+            "resource_arc_demand_pruned_option_count": final_judge.get(
+                "resource_arc_demand_pruned_option_count"
+            ),
+            **_single_journey_mip_start_fields(final_judge),
+            **_required_task_set_region_fields(final_judge),
             "compact_pricing_dual_bound": final_judge.get("dual_bound", final_judge.get("bound")),
             "negative_column_count": _first_int(
                 final_judge.get("negative_column_count"),
@@ -3045,7 +7554,8 @@ def _payload_has_final_judge_harvest_telemetry(payload: dict) -> bool:
 
 
 def _is_compact_final_judge_harvest_source(source_phase: str) -> bool:
-    return str(source_phase or "").startswith("compact_final_judge")
+    value = str(source_phase or "")
+    return value.startswith("compact_final_judge") or value == "route_template_pre_harvest"
 
 
 def _probe_has_frontier_ledger(final_judge: dict) -> bool:
@@ -3092,6 +7602,15 @@ def _last_worker_payload(history: object) -> dict:
         return {}
     for row in reversed(history):
         if isinstance(row, dict) and row.get("final_judge_called") is False:
+            return row
+    return {}
+
+
+def _last_final_judge_history_payload(history: object) -> dict:
+    if not isinstance(history, list):
+        return {}
+    for row in reversed(history):
+        if isinstance(row, dict) and row.get("final_judge_called") is True:
             return row
     return {}
 
@@ -3298,10 +7817,15 @@ def _frontier_sort_key(row: dict) -> tuple[int, int, float, str]:
 def _is_30_scale_row(row: dict) -> bool:
     if str(row.get("scale") or "") == "30":
         return True
-    text = " ".join(
-        str(row.get(key) or "")
-        for key in ("instance_id", "instance_path", "source_probe_json", "matrix_group")
-    )
+    text = " ".join(str(row.get(key) or "") for key in ("instance_id", "instance_path", "source_probe_json", "matrix_group"))
+    return _text_looks_30_scale(text)
+
+
+def _path_or_id_looks_30_scale(*values: object) -> bool:
+    return _text_looks_30_scale(" ".join(str(value or "") for value in values))
+
+
+def _text_looks_30_scale(text: str) -> bool:
     return "sp50_030" in text or "_030_" in text or "30-scale" in text
 
 
@@ -3379,8 +7903,71 @@ def _normalize_b4_1_row(row: dict) -> dict:
             normalized.get("root_round_count"),
             normalized.get("round"),
         )
-    tail_payload = normalized.get("tail_dual_stabilization") if isinstance(normalized.get("tail_dual_stabilization"), dict) else {}
     history = normalized.get("history") if isinstance(normalized.get("history"), list) else []
+    final_judge_payload = normalized.get("final_judge") if isinstance(normalized.get("final_judge"), dict) else {}
+    last_final_judge = _last_final_judge_history_payload(history)
+    if not _has_value(normalized.get("compact_pricing_phase")):
+        normalized["compact_pricing_phase"] = _first_str(
+            final_judge_payload.get("compact_pricing_phase"),
+            last_final_judge.get("compact_pricing_phase"),
+        )
+    for key in (
+        "route_template_pre_harvest_status",
+        "route_template_pre_harvest_target",
+        "route_template_pre_harvest_time_cap_sec",
+        "route_template_pre_harvest_max_direct_tasks",
+        "route_template_pre_harvest_max_active_seeds",
+        "route_template_pre_harvest_seed_strategy",
+        "route_template_pre_harvest_neighborhood_enabled",
+        "route_template_pre_harvest_max_neighborhood_seeds",
+        "route_template_pre_harvest_max_candidate_sets",
+        "route_template_pre_harvest_seed_count",
+        "route_template_pre_harvest_candidate_round_count",
+        "route_template_pre_harvest_candidate_round_limit",
+        "route_template_pre_harvest_candidate_negative_count",
+        "route_template_pre_harvest_selected_count",
+        "route_template_pre_harvest_selected_new_task_set_count",
+        "route_template_pre_harvest_selected_replacement_task_set_count",
+        "route_template_pre_harvest_pricing_wall_time_sec",
+        "route_template_pre_harvest_fallback_enabled",
+        "harvest_source_phase",
+        "harvest_selected_count",
+        "harvest_candidate_negative_count",
+        "harvest_best_true_rc",
+        "objective_bound_no_negative_cutoff_enabled",
+        "objective_bound_no_negative_cutoff_value",
+        "objective_bound_no_negative_cutoff_can_certify",
+        "zero_capacity_slot_truncation_enabled",
+        "zero_capacity_slot_truncation_original_slot_count",
+        "zero_capacity_slot_truncation_effective_slot_count",
+        "zero_capacity_slot_truncation_trimmed_slot_count",
+        "zero_capacity_slot_truncation_first_zero_slot",
+        "slot_sequence_capacity_live_bound_enabled",
+        "slot_sequence_capacity_live_bound_tightened_slot_count",
+        "slot_sequence_capacity_live_bound_by_slot",
+        "tight_service_start_bounds_enabled",
+        "tight_service_start_bound_count",
+        "tight_service_start_bound_min",
+        "tight_service_start_bound_max",
+        "tight_time_arc_big_m_enabled",
+        "tight_time_arc_big_m_depot_arc_count",
+        "tight_time_arc_big_m_active_time_bound_count",
+        "tight_time_arc_big_m_max_reduction",
+        "slot_service_start_y_lower_bound_enabled",
+        "slot_service_start_y_lower_bound_count",
+        "slot_service_start_y_lower_bound_max_lift",
+        "slot_service_start_y_lower_bound_min",
+        "slot_service_start_y_lower_bound_max",
+        "sortie_start_upper_bound",
+    ):
+        if not _has_value(normalized.get(key)):
+            normalized[key] = _first_str(final_judge_payload.get(key), last_final_judge.get(key))
+    if not _has_value(normalized.get("route_template_pre_harvest_enabled")):
+        normalized["route_template_pre_harvest_enabled"] = bool(
+            final_judge_payload.get("route_template_pre_harvest_enabled")
+            or last_final_judge.get("route_template_pre_harvest_enabled")
+        )
+    tail_payload = normalized.get("tail_dual_stabilization") if isinstance(normalized.get("tail_dual_stabilization"), dict) else {}
     last_worker = _last_worker_payload(history)
     if not tail_payload and isinstance(last_worker.get("tail_dual_stabilization"), dict):
         tail_payload = last_worker["tail_dual_stabilization"]
@@ -3454,6 +8041,29 @@ def _aggregate_hidden_negative_miss_reason_counts(rows: Iterable[dict]) -> dict[
         for reason, count in row_counts.items():
             counts[reason] += int(count)
     return {reason: count for reason, count in counts.items() if count > 0}
+
+
+def _aggregate_partition_candidate_issue_counts(rows: Iterable[dict]) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for row in rows:
+        raw = row.get("partition_candidate_gate_issue_codes")
+        if isinstance(raw, str):
+            codes = [item.strip() for item in raw.split(",") if item.strip()]
+        elif isinstance(raw, (list, tuple)):
+            codes = [str(item).strip() for item in raw if str(item).strip()]
+        elif isinstance(raw, dict):
+            codes = [str(key).strip() for key, value in raw.items() if int(value or 0) > 0 and str(key).strip()]
+        else:
+            codes = []
+        counter.update(codes)
+    return dict(counter)
+
+
+def _top_partition_candidate_issue(counts: dict[str, int]) -> str:
+    if not counts:
+        return "none"
+    issue, _count = max(sorted(counts.items()), key=lambda item: (int(item[1]), item[0]))
+    return issue
 
 
 def _top_hidden_negative_miss_reason(counts: dict[str, int]) -> str:
@@ -3756,6 +8366,30 @@ def _first_float(*values: object) -> float | None:
     return None
 
 
+def _min_present_float(values: Iterable[object]) -> float | None:
+    parsed = [_first_float(value) for value in values]
+    present = [float(value) for value in parsed if value is not None]
+    return None if not present else round(min(present), 9)
+
+
+def _max_present_float(values: Iterable[object]) -> float | None:
+    parsed = [_first_float(value) for value in values]
+    present = [float(value) for value in parsed if value is not None]
+    return None if not present else round(max(present), 9)
+
+
+def _max_present_int(values: Iterable[object]) -> int:
+    present = [_first_int(value) for value in values if value not in (None, "")]
+    return max(present) if present else 0
+
+
+def _first_present_str(values: Iterable[object]) -> str:
+    for value in values:
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
 def _float_or_none(value: object) -> float | None:
     return _first_float(value)
 
@@ -3771,12 +8405,278 @@ def _first_int(*values: object) -> int:
     return 0
 
 
+def _optional_positive_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def _first_str(*values: object) -> str:
     for value in values:
         if value is None or value == "":
             continue
         return str(value)
     return ""
+
+
+def _dual_task_slot_full_space_lower_bound_fields(payload: dict) -> dict:
+    return {
+        "dual_task_slot_full_space_lower_bound_enabled": bool(
+            payload.get("dual_task_slot_full_space_lower_bound_enabled")
+        ),
+        "dual_task_slot_full_space_lower_bound_applicable": bool(
+            payload.get("dual_task_slot_full_space_lower_bound_applicable")
+        ),
+        "dual_task_slot_full_space_lower_bound_early_stop_on_negative": bool(
+            payload.get("dual_task_slot_full_space_lower_bound_early_stop_on_negative")
+        ),
+        "dual_task_slot_full_space_lower_bound_early_stopped_on_negative": bool(
+            payload.get("dual_task_slot_full_space_lower_bound_early_stopped_on_negative")
+        ),
+        "dual_task_slot_full_space_lower_bound_coverage_complete": bool(
+            payload.get("dual_task_slot_full_space_lower_bound_coverage_complete")
+        ),
+        "dual_task_slot_full_space_lower_bound_can_certify": bool(
+            payload.get("dual_task_slot_full_space_lower_bound_can_certify")
+        ),
+        "dual_task_slot_full_space_lower_bound_region_count": _first_int(
+            payload.get("dual_task_slot_full_space_lower_bound_region_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_optimal_region_count": _first_int(
+            payload.get("dual_task_slot_full_space_lower_bound_optimal_region_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_infeasible_region_count": _first_int(
+            payload.get("dual_task_slot_full_space_lower_bound_infeasible_region_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_unsupported_region_count": _first_int(
+            payload.get("dual_task_slot_full_space_lower_bound_unsupported_region_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_negative_region_count": _first_int(
+            payload.get("dual_task_slot_full_space_lower_bound_negative_region_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_value": _first_float(
+            payload.get("dual_task_slot_full_space_lower_bound_value")
+        ),
+        "dual_task_slot_full_space_lower_bound_task_count": _first_int(
+            payload.get("dual_task_slot_full_space_lower_bound_task_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_active_sortie_count": _first_int(
+            payload.get("dual_task_slot_full_space_lower_bound_active_sortie_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_wall_time_sec": _first_float(
+            payload.get("dual_task_slot_full_space_lower_bound_wall_time_sec")
+        ),
+        "dual_task_slot_full_space_lower_bound_status": (
+            payload.get("dual_task_slot_full_space_lower_bound_status") or ""
+        ),
+    }
+
+
+def _single_journey_mip_start_fields(payload: dict) -> dict:
+    return {
+        "single_journey_mip_start_enabled": bool(payload.get("single_journey_mip_start_enabled")),
+        "single_journey_mip_start_status": payload.get("single_journey_mip_start_status") or "",
+        "single_journey_mip_start_source": payload.get("single_journey_mip_start_source") or "",
+        "single_journey_mip_start_entry_count": _first_int(
+            payload.get("single_journey_mip_start_entry_count")
+        ),
+        "single_journey_mip_start_zero_fill_integers": bool(
+            payload.get("single_journey_mip_start_zero_fill_integers")
+        ),
+        "single_journey_mip_start_zero_fill_integer_entry_count": _first_int(
+            payload.get("single_journey_mip_start_zero_fill_integer_entry_count")
+        ),
+        "single_journey_mip_start_inactive_tail_time_entry_count": _first_int(
+            payload.get("single_journey_mip_start_inactive_tail_time_entry_count")
+        ),
+        "single_journey_mip_start_inactive_tail_time_mode": str(
+            payload.get("single_journey_mip_start_inactive_tail_time_mode") or ""
+        ),
+        "single_journey_mip_start_sort_indices": bool(
+            payload.get("single_journey_mip_start_sort_indices", True)
+        ),
+        "single_journey_mip_start_sortie_count": _first_int(
+            payload.get("single_journey_mip_start_sortie_count")
+        ),
+        "single_journey_mip_start_task_count": _first_int(
+            payload.get("single_journey_mip_start_task_count")
+        ),
+        "single_journey_mip_start_objective": _first_float(
+            payload.get("single_journey_mip_start_objective")
+        ),
+        "single_journey_mip_start_reduced_cost": _first_float(
+            payload.get("single_journey_mip_start_reduced_cost")
+        ),
+    }
+
+
+def _required_task_set_region_fields(payload: dict) -> dict:
+    required_task_count_enabled = bool(payload.get("required_task_count_enabled"))
+    return {
+        "required_task_set_enabled": bool(payload.get("required_task_set_enabled")),
+        "required_task_set_count": _first_int(payload.get("required_task_set_count")),
+        "pricing_model_task_count": _first_int(payload.get("pricing_model_task_count")),
+        "required_task_set_model_reduction_enabled": bool(
+            payload.get("required_task_set_model_reduction_enabled")
+        ),
+        "required_task_set_model_task_count": _first_int(
+            payload.get("required_task_set_model_task_count")
+        ),
+        "required_task_set_model_task_reduction_count": _first_int(
+            payload.get("required_task_set_model_task_reduction_count")
+        ),
+        "required_task_set_region_can_certify_no_negative": bool(
+            payload.get("required_task_set_region_can_certify_no_negative")
+        ),
+        "pricing_complete_for_required_task_set": bool(
+            payload.get("pricing_complete_for_required_task_set")
+        ),
+        "required_task_set_infeasible_by_feasible_task_count": bool(
+            payload.get("required_task_set_infeasible_by_feasible_task_count")
+        ),
+        "required_task_set_infeasible_by_slot_capacity": bool(
+            payload.get("required_task_set_infeasible_by_slot_capacity")
+        ),
+        "required_task_set_infeasible_by_slot_sequence_capacity": bool(
+            payload.get("required_task_set_infeasible_by_slot_sequence_capacity")
+        ),
+        "required_task_set_infeasible_by_slot_matching": bool(
+            payload.get("required_task_set_infeasible_by_slot_matching")
+        ),
+        "required_task_count_enabled": required_task_count_enabled,
+        "required_task_count": (
+            _first_int(payload.get("required_task_count"))
+            if required_task_count_enabled
+            else ""
+        ),
+        "required_task_count_region_can_certify_no_negative": bool(
+            payload.get("required_task_count_region_can_certify_no_negative")
+        ),
+        "pricing_complete_for_required_task_count": bool(
+            payload.get("pricing_complete_for_required_task_count")
+        ),
+        "required_task_count_feasible_task_count": _first_int(
+            payload.get("required_task_count_feasible_task_count")
+        ),
+        "required_task_count_slot_capacity_task_upper_bound": _first_int(
+            payload.get("required_task_count_slot_capacity_task_upper_bound")
+        ),
+        "required_task_count_slot_sequence_capacity_upper_bound": _first_int(
+            payload.get("required_task_count_slot_sequence_capacity_upper_bound")
+        ),
+        "required_task_count_slot_matching_capacity_upper_bound": _first_int(
+            payload.get("required_task_count_slot_matching_capacity_upper_bound")
+        ),
+        "required_task_count_pair_conflict_capacity_upper_bound": _first_int(
+            payload.get("required_task_count_pair_conflict_capacity_upper_bound")
+        ),
+        "required_task_count_min_active_sorties": _first_int(
+            payload.get("required_task_count_min_active_sorties")
+        ),
+        "required_task_count_active_sortie_lb_count": _first_int(
+            payload.get("required_task_count_active_sortie_lb_count")
+        ),
+        "required_task_count_infeasible_by_feasible_task_count": bool(
+            payload.get("required_task_count_infeasible_by_feasible_task_count")
+        ),
+        "required_task_count_infeasible_by_slot_capacity": bool(
+            payload.get("required_task_count_infeasible_by_slot_capacity")
+        ),
+        "required_task_count_infeasible_by_slot_sequence_capacity": bool(
+            payload.get("required_task_count_infeasible_by_slot_sequence_capacity")
+        ),
+        "required_task_count_infeasible_by_slot_matching": bool(
+            payload.get("required_task_count_infeasible_by_slot_matching")
+        ),
+        "required_task_count_infeasible_by_pair_conflict_capacity": bool(
+            payload.get("required_task_count_infeasible_by_pair_conflict_capacity")
+        ),
+        "task_slot_pair_conflict_capacity_bound_enabled": bool(
+            payload.get("task_slot_pair_conflict_capacity_bound_enabled")
+        ),
+        "task_slot_pair_conflict_capacity_near_matching_cap": bool(
+            payload.get("task_slot_pair_conflict_capacity_near_matching_cap")
+        ),
+        "task_slot_pair_conflict_capacity_bound_requested": bool(
+            payload.get("task_slot_pair_conflict_capacity_bound_requested")
+        ),
+        "task_slot_pair_conflict_capacity_bound_optimal": bool(
+            payload.get("task_slot_pair_conflict_capacity_bound_optimal")
+        ),
+        "task_slot_pair_conflict_capacity_bound_status": (
+            payload.get("task_slot_pair_conflict_capacity_bound_status") or ""
+        ),
+        "task_slot_pair_conflict_capacity_bound_wall_time_sec": _first_float(
+            payload.get("task_slot_pair_conflict_capacity_bound_wall_time_sec")
+        ),
+        "task_slot_pair_conflict_capacity_bound_variable_count": _first_int(
+            payload.get("task_slot_pair_conflict_capacity_bound_variable_count")
+        ),
+        "task_slot_pair_conflict_capacity_bound_constraint_count": _first_int(
+            payload.get("task_slot_pair_conflict_capacity_bound_constraint_count")
+        ),
+        "task_slot_pair_conflict_capacity_pair_count": _first_int(
+            payload.get("task_slot_pair_conflict_capacity_pair_count")
+        ),
+        "task_slot_pair_conflict_capacity_row_count": _first_int(
+            payload.get("task_slot_pair_conflict_capacity_row_count")
+        ),
+        "task_slot_pair_conflict_capacity_hyperedge_count": _first_int(
+            payload.get("task_slot_pair_conflict_capacity_hyperedge_count")
+        ),
+        "task_slot_pair_conflict_capacity_hyperedge_row_count": _first_int(
+            payload.get("task_slot_pair_conflict_capacity_hyperedge_row_count")
+        ),
+        "required_active_sortie_count_enabled": bool(
+            payload.get("required_active_sortie_count_enabled")
+        ),
+        "required_active_sortie_count": (
+            _first_int(payload.get("required_active_sortie_count"))
+            if payload.get("required_active_sortie_count_enabled")
+            else ""
+        ),
+        "required_active_sortie_count_region_can_certify_no_negative": bool(
+            payload.get("required_active_sortie_count_region_can_certify_no_negative")
+        ),
+        "pricing_complete_for_required_active_sortie_count": bool(
+            payload.get("pricing_complete_for_required_active_sortie_count")
+        ),
+        "required_active_sortie_count_min": _first_int(
+            payload.get("required_active_sortie_count_min")
+        ),
+        "required_active_sortie_count_max": _first_int(
+            payload.get("required_active_sortie_count_max")
+        ),
+        "required_active_sortie_count_capacity_min": _first_int(
+            payload.get("required_active_sortie_count_capacity_min")
+        ),
+        "required_active_sortie_count_expected_counts": payload.get(
+            "required_active_sortie_count_expected_counts"
+        )
+        or [],
+        "required_active_sortie_count_infeasible": bool(
+            payload.get("required_active_sortie_count_infeasible")
+        ),
+        "required_active_sortie_count_infeasible_by_empty_slot": bool(
+            payload.get("required_active_sortie_count_infeasible_by_empty_slot")
+        ),
+        "required_active_sortie_count_infeasible_by_capacity_min": bool(
+            payload.get("required_active_sortie_count_infeasible_by_capacity_min")
+        ),
+        "required_active_sortie_count_slots_fixed": bool(
+            payload.get("required_active_sortie_count_slots_fixed")
+        ),
+        "required_active_sortie_count_fixed_slot_count": _first_int(
+            payload.get("required_active_sortie_count_fixed_slot_count")
+        ),
+        "forbidden_task_set_skipped_by_required_task_count": _first_int(
+            payload.get("forbidden_task_set_skipped_by_required_task_count")
+        ),
+    }
 
 
 def _has_value(value: object) -> bool:

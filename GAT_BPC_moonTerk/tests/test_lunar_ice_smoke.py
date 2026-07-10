@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import inspect
 import json
+import os
 import re
 import subprocess
 import sys
@@ -128,9 +130,11 @@ from lunar_ice_bpc.exact.pricing.journey_pricing import (
     DirectPricingCache,
     price_canonical_journey_universe,
     price_direct_journey_columns,
+    price_direct_journey_columns_incremental,
     price_exhaustive_direct_journey_columns,
     price_direct_journey_labels,
 )
+import lunar_ice_bpc.exact.pricing.journey_pricing as journey_pricing_module
 import lunar_ice_bpc.exact.solver.journey_driver as journey_driver_module
 from lunar_ice_bpc.exact.solver.journey_driver import (
     DirectBaselineTimeLimitExceeded,
@@ -2854,6 +2858,72 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertAlmostEqual(objective, template_by_tasks[task_set], delta=2.0e-6)
         self.assertLessEqual(direct.route_template_count, template.route_template_count)
 
+    def test_partial_direct_pricing_keeps_multi_sortie_seed_task_sets(self) -> None:
+        instance = generate_instance(10, seed=729001, index=1)
+        data = load_lunar_ice_data(instance)
+        seed = tuple(data.task_ids[:8])
+
+        merged = journey_pricing_module._merge_candidate_sets(
+            data,
+            tuple(),
+            (seed,),
+            max_candidate_task_count=8,
+        )
+
+        self.assertGreater(len(seed), data.max_tasks_per_trip)
+        self.assertIn(seed, merged)
+
+    def test_incremental_direct_pricing_matches_template_pricing_on_seed_set(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.03 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=-0.02,
+        )
+        seed = (tuple(data.task_ids),)
+
+        template_payload, _ = price_direct_journey_columns(
+            data,
+            duals,
+            max_direct_tasks=5,
+            seed_task_sets=seed,
+            completion_bound_enabled=True,
+        )
+        incremental_payload, _ = price_direct_journey_columns_incremental(
+            data,
+            duals,
+            max_direct_tasks=5,
+            seed_task_sets=seed,
+            wall_time_limit_sec=30.0,
+            stop_at_first_negative=False,
+        )
+
+        self.assertAlmostEqual(
+            incremental_payload["best_reduced_cost"],
+            template_payload["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertFalse(incremental_payload["can_certify_no_negative"])
+
+    def test_incremental_direct_pricing_prioritizes_seed_task_sets(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        seed = (tuple(data.task_ids[-2:]),)
+
+        payload, _ = price_direct_journey_columns_incremental(
+            data,
+            duals,
+            max_direct_tasks=5,
+            seed_task_sets=seed,
+            max_candidate_sets=1,
+            wall_time_limit_sec=30.0,
+            stop_at_first_negative=False,
+        )
+
+        self.assertTrue(payload["seed_task_sets_first"])
+        self.assertEqual(payload["candidate_sets"][0], list(seed[0]))
+
     def test_full_fixed_column_ip_equals_direct_dp_integer_oracle(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -2929,6 +2999,10 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertEqual(compact["pricing_complete_by_compact_milp"], True)
             self.assertEqual(compact["flow_connectivity_enabled"], variant["flow_connectivity"])
             self.assertEqual(compact["mtz_connectivity_enabled"], variant["mtz_connectivity"])
+            self.assertGreaterEqual(
+                compact["fixed_active_sortie_redundant_constraint_skipped_count"],
+                compact["sortie_slots_per_journey"],
+            )
             self.assertEqual(compact["pair_adjacency_cuts_enabled"], bool(variant.get("pair_adjacency_cuts", False)))
             self.assertEqual(
                 compact["mtz_endpoint_order_cuts_enabled"],
@@ -2937,6 +3011,994 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertAlmostEqual(compact["best_reduced_cost"], expected, delta=1.0e-6)
             self.assertAlmostEqual(compact["manual_best_reduced_cost"], expected, delta=1.0e-6)
             self.assertTrue(compact["pricing_rc_audit_pass"])
+
+    def test_highs_compact_single_journey_pricing_accepts_journey_mip_start(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        warm_start = min(universe.columns, key=lambda column: manual_journey_reduced_cost(column, duals))
+        expected = manual_journey_reduced_cost(warm_start, duals)
+
+        cold = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+        )
+        warm = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mip_start_journey=warm_start,
+        )
+        warm_inactive_tail = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mip_start_journey=warm_start,
+            mip_start_inactive_tail_time=True,
+        )
+        warm_zero_fill = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mip_start_journey=warm_start,
+            mip_start_zero_fill_integers=True,
+        )
+
+        self.assertEqual(warm["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(warm["single_journey_mip_start_enabled"])
+        self.assertEqual(warm["single_journey_mip_start_status"], "OK")
+        self.assertEqual(warm["single_journey_mip_start_source"], "column_pool_journey")
+        self.assertGreater(warm["single_journey_mip_start_entry_count"], 0)
+        self.assertEqual(warm["single_journey_mip_start_inactive_tail_time_entry_count"], 0)
+        self.assertEqual(warm["single_journey_mip_start_sortie_count"], len(warm_start.sorties))
+        self.assertEqual(warm["single_journey_mip_start_task_count"], len(warm_start.task_set))
+        self.assertAlmostEqual(warm["single_journey_mip_start_reduced_cost"], expected, delta=1.0e-6)
+        self.assertAlmostEqual(warm["best_reduced_cost"], cold["best_reduced_cost"], delta=1.0e-6)
+        self.assertTrue(warm["pricing_rc_audit_pass"])
+        self.assertEqual(warm_inactive_tail["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(warm_inactive_tail["single_journey_mip_start_status"], "OK")
+        self.assertGreater(
+            warm_inactive_tail["single_journey_mip_start_inactive_tail_time_entry_count"],
+            0,
+        )
+        self.assertAlmostEqual(
+            warm_inactive_tail["best_reduced_cost"],
+            cold["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(warm_inactive_tail["pricing_rc_audit_pass"])
+        self.assertEqual(warm_zero_fill["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(warm_zero_fill["single_journey_mip_start_status"], "OK")
+        self.assertTrue(warm_zero_fill["single_journey_mip_start_zero_fill_integers"])
+        self.assertGreater(
+            warm_zero_fill["single_journey_mip_start_zero_fill_integer_entry_count"],
+            warm["single_journey_mip_start_entry_count"],
+        )
+        self.assertGreater(
+            warm_zero_fill["single_journey_mip_start_entry_count"],
+            warm["single_journey_mip_start_entry_count"],
+        )
+        self.assertAlmostEqual(
+            warm_zero_fill["best_reduced_cost"],
+            cold["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(warm_zero_fill["pricing_rc_audit_pass"])
+
+    def test_highs_compact_slot_sequence_capacity_arc_pruning_preserves_rc(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+
+        base = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            resource_arc_pruning=True,
+            slot_task_time_pruning=True,
+            max_sorties_per_journey=8,
+        )
+        pruned = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            resource_arc_pruning=True,
+            slot_task_time_pruning=True,
+            slot_sequence_capacity_arc_pruning=True,
+            max_sorties_per_journey=8,
+        )
+
+        self.assertEqual(base["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(pruned["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertAlmostEqual(
+            pruned["best_reduced_cost"],
+            base["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(pruned["pricing_rc_audit_pass"])
+        self.assertTrue(pruned["slot_sequence_capacity_arc_pruning_enabled"])
+        self.assertGreater(pruned["slot_sequence_capacity_mtz_disabled_slot_count"], 0)
+        self.assertLess(pruned["variable_count"], base["variable_count"])
+        self.assertLess(pruned["constraint_count"], base["constraint_count"])
+
+    def test_compact_sortie_slot_bound_includes_recharge_lower_bound(self) -> None:
+        instance_path = Path("data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json")
+        data = load_lunar_ice_data(json.loads(instance_path.read_text()))
+        default_bound = gurobi_compact_module._safe_sortie_slot_bound(data)
+        slot_bound = gurobi_compact_module._safe_sortie_slot_bound(
+            data,
+            recharge_aware_duration_bound=True,
+        )
+        travel_service_dock_lb = (
+            float(slot_bound["min_return_duration_lower_bound"])
+            + float(data.dock_overhead_min)
+        )
+
+        self.assertFalse(default_bound["recharge_aware_duration_bound_enabled"])
+        self.assertEqual(default_bound["min_energy_recharge_duration_lower_bound"], 0.0)
+        self.assertEqual(default_bound["slot_count"], 21)
+        self.assertTrue(slot_bound["recharge_aware_duration_bound_enabled"])
+        self.assertGreater(slot_bound["min_energy_recharge_duration_lower_bound"], 0.0)
+        self.assertGreater(slot_bound["min_sortie_energy_lower_bound"], 0.0)
+        self.assertAlmostEqual(
+            slot_bound["min_duration_lower_bound"],
+            travel_service_dock_lb + slot_bound["min_energy_recharge_duration_lower_bound"],
+            delta=1.0e-9,
+        )
+        self.assertEqual(slot_bound["slot_count"], 18)
+        self.assertEqual(slot_bound["latest_start_slot_count_bound"], 18)
+
+    def test_compact_zero_capacity_slot_truncation_finds_prefix_cut(self) -> None:
+        self.assertIsNone(gurobi_compact_module._first_zero_capacity_slot([3, 2, 1]))
+        self.assertEqual(gurobi_compact_module._first_zero_capacity_slot([3, 0, 2]), 1)
+        self.assertEqual(gurobi_compact_module._first_zero_capacity_slot([0, 2, 2]), 0)
+
+    def test_highs_compact_single_journey_slot_sequence_capacity_live_bound(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        raw = json.loads(json.dumps(generate_instance(5, seed=629003, index=1)))
+        probe_data = load_lunar_ice_data(raw)
+        for task_id, task_payload in raw["tasks"].items():
+            min_depot_travel = min(
+                float(option.travel_time_min)
+                for option in probe_data.arcs[("depot", str(task_id))].values()
+            )
+            task_payload["D"] = min_depot_travel + float(task_payload["sigma"]) + 0.1
+        data = load_lunar_ice_data(raw)
+        result = solve_highs_compact_single_journey_pricing(
+            data,
+            JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0),
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            slot_task_time_pruning=True,
+            slot_sequence_capacity_live_bound=True,
+        )
+
+        self.assertTrue(result["slot_sequence_capacity_live_bound_enabled"])
+        self.assertEqual(result["slot_sequence_capacity_live_bound_by_slot"], [1])
+        self.assertEqual(result["slot_sequence_capacity_live_bound_tightened_slot_count"], 1)
+        self.assertEqual(result["slot_task_sequence_capacity_by_slot"], [1])
+        self.assertTrue(result["pricing_rc_audit_pass"])
+
+    def test_highs_compact_single_journey_tight_service_start_bounds_preserve_rc(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        base = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            slot_task_time_pruning=True,
+        )
+        tightened = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            slot_task_time_pruning=True,
+            tight_service_start_bounds=True,
+        )
+
+        self.assertEqual(base["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(tightened["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(tightened["tight_service_start_bounds_enabled"])
+        self.assertGreater(tightened["tight_service_start_bound_count"], 0)
+        self.assertLessEqual(tightened["tight_service_start_bound_max"], float(data.horizon))
+        self.assertAlmostEqual(
+            tightened["best_reduced_cost"],
+            base["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(tightened["pricing_rc_audit_pass"])
+
+    def test_highs_compact_single_journey_tight_time_arc_big_m_preserves_rc(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        base = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            slot_task_time_pruning=True,
+        )
+        tightened = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            slot_task_time_pruning=True,
+            tight_time_arc_big_m=True,
+        )
+
+        self.assertEqual(base["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(tightened["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(tightened["tight_time_arc_big_m_enabled"])
+        self.assertGreater(tightened["tight_time_arc_big_m_depot_arc_count"], 0)
+        self.assertGreater(tightened["tight_time_arc_big_m_max_reduction"], 0.0)
+        self.assertLess(tightened["sortie_start_upper_bound"], float(data.horizon))
+        self.assertAlmostEqual(
+            tightened["best_reduced_cost"],
+            base["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(tightened["pricing_rc_audit_pass"])
+
+    def test_highs_compact_tight_time_big_m_accepts_inactive_tail_mip_start(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        warm_start = next(column for column in universe.columns if len(column.sorties) == 1)
+
+        result = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            slot_task_time_pruning=True,
+            sortie_slot_position_bounds=True,
+            tight_service_start_bounds=True,
+            tight_time_arc_big_m=True,
+            active_time_z_bounds=True,
+            mip_start_journey=warm_start,
+            mip_start_inactive_tail_time=True,
+        )
+
+        self.assertEqual(result["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(result["tight_time_arc_big_m_enabled"])
+        self.assertTrue(result["active_time_z_bounds_enabled"])
+        self.assertGreater(result["tight_time_arc_big_m_active_time_bound_count"], 0)
+        self.assertTrue(result["single_journey_mip_start_enabled"])
+        self.assertEqual(result["single_journey_mip_start_status"], "OK")
+        self.assertGreater(result["single_journey_mip_start_entry_count"], 0)
+        self.assertGreater(result["single_journey_mip_start_inactive_tail_time_entry_count"], 0)
+        self.assertTrue(result["pricing_rc_audit_pass"])
+        self.assertFalse(result["tight_conditional_sequence_big_m_enabled"])
+
+    def test_highs_compact_legacy_sequence_chain_preserves_rc(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        legacy = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            slot_task_time_pruning=True,
+        )
+        active_time = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            slot_task_time_pruning=True,
+            active_time_z_bounds=True,
+        )
+
+        self.assertEqual(legacy["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(legacy["tight_conditional_sequence_big_m_enabled"])
+        self.assertGreater(legacy["tight_conditional_sequence_big_m_count"], 0)
+        self.assertAlmostEqual(
+            legacy["tight_conditional_sequence_big_m_max_reduction"],
+            data.horizon,
+            delta=1.0e-6,
+        )
+        self.assertEqual(active_time["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(active_time["active_time_z_bounds_enabled"])
+        self.assertFalse(active_time["tight_conditional_sequence_big_m_enabled"])
+        self.assertAlmostEqual(
+            legacy["best_reduced_cost"],
+            active_time["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(legacy["pricing_rc_audit_pass"])
+        self.assertTrue(active_time["pricing_rc_audit_pass"])
+
+    def test_highs_compact_tight_conditional_sequence_big_m_preserves_rc(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        base = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            slot_task_time_pruning=True,
+        )
+        tightened = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            slot_task_time_pruning=True,
+            tight_time_arc_big_m=True,
+        )
+
+        self.assertEqual(base["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(tightened["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(tightened["tight_time_arc_big_m_enabled"])
+        self.assertTrue(tightened["tight_conditional_sequence_big_m_enabled"])
+        self.assertGreater(tightened["tight_conditional_sequence_big_m_count"], 0)
+        self.assertGreater(tightened["tight_conditional_sequence_big_m_max_reduction"], 0.0)
+        self.assertAlmostEqual(
+            tightened["best_reduced_cost"],
+            base["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(tightened["pricing_rc_audit_pass"])
+
+    def test_highs_compact_slot_service_start_y_lb_preserves_rc(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        base = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            slot_task_time_pruning=True,
+            sortie_slot_position_bounds=True,
+        )
+        tightened = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            slot_task_time_pruning=True,
+            sortie_slot_position_bounds=True,
+            slot_service_start_y_lower_bound=True,
+        )
+
+        self.assertEqual(base["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(tightened["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(tightened["slot_service_start_y_lower_bound_enabled"])
+        self.assertGreater(tightened["slot_service_start_y_lower_bound_count"], 0)
+        self.assertGreater(tightened["slot_service_start_y_lower_bound_max_lift"], 0.0)
+        self.assertAlmostEqual(
+            tightened["best_reduced_cost"],
+            base["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(tightened["pricing_rc_audit_pass"])
+
+    def test_highs_compact_single_journey_pricing_required_task_set_region(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        target_column = next(column for column in universe.columns if len(column.task_set) >= 2)
+        target_task_set = tuple(sorted(target_column.task_set))
+        expected = min(
+            manual_journey_reduced_cost(column, duals)
+            for column in universe.columns
+            if tuple(sorted(column.task_set)) == target_task_set
+        )
+        unrestricted = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+        )
+
+        region = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_set=target_task_set,
+            mip_start_journey=target_column,
+        )
+
+        self.assertEqual(region["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(region["exact_status"], "REQUIRED_TASK_SET_PRICING_OPTIMAL")
+        self.assertTrue(region["required_task_set_enabled"])
+        self.assertEqual(region["required_task_set"], list(target_task_set))
+        self.assertEqual(region["required_task_set_count"], len(target_task_set))
+        self.assertTrue(region["required_task_set_model_reduction_enabled"])
+        self.assertEqual(region["pricing_model_task_count"], len(target_task_set))
+        self.assertEqual(
+            region["required_task_set_model_task_reduction_count"],
+            len(data.task_ids) - len(target_task_set),
+        )
+        self.assertLess(region["variable_count"], unrestricted["variable_count"])
+        self.assertLess(region["constraint_count"], unrestricted["constraint_count"])
+        self.assertTrue(region["pricing_complete_for_required_task_set"])
+        self.assertFalse(region["pricing_complete_for_all_task_subsets"])
+        self.assertFalse(region["can_certify_no_negative"])
+        self.assertFalse(region["required_task_set_can_certify_full_space"])
+        self.assertAlmostEqual(region["best_reduced_cost"], expected, delta=1.0e-6)
+        self.assertTrue(region["pricing_rc_audit_pass"])
+        self.assertTrue(region["single_journey_mip_start_enabled"])
+        self.assertEqual(region["single_journey_mip_start_status"], "OK")
+
+        mismatch = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_set=target_task_set,
+            mip_start_journey=next(column for column in universe.columns if tuple(sorted(column.task_set)) != target_task_set),
+        )
+        self.assertEqual(mismatch["single_journey_mip_start_status"], "MISMATCH_REQUIRED_TASK_SET")
+        self.assertEqual(mismatch["exact_status"], "REQUIRED_TASK_SET_PRICING_OPTIMAL")
+
+        tight_raw = json.loads(json.dumps(generate_instance(5, seed=629003, index=1)))
+        tight_probe_data = load_lunar_ice_data(tight_raw)
+        for task_id, task_payload in tight_raw["tasks"].items():
+            min_depot_travel = min(
+                float(option.travel_time_min)
+                for option in tight_probe_data.arcs[("depot", str(task_id))].values()
+            )
+            task_payload["D"] = min_depot_travel + float(task_payload["sigma"]) + 0.1
+        tight_data = load_lunar_ice_data(tight_raw)
+        tight_task_set = tuple(sorted(list(tight_data.task_ids)[:2]))
+        task_set_infeasible = solve_highs_compact_single_journey_pricing(
+            tight_data,
+            JourneyDuals(cover={task_id: 0.0 for task_id in tight_data.task_ids}, fleet_limit=0.0),
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            required_task_set=tight_task_set,
+            slot_task_time_pruning=True,
+        )
+        self.assertEqual(
+            task_set_infeasible["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_TASK_SET_INFEASIBLE",
+        )
+        self.assertEqual(
+            task_set_infeasible["exact_status"],
+            "REQUIRED_TASK_SET_PRICING_INFEASIBLE",
+        )
+        self.assertTrue(task_set_infeasible["pricing_complete_for_required_task_set"])
+        self.assertTrue(task_set_infeasible["required_task_set_region_can_certify_no_negative"])
+        self.assertFalse(task_set_infeasible["can_certify_no_negative"])
+        self.assertTrue(task_set_infeasible["required_task_set_infeasible_by_slot_sequence_capacity"])
+        self.assertEqual(task_set_infeasible["variable_count"], 0)
+        self.assertEqual(task_set_infeasible["constraint_count"], 0)
+
+    def test_highs_compact_single_journey_pricing_required_task_count_region(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        target_task_count = 2
+        target_column = next(column for column in universe.columns if len(column.task_set) == target_task_count)
+        mismatch_column = next(column for column in universe.columns if len(column.task_set) != target_task_count)
+        expected = min(
+            manual_journey_reduced_cost(column, duals)
+            for column in universe.columns
+            if len(column.task_set) == target_task_count
+        )
+        unrestricted = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+        )
+
+        region = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_count=target_task_count,
+            mip_start_journey=target_column,
+        )
+
+        self.assertEqual(region["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(region["exact_status"], "REQUIRED_TASK_COUNT_PRICING_OPTIMAL")
+        self.assertTrue(region["required_task_count_enabled"])
+        self.assertEqual(region["required_task_count"], target_task_count)
+        self.assertTrue(region["pricing_complete_for_required_task_count"])
+        self.assertFalse(region["pricing_complete_for_all_task_subsets"])
+        self.assertFalse(region["can_certify_no_negative"])
+        self.assertFalse(region["required_task_count_can_certify_full_space"])
+        expected_min_active = (
+            target_task_count + int(data.max_tasks_per_trip) - 1
+        ) // int(data.max_tasks_per_trip)
+        self.assertEqual(region["required_task_count_min_active_sorties"], expected_min_active)
+        self.assertEqual(region["required_task_count_active_sortie_lb_count"], expected_min_active)
+        self.assertGreaterEqual(region["required_task_count_feasible_task_count"], target_task_count)
+        self.assertGreaterEqual(
+            region["required_task_count_slot_capacity_task_upper_bound"],
+            target_task_count,
+        )
+        self.assertGreaterEqual(
+            region["required_task_count_slot_sequence_capacity_upper_bound"],
+            target_task_count,
+        )
+        self.assertGreaterEqual(
+            region["required_task_count_slot_matching_capacity_upper_bound"],
+            target_task_count,
+        )
+        self.assertFalse(region["required_task_count_infeasible_by_feasible_task_count"])
+        self.assertFalse(region["required_task_count_infeasible_by_slot_capacity"])
+        self.assertFalse(region["required_task_count_infeasible_by_slot_sequence_capacity"])
+        self.assertFalse(region["required_task_count_infeasible_by_slot_matching"])
+        self.assertEqual(region["sortie_slots_per_journey"], target_task_count)
+        self.assertLess(region["variable_count"], unrestricted["variable_count"])
+        self.assertLess(region["constraint_count"], unrestricted["constraint_count"])
+        self.assertAlmostEqual(region["best_reduced_cost"], expected, delta=1.0e-6)
+        self.assertTrue(region["required_task_count_region_can_certify_no_negative"])
+        self.assertTrue(region["pricing_rc_audit_pass"])
+        self.assertEqual(region["single_journey_mip_start_status"], "OK")
+
+        mismatch = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_count=target_task_count,
+            mip_start_journey=mismatch_column,
+        )
+        self.assertEqual(mismatch["single_journey_mip_start_status"], "MISMATCH_REQUIRED_TASK_COUNT")
+        self.assertEqual(mismatch["exact_status"], "REQUIRED_TASK_COUNT_PRICING_OPTIMAL")
+
+        target_active_sorties = len(target_column.sorties)
+        active_expected = min(
+            manual_journey_reduced_cost(column, duals)
+            for column in universe.columns
+            if len(column.task_set) == target_task_count
+            and len(column.sorties) == target_active_sorties
+        )
+        active_region = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_count=target_task_count,
+            required_active_sortie_count=target_active_sorties,
+            mip_start_journey=target_column,
+        )
+        self.assertEqual(active_region["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(active_region["exact_status"], "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_OPTIMAL")
+        self.assertTrue(active_region["required_active_sortie_count_enabled"])
+        self.assertEqual(active_region["required_active_sortie_count"], target_active_sorties)
+        self.assertEqual(active_region["sortie_slots_per_journey"], target_active_sorties)
+        self.assertTrue(active_region["required_active_sortie_count_slots_fixed"])
+        self.assertEqual(
+            active_region["required_active_sortie_count_fixed_slot_count"],
+            target_active_sorties,
+        )
+        self.assertTrue(active_region["pricing_complete_for_required_active_sortie_count"])
+        self.assertTrue(active_region["required_active_sortie_count_region_can_certify_no_negative"])
+        self.assertFalse(active_region["required_active_sortie_count_can_certify_full_space"])
+        self.assertLessEqual(active_region["variable_count"], region["variable_count"])
+        self.assertLessEqual(active_region["constraint_count"], region["constraint_count"])
+        self.assertIn(
+            target_active_sorties,
+            active_region["required_active_sortie_count_expected_counts"],
+        )
+        self.assertAlmostEqual(active_region["best_reduced_cost"], active_expected, delta=1.0e-6)
+        self.assertEqual(active_region["single_journey_mip_start_status"], "OK")
+
+        split_column = next(
+            column
+            for column in universe.columns
+            if len(column.task_set) == target_task_count and len(column.sorties) == target_task_count
+        )
+        unpruned_split_active_region = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_count=target_task_count,
+            required_active_sortie_count=target_task_count,
+            single_task_per_active_sortie_arc_pruning=False,
+            mip_start_journey=split_column,
+        )
+        split_active_region = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_count=target_task_count,
+            required_active_sortie_count=target_task_count,
+            mip_start_journey=split_column,
+        )
+        self.assertEqual(split_active_region["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(
+            split_active_region["exact_status"],
+            "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_OPTIMAL",
+        )
+        self.assertEqual(
+            unpruned_split_active_region["exact_status"],
+            "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_OPTIMAL",
+        )
+        self.assertTrue(
+            split_active_region["single_task_per_active_sortie_arc_pruning_enabled"]
+        )
+        self.assertFalse(
+            unpruned_split_active_region["single_task_per_active_sortie_arc_pruning_enabled"]
+        )
+        self.assertTrue(unpruned_split_active_region["mtz_connectivity_effective"])
+        self.assertFalse(unpruned_split_active_region["single_task_per_active_sortie_mtz_disabled"])
+        self.assertGreater(
+            split_active_region["single_task_per_active_sortie_arc_pruned_option_count"],
+            0,
+        )
+        self.assertFalse(split_active_region["mtz_connectivity_effective"])
+        self.assertTrue(split_active_region["single_task_per_active_sortie_mtz_disabled"])
+        self.assertLess(split_active_region["variable_count"], unpruned_split_active_region["variable_count"])
+        self.assertLess(split_active_region["constraint_count"], unpruned_split_active_region["constraint_count"])
+        self.assertAlmostEqual(
+            split_active_region["best_reduced_cost"],
+            unpruned_split_active_region["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(split_active_region["pricing_rc_audit_pass"])
+
+        active_infeasible = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_count=target_task_count,
+            required_active_sortie_count=target_task_count + 1,
+        )
+        self.assertEqual(
+            active_infeasible["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE",
+        )
+        self.assertEqual(
+            active_infeasible["exact_status"],
+            "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_INFEASIBLE",
+        )
+        self.assertTrue(active_infeasible["pricing_complete_for_required_active_sortie_count"])
+        self.assertTrue(active_infeasible["required_active_sortie_count_region_can_certify_no_negative"])
+        self.assertTrue(active_infeasible["required_active_sortie_count_infeasible"])
+        self.assertEqual(active_infeasible["variable_count"], 0)
+        self.assertEqual(active_infeasible["constraint_count"], 0)
+
+        one_task_per_sortie_raw = json.loads(json.dumps(generate_instance(5, seed=629002, index=1)))
+        one_task_per_sortie_raw["vehicle"]["max_tasks_per_trip"] = 1
+        one_task_per_sortie_data = load_lunar_ice_data(one_task_per_sortie_raw)
+        active_capacity_min_infeasible = solve_highs_compact_single_journey_pricing(
+            one_task_per_sortie_data,
+            JourneyDuals(
+                cover={task_id: 0.0 for task_id in one_task_per_sortie_data.task_ids},
+                fleet_limit=0.0,
+            ),
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            required_task_count=2,
+            required_active_sortie_count=1,
+            slot_task_time_pruning=True,
+        )
+        self.assertEqual(active_capacity_min_infeasible["variable_count"], 0)
+        self.assertEqual(active_capacity_min_infeasible["constraint_count"], 0)
+        self.assertTrue(active_capacity_min_infeasible["required_active_sortie_count_enabled"])
+        self.assertTrue(
+            active_capacity_min_infeasible["pricing_complete_for_required_active_sortie_count"]
+        )
+        self.assertTrue(
+            active_capacity_min_infeasible[
+                "required_active_sortie_count_infeasible_by_capacity_min"
+            ]
+        )
+        self.assertEqual(
+            active_capacity_min_infeasible["required_active_sortie_count_capacity_min"],
+            2,
+        )
+        self.assertTrue(
+            active_capacity_min_infeasible[
+                "required_active_sortie_count_region_can_certify_no_negative"
+            ]
+        )
+
+        active_only_infeasible = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_active_sortie_count=10_000,
+        )
+        self.assertEqual(
+            active_only_infeasible["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE",
+        )
+        self.assertEqual(
+            active_only_infeasible["exact_status"],
+            "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_INFEASIBLE",
+        )
+        self.assertFalse(active_only_infeasible["required_task_count_enabled"])
+        self.assertFalse(active_only_infeasible["pricing_complete_for_required_task_count"])
+        self.assertFalse(
+            active_only_infeasible["required_task_count_region_can_certify_no_negative"]
+        )
+        self.assertTrue(active_only_infeasible["required_active_sortie_count_enabled"])
+        self.assertTrue(active_only_infeasible["pricing_complete_for_required_active_sortie_count"])
+        self.assertTrue(
+            active_only_infeasible["required_active_sortie_count_region_can_certify_no_negative"]
+        )
+        self.assertTrue(active_only_infeasible["required_active_sortie_count_infeasible"])
+
+        tight_raw = json.loads(json.dumps(generate_instance(5, seed=629003, index=1)))
+        tight_probe_data = load_lunar_ice_data(tight_raw)
+        for task_id, task_payload in tight_raw["tasks"].items():
+            min_depot_travel = min(
+                float(option.travel_time_min)
+                for option in tight_probe_data.arcs[("depot", str(task_id))].values()
+            )
+            task_payload["D"] = min_depot_travel + float(task_payload["sigma"]) + 0.1
+        tight_data = load_lunar_ice_data(tight_raw)
+        empty_active_slot = solve_highs_compact_single_journey_pricing(
+            tight_data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=2,
+            required_active_sortie_count=2,
+            slot_task_time_pruning=True,
+        )
+        self.assertEqual(
+            empty_active_slot["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE",
+        )
+        self.assertTrue(empty_active_slot["pricing_complete_for_required_active_sortie_count"])
+        self.assertTrue(empty_active_slot["required_active_sortie_count_infeasible_by_empty_slot"])
+        self.assertTrue(empty_active_slot["required_active_sortie_count_region_can_certify_no_negative"])
+        self.assertFalse(empty_active_slot["can_certify_no_negative"])
+        self.assertEqual(empty_active_slot["variable_count"], 0)
+        self.assertEqual(empty_active_slot["constraint_count"], 0)
+
+        sequence_infeasible = solve_highs_compact_single_journey_pricing(
+            tight_data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            required_task_count=2,
+            slot_task_time_pruning=True,
+        )
+        self.assertEqual(
+            sequence_infeasible["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE",
+        )
+        self.assertEqual(
+            sequence_infeasible["exact_status"],
+            "REQUIRED_TASK_COUNT_PRICING_INFEASIBLE",
+        )
+        self.assertTrue(sequence_infeasible["pricing_complete_for_required_task_count"])
+        self.assertTrue(sequence_infeasible["required_task_count_region_can_certify_no_negative"])
+        self.assertFalse(sequence_infeasible["can_certify_no_negative"])
+        self.assertGreaterEqual(
+            sequence_infeasible["required_task_count_slot_capacity_task_upper_bound"],
+            2,
+        )
+        self.assertLess(
+            sequence_infeasible["required_task_count_slot_sequence_capacity_upper_bound"],
+            2,
+        )
+        self.assertTrue(sequence_infeasible["required_task_count_infeasible_by_slot_sequence_capacity"])
+        self.assertEqual(sequence_infeasible["variable_count"], 0)
+        self.assertEqual(sequence_infeasible["constraint_count"], 0)
+
+        limited_raw = json.loads(json.dumps(generate_instance(5, seed=629002, index=1)))
+        limited_raw["vehicle"]["max_tasks_per_trip"] = 2
+        limited_data = load_lunar_ice_data(limited_raw)
+        infeasible = solve_highs_compact_single_journey_pricing(
+            limited_data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            required_task_count=3,
+            max_sorties_per_journey=1,
+        )
+        self.assertEqual(
+            infeasible["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE",
+        )
+        self.assertEqual(infeasible["exact_status"], "REQUIRED_TASK_COUNT_PRICING_INFEASIBLE")
+        self.assertTrue(infeasible["pricing_complete_for_required_task_count"])
+        self.assertTrue(infeasible["required_task_count_region_can_certify_no_negative"])
+        self.assertFalse(infeasible["can_certify_no_negative"])
+        self.assertEqual(infeasible["required_task_count_slot_capacity_task_upper_bound"], 2)
+        self.assertTrue(infeasible["required_task_count_infeasible_by_slot_capacity"])
+        self.assertEqual(infeasible["variable_count"], 0)
+        self.assertEqual(infeasible["constraint_count"], 0)
+
+    def test_highs_compact_pair_conflict_capacity_bound_can_fail_scoped_region_before_main_milp(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        raw = json.loads(json.dumps(generate_instance(5, seed=641777, index=1)))
+        for task_payload in raw["tasks"].values():
+            task_payload["r"] = 300.0
+            task_payload["D"] = 300.0 + float(task_payload["d"]) + 0.001
+        data = load_lunar_ice_data(raw)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+
+        base = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            required_task_count=2,
+            required_active_sortie_count=1,
+            slot_task_time_pruning=True,
+            pair_time_window_infeasible_cut=True,
+        )
+        bounded = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            max_sorties_per_journey=1,
+            required_task_count=2,
+            required_active_sortie_count=1,
+            slot_task_time_pruning=True,
+            pair_time_window_infeasible_cut=True,
+            task_slot_pair_conflict_capacity_bound=True,
+        )
+
+        self.assertFalse(base["task_slot_pair_conflict_capacity_bound_enabled"])
+        self.assertFalse(base["task_slot_pair_conflict_capacity_bound_requested"])
+        self.assertGreater(base["variable_count"], 0)
+        self.assertTrue(bounded["task_slot_pair_conflict_capacity_bound_requested"])
+        self.assertTrue(bounded["task_slot_pair_conflict_capacity_bound_enabled"])
+        self.assertTrue(bounded["task_slot_pair_conflict_capacity_bound_optimal"])
+        self.assertEqual(bounded["required_task_count_pair_conflict_capacity_upper_bound"], 1)
+        self.assertTrue(bounded["required_task_count_infeasible_by_pair_conflict_capacity"])
+        self.assertTrue(bounded["pricing_complete_for_required_task_count"])
+        self.assertTrue(bounded["required_task_count_region_can_certify_no_negative"])
+        self.assertTrue(bounded["pricing_complete_for_required_active_sortie_count"])
+        self.assertTrue(bounded["required_active_sortie_count_region_can_certify_no_negative"])
+        self.assertFalse(bounded["can_certify_no_negative"])
+        self.assertEqual(
+            bounded["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE",
+        )
+        self.assertEqual(bounded["variable_count"], 0)
+        self.assertEqual(bounded["constraint_count"], 0)
 
     def test_pair_time_window_infeasible_pairs_detects_safe_task_pair_cut(self) -> None:
         raw = json.loads(json.dumps(generate_instance(5, seed=641777, index=1)))
@@ -3173,6 +4235,499 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertAlmostEqual(strengthened["manual_best_reduced_cost"], expected, delta=1.0e-6)
         self.assertTrue(strengthened["pricing_rc_audit_pass"])
 
+    def test_highs_compact_slot_task_time_pruning_preserves_pricing_optimum(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        task_id = sorted(instance["tasks"])[0]
+        baseline_data = load_lunar_ice_data(instance)
+        min_depot_travel = min(
+            option.travel_time_min
+            for option in baseline_data.arcs[("depot", task_id)].values()
+        )
+        service_time = baseline_data.tasks[task_id].service_time
+        instance["tasks"][task_id]["r"] = 0.0
+        instance["tasks"][task_id]["D"] = float(min_depot_travel) + float(service_time) + 0.5
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+
+        unpruned = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mtz_endpoint_order_cuts=True,
+            pair_adjacency_cuts=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            slot_task_time_pruning=False,
+        )
+        pruned = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mtz_endpoint_order_cuts=True,
+            pair_adjacency_cuts=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            slot_task_time_pruning=True,
+        )
+
+        self.assertEqual(unpruned["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(pruned["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertFalse(unpruned["slot_task_time_pruning_enabled"])
+        self.assertTrue(pruned["slot_task_time_pruning_enabled"])
+        self.assertGreater(pruned["slot_task_time_pruned_assignment_count"], 0)
+        self.assertGreater(pruned["slot_arc_time_pruned_option_count"], 0)
+        self.assertEqual(
+            pruned["slot_task_time_total_assignment_count"],
+            pruned["slot_task_time_feasible_assignment_count"]
+            + pruned["slot_task_time_pruned_assignment_count"],
+        )
+        self.assertLess(pruned["variable_count"], unpruned["variable_count"])
+        self.assertLess(pruned["constraint_count"], unpruned["constraint_count"])
+        self.assertAlmostEqual(
+            pruned["best_reduced_cost"],
+            unpruned["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(pruned["pricing_rc_audit_pass"])
+
+    def test_highs_compact_resource_arc_pruning_preserves_pricing_optimum(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        instance["vehicle"]["B_use"] = 80.0
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+
+        unpruned = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mtz_endpoint_order_cuts=True,
+            pair_adjacency_cuts=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            resource_arc_pruning=False,
+            slot_task_time_pruning=True,
+        )
+        pruned = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mtz_endpoint_order_cuts=True,
+            pair_adjacency_cuts=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            resource_arc_pruning=True,
+            slot_task_time_pruning=True,
+        )
+
+        self.assertEqual(unpruned["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(pruned["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertFalse(unpruned["resource_arc_pruning_enabled"])
+        self.assertTrue(pruned["resource_arc_pruning_enabled"])
+        self.assertGreater(pruned["resource_arc_pruned_option_count"], 0)
+        self.assertEqual(
+            pruned["resource_arc_pruned_option_count"],
+            pruned["resource_arc_energy_pruned_option_count"]
+            + pruned["resource_arc_shadow_pruned_option_count"]
+            + pruned["resource_arc_demand_pruned_option_count"],
+        )
+        self.assertLess(pruned["variable_count"], unpruned["variable_count"])
+        self.assertAlmostEqual(
+            pruned["best_reduced_cost"],
+            unpruned["best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertAlmostEqual(
+            pruned["manual_best_reduced_cost"],
+            unpruned["manual_best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(pruned["pricing_rc_audit_pass"])
+
+    def test_highs_compact_slot_arc_support_pruning_preserves_pricing_optimum(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629003, index=1)
+        instance["vehicle"]["B_use"] = 80.0
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.123,
+        )
+
+        base = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mtz_endpoint_order_cuts=True,
+            pair_adjacency_cuts=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            resource_arc_pruning=True,
+            slot_task_time_pruning=True,
+            slot_arc_support_pruning=False,
+        )
+        pruned = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mtz_endpoint_order_cuts=True,
+            pair_adjacency_cuts=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            resource_arc_pruning=True,
+            slot_task_time_pruning=True,
+            slot_arc_support_pruning=True,
+        )
+
+        self.assertEqual(base["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertEqual(pruned["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertFalse(base["slot_arc_support_pruning_enabled"])
+        self.assertTrue(pruned["slot_arc_support_pruning_enabled"])
+        self.assertGreater(pruned["slot_arc_support_pruned_assignment_count"], 0)
+        self.assertGreater(pruned["slot_arc_support_pruned_option_count"], 0)
+        self.assertLessEqual(
+            pruned["slot_arc_support_pruned_assignment_count"],
+            pruned["slot_arc_support_pruned_unreachable_count"]
+            + pruned["slot_arc_support_pruned_no_return_count"],
+        )
+        self.assertLess(pruned["slot_task_model_assignment_count"], base["slot_task_model_assignment_count"])
+        self.assertLess(pruned["variable_count"], base["variable_count"])
+        self.assertAlmostEqual(pruned["best_reduced_cost"], base["best_reduced_cost"], delta=1.0e-6)
+        self.assertAlmostEqual(
+            pruned["manual_best_reduced_cost"],
+            base["manual_best_reduced_cost"],
+            delta=1.0e-6,
+        )
+        self.assertTrue(pruned["pricing_rc_audit_pass"])
+
+    def test_highs_compact_dual_task_slot_lower_bound_certifies_scoped_region_only(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+
+        result = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            slot_task_time_pruning=True,
+            pair_energy_infeasible_cut=True,
+            pair_time_window_infeasible_cut=True,
+            dual_task_slot_lower_bound=True,
+            required_task_count=2,
+            required_active_sortie_count=1,
+        )
+
+        self.assertEqual(
+            result["status"],
+            "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_DUAL_TASK_SLOT_LB_CERTIFIED",
+        )
+        self.assertEqual(
+            result["exact_status"],
+            "REQUIRED_TASK_COUNT_PRICING_DUAL_TASK_SLOT_LB_CERTIFIED",
+        )
+        self.assertTrue(result["required_task_count_certified_by_dual_task_slot_lower_bound"])
+        self.assertTrue(result["dual_task_slot_lower_bound_enabled"])
+        self.assertTrue(result["dual_task_slot_lower_bound_applicable"])
+        self.assertTrue(result["dual_task_slot_lower_bound_optimal"])
+        self.assertGreaterEqual(result["dual_task_slot_lower_bound_value"], -1.0e-6)
+        self.assertEqual(result["dual_bound"], result["dual_task_slot_lower_bound_value"])
+        self.assertTrue(result["pricing_complete_for_required_task_count"])
+        self.assertTrue(result["required_task_count_region_can_certify_no_negative"])
+        self.assertTrue(result["pricing_complete_for_required_active_sortie_count"])
+        self.assertTrue(result["required_active_sortie_count_region_can_certify_no_negative"])
+        self.assertFalse(result["can_certify_no_negative"])
+        self.assertEqual(result["variable_count"], 0)
+        self.assertEqual(result["constraint_count"], 0)
+        self.assertGreater(result["dual_task_slot_lower_bound_variable_count"], 0)
+
+    def test_highs_compact_dual_task_slot_route_arc_lb_is_safe_for_scoped_region(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        common_kwargs = {
+            "time_limit_sec": 30.0,
+            "threads": 1,
+            "mtz_connectivity": True,
+            "latest_service_start_slot_bound": True,
+            "time_window_arc_pruning": True,
+            "slot_task_time_pruning": True,
+            "pair_energy_infeasible_cut": True,
+            "pair_time_window_infeasible_cut": True,
+            "required_task_count": 2,
+            "required_active_sortie_count": 1,
+        }
+
+        exact = solve_highs_compact_single_journey_pricing(data, duals, **common_kwargs)
+        lower_bound = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            dual_task_slot_lower_bound=True,
+            **common_kwargs,
+        )
+
+        self.assertEqual(exact["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertIsNotNone(exact["best_reduced_cost"])
+        self.assertTrue(lower_bound["dual_task_slot_lower_bound_enabled"])
+        self.assertTrue(lower_bound["dual_task_slot_lower_bound_optimal"])
+        self.assertEqual(
+            lower_bound["dual_task_slot_lower_bound_route_arc_mode"],
+            "slot_incoming_outgoing_max",
+        )
+        self.assertEqual(lower_bound["dual_task_slot_lower_bound_route_arc_row_count"], 3)
+        self.assertIsNotNone(lower_bound["dual_task_slot_lower_bound_route_arc_value"])
+        self.assertGreater(
+            lower_bound["dual_task_slot_lower_bound_pair_route_arc_bound_row_count"],
+            0,
+        )
+        self.assertIsNotNone(lower_bound["dual_task_slot_lower_bound_pair_route_arc_bound_max"])
+        self.assertGreater(
+            lower_bound["dual_task_slot_lower_bound_pair_completion_lift_var_count"],
+            0,
+        )
+        self.assertGreater(
+            lower_bound["dual_task_slot_lower_bound_pair_completion_lift_row_count"],
+            0,
+        )
+        self.assertIsNotNone(lower_bound["dual_task_slot_lower_bound_pair_completion_lift_max"])
+        self.assertLessEqual(
+            lower_bound["dual_task_slot_lower_bound_value"],
+            exact["best_reduced_cost"] + 1.0e-6,
+        )
+
+    def test_highs_compact_dual_task_slot_single_route_lb_is_safe_when_task_count_matches_sorties(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        common_kwargs = {
+            "time_limit_sec": 30.0,
+            "threads": 1,
+            "mtz_connectivity": True,
+            "latest_service_start_slot_bound": True,
+            "time_window_arc_pruning": True,
+            "slot_task_time_pruning": True,
+            "pair_energy_infeasible_cut": True,
+            "pair_time_window_infeasible_cut": True,
+            "required_task_count": 2,
+            "required_active_sortie_count": 2,
+        }
+
+        exact = solve_highs_compact_single_journey_pricing(data, duals, **common_kwargs)
+        lower_bound = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            dual_task_slot_lower_bound=True,
+            **common_kwargs,
+        )
+
+        self.assertEqual(exact["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(lower_bound["dual_task_slot_lower_bound_optimal"])
+        self.assertEqual(
+            lower_bound["dual_task_slot_lower_bound_single_task_route_arc_bound_row_count"],
+            1,
+        )
+        self.assertIsNotNone(
+            lower_bound["dual_task_slot_lower_bound_single_task_route_arc_bound_max"]
+        )
+        self.assertLessEqual(
+            lower_bound["dual_task_slot_lower_bound_value"],
+            exact["best_reduced_cost"] + 1.0e-6,
+        )
+
+    def test_highs_compact_dual_task_slot_triple_route_lb_is_safe_for_single_sortie(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        common_kwargs = {
+            "time_limit_sec": 30.0,
+            "threads": 1,
+            "mtz_connectivity": True,
+            "latest_service_start_slot_bound": True,
+            "time_window_arc_pruning": True,
+            "slot_task_time_pruning": True,
+            "pair_energy_infeasible_cut": True,
+            "pair_time_window_infeasible_cut": True,
+            "required_task_count": 3,
+            "required_active_sortie_count": 1,
+        }
+
+        exact = solve_highs_compact_single_journey_pricing(data, duals, **common_kwargs)
+        lower_bound = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            dual_task_slot_lower_bound=True,
+            **common_kwargs,
+        )
+
+        self.assertEqual(exact["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(lower_bound["dual_task_slot_lower_bound_optimal"])
+        self.assertGreater(
+            lower_bound["dual_task_slot_lower_bound_triple_route_arc_bound_row_count"],
+            0,
+        )
+        self.assertIsNotNone(
+            lower_bound["dual_task_slot_lower_bound_triple_route_arc_bound_max"]
+        )
+        self.assertLessEqual(
+            lower_bound["dual_task_slot_lower_bound_value"],
+            exact["best_reduced_cost"] + 1.0e-6,
+        )
+
+    def test_highs_compact_dual_task_slot_one_pair_rest_single_route_lb_is_safe(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 0.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        common_kwargs = {
+            "time_limit_sec": 30.0,
+            "threads": 1,
+            "mtz_connectivity": True,
+            "latest_service_start_slot_bound": True,
+            "time_window_arc_pruning": True,
+            "slot_task_time_pruning": True,
+            "pair_energy_infeasible_cut": True,
+            "pair_time_window_infeasible_cut": True,
+            "required_task_count": 3,
+            "required_active_sortie_count": 2,
+        }
+
+        exact = solve_highs_compact_single_journey_pricing(data, duals, **common_kwargs)
+        lower_bound = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            dual_task_slot_lower_bound=True,
+            **common_kwargs,
+        )
+
+        self.assertEqual(exact["status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
+        self.assertTrue(lower_bound["dual_task_slot_lower_bound_optimal"])
+        self.assertEqual(
+            lower_bound[
+                "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_var_count"
+            ],
+            0,
+        )
+        self.assertGreater(
+            lower_bound[
+                "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_row_count"
+            ],
+            0,
+        )
+        self.assertGreater(
+            lower_bound[
+                "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_pair_count"
+            ],
+            0,
+        )
+        self.assertLessEqual(
+            lower_bound["dual_task_slot_lower_bound_value"],
+            exact["best_reduced_cost"] + 1.0e-6,
+        )
+
+    def test_highs_compact_full_space_dual_task_slot_lb_early_stop_is_not_certificate(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 10.0 for task_id in data.task_ids}, fleet_limit=0.0)
+
+        result = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            mtz_endpoint_order_cuts=True,
+            pair_adjacency_cuts=True,
+            latest_service_start_slot_bound=True,
+            time_window_arc_pruning=True,
+            resource_arc_pruning=True,
+            slot_task_time_pruning=True,
+            dual_task_slot_full_space_lower_bound=True,
+            dual_task_slot_full_space_lb_time_limit_sec=0.1,
+            dual_task_slot_full_space_lb_early_stop_on_negative=True,
+        )
+
+        self.assertTrue(result["dual_task_slot_full_space_lower_bound_enabled"])
+        self.assertTrue(result["dual_task_slot_full_space_lower_bound_applicable"])
+        self.assertTrue(result["dual_task_slot_full_space_lower_bound_early_stop_on_negative"])
+        self.assertTrue(result["dual_task_slot_full_space_lower_bound_early_stopped_on_negative"])
+        self.assertFalse(result["dual_task_slot_full_space_lower_bound_coverage_complete"])
+        self.assertFalse(result["dual_task_slot_full_space_lower_bound_can_certify"])
+        self.assertGreater(result["dual_task_slot_full_space_lower_bound_negative_region_count"], 0)
+        self.assertEqual(
+            result["dual_task_slot_full_space_lower_bound_status"],
+            "BOUND_SCAN_NEGATIVE_REGION_EARLY_STOP",
+        )
+        self.assertNotEqual(
+            result["status"],
+            "COMPACT_HIGHS_PRICING_DUAL_TASK_SLOT_FULL_SPACE_LB_CERTIFIED",
+        )
+        self.assertFalse(result["can_certify_no_negative"])
+        self.assertLess(result["best_reduced_cost"], -1.0e-6)
+        self.assertTrue(result["pricing_rc_audit_pass"])
+
     def test_highs_compact_single_journey_negative_feasibility_search(self) -> None:
         try:
             import highspy  # noqa: F401
@@ -3199,6 +4754,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(no_negative["exact_status"], "EXACT_NEGATIVE_FEASIBILITY_INFEASIBLE")
         self.assertTrue(no_negative["can_certify_no_negative"])
         self.assertTrue(no_negative["negative_feasibility_search_enabled"])
+        self.assertTrue(no_negative["negative_feasibility_zero_objective_enabled"])
         self.assertTrue(no_negative["mtz_connectivity_enabled"])
 
         negative_duals = JourneyDuals(cover=cover_duals, fleet_limit=2.0)
@@ -3214,6 +4770,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         )
         self.assertEqual(negative["pricing_state"], "FOUND_NEGATIVE")
         self.assertTrue(negative["negative_found"])
+        self.assertTrue(negative["negative_feasibility_zero_objective_enabled"])
         self.assertLess(negative["manual_best_reduced_cost"], -1.0e-6)
         self.assertTrue(negative["pricing_rc_audit_pass"])
         forbidden_pattern = tuple(
@@ -3254,6 +4811,55 @@ class LunarIceSmokeTests(unittest.TestCase):
             restricted_task_set_no_negative["exact_status"],
             "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE",
         )
+
+    def test_highs_compact_single_journey_objective_bound_cutoff_certifies_no_negative(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        duals = JourneyDuals(cover=cover_duals, fleet_limit=0.0)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        expected = min(manual_journey_reduced_cost(column, duals) for column in universe.columns)
+        self.assertGreater(expected, 0.0)
+
+        result = solve_highs_compact_single_journey_pricing(
+            data,
+            duals,
+            time_limit_sec=30.0,
+            threads=1,
+            mtz_connectivity=True,
+            objective_bound_no_negative_cutoff=True,
+            negative_eps=1.0e-6,
+        )
+
+        self.assertEqual(result["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+        self.assertIn(
+            result["status"],
+            {
+                "COMPACT_HIGHS_PRICING_OBJECTIVE_BOUND_NO_NEGATIVE",
+                "COMPACT_HIGHS_PRICING_OPTIMAL",
+            },
+        )
+        self.assertIn(
+            result["exact_status"],
+            {
+                "EXACT_OBJECTIVE_BOUND_NO_NEGATIVE",
+                "EXACT_PRICING_OPTIMAL",
+            },
+        )
+        self.assertTrue(result["can_certify_no_negative"])
+        self.assertTrue(result["objective_bound_no_negative_cutoff_enabled"])
+        self.assertAlmostEqual(result["objective_bound_no_negative_cutoff_value"], -1.0e-6)
+        self.assertEqual(
+            bool(result["objective_bound_no_negative_cutoff_can_certify"]),
+            result["status"] == "COMPACT_HIGHS_PRICING_OBJECTIVE_BOUND_NO_NEGATIVE",
+        )
+        self.assertFalse(result["negative_feasibility_zero_objective_enabled"])
+        self.assertFalse(result["negative_found"])
 
     def test_compact_final_judge_hybrid_uses_negative_search_for_negative_columns(self) -> None:
         try:
@@ -3492,6 +5098,10 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(negative_kwargs["pair_adjacency_cuts"])
         self.assertTrue(negative_kwargs["latest_service_start_slot_bound"])
         self.assertFalse(negative_kwargs["time_window_arc_pruning"])
+        self.assertFalse(negative_kwargs["slot_task_time_pruning"])
+        self.assertFalse(negative_kwargs["slot_arc_support_pruning"])
+        self.assertFalse(negative_kwargs["dual_task_slot_full_space_lower_bound"])
+        self.assertTrue(negative_kwargs["dual_task_slot_full_space_lb_early_stop_on_negative"])
         self.assertFalse(negative_kwargs["service_start_depot_travel_lb"])
         self.assertFalse(negative_kwargs["task_to_depot_return_travel_lb"])
         self.assertFalse(negative_kwargs["pair_route_duration_lb"])
@@ -3512,6 +5122,11 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(proof_kwargs["pair_adjacency_cuts"])
         self.assertTrue(proof_kwargs["latest_service_start_slot_bound"])
         self.assertFalse(proof_kwargs["time_window_arc_pruning"])
+        self.assertFalse(proof_kwargs["resource_arc_pruning"])
+        self.assertFalse(proof_kwargs["slot_task_time_pruning"])
+        self.assertFalse(proof_kwargs["slot_arc_support_pruning"])
+        self.assertFalse(proof_kwargs["dual_task_slot_full_space_lower_bound"])
+        self.assertTrue(proof_kwargs["dual_task_slot_full_space_lb_early_stop_on_negative"])
         self.assertFalse(proof_kwargs["service_start_depot_travel_lb"])
         self.assertFalse(proof_kwargs["task_to_depot_return_travel_lb"])
         self.assertFalse(proof_kwargs["pair_route_duration_lb"])
@@ -3591,6 +5206,11 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertTrue(kwargs["pair_adjacency_cuts"])
             self.assertTrue(kwargs["latest_service_start_slot_bound"])
             self.assertTrue(kwargs["time_window_arc_pruning"])
+            self.assertTrue(kwargs["resource_arc_pruning"])
+            self.assertTrue(kwargs["slot_task_time_pruning"])
+            self.assertFalse(kwargs["slot_arc_support_pruning"])
+            self.assertFalse(kwargs["dual_task_slot_full_space_lower_bound"])
+            self.assertTrue(kwargs["dual_task_slot_full_space_lb_early_stop_on_negative"])
             self.assertFalse(kwargs["service_start_depot_travel_lb"])
             self.assertFalse(kwargs["task_to_depot_return_travel_lb"])
             self.assertFalse(kwargs["pair_route_duration_lb"])
@@ -3620,6 +5240,1138 @@ class LunarIceSmokeTests(unittest.TestCase):
             ],
             "V4",
         )
+
+    def test_b4_1_v4_final_judge_cut_strengthening_can_be_opted_out(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4-lean-proof-profile",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+                "LUNAR_ICE_COMPACT_MTZ_ENDPOINT_ORDER_CUTS": "0",
+                "LUNAR_ICE_COMPACT_PAIR_ADJACENCY_CUTS": "0",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        proof_kwargs = mocked_solver.call_args.kwargs
+        self.assertTrue(proof_kwargs["mtz_connectivity"])
+        self.assertFalse(proof_kwargs["mtz_endpoint_order_cuts"])
+        self.assertFalse(proof_kwargs["pair_adjacency_cuts"])
+        self.assertTrue(proof_kwargs["latest_service_start_slot_bound"])
+        self.assertTrue(proof_kwargs["time_window_arc_pruning"])
+        self.assertTrue(proof_kwargs["resource_arc_pruning"])
+        self.assertTrue(proof_kwargs["slot_task_time_pruning"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4")
+        self.assertEqual(result.pricing_payload["compact_final_judge_phase_mode"], "proof_only")
+
+    def test_b4_1_v4_final_judge_proof_mtz_can_be_opted_out(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4-no-mtz-proof-profile",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+                "LUNAR_ICE_COMPACT_PROOF_MTZ_CONNECTIVITY": "0",
+                "LUNAR_ICE_COMPACT_MTZ_ENDPOINT_ORDER_CUTS": "0",
+                "LUNAR_ICE_COMPACT_PAIR_ADJACENCY_CUTS": "0",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        proof_kwargs = mocked_solver.call_args.kwargs
+        self.assertFalse(proof_kwargs["mtz_connectivity"])
+        self.assertFalse(proof_kwargs["mtz_endpoint_order_cuts"])
+        self.assertFalse(proof_kwargs["pair_adjacency_cuts"])
+        self.assertTrue(proof_kwargs["latest_service_start_slot_bound"])
+        self.assertTrue(proof_kwargs["time_window_arc_pruning"])
+        self.assertTrue(proof_kwargs["resource_arc_pruning"])
+        self.assertTrue(proof_kwargs["slot_task_time_pruning"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4")
+        self.assertFalse(
+            result.pricing_payload["compact_final_judge_profile_proof_mtz_connectivity"]
+        )
+        self.assertEqual(result.pricing_payload["compact_final_judge_phase_mode"], "proof_only")
+
+    def test_b4_1_v4_final_judge_pair_weighted_strengthening_can_be_opted_in(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4-pair-weighted-strengthening",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4S",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        proof_kwargs = mocked_solver.call_args.kwargs
+        self.assertTrue(proof_kwargs["mtz_connectivity"])
+        self.assertFalse(proof_kwargs["mtz_endpoint_order_cuts"])
+        self.assertFalse(proof_kwargs["pair_adjacency_cuts"])
+        self.assertTrue(proof_kwargs["resource_arc_pruning"])
+        self.assertTrue(proof_kwargs["slot_task_time_pruning"])
+        self.assertTrue(proof_kwargs["sortie_slot_position_bounds"])
+        self.assertTrue(proof_kwargs["pair_weighted_completion_lb"])
+        self.assertTrue(proof_kwargs["pair_energy_infeasible_cut"])
+        self.assertTrue(proof_kwargs["pair_time_window_infeasible_cut"])
+        self.assertTrue(proof_kwargs["pair_shadow_infeasible_cut"])
+        self.assertFalse(proof_kwargs["recharge_aware_slot_bound"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4S")
+        self.assertEqual(
+            result.pricing_payload["compact_final_judge_formulation_profile"],
+            "B4V4_strengthened_pair_weighted_final_tail",
+        )
+        self.assertTrue(
+            result.pricing_payload["compact_final_judge_profile_pair_weighted_completion_lb"]
+        )
+        self.assertFalse(
+            result.pricing_payload["compact_final_judge_profile_recharge_aware_slot_bound"]
+        )
+        self.assertEqual(result.pricing_payload["compact_final_judge_phase_mode"], "proof_only")
+
+    def test_b4_1_v4sr_final_judge_enables_recharge_aware_slot_bound(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4sr-recharge-slot-bound",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SR",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertTrue(mocked_solver.call_args.kwargs["recharge_aware_slot_bound"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SR")
+        self.assertTrue(
+            result.pricing_payload["compact_final_judge_profile_recharge_aware_slot_bound"]
+        )
+
+    def test_b4_1_v4sc_final_judge_enables_objective_bound_cutoff(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4sc-objective-bound-cutoff",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OBJECTIVE_BOUND_NO_NEGATIVE",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "EXACT_OBJECTIVE_BOUND_NO_NEGATIVE",
+            "best_reduced_cost": None,
+            "manual_best_reduced_cost": None,
+            "pricing_best_reduced_cost": None,
+            "dual_bound": None,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "objective_bound_no_negative_cutoff_enabled": True,
+            "objective_bound_no_negative_cutoff_can_certify": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SC",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertTrue(mocked_solver.call_args.kwargs["objective_bound_no_negative_cutoff"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SC")
+        self.assertEqual(
+            result.pricing_payload["compact_final_judge_formulation_profile"],
+            "B4V4_strengthened_pair_weighted_objective_bound_cutoff",
+        )
+        self.assertTrue(
+            result.pricing_payload[
+                "compact_final_judge_profile_objective_bound_no_negative_cutoff"
+            ]
+        )
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_v4sz_final_judge_enables_zero_capacity_slot_truncation(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4sz-zero-capacity-slot-truncation",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "zero_capacity_slot_truncation_enabled": True,
+            "zero_capacity_slot_truncation_original_slot_count": 5,
+            "zero_capacity_slot_truncation_effective_slot_count": 4,
+            "zero_capacity_slot_truncation_trimmed_slot_count": 1,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SZ",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertTrue(mocked_solver.call_args.kwargs["zero_capacity_slot_truncation"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SZ")
+        self.assertEqual(
+            result.pricing_payload["compact_final_judge_formulation_profile"],
+            "B4V4_strengthened_pair_weighted_zero_capacity_slot_truncation",
+        )
+        self.assertTrue(
+            result.pricing_payload[
+                "compact_final_judge_profile_zero_capacity_slot_truncation"
+            ]
+        )
+        self.assertTrue(result.pricing_payload["zero_capacity_slot_truncation_enabled"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_v4szcap_final_judge_enables_slot_sequence_capacity_arc_pruning(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4szcap-slot-sequence-capacity-arc-pruning",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "zero_capacity_slot_truncation_enabled": True,
+            "slot_sequence_capacity_arc_pruning_enabled": True,
+            "slot_sequence_capacity_arc_pruned_option_count": 3,
+            "slot_sequence_capacity_mtz_disabled_slot_count": 2,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SZCAP",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SZCAP")
+        self.assertTrue(mocked_solver.call_args.kwargs["zero_capacity_slot_truncation"])
+        self.assertTrue(mocked_solver.call_args.kwargs["slot_sequence_capacity_arc_pruning"])
+        self.assertTrue(
+            result.pricing_payload[
+                "compact_final_judge_profile_slot_sequence_capacity_arc_pruning"
+            ]
+        )
+        self.assertTrue(result.pricing_payload["slot_sequence_capacity_arc_pruning_enabled"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_v4szpc_final_judge_enables_pair_conflict_capacity_bound(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4szpc-pair-conflict-capacity-bound",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "zero_capacity_slot_truncation_enabled": True,
+            "task_slot_pair_conflict_capacity_bound_requested": True,
+            "task_slot_pair_conflict_capacity_bound_enabled": True,
+            "task_slot_pair_conflict_capacity_bound_optimal": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SZPC",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SZPC")
+        self.assertTrue(mocked_solver.call_args.kwargs["zero_capacity_slot_truncation"])
+        self.assertTrue(mocked_solver.call_args.kwargs["task_slot_pair_conflict_capacity_bound"])
+        self.assertTrue(
+            result.pricing_payload[
+                "compact_final_judge_profile_task_slot_pair_conflict_capacity_bound"
+            ]
+        )
+        self.assertTrue(result.pricing_payload["task_slot_pair_conflict_capacity_bound_enabled"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_v4szw_final_judge_enables_warm_integer_start(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4szw-warm-integer-start",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "zero_capacity_slot_truncation_enabled": True,
+            "single_journey_mip_start_zero_fill_integers": True,
+            "single_journey_mip_start_zero_fill_integer_entry_count": 42,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SZW",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SZW")
+        self.assertTrue(mocked_solver.call_args.kwargs["zero_capacity_slot_truncation"])
+        self.assertTrue(mocked_solver.call_args.kwargs["mip_start_zero_fill_integers"])
+        self.assertTrue(
+            result.pricing_payload[
+                "compact_final_judge_profile_mip_start_zero_fill_integers"
+            ]
+        )
+        self.assertTrue(result.pricing_payload["single_journey_mip_start_zero_fill_integers"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_v4sl_final_judge_enables_slot_sequence_capacity_live_bound(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4sl-slot-sequence-live-bound",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "slot_sequence_capacity_live_bound_enabled": True,
+            "slot_sequence_capacity_live_bound_tightened_slot_count": 2,
+            "slot_sequence_capacity_live_bound_by_slot": [6, 5, 3],
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SL",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertTrue(mocked_solver.call_args.kwargs["zero_capacity_slot_truncation"])
+        self.assertTrue(mocked_solver.call_args.kwargs["slot_sequence_capacity_live_bound"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SL")
+        self.assertEqual(
+            result.pricing_payload["compact_final_judge_formulation_profile"],
+            "B4V4_strengthened_pair_weighted_slot_sequence_live_bound",
+        )
+        self.assertTrue(
+            result.pricing_payload[
+                "compact_final_judge_profile_slot_sequence_capacity_live_bound"
+            ]
+        )
+        self.assertTrue(result.pricing_payload["slot_sequence_capacity_live_bound_enabled"])
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_v4st_final_judge_enables_tight_service_start_bounds(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4st-tight-service-start-bounds",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "zero_capacity_slot_truncation_enabled": True,
+            "tight_service_start_bounds_enabled": True,
+            "tight_service_start_bound_count": 15,
+            "tight_service_start_bound_min": 12.0,
+            "tight_service_start_bound_max": 128.0,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4ST",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertTrue(mocked_solver.call_args.kwargs["zero_capacity_slot_truncation"])
+        self.assertTrue(mocked_solver.call_args.kwargs["tight_service_start_bounds"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4ST")
+        self.assertEqual(
+            result.pricing_payload["compact_final_judge_formulation_profile"],
+            "B4V4_strengthened_pair_weighted_tight_service_start_bounds",
+        )
+        self.assertTrue(
+            result.pricing_payload[
+                "compact_final_judge_profile_tight_service_start_bounds"
+            ]
+        )
+        self.assertTrue(result.pricing_payload["tight_service_start_bounds_enabled"])
+        self.assertEqual(result.pricing_payload["tight_service_start_bound_count"], 15)
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_v4_final_judge_passes_column_pool_mip_start_to_proof(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        duals = JourneyDuals(cover=cover_duals, fleet_limit=0.0)
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4-mip-start",
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        warm_start = min(universe.columns, key=lambda column: manual_journey_reduced_cost(column, duals))
+        pool = ColumnPool()
+        signature = column_signature_from_journey(warm_start)
+        pool.add(BpcColumn(signature=signature, objective=warm_start.objective, payload=warm_start))
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "single_journey_mip_start_enabled": True,
+            "single_journey_mip_start_status": "OK",
+            "single_journey_mip_start_source": "column_pool_journey",
+            "single_journey_mip_start_entry_count": 10,
+            "single_journey_mip_start_sortie_count": len(warm_start.sorties),
+            "single_journey_mip_start_task_count": len(warm_start.task_set),
+            "single_journey_mip_start_objective": warm_start.objective,
+            "single_journey_mip_start_reduced_cost": manual_journey_reduced_cost(warm_start, duals),
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    duals,
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                    column_pool=pool,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 1)
+        self.assertIs(mocked_solver.call_args.kwargs["mip_start_journey"], warm_start)
+        self.assertTrue(result.pricing_payload["compact_final_judge_mip_start_from_column_pool"])
+        self.assertTrue(result.pricing_payload["single_journey_mip_start_enabled"])
+        self.assertEqual(result.pricing_payload["single_journey_mip_start_status"], "OK")
+        self.assertEqual(
+            result.pricing_payload["compact_pricing_phase_payloads"]["optimization_proof"][
+                "single_journey_mip_start_status"
+            ],
+            "OK",
+        )
+
+    def test_b4_1_v4_final_judge_can_pass_mip_start_to_negative_search(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        duals = JourneyDuals(cover=cover_duals, fleet_limit=0.0)
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4-negative-search-mip-start",
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        warm_start = min(universe.columns, key=lambda column: manual_journey_reduced_cost(column, duals))
+        pool = ColumnPool()
+        signature = column_signature_from_journey(warm_start)
+        pool.add(BpcColumn(signature=signature, objective=warm_start.objective, payload=warm_start))
+        negative_probe = {
+            "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "exact_status": "NOT_SOLVED",
+            "best_reduced_cost": None,
+            "manual_best_reduced_cost": None,
+            "pricing_best_reduced_cost": None,
+            "dual_bound": 0.0,
+            "negative_found": False,
+            "can_certify_no_negative": False,
+            "pricing_complete_by_compact_milp": False,
+            "single_journey_mip_start_enabled": True,
+            "single_journey_mip_start_status": "OK",
+            "single_journey_mip_start_source": "column_pool_journey",
+            "single_journey_mip_start_entry_count": 10,
+            "single_journey_mip_start_sortie_count": len(warm_start.sorties),
+            "single_journey_mip_start_task_count": len(warm_start.task_set),
+            "single_journey_mip_start_objective": warm_start.objective,
+            "single_journey_mip_start_reduced_cost": manual_journey_reduced_cost(warm_start, duals),
+            "journeys": tuple(),
+        }
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "BPC_NO_NEGATIVE_CERTIFIED",
+            "best_reduced_cost": 0.1,
+            "manual_best_reduced_cost": 0.1,
+            "pricing_best_reduced_cost": 0.1,
+            "dual_bound": 0.1,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "single_journey_mip_start_enabled": True,
+            "single_journey_mip_start_status": "OK",
+            "single_journey_mip_start_source": "column_pool_journey",
+            "single_journey_mip_start_entry_count": 10,
+            "single_journey_mip_start_sortie_count": len(warm_start.sorties),
+            "single_journey_mip_start_task_count": len(warm_start.task_set),
+            "single_journey_mip_start_objective": warm_start.objective,
+            "single_journey_mip_start_reduced_cost": manual_journey_reduced_cost(warm_start, duals),
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4",
+                "LUNAR_ICE_COMPACT_NEGATIVE_SEARCH_MIP_START": "1",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=(negative_probe, proof_probe),
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    duals,
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                    column_pool=pool,
+                )
+
+        self.assertEqual(mocked_solver.call_count, 2)
+        self.assertIs(mocked_solver.call_args_list[0].kwargs["mip_start_journey"], warm_start)
+        self.assertIs(mocked_solver.call_args_list[1].kwargs["mip_start_journey"], warm_start)
+        self.assertTrue(result.pricing_payload["compact_final_judge_mip_start_from_column_pool"])
+        self.assertEqual(
+            result.pricing_payload["compact_pricing_phase_payloads"]["negative_feasibility_search_1"][
+                "single_journey_mip_start_status"
+            ],
+            "OK",
+        )
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_route_template_pre_harvest_returns_audited_negative(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 1000.0 for task_id in data.task_ids}
+        duals = JourneyDuals(cover=cover_duals, fleet_limit=0.0)
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-route-template-pre-harvest",
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        seed_column = next(
+            column for column in universe.columns if len(column.task_set) == len(data.task_ids)
+        )
+        pool = ColumnPool()
+        pool.add(
+            BpcColumn(
+                signature=column_signature_from_journey(seed_column),
+                objective=seed_column.objective,
+                payload=seed_column,
+            )
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST": "1",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_TIME_CAP_SEC": "10",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_DIRECT_TASKS": "5",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_ACTIVE_SEEDS": "4",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_CANDIDATE_SETS": "12",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_TARGET": "2",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=AssertionError("compact solver should not run after pre-harvest negative"),
+            ):
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    duals,
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                    column_pool=pool,
+                    master_view=MasterColumnView(),
+                    node_id="root",
+                )
+
+        self.assertEqual(result.pricing_state, PricingState.FOUND_NEGATIVE)
+        self.assertGreater(len(result.negative_columns), 0)
+        self.assertEqual(result.pricing_payload["compact_pricing_phase"], "route_template_pre_harvest")
+        self.assertEqual(
+            result.pricing_payload["route_template_pre_harvest_status"],
+            "ROUTE_TEMPLATE_PRE_HARVEST_FOUND_NEGATIVE",
+        )
+        self.assertFalse(result.pricing_payload["can_certify_no_negative"])
+        self.assertFalse(result.pricing_payload["uses_true_dual_bpc_certificate"])
+        self.assertEqual(result.pricing_payload["pricing_proof_kind"], "FRONTIER_BOUND_INCOMPLETE")
+        self.assertFalse(result.pricing_payload["route_template_pre_harvest_can_certify_no_negative"])
+        self.assertTrue(result.pricing_payload["harvest_manual_rc_audit_pass"])
+        self.assertTrue(result.pricing_payload["harvest_pricing_rc_audit_pass"])
+        self.assertTrue(result.pricing_payload["harvest_addability_audit_available"])
+        self.assertEqual(result.pricing_payload["variable_count"], 0)
+        self.assertEqual(result.pricing_payload["constraint_count"], 0)
+
+    def test_b4_1_v4sh_profile_enables_route_template_pre_harvest(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 1000.0 for task_id in data.task_ids}
+        duals = JourneyDuals(cover=cover_duals, fleet_limit=0.0)
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4sh-route-template-profile",
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        seed_column = next(
+            column for column in universe.columns if len(column.task_set) == len(data.task_ids)
+        )
+        pool = ColumnPool()
+        pool.add(
+            BpcColumn(
+                signature=column_signature_from_journey(seed_column),
+                objective=seed_column.objective,
+                payload=seed_column,
+            )
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SH",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST": "",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_TIME_CAP_SEC": "",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_DIRECT_TASKS": "",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_ACTIVE_SEEDS": "",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_CANDIDATE_SETS": "",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_TARGET": "",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=AssertionError("V4SH pre-harvest should return before compact proof"),
+            ):
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    duals,
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                    column_pool=pool,
+                    master_view=MasterColumnView(),
+                    node_id="root",
+                )
+
+        self.assertEqual(result.pricing_state, PricingState.FOUND_NEGATIVE)
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SH")
+        self.assertTrue(result.pricing_payload["compact_final_judge_profile_route_template_pre_harvest"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile_route_template_pre_harvest_target"], 1)
+        self.assertEqual(
+            result.pricing_payload["compact_pricing_phase"],
+            "route_template_pre_harvest",
+        )
+        self.assertEqual(
+            result.pricing_payload["route_template_pre_harvest_target"],
+            1,
+        )
+        self.assertEqual(
+            result.pricing_payload["route_template_pre_harvest_max_candidate_sets"],
+            180,
+        )
+        self.assertFalse(result.pricing_payload["can_certify_no_negative"])
+        self.assertFalse(result.pricing_payload["route_template_pre_harvest_can_certify_no_negative"])
+        self.assertEqual(result.pricing_payload["pricing_proof_kind"], "FRONTIER_BOUND_INCOMPLETE")
+
+    def test_b4_1_route_template_pre_harvest_no_column_fallback_disabled_is_incomplete(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.0 for task_id in data.task_ids}
+        duals = JourneyDuals(cover=cover_duals, fleet_limit=0.0)
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-route-template-no-fallback",
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        seed_column = next(
+            column for column in universe.columns if len(column.task_set) == len(data.task_ids)
+        )
+        pool = ColumnPool()
+        pool.add(
+            BpcColumn(
+                signature=column_signature_from_journey(seed_column),
+                objective=seed_column.objective,
+                payload=seed_column,
+            )
+        )
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST": "1",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_FALLBACK": "0",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_TIME_CAP_SEC": "10",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_DIRECT_TASKS": "5",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_ACTIVE_SEEDS": "4",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_MAX_CANDIDATE_SETS": "12",
+                "LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_TARGET": "1",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=AssertionError("compact solver should not run when fallback is disabled"),
+            ):
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    duals,
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                    column_pool=pool,
+                    master_view=MasterColumnView(),
+                    node_id="root",
+                )
+
+        self.assertEqual(result.pricing_state, PricingState.INCOMPLETE_LIMIT)
+        self.assertEqual(result.negative_columns, tuple())
+        self.assertEqual(result.pricing_payload["compact_pricing_phase"], "route_template_pre_harvest")
+        self.assertEqual(
+            result.pricing_payload["status"],
+            "ROUTE_TEMPLATE_PRE_HARVEST_NO_NEGATIVE_FALLBACK_DISABLED",
+        )
+        self.assertFalse(result.pricing_payload["can_certify_no_negative"])
+        self.assertFalse(result.pricing_payload["uses_true_dual_bpc_certificate"])
+        self.assertEqual(result.pricing_payload["pricing_proof_kind"], "FRONTIER_BOUND_INCOMPLETE")
+        self.assertFalse(result.pricing_payload["route_template_pre_harvest_fallback_enabled"])
+
+    def test_b4_1_route_template_pre_harvest_expands_seed_neighborhood(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(
+            cover={task_id: 10.0 - index for index, task_id in enumerate(data.task_ids)},
+            fleet_limit=0.0,
+        )
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        seed_column = next(
+            column for column in universe.columns if len(column.task_set) == len(data.task_ids)
+        )
+        pool = ColumnPool()
+        pool.add(
+            BpcColumn(
+                signature=column_signature_from_journey(seed_column),
+                objective=seed_column.objective,
+                payload=seed_column,
+            )
+        )
+
+        seeds = final_judge_module._route_template_pre_harvest_seed_task_sets(
+            data,
+            duals,
+            CutContext(),
+            branch_context=BranchContext(),
+            column_pool=pool,
+            max_direct_tasks=5,
+            max_active_seeds=1,
+            neighborhood_enabled=True,
+            max_neighborhood_seeds=8,
+        )
+
+        self.assertEqual(seeds[0], tuple(sorted(seed_column.task_set)))
+        self.assertGreater(len(seeds), 1)
+        self.assertTrue(any(len(seed) == len(data.task_ids) - 1 for seed in seeds[1:]))
+
+    def test_b4_1_route_template_pre_harvest_neighborhood_respects_branch_context(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        task_a, task_b = data.task_ids[:2]
+        third_task = data.task_ids[2]
+        duals = JourneyDuals(cover={task_id: 1.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        seed_column = next(
+            column
+            for column in universe.columns
+            if tuple(sorted(column.task_set)) == tuple(sorted((task_a, task_b, third_task)))
+        )
+        pool = ColumnPool()
+        pool.add(
+            BpcColumn(
+                signature=column_signature_from_journey(seed_column),
+                objective=seed_column.objective,
+                payload=seed_column,
+            )
+        )
+        branch = BranchContext((PairBranchDecision(task_a, task_b, SAME_JOURNEY),))
+
+        seeds = final_judge_module._route_template_pre_harvest_seed_task_sets(
+            data,
+            duals,
+            CutContext(),
+            branch_context=branch,
+            column_pool=pool,
+            max_direct_tasks=5,
+            max_active_seeds=1,
+            neighborhood_enabled=True,
+            max_neighborhood_seeds=20,
+        )
+
+        for seed in seeds:
+            self.assertEqual(str(task_a) in seed, str(task_b) in seed)
 
     def test_b4_1_compact_final_judge_service_start_depot_travel_lb_is_env_opt_in(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -3961,6 +6713,9 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertTrue(proof_kwargs["pair_adjacency_cuts"])
         self.assertTrue(proof_kwargs["latest_service_start_slot_bound"])
         self.assertTrue(proof_kwargs["time_window_arc_pruning"])
+        self.assertFalse(proof_kwargs["slot_arc_support_pruning"])
+        self.assertFalse(proof_kwargs["dual_task_slot_full_space_lower_bound"])
+        self.assertTrue(proof_kwargs["dual_task_slot_full_space_lb_early_stop_on_negative"])
         self.assertEqual(result.pricing_state, PricingState.INCOMPLETE_LIMIT)
         self.assertEqual(result.pricing_payload["compact_pricing_phase"], "optimization_proof")
         self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4")
@@ -4023,6 +6778,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertTrue(kwargs["pair_adjacency_cuts"])
         self.assertTrue(kwargs["latest_service_start_slot_bound"])
         self.assertTrue(kwargs["time_window_arc_pruning"])
+        self.assertFalse(kwargs["slot_arc_support_pruning"])
         self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
         self.assertEqual(result.pricing_payload["compact_pricing_phase"], "negative_feasibility_proof")
         self.assertEqual(result.pricing_payload["compact_final_judge_phase_mode"], "feasibility_proof_only")
@@ -4031,6 +6787,118 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertTrue(result.pricing_payload["can_certify_no_negative"])
         self.assertEqual(result.pricing_payload["pricing_proof_kind"], "EXHAUSTIVE_NO_NEGATIVE")
         self.assertIn("negative_feasibility_proof", result.pricing_payload["compact_pricing_phase_payloads"])
+
+    def test_b4_1_compact_final_judge_v4szt_profile_enables_tight_big_m(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4szt-profile",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "EXACT_PRICING_OPTIMAL",
+            "best_reduced_cost": 0.02,
+            "dual_bound": 0.02,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SZT",
+                "LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE": "proof_only",
+            },
+        ):
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        kwargs = mocked_solver.call_args.kwargs
+        self.assertTrue(kwargs["zero_capacity_slot_truncation"])
+        self.assertTrue(kwargs["tight_service_start_bounds"])
+        self.assertTrue(kwargs["tight_time_arc_big_m"])
+        self.assertFalse(kwargs["slot_service_start_y_lower_bound"])
+        self.assertTrue(kwargs["pair_weighted_completion_lb"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SZT")
+        self.assertTrue(result.pricing_payload["compact_final_judge_profile_tight_time_arc_big_m"])
+        self.assertFalse(
+            result.pricing_payload[
+                "compact_final_judge_profile_slot_service_start_y_lower_bound"
+            ]
+        )
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+
+    def test_b4_1_compact_final_judge_v4sztp_profile_defaults_to_proof_only(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        cover_duals = {task_id: 0.05 * (index + 1) for index, task_id in enumerate(data.task_ids)}
+        context = ReducedCostContext(
+            task_duals=cover_duals,
+            fleet_dual=0.0,
+            dual_fingerprint="b4-1-v4sztp-profile",
+        )
+        proof_probe = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_status": "EXACT_PRICING_OPTIMAL",
+            "best_reduced_cost": 0.02,
+            "dual_bound": 0.02,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "pricing_complete_by_compact_milp": True,
+            "journeys": tuple(),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {"LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE": "V4SZTP"},
+            clear=False,
+        ):
+            os.environ.pop("LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE", None)
+            with patch.object(
+                final_judge_module,
+                "solve_highs_compact_single_journey_pricing",
+                return_value=proof_probe,
+            ) as mocked_solver:
+                result = _run_compact_single_journey_pricing_final_judge(
+                    data,
+                    JourneyDuals(cover=cover_duals, fleet_limit=0.0),
+                    context=context,
+                    branch_context=BranchContext(),
+                    cut_context=CutContext(),
+                    negative_eps=1.0e-6,
+                    wall_time_limit_sec=30.0,
+                )
+
+        kwargs = mocked_solver.call_args.kwargs
+        self.assertTrue(kwargs["tight_time_arc_big_m"])
+        self.assertTrue(kwargs["zero_capacity_slot_truncation"])
+        self.assertEqual(result.pricing_payload["compact_final_judge_profile"], "V4SZTP")
+        self.assertEqual(
+            result.pricing_payload["compact_final_judge_profile_phase_mode_default"],
+            "proof_only",
+        )
+        self.assertEqual(result.pricing_payload["compact_final_judge_phase_mode"], "proof_only")
+        self.assertEqual(result.pricing_payload["compact_pricing_phase"], "optimization_proof")
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
 
     def test_b4_1_compact_final_judge_downgrades_unproven_frontier_no_negative(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -5071,12 +7939,16 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(v2["pair_adjacency_cuts"])
         self.assertTrue(v2["latest_service_start_slot_bound"])
         self.assertFalse(v2["time_window_arc_pruning"])
+        self.assertFalse(v2["resource_arc_pruning"])
+        self.assertFalse(v2["slot_arc_support_pruning"])
 
         v4 = B4D_VARIANT_CONFIGS["V4_combined_endpoint_pair_latest_start_time_window"]
         self.assertTrue(v4["mtz_endpoint_order_cuts"])
         self.assertTrue(v4["pair_adjacency_cuts"])
         self.assertTrue(v4["latest_service_start_slot_bound"])
         self.assertTrue(v4["time_window_arc_pruning"])
+        self.assertTrue(v4["resource_arc_pruning"])
+        self.assertFalse(v4["slot_arc_support_pruning"])
 
     def test_b4_1_runner_report_keeps_full_experiment_gate_closed(self) -> None:
         rows = [
@@ -5190,6 +8062,8 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "manual_rc_audit_pass": True,
                 "pricing_rc_audit_pass": True,
                 "final_judge": {
+                    "variable_count": 6009,
+                    "constraint_count": 14743,
                     "harvest_selected_count": 2,
                     "harvest_candidate_negative_count": 4,
                     "harvest_selected_new_task_set_count": 1,
@@ -5237,6 +8111,8 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(stage_a["root_last_pricing_state"], "CERTIFIED_NO_NEGATIVE")
         self.assertEqual(stage_a["root_last_negative_column_count"], 0)
         self.assertEqual(stage_a["tree_gate_issue_count"], 0)
+        self.assertEqual(stage_a["variable_count"], 6009)
+        self.assertEqual(stage_a["constraint_count"], 14743)
         self.assertEqual(stage_a["b4_1_matrix_cell"], "B3B_accepted_tree_baseline")
         self.assertEqual(stage_a["b4_1_proof_tail_component"], "true_dual_final_judge_tree_closure")
         self.assertEqual(stage_a["b4_1_formulation_profile"], "B3B_representative_universe_branch_rc_audit")
@@ -6024,6 +8900,18 @@ class LunarIceSmokeTests(unittest.TestCase):
                         "pricing_rc_audit_pass": True,
                         "variable_count": 10,
                         "constraint_count": 20,
+                        "single_journey_mip_start_enabled": True,
+                        "single_journey_mip_start_status": "OK",
+                        "single_journey_mip_start_source": "column_pool_journey",
+                        "single_journey_mip_start_entry_count": 12,
+                        "single_journey_mip_start_sortie_count": 1,
+                        "single_journey_mip_start_task_count": 2,
+                        "single_journey_mip_start_objective": 0.4,
+                        "single_journey_mip_start_reduced_cost": -0.04,
+                        "required_task_set_enabled": True,
+                        "required_task_set_count": 2,
+                        "required_task_set_region_can_certify_no_negative": False,
+                        "pricing_complete_for_required_task_set": True,
                     },
                     {
                         "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
@@ -6080,6 +8968,13 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertFalse(second_call_kwargs["pair_shadow_lb"])
             self.assertTrue(second_call_kwargs["pair_time_window_infeasible_cut"])
             self.assertFalse(second_call_kwargs["pair_time_window_precedence_cut"])
+            self.assertTrue(report["rows"][0]["single_journey_mip_start_enabled"])
+            self.assertEqual(report["rows"][0]["single_journey_mip_start_status"], "OK")
+            self.assertEqual(report["rows"][0]["single_journey_mip_start_entry_count"], 12)
+            self.assertEqual(report["rows"][0]["single_journey_mip_start_task_count"], 2)
+            self.assertTrue(report["rows"][0]["required_task_set_enabled"])
+            self.assertEqual(report["rows"][0]["required_task_set_count"], 2)
+            self.assertTrue(report["rows"][0]["pricing_complete_for_required_task_set"])
             self.assertEqual(report["rows"][1]["pair_time_window_infeasible_cut_count"], 7)
             self.assertEqual(report["rows"][1]["pair_time_window_infeasible_pair_count"], 7)
             self.assertEqual(report["rows"][1]["pair_time_window_infeasible_margin_min"], 0.25)
@@ -6261,6 +9156,1422 @@ class LunarIceSmokeTests(unittest.TestCase):
                     target_region_ids=("prefix_999",),
                 )
 
+    def test_b4_1_required_task_set_partition_probe_is_diagnostic_candidate(self) -> None:
+        raw = generate_instance(5, seed=641001, index=1)
+        data = load_lunar_ice_data(raw)
+        tasks = list(data.task_ids)
+        first_task_set = tuple(sorted(tasks[:2]))
+        second_task_set = tuple(sorted(tasks[2:4]))
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        first_start = next(
+            column for column in universe.columns if tuple(sorted(column.task_set)) == first_task_set
+        )
+        second_start = next(
+            column for column in universe.columns if tuple(sorted(column.task_set)) == second_task_set
+        )
+        residual_start = next(
+            column
+            for column in universe.columns
+            if tuple(sorted(column.task_set)) not in {first_task_set, second_task_set}
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            instance_path = tmp_path / "instance.json"
+            instance_path.write_text(json.dumps(raw), encoding="utf-8")
+            probe = tmp_path / "probe.json"
+            probe.write_text(
+                json.dumps(
+                    {
+                        "instance_id": "partition-probe-smoke",
+                        "instance_path": str(instance_path),
+                        "history": [
+                            {
+                                "round": 1,
+                                "dual_context": {
+                                    "task_duals": {task: 0.1 for task in tasks},
+                                    "fleet_dual": 0.0,
+                                    "cut_duals": {},
+                                },
+                            }
+                        ],
+                        "active_columns": [
+                            first_start.to_solution_payload(vehicle_id="warm_exact_001"),
+                            second_start.to_solution_payload(vehicle_id="warm_exact_002"),
+                            residual_start.to_solution_payload(vehicle_id="warm_residual_001"),
+                        ],
+                        "final_judge": {
+                            "pricing_proof_kind": "FRONTIER_BOUND_INCOMPLETE",
+                            "global_remaining_rc_lb": -0.5,
+                            "harvest_reports": [
+                                {
+                                    "true_reduced_cost": -0.4,
+                                    "pricing_reduced_cost": -0.4,
+                                    "task_set": list(first_task_set),
+                                    "would_enter_master": True,
+                                    "selected_after_addability_audit": True,
+                                },
+                                {
+                                    "true_reduced_cost": -0.2,
+                                    "pricing_reduced_cost": -0.2,
+                                    "task_set": list(second_task_set),
+                                    "would_enter_master": True,
+                                    "selected_after_addability_audit": True,
+                                },
+                            ],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            side_effect = [
+                {
+                    "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                    "exact_status": "REQUIRED_TASK_SET_PRICING_OPTIMAL",
+                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                    "best_reduced_cost": 0.11,
+                    "dual_bound": 0.11,
+                    "negative_found": False,
+                    "negative_column_count": 0,
+                    "pricing_complete_for_required_task_set": True,
+                    "required_task_set_enabled": True,
+                    "required_task_set_count": len(first_task_set),
+                    "required_task_set_region_can_certify_no_negative": True,
+                    "variable_count": 10,
+                    "constraint_count": 20,
+                    "pricing_rc_audit_pass": True,
+                },
+                {
+                    "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                    "exact_status": "REQUIRED_TASK_SET_PRICING_OPTIMAL",
+                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                    "best_reduced_cost": 0.07,
+                    "dual_bound": 0.07,
+                    "negative_found": False,
+                    "negative_column_count": 0,
+                    "pricing_complete_for_required_task_set": True,
+                    "required_task_set_enabled": True,
+                    "required_task_set_count": len(second_task_set),
+                    "required_task_set_region_can_certify_no_negative": True,
+                    "variable_count": 11,
+                    "constraint_count": 22,
+                    "pricing_rc_audit_pass": True,
+                },
+                {
+                    "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                    "exact_status": "RESTRICTED_PRICING_OPTIMAL",
+                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                    "best_reduced_cost": 0.03,
+                    "dual_bound": 0.03,
+                    "negative_found": False,
+                    "negative_column_count": 0,
+                    "forbidden_task_set_count": 2,
+                    "variable_count": 12,
+                    "constraint_count": 24,
+                    "pricing_rc_audit_pass": True,
+                },
+            ]
+            with patch.object(
+                b4_1_runner_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=side_effect,
+            ) as mocked_solver:
+                report = b4_1_runner_module.run_b4_1_required_task_set_partition_probe(
+                    probe,
+                    variants=("V4_current_strengthening",),
+                    time_limit_sec=5.0,
+                )
+
+            self.assertEqual(report["row_count"], 3)
+            self.assertTrue(report["diagnostic_only"])
+            self.assertFalse(report["official_certificate_allowed"])
+            self.assertFalse(report["can_claim_certificate"])
+            self.assertEqual(report["redlines"]["certificate_claim_count"], 0)
+            self.assertEqual(report["redlines"]["official_certificate_claim_count"], 0)
+            self.assertEqual(report["redlines"]["full_space_certificate_claim_count"], 0)
+            summary = report["summary"]
+            self.assertTrue(summary["partition_regions_disjoint"])
+            self.assertTrue(summary["partition_regions_cover_full_space"])
+            self.assertTrue(summary["partition_candidate_complete"])
+            self.assertTrue(summary["partition_candidate_can_certify_no_negative"])
+            self.assertTrue(summary["partition_candidate_gate_pass"])
+            self.assertEqual(summary["partition_candidate_gate_issue_codes"], [])
+            self.assertTrue(summary["partition_candidate_gate_full_space_partition_valid"])
+            self.assertEqual(summary["partition_candidate_gate_exact_regions_proven"], 2)
+            self.assertTrue(summary["partition_candidate_gate_residual_proven"])
+            self.assertFalse(summary["partition_candidate_gate_official_certificate_allowed"])
+            self.assertFalse(summary["official_certificate_allowed"])
+            self.assertEqual(summary["exact_region_proven_count"], 2)
+            self.assertTrue(summary["residual_region_proven"])
+            self.assertEqual(summary["best_partition_region_lb"], 0.03)
+            self.assertEqual(mocked_solver.call_count, 3)
+            self.assertEqual(tuple(mocked_solver.call_args_list[0].kwargs["required_task_set"]), first_task_set)
+            self.assertEqual(tuple(mocked_solver.call_args_list[1].kwargs["required_task_set"]), second_task_set)
+            self.assertIsNotNone(mocked_solver.call_args_list[0].kwargs["mip_start_journey"])
+            self.assertEqual(
+                tuple(sorted(mocked_solver.call_args_list[0].kwargs["mip_start_journey"].task_set)),
+                first_task_set,
+            )
+            self.assertIsNotNone(mocked_solver.call_args_list[1].kwargs["mip_start_journey"])
+            self.assertEqual(
+                tuple(sorted(mocked_solver.call_args_list[1].kwargs["mip_start_journey"].task_set)),
+                second_task_set,
+            )
+            self.assertEqual(
+                tuple(tuple(row) for row in mocked_solver.call_args_list[2].kwargs["forbidden_task_sets"]),
+                (first_task_set, second_task_set),
+            )
+            self.assertIsNotNone(mocked_solver.call_args_list[2].kwargs["mip_start_journey"])
+            self.assertNotIn(
+                tuple(sorted(mocked_solver.call_args_list[2].kwargs["mip_start_journey"].task_set)),
+                {first_task_set, second_task_set},
+            )
+            exact_row = report["rows"][0]
+            self.assertTrue(exact_row["region_can_certify_no_negative"])
+            self.assertFalse(exact_row["can_certify_no_negative"])
+            self.assertEqual(exact_row["region_kind"], "exact_task_set")
+            residual_row = report["rows"][2]
+            self.assertEqual(residual_row["region_kind"], "residual_after_exact_task_sets")
+            self.assertTrue(residual_row["region_can_certify_no_negative"])
+
+            out_json = tmp_path / "partition.json"
+            out_md = tmp_path / "partition_zh.md"
+            b4_1_runner_module.write_b4_1_required_task_set_partition_probe(
+                report,
+                summary_json=out_json,
+                report_md=out_md,
+            )
+            self.assertTrue(out_json.exists())
+            markdown = out_md.read_text(encoding="utf-8")
+            self.assertIn("diagnostic-only", markdown)
+            self.assertIn("partition_candidate_complete", markdown)
+            self.assertIn("partition_candidate_gate_pass", markdown)
+
+            audit = b4_1_runner_module.build_b4_1_partition_candidate_audit([out_json])
+            self.assertTrue(audit["diagnostic_only"])
+            self.assertFalse(audit["official_certificate_allowed"])
+            self.assertFalse(audit["can_claim_certificate"])
+            self.assertEqual(audit["partition_probe_count"], 1)
+            self.assertEqual(audit["partition_gate_pass_count"], 1)
+            self.assertEqual(audit["partition_gate_fail_count"], 0)
+            self.assertEqual(audit["partition_candidate_can_certify_no_negative_count"], 1)
+            self.assertEqual(audit["partition_gate_issue_counts"], {})
+            self.assertEqual(audit["redline_fail_count"], 0)
+            self.assertEqual(
+                audit["redlines"]["partition_row_certificate_claim_count"],
+                0,
+            )
+            audit_json = tmp_path / "partition_audit.json"
+            audit_md = tmp_path / "partition_audit_zh.md"
+            b4_1_runner_module.write_b4_1_partition_candidate_audit(
+                audit,
+                summary_json=audit_json,
+                report_md=audit_md,
+            )
+            audit_markdown = audit_md.read_text(encoding="utf-8")
+            self.assertIn("Partition Candidate Audit", audit_markdown)
+            self.assertIn("partition_gate_pass_count", audit_markdown)
+
+            project_root = Path(__file__).resolve().parents[1]
+            cli_out = tmp_path / "partition_cli"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(project_root / "scripts" / "run_lunar_ice_b4_1_true_dual_proof_tail.py"),
+                    "--output-dir",
+                    str(cli_out),
+                    "--stage-b-v4-root-tail-partition-proof",
+                    "--partition-region-result-json",
+                    str(out_json),
+                    "--no-resume",
+                ],
+                cwd=project_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            cli_audit = json.loads((cli_out / "partition_candidate_audit.json").read_text(encoding="utf-8"))
+            self.assertEqual(cli_audit["partition_gate_pass_count"], 1)
+            self.assertEqual(cli_audit["redline_fail_count"], 0)
+            self.assertTrue((cli_out / "partition_candidate_audit_zh.md").exists())
+            cli_summary = json.loads((cli_out / "b4_1_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(cli_summary["diagnostics"]["partition_candidate_audit_row_count"], 1)
+            self.assertEqual(cli_summary["diagnostics"]["partition_candidate_gate_pass_count"], 1)
+            self.assertEqual(cli_summary["redlines"]["partition_candidate_certificate_leak_count"], 0)
+            self.assertTrue((cli_out / "b4_1_report_zh.md").exists())
+
+            empty_alias_out = tmp_path / "partition_empty_alias_cli"
+            empty_alias = subprocess.run(
+                [
+                    sys.executable,
+                    str(project_root / "scripts" / "run_lunar_ice_b4_1_true_dual_proof_tail.py"),
+                    "--output-dir",
+                    str(empty_alias_out),
+                    "--stage-b-v4-root-tail-partition-proof",
+                    "--no-resume",
+                ],
+                cwd=project_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(empty_alias.returncode, 2)
+            self.assertIn("no partition probe JSON", empty_alias.stderr)
+            self.assertFalse((empty_alias_out / "partition_candidate_audit.json").exists())
+
+            cli_spec = importlib.util.spec_from_file_location(
+                "b4_1_cli_smoke",
+                project_root / "scripts" / "run_lunar_ice_b4_1_true_dual_proof_tail.py",
+            )
+            self.assertIsNotNone(cli_spec)
+            self.assertIsNotNone(cli_spec.loader)
+            cli_module = importlib.util.module_from_spec(cli_spec)
+            cli_spec.loader.exec_module(cli_module)
+            alias_args = SimpleNamespace(
+                stage_b_v4_root_tail_partition_proof=True,
+                source_probe_json=["probe.json"],
+                required_task_set_partition_proof_probe=False,
+                partition_candidate_audit=False,
+                partition_candidate_audit_import_rows=False,
+                partition_region_max_task_sets=0,
+            )
+            cli_module._apply_stage_b_v4_root_tail_partition_alias(alias_args)
+            self.assertTrue(alias_args.required_task_set_partition_proof_probe)
+            self.assertTrue(alias_args.partition_candidate_audit)
+            self.assertTrue(alias_args.partition_candidate_audit_import_rows)
+            self.assertEqual(
+                alias_args.partition_region_max_task_sets,
+                cli_module.B41_ROOT_TAIL_PARTITION_DEFAULT_MAX_TASK_SETS,
+            )
+            explicit_alias_args = SimpleNamespace(
+                stage_b_v4_root_tail_partition_proof=True,
+                source_probe_json=["probe.json"],
+                required_task_set_partition_proof_probe=False,
+                partition_candidate_audit=False,
+                partition_candidate_audit_import_rows=False,
+                partition_region_max_task_sets=9,
+            )
+            cli_module._apply_stage_b_v4_root_tail_partition_alias(explicit_alias_args)
+            self.assertEqual(explicit_alias_args.partition_region_max_task_sets, 9)
+
+            evidence_rows = b4_1_runner_module.rows_from_b4_1_partition_candidate_audit(audit_json)
+            self.assertEqual(len(evidence_rows), 1)
+            self.assertEqual(evidence_rows[0]["mode"], "B4.1_partition_candidate_audit")
+            self.assertEqual(evidence_rows[0]["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+            self.assertFalse(evidence_rows[0]["can_certify_no_negative"])
+            self.assertTrue(evidence_rows[0]["underlying_can_certify_no_negative"])
+            self.assertTrue(evidence_rows[0]["partition_candidate_gate_pass"])
+            self.assertEqual(evidence_rows[0]["partition_candidate_redline_fail_count"], 0)
+            main_report = b4_1_runner_module.build_b4_1_report(evidence_rows)
+            self.assertEqual(main_report["redlines"]["partition_candidate_certificate_leak_count"], 0)
+            self.assertEqual(main_report["diagnostics"]["partition_candidate_audit_row_count"], 1)
+            self.assertEqual(main_report["diagnostics"]["partition_candidate_gate_pass_count"], 1)
+            self.assertEqual(main_report["diagnostics"]["partition_candidate_gate_fail_count"], 0)
+            self.assertEqual(
+                main_report["diagnostics"]["partition_candidate_can_certify_no_negative_count"],
+                1,
+            )
+            self.assertFalse(main_report["acceptance"]["b4_1_full_experiment_complete"])
+
+            import_out = tmp_path / "partition_import_cli"
+            imported = subprocess.run(
+                [
+                    sys.executable,
+                    str(project_root / "scripts" / "run_lunar_ice_b4_1_true_dual_proof_tail.py"),
+                    "--output-dir",
+                    str(import_out),
+                    "--import-partition-candidate-audit-json",
+                    str(audit_json),
+                    "--no-resume",
+                ],
+                cwd=project_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(imported.returncode, 0, imported.stderr)
+            imported_summary = json.loads((import_out / "b4_1_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(imported_summary["diagnostics"]["partition_candidate_audit_row_count"], 1)
+            self.assertEqual(imported_summary["diagnostics"]["partition_candidate_gate_pass_count"], 1)
+            self.assertEqual(imported_summary["redlines"]["partition_candidate_certificate_leak_count"], 0)
+            self.assertTrue((import_out / "b4_1_report_zh.md").exists())
+
+    def test_b4_1_residual_task_count_partition_probe_is_fail_closed_until_complete(self) -> None:
+        raw = generate_instance(5, seed=641002, index=1)
+        data = load_lunar_ice_data(raw)
+        tasks = list(data.task_ids)
+        first_task_set = tuple(sorted(tasks[:2]))
+        second_task_set = tuple(sorted(tasks[2:4]))
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        first_start = next(
+            column for column in universe.columns if tuple(sorted(column.task_set)) == first_task_set
+        )
+        second_start = next(
+            column for column in universe.columns if tuple(sorted(column.task_set)) == second_task_set
+        )
+        residual_count_one_start = next(
+            column
+            for column in universe.columns
+            if len(column.task_set) == 1
+            and tuple(sorted(column.task_set)) not in {first_task_set, second_task_set}
+        )
+        residual_count_two_start = next(
+            column
+            for column in universe.columns
+            if len(column.task_set) == 2
+            and tuple(sorted(column.task_set)) not in {first_task_set, second_task_set}
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            instance_path = tmp_path / "instance.json"
+            instance_path.write_text(json.dumps(raw), encoding="utf-8")
+            probe = tmp_path / "probe.json"
+            probe.write_text(
+                json.dumps(
+                    {
+                        "instance_id": "partition-task-count-smoke",
+                        "instance_path": str(instance_path),
+                        "history": [
+                            {
+                                "round": 1,
+                                "dual_context": {
+                                    "task_duals": {task: 0.1 for task in tasks},
+                                    "fleet_dual": 0.0,
+                                    "cut_duals": {},
+                                },
+                            }
+                        ],
+                        "active_columns": [
+                            first_start.to_solution_payload(vehicle_id="warm_exact_001"),
+                            second_start.to_solution_payload(vehicle_id="warm_exact_002"),
+                            residual_count_one_start.to_solution_payload(vehicle_id="warm_residual_k1"),
+                            residual_count_two_start.to_solution_payload(vehicle_id="warm_residual_k2"),
+                        ],
+                        "final_judge": {
+                            "pricing_proof_kind": "FRONTIER_BOUND_INCOMPLETE",
+                            "harvest_reports": [
+                                {
+                                    "true_reduced_cost": -0.4,
+                                    "pricing_reduced_cost": -0.4,
+                                    "task_set": list(first_task_set),
+                                    "would_enter_master": True,
+                                    "selected_after_addability_audit": True,
+                                },
+                                {
+                                    "true_reduced_cost": -0.2,
+                                    "pricing_reduced_cost": -0.2,
+                                    "task_set": list(second_task_set),
+                                    "would_enter_master": True,
+                                    "selected_after_addability_audit": True,
+                                },
+                            ],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            exact_result = {
+                "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                "exact_status": "REQUIRED_TASK_SET_PRICING_OPTIMAL",
+                "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                "best_reduced_cost": 0.11,
+                "dual_bound": 0.11,
+                "negative_found": False,
+                "negative_column_count": 0,
+                "pricing_complete_for_required_task_set": True,
+                "required_task_set_enabled": True,
+                "required_task_set_region_can_certify_no_negative": True,
+                "pricing_rc_audit_pass": True,
+                "single_journey_mip_start_enabled": True,
+                "single_journey_mip_start_status": "OK",
+            }
+            task_count_one = {
+                "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                "exact_status": "REQUIRED_TASK_COUNT_PRICING_OPTIMAL",
+                "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                "best_reduced_cost": 0.08,
+                "dual_bound": 0.08,
+                "negative_found": False,
+                "negative_column_count": 0,
+                "pricing_complete_for_required_task_count": True,
+                "required_task_count_enabled": True,
+                "required_task_count": 1,
+                "required_task_count_region_can_certify_no_negative": True,
+                "pricing_rc_audit_pass": True,
+                "single_journey_mip_start_enabled": True,
+                "single_journey_mip_start_status": "OK",
+            }
+            task_count_two = dict(task_count_one)
+            task_count_two.update(
+                {
+                    "best_reduced_cost": 0.05,
+                    "dual_bound": 0.05,
+                    "required_task_count": 2,
+                }
+            )
+            with patch.object(
+                b4_1_runner_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=[dict(exact_result), dict(exact_result), task_count_one, task_count_two],
+            ) as mocked_solver:
+                report = b4_1_runner_module.run_b4_1_required_task_set_partition_probe(
+                    probe,
+                    variants=("V4_current_strengthening",),
+                    time_limit_sec=5.0,
+                    residual_task_count_partition=True,
+                    residual_task_count_max_regions=2,
+                )
+
+            self.assertEqual(report["row_count"], 4)
+            summary = report["summary"]
+            self.assertTrue(summary["residual_task_count_partition_enabled"])
+            self.assertEqual(summary["residual_task_count_region_expected_count"], len(tasks))
+            self.assertEqual(summary["residual_task_count_region_observed_count"], 2)
+            self.assertEqual(summary["residual_task_count_region_proven_count"], 2)
+            self.assertEqual(summary["residual_task_count_region_missing_count"], len(tasks) - 2)
+            self.assertEqual(summary["residual_task_count_region_missing_counts"], [3, 4, 5])
+            self.assertFalse(summary["partition_regions_cover_full_space"])
+            self.assertFalse(summary["partition_candidate_gate_pass"])
+            self.assertIn(
+                "missing_residual_task_count_region",
+                summary["partition_candidate_gate_issue_codes"],
+            )
+            self.assertEqual(mocked_solver.call_count, 4)
+            self.assertEqual(tuple(mocked_solver.call_args_list[0].kwargs["required_task_set"]), first_task_set)
+            self.assertEqual(tuple(mocked_solver.call_args_list[1].kwargs["required_task_set"]), second_task_set)
+            self.assertEqual(mocked_solver.call_args_list[2].kwargs["required_task_count"], 1)
+            self.assertEqual(mocked_solver.call_args_list[3].kwargs["required_task_count"], 2)
+            self.assertEqual(
+                tuple(tuple(row) for row in mocked_solver.call_args_list[2].kwargs["forbidden_task_sets"]),
+                (first_task_set, second_task_set),
+            )
+            self.assertEqual(
+                tuple(tuple(row) for row in mocked_solver.call_args_list[3].kwargs["forbidden_task_sets"]),
+                (first_task_set, second_task_set),
+            )
+            self.assertIsNotNone(mocked_solver.call_args_list[2].kwargs["mip_start_journey"])
+            self.assertEqual(len(mocked_solver.call_args_list[2].kwargs["mip_start_journey"].task_set), 1)
+            self.assertIsNotNone(mocked_solver.call_args_list[3].kwargs["mip_start_journey"])
+            self.assertEqual(len(mocked_solver.call_args_list[3].kwargs["mip_start_journey"].task_set), 2)
+            self.assertEqual(summary["partition_residual_region_mip_start_ok_count"], 2)
+
+            out_json = tmp_path / "partition_task_count.json"
+            b4_1_runner_module.write_b4_1_required_task_set_partition_probe(
+                report,
+                summary_json=out_json,
+                report_md=tmp_path / "partition_task_count_zh.md",
+            )
+            audit = b4_1_runner_module.build_b4_1_partition_candidate_audit([out_json])
+            self.assertEqual(audit["partition_gate_fail_count"], 1)
+            self.assertEqual(audit["partition_gate_pass_count"], 0)
+            self.assertEqual(audit["partition_residual_region_mip_start_ok_count"], 2)
+            self.assertEqual(audit["residual_task_count_partition_enabled_count"], 1)
+            self.assertEqual(audit["residual_task_count_region_observed_count"], 2)
+            self.assertEqual(audit["residual_task_count_region_missing_count"], len(tasks) - 2)
+            self.assertEqual(
+                audit["partition_gate_issue_counts"]["missing_residual_task_count_region"],
+                1,
+            )
+            audit_json = tmp_path / "partition_task_count_audit.json"
+            b4_1_runner_module.write_b4_1_partition_candidate_audit(
+                audit,
+                summary_json=audit_json,
+                report_md=tmp_path / "partition_task_count_audit_zh.md",
+            )
+            evidence_rows = b4_1_runner_module.rows_from_b4_1_partition_candidate_audit(audit_json)
+            self.assertEqual(len(evidence_rows), 1)
+            self.assertFalse(evidence_rows[0]["partition_candidate_gate_pass"])
+            self.assertTrue(evidence_rows[0]["residual_task_count_partition_enabled"])
+            self.assertEqual(evidence_rows[0]["residual_task_count_region_observed_count"], 2)
+            main_report = b4_1_runner_module.build_b4_1_report(evidence_rows)
+            self.assertEqual(
+                main_report["diagnostics"]["residual_task_count_partition_enabled_count"],
+                1,
+            )
+            self.assertEqual(
+                main_report["diagnostics"]["residual_task_count_region_missing_count"],
+                len(tasks) - 2,
+            )
+            self.assertEqual(main_report["redlines"]["partition_candidate_certificate_leak_count"], 0)
+
+            pure_probe = tmp_path / "pure_residual_probe.json"
+            pure_probe.write_text(
+                json.dumps(
+                    {
+                        "instance_id": "pure-residual-task-count-smoke",
+                        "instance_path": str(instance_path),
+                        "history": [
+                            {
+                                "round": 1,
+                                "dual_context": {
+                                    "task_duals": {task: 0.1 for task in tasks},
+                                    "fleet_dual": 0.0,
+                                    "cut_duals": {},
+                                },
+                            }
+                        ],
+                        "active_columns": [
+                            residual_count_one_start.to_solution_payload(vehicle_id="pure_warm_k1"),
+                            residual_count_two_start.to_solution_payload(vehicle_id="pure_warm_k2"),
+                        ],
+                        "final_judge": {
+                            "pricing_proof_kind": "EXHAUSTIVE_NO_NEGATIVE",
+                            "harvest_reports": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            pure_side_effect = []
+            for required_count in range(1, len(tasks) + 1):
+                row = dict(task_count_one)
+                row.update(
+                    {
+                        "best_reduced_cost": 0.01 * required_count,
+                        "dual_bound": 0.01 * required_count,
+                        "required_task_count": required_count,
+                    }
+                )
+                pure_side_effect.append(row)
+            with patch.object(
+                b4_1_runner_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=pure_side_effect,
+            ) as pure_mocked_solver:
+                pure_report = b4_1_runner_module.run_b4_1_required_task_set_partition_probe(
+                    pure_probe,
+                    variants=("V4_current_strengthening",),
+                    time_limit_sec=5.0,
+                    residual_task_count_partition=True,
+                    residual_task_count_max_regions=len(tasks),
+                )
+
+            pure_summary = pure_report["summary"]
+            self.assertEqual(pure_report["target_task_set_count"], 0)
+            self.assertEqual(pure_report["row_count"], len(tasks))
+            self.assertTrue(pure_summary["partition_regions_cover_full_space"])
+            self.assertTrue(pure_summary["partition_candidate_gate_pass"])
+            self.assertTrue(pure_summary["partition_candidate_can_certify_no_negative"])
+            self.assertFalse(pure_summary["official_certificate_allowed"])
+            self.assertEqual(pure_summary["partition_candidate_gate_issue_codes"], [])
+            self.assertEqual(pure_summary["residual_task_count_region_observed_count"], len(tasks))
+            self.assertEqual(pure_summary["residual_task_count_region_proven_count"], len(tasks))
+            self.assertEqual(pure_summary["residual_task_count_region_missing_count"], 0)
+            self.assertEqual(pure_mocked_solver.call_count, len(tasks))
+            self.assertEqual(pure_mocked_solver.call_args_list[0].kwargs["forbidden_task_sets"], [])
+
+    def test_b4_1_adaptive_active_sortie_refinement_discards_failed_coarse_region(self) -> None:
+        raw = generate_instance(5, seed=641004, index=1)
+        data = load_lunar_ice_data(raw)
+        tasks = list(data.task_ids)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        warm_columns = []
+        for task_count in range(1, len(tasks) + 1):
+            warm_columns.append(
+                next(column for column in universe.columns if len(column.task_set) == task_count)
+            )
+
+        def certified_task_count_row(required_count: int) -> dict:
+            return {
+                "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                "exact_status": "REQUIRED_TASK_COUNT_PRICING_OPTIMAL",
+                "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                "best_reduced_cost": 0.01 * required_count,
+                "dual_bound": 0.01 * required_count,
+                "negative_found": False,
+                "negative_column_count": 0,
+                "pricing_complete_for_required_task_count": True,
+                "required_task_count_enabled": True,
+                "required_task_count": required_count,
+                "required_task_count_region_can_certify_no_negative": True,
+                "pricing_rc_audit_pass": True,
+                "single_journey_mip_start_enabled": True,
+                "single_journey_mip_start_status": "OK",
+            }
+
+        def timeout_task_count_row(required_count: int) -> dict:
+            row = certified_task_count_row(required_count)
+            row.update(
+                {
+                    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+                    "exact_status": "REQUIRED_TASK_COUNT_PRICING_TIME_LIMIT_REACHED",
+                    "pricing_state": "FAIL_CLOSED",
+                    "best_reduced_cost": 0.02,
+                    "dual_bound": -0.25,
+                    "pricing_complete_for_required_task_count": False,
+                    "required_task_count_region_can_certify_no_negative": False,
+                }
+            )
+            return row
+
+        def certified_active_sortie_row(required_count: int, active_count: int) -> dict:
+            row = certified_task_count_row(required_count)
+            row.update(
+                {
+                    "exact_status": "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_OPTIMAL",
+                    "required_active_sortie_count_enabled": True,
+                    "required_active_sortie_count": active_count,
+                    "required_active_sortie_count_expected_counts": list(
+                        range(1, required_count + 1)
+                    ),
+                    "pricing_complete_for_required_active_sortie_count": True,
+                    "required_active_sortie_count_region_can_certify_no_negative": True,
+                }
+            )
+            return row
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            instance_path = tmp_path / "instance.json"
+            instance_path.write_text(json.dumps(raw), encoding="utf-8")
+            probe = tmp_path / "adaptive_probe.json"
+            probe.write_text(
+                json.dumps(
+                    {
+                        "instance_id": "adaptive-active-sortie-smoke",
+                        "instance_path": str(instance_path),
+                        "history": [
+                            {
+                                "round": 1,
+                                "dual_context": {
+                                    "task_duals": {task: 0.1 for task in tasks},
+                                    "fleet_dual": 0.0,
+                                    "cut_duals": {},
+                                },
+                            }
+                        ],
+                        "active_columns": [
+                            column.to_solution_payload(vehicle_id=f"warm_k{index}")
+                            for index, column in enumerate(warm_columns, start=1)
+                        ],
+                        "final_judge": {
+                            "pricing_proof_kind": "EXHAUSTIVE_NO_NEGATIVE",
+                            "harvest_reports": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            side_effect = [
+                certified_task_count_row(1),
+                timeout_task_count_row(2),
+                certified_active_sortie_row(2, 1),
+                certified_active_sortie_row(2, 2),
+                certified_task_count_row(3),
+                certified_task_count_row(4),
+                certified_task_count_row(5),
+            ]
+            with patch.object(
+                b4_1_runner_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=side_effect,
+            ) as mocked_solver:
+                report = b4_1_runner_module.run_b4_1_required_task_set_partition_probe(
+                    probe,
+                    variants=("V4_current_strengthening",),
+                    time_limit_sec=5.0,
+                    residual_task_count_partition=True,
+                    residual_task_count_max_regions=len(tasks),
+                    residual_active_sortie_count_partition=True,
+                    residual_active_sortie_count_min=1,
+                    residual_active_sortie_count_max=len(tasks),
+                    residual_active_sortie_adaptive_refinement=True,
+                )
+
+            summary = report["summary"]
+            rows = report["rows"]
+            self.assertEqual(mocked_solver.call_count, 7)
+            self.assertEqual(report["row_count"], 6)
+            self.assertTrue(summary["partition_regions_cover_full_space"])
+            self.assertTrue(summary["partition_candidate_gate_pass"])
+            self.assertTrue(summary["partition_candidate_can_certify_no_negative"])
+            self.assertFalse(summary["official_certificate_allowed"])
+            self.assertEqual(summary["partition_candidate_gate_issue_codes"], [])
+            self.assertTrue(summary["residual_task_count_partition_enabled"])
+            self.assertTrue(summary["residual_active_sortie_count_partition_enabled"])
+            self.assertEqual(summary["residual_task_count_region_observed_count"], len(tasks))
+            self.assertEqual(summary["residual_task_count_region_proven_count"], len(tasks))
+            self.assertEqual(summary["residual_task_count_region_missing_count"], 0)
+            self.assertEqual(summary["residual_active_sortie_count_missing_group_count"], 0)
+            self.assertEqual(summary["residual_active_sortie_count_duplicate_group_count"], 0)
+            self.assertTrue(summary["partition_adaptive_active_sortie_refinement_enabled"])
+            self.assertEqual(summary["partition_adaptive_active_sortie_refinement_attempt_count"], 5)
+            self.assertEqual(
+                summary["partition_adaptive_active_sortie_refinement_coarse_accepted_count"],
+                4,
+            )
+            self.assertEqual(summary["partition_adaptive_active_sortie_refinement_refined_count"], 1)
+            self.assertGreaterEqual(
+                summary["partition_adaptive_active_sortie_refinement_discarded_coarse_wall_time_sec"],
+                0.0,
+            )
+            self.assertNotIn("residual_task_count_002", {row["region_id"] for row in rows})
+            self.assertEqual(
+                {
+                    (row["region_id"], row["partition_adaptive_active_sortie_refinement_role"])
+                    for row in rows
+                },
+                {
+                    ("residual_task_count_001", "coarse_accepted"),
+                    ("residual_task_count_002_active_sorties_001", "refined_active_sortie"),
+                    ("residual_task_count_002_active_sorties_002", "refined_active_sortie"),
+                    ("residual_task_count_003", "coarse_accepted"),
+                    ("residual_task_count_004", "coarse_accepted"),
+                    ("residual_task_count_005", "coarse_accepted"),
+                },
+            )
+            self.assertIsNone(mocked_solver.call_args_list[0].kwargs["required_active_sortie_count"])
+            self.assertIsNone(mocked_solver.call_args_list[1].kwargs["required_active_sortie_count"])
+            self.assertEqual(mocked_solver.call_args_list[2].kwargs["required_active_sortie_count"], 1)
+            self.assertEqual(mocked_solver.call_args_list[3].kwargs["required_active_sortie_count"], 2)
+            self.assertIsNone(mocked_solver.call_args_list[4].kwargs["required_active_sortie_count"])
+            self.assertIsNone(mocked_solver.call_args_list[5].kwargs["required_active_sortie_count"])
+            self.assertIsNone(mocked_solver.call_args_list[6].kwargs["required_active_sortie_count"])
+
+    def test_b4_1_residual_task_count_partition_negative_feasibility_fallback(self) -> None:
+        raw = generate_instance(5, seed=641003, index=1)
+        data = load_lunar_ice_data(raw)
+        tasks = list(data.task_ids)
+        first_task_set = tuple(sorted(tasks[:2]))
+        second_task_set = tuple(sorted(tasks[2:4]))
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        first_start = next(
+            column for column in universe.columns if tuple(sorted(column.task_set)) == first_task_set
+        )
+        second_start = next(
+            column for column in universe.columns if tuple(sorted(column.task_set)) == second_task_set
+        )
+        residual_count_one_start = next(
+            column
+            for column in universe.columns
+            if len(column.task_set) == 1
+            and tuple(sorted(column.task_set)) not in {first_task_set, second_task_set}
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            instance_path = tmp_path / "instance.json"
+            instance_path.write_text(json.dumps(raw), encoding="utf-8")
+            probe = tmp_path / "probe.json"
+            probe.write_text(
+                json.dumps(
+                    {
+                        "instance_id": "partition-task-count-fallback-smoke",
+                        "instance_path": str(instance_path),
+                        "history": [
+                            {
+                                "round": 1,
+                                "dual_context": {
+                                    "task_duals": {task: 0.1 for task in tasks},
+                                    "fleet_dual": 0.0,
+                                    "cut_duals": {},
+                                },
+                            }
+                        ],
+                        "active_columns": [
+                            first_start.to_solution_payload(vehicle_id="warm_exact_001"),
+                            second_start.to_solution_payload(vehicle_id="warm_exact_002"),
+                            residual_count_one_start.to_solution_payload(vehicle_id="warm_residual_k1"),
+                        ],
+                        "final_judge": {
+                            "pricing_proof_kind": "FRONTIER_BOUND_INCOMPLETE",
+                            "harvest_reports": [
+                                {
+                                    "true_reduced_cost": -0.4,
+                                    "pricing_reduced_cost": -0.4,
+                                    "task_set": list(first_task_set),
+                                    "would_enter_master": True,
+                                    "selected_after_addability_audit": True,
+                                },
+                                {
+                                    "true_reduced_cost": -0.2,
+                                    "pricing_reduced_cost": -0.2,
+                                    "task_set": list(second_task_set),
+                                    "would_enter_master": True,
+                                    "selected_after_addability_audit": True,
+                                },
+                            ],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            exact_result = {
+                "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                "exact_status": "REQUIRED_TASK_SET_PRICING_OPTIMAL",
+                "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                "best_reduced_cost": 0.11,
+                "dual_bound": 0.11,
+                "negative_found": False,
+                "negative_column_count": 0,
+                "pricing_complete_for_required_task_set": True,
+                "required_task_set_enabled": True,
+                "required_task_set_region_can_certify_no_negative": True,
+                "pricing_rc_audit_pass": True,
+            }
+            incomplete_optimization = {
+                "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT",
+                "exact_status": "NOT_SOLVED",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "best_reduced_cost": 0.02,
+                "dual_bound": None,
+                "negative_found": False,
+                "negative_column_count": 0,
+                "pricing_complete_for_required_task_count": False,
+                "required_task_count_enabled": True,
+                "required_task_count": 1,
+                "required_task_count_region_can_certify_no_negative": False,
+                "pricing_rc_audit_pass": True,
+            }
+            fallback_infeasible = {
+                "status": "COMPACT_HIGHS_PRICING_RESTRICTED_INFEASIBLE",
+                "exact_status": "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "best_reduced_cost": None,
+                "dual_bound": None,
+                "negative_found": False,
+                "negative_column_count": 0,
+                "pricing_complete_for_required_task_count": True,
+                "required_task_count_enabled": True,
+                "required_task_count": 1,
+                "required_task_count_region_can_certify_no_negative": True,
+                "pricing_rc_audit_pass": True,
+            }
+            with patch.object(
+                b4_1_runner_module,
+                "solve_highs_compact_single_journey_pricing",
+                side_effect=[dict(exact_result), dict(exact_result), incomplete_optimization, fallback_infeasible],
+            ) as mocked_solver:
+                report = b4_1_runner_module.run_b4_1_required_task_set_partition_probe(
+                    probe,
+                    variants=("V4_current_strengthening",),
+                    time_limit_sec=5.0,
+                    residual_task_count_partition=True,
+                    residual_task_count_max_regions=1,
+                    negative_feasibility_fallback=True,
+                )
+
+            self.assertEqual(mocked_solver.call_count, 4)
+            self.assertFalse(mocked_solver.call_args_list[2].kwargs["negative_feasibility_search"])
+            self.assertTrue(mocked_solver.call_args_list[3].kwargs["negative_feasibility_search"])
+            residual_row = report["rows"][2]
+            self.assertEqual(residual_row["region_kind"], "residual_task_count")
+            self.assertEqual(residual_row["exact_status"], "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE")
+            self.assertTrue(residual_row["region_pricing_complete"])
+            self.assertTrue(residual_row["region_can_certify_no_negative"])
+            self.assertTrue(residual_row["partition_negative_feasibility_fallback_enabled"])
+            self.assertTrue(residual_row["partition_negative_feasibility_fallback_run"])
+            self.assertTrue(residual_row["partition_negative_feasibility_fallback_used"])
+            self.assertEqual(
+                residual_row["partition_negative_feasibility_fallback_exact_status"],
+                "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE",
+            )
+            self.assertEqual(residual_row["partition_optimization_best_reduced_cost"], 0.02)
+            summary = report["summary"]
+            self.assertEqual(summary["residual_task_count_region_observed_count"], 1)
+            self.assertEqual(summary["residual_task_count_region_proven_count"], 1)
+            self.assertFalse(summary["partition_candidate_gate_pass"])
+            self.assertIn(
+                "missing_residual_task_count_region",
+                summary["partition_candidate_gate_issue_codes"],
+            )
+            self.assertFalse(report["can_claim_certificate"])
+            self.assertEqual(report["redlines"]["certificate_claim_count"], 0)
+
+    def test_b4_1_partition_candidate_gate_rejects_unsafe_rows(self) -> None:
+        first_task_set = ("ice_site_001", "ice_site_002")
+        second_task_set = ("ice_site_003", "ice_site_004")
+        task_sets = [first_task_set, second_task_set]
+
+        negative_journey = SimpleNamespace(
+            task_set=frozenset(first_task_set),
+            to_solution_payload=lambda *, vehicle_id: {
+                "vehicle_id": vehicle_id,
+                "sorties": [
+                    {
+                        "tasks": list(first_task_set),
+                        "legs": [
+                            {"from": "depot", "to": first_task_set[0], "path_type": "low_time"},
+                            {"from": first_task_set[0], "to": first_task_set[1], "path_type": "low_risk"},
+                            {"from": first_task_set[1], "to": "depot", "path_type": "low_time"},
+                        ],
+                        "start_time": 0.0,
+                    }
+                ],
+            },
+        )
+        negative_probe_row = b4_1_runner_module._partition_probe_row(
+            {
+                "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                "exact_status": "REQUIRED_TASK_SET_PRICING_OPTIMAL",
+                "pricing_state": "FOUND_NEGATIVE",
+                "best_reduced_cost": -0.015,
+                "dual_bound": -0.014,
+                "negative_found": True,
+                "negative_column_count": 1,
+                "pricing_complete_for_required_task_set": True,
+                "required_task_set_region_can_certify_no_negative": False,
+                "journeys": (negative_journey,),
+            },
+            source_probe_json=Path("probe.json"),
+            instance_id="partition-negative-payload-smoke",
+            history_round=1,
+            region_id="exact_001",
+            region_kind="exact_task_set",
+            task_set=first_task_set,
+            forbidden_task_sets=tuple(),
+            variant="V4_current_strengthening",
+            formulation_kind="v4_current_strengthening",
+            wall_time=0.25,
+            negative_eps=1.0e-6,
+            source_active_column_count=10,
+            dual_active_column_count=5,
+        )
+        self.assertTrue(negative_probe_row["negative_found"])
+        self.assertEqual(negative_probe_row["partition_negative_task_set"], list(first_task_set))
+        self.assertEqual(negative_probe_row["partition_negative_task_set_size"], 2)
+        self.assertEqual(negative_probe_row["partition_negative_true_rc"], -0.015)
+        self.assertEqual(negative_probe_row["partition_negative_source_region_id"], "exact_001")
+        self.assertTrue(negative_probe_row["partition_negative_payload_available"])
+        self.assertFalse(negative_probe_row["partition_negative_already_active"])
+        self.assertFalse(negative_probe_row["partition_negative_active_task_set_seen"])
+        self.assertEqual(
+            negative_probe_row["partition_negative_replacement_or_new_task_set"],
+            "new_task_set",
+        )
+        self.assertEqual(negative_probe_row["partition_source_active_column_count"], 10)
+        self.assertEqual(negative_probe_row["partition_dual_active_column_count"], 5)
+        self.assertEqual(negative_probe_row["partition_active_pool_after_dual_delta"], 5)
+        self.assertFalse(negative_probe_row["partition_dual_scope_matches_active_pool"])
+        self.assertEqual(negative_probe_row["partition_negative_rc_audit_pass"], "")
+        self.assertEqual(
+            negative_probe_row["partition_negative_solution_payload"]["vehicle_id"],
+            "targeted_restricted_region_negative",
+        )
+        self.assertEqual(
+            negative_probe_row["partition_negative_solution_payload"]["sorties"][0]["tasks"],
+            list(first_task_set),
+        )
+        negative_result = {
+            "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+            "exact_status": "REQUIRED_TASK_SET_PRICING_OPTIMAL",
+            "pricing_state": "FOUND_NEGATIVE",
+            "best_reduced_cost": -0.015,
+            "dual_bound": -0.014,
+            "negative_found": True,
+            "negative_column_count": 1,
+            "pricing_complete_for_required_task_set": True,
+            "required_task_set_region_can_certify_no_negative": False,
+            "journeys": (negative_journey,),
+        }
+        replacement_probe_row = b4_1_runner_module._partition_probe_row(
+            negative_result,
+            source_probe_json=Path("probe.json"),
+            instance_id="partition-replacement-payload-smoke",
+            history_round=1,
+            region_id="exact_001",
+            region_kind="exact_task_set",
+            task_set=first_task_set,
+            forbidden_task_sets=tuple(),
+            variant="V4_current_strengthening",
+            formulation_kind="v4_current_strengthening",
+            wall_time=0.25,
+            negative_eps=1.0e-6,
+            active_task_sets={first_task_set},
+            active_column_keys=set(),
+            source_active_column_count=10,
+            dual_active_column_count=5,
+        )
+        self.assertTrue(replacement_probe_row["partition_negative_active_task_set_seen"])
+        self.assertFalse(replacement_probe_row["partition_negative_already_active"])
+        self.assertEqual(
+            replacement_probe_row["partition_negative_replacement_or_new_task_set"],
+            "replacement",
+        )
+        active_column_key = b4_1_runner_module._solution_payload_column_key(
+            negative_probe_row["partition_negative_solution_payload"]
+        )
+        already_active_probe_row = b4_1_runner_module._partition_probe_row(
+            negative_result,
+            source_probe_json=Path("probe.json"),
+            instance_id="partition-already-active-payload-smoke",
+            history_round=1,
+            region_id="exact_001",
+            region_kind="exact_task_set",
+            task_set=first_task_set,
+            forbidden_task_sets=tuple(),
+            variant="V4_current_strengthening",
+            formulation_kind="v4_current_strengthening",
+            wall_time=0.25,
+            negative_eps=1.0e-6,
+            active_task_sets={first_task_set},
+            active_column_keys={active_column_key},
+            source_active_column_count=10,
+            dual_active_column_count=10,
+            dual_source="refreshed_active_pool_restricted_rmp",
+            dual_refresh_payload={
+                "partition_dual_refresh_status": "RESTRICTED_RMP_OPTIMAL",
+                "partition_dual_refresh_min_rc": 0.0,
+                "partition_dual_refresh_negative_count": 0,
+                "partition_dual_refresh_input_column_count": 10,
+                "partition_dual_refresh_rmp_active_column_count": 10,
+            },
+        )
+        self.assertTrue(already_active_probe_row["partition_negative_active_task_set_seen"])
+        self.assertTrue(already_active_probe_row["partition_negative_already_active"])
+        self.assertEqual(
+            already_active_probe_row["partition_negative_replacement_or_new_task_set"],
+            "already_active",
+        )
+        self.assertEqual(
+            already_active_probe_row["partition_dual_source"],
+            "refreshed_active_pool_restricted_rmp",
+        )
+        self.assertEqual(
+            already_active_probe_row["partition_dual_refresh_status"],
+            "RESTRICTED_RMP_OPTIMAL",
+        )
+        self.assertEqual(already_active_probe_row["partition_dual_refresh_negative_count"], 0)
+
+        def row(
+            *,
+            region_id: str,
+            region_kind: str,
+            required_task_set: tuple[str, ...] = (),
+            required_task_count: int | None = None,
+            forbidden_task_sets: tuple[tuple[str, ...], ...] = (),
+            negative_found: bool = False,
+            region_complete: bool = True,
+            region_certifies: bool = True,
+            variant: str = "V4_current_strengthening",
+            formulation_kind: str = "v4_current_strengthening",
+            variable_count: int = 10,
+            constraint_count: int = 20,
+        ) -> dict:
+            return {
+                "source_probe_json": "probe.json",
+                "instance_id": "partition-gate-smoke",
+                "history_round": 1,
+                "region_id": region_id,
+                "region_kind": region_kind,
+                "required_task_set": list(required_task_set),
+                "required_task_count": required_task_count,
+                "forbidden_task_sets": [list(item) for item in forbidden_task_sets],
+                "variant": variant,
+                "formulation_kind": formulation_kind,
+                "best_reduced_cost": 0.05 if not negative_found else -0.02,
+                "dual_bound": 0.05 if not negative_found else -0.02,
+                "negative_found": negative_found,
+                "region_pricing_complete": region_complete,
+                "region_can_certify_no_negative": region_certifies,
+                "region_can_certify_full_space": False,
+                "official_certificate_allowed": False,
+                "can_claim_certificate": False,
+                "can_certify_no_negative": False,
+                "diagnostic_only": True,
+                "pricing_rc_audit_pass": True,
+                "variable_count": variable_count,
+                "constraint_count": constraint_count,
+                "slot_task_time_feasible_assignment_count": 7,
+                "slot_task_time_pruned_assignment_count": 3,
+                "slot_arc_time_pruned_option_count": 2,
+            }
+
+        safe_rows = [
+            row(region_id="exact_001", region_kind="exact_task_set", required_task_set=first_task_set),
+            row(region_id="exact_002", region_kind="exact_task_set", required_task_set=second_task_set),
+            row(
+                region_id="residual_after_exact_task_sets",
+                region_kind="residual_after_exact_task_sets",
+                forbidden_task_sets=(first_task_set, second_task_set),
+            ),
+        ]
+        safe_summary = b4_1_runner_module._partition_probe_summary(
+            safe_rows,
+            task_sets=task_sets,
+            negative_eps=1.0e-6,
+        )
+        self.assertTrue(safe_summary["partition_candidate_gate_pass"])
+        self.assertEqual(safe_summary["partition_candidate_gate_issue_codes"], [])
+
+        missing_residual_summary = b4_1_runner_module._partition_probe_summary(
+            safe_rows[:2],
+            task_sets=task_sets,
+            negative_eps=1.0e-6,
+        )
+        self.assertFalse(missing_residual_summary["partition_candidate_gate_pass"])
+        self.assertIn(
+            "missing_residual_region",
+            missing_residual_summary["partition_candidate_gate_issue_codes"],
+        )
+        self.assertFalse(missing_residual_summary["partition_candidate_can_certify_no_negative"])
+
+        negative_exact_rows = [
+            row(
+                region_id="exact_001",
+                region_kind="exact_task_set",
+                required_task_set=first_task_set,
+                negative_found=True,
+                region_certifies=False,
+            ),
+            safe_rows[1],
+            safe_rows[2],
+        ]
+        negative_exact_summary = b4_1_runner_module._partition_probe_summary(
+            negative_exact_rows,
+            task_sets=task_sets,
+            negative_eps=1.0e-6,
+        )
+        self.assertFalse(negative_exact_summary["partition_candidate_gate_pass"])
+        self.assertIn(
+            "negative_exact_task_set_region",
+            negative_exact_summary["partition_candidate_gate_issue_codes"],
+        )
+        self.assertIn(
+            "unproven_exact_task_set_region",
+            negative_exact_summary["partition_candidate_gate_issue_codes"],
+        )
+        negative_payload_rows = [negative_probe_row, safe_rows[1], safe_rows[2]]
+        negative_payload_summary = b4_1_runner_module._partition_probe_summary(
+            negative_payload_rows,
+            task_sets=task_sets,
+            negative_eps=1.0e-6,
+        )
+        self.assertEqual(negative_payload_summary["exact_region_negative_count"], 1)
+        self.assertEqual(negative_payload_summary["partition_negative_new_task_set_count"], 1)
+        self.assertEqual(negative_payload_summary["partition_negative_replacement_task_set_count"], 0)
+        self.assertEqual(negative_payload_summary["partition_negative_already_active_count"], 0)
+        self.assertEqual(negative_payload_summary["partition_source_active_column_count"], 10)
+        self.assertEqual(negative_payload_summary["partition_dual_active_column_count"], 5)
+        self.assertEqual(negative_payload_summary["partition_active_pool_after_dual_delta"], 5)
+        self.assertEqual(negative_payload_summary["partition_dual_scope_mismatch_count"], 1)
+        self.assertEqual(negative_payload_summary["partition_negative_rc_audit_fail_count"], 0)
+
+        bad_residual_rows = [
+            safe_rows[0],
+            safe_rows[1],
+            row(
+                region_id="residual_after_exact_task_sets",
+                region_kind="residual_after_exact_task_sets",
+                forbidden_task_sets=(first_task_set,),
+            ),
+        ]
+        bad_residual_summary = b4_1_runner_module._partition_probe_summary(
+            bad_residual_rows,
+            task_sets=task_sets,
+            negative_eps=1.0e-6,
+        )
+        self.assertFalse(bad_residual_summary["partition_candidate_gate_pass"])
+        self.assertIn(
+            "residual_forbidden_task_sets_do_not_match_exact_regions",
+            bad_residual_summary["partition_candidate_gate_issue_codes"],
+        )
+        self.assertFalse(bad_residual_summary["partition_candidate_gate_full_space_partition_valid"])
+
+        mixed_variant_rows = [
+            safe_rows[0],
+            row(
+                region_id="exact_002",
+                region_kind="exact_task_set",
+                required_task_set=second_task_set,
+                variant="V2_latest_service_start_slot_bound",
+            ),
+            safe_rows[2],
+        ]
+        mixed_variant_summary = b4_1_runner_module._partition_probe_summary(
+            mixed_variant_rows,
+            task_sets=task_sets,
+            negative_eps=1.0e-6,
+        )
+        self.assertFalse(mixed_variant_summary["partition_candidate_gate_pass"])
+        self.assertIn(
+            "mixed_variant_partition_rows",
+            mixed_variant_summary["partition_candidate_gate_issue_codes"],
+        )
+
+        mixed_variant_residual_rows = [
+            row(
+                region_id="residual_task_count_005",
+                region_kind="residual_task_count",
+                required_task_count=5,
+                forbidden_task_sets=(first_task_set, second_task_set),
+            ),
+            row(
+                region_id="residual_task_count_005",
+                region_kind="residual_task_count",
+                required_task_count=5,
+                forbidden_task_sets=(first_task_set, second_task_set),
+                negative_found=True,
+                region_certifies=False,
+                variant="V4_current_triple_time_window_infeasible",
+                formulation_kind="v4_current_triple_time_window_infeasible",
+                variable_count=12,
+                constraint_count=24,
+            ),
+        ]
+        mixed_variant_residual_summary = b4_1_runner_module._partition_probe_summary(
+            mixed_variant_residual_rows,
+            task_sets=task_sets,
+            negative_eps=1.0e-6,
+            total_task_count=5,
+        )
+        self.assertEqual(
+            mixed_variant_residual_summary["residual_task_count_region_negative_count"],
+            1,
+        )
+        self.assertEqual(mixed_variant_residual_summary["partition_best_negative_rc"], -0.02)
+        self.assertEqual(mixed_variant_residual_summary["partition_region_variable_count_max"], 12)
+        self.assertEqual(mixed_variant_residual_summary["partition_region_constraint_count_max"], 24)
+        self.assertEqual(mixed_variant_residual_summary["partition_region_variable_count_mean"], 11.0)
+        self.assertEqual(mixed_variant_residual_summary["partition_region_constraint_count_mean"], 22.0)
+        self.assertEqual(
+            mixed_variant_residual_summary[
+                "partition_region_slot_task_time_feasible_assignment_count_max"
+            ],
+            7,
+        )
+        self.assertEqual(
+            mixed_variant_residual_summary["partition_region_slot_task_time_pruned_assignment_count_sum"],
+            6,
+        )
+        self.assertEqual(
+            mixed_variant_residual_summary["partition_region_slot_arc_time_pruned_option_count_sum"],
+            4,
+        )
+        self.assertFalse(mixed_variant_residual_summary["partition_candidate_gate_pass"])
+        self.assertIn(
+            "mixed_variant_partition_rows",
+            mixed_variant_residual_summary["partition_candidate_gate_issue_codes"],
+        )
+        self.assertIn(
+            "duplicate_residual_task_count_region",
+            mixed_variant_residual_summary["partition_candidate_gate_issue_codes"],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            unsafe_json = tmp_path / "unsafe_partition.json"
+            unsafe_json.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "lunar_ice_bpc.b4_1_required_task_set_partition_probe.v1",
+                        "instance_id": "partition-gate-smoke",
+                        "diagnostic_only": True,
+                        "official_certificate_allowed": False,
+                        "can_claim_certificate": False,
+                        "target_task_set_count": len(task_sets),
+                        "row_count": len(bad_residual_rows),
+                        "rows": bad_residual_rows,
+                        "summary": bad_residual_summary,
+                        "redlines": {
+                            "certificate_claim_count": 0,
+                            "official_certificate_claim_count": 0,
+                            "full_space_certificate_claim_count": 0,
+                        },
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+            unsafe_audit = b4_1_runner_module.build_b4_1_partition_candidate_audit([unsafe_json])
+            self.assertEqual(unsafe_audit["partition_gate_pass_count"], 0)
+            self.assertEqual(unsafe_audit["partition_gate_fail_count"], 1)
+            self.assertEqual(unsafe_audit["redline_fail_count"], 0)
+            self.assertEqual(
+                unsafe_audit["partition_gate_issue_counts"][
+                    "residual_forbidden_task_sets_do_not_match_exact_regions"
+                ],
+                1,
+            )
+            self.assertFalse(unsafe_audit["can_claim_certificate"])
+            unsafe_audit_json = tmp_path / "unsafe_audit.json"
+            b4_1_runner_module.write_b4_1_partition_candidate_audit(
+                unsafe_audit,
+                summary_json=unsafe_audit_json,
+                report_md=tmp_path / "unsafe_audit_zh.md",
+            )
+            unsafe_rows = b4_1_runner_module.rows_from_b4_1_partition_candidate_audit(unsafe_audit_json)
+            self.assertEqual(len(unsafe_rows), 1)
+            self.assertFalse(unsafe_rows[0]["partition_candidate_gate_pass"])
+            self.assertFalse(unsafe_rows[0]["partition_candidate_can_certify_no_negative"])
+            unsafe_report = b4_1_runner_module.build_b4_1_report(unsafe_rows)
+            self.assertEqual(unsafe_report["diagnostics"]["partition_candidate_gate_fail_count"], 1)
+            self.assertEqual(
+                unsafe_report["diagnostics"]["partition_candidate_issue_counts"][
+                    "residual_forbidden_task_sets_do_not_match_exact_regions"
+                ],
+                1,
+            )
+            self.assertEqual(unsafe_report["redlines"]["partition_candidate_certificate_leak_count"], 0)
+
+            negative_json = tmp_path / "negative_partition.json"
+            negative_json.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "lunar_ice_bpc.b4_1_required_task_set_partition_probe.v1",
+                        "instance_id": "partition-negative-payload-smoke",
+                        "diagnostic_only": True,
+                        "official_certificate_allowed": False,
+                        "can_claim_certificate": False,
+                        "target_task_set_count": len(task_sets),
+                        "row_count": len(negative_payload_rows),
+                        "rows": negative_payload_rows,
+                        "summary": negative_payload_summary,
+                        "redlines": {
+                            "certificate_claim_count": 0,
+                            "official_certificate_claim_count": 0,
+                            "full_space_certificate_claim_count": 0,
+                        },
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+            negative_audit = b4_1_runner_module.build_b4_1_partition_candidate_audit([negative_json])
+            self.assertEqual(negative_audit["partition_negative_region_count"], 1)
+            self.assertEqual(negative_audit["partition_negative_payload_available_count"], 1)
+            self.assertEqual(negative_audit["partition_best_negative_rc"], -0.015)
+            self.assertEqual(negative_audit["partition_negative_new_task_set_count"], 1)
+            self.assertEqual(negative_audit["partition_negative_replacement_task_set_count"], 0)
+            self.assertEqual(negative_audit["partition_negative_already_active_count"], 0)
+            self.assertEqual(negative_audit["partition_dual_scope_mismatch_count"], 1)
+            self.assertEqual(negative_audit["partition_negative_rc_audit_fail_count"], 0)
+            self.assertEqual(negative_audit["redline_fail_count"], 0)
+            negative_audit_json = tmp_path / "negative_audit.json"
+            b4_1_runner_module.write_b4_1_partition_candidate_audit(
+                negative_audit,
+                summary_json=negative_audit_json,
+                report_md=tmp_path / "negative_audit_zh.md",
+            )
+            negative_rows = b4_1_runner_module.rows_from_b4_1_partition_candidate_audit(
+                negative_audit_json
+            )
+            self.assertEqual(negative_rows[0]["partition_negative_region_count"], 1)
+            self.assertEqual(negative_rows[0]["partition_negative_payload_available_count"], 1)
+            self.assertEqual(negative_rows[0]["partition_best_negative_rc"], -0.015)
+            self.assertEqual(negative_rows[0]["partition_negative_new_task_set_count"], 1)
+            self.assertEqual(negative_rows[0]["partition_dual_scope_mismatch_count"], 1)
+            self.assertEqual(negative_rows[0]["partition_active_pool_after_dual_delta"], 5)
+            negative_report = b4_1_runner_module.build_b4_1_report(negative_rows)
+            self.assertEqual(negative_report["diagnostics"]["partition_negative_region_count"], 1)
+            self.assertEqual(
+                negative_report["diagnostics"]["partition_negative_payload_available_count"],
+                1,
+            )
+            self.assertEqual(negative_report["diagnostics"]["partition_best_negative_rc"], -0.015)
+            self.assertEqual(negative_report["diagnostics"]["partition_negative_new_task_set_count"], 1)
+            self.assertEqual(
+                negative_report["diagnostics"]["partition_negative_already_active_count"],
+                0,
+            )
+            self.assertEqual(negative_report["diagnostics"]["partition_dual_scope_mismatch_count"], 1)
+            self.assertEqual(negative_report["diagnostics"]["partition_active_pool_after_dual_delta_max"], 5)
+            self.assertEqual(negative_report["diagnostics"]["partition_negative_rc_audit_fail_count"], 0)
+            self.assertEqual(
+                negative_report["redlines"]["partition_candidate_certificate_leak_count"],
+                0,
+            )
+
     def test_merge_targeted_restricted_region_column_into_probe(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
@@ -6363,6 +10674,96 @@ class LunarIceSmokeTests(unittest.TestCase):
             )
             self.assertEqual(payload["merged_replay_column"]["targeted_row_index"], 1)
             self.assertEqual(payload["merged_replay_column"]["replay_best_reduced_cost"], -0.05)
+
+            partition = tmp_path / "partition.json"
+            partition_merged = tmp_path / "partition_merged.json"
+            partition_duplicate = tmp_path / "partition_duplicate.json"
+            partition.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "lunar_ice_bpc.b4_1_required_task_set_partition_probe.v1",
+                        "instance_id": "merge-targeted-smoke",
+                        "rows": [
+                            {
+                                "region_id": "exact_001",
+                                "region_kind": "exact_task_set",
+                                "variant": "V4_current_strengthening",
+                                "partition_negative_true_rc": -0.02,
+                                "partition_negative_task_set": ["ice_site_004"],
+                                "partition_negative_solution_payload": first_payload,
+                                "dual_bound": -0.025,
+                            },
+                            {
+                                "region_id": "exact_002",
+                                "region_kind": "exact_task_set",
+                                "variant": "V4_current_strengthening",
+                                "partition_negative_true_rc": -0.08,
+                                "partition_negative_task_set": ["ice_site_002", "ice_site_003"],
+                                "partition_negative_solution_payload": best_payload,
+                                "dual_bound": -0.081,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            partition_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(project_root / "scripts" / "merge_lunar_ice_replay_column_into_probe.py"),
+                    "--base-probe",
+                    str(base),
+                    "--partition-json",
+                    str(partition),
+                    "--output-json",
+                    str(partition_merged),
+                    "--vehicle-id",
+                    "merged_partition_best",
+                ],
+                cwd=project_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(partition_completed.returncode, 0, partition_completed.stderr)
+            partition_payload = json.loads(partition_merged.read_text(encoding="utf-8"))
+            self.assertEqual(len(partition_payload["active_columns"]), 1)
+            self.assertEqual(partition_payload["active_columns"][0]["vehicle_id"], "merged_partition_best")
+            self.assertEqual(
+                partition_payload["active_columns"][0]["sorties"][0]["tasks"],
+                ["ice_site_002", "ice_site_003"],
+            )
+            self.assertTrue(partition_payload["merged_replay_column"]["added"])
+            self.assertEqual(
+                partition_payload["merged_replay_column"]["source_kind"],
+                "b4_1_required_task_set_partition_probe",
+            )
+            self.assertEqual(partition_payload["merged_replay_column"]["partition_row_index"], 1)
+            self.assertEqual(partition_payload["merged_replay_column"]["replay_best_reduced_cost"], -0.08)
+
+            duplicate_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(project_root / "scripts" / "merge_lunar_ice_replay_column_into_probe.py"),
+                    "--base-probe",
+                    str(partition_merged),
+                    "--partition-json",
+                    str(partition),
+                    "--output-json",
+                    str(partition_duplicate),
+                    "--vehicle-id",
+                    "merged_partition_best_again",
+                ],
+                cwd=project_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(duplicate_completed.returncode, 0, duplicate_completed.stderr)
+            duplicate_payload = json.loads(partition_duplicate.read_text(encoding="utf-8"))
+            self.assertEqual(len(duplicate_payload["active_columns"]), 1)
+            self.assertFalse(duplicate_payload["merged_replay_column"]["added"])
+            self.assertEqual(duplicate_payload["merged_replay_column"]["after_active_column_count"], 1)
 
     def test_staged_resume_report_refreshes_feasibility_proof_rows(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
@@ -6652,16 +11053,107 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertTrue(by_region["prefix_3"]["targeted_bound_improved_over_source"])
             self.assertEqual(by_region["prefix_3"]["best_known_dual_bound"], -0.2)
             self.assertEqual(ledger["best_known_global_remaining_rc_lb"], -0.2)
+            self.assertEqual(ledger["supported_bound_region_count"], 2)
+            self.assertEqual(ledger["unsupported_bound_region_count"], 0)
+            self.assertEqual(ledger["negative_bound_region_count"], 2)
+            self.assertEqual(ledger["nonnegative_bound_region_count"], 0)
+            self.assertEqual(ledger["region_bound_gap_to_zero"], 0.2)
+            self.assertEqual(ledger["region_bound_gap_source_region_id"], "prefix_3")
+            self.assertEqual(ledger["region_bound_gap_source"], "targeted_probe")
+            self.assertEqual(ledger["region_partition_family"], "prefix_no_good_residual_regions")
+            self.assertEqual(ledger["region_partition_required_model"], "exact_task_set_regions_plus_final_residual")
+            self.assertEqual(ledger["region_partition_observed_prefixes"], [2, 3])
+            self.assertTrue(ledger["region_partition_prefix_regions_nested"])
+            self.assertFalse(ledger["region_partition_regions_disjoint"])
+            self.assertFalse(ledger["region_partition_complete"])
+            self.assertFalse(ledger["region_partition_can_certify"])
+            self.assertEqual(ledger["region_partition_required_exact_task_set_region_count"], 3)
+            self.assertEqual(ledger["region_partition_observed_exact_task_set_region_count"], 0)
+            self.assertEqual(ledger["region_partition_missing_exact_task_set_region_count"], 3)
+            self.assertEqual(ledger["region_partition_residual_region_id"], "prefix_3")
+            self.assertEqual(ledger["region_partition_residual_best_known_dual_bound"], -0.2)
+            self.assertFalse(ledger["region_partition_residual_bound_nonnegative"])
+            self.assertIn(
+                "prefix_no_good_regions_are_nested_not_disjoint",
+                ledger["region_partition_issue_codes"],
+            )
+            self.assertIn("missing_exact_task_set_region_proofs", ledger["region_partition_issue_codes"])
+            self.assertTrue(ledger["summary"]["region_bound_diagnostic_complete_for_listed_regions"])
+            self.assertFalse(ledger["summary"]["region_bound_can_certify_if_partition"])
+            self.assertFalse(ledger["summary"]["region_bound_official_certificate_allowed"])
+            self.assertEqual(by_region["prefix_3"]["best_known_dual_bound_gap_to_zero"], 0.2)
+            self.assertFalse(by_region["prefix_3"]["best_known_dual_bound_nonnegative"])
+
+            positive_targeted = tmp_path / "targeted_positive.json"
+            positive_targeted.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "lunar_ice_bpc.b4_1_targeted_restricted_region_probe.v1",
+                        "source_probe_json": str(probe),
+                        "diagnostic_only": True,
+                        "official_certificate_allowed": False,
+                        "rows": [
+                            {
+                                "source_probe_json": str(probe),
+                                "region_id": "prefix_2",
+                                "forbidden_task_set_count": 2,
+                                "variant": "V4_current_strengthening",
+                                "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                                "exact_status": "RESTRICTED_PRICING_OPTIMAL",
+                                "best_reduced_cost": 0.05,
+                                "dual_bound": 0.05,
+                                "official_certificate_allowed": False,
+                                "can_certify_no_negative": False,
+                            },
+                            {
+                                "source_probe_json": str(probe),
+                                "region_id": "prefix_3",
+                                "forbidden_task_set_count": 3,
+                                "variant": "V4_current_strengthening",
+                                "status": "COMPACT_HIGHS_PRICING_OPTIMAL",
+                                "exact_status": "RESTRICTED_PRICING_OPTIMAL",
+                                "best_reduced_cost": 0.08,
+                                "dual_bound": 0.08,
+                                "official_certificate_allowed": False,
+                                "can_certify_no_negative": False,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            positive_ledger = b4_1_runner_module.build_b4_1_restricted_region_bound_ledger(
+                probe,
+                targeted_probe_jsons=[positive_targeted],
+            )
+            self.assertEqual(positive_ledger["best_known_global_remaining_rc_lb"], 0.05)
+            self.assertEqual(positive_ledger["region_bound_gap_to_zero"], 0.0)
+            self.assertEqual(positive_ledger["negative_bound_region_count"], 0)
+            self.assertEqual(positive_ledger["nonnegative_bound_region_count"], 2)
+            self.assertTrue(positive_ledger["summary"]["region_bound_can_certify_if_partition"])
+            self.assertFalse(positive_ledger["region_partition_can_certify"])
+            self.assertFalse(positive_ledger["region_partition_complete"])
+            self.assertEqual(positive_ledger["region_partition_missing_exact_task_set_region_count"], 3)
+            self.assertEqual(positive_ledger["region_partition_residual_region_id"], "prefix_3")
+            self.assertTrue(positive_ledger["region_partition_residual_bound_nonnegative"])
+            self.assertIn(
+                "missing_exact_task_set_region_proofs",
+                positive_ledger["region_partition_issue_codes"],
+            )
+            self.assertFalse(positive_ledger["official_certificate_allowed"])
+            self.assertFalse(positive_ledger["can_claim_certificate"])
+            self.assertFalse(positive_ledger["frontier_coverage_complete"])
+            self.assertEqual(positive_ledger["pricing_proof_kind"], "FRONTIER_BOUND_INCOMPLETE")
 
             b4_1_runner_module.write_b4_1_restricted_region_bound_ledger(
                 ledger,
                 summary_json=tmp_path / "ledger.json",
                 report_md=tmp_path / "ledger_zh.md",
             )
-            self.assertIn(
-                "diagnostic-only",
-                (tmp_path / "ledger_zh.md").read_text(encoding="utf-8"),
-            )
+            ledger_markdown = (tmp_path / "ledger_zh.md").read_text(encoding="utf-8")
+            self.assertIn("diagnostic-only", ledger_markdown)
+            self.assertIn("region_bound_gap_to_zero", ledger_markdown)
+            self.assertIn("missing exact-task-set regions", ledger_markdown)
 
             cli_out = tmp_path / "cli"
             completed = subprocess.run(
@@ -8561,6 +13053,292 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(matrix["all_suites_workload_observed"])
         self.assertFalse(matrix["performance_claim_allowed"])
         self.assertEqual(matrix["performance_claim_status"], "MISSING_AB_MODES")
+
+    def test_b4_2_cold_runner_rejects_external_probe_cli(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        parser = module._build_parser()
+        help_text = parser.format_help()
+        self.assertNotIn("--reuse-probe", help_text)
+        self.assertNotIn("--initial-resume-probe", help_text)
+        self.assertNotIn("--source-probe-json", help_text)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--reuse-probe", "instance_001=probe.json"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--source-probe-json", "probe.json"])
+
+    def test_b4_2_config_hash_and_summary_gate_no_cheat(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_summary",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        args = module._build_parser().parse_args([])
+        config = module._official_config(args)
+        self.assertEqual(config["model_id"], "B4_2_COLD_EXACT_V1")
+        self.assertFalse(config["no_cheat_policy"]["external_source_probe_allowed"])
+        self.assertTrue(config["no_cheat_policy"]["checkpoint_time_counted"])
+        first_hash = module._config_hash(config)
+        self.assertEqual(first_hash, module._config_hash(dict(config)))
+        changed = dict(config)
+        changed["threads"] = 8
+        self.assertNotEqual(first_hash, module._config_hash(changed))
+
+        rows = [
+            {
+                "scale": 30,
+                "instance_key": "instance_001",
+                "config_hash": first_hash,
+                "certificate_scope": "BPC_TREE_OPTIMAL",
+                "exact_certificate": True,
+                "under_500": True,
+                "cold_start_total_sec": 120.0,
+                "root_cg_sec": 80.0,
+                "tree_sec": 40.0,
+                "no_cheat_pass": True,
+                "external_probe_used": False,
+                "mature_pool_used": False,
+                "manual_columns_used": False,
+                "per_instance_override_used": False,
+            }
+        ]
+        limited_summary = module._summary(
+            rows,
+            config=config,
+            limited_run=True,
+            discovered_instance_count=1,
+        )
+        self.assertFalse(limited_summary["acceptance"]["b4_2_cold_exact_accepted"])
+        self.assertEqual(limited_summary["redlines"]["no_cheat_fail_count"], 0)
+
+        cheat_rows = [dict(rows[0], external_probe_used=True, no_cheat_pass=False)]
+        cheat_summary = module._summary(
+            cheat_rows,
+            config=config,
+            limited_run=False,
+            discovered_instance_count=1,
+        )
+        self.assertEqual(cheat_summary["redlines"]["no_cheat_fail_count"], 1)
+        self.assertFalse(cheat_summary["acceptance"]["b4_2_cold_exact_accepted"])
+
+    def test_b4_2_report_marks_seed_instrumentation_boundary(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_report",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        args = module._build_parser().parse_args([])
+        config = module._official_config(args)
+        config_hash = module._config_hash(config)
+        rows = [
+            {
+                "scale": 30,
+                "instance_key": "instance_001",
+                "config_hash": config_hash,
+                "algorithm_status": "BPC_INCOMPLETE_PRICING",
+                "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "exact_certificate": False,
+                "under_500": False,
+                "cold_start_total_sec": 500.1,
+                "root_cg_sec": 500.1,
+                "tree_sec": None,
+                "root_pool_active_column_count": 151,
+                "column_provenance": "instance_json_fixed_seed_same_run_checkpoint_and_partition_feedback",
+                "fail_reason": "root pool did not certify",
+                "no_cheat_pass": True,
+                "external_probe_used": False,
+                "mature_pool_used": False,
+                "manual_columns_used": False,
+                "per_instance_override_used": False,
+            }
+        ]
+        summary = module._summary(
+            rows,
+            config=config,
+            limited_run=False,
+            discovered_instance_count=1,
+        )
+        report = module._render_report(rows, summary)
+        self.assertIn("B4.2 Cold-Start Exact 500s Report", report)
+        self.assertIn("B0 incumbent + singleton", report)
+        self.assertIn("instance_json_fixed_seed_same_run_checkpoint_and_partition_feedback", report)
+        self.assertFalse(summary["acceptance"]["b4_2_cold_exact_accepted"])
+
+    def test_b4_2_partition_feedback_merges_only_audited_negative_payloads(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_partition_feedback",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        base_column = {
+            "vehicle_id": "active_column_001",
+            "sorties": [
+                {
+                    "tasks": ["ice_site_001"],
+                    "legs": [
+                        {"from": "depot", "to": "ice_site_001", "path_type": "low_time"},
+                        {"from": "ice_site_001", "to": "depot", "path_type": "low_time"},
+                    ],
+                    "start_time": 0.0,
+                    "service_starts": {"ice_site_001": 10.0},
+                }
+            ],
+        }
+        new_payload = {
+            "vehicle_id": "partition_negative",
+            "sorties": [
+                {
+                    "tasks": ["ice_site_002", "ice_site_003"],
+                    "legs": [
+                        {"from": "depot", "to": "ice_site_002", "path_type": "low_time"},
+                        {"from": "ice_site_002", "to": "ice_site_003", "path_type": "low_risk"},
+                        {"from": "ice_site_003", "to": "depot", "path_type": "low_time"},
+                    ],
+                    "start_time": 0.0,
+                    "service_starts": {"ice_site_002": 20.0, "ice_site_003": 30.0},
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_probe = tmp_path / "probe.json"
+            source_probe.write_text(
+                json.dumps(
+                    {
+                        "instance_id": "demo_instance",
+                        "active_columns_payload_version": "journey_solution_payload.v1",
+                        "active_columns": [base_column],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            partition_dir = tmp_path / "partition"
+            worker_dir = partition_dir / "worker_01_k002_002"
+            worker_dir.mkdir(parents=True)
+            (worker_dir / "required_task_set_partition_probe.json").write_text(
+                json.dumps(
+                    {
+                        "rows": [
+                            {
+                                "region_id": "residual_task_count_002_active_sorties_001",
+                                "partition_negative_solution_payload": new_payload,
+                                "partition_negative_true_rc": -0.5,
+                                "partition_negative_pricing_rc_diff": 0.0,
+                                "partition_negative_rc_audit_pass": True,
+                                "partition_negative_task_set": ["ice_site_002", "ice_site_003"],
+                                "partition_negative_task_set_size": 2,
+                                "partition_negative_replacement_or_new_task_set": "new_task_set",
+                            },
+                            {
+                                "region_id": "bad_rc_audit",
+                                "partition_negative_solution_payload": {
+                                    **new_payload,
+                                    "vehicle_id": "bad_partition_negative",
+                                },
+                                "partition_negative_true_rc": -1.0,
+                                "partition_negative_pricing_rc_diff": 0.0,
+                                "partition_negative_rc_audit_pass": False,
+                            },
+                            {
+                                "region_id": "positive_rc",
+                                "partition_negative_solution_payload": {
+                                    **new_payload,
+                                    "vehicle_id": "positive_partition_negative",
+                                },
+                                "partition_negative_true_rc": 0.01,
+                                "partition_negative_pricing_rc_diff": 0.0,
+                                "partition_negative_rc_audit_pass": True,
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output_probe = tmp_path / "merged.json"
+            result = module._merge_partition_negative_columns_into_probe(
+                source_probe=source_probe,
+                partition_dir=partition_dir,
+                output_probe=output_probe,
+                max_columns=4,
+                negative_eps=1.0e-6,
+                round_index=1,
+            )
+            self.assertEqual(result["candidate_count"], 1)
+            self.assertEqual(result["added_count"], 1)
+            merged = json.loads(output_probe.read_text(encoding="utf-8"))
+            self.assertEqual(len(merged["active_columns"]), 2)
+            self.assertEqual(
+                merged["b4_2_partition_feedback_merge"]["selected"][0]["region_id"],
+                "residual_task_count_002_active_sorties_001",
+            )
+
+    def test_b4_2_root_partition_gate_requires_integral_root(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_partition_gate",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        partition_row = {"root_partition_certified_no_negative": True, "root_partition_sec": 12.0}
+        with tempfile.TemporaryDirectory() as tmp:
+            source_probe = Path(tmp) / "probe.json"
+            source_probe.write_text(
+                json.dumps(
+                    {
+                        "integral_root": True,
+                        "root_lp_bound": 1.25,
+                        "root_lp_vs_direct_dp_gap": 0.0,
+                        "b0_ablation": {"direct_dp_objective": 1.25},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            gate = module._root_partition_tree_gate(source_probe, partition_row)
+            self.assertTrue(gate["exact_certificate"])
+            self.assertEqual(gate["certificate_scope"], "BPC_TREE_OPTIMAL")
+
+            source_probe.write_text(
+                json.dumps(
+                    {
+                        "integral_root": False,
+                        "root_lp_bound": 1.1,
+                        "root_lp_vs_direct_dp_gap": 0.2,
+                        "b0_ablation": {"direct_dp_objective": 1.3},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            gate = module._root_partition_tree_gate(source_probe, partition_row)
+            self.assertFalse(gate["exact_certificate"])
+            self.assertEqual(gate["certificate_scope"], "BPC_NODE_LP_CERTIFIED")
 
 
 def _walk_keys(value):

@@ -17,19 +17,26 @@ from lunar_ice_bpc.runners.b4_1_true_dual_proof_tail import (  # noqa: E402
     B41_STAGE_B_VARIANTS,
     B41_TARGETED_RESTRICTED_REGION_VARIANT_CONFIGS,
     build_b4_1_restricted_region_bound_ledger,
+    build_b4_1_partition_candidate_audit,
     build_b4_1_restricted_region_taskset_diagnostic,
     build_b4_1_report,
+    run_b4_1_required_task_set_partition_probe,
     run_b4_1_targeted_restricted_region_probe,
     run_b4_1_stage_a_regression,
     run_b4_1_stage_b_from_probe,
     run_b4_1_stage_b_worker_tail_hidden_probe,
     run_b4_1_stage_c_selected_from_probe,
     run_b4_1_tree_closure_from_probe,
+    rows_from_b4_1_partition_candidate_audit,
     write_b4_1_artifacts,
+    write_b4_1_partition_candidate_audit,
     write_b4_1_restricted_region_bound_ledger,
     write_b4_1_restricted_region_taskset_diagnostic,
+    write_b4_1_required_task_set_partition_probe,
     write_b4_1_targeted_restricted_region_probe,
 )
+
+B41_ROOT_TAIL_PARTITION_DEFAULT_MAX_TASK_SETS = 5
 
 
 def main() -> int:
@@ -40,6 +47,7 @@ def main() -> int:
     parser.add_argument("--manifest")
     parser.add_argument("--scales", nargs="*", type=int, default=[])
     parser.add_argument("--limit-per-scale", type=int, default=0)
+    parser.add_argument("--import-partition-candidate-audit-json", action="append", default=[])
     parser.add_argument("--stage-a", action="store_true")
     parser.add_argument("--stage-a-modes", nargs="*", default=list(B41_STAGE_A_MODES))
     parser.add_argument("--max-direct-tasks", type=int, default=5)
@@ -52,6 +60,15 @@ def main() -> int:
     parser.add_argument("--import-rows-jsonl", action="append", default=[])
     parser.add_argument("--stage-b", action="store_true")
     parser.add_argument("--stage-b-variants", nargs="*", default=list(B41_STAGE_B_VARIANTS))
+    parser.add_argument(
+        "--stage-b-v4-root-tail-partition-proof",
+        action="store_true",
+        help=(
+            "Convenience alias for the B4.1 V4 root-tail region proof chain: "
+            "run required-task-set partition proof when source probes are given, "
+            "build partition candidate audit, and import the audit as diagnostic rows."
+        ),
+    )
     parser.add_argument("--stage-b-worker-tail-hidden-probe", action="store_true")
     parser.add_argument("--stage-b-worker-tail-output-subdir", default="stage_b_worker_tail_hidden_negative")
     parser.add_argument("--stage-b-worker-tail-max-direct-tasks", type=int, default=30)
@@ -103,6 +120,37 @@ def main() -> int:
         "--targeted-region-basename",
         default="targeted_restricted_region_probe",
     )
+    parser.add_argument("--required-task-set-partition-proof-probe", action="store_true")
+    parser.add_argument(
+        "--partition-region-variants",
+        nargs="*",
+        default=("V4_current_strengthening",),
+    )
+    parser.add_argument("--partition-region-time-limit-sec", type=float, default=120.0)
+    parser.add_argument("--partition-region-max-task-sets", type=int, default=0)
+    parser.add_argument("--partition-region-history-round", type=int, default=-1)
+    parser.add_argument("--partition-residual-task-count-proof", action="store_true")
+    parser.add_argument("--partition-residual-task-count-min", type=int, default=1)
+    parser.add_argument("--partition-residual-task-count-max", type=int, default=0)
+    parser.add_argument("--partition-residual-task-count-max-regions", type=int, default=0)
+    parser.add_argument("--partition-residual-active-sortie-count-proof", action="store_true")
+    parser.add_argument("--partition-residual-active-sortie-count-min", type=int, default=0)
+    parser.add_argument("--partition-residual-active-sortie-count-max", type=int, default=0)
+    parser.add_argument("--partition-adaptive-active-sortie-refinement", action="store_true")
+    parser.add_argument("--partition-negative-feasibility-fallback", action="store_true")
+    parser.add_argument("--partition-refresh-dual-from-active-pool", action="store_true")
+    parser.add_argument("--partition-refresh-rmp-max-iterations", type=int, default=100)
+    parser.add_argument(
+        "--partition-region-basename",
+        default="required_task_set_partition_probe",
+    )
+    parser.add_argument("--partition-candidate-audit", action="store_true")
+    parser.add_argument("--partition-region-result-json", action="append", default=[])
+    parser.add_argument(
+        "--partition-candidate-audit-basename",
+        default="partition_candidate_audit",
+    )
+    parser.add_argument("--partition-candidate-audit-import-rows", action="store_true")
     parser.add_argument("--restricted-region-bound-ledger", action="store_true")
     parser.add_argument(
         "--restricted-region-bound-ledger-basename",
@@ -110,6 +158,7 @@ def main() -> int:
     )
     parser.add_argument("--targeted-region-result-json", action="append", default=[])
     args = parser.parse_args()
+    _apply_stage_b_v4_root_tail_partition_alias(args)
 
     output_dir = _resolve(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -120,6 +169,8 @@ def main() -> int:
 
     row_mode_requested = bool(
         args.import_rows_jsonl
+        or args.import_partition_candidate_audit_json
+        or args.partition_candidate_audit_import_rows
         or args.stage_a
         or args.stage_b
         or args.stage_b_worker_tail_hidden_probe
@@ -137,6 +188,16 @@ def main() -> int:
             _write(rows, rows_csv=rows_csv, summary_json=summary_json, report_md=report_md)
             row_artifacts_dirty = True
             print(f"Imported {imported_count} B4.1 row(s) into {rows_jsonl}")
+    if args.import_partition_candidate_audit_json:
+        imported_count = _merge_partition_candidate_audit_rows(
+            rows,
+            (_resolve(path) for path in args.import_partition_candidate_audit_json),
+        )
+        if imported_count:
+            _write_rows_jsonl(rows_jsonl, rows)
+            _write(rows, rows_csv=rows_csv, summary_json=summary_json, report_md=report_md)
+            row_artifacts_dirty = True
+            print(f"Imported {imported_count} B4.1 partition audit evidence row(s) into {rows_jsonl}")
     stage_a_keys = {_stage_a_key(row) for row in rows if row.get("stage") == "A"}
     stage_b_keys = {_stage_b_key(row) for row in rows if row.get("stage") == "B"}
     stage_c_keys = {_stage_b_key(row) for row in rows if row.get("stage") == "C"}
@@ -188,6 +249,82 @@ def main() -> int:
             print(
                 "B4.1 targeted restricted-region proof probe written for "
                 f"{_resolve(probe)}"
+            )
+
+    generated_partition_jsons: list[Path] = []
+    if args.required_task_set_partition_proof_probe:
+        source_probes = tuple(args.source_probe_json)
+        for index, probe in enumerate(source_probes, start=1):
+            if not _resource_status(
+                output_dir=output_dir,
+                min_available_mem_gb=float(args.min_available_mem_gb),
+                min_free_disk_gb=float(args.min_free_disk_gb),
+                max_output_dir_gb=float(args.max_output_dir_gb),
+            )[0]:
+                print(f"B4.1 required-task-set partition resource gate failed before {probe}", file=sys.stderr)
+                return 2
+            suffix = "" if len(source_probes) == 1 else f"_{index:03d}"
+            partition = run_b4_1_required_task_set_partition_probe(
+                _resolve(probe),
+                variants=tuple(args.partition_region_variants),
+                history_round=int(args.partition_region_history_round),
+                time_limit_sec=float(args.partition_region_time_limit_sec),
+                threads=int(args.threads),
+                max_task_sets=int(args.partition_region_max_task_sets),
+                refresh_dual_from_active_pool=bool(args.partition_refresh_dual_from_active_pool),
+                refresh_rmp_max_iterations=int(args.partition_refresh_rmp_max_iterations),
+                residual_task_count_partition=bool(args.partition_residual_task_count_proof),
+                residual_task_count_min=int(args.partition_residual_task_count_min),
+                residual_task_count_max=int(args.partition_residual_task_count_max),
+                residual_task_count_max_regions=int(args.partition_residual_task_count_max_regions),
+                residual_active_sortie_count_partition=bool(args.partition_residual_active_sortie_count_proof),
+                residual_active_sortie_count_min=int(args.partition_residual_active_sortie_count_min),
+                residual_active_sortie_count_max=int(args.partition_residual_active_sortie_count_max),
+                residual_active_sortie_adaptive_refinement=bool(
+                    args.partition_adaptive_active_sortie_refinement
+                ),
+                negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),
+            )
+            partition_json = output_dir / f"{args.partition_region_basename}{suffix}.json"
+            write_b4_1_required_task_set_partition_probe(
+                partition,
+                summary_json=partition_json,
+                report_md=output_dir / f"{args.partition_region_basename}{suffix}_zh.md",
+            )
+            generated_partition_jsons.append(partition_json)
+            print(
+                "B4.1 required-task-set partition proof probe written for "
+                f"{_resolve(probe)}"
+            )
+
+    generated_partition_audit_jsons: list[Path] = []
+    if args.partition_candidate_audit:
+        partition_jsons = tuple(_resolve(path) for path in args.partition_region_result_json) + tuple(
+            generated_partition_jsons
+        )
+        if not partition_jsons:
+            print(
+                "B4.1 partition candidate audit requested but no partition probe JSON was provided or generated",
+                file=sys.stderr,
+            )
+            return 2
+        audit = build_b4_1_partition_candidate_audit(partition_jsons)
+        audit_json = output_dir / f"{args.partition_candidate_audit_basename}.json"
+        write_b4_1_partition_candidate_audit(
+            audit,
+            summary_json=audit_json,
+            report_md=output_dir / f"{args.partition_candidate_audit_basename}_zh.md",
+        )
+        generated_partition_audit_jsons.append(audit_json)
+        print(f"B4.1 partition candidate audit written for {len(partition_jsons)} probe(s)")
+    if args.partition_candidate_audit_import_rows and generated_partition_audit_jsons:
+        imported_count = _merge_partition_candidate_audit_rows(rows, tuple(generated_partition_audit_jsons))
+        if imported_count:
+            _write_rows_jsonl(rows_jsonl, rows)
+            _write(rows, rows_csv=rows_csv, summary_json=summary_json, report_md=report_md)
+            row_artifacts_dirty = True
+            print(
+                f"Imported {imported_count} generated B4.1 partition audit evidence row(s) into {rows_jsonl}"
             )
 
     if args.restricted_region_bound_ledger:
@@ -429,6 +566,17 @@ def main() -> int:
     return 0
 
 
+def _apply_stage_b_v4_root_tail_partition_alias(args) -> None:
+    if not bool(getattr(args, "stage_b_v4_root_tail_partition_proof", False)):
+        return
+    if getattr(args, "source_probe_json", None):
+        args.required_task_set_partition_proof_probe = True
+        if int(getattr(args, "partition_region_max_task_sets", 0) or 0) <= 0:
+            args.partition_region_max_task_sets = B41_ROOT_TAIL_PARTITION_DEFAULT_MAX_TASK_SETS
+    args.partition_candidate_audit = True
+    args.partition_candidate_audit_import_rows = True
+
+
 def _stage_a_instances(args) -> list[Path]:
     explicit = [_resolve(path) for path in args.instance]
     if explicit:
@@ -519,12 +667,36 @@ def _merge_imported_rows(rows: list[dict], row_sources: Iterable[Path]) -> int:
     return added
 
 
+def _merge_partition_candidate_audit_rows(rows: list[dict], audit_sources: Iterable[Path]) -> int:
+    seen = {_row_import_key(row) for row in rows}
+    added = 0
+    for source in audit_sources:
+        for row in rows_from_b4_1_partition_candidate_audit(source):
+            key = _row_import_key(row)
+            if key in seen:
+                continue
+            rows.append(row)
+            seen.add(key)
+            added += 1
+    return added
+
+
 def _row_import_key(row: dict) -> tuple[str, ...]:
     stage = str(row.get("stage") or "")
     if stage == "A":
         return ("A", str(_resolve(row.get("instance_path") or "")), str(row.get("mode") or ""))
     if stage in {"B", "C"}:
         source = str(_resolve(row.get("source_probe_json") or ""))
+        if str(row.get("mode") or "") == "B4.1_partition_candidate_audit":
+            return (
+                stage,
+                str(_resolve(row.get("partition_candidate_audit_json") or "")),
+                str(_resolve(row.get("partition_probe_json") or "")),
+                source,
+                str(row.get("round") or ""),
+                str(row.get("variant") or ""),
+                str(row.get("phase") or ""),
+            )
         return (
             stage,
             source,

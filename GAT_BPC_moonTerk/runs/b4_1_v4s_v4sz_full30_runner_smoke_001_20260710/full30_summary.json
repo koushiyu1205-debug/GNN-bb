@@ -1,0 +1,24 @@
+{
+  "pool_certified_count": 1,
+  "pool_row_count": 1,
+  "profiles": {
+    "V4S": {
+      "exact_certificate_count": 0,
+      "failed_or_skipped_count": 1,
+      "mean_active_column_count_certified": null,
+      "mean_final_judge_wall_time_sec_certified": null,
+      "mean_wall_time_sec_certified": null,
+      "rows": 1
+    },
+    "V4SZ": {
+      "exact_certificate_count": 0,
+      "failed_or_skipped_count": 1,
+      "mean_active_column_count_certified": null,
+      "mean_final_judge_wall_time_sec_certified": null,
+      "mean_wall_time_sec_certified": null,
+      "rows": 1
+    }
+  },
+  "proof_row_count": 2,
+  "row_count": 3
+}

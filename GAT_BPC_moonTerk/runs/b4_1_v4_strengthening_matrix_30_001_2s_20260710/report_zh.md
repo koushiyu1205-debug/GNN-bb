@@ -1,0 +1,20 @@
+# B4.1 V4 Strengthening Matrix 30-001 2s
+
+| variant | vars | rows | dual_bound | status | key rows |
+|---|---:|---:|---:|---|---:|
+| baseline | 6009 | 11437 | -0.282404269 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 0 |
+| sortie_position | 6009 | 11499 | -0.273551336 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 62 |
+| service_start_lb | 6009 | 11712 | None | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 275 |
+| task_return_lb | 6009 | 11712 | None | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 275 |
+| service_and_return_lb | 6009 | 11987 | None | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 550 |
+| single_energy_lb | 6009 | 11712 | -0.30640909 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 275 |
+| single_shadow_lb | 6009 | 11712 | -0.304230189 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 275 |
+| single_resource_lb | 6009 | 11987 | -0.310436329 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 550 |
+| pair_route_duration_lb | 6009 | 13859 | -0.290042083 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 2422 |
+| pair_weighted_completion_lb | 6009 | 13859 | -0.284874635 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 2422 |
+| pair_energy_lb | 6009 | 13859 | None | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 2422 |
+| pair_shadow_lb | 6009 | 13859 | None | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 2422 |
+| pair_infeasible_cuts | 6009 | 12259 | -0.280456094 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 822 |
+| triple_infeasible_cuts | 6009 | 20366 | -0.29086145 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 8929 |
+| quad_time_window_infeasible | 6009 | 63342 | -0.317033487 | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 51905 |
+| all_single_time_resource | 6009 | 12599 | None | COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED | 1162 |

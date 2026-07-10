@@ -1,0 +1,42 @@
+{
+  "best_lb": null,
+  "certified_no_negative": false,
+  "coverage_complete": false,
+  "dual_refresh_status": "",
+  "dual_scope_mismatch_count": 0,
+  "duplicate_region_count": 0,
+  "expected_region_count": 465,
+  "incomplete_region_count": 0,
+  "issue_codes": [
+    "best_lb_missing",
+    "dual_refresh_not_optimal",
+    "missing_regions",
+    "worker_timeout"
+  ],
+  "missing_region_count": 465,
+  "negative_rc_audit_fail_count": 0,
+  "negative_region_count": 0,
+  "redline_count": 0,
+  "region_count": 0,
+  "schema_version": "lunar_ice_bpc.b4_2.parallel_partition_summary.v1",
+  "task_count": 30,
+  "unexpected_region_count": 0,
+  "worker_results": [
+    {
+      "error": "partition worker timeout",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_parallel_partition_smoke_30_001_90s/proofs/scale_030/instance_001/root_partition_proof/worker_01_k001_021",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 39.735425
+    },
+    {
+      "error": "partition worker timeout",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_parallel_partition_smoke_30_001_90s/proofs/scale_030/instance_001/root_partition_proof/worker_02_k022_030",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 39.745058
+    }
+  ]
+}

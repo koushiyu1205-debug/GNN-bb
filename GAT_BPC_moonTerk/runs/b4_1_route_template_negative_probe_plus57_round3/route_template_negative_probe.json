@@ -1,0 +1,2708 @@
+{
+  "schema_version": "lunar_ice_bpc.route_template_negative_probe.v1",
+  "source_json": "runs/b4_1_true_dual_proof_tail_stage_b_30_v4_replay_merge/v4_round3_replay.json",
+  "active_pool_json": "runs/objective_normalized_cost_risk_completion_full/compact_pricing_replay_plus57_stage001_round3_negative_feas_mtz_endpoint_pair_600s/plus57_stage001_plus_replay_probe.json",
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "instance_id": "lunar_ice_sp50_030_001_seed929001",
+  "config": {
+    "max_direct_tasks": 8,
+    "max_active_seeds": 120,
+    "max_candidate_sets": 160,
+    "time_limit_sec": 60.0,
+    "negative_eps": 1e-06,
+    "history_round": -1
+  },
+  "dual_context": {
+    "dual_fingerprint": "4db52b44e274a5927f24c0dfb014d821cad8b642bd451bdf4301bcf21bcb78b2",
+    "rmp_iteration_id": "root-3",
+    "fleet_dual": -0.13469015,
+    "task_duals": {
+      "ice_site_001": 0.115385925,
+      "ice_site_002": 0.062946,
+      "ice_site_003": 0.042855875,
+      "ice_site_004": 0.1182747,
+      "ice_site_005": 0.043773,
+      "ice_site_006": 0.102472025,
+      "ice_site_007": 0.125530025,
+      "ice_site_008": 0.055273625,
+      "ice_site_009": 0.07896565,
+      "ice_site_010": 0.123916275,
+      "ice_site_011": 0.158708175,
+      "ice_site_012": 0.06828845,
+      "ice_site_013": 0.05154365,
+      "ice_site_014": 0.04590225,
+      "ice_site_015": 0.0959994,
+      "ice_site_016": 0.0630649,
+      "ice_site_017": 0.0639749,
+      "ice_site_018": 0.0228142,
+      "ice_site_019": 0.050158125,
+      "ice_site_020": 0.0729815,
+      "ice_site_021": 0.0309163,
+      "ice_site_022": 0.042887,
+      "ice_site_023": 0.0468479,
+      "ice_site_024": 0.03210615,
+      "ice_site_025": 0.03364775,
+      "ice_site_026": 0.03945025,
+      "ice_site_027": 0.02974975,
+      "ice_site_028": 0.104291525,
+      "ice_site_029": 0.0795242,
+      "ice_site_030": 0.024189125
+    },
+    "cut_duals": {}
+  },
+  "active_seed_count": 120,
+  "active_seed_task_sets": [
+    [
+      "ice_site_006",
+      "ice_site_011",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_022"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_006",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_025"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_014",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_013",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_028",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_017",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_018",
+      "ice_site_019",
+      "ice_site_022"
+    ],
+    [
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_019",
+      "ice_site_022"
+    ],
+    [
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_014",
+      "ice_site_019",
+      "ice_site_022",
+      "ice_site_024"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_006",
+      "ice_site_018",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_014",
+      "ice_site_019",
+      "ice_site_024",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_025",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_015",
+      "ice_site_025",
+      "ice_site_027",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_023",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_011",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_022",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_003",
+      "ice_site_013",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_022",
+      "ice_site_023"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_011",
+      "ice_site_019",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_025",
+      "ice_site_026",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_025"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_025",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_007",
+      "ice_site_014",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_028",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_024",
+      "ice_site_026",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_026",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_020",
+      "ice_site_026",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_014",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_009",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_019",
+      "ice_site_022",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_019"
+    ],
+    [
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_013",
+      "ice_site_022",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_017",
+      "ice_site_022",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_021",
+      "ice_site_022",
+      "ice_site_023",
+      "ice_site_026",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_024",
+      "ice_site_026",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_014",
+      "ice_site_022",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_023",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_014",
+      "ice_site_019",
+      "ice_site_024"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_018",
+      "ice_site_019"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_011",
+      "ice_site_018",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_007",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_028",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_003",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_022",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_008",
+      "ice_site_019",
+      "ice_site_020",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_007",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_025"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_006",
+      "ice_site_020",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_009",
+      "ice_site_010"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_016",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_013",
+      "ice_site_022"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_007",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_018",
+      "ice_site_020",
+      "ice_site_023",
+      "ice_site_028",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_019",
+      "ice_site_020",
+      "ice_site_022",
+      "ice_site_023",
+      "ice_site_024"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_010"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_004",
+      "ice_site_007",
+      "ice_site_025"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_007",
+      "ice_site_013",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_019",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_013",
+      "ice_site_020",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_018",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_019",
+      "ice_site_026",
+      "ice_site_028",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_007",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_025",
+      "ice_site_026",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_006",
+      "ice_site_018",
+      "ice_site_020",
+      "ice_site_023",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_013",
+      "ice_site_017",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_025",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_022",
+      "ice_site_024",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_006",
+      "ice_site_020",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_018",
+      "ice_site_022",
+      "ice_site_024"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_017",
+      "ice_site_022"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_006",
+      "ice_site_025",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_018",
+      "ice_site_021",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_006",
+      "ice_site_025"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_009",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_019",
+      "ice_site_024",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_018",
+      "ice_site_019",
+      "ice_site_020",
+      "ice_site_022",
+      "ice_site_023"
+    ],
+    [
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_023",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_013",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_003",
+      "ice_site_019",
+      "ice_site_020",
+      "ice_site_023",
+      "ice_site_024",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_013",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_022",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_007",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_021",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_019"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_007",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_013",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_022",
+      "ice_site_023",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_011",
+      "ice_site_014",
+      "ice_site_022",
+      "ice_site_024",
+      "ice_site_025",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_008",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_014",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_019"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_010",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_019",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_009",
+      "ice_site_028",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_004",
+      "ice_site_011",
+      "ice_site_019",
+      "ice_site_024",
+      "ice_site_025",
+      "ice_site_027",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_017",
+      "ice_site_021",
+      "ice_site_024",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_015",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_019",
+      "ice_site_023",
+      "ice_site_028",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_001",
+      "ice_site_002",
+      "ice_site_008",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_015",
+      "ice_site_017",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_010",
+      "ice_site_015",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_019",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_008",
+      "ice_site_025",
+      "ice_site_027"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_006",
+      "ice_site_022",
+      "ice_site_024",
+      "ice_site_025"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_010",
+      "ice_site_013",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_021",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_008",
+      "ice_site_009",
+      "ice_site_019",
+      "ice_site_024",
+      "ice_site_027",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_009",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_016",
+      "ice_site_026",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_002",
+      "ice_site_006",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_029"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_013",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_009",
+      "ice_site_010",
+      "ice_site_014",
+      "ice_site_016",
+      "ice_site_018",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_013",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_013",
+      "ice_site_014",
+      "ice_site_015",
+      "ice_site_020",
+      "ice_site_026",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_005",
+      "ice_site_007",
+      "ice_site_010",
+      "ice_site_014",
+      "ice_site_015"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_010",
+      "ice_site_016",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_004",
+      "ice_site_008",
+      "ice_site_011",
+      "ice_site_014",
+      "ice_site_024",
+      "ice_site_025",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_015",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_021",
+      "ice_site_028",
+      "ice_site_029",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_014",
+      "ice_site_019",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_003",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_018",
+      "ice_site_019",
+      "ice_site_030"
+    ],
+    [
+      "ice_site_008",
+      "ice_site_010",
+      "ice_site_014",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_018",
+      "ice_site_024",
+      "ice_site_026"
+    ],
+    [
+      "ice_site_007",
+      "ice_site_011",
+      "ice_site_012",
+      "ice_site_014",
+      "ice_site_021"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_009",
+      "ice_site_014",
+      "ice_site_020",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_028"
+    ],
+    [
+      "ice_site_006",
+      "ice_site_015",
+      "ice_site_016",
+      "ice_site_017",
+      "ice_site_021",
+      "ice_site_023",
+      "ice_site_028",
+      "ice_site_029"
+    ]
+  ],
+  "pricing": {
+    "status": "INCREMENTAL_DIRECT_LABEL_NEGATIVE_FOUND",
+    "exact_status": "NOT_SOLVED",
+    "task_count": 30,
+    "max_direct_tasks": 8,
+    "candidate_round_count": 13,
+    "candidate_round_limit": 160,
+    "candidate_sets": [
+      [
+        "ice_site_011",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_004",
+        "ice_site_001",
+        "ice_site_028",
+        "ice_site_006",
+        "ice_site_015"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_009",
+        "ice_site_028",
+        "ice_site_015",
+        "ice_site_010",
+        "ice_site_011",
+        "ice_site_016"
+      ],
+      [
+        "ice_site_024",
+        "ice_site_026",
+        "ice_site_018",
+        "ice_site_023",
+        "ice_site_030",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_029",
+        "ice_site_009",
+        "ice_site_020",
+        "ice_site_012",
+        "ice_site_017",
+        "ice_site_016",
+        "ice_site_002",
+        "ice_site_008"
+      ],
+      [
+        "ice_site_013",
+        "ice_site_019",
+        "ice_site_023",
+        "ice_site_014",
+        "ice_site_005",
+        "ice_site_022",
+        "ice_site_003",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_025",
+        "ice_site_024",
+        "ice_site_021",
+        "ice_site_027",
+        "ice_site_030",
+        "ice_site_018"
+      ],
+      [
+        "ice_site_025",
+        "ice_site_012",
+        "ice_site_020",
+        "ice_site_004",
+        "ice_site_017",
+        "ice_site_029",
+        "ice_site_023",
+        "ice_site_005"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_027",
+        "ice_site_021",
+        "ice_site_008",
+        "ice_site_007",
+        "ice_site_018",
+        "ice_site_013",
+        "ice_site_024"
+      ],
+      [
+        "ice_site_022",
+        "ice_site_019",
+        "ice_site_026",
+        "ice_site_030",
+        "ice_site_014",
+        "ice_site_003"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_025",
+        "ice_site_019",
+        "ice_site_014",
+        "ice_site_020",
+        "ice_site_013",
+        "ice_site_003",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_017",
+        "ice_site_012",
+        "ice_site_011",
+        "ice_site_006",
+        "ice_site_016",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_002",
+        "ice_site_015",
+        "ice_site_009",
+        "ice_site_001",
+        "ice_site_010",
+        "ice_site_007"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_011",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_022"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_006",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_025"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_013",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_028",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_017",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_022"
+      ],
+      [
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_022"
+      ],
+      [
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_019",
+        "ice_site_022",
+        "ice_site_024"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_006",
+        "ice_site_018",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_019",
+        "ice_site_024",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_025",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_015",
+        "ice_site_025",
+        "ice_site_027",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_023",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_011",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_013",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_023"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_011",
+        "ice_site_019",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_025",
+        "ice_site_026",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_025"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_025",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_007",
+        "ice_site_014",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_028",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_024",
+        "ice_site_026",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_026",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_020",
+        "ice_site_026",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_014",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_009",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_019",
+        "ice_site_022",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ],
+      [
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_013",
+        "ice_site_022",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_017",
+        "ice_site_022",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_023",
+        "ice_site_026",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_024",
+        "ice_site_026",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_022",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_023",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_019",
+        "ice_site_024"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_019"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_011",
+        "ice_site_018",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_028",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_008",
+        "ice_site_019",
+        "ice_site_020",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_007",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_025"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_006",
+        "ice_site_020",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_009",
+        "ice_site_010"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_016",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_013",
+        "ice_site_022"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_018",
+        "ice_site_020",
+        "ice_site_023",
+        "ice_site_028",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_019",
+        "ice_site_020",
+        "ice_site_022",
+        "ice_site_023",
+        "ice_site_024"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_010"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_007",
+        "ice_site_025"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_013",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_019",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_020",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_018",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_019",
+        "ice_site_026",
+        "ice_site_028",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_025",
+        "ice_site_026",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_006",
+        "ice_site_018",
+        "ice_site_020",
+        "ice_site_023",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_017",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_025",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_022",
+        "ice_site_024",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_020",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_022",
+        "ice_site_024"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_017",
+        "ice_site_022"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_025",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_021",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_025"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_009",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_019",
+        "ice_site_024",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020",
+        "ice_site_022",
+        "ice_site_023"
+      ],
+      [
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_023",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_013",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_019",
+        "ice_site_020",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_022",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_021",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_007",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_013",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_023",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_014",
+        "ice_site_022",
+        "ice_site_024",
+        "ice_site_025",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_008",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_014",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_019"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_019",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_009",
+        "ice_site_028",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_004",
+        "ice_site_011",
+        "ice_site_019",
+        "ice_site_024",
+        "ice_site_025",
+        "ice_site_027",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_017",
+        "ice_site_021",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_015",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_023",
+        "ice_site_028",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_008",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_015",
+        "ice_site_017",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_010",
+        "ice_site_015",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_008",
+        "ice_site_025",
+        "ice_site_027"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_022",
+        "ice_site_024",
+        "ice_site_025"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_021",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_008",
+        "ice_site_009",
+        "ice_site_019",
+        "ice_site_024",
+        "ice_site_027",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_016",
+        "ice_site_026",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_002",
+        "ice_site_006",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_029"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_013",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_014",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_013",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020",
+        "ice_site_026",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_014",
+        "ice_site_015"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_016",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_004",
+        "ice_site_008",
+        "ice_site_011",
+        "ice_site_014",
+        "ice_site_024",
+        "ice_site_025",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_015",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_021",
+        "ice_site_028",
+        "ice_site_029",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_014",
+        "ice_site_019",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_003",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_030"
+      ],
+      [
+        "ice_site_008",
+        "ice_site_010",
+        "ice_site_014",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      [
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_021"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_014",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_028"
+      ],
+      [
+        "ice_site_006",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_028",
+        "ice_site_029"
+      ]
+    ],
+    "candidate_summaries": [
+      {
+        "candidate_task_ids": [
+          "ice_site_011",
+          "ice_site_007",
+          "ice_site_010",
+          "ice_site_004",
+          "ice_site_001",
+          "ice_site_028",
+          "ice_site_006",
+          "ice_site_015"
+        ],
+        "sortie_attempt_count": 3121,
+        "feasible_sortie_template_count": 1046,
+        "pareto_label_count": 147,
+        "best_reduced_cost": 0.00779675,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_009",
+          "ice_site_028",
+          "ice_site_015",
+          "ice_site_010",
+          "ice_site_011",
+          "ice_site_016"
+        ],
+        "sortie_attempt_count": 609,
+        "feasible_sortie_template_count": 406,
+        "pareto_label_count": 138,
+        "best_reduced_cost": 0.076659575,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_024",
+          "ice_site_026",
+          "ice_site_018",
+          "ice_site_023",
+          "ice_site_030",
+          "ice_site_021",
+          "ice_site_022",
+          "ice_site_027"
+        ],
+        "sortie_attempt_count": 6562,
+        "feasible_sortie_template_count": 2897,
+        "pareto_label_count": 810,
+        "best_reduced_cost": 0.06445155,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_029",
+          "ice_site_009",
+          "ice_site_020",
+          "ice_site_012",
+          "ice_site_017",
+          "ice_site_016",
+          "ice_site_002",
+          "ice_site_008"
+        ],
+        "sortie_attempt_count": 3768,
+        "feasible_sortie_template_count": 1914,
+        "pareto_label_count": 389,
+        "best_reduced_cost": 0.032939875,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_013",
+          "ice_site_019",
+          "ice_site_023",
+          "ice_site_014",
+          "ice_site_005",
+          "ice_site_022",
+          "ice_site_003",
+          "ice_site_026"
+        ],
+        "sortie_attempt_count": 6086,
+        "feasible_sortie_template_count": 2909,
+        "pareto_label_count": 661,
+        "best_reduced_cost": 0.053726225,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_025",
+          "ice_site_024",
+          "ice_site_021",
+          "ice_site_027",
+          "ice_site_030",
+          "ice_site_018"
+        ],
+        "sortie_attempt_count": 4486,
+        "feasible_sortie_template_count": 2915,
+        "pareto_label_count": 226,
+        "best_reduced_cost": 0.124984,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_025",
+          "ice_site_012",
+          "ice_site_020",
+          "ice_site_004",
+          "ice_site_017",
+          "ice_site_029",
+          "ice_site_023",
+          "ice_site_005"
+        ],
+        "sortie_attempt_count": 1216,
+        "feasible_sortie_template_count": 638,
+        "pareto_label_count": 97,
+        "best_reduced_cost": 0.07853275,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_006",
+          "ice_site_027",
+          "ice_site_021",
+          "ice_site_008",
+          "ice_site_007",
+          "ice_site_018",
+          "ice_site_013",
+          "ice_site_024"
+        ],
+        "sortie_attempt_count": 1718,
+        "feasible_sortie_template_count": 784,
+        "pareto_label_count": 225,
+        "best_reduced_cost": 0.096722375,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_022",
+          "ice_site_019",
+          "ice_site_026",
+          "ice_site_030",
+          "ice_site_014",
+          "ice_site_003"
+        ],
+        "sortie_attempt_count": 1272,
+        "feasible_sortie_template_count": 750,
+        "pareto_label_count": 175,
+        "best_reduced_cost": 0.081845775,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_008",
+          "ice_site_025",
+          "ice_site_019",
+          "ice_site_014",
+          "ice_site_020",
+          "ice_site_013",
+          "ice_site_003",
+          "ice_site_029"
+        ],
+        "sortie_attempt_count": 4523,
+        "feasible_sortie_template_count": 2958,
+        "pareto_label_count": 303,
+        "best_reduced_cost": 0.066926,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_004",
+          "ice_site_005",
+          "ice_site_017",
+          "ice_site_012",
+          "ice_site_011",
+          "ice_site_006",
+          "ice_site_016",
+          "ice_site_028"
+        ],
+        "sortie_attempt_count": 2426,
+        "feasible_sortie_template_count": 1052,
+        "pareto_label_count": 183,
+        "best_reduced_cost": 0.01917525,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_002",
+          "ice_site_015",
+          "ice_site_009",
+          "ice_site_001",
+          "ice_site_010",
+          "ice_site_007"
+        ],
+        "sortie_attempt_count": 439,
+        "feasible_sortie_template_count": 172,
+        "pareto_label_count": 47,
+        "best_reduced_cost": 0.09017245,
+        "negative_found": false,
+        "branch_feasible": true
+      },
+      {
+        "candidate_task_ids": [
+          "ice_site_006",
+          "ice_site_011",
+          "ice_site_020",
+          "ice_site_021",
+          "ice_site_023",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        "sortie_attempt_count": 3880,
+        "feasible_sortie_template_count": 1551,
+        "pareto_label_count": 469,
+        "best_reduced_cost": -0.00788215,
+        "negative_found": true,
+        "branch_feasible": true
+      }
+    ],
+    "pricing_complete_for_all_tasks": false,
+    "pricing_complete_for_all_task_subsets": false,
+    "sortie_attempt_count": 40106,
+    "feasible_sortie_template_count": 19992,
+    "pareto_label_count": 3870,
+    "best_reduced_cost": -0.00788215,
+    "negative_found": true,
+    "negative_column_count": 1,
+    "branch_context_active": false,
+    "branch_decision_count": 0,
+    "branch_filtered_column_count": 0,
+    "cut_context_active": false,
+    "cut_count": 0,
+    "can_certify_no_negative": false,
+    "uses_true_dual_bpc_certificate": false,
+    "timeout_stage": "",
+    "wall_time_sec": 0.456755,
+    "best_column": {
+      "task_count": 7,
+      "tasks": [
+        "ice_site_006",
+        "ice_site_011",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      "objective": 0.34091,
+      "end_time": 1066.111109,
+      "sortie_count": 2,
+      "legs": [
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_006",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_006",
+            "to": "ice_site_026",
+            "path_type": "low_risk"
+          },
+          {
+            "from": "ice_site_026",
+            "to": "ice_site_024",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_024",
+            "to": "depot",
+            "path_type": "low_time"
+          }
+        ],
+        [
+          {
+            "from": "depot",
+            "to": "ice_site_021",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_021",
+            "to": "ice_site_023",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_023",
+            "to": "ice_site_020",
+            "path_type": "low_time"
+          },
+          {
+            "from": "ice_site_020",
+            "to": "ice_site_011",
+            "path_type": "low_energy"
+          },
+          {
+            "from": "ice_site_011",
+            "to": "depot",
+            "path_type": "low_time"
+          }
+        ]
+      ]
+    },
+    "note": "Incremental direct-label route-template pricing over selected task sets. Negative columns are true-dual audited and addable diagnostics; no-column results are not exhaustive certificates."
+  },
+  "negative_columns": [
+    {
+      "reduced_cost": -0.00788215,
+      "task_count": 7,
+      "tasks": [
+        "ice_site_006",
+        "ice_site_011",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026"
+      ],
+      "objective": 0.34091,
+      "sortie_count": 2,
+      "solution_payload": {
+        "vehicle_id": "route_template_negative_001",
+        "sorties": [
+          {
+            "tasks": [
+              "ice_site_006",
+              "ice_site_026",
+              "ice_site_024"
+            ],
+            "legs": [
+              {
+                "from": "depot",
+                "to": "ice_site_006",
+                "path_type": "low_time"
+              },
+              {
+                "from": "ice_site_006",
+                "to": "ice_site_026",
+                "path_type": "low_risk"
+              },
+              {
+                "from": "ice_site_026",
+                "to": "ice_site_024",
+                "path_type": "low_time"
+              },
+              {
+                "from": "ice_site_024",
+                "to": "depot",
+                "path_type": "low_time"
+              }
+            ],
+            "start_time": 0.0,
+            "service_starts": {
+              "ice_site_006": 62.455551,
+              "ice_site_026": 140.0,
+              "ice_site_024": 180.0
+            },
+            "return_time": 209.093733,
+            "recharge_time": 85.855555,
+            "end_time": 294.949287,
+            "travel_time": 161.237632,
+            "distance_km": 61.009755,
+            "energy_proxy": 311.422218,
+            "risk_integral": 13.382908,
+            "service_cost": 1.925241,
+            "shadow_exposure_min": 29.247078,
+            "demand": 1.5,
+            "task_completion_times": {
+              "ice_site_006": 79.320795,
+              "ice_site_026": 150.75899,
+              "ice_site_024": 194.682631
+            },
+            "feasible": true
+          },
+          {
+            "tasks": [
+              "ice_site_021",
+              "ice_site_023",
+              "ice_site_020",
+              "ice_site_011"
+            ],
+            "legs": [
+              {
+                "from": "depot",
+                "to": "ice_site_021",
+                "path_type": "low_time"
+              },
+              {
+                "from": "ice_site_021",
+                "to": "ice_site_023",
+                "path_type": "low_time"
+              },
+              {
+                "from": "ice_site_023",
+                "to": "ice_site_020",
+                "path_type": "low_time"
+              },
+              {
+                "from": "ice_site_020",
+                "to": "ice_site_011",
+                "path_type": "low_energy"
+              },
+              {
+                "from": "ice_site_011",
+                "to": "depot",
+                "path_type": "low_time"
+              }
+            ],
+            "start_time": 294.949287,
+            "service_starts": {
+              "ice_site_021": 390.0,
+              "ice_site_023": 422.543376,
+              "ice_site_020": 600.0,
+              "ice_site_011": 830.0
+            },
+            "return_time": 949.097035,
+            "recharge_time": 117.014073,
+            "end_time": 1066.111109,
+            "travel_time": 202.552122,
+            "distance_km": 61.811479,
+            "energy_proxy": 436.056294,
+            "risk_integral": 23.29613,
+            "service_cost": 6.035937,
+            "shadow_exposure_min": 200.395804,
+            "demand": 4.0,
+            "task_completion_times": {
+              "ice_site_021": 415.051762,
+              "ice_site_023": 460.435534,
+              "ice_site_020": 636.349887,
+              "ice_site_011": 867.149228
+            },
+            "feasible": true
+          }
+        ],
+        "objective_breakdown": {
+          "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+          "mode": "normalized_operating_cost_risk_weighted_completion",
+          "raw_operating_cost": 878.260924,
+          "raw_risk": 36.679038,
+          "raw_weighted_completion_time": 2054.106917,
+          "raw_makespan": 867.149228,
+          "normalized_operating_cost": 0.120449902,
+          "normalized_risk": 0.141885842,
+          "normalized_weighted_completion_time": 0.196436423,
+          "normalized_makespan": 0.516160255,
+          "weight_operating_cost": 1.0,
+          "weight_risk": 1.0,
+          "weight_completion": 0.4,
+          "objective": 0.34091,
+          "normalized_objective": 0.34091,
+          "official_objective": 0.34091,
+          "raw_objective_unscaled_weighted_sum": 1736.582729,
+          "makespan_enters_pricing_objective": false,
+          "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only."
+        }
+      }
+    }
+  ],
+  "compact_reference": {
+    "source": "result",
+    "wall_time_sec": 356.857076,
+    "best_reduced_cost": -0.0080034,
+    "dual_bound": -0.008003885,
+    "pricing_state": "FOUND_NEGATIVE",
+    "algorithm_status": "COMPACT_HIGHS_PRICING_OPTIMAL"
+  },
+  "speedup_vs_compact_reference": {
+    "available": true,
+    "route_template_wall_time_sec": 0.456755,
+    "compact_reference_wall_time_sec": 356.857076,
+    "saved_wall_time_sec": 356.400321,
+    "speedup_factor": 781.287728
+  },
+  "certificate_boundary": "Negative columns are true-dual audited and exact-safe to add. This probe never certifies no-negative because selected task sets are not full-space coverage."
+}

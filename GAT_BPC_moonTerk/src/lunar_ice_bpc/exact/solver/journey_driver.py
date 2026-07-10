@@ -675,7 +675,14 @@ def _direct_sortie_candidates_from_start(
             journey_label_bound_pruned_count=bound_pruned_count,
         )
         next_by_key: dict[tuple[int, str], list[_PartialSortieLabel]] = {}
-        for label in current_level:
+        for label_index, label in enumerate(current_level):
+            if label_index % 64 == 0:
+                _raise_if_sortie_generation_deadline_exceeded(
+                    deadline,
+                    generated_count=generated_count,
+                    route_count=route_count,
+                    journey_label_bound_pruned_count=bound_pruned_count,
+                )
             if _partial_sortie_bound_exceeds_incumbent(
                 label,
                 prefix_task_mask=int(prefix_task_mask),
@@ -739,9 +746,23 @@ def _direct_sortie_candidates_from_start(
                     key = (extended.task_mask, extended.last_task)
                     _add_partial_sortie_label(next_by_key.setdefault(key, []), extended)
         current_level = [label for labels in next_by_key.values() for label in labels]
-        for label in current_level:
-            for return_path_type in path_type_cache[(str(label.last_task), "depot")]:
+        for label_index, label in enumerate(current_level):
+            if label_index % 64 == 0:
+                _raise_if_sortie_generation_deadline_exceeded(
+                    deadline,
+                    generated_count=generated_count,
+                    route_count=route_count,
+                    journey_label_bound_pruned_count=bound_pruned_count,
+                )
+            for return_index, return_path_type in enumerate(path_type_cache[(str(label.last_task), "depot")]):
                 generated_count += 1
+                if return_index % 256 == 0:
+                    _raise_if_sortie_generation_deadline_exceeded(
+                        deadline,
+                        generated_count=generated_count,
+                        route_count=route_count,
+                        journey_label_bound_pruned_count=bound_pruned_count,
+                    )
                 candidate = _close_partial_sortie_label(data, label, return_path_type)
                 if candidate is None:
                     continue

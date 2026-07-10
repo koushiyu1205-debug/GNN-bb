@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from itertools import combinations, permutations, product
 import math
+import os
 from time import perf_counter
 from typing import Iterable
 
@@ -18,6 +19,59 @@ from lunar_ice_bpc.exact.core.objective import (
 )
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
 from lunar_ice_bpc.exact.solver.journey_driver import _nondominated_path_type_cache
+
+
+COMPACT_HIGHS_OPTION_ENV_PREFIX = "LUNAR_ICE_COMPACT_HIGHS_"
+COMPACT_MIP_START_SORT_INDICES_ENV = "LUNAR_ICE_COMPACT_MIP_START_SORT_INDICES"
+
+
+def _env_bool_value(raw: str) -> bool:
+    value = str(raw).strip().lower()
+    return value in {"1", "true", "t", "yes", "y", "on"}
+
+
+def _apply_compact_highs_option_overrides(highs) -> dict:
+    """Apply exact-safe HiGHS search-option overrides for compact pricing probes."""
+
+    option_specs = {
+        "random_seed": int,
+        "mip_detect_symmetry": _env_bool_value,
+        "mip_heuristic_effort": float,
+        "mip_heuristic_run_feasibility_jump": _env_bool_value,
+        "mip_heuristic_run_rens": _env_bool_value,
+        "mip_heuristic_run_rins": _env_bool_value,
+        "mip_heuristic_run_root_reduced_cost": _env_bool_value,
+        "mip_heuristic_run_shifting": _env_bool_value,
+        "mip_heuristic_run_zi_round": _env_bool_value,
+        "mip_pscost_minreliable": int,
+        "mip_lp_age_limit": int,
+        "mip_pool_age_limit": int,
+        "mip_report_level": int,
+        "presolve": str,
+        "parallel": str,
+        "simplex_strategy": int,
+        "simplex_scale_strategy": int,
+    }
+    applied: dict[str, object] = {}
+    for option_name, parser in option_specs.items():
+        env_name = f"{COMPACT_HIGHS_OPTION_ENV_PREFIX}{option_name.upper()}"
+        raw = os.environ.get(env_name)
+        if raw is None:
+            continue
+        try:
+            value = parser(raw)
+            highs.setOptionValue(option_name, value)
+            applied[option_name] = value
+        except Exception as exc:  # pragma: no cover - defensive telemetry
+            applied[f"{option_name}_error"] = f"{type(exc).__name__}: {exc}"
+    return applied
+
+
+def _compact_mip_start_sort_indices_enabled() -> bool:
+    raw = os.environ.get(COMPACT_MIP_START_SORT_INDICES_ENV)
+    if raw is None:
+        return True
+    return _env_bool_value(raw)
 
 
 def estimate_gurobi_compact_size(
@@ -63,6 +117,10 @@ def estimate_gurobi_compact_size(
         "sortie_slot_min_duration_lower_bound": slot_bound["min_duration_lower_bound"],
         "sortie_slot_min_return_duration_lower_bound": slot_bound["min_return_duration_lower_bound"],
         "sortie_slot_min_out_return_travel_lower_bound": slot_bound["min_out_return_travel_lower_bound"],
+        "sortie_slot_min_sortie_energy_lower_bound": slot_bound["min_sortie_energy_lower_bound"],
+        "sortie_slot_min_energy_recharge_duration_lower_bound": (
+            slot_bound["min_energy_recharge_duration_lower_bound"]
+        ),
         "binary_arc_var_count": int(arc_var_count),
         **pruning,
         "task_assignment_var_count": int(y_count),
@@ -72,7 +130,12 @@ def estimate_gurobi_compact_size(
     }
 
 
-def _safe_sortie_slot_bound(data: LunarIceData, *, latest_service_start_bound: bool = True) -> dict:
+def _safe_sortie_slot_bound(
+    data: LunarIceData,
+    *,
+    latest_service_start_bound: bool = True,
+    recharge_aware_duration_bound: bool = False,
+) -> dict:
     tasks = tuple(data.task_ids)
     if not tasks:
         return {
@@ -85,6 +148,9 @@ def _safe_sortie_slot_bound(data: LunarIceData, *, latest_service_start_bound: b
             "min_return_duration_lower_bound": 0.0,
             "min_duration_lower_bound": 0.0,
             "min_out_return_travel_lower_bound": 0.0,
+            "min_sortie_energy_lower_bound": 0.0,
+            "min_energy_recharge_duration_lower_bound": 0.0,
+            "recharge_aware_duration_bound_enabled": bool(recharge_aware_duration_bound),
         }
     min_outbound = min(
         float(option.travel_time_min)
@@ -97,11 +163,35 @@ def _safe_sortie_slot_bound(data: LunarIceData, *, latest_service_start_bound: b
         for option in data.arcs[(str(task_id), "depot")].values()
     )
     min_service = min(float(task.service_time) for task in data.tasks.values())
+    min_outbound_energy = min(
+        float(option.energy_proxy)
+        for task_id in tasks
+        for option in data.arcs[("depot", str(task_id))].values()
+    )
+    min_return_energy = min(
+        float(option.energy_proxy)
+        for task_id in tasks
+        for option in data.arcs[(str(task_id), "depot")].values()
+    )
+    min_service_energy = min(float(task.service_energy) for task in data.tasks.values())
+    min_sortie_energy = max(
+        0.0,
+        float(min_outbound_energy) + float(min_return_energy) + float(min_service_energy),
+    )
+    min_recharge_duration_available = float(min_sortie_energy) / max(
+        1.0e-9,
+        float(data.recharge_power_proxy_per_min),
+    )
+    min_recharge_duration = (
+        float(min_recharge_duration_available)
+        if bool(recharge_aware_duration_bound)
+        else 0.0
+    )
     min_out_return_travel = max(1.0e-9, min_outbound + min_return)
     min_return_duration = max(1.0e-9, min_outbound + min_return + min_service)
     min_duration = max(
         1.0e-9,
-        min_return_duration + float(data.dock_overhead_min),
+        min_return_duration + float(data.dock_overhead_min) + float(min_recharge_duration),
     )
     horizon_slot_count = max(1, int(math.floor((float(data.horizon) + 1.0e-9) / min_duration)))
     latest_service_start = max(
@@ -134,6 +224,1377 @@ def _safe_sortie_slot_bound(data: LunarIceData, *, latest_service_start_bound: b
         "min_return_duration_lower_bound": round(float(min_return_duration), 9),
         "min_duration_lower_bound": round(float(min_duration), 9),
         "min_out_return_travel_lower_bound": round(float(min_out_return_travel), 9),
+        "min_sortie_energy_lower_bound": round(float(min_sortie_energy), 9),
+        "min_energy_recharge_duration_lower_bound": round(float(min_recharge_duration), 9),
+        "min_energy_recharge_duration_available_lower_bound": round(
+            float(min_recharge_duration_available),
+            9,
+        ),
+        "recharge_aware_duration_bound_enabled": bool(recharge_aware_duration_bound),
+    }
+
+
+def _max_slot_task_matching(
+    slot_feasible_tasks: dict[int, tuple[str, ...]],
+    slot_capacities: dict[int, int],
+) -> int:
+    """Maximum distinct task count assignable to slot copies under safe slot capacities."""
+
+    slot_copies: list[tuple[int, int]] = []
+    for slot, capacity in sorted(slot_capacities.items()):
+        for copy_index in range(max(0, int(capacity))):
+            slot_copies.append((int(slot), int(copy_index)))
+    matched_copy_by_task: dict[str, int] = {}
+
+    def _augment(copy_index: int, seen_tasks: set[str]) -> bool:
+        slot, _copy = slot_copies[copy_index]
+        for task_id in slot_feasible_tasks.get(slot, tuple()):
+            if task_id in seen_tasks:
+                continue
+            seen_tasks.add(task_id)
+            previous_copy = matched_copy_by_task.get(task_id)
+            if previous_copy is None or _augment(previous_copy, seen_tasks):
+                matched_copy_by_task[task_id] = copy_index
+                return True
+        return False
+
+    matching_size = 0
+    for copy_index in range(len(slot_copies)):
+        if _augment(copy_index, set()):
+            matching_size += 1
+    return int(matching_size)
+
+
+def _min_prefix_slots_for_task_count(
+    slot_capacities: Iterable[int],
+    task_count: int,
+) -> int | None:
+    """Minimum ordered prefix length whose safe slot capacities can cover tasks."""
+
+    remaining = int(task_count)
+    if remaining <= 0:
+        return 0
+    covered = 0
+    for index, capacity in enumerate(slot_capacities, start=1):
+        covered += max(0, int(capacity))
+        if int(covered) >= remaining:
+            return int(index)
+    return None
+
+
+def _slot_task_sequence_capacity_bounds(
+    data: LunarIceData,
+    *,
+    model_tasks: tuple[str, ...],
+    slot_feasible_tasks: dict[int, tuple[str, ...]],
+    min_active_duration: float,
+    min_depot_outbound_travel: float,
+    min_return_travel: float,
+) -> dict:
+    """Safe per-slot task-count upper bounds from time-window and horizon lower bounds."""
+
+    if not model_tasks:
+        return {
+            "slot_sequence_capacity_by_slot": [],
+            "slot_sequence_capacity_upper_bound": 0,
+            "slot_sequence_capacity_limited_slot_count": 0,
+            "slot_sequence_capacity_empty_slot_count": 0,
+            "slot_matching_capacity_upper_bound": 0,
+        }
+    min_service = min(float(data.tasks[task_id].service_time) for task_id in model_tasks)
+    min_service_energy = min(float(data.tasks[task_id].service_energy) for task_id in model_tasks)
+    min_intertask_travel = 0.0
+    min_intertask_energy = 0.0
+    if len(model_tasks) > 1:
+        min_intertask_travel = min(
+            float(option.travel_time_min)
+            for source in model_tasks
+            for target in model_tasks
+            if source != target
+            for option in data.arcs[(str(source), str(target))].values()
+        )
+        min_intertask_energy = min(
+            float(option.energy_proxy)
+            for source in model_tasks
+            for target in model_tasks
+            if source != target
+            for option in data.arcs[(str(source), str(target))].values()
+        )
+    min_outbound_energy = min(
+        float(option.energy_proxy)
+        for task_id in model_tasks
+        for option in data.arcs[("depot", str(task_id))].values()
+    )
+    min_return_energy = min(
+        float(option.energy_proxy)
+        for task_id in model_tasks
+        for option in data.arcs[(str(task_id), "depot")].values()
+    )
+    max_tasks_per_slot = max(1, int(data.max_tasks_per_trip))
+    slot_capacities: dict[int, int] = {}
+    limited_slot_count = 0
+    for slot, feasible_tasks in sorted(slot_feasible_tasks.items()):
+        latest_starts = sorted(
+            (
+                float(data.tasks[task_id].due_time) - float(data.tasks[task_id].service_time)
+                for task_id in feasible_tasks
+            ),
+            reverse=True,
+        )
+        raw_capacity = min(max_tasks_per_slot, len(latest_starts))
+        capacity = 0
+        earliest_slot_start = float(slot) * float(min_active_duration)
+        for task_count in range(1, raw_capacity + 1):
+            kth_service_start_lb = (
+                earliest_slot_start
+                + float(min_depot_outbound_travel)
+                + float(task_count - 1) * (float(min_service) + float(min_intertask_travel))
+            )
+            if kth_service_start_lb > latest_starts[task_count - 1] + 1.0e-9:
+                break
+            route_return_lb = (
+                earliest_slot_start
+                + float(min_depot_outbound_travel)
+                + float(task_count) * float(min_service)
+                + float(task_count - 1) * float(min_intertask_travel)
+                + float(min_return_travel)
+            )
+            energy_lb = (
+                float(min_outbound_energy)
+                + float(min_return_energy)
+                + float(task_count) * float(min_service_energy)
+                + float(task_count - 1) * float(min_intertask_energy)
+            )
+            recharge_lb = energy_lb / max(1.0e-9, float(data.recharge_power_proxy_per_min))
+            end_lb = route_return_lb + float(data.dock_overhead_min) + recharge_lb
+            if route_return_lb > float(data.horizon) + 1.0e-9 or end_lb > float(data.horizon) + 1.0e-9:
+                break
+            capacity = task_count
+        slot_capacities[int(slot)] = int(capacity)
+        if int(capacity) < int(raw_capacity):
+            limited_slot_count += 1
+    return {
+        "slot_sequence_capacity_by_slot": [
+            int(slot_capacities.get(slot, 0)) for slot in sorted(slot_feasible_tasks)
+        ],
+        "slot_sequence_capacity_upper_bound": int(sum(slot_capacities.values())),
+        "slot_sequence_capacity_limited_slot_count": int(limited_slot_count),
+        "slot_sequence_capacity_empty_slot_count": int(
+            sum(1 for capacity in slot_capacities.values() if int(capacity) <= 0)
+        ),
+        "slot_matching_capacity_upper_bound": _max_slot_task_matching(
+            slot_feasible_tasks,
+            slot_capacities,
+        ),
+    }
+
+
+def _first_zero_capacity_slot(slot_capacities: Iterable[int]) -> int | None:
+    """Return the first prefix slot that cannot carry any task."""
+
+    for index, capacity in enumerate(slot_capacities):
+        if int(capacity) <= 0:
+            return int(index)
+    return None
+
+
+def _task_slot_pair_conflict_capacity_upper_bound(
+    *,
+    highspy_module,
+    model_tasks: tuple[str, ...],
+    slot_feasible_tasks: dict[int, tuple[str, ...]],
+    slot_capacities: dict[int, int],
+    pair_conflicts: set[tuple[str, str]],
+    hyperedge_conflicts: set[tuple[str, ...]] | None = None,
+    time_limit_sec: float = 1.0,
+    threads: int = 1,
+) -> dict:
+    """Exact small MILP upper bound for assignable tasks under pair conflicts."""
+
+    start_wall = perf_counter()
+    if not model_tasks or not slot_feasible_tasks:
+        return {
+            "enabled": True,
+            "optimal": True,
+            "upper_bound": 0,
+            "variable_count": 0,
+            "constraint_count": 0,
+            "pair_conflict_count": int(len(pair_conflicts)),
+            "hyperedge_conflict_count": int(len(hyperedge_conflicts or set())),
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "status": "EMPTY",
+        }
+    highs = highspy_module.Highs()
+    highs.setOptionValue("output_flag", False)
+    highs.setOptionValue("threads", max(1, int(threads)))
+    highs.setOptionValue("mip_rel_gap", 0.0)
+    highs.setOptionValue("time_limit", max(0.001, float(time_limit_sec)))
+    highs.setMinimize()
+    infinity = highs.getInfinity()
+
+    def add_var() -> int:
+        index = highs.getNumCol()
+        highs.addVar(0.0, 1.0)
+        highs.changeColCost(index, -1.0)
+        highs.changeColIntegrality(index, highspy_module.HighsVarType.kInteger)
+        return index
+
+    def add_row(coefficients: dict[int, float], lb: float, ub: float) -> None:
+        cleaned = {int(col): float(value) for col, value in coefficients.items() if abs(float(value)) > 1.0e-12}
+        highs.addRow(float(lb), float(ub), len(cleaned), list(cleaned), list(cleaned.values()))
+
+    y: dict[tuple[int, str], int] = {}
+    for slot, feasible_tasks in sorted(slot_feasible_tasks.items()):
+        if int(slot_capacities.get(slot, 0)) <= 0:
+            continue
+        for task_id in feasible_tasks:
+            y[int(slot), str(task_id)] = add_var()
+    for task_id in model_tasks:
+        coeffs = {col: 1.0 for (slot, row_task), col in y.items() if row_task == str(task_id)}
+        if coeffs:
+            add_row(coeffs, -infinity, 1.0)
+    for slot, feasible_tasks in sorted(slot_feasible_tasks.items()):
+        coeffs = {y[int(slot), str(task_id)]: 1.0 for task_id in feasible_tasks if (int(slot), str(task_id)) in y}
+        if coeffs:
+            add_row(coeffs, -infinity, float(max(0, int(slot_capacities.get(slot, 0)))))
+    pair_conflict_row_count = 0
+    hyperedge_conflict_row_count = 0
+    for slot, feasible_tasks in sorted(slot_feasible_tasks.items()):
+        feasible_lookup = set(str(task_id) for task_id in feasible_tasks)
+        for left_task, right_task in pair_conflicts:
+            if left_task not in feasible_lookup or right_task not in feasible_lookup:
+                continue
+            left_col = y.get((int(slot), str(left_task)))
+            right_col = y.get((int(slot), str(right_task)))
+            if left_col is None or right_col is None:
+                continue
+            add_row({left_col: 1.0, right_col: 1.0}, -infinity, 1.0)
+            pair_conflict_row_count += 1
+        for conflict in hyperedge_conflicts or set():
+            conflict_tasks = tuple(str(task_id) for task_id in conflict)
+            if len(conflict_tasks) <= 2:
+                continue
+            if any(task_id not in feasible_lookup for task_id in conflict_tasks):
+                continue
+            coeffs = {
+                y[int(slot), task_id]: 1.0
+                for task_id in conflict_tasks
+                if (int(slot), task_id) in y
+            }
+            if len(coeffs) != len(conflict_tasks):
+                continue
+            add_row(coeffs, -infinity, float(len(conflict_tasks) - 1))
+            hyperedge_conflict_row_count += 1
+    highs.run()
+    status = highs.getModelStatus()
+    status_name = str(highs.modelStatusToString(status))
+    optimal = status == highspy_module.HighsModelStatus.kOptimal
+    upper_bound = None
+    if optimal:
+        upper_bound = int(round(max(0.0, -float(highs.getObjectiveValue()))))
+    return {
+        "enabled": True,
+        "optimal": bool(optimal),
+        "upper_bound": upper_bound,
+        "variable_count": int(highs.getNumCol()),
+        "constraint_count": int(highs.getNumRow()),
+        "pair_conflict_count": int(len(pair_conflicts)),
+        "pair_conflict_row_count": int(pair_conflict_row_count),
+        "hyperedge_conflict_count": int(len(hyperedge_conflicts or set())),
+        "hyperedge_conflict_row_count": int(hyperedge_conflict_row_count),
+        "wall_time_sec": round(perf_counter() - start_wall, 6),
+        "status": status_name,
+    }
+
+
+def _dual_task_slot_reduced_cost_lower_bound(
+    highspy_module,
+    data: LunarIceData,
+    duals: JourneyDuals,
+    *,
+    model_tasks: tuple[str, ...],
+    slot_feasible_tasks: dict[int, tuple[str, ...]],
+    slot_capacities: dict[int, int],
+    required_task_count: int,
+    required_active_sortie_count: int,
+    cost_coeff: float,
+    risk_coeff: float,
+    completion_coeff: float,
+    min_active_duration: float,
+    min_depot_travel_by_task: dict[str, float],
+    pair_conflicts: set[tuple[str, str]] | None = None,
+    hyperedge_conflicts: set[tuple[str, ...]] | None = None,
+    time_limit_sec: float = 1.0,
+    threads: int = 1,
+) -> dict:
+    """Small exact assignment relaxation lower bound for a fixed (task-count, sortie-count) region."""
+
+    start_wall = perf_counter()
+    if required_task_count < 1 or required_active_sortie_count < 1:
+        return {
+            "enabled": True,
+            "applicable": False,
+            "optimal": False,
+            "region_infeasible": True,
+            "lower_bound": None,
+            "variable_count": 0,
+            "constraint_count": 0,
+            "pair_conflict_row_count": 0,
+            "hyperedge_conflict_row_count": 0,
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "status": "EMPTY_OR_INVALID_REGION",
+        }
+
+    active_slots = tuple(range(int(required_active_sortie_count)))
+    if any(int(slot_capacities.get(slot, 0)) <= 0 for slot in active_slots):
+        return {
+            "enabled": True,
+            "applicable": True,
+            "optimal": True,
+            "region_infeasible": True,
+            "lower_bound": None,
+            "variable_count": 0,
+            "constraint_count": 0,
+            "pair_conflict_row_count": 0,
+            "hyperedge_conflict_row_count": 0,
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "status": "EMPTY_ACTIVE_SLOT",
+        }
+
+    def _arc_objective(source: str, target: str) -> float:
+        options = data.arcs.get((str(source), str(target)), {})
+        if not options:
+            return 0.0
+        return min(
+            float(cost_coeff) * (float(option.distance_km) + float(option.energy_proxy))
+            + float(risk_coeff) * float(option.risk_integral)
+            for option in options.values()
+        )
+
+    depot_outbound_lb = min((_arc_objective("depot", task_id) for task_id in model_tasks), default=0.0)
+    depot_return_lb = min((_arc_objective(task_id, "depot") for task_id in model_tasks), default=0.0)
+    intertask_lb = (
+        min(
+            _arc_objective(source, target)
+            for source in model_tasks
+            for target in model_tasks
+            if source != target
+        )
+        if len(model_tasks) > 1
+        else 0.0
+    )
+    global_route_arc_constant_lb = (
+        float(required_active_sortie_count) * (float(depot_outbound_lb) + float(depot_return_lb))
+        + max(0, int(required_task_count) - int(required_active_sortie_count)) * float(intertask_lb)
+    )
+    slot_outbound_lb_by_slot: dict[int, float] = {}
+    slot_return_lb_by_slot: dict[int, float] = {}
+    slot_incoming_arc_lb: dict[tuple[int, str], float] = {}
+    slot_outgoing_arc_lb: dict[tuple[int, str], float] = {}
+    for slot in active_slots:
+        feasible_tasks = tuple(str(task_id) for task_id in slot_feasible_tasks.get(slot, tuple()))
+        slot_outbound_lb_by_slot[int(slot)] = min(
+            (_arc_objective("depot", task_id) for task_id in feasible_tasks),
+            default=0.0,
+        )
+        slot_return_lb_by_slot[int(slot)] = min(
+            (_arc_objective(task_id, "depot") for task_id in feasible_tasks),
+            default=0.0,
+        )
+        for task_id in feasible_tasks:
+            incoming_sources = ("depot",) + tuple(
+                other_task_id for other_task_id in feasible_tasks if other_task_id != task_id
+            )
+            outgoing_targets = ("depot",) + tuple(
+                other_task_id for other_task_id in feasible_tasks if other_task_id != task_id
+            )
+            slot_incoming_arc_lb[int(slot), task_id] = min(
+                (_arc_objective(source, task_id) for source in incoming_sources),
+                default=0.0,
+            )
+            slot_outgoing_arc_lb[int(slot), task_id] = min(
+                (_arc_objective(task_id, target) for target in outgoing_targets),
+                default=0.0,
+            )
+    slot_outbound_lb_sum = sum(float(value) for value in slot_outbound_lb_by_slot.values())
+    slot_return_lb_sum = sum(float(value) for value in slot_return_lb_by_slot.values())
+    slot_route_arc_constant_lb = (
+        float(slot_outbound_lb_sum)
+        + float(slot_return_lb_sum)
+        + max(0, int(required_task_count) - int(required_active_sortie_count)) * float(intertask_lb)
+    )
+    route_arc_constant_lb = max(float(global_route_arc_constant_lb), float(slot_route_arc_constant_lb))
+    constant_lb = -float(duals.fleet_limit)
+
+    highs = highspy_module.Highs()
+    highs.setOptionValue("output_flag", False)
+    highs.setOptionValue("threads", max(1, int(threads)))
+    highs.setOptionValue("mip_rel_gap", 0.0)
+    highs.setOptionValue("time_limit", max(0.001, float(time_limit_sec)))
+    highs.setMinimize()
+    infinity = highs.getInfinity()
+
+    def add_var(
+        cost: float,
+        *,
+        lb: float = 0.0,
+        ub: float = 1.0,
+        integer: bool = True,
+    ) -> int:
+        index = highs.getNumCol()
+        highs.addVar(float(lb), float(ub))
+        highs.changeColCost(index, float(cost))
+        if bool(integer):
+            highs.changeColIntegrality(index, highspy_module.HighsVarType.kInteger)
+        return index
+
+    def add_row(coefficients: dict[int, float], lb: float, ub: float) -> None:
+        cleaned = {int(col): float(value) for col, value in coefficients.items() if abs(float(value)) > 1.0e-12}
+        highs.addRow(float(lb), float(ub), len(cleaned), list(cleaned), list(cleaned.values()))
+
+    y: dict[tuple[int, str], int] = {}
+    weighted_service_start_lb: dict[tuple[int, str], float] = {}
+    for slot in active_slots:
+        earliest_slot_start = float(slot) * float(min_active_duration)
+        for task_id in slot_feasible_tasks.get(slot, tuple()):
+            task = data.tasks[str(task_id)]
+            service_cost = float(cost_coeff) * (float(task.service_cost) + float(task.service_energy))
+            service_cost += float(risk_coeff) * service_risk_value(task)
+            service_cost += (
+                float(completion_coeff)
+                * float(task.science_weight)
+                * float(task.service_time)
+            )
+            service_cost -= float(duals.cover.get(str(task_id), 0.0))
+            service_start_lb = max(
+                float(task.ready_time),
+                earliest_slot_start + float(min_depot_travel_by_task.get(str(task_id), 0.0)),
+            )
+            weighted_service_start_lb[int(slot), str(task_id)] = (
+                max(0.0, float(task.science_weight)) * float(service_start_lb)
+            )
+            service_cost += (
+                float(completion_coeff)
+                * float(task.science_weight)
+                * float(service_start_lb)
+            )
+            y[int(slot), str(task_id)] = add_var(service_cost)
+
+    for task_id in model_tasks:
+        coeffs = {col: 1.0 for (slot, row_task), col in y.items() if row_task == str(task_id)}
+        if coeffs:
+            add_row(coeffs, -infinity, 1.0)
+
+    all_coeffs = {col: 1.0 for col in y.values()}
+    if all_coeffs:
+        add_row(all_coeffs, float(required_task_count), float(required_task_count))
+    for slot in active_slots:
+        coeffs = {
+            y[int(slot), str(task_id)]: 1.0
+            for task_id in slot_feasible_tasks.get(slot, tuple())
+            if (int(slot), str(task_id)) in y
+        }
+        if coeffs:
+            add_row(coeffs, 1.0, float(max(0, int(slot_capacities.get(slot, 0)))))
+        else:
+            return {
+                "enabled": True,
+                "applicable": True,
+                "optimal": True,
+                "region_infeasible": True,
+                "lower_bound": None,
+                "variable_count": int(highs.getNumCol()),
+                "constraint_count": int(highs.getNumRow()),
+                "pair_conflict_row_count": 0,
+                "hyperedge_conflict_row_count": 0,
+                "wall_time_sec": round(perf_counter() - start_wall, 6),
+                "status": "EMPTY_ACTIVE_SLOT",
+            }
+
+    pair_conflict_row_count = 0
+    hyperedge_conflict_row_count = 0
+    for slot in active_slots:
+        feasible_lookup = set(str(task_id) for task_id in slot_feasible_tasks.get(slot, tuple()))
+        for left_task, right_task in pair_conflicts or set():
+            if left_task not in feasible_lookup or right_task not in feasible_lookup:
+                continue
+            left_col = y.get((int(slot), str(left_task)))
+            right_col = y.get((int(slot), str(right_task)))
+            if left_col is None or right_col is None:
+                continue
+            add_row({left_col: 1.0, right_col: 1.0}, -infinity, 1.0)
+            pair_conflict_row_count += 1
+        for conflict in hyperedge_conflicts or set():
+            conflict_tasks = tuple(str(task_id) for task_id in conflict)
+            if len(conflict_tasks) <= 2:
+                continue
+            if any(task_id not in feasible_lookup for task_id in conflict_tasks):
+                continue
+            coeffs = {
+                y[int(slot), task_id]: 1.0
+                for task_id in conflict_tasks
+                if (int(slot), task_id) in y
+            }
+            if len(coeffs) != len(conflict_tasks):
+                continue
+            add_row(coeffs, -infinity, float(len(conflict_tasks) - 1))
+            hyperedge_conflict_row_count += 1
+
+    route_arc_lb_col = add_var(1.0, lb=0.0, ub=infinity, integer=False)
+    route_arc_bound_row_count = 0
+    incoming_coeffs = {route_arc_lb_col: 1.0}
+    for (slot, task_id), col in y.items():
+        incoming_lb = float(slot_incoming_arc_lb.get((int(slot), str(task_id)), 0.0))
+        if incoming_lb:
+            incoming_coeffs[int(col)] = incoming_coeffs.get(int(col), 0.0) - incoming_lb
+    add_row(incoming_coeffs, float(slot_return_lb_sum), infinity)
+    route_arc_bound_row_count += 1
+    outgoing_coeffs = {route_arc_lb_col: 1.0}
+    for (slot, task_id), col in y.items():
+        outgoing_lb = float(slot_outgoing_arc_lb.get((int(slot), str(task_id)), 0.0))
+        if outgoing_lb:
+            outgoing_coeffs[int(col)] = outgoing_coeffs.get(int(col), 0.0) - outgoing_lb
+    add_row(outgoing_coeffs, float(slot_outbound_lb_sum), infinity)
+    route_arc_bound_row_count += 1
+    add_row({route_arc_lb_col: 1.0}, float(route_arc_constant_lb), infinity)
+    route_arc_bound_row_count += 1
+
+    single_task_route_arc_bound_row_count = 0
+    single_task_route_arc_bound_min: float | None = None
+    single_task_route_arc_bound_max: float | None = None
+    if int(required_task_count) == int(required_active_sortie_count):
+        single_route_coeffs = {route_arc_lb_col: 1.0}
+        for (slot, task_id), col in y.items():
+            single_route_lb = max(
+                0.0,
+                _arc_objective("depot", str(task_id)) + _arc_objective(str(task_id), "depot"),
+            )
+            if single_route_lb <= 1.0e-12:
+                continue
+            single_route_coeffs[int(col)] = (
+                single_route_coeffs.get(int(col), 0.0) - float(single_route_lb)
+            )
+            single_task_route_arc_bound_min = (
+                float(single_route_lb)
+                if single_task_route_arc_bound_min is None
+                else min(float(single_task_route_arc_bound_min), float(single_route_lb))
+            )
+            single_task_route_arc_bound_max = (
+                float(single_route_lb)
+                if single_task_route_arc_bound_max is None
+                else max(float(single_task_route_arc_bound_max), float(single_route_lb))
+            )
+        if len(single_route_coeffs) > 1:
+            add_row(single_route_coeffs, 0.0, infinity)
+            single_task_route_arc_bound_row_count = 1
+
+    one_pair_rest_single_route_arc_var_count = 0
+    one_pair_rest_single_route_arc_row_count = 0
+    one_pair_rest_single_route_arc_pair_count = 0
+    one_pair_rest_single_route_arc_separation_row_count = 0
+    one_pair_rest_single_route_arc_separation_iteration_count = 0
+    one_pair_rest_single_route_arc_big_m = 0.0
+    one_pair_rest_single_route_arc_base_coeffs: dict[int, float] = {}
+    one_pair_rest_single_route_arc_conditional_rows: dict[
+        tuple[int, tuple[str, str]],
+        tuple[int, int, float],
+    ] = {}
+    one_pair_rest_single_route_arc_separated_pairs: set[tuple[int, tuple[str, str]]] = set()
+    if (
+        int(required_active_sortie_count) >= 2
+        and int(required_task_count) == int(required_active_sortie_count) + 1
+    ):
+        single_route_lb_by_col: dict[int, float] = {}
+        for (slot, task_id), col in y.items():
+            single_route_lb = max(
+                0.0,
+                _arc_objective("depot", str(task_id)) + _arc_objective(str(task_id), "depot"),
+            )
+            single_route_lb_by_col[int(col)] = float(single_route_lb)
+        pair_rows: list[tuple[int, str, str, int, int, float]] = []
+        max_abs_delta = 0.0
+        largest_single_sum = sum(
+            sorted(single_route_lb_by_col.values(), reverse=True)[
+                : max(0, int(required_task_count))
+            ]
+        )
+        for slot in active_slots:
+            feasible_tasks = tuple(str(task_id) for task_id in slot_feasible_tasks.get(slot, tuple()))
+            if len(feasible_tasks) < 2:
+                continue
+            for left_task, right_task in combinations(feasible_tasks, 2):
+                left_col = y.get((int(slot), str(left_task)))
+                right_col = y.get((int(slot), str(right_task)))
+                if left_col is None or right_col is None:
+                    continue
+                left_then_right = (
+                    _arc_objective("depot", str(left_task))
+                    + _arc_objective(str(left_task), str(right_task))
+                    + _arc_objective(str(right_task), "depot")
+                )
+                right_then_left = (
+                    _arc_objective("depot", str(right_task))
+                    + _arc_objective(str(right_task), str(left_task))
+                    + _arc_objective(str(left_task), "depot")
+                )
+                pair_route_lb = max(0.0, min(float(left_then_right), float(right_then_left)))
+                one_pair_rest_single_route_arc_pair_count += 1
+                left_single_lb = max(
+                    0.0,
+                    _arc_objective("depot", str(left_task))
+                    + _arc_objective(str(left_task), "depot"),
+                )
+                right_single_lb = max(
+                    0.0,
+                    _arc_objective("depot", str(right_task))
+                    + _arc_objective(str(right_task), "depot"),
+                )
+                delta = float(pair_route_lb) - float(left_single_lb) - float(right_single_lb)
+                pair_rows.append(
+                    (
+                        int(slot),
+                        str(left_task),
+                        str(right_task),
+                        int(left_col),
+                        int(right_col),
+                        float(delta),
+                    )
+                )
+                max_abs_delta = max(float(max_abs_delta), abs(float(delta)))
+        if pair_rows:
+            base_coeffs = {route_arc_lb_col: 1.0}
+            for col, single_route_lb in single_route_lb_by_col.items():
+                if abs(float(single_route_lb)) > 1.0e-12:
+                    base_coeffs[int(col)] = base_coeffs.get(int(col), 0.0) - float(single_route_lb)
+            one_pair_rest_single_route_arc_base_coeffs = dict(base_coeffs)
+            one_pair_rest_single_route_arc_big_m = max(
+                1.0,
+                float(largest_single_sum) + float(max_abs_delta) + 1.0,
+            )
+            for slot, left_task, right_task, left_col, right_col, delta in pair_rows:
+                pair_key = (int(slot), tuple(sorted((str(left_task), str(right_task)))))
+                one_pair_rest_single_route_arc_conditional_rows[pair_key] = (
+                    int(left_col),
+                    int(right_col),
+                    float(delta),
+                )
+            min_pair_delta = min(
+                float(delta)
+                for _slot, _left_task, _right_task, _left_col, _right_col, delta in pair_rows
+            )
+            add_row(base_coeffs, float(min_pair_delta), infinity)
+            one_pair_rest_single_route_arc_row_count += 1
+
+    pair_route_arc_bound_row_count = 0
+    pair_route_arc_bound_min: float | None = None
+    pair_route_arc_bound_max: float | None = None
+    if int(required_task_count) == 2:
+        for slot in active_slots:
+            feasible_tasks = tuple(str(task_id) for task_id in slot_feasible_tasks.get(slot, tuple()))
+            if len(feasible_tasks) < 2:
+                continue
+            for left_task, right_task in combinations(feasible_tasks, 2):
+                left_col = y.get((int(slot), str(left_task)))
+                right_col = y.get((int(slot), str(right_task)))
+                if left_col is None or right_col is None:
+                    continue
+                left_then_right = (
+                    _arc_objective("depot", str(left_task))
+                    + _arc_objective(str(left_task), str(right_task))
+                    + _arc_objective(str(right_task), "depot")
+                )
+                right_then_left = (
+                    _arc_objective("depot", str(right_task))
+                    + _arc_objective(str(right_task), str(left_task))
+                    + _arc_objective(str(left_task), "depot")
+                )
+                pair_route_lb = max(0.0, min(float(left_then_right), float(right_then_left)))
+                if pair_route_lb <= 1.0e-12:
+                    continue
+                add_row(
+                    {
+                        route_arc_lb_col: 1.0,
+                        int(left_col): -float(pair_route_lb),
+                        int(right_col): -float(pair_route_lb),
+                    },
+                    -float(pair_route_lb),
+                    infinity,
+                )
+                pair_route_arc_bound_row_count += 1
+                pair_route_arc_bound_min = (
+                    float(pair_route_lb)
+                    if pair_route_arc_bound_min is None
+                    else min(float(pair_route_arc_bound_min), float(pair_route_lb))
+                )
+                pair_route_arc_bound_max = (
+                    float(pair_route_lb)
+                    if pair_route_arc_bound_max is None
+                    else max(float(pair_route_arc_bound_max), float(pair_route_lb))
+                )
+
+    triple_route_arc_bound_row_count = 0
+    triple_route_arc_bound_min: float | None = None
+    triple_route_arc_bound_max: float | None = None
+    if int(required_task_count) == 3 and int(required_active_sortie_count) == 1:
+        for slot in active_slots:
+            feasible_tasks = tuple(str(task_id) for task_id in slot_feasible_tasks.get(slot, tuple()))
+            if len(feasible_tasks) < 3:
+                continue
+            for triple in combinations(feasible_tasks, 3):
+                cols = [y.get((int(slot), str(task_id))) for task_id in triple]
+                if any(col is None for col in cols):
+                    continue
+                best_route_lb = math.inf
+                for order in permutations(tuple(str(task_id) for task_id in triple)):
+                    route_lb = _arc_objective("depot", order[0])
+                    for source, target in zip(order, order[1:]):
+                        route_lb += _arc_objective(source, target)
+                    route_lb += _arc_objective(order[-1], "depot")
+                    best_route_lb = min(float(best_route_lb), float(route_lb))
+                if not math.isfinite(best_route_lb):
+                    continue
+                triple_route_lb = max(0.0, float(best_route_lb))
+                if triple_route_lb <= 1.0e-12:
+                    continue
+                coeffs = {route_arc_lb_col: 1.0}
+                for col in cols:
+                    coeffs[int(col)] = coeffs.get(int(col), 0.0) - float(triple_route_lb)
+                add_row(coeffs, -2.0 * float(triple_route_lb), infinity)
+                triple_route_arc_bound_row_count += 1
+                triple_route_arc_bound_min = (
+                    float(triple_route_lb)
+                    if triple_route_arc_bound_min is None
+                    else min(float(triple_route_arc_bound_min), float(triple_route_lb))
+                )
+                triple_route_arc_bound_max = (
+                    float(triple_route_lb)
+                    if triple_route_arc_bound_max is None
+                    else max(float(triple_route_arc_bound_max), float(triple_route_lb))
+                )
+
+    pair_completion_lift_var_count = 0
+    pair_completion_lift_row_count = 0
+    pair_completion_lift_min: float | None = None
+    pair_completion_lift_max: float | None = None
+    pair_completion_depot_to = (
+        _single_source_shortest_travel_lower_bounds(data, "depot")
+        if float(completion_coeff) > 1.0e-12
+        else {}
+    )
+    pair_completion_to_depot = (
+        _task_to_depot_shortest_travel_lower_bounds(data)
+        if float(completion_coeff) > 1.0e-12
+        else {}
+    )
+    single_task_recharge_duration_lb_by_task = (
+        {
+            str(task_id): float(energy_lb) / max(1.0e-9, float(data.recharge_power_proxy_per_min))
+            for task_id, energy_lb in _single_task_route_energy_lower_bounds(data).items()
+        }
+        if float(completion_coeff) > 1.0e-12
+        else {}
+    )
+    pair_route_energy_lb_by_pair = (
+        _pair_route_energy_lower_bounds(data)
+        if float(completion_coeff) > 1.0e-12
+        else {}
+    )
+    pair_completion_from_task = (
+        {
+            task_id: _single_source_shortest_travel_lower_bounds(data, task_id)
+            for task_id in model_tasks
+        }
+        if float(completion_coeff) > 1.0e-12
+        else {}
+    )
+
+    def _pair_weighted_start_absolute_lb(
+        left_task: str,
+        right_task: str,
+        *,
+        sortie_start_lb: float,
+    ) -> float:
+        def _ordered(first_task_id: str, second_task_id: str) -> float:
+            first = data.tasks[str(first_task_id)]
+            second = data.tasks[str(second_task_id)]
+            first_weight = max(0.0, float(first.science_weight))
+            second_weight = max(0.0, float(second.science_weight))
+            first_start = max(
+                float(first.ready_time),
+                float(sortie_start_lb)
+                + float(pair_completion_depot_to.get(str(first_task_id), 0.0)),
+            )
+            second_start = max(
+                float(second.ready_time),
+                first_start
+                + float(first.service_time)
+                + float(pair_completion_from_task[str(first_task_id)].get(str(second_task_id), 0.0)),
+            )
+            return float(first_weight) * float(first_start) + float(second_weight) * float(second_start)
+
+        return min(
+            _ordered(str(left_task), str(right_task)),
+            _ordered(str(right_task), str(left_task)),
+        )
+
+    for slot in active_slots:
+        feasible_tasks = tuple(str(task_id) for task_id in slot_feasible_tasks.get(slot, tuple()))
+        if len(feasible_tasks) < 2:
+            continue
+        lift_col: int | None = None
+        earliest_slot_start = float(slot) * float(min_active_duration)
+        for left_task, right_task in combinations(feasible_tasks, 2):
+            left_col = y.get((int(slot), str(left_task)))
+            right_col = y.get((int(slot), str(right_task)))
+            if left_col is None or right_col is None:
+                continue
+            left_weight = max(0.0, float(data.tasks[str(left_task)].science_weight))
+            right_weight = max(0.0, float(data.tasks[str(right_task)].science_weight))
+            total_weight = float(left_weight) + float(right_weight)
+            if total_weight <= 1.0e-12:
+                continue
+            absolute_pair_lb = _pair_weighted_start_absolute_lb(
+                str(left_task),
+                str(right_task),
+                sortie_start_lb=float(earliest_slot_start),
+            )
+            individual_pair_lb = float(weighted_service_start_lb.get((int(slot), str(left_task)), 0.0))
+            individual_pair_lb += float(weighted_service_start_lb.get((int(slot), str(right_task)), 0.0))
+            lift = max(0.0, float(absolute_pair_lb) - float(individual_pair_lb))
+            if lift <= 1.0e-9:
+                continue
+            if lift_col is None:
+                lift_col = add_var(
+                    float(completion_coeff),
+                    lb=0.0,
+                    ub=infinity,
+                    integer=False,
+                )
+                pair_completion_lift_var_count += 1
+            add_row({lift_col: 1.0, int(left_col): -float(lift), int(right_col): -float(lift)}, -float(lift), infinity)
+            pair_completion_lift_row_count += 1
+            pair_completion_lift_min = (
+                float(lift)
+                if pair_completion_lift_min is None
+                else min(float(pair_completion_lift_min), float(lift))
+            )
+            pair_completion_lift_max = (
+                float(lift)
+                if pair_completion_lift_max is None
+                else max(float(pair_completion_lift_max), float(lift))
+            )
+
+    cross_slot_completion_lift_var_count = 0
+    cross_slot_completion_lift_row_count = 0
+    cross_slot_pair_completion_separation_row_count = 0
+    cross_slot_completion_lift_min: float | None = None
+    cross_slot_completion_lift_max: float | None = None
+    cross_slot_lift_col: int | None = None
+    if float(completion_coeff) > 1.0e-12 and len(active_slots) >= 2:
+        for earlier_slot in active_slots:
+            for later_slot in active_slots:
+                if int(later_slot) <= int(earlier_slot):
+                    continue
+                earlier_tasks = tuple(str(task_id) for task_id in slot_feasible_tasks.get(earlier_slot, tuple()))
+                later_tasks = tuple(str(task_id) for task_id in slot_feasible_tasks.get(later_slot, tuple()))
+                if not earlier_tasks or not later_tasks:
+                    continue
+                earlier_slot_start_lb = float(earlier_slot) * float(min_active_duration)
+                for earlier_task_id in earlier_tasks:
+                    earlier_col = y.get((int(earlier_slot), str(earlier_task_id)))
+                    if earlier_col is None:
+                        continue
+                    earlier_task = data.tasks[str(earlier_task_id)]
+                    earlier_weight = max(0.0, float(earlier_task.science_weight))
+                    earlier_start_lb = max(
+                        float(earlier_task.ready_time),
+                        float(earlier_slot_start_lb)
+                        + float(pair_completion_depot_to.get(str(earlier_task_id), 0.0)),
+                    )
+                    earlier_sortie_end_lb = (
+                        float(earlier_start_lb)
+                        + float(earlier_task.service_time)
+                        + float(pair_completion_to_depot.get(str(earlier_task_id), 0.0))
+                        + float(data.dock_overhead_min)
+                        + float(single_task_recharge_duration_lb_by_task.get(str(earlier_task_id), 0.0))
+                    )
+                    for later_task_id in later_tasks:
+                        later_col = y.get((int(later_slot), str(later_task_id)))
+                        if later_col is None:
+                            continue
+                        later_task = data.tasks[str(later_task_id)]
+                        later_weight = max(0.0, float(later_task.science_weight))
+                        total_weight = float(earlier_weight) + float(later_weight)
+                        if total_weight <= 1.0e-12:
+                            continue
+                        later_start_lb = max(
+                            float(later_task.ready_time),
+                            float(earlier_sortie_end_lb)
+                            + float(pair_completion_depot_to.get(str(later_task_id), 0.0)),
+                        )
+                        absolute_pair_lb = (
+                            float(earlier_weight) * float(earlier_start_lb)
+                            + float(later_weight) * float(later_start_lb)
+                        )
+                        individual_pair_lb = float(
+                            weighted_service_start_lb.get((int(earlier_slot), str(earlier_task_id)), 0.0)
+                        )
+                        individual_pair_lb += float(
+                            weighted_service_start_lb.get((int(later_slot), str(later_task_id)), 0.0)
+                        )
+                        lift = max(0.0, float(absolute_pair_lb) - float(individual_pair_lb))
+                        if lift <= 1.0e-9:
+                            continue
+                        if cross_slot_lift_col is None:
+                            cross_slot_lift_col = add_var(
+                                float(completion_coeff),
+                                lb=0.0,
+                                ub=infinity,
+                                integer=False,
+                            )
+                            cross_slot_completion_lift_var_count = 1
+                        add_row(
+                            {
+                                cross_slot_lift_col: 1.0,
+                                int(earlier_col): -float(lift),
+                                int(later_col): -float(lift),
+                            },
+                            -float(lift),
+                            infinity,
+                        )
+                        cross_slot_completion_lift_row_count += 1
+                        cross_slot_completion_lift_min = (
+                            float(lift)
+                            if cross_slot_completion_lift_min is None
+                            else min(float(cross_slot_completion_lift_min), float(lift))
+                        )
+                        cross_slot_completion_lift_max = (
+                            float(lift)
+                            if cross_slot_completion_lift_max is None
+                            else max(float(cross_slot_completion_lift_max), float(lift))
+                        )
+
+    def _pair_to_later_weighted_later_start_absolute_lb(
+        pair_tasks: tuple[str, str],
+        later_task_id: str,
+        *,
+        pair_slot_start_lb: float,
+    ) -> float:
+        later_task = data.tasks[str(later_task_id)]
+        later_weight = max(0.0, float(later_task.science_weight))
+        pair_key = tuple(sorted(str(task_id) for task_id in pair_tasks))
+        pair_recharge_lb = float(pair_route_energy_lb_by_pair.get(pair_key, 0.0)) / max(
+            1.0e-9,
+            float(data.recharge_power_proxy_per_min),
+        )
+        best = math.inf
+        for first_task_id, second_task_id in permutations(pair_key):
+            first = data.tasks[str(first_task_id)]
+            second = data.tasks[str(second_task_id)]
+            first_start = max(
+                float(first.ready_time),
+                float(pair_slot_start_lb)
+                + float(pair_completion_depot_to.get(str(first_task_id), 0.0)),
+            )
+            second_start = max(
+                float(second.ready_time),
+                float(first_start)
+                + float(first.service_time)
+                + float(pair_completion_from_task[str(first_task_id)].get(str(second_task_id), 0.0)),
+            )
+            pair_end = (
+                float(second_start)
+                + float(second.service_time)
+                + float(pair_completion_to_depot.get(str(second_task_id), 0.0))
+                + float(data.dock_overhead_min)
+                + float(pair_recharge_lb)
+            )
+            later_start = max(
+                float(later_task.ready_time),
+                float(pair_end) + float(pair_completion_depot_to.get(str(later_task_id), 0.0)),
+            )
+            best = min(
+                float(best),
+                float(later_weight) * float(later_start),
+            )
+        return float(best) if math.isfinite(best) else 0.0
+
+    def _selected_slot_task_sets_from_solution(solution) -> dict[int, tuple[str, ...]]:
+        selected_by_slot: dict[int, list[str]] = defaultdict(list)
+        for (slot, task_id), col in y.items():
+            if float(solution.col_value[int(col)]) > 0.5:
+                selected_by_slot[int(slot)].append(str(task_id))
+        return {
+            int(slot): tuple(sorted(tasks_for_slot))
+            for slot, tasks_for_slot in sorted(selected_by_slot.items())
+        }
+
+    def _add_one_pair_rest_single_route_separation_row(solution) -> bool:
+        nonlocal one_pair_rest_single_route_arc_separation_row_count
+        nonlocal cross_slot_lift_col
+        nonlocal cross_slot_completion_lift_var_count
+        nonlocal cross_slot_completion_lift_row_count
+        nonlocal cross_slot_pair_completion_separation_row_count
+        nonlocal cross_slot_completion_lift_min
+        nonlocal cross_slot_completion_lift_max
+        selected_slot_task_sets = _selected_slot_task_sets_from_solution(solution)
+        for slot, tasks_for_slot in selected_slot_task_sets.items():
+            if len(tasks_for_slot) != 2:
+                continue
+            pair_key = (int(slot), tuple(sorted(str(task_id) for task_id in tasks_for_slot)))
+            if pair_key in one_pair_rest_single_route_arc_separated_pairs:
+                continue
+            row_payload = one_pair_rest_single_route_arc_conditional_rows.get(pair_key)
+            if row_payload is None:
+                continue
+            left_col, right_col, delta = row_payload
+            big_m = float(one_pair_rest_single_route_arc_big_m)
+            if big_m <= 0.0:
+                continue
+            coeffs = dict(one_pair_rest_single_route_arc_base_coeffs)
+            coeffs[int(left_col)] = coeffs.get(int(left_col), 0.0) - float(big_m)
+            coeffs[int(right_col)] = coeffs.get(int(right_col), 0.0) - float(big_m)
+            add_row(coeffs, float(delta) - 2.0 * float(big_m), infinity)
+            one_pair_rest_single_route_arc_separated_pairs.add(pair_key)
+            one_pair_rest_single_route_arc_separation_row_count += 1
+            if float(completion_coeff) > 1.0e-12:
+                for later_slot, later_tasks in selected_slot_task_sets.items():
+                    if int(later_slot) <= int(slot):
+                        continue
+                    for later_task_id in later_tasks:
+                        later_col = y.get((int(later_slot), str(later_task_id)))
+                        if later_col is None:
+                            continue
+                        absolute_lb = _pair_to_later_weighted_later_start_absolute_lb(
+                            tuple(str(task_id) for task_id in tasks_for_slot),
+                            str(later_task_id),
+                            pair_slot_start_lb=float(slot) * float(min_active_duration),
+                        )
+                        individual_lb = float(
+                            weighted_service_start_lb.get((int(later_slot), str(later_task_id)), 0.0)
+                        )
+                        lift = max(0.0, float(absolute_lb) - float(individual_lb))
+                        if lift <= 1.0e-9:
+                            continue
+                        if cross_slot_lift_col is None:
+                            cross_slot_lift_col = add_var(
+                                float(completion_coeff),
+                                lb=0.0,
+                                ub=infinity,
+                                integer=False,
+                            )
+                            cross_slot_completion_lift_var_count = 1
+                        coeffs_completion = {cross_slot_lift_col: 1.0}
+                        for task_id in tasks_for_slot:
+                            pair_task_col = y.get((int(slot), str(task_id)))
+                            if pair_task_col is not None:
+                                coeffs_completion[int(pair_task_col)] = (
+                                    coeffs_completion.get(int(pair_task_col), 0.0) - float(lift)
+                                )
+                        coeffs_completion[int(later_col)] = (
+                            coeffs_completion.get(int(later_col), 0.0) - float(lift)
+                        )
+                        add_row(coeffs_completion, -2.0 * float(lift), infinity)
+                        cross_slot_completion_lift_row_count += 1
+                        cross_slot_pair_completion_separation_row_count += 1
+                        cross_slot_completion_lift_min = (
+                            float(lift)
+                            if cross_slot_completion_lift_min is None
+                            else min(float(cross_slot_completion_lift_min), float(lift))
+                        )
+                        cross_slot_completion_lift_max = (
+                            float(lift)
+                            if cross_slot_completion_lift_max is None
+                            else max(float(cross_slot_completion_lift_max), float(lift))
+                        )
+            return True
+        return False
+
+    highs.run()
+    status = highs.getModelStatus()
+    status_name = str(highs.modelStatusToString(status))
+    optimal = status == highspy_module.HighsModelStatus.kOptimal
+    infeasible = status == highspy_module.HighsModelStatus.kInfeasible
+    if float(time_limit_sec) >= 1.0:
+        max_separation_iterations = 24
+    else:
+        max_separation_iterations = 0
+    while (
+        optimal
+        and one_pair_rest_single_route_arc_conditional_rows
+        and one_pair_rest_single_route_arc_separation_iteration_count < max_separation_iterations
+    ):
+        remaining = float(time_limit_sec) - float(perf_counter() - start_wall)
+        if remaining <= 1.0e-3:
+            break
+        solution = highs.getSolution()
+        if not _add_one_pair_rest_single_route_separation_row(solution):
+            break
+        one_pair_rest_single_route_arc_separation_iteration_count += 1
+        highs.setOptionValue("time_limit", max(0.001, remaining))
+        highs.run()
+        status = highs.getModelStatus()
+        status_name = str(highs.modelStatusToString(status))
+        optimal = status == highspy_module.HighsModelStatus.kOptimal
+        infeasible = status == highspy_module.HighsModelStatus.kInfeasible
+    lower_bound = None
+    route_arc_lower_bound_value = None
+    selected_task_set: tuple[str, ...] = tuple()
+    selected_slot_task_sets: dict[int, tuple[str, ...]] = {}
+    if optimal:
+        lower_bound = float(highs.getObjectiveValue()) + float(constant_lb)
+        solution = highs.getSolution()
+        route_arc_lower_bound_value = float(solution.col_value[route_arc_lb_col])
+        selected_slot_task_sets = _selected_slot_task_sets_from_solution(solution)
+        selected_task_set = tuple(
+            sorted(task_id for tasks_for_slot in selected_slot_task_sets.values() for task_id in tasks_for_slot)
+        )
+    return {
+        "enabled": True,
+        "applicable": True,
+        "optimal": bool(optimal),
+        "region_infeasible": bool(infeasible),
+        "lower_bound": None if lower_bound is None else round(float(lower_bound), 9),
+        "constant_lower_bound": round(float(constant_lb), 9),
+        "depot_outbound_arc_lower_bound": round(float(depot_outbound_lb), 9),
+        "depot_return_arc_lower_bound": round(float(depot_return_lb), 9),
+        "intertask_arc_lower_bound": round(float(intertask_lb), 9),
+        "route_arc_lower_bound_mode": "slot_incoming_outgoing_max",
+        "route_arc_lower_bound_value": (
+            None
+            if route_arc_lower_bound_value is None
+            else round(float(route_arc_lower_bound_value), 9)
+        ),
+        "route_arc_lower_bound_row_count": int(route_arc_bound_row_count),
+        "route_arc_global_constant_lower_bound": round(float(global_route_arc_constant_lb), 9),
+        "route_arc_slot_constant_lower_bound": round(float(slot_route_arc_constant_lb), 9),
+        "route_arc_constant_lower_bound": round(float(route_arc_constant_lb), 9),
+        "route_arc_slot_outbound_lower_bound_sum": round(float(slot_outbound_lb_sum), 9),
+        "route_arc_slot_return_lower_bound_sum": round(float(slot_return_lb_sum), 9),
+        "single_task_route_arc_bound_row_count": int(single_task_route_arc_bound_row_count),
+        "single_task_route_arc_bound_min": (
+            None
+            if single_task_route_arc_bound_min is None
+            else round(float(single_task_route_arc_bound_min), 9)
+        ),
+        "single_task_route_arc_bound_max": (
+            None
+            if single_task_route_arc_bound_max is None
+            else round(float(single_task_route_arc_bound_max), 9)
+        ),
+        "one_pair_rest_single_route_arc_var_count": int(
+            one_pair_rest_single_route_arc_var_count
+        ),
+        "one_pair_rest_single_route_arc_row_count": int(
+            one_pair_rest_single_route_arc_row_count
+        ),
+        "one_pair_rest_single_route_arc_pair_count": int(
+            one_pair_rest_single_route_arc_pair_count
+        ),
+        "one_pair_rest_single_route_arc_separation_row_count": int(
+            one_pair_rest_single_route_arc_separation_row_count
+        ),
+        "one_pair_rest_single_route_arc_separation_iteration_count": int(
+            one_pair_rest_single_route_arc_separation_iteration_count
+        ),
+        "pair_route_arc_bound_row_count": int(pair_route_arc_bound_row_count),
+        "pair_route_arc_bound_min": (
+            None
+            if pair_route_arc_bound_min is None
+            else round(float(pair_route_arc_bound_min), 9)
+        ),
+        "pair_route_arc_bound_max": (
+            None
+            if pair_route_arc_bound_max is None
+            else round(float(pair_route_arc_bound_max), 9)
+        ),
+        "triple_route_arc_bound_row_count": int(triple_route_arc_bound_row_count),
+        "triple_route_arc_bound_min": (
+            None
+            if triple_route_arc_bound_min is None
+            else round(float(triple_route_arc_bound_min), 9)
+        ),
+        "triple_route_arc_bound_max": (
+            None
+            if triple_route_arc_bound_max is None
+            else round(float(triple_route_arc_bound_max), 9)
+        ),
+        "pair_completion_lift_var_count": int(pair_completion_lift_var_count),
+        "pair_completion_lift_row_count": int(pair_completion_lift_row_count),
+        "pair_completion_lift_min": (
+            None
+            if pair_completion_lift_min is None
+            else round(float(pair_completion_lift_min), 9)
+        ),
+        "pair_completion_lift_max": (
+            None
+            if pair_completion_lift_max is None
+            else round(float(pair_completion_lift_max), 9)
+        ),
+        "cross_slot_completion_lift_var_count": int(cross_slot_completion_lift_var_count),
+        "cross_slot_completion_lift_row_count": int(cross_slot_completion_lift_row_count),
+        "cross_slot_pair_completion_separation_row_count": int(
+            cross_slot_pair_completion_separation_row_count
+        ),
+        "cross_slot_completion_lift_min": (
+            None
+            if cross_slot_completion_lift_min is None
+            else round(float(cross_slot_completion_lift_min), 9)
+        ),
+        "cross_slot_completion_lift_max": (
+            None
+            if cross_slot_completion_lift_max is None
+            else round(float(cross_slot_completion_lift_max), 9)
+        ),
+        "selected_task_set": list(selected_task_set),
+        "selected_slot_task_sets": {
+            str(slot): list(tasks_for_slot)
+            for slot, tasks_for_slot in selected_slot_task_sets.items()
+        },
+        "variable_count": int(highs.getNumCol()),
+        "constraint_count": int(highs.getNumRow()),
+        "pair_conflict_row_count": int(pair_conflict_row_count),
+        "hyperedge_conflict_row_count": int(hyperedge_conflict_row_count),
+        "wall_time_sec": round(perf_counter() - start_wall, 6),
+        "status": status_name,
+    }
+
+
+def _dual_task_slot_full_space_lower_bound_scan(
+    highspy_module,
+    data: LunarIceData,
+    duals: JourneyDuals,
+    *,
+    model_tasks: tuple[str, ...],
+    slot_feasible_tasks: dict[int, tuple[str, ...]],
+    slot_capacities: dict[int, int],
+    cost_coeff: float,
+    risk_coeff: float,
+    completion_coeff: float,
+    min_active_duration: float,
+    min_depot_travel_by_task: dict[str, float],
+    pair_conflicts: set[tuple[str, str]] | None = None,
+    hyperedge_conflicts: set[tuple[str, ...]] | None = None,
+    negative_eps: float = 1.0e-6,
+    per_region_time_limit_sec: float = 0.25,
+    early_stop_on_negative_bound: bool = True,
+    threads: int = 1,
+) -> dict:
+    """Scan a safe task-count/active-sortie partition lower bound.
+
+    The assignment relaxation lower bound is valid for each exact
+    (task-count, active-sortie-count) region.  If every nonempty journey region
+    is either infeasible or has lower_bound >= -eps, the full pricing space has
+    no negative reduced-cost column.
+    """
+
+    start_wall = perf_counter()
+    max_task_count = min(
+        len(model_tasks),
+        sum(max(0, int(capacity)) for capacity in slot_capacities.values()),
+    )
+    if max_task_count < 1:
+        return {
+            "enabled": True,
+            "applicable": True,
+            "coverage_complete": True,
+            "can_certify_no_negative": True,
+            "region_count": 0,
+            "optimal_region_count": 0,
+            "infeasible_region_count": 0,
+            "unsupported_region_count": 0,
+            "negative_bound_region_count": 0,
+            "min_lower_bound": None,
+            "min_lower_bound_task_count": None,
+            "min_lower_bound_active_sortie_count": None,
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "status": "EMPTY_FULL_SPACE",
+        }
+
+    region_count = 0
+    optimal_region_count = 0
+    infeasible_region_count = 0
+    unsupported_region_count = 0
+    negative_bound_region_count = 0
+    min_lower_bound: float | None = None
+    min_lower_bound_task_count: int | None = None
+    min_lower_bound_active_sortie_count: int | None = None
+    early_stopped_on_negative_bound = False
+    max_tasks_per_sortie = max(1, int(data.max_tasks_per_trip))
+    sortie_slots = len(slot_feasible_tasks)
+    for task_count in range(1, int(max_task_count) + 1):
+        min_active_sorties = int(math.ceil(float(task_count) / float(max_tasks_per_sortie)))
+        max_active_sorties = min(int(task_count), int(sortie_slots))
+        for active_sortie_count in range(min_active_sorties, max_active_sorties + 1):
+            region_count += 1
+            result = _dual_task_slot_reduced_cost_lower_bound(
+                highspy_module,
+                data,
+                duals,
+                model_tasks=model_tasks,
+                slot_feasible_tasks=slot_feasible_tasks,
+                slot_capacities=slot_capacities,
+                required_task_count=int(task_count),
+                required_active_sortie_count=int(active_sortie_count),
+                cost_coeff=float(cost_coeff),
+                risk_coeff=float(risk_coeff),
+                completion_coeff=float(completion_coeff),
+                min_active_duration=float(min_active_duration),
+                min_depot_travel_by_task=min_depot_travel_by_task,
+                pair_conflicts=pair_conflicts,
+                hyperedge_conflicts=hyperedge_conflicts,
+                time_limit_sec=float(per_region_time_limit_sec),
+                threads=int(threads),
+            )
+            if bool(result.get("region_infeasible")):
+                infeasible_region_count += 1
+                continue
+            if not bool(result.get("optimal")) or result.get("lower_bound") is None:
+                unsupported_region_count += 1
+                continue
+            optimal_region_count += 1
+            lower_bound = float(result["lower_bound"])
+            if min_lower_bound is None or lower_bound < float(min_lower_bound):
+                min_lower_bound = lower_bound
+                min_lower_bound_task_count = int(task_count)
+                min_lower_bound_active_sortie_count = int(active_sortie_count)
+            if lower_bound < -abs(float(negative_eps)):
+                negative_bound_region_count += 1
+                if bool(early_stop_on_negative_bound):
+                    early_stopped_on_negative_bound = True
+                    break
+        if early_stopped_on_negative_bound:
+            break
+
+    coverage_complete = bool((not early_stopped_on_negative_bound) and unsupported_region_count == 0)
+    can_certify = bool(
+        coverage_complete
+        and negative_bound_region_count == 0
+        and (min_lower_bound is None or float(min_lower_bound) >= -abs(float(negative_eps)))
+    )
+    if can_certify:
+        status = "CERTIFIED_NO_NEGATIVE"
+    elif early_stopped_on_negative_bound:
+        status = "BOUND_SCAN_NEGATIVE_REGION_EARLY_STOP"
+    else:
+        status = "BOUND_SCAN_INCOMPLETE_OR_NEGATIVE"
+    return {
+        "enabled": True,
+        "applicable": True,
+        "early_stop_on_negative_bound": bool(early_stop_on_negative_bound),
+        "early_stopped_on_negative_bound": bool(early_stopped_on_negative_bound),
+        "coverage_complete": coverage_complete,
+        "can_certify_no_negative": can_certify,
+        "region_count": int(region_count),
+        "optimal_region_count": int(optimal_region_count),
+        "infeasible_region_count": int(infeasible_region_count),
+        "unsupported_region_count": int(unsupported_region_count),
+        "negative_bound_region_count": int(negative_bound_region_count),
+        "min_lower_bound": None if min_lower_bound is None else round(float(min_lower_bound), 9),
+        "min_lower_bound_task_count": min_lower_bound_task_count,
+        "min_lower_bound_active_sortie_count": min_lower_bound_active_sortie_count,
+        "wall_time_sec": round(perf_counter() - start_wall, 6),
+        "status": status,
     }
 
 
@@ -143,7 +1604,10 @@ def _time_arc_big_m(
     travel: float,
     service: float = 0.0,
     source: str = "depot",
+    source_start_upper_bound: float | None = None,
 ) -> float:
+    if source_start_upper_bound is not None:
+        return max(0.0, float(source_start_upper_bound)) + float(service) + float(travel)
     if source != "depot" and source in data.tasks:
         task = data.tasks[source]
         latest_start = max(0.0, float(task.due_time) - float(task.service_time))
@@ -206,6 +1670,58 @@ def _arc_option_time_window_impossible(
     latest_target_start = _latest_task_service_start(data, target)
     earliest_target_start = earliest_source_start + float(source_task.service_time) + travel
     return earliest_target_start > latest_target_start + 1.0e-9
+
+
+def _arc_option_resource_impossible(
+    data: LunarIceData,
+    source: str,
+    target: str,
+    path_type: str,
+    *,
+    depot_energy_lb_by_task: dict[str, float],
+    task_to_depot_energy_lb_by_task: dict[str, float],
+    depot_shadow_lb_by_task: dict[str, float],
+    task_to_depot_shadow_lb_by_task: dict[str, float],
+) -> tuple[bool, str]:
+    """Return whether a directed arc option cannot appear in any feasible sortie.
+
+    The test uses optimistic lower bounds around the arc, so pruning is safe:
+    if even the cheapest possible depot-prefix plus this arc plus cheapest
+    depot-return violates a sortie resource, adding more tasks cannot repair it.
+    """
+
+    source = str(source)
+    target = str(target)
+    if source == target or (source == "depot" and target == "depot"):
+        return True, "structural"
+    option = data.option(source, target, path_type)
+    involved_tasks = tuple(task_id for task_id in (source, target) if task_id != "depot")
+    if any(float(data.tasks[task_id].demand) > float(data.capacity) + 1.0e-9 for task_id in involved_tasks):
+        return True, "demand"
+    if len(involved_tasks) == 2:
+        demand_lb = sum(float(data.tasks[task_id].demand) for task_id in involved_tasks)
+        if demand_lb > float(data.capacity) + 1.0e-9:
+            return True, "demand"
+
+    first_task = target if source == "depot" else source
+    last_task = source if target == "depot" else target
+    energy_lb = float(option.energy_proxy)
+    shadow_lb = float(option.shadow_exposure_min)
+    if first_task != "depot":
+        energy_lb += float(depot_energy_lb_by_task.get(first_task, 0.0))
+        shadow_lb += float(depot_shadow_lb_by_task.get(first_task, 0.0))
+    if last_task != "depot":
+        energy_lb += float(task_to_depot_energy_lb_by_task.get(last_task, 0.0))
+        shadow_lb += float(task_to_depot_shadow_lb_by_task.get(last_task, 0.0))
+    for task_id in involved_tasks:
+        task = data.tasks[task_id]
+        energy_lb += float(task.service_energy)
+        shadow_lb += float(task.local_shadow_score) * float(task.service_time)
+    if energy_lb > float(data.energy_limit) + 1.0e-9:
+        return True, "energy"
+    if shadow_lb > float(data.max_shadow_exposure_per_sortie) + 1.0e-9:
+        return True, "shadow"
+    return False, ""
 
 
 def _pricing_path_type_cache(
@@ -962,7 +2478,12 @@ def solve_gurobi_compact_fixed_graph(
             if slot + 1 < sortie_slots:
                 model.addConstr(z[vehicle, slot + 1] <= z_var, name=f"sortie_order[{vehicle},{slot}]")
             if slot > 0:
-                model.addConstr(sortie_start[vehicle, slot] >= sortie_end[vehicle, slot - 1], name=f"sortie_seq[{vehicle},{slot}]")
+                model.addConstr(
+                    sortie_start[vehicle, slot]
+                    >= sortie_end[vehicle, slot - 1]
+                    - float(data.horizon) * (1 - z[vehicle, slot]),
+                    name=f"sortie_seq[{vehicle},{slot}]",
+            )
             model.addConstr(sortie_end[vehicle, slot] >= sortie_start[vehicle, slot], name=f"end_after_start[{vehicle},{slot}]")
             min_return_m = float(data.horizon) + min_return_duration
             min_active_m = float(data.horizon) + min_active_duration
@@ -1119,6 +2640,10 @@ def solve_gurobi_compact_fixed_graph(
             "sortie_slot_min_duration_lower_bound": slot_bound["min_duration_lower_bound"],
             "sortie_slot_min_return_duration_lower_bound": slot_bound["min_return_duration_lower_bound"],
             "sortie_slot_min_out_return_travel_lower_bound": slot_bound["min_out_return_travel_lower_bound"],
+            "sortie_slot_min_sortie_energy_lower_bound": slot_bound["min_sortie_energy_lower_bound"],
+            "sortie_slot_min_energy_recharge_duration_lower_bound": (
+                slot_bound["min_energy_recharge_duration_lower_bound"]
+            ),
             "binary_arc_var_count": len(x_keys),
             **pruning,
             "task_assignment_var_count": len(y_keys),
@@ -1172,6 +2697,10 @@ def solve_gurobi_compact_fixed_graph(
         "sortie_slot_min_duration_lower_bound": slot_bound["min_duration_lower_bound"],
         "sortie_slot_min_return_duration_lower_bound": slot_bound["min_return_duration_lower_bound"],
         "sortie_slot_min_out_return_travel_lower_bound": slot_bound["min_out_return_travel_lower_bound"],
+        "sortie_slot_min_sortie_energy_lower_bound": slot_bound["min_sortie_energy_lower_bound"],
+        "sortie_slot_min_energy_recharge_duration_lower_bound": (
+            slot_bound["min_energy_recharge_duration_lower_bound"]
+        ),
         "binary_arc_var_count": len(x_keys),
         **pruning,
         "task_assignment_var_count": len(y_keys),
@@ -1650,6 +3179,11 @@ def solve_highs_compact_single_journey_pricing(
     pair_adjacency_cuts: bool = False,
     latest_service_start_slot_bound: bool = True,
     time_window_arc_pruning: bool = True,
+    resource_arc_pruning: bool = False,
+    slot_task_time_pruning: bool = False,
+    slot_arc_support_pruning: bool = False,
+    slot_sequence_capacity_arc_pruning: bool = False,
+    single_task_per_active_sortie_arc_pruning: bool = True,
     sortie_slot_position_bounds: bool = False,
     service_start_depot_travel_lb: bool = False,
     task_to_depot_return_travel_lb: bool = False,
@@ -1668,9 +3202,29 @@ def solve_highs_compact_single_journey_pricing(
     pair_shadow_infeasible_cut: bool = False,
     triple_shadow_infeasible_cut: bool = False,
     triple_energy_infeasible_cut: bool = False,
+    task_slot_pair_conflict_capacity_bound: bool = False,
+    dual_task_slot_lower_bound: bool = False,
+    dual_task_slot_full_space_lower_bound: bool = False,
+    dual_task_slot_full_space_lb_time_limit_sec: float = 0.25,
+    dual_task_slot_full_space_lb_early_stop_on_negative: bool = True,
+    recharge_aware_slot_bound: bool = False,
+    objective_bound_no_negative_cutoff: bool = False,
+    zero_capacity_slot_truncation: bool = False,
+    slot_sequence_capacity_live_bound: bool = False,
+    tight_service_start_bounds: bool = False,
+    tight_time_arc_big_m: bool = False,
+    active_time_z_bounds: bool = False,
+    slot_service_start_y_lower_bound: bool = False,
     negative_feasibility_search: bool = False,
     forbidden_arc_patterns: Iterable[Iterable[tuple[int, str, str, str]]] | None = None,
     forbidden_task_sets: Iterable[Iterable[str]] | None = None,
+    required_task_set: Iterable[str] | None = None,
+    required_task_count: int | None = None,
+    required_active_sortie_count: int | None = None,
+    mip_start_journey: JourneyColumn | None = None,
+    mip_start_zero_fill_integers: bool = False,
+    mip_start_inactive_tail_time: bool = False,
+    mip_start_inactive_tail_time_mode: str = "zero",
 ) -> dict:
     """Solve exact fixed-graph single-journey reduced-cost pricing with HiGHS.
 
@@ -1712,14 +3266,159 @@ def solve_highs_compact_single_journey_pricing(
             "note": "Empty instance has no nonempty journey columns.",
         }
 
+    required_task_set_raw = (
+        None
+        if required_task_set is None
+        else tuple(str(task_id) for task_id in required_task_set)
+    )
+    required_task_set_unknown = tuple(sorted(set(required_task_set_raw or tuple()) - set(tasks)))
+    if required_task_set_unknown:
+        return {
+            "status": "COMPACT_HIGHS_PRICING_INVALID_REQUIRED_TASK_SET",
+            "algorithm_status": "COMPACT_HIGHS_PRICING_INVALID_REQUIRED_TASK_SET",
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "best_reduced_cost": None,
+            "dual_bound": None,
+            "negative_found": False,
+            "can_certify_no_negative": False,
+            "journeys": tuple(),
+            "required_task_set_enabled": True,
+            "required_task_set": list(required_task_set_raw or tuple()),
+            "required_task_set_unknown": list(required_task_set_unknown),
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "note": "Required task-set pricing received tasks outside the instance; fail closed.",
+        }
+    required_task_set_normalized = (
+        None
+        if required_task_set_raw is None
+        else tuple(sorted(set(required_task_set_raw)))
+    )
+    if required_task_set_raw is not None and not required_task_set_normalized:
+        return {
+            "status": "COMPACT_HIGHS_PRICING_EMPTY_REQUIRED_TASK_SET",
+            "algorithm_status": "COMPACT_HIGHS_PRICING_EMPTY_REQUIRED_TASK_SET",
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "best_reduced_cost": None,
+            "dual_bound": None,
+            "negative_found": False,
+            "can_certify_no_negative": False,
+            "journeys": tuple(),
+            "required_task_set_enabled": True,
+            "required_task_set": [],
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "note": "Required task-set pricing needs a nonempty task set; fail closed.",
+        }
+    required_task_count_normalized = None
+    if required_task_count is not None:
+        required_task_count_normalized = int(required_task_count)
+        if required_task_count_normalized < 1 or required_task_count_normalized > len(tasks):
+            return {
+                "status": "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE",
+                "algorithm_status": "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE",
+                "exact_status": "REQUIRED_TASK_COUNT_PRICING_INFEASIBLE",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "best_reduced_cost": None,
+                "dual_bound": None,
+                "negative_found": False,
+                "can_certify_no_negative": False,
+                "journeys": tuple(),
+                "required_task_count_enabled": True,
+                "required_task_count": required_task_count_normalized,
+                "pricing_complete_for_required_task_count": True,
+                "required_task_count_region_can_certify_no_negative": True,
+                "required_task_count_can_certify_full_space": False,
+                "required_task_count_feasible_task_count": 0,
+                "required_task_count_slot_capacity_task_upper_bound": 0,
+                "required_task_count_min_active_sorties": 0,
+                "required_task_count_active_sortie_lb_count": 0,
+                "required_task_count_infeasible_by_feasible_task_count": True,
+                "required_task_count_infeasible_by_slot_capacity": True,
+                "wall_time_sec": round(perf_counter() - start_wall, 6),
+                "note": "Required task-count pricing region has no feasible nonempty journey columns.",
+            }
+    required_active_sortie_count_normalized = None
+    if required_active_sortie_count is not None:
+        required_active_sortie_count_normalized = int(required_active_sortie_count)
+        if required_active_sortie_count_normalized < 1:
+            return {
+                "status": "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE",
+                "algorithm_status": "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE",
+                "exact_status": "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_INFEASIBLE",
+                "pricing_state": "INCOMPLETE_LIMIT",
+                "best_reduced_cost": None,
+                "dual_bound": None,
+                "negative_found": False,
+                "can_certify_no_negative": False,
+                "journeys": tuple(),
+                "required_active_sortie_count_enabled": True,
+                "required_active_sortie_count": required_active_sortie_count_normalized,
+                "pricing_complete_for_required_active_sortie_count": True,
+                "required_active_sortie_count_region_can_certify_no_negative": True,
+                "required_active_sortie_count_can_certify_full_space": False,
+                "required_active_sortie_count_infeasible": True,
+                "wall_time_sec": round(perf_counter() - start_wall, 6),
+                "note": "Required active-sortie-count pricing region has no feasible nonempty journey columns.",
+            }
+    model_tasks = required_task_set_normalized if required_task_set_normalized is not None else tasks
+
     slot_bound = _safe_sortie_slot_bound(
         data,
         latest_service_start_bound=bool(latest_service_start_slot_bound),
+        recharge_aware_duration_bound=bool(recharge_aware_slot_bound),
     )
     sortie_slots = (
         int(max_sorties_per_journey)
         if max_sorties_per_journey is not None
         else int(slot_bound["slot_count"])
+    )
+    if required_task_set_normalized is not None:
+        sortie_slots = min(sortie_slots, len(required_task_set_normalized))
+    if required_task_count_normalized is not None:
+        sortie_slots = min(sortie_slots, required_task_count_normalized)
+    required_task_size_for_active_bounds = (
+        len(required_task_set_normalized)
+        if required_task_set_normalized is not None
+        else required_task_count_normalized
+    )
+    required_active_sortie_count_min = (
+        int(math.ceil(float(required_task_size_for_active_bounds) / max(1.0, float(data.max_tasks_per_trip))))
+        if required_task_size_for_active_bounds is not None
+        else 1
+    )
+    required_active_sortie_count_max = (
+        min(int(required_task_size_for_active_bounds), int(sortie_slots))
+        if required_task_size_for_active_bounds is not None
+        else int(sortie_slots)
+    )
+    required_active_sortie_count_expected_counts = (
+        list(range(int(required_active_sortie_count_min), int(required_active_sortie_count_max) + 1))
+        if required_active_sortie_count_normalized is not None
+        else []
+    )
+    pre_active_sortie_slot_count = int(sortie_slots)
+    if required_active_sortie_count_normalized is not None:
+        sortie_slots = min(sortie_slots, int(required_active_sortie_count_normalized))
+    required_active_sortie_count_slots_fixed = bool(
+        required_active_sortie_count_normalized is not None
+        and int(sortie_slots) == int(required_active_sortie_count_normalized)
+    )
+    single_task_per_active_sortie_arc_pruning_enabled = bool(
+        single_task_per_active_sortie_arc_pruning
+        and required_active_sortie_count_slots_fixed
+        and required_task_size_for_active_bounds is not None
+        and required_active_sortie_count_normalized is not None
+        and int(required_task_size_for_active_bounds) == int(required_active_sortie_count_normalized)
+    )
+    single_task_per_active_sortie_arc_pruned_option_count = 0
+    slot_sequence_capacity_arc_pruned_option_count = 0
+    mtz_connectivity_effective = bool(mtz_connectivity) and not bool(
+        single_task_per_active_sortie_arc_pruning_enabled
+    )
+    mtz_endpoint_order_cuts_effective = bool(
+        mtz_connectivity_effective and mtz_endpoint_order_cuts
+    )
+    pair_time_window_precedence_cut_effective = bool(
+        mtz_connectivity_effective and pair_time_window_precedence_cut
     )
     min_return_duration = float(slot_bound["min_return_duration_lower_bound"])
     min_active_duration = float(slot_bound["min_duration_lower_bound"])
@@ -1729,11 +3428,1512 @@ def solve_highs_compact_single_journey_pricing(
         float(slot_bound["latest_service_start_upper_bound"])
         - float(slot_bound["min_depot_outbound_travel_lower_bound"]),
     )
-    nodes = ("depot", *tasks)
+    tight_time_arc_big_m_enabled = bool(tight_time_arc_big_m)
+    sortie_start_upper_bound = (
+        min(float(data.horizon), float(latest_sortie_start_upper_bound))
+        if tight_time_arc_big_m_enabled
+        else float(data.horizon)
+    )
+    active_time_z_bounds_enabled = bool(active_time_z_bounds)
+    nodes = ("depot", *model_tasks)
     path_type_cache, pruning = _pricing_path_type_cache(
         data,
         time_window_arc_pruning=bool(time_window_arc_pruning),
     )
+    depot_energy_lb_by_task = _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        "depot",
+        "energy_proxy",
+    )
+    task_to_depot_energy_lb_by_task = _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        "depot",
+        "energy_proxy",
+        reverse=True,
+    )
+    depot_shadow_lb_by_task = _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        "depot",
+        "shadow_exposure_min",
+    )
+    task_to_depot_shadow_lb_by_task = _single_source_shortest_arc_attribute_lower_bounds(
+        data,
+        "depot",
+        "shadow_exposure_min",
+        reverse=True,
+    )
+    min_depot_travel_by_task = {
+        str(task_id): min(
+            float(option.travel_time_min)
+            for option in data.arcs[("depot", str(task_id))].values()
+        )
+        for task_id in model_tasks
+    }
+    min_return_travel_by_task = {
+        str(task_id): min(
+            float(option.travel_time_min)
+            for option in data.arcs[(str(task_id), "depot")].values()
+        )
+        for task_id in model_tasks
+    }
+    min_round_trip_energy_by_task = {
+        str(task_id): (
+            min(float(option.energy_proxy) for option in data.arcs[("depot", str(task_id))].values())
+            + min(float(option.energy_proxy) for option in data.arcs[(str(task_id), "depot")].values())
+            + float(data.tasks[str(task_id)].service_energy)
+        )
+        for task_id in model_tasks
+    }
+
+    def build_slot_feasible_tasks(
+        slot_count: int,
+    ) -> tuple[dict[int, tuple[str, ...]], int, int, int]:
+        feasible_by_slot: dict[int, tuple[str, ...]] = {}
+        pruned_assignment_count = 0
+        pruned_due_count = 0
+        pruned_horizon_count = 0
+        for slot in range(int(slot_count)):
+            feasible_for_slot: list[str] = []
+            earliest_slot_start = float(slot) * min_active_duration
+            for task_id in model_tasks:
+                task = data.tasks[task_id]
+                latest_service_start = float(data.tasks[task_id].due_time) - float(
+                    data.tasks[task_id].service_time
+                )
+                earliest_service_start = earliest_slot_start + float(
+                    min_depot_travel_by_task[str(task_id)]
+                )
+                if bool(slot_task_time_pruning):
+                    due_infeasible = earliest_service_start > latest_service_start + 1.0e-9
+                    earliest_return = (
+                        earliest_service_start
+                        + float(task.service_time)
+                        + float(min_return_travel_by_task[str(task_id)])
+                    )
+                    recharge_lb = float(min_round_trip_energy_by_task[str(task_id)]) / max(
+                        1.0e-9,
+                        float(data.recharge_power_proxy_per_min),
+                    )
+                    earliest_end = earliest_return + float(data.dock_overhead_min) + recharge_lb
+                    horizon_infeasible = (
+                        earliest_return > float(data.horizon) + 1.0e-9
+                        or earliest_end > float(data.horizon) + 1.0e-9
+                    )
+                    if due_infeasible or horizon_infeasible:
+                        pruned_assignment_count += 1
+                        if due_infeasible:
+                            pruned_due_count += 1
+                        if horizon_infeasible:
+                            pruned_horizon_count += 1
+                        continue
+                feasible_for_slot.append(str(task_id))
+            feasible_by_slot[slot] = tuple(feasible_for_slot)
+        return (
+            feasible_by_slot,
+            int(pruned_assignment_count),
+            int(pruned_due_count),
+            int(pruned_horizon_count),
+        )
+
+    (
+        slot_feasible_tasks,
+        slot_task_time_pruned_assignment_count,
+        slot_task_time_pruned_due_count,
+        slot_task_time_pruned_horizon_count,
+    ) = build_slot_feasible_tasks(int(sortie_slots))
+    slot_task_time_feasible_assignment_count = sum(len(row) for row in slot_feasible_tasks.values())
+    preflight_task_count_feasible_task_count = len(
+        {task_id for feasible_tasks in slot_feasible_tasks.values() for task_id in feasible_tasks}
+    )
+    preflight_task_count_slot_capacity_upper_bound = sum(
+        min(int(data.max_tasks_per_trip), len(feasible_tasks))
+        for feasible_tasks in slot_feasible_tasks.values()
+    )
+    preflight_slot_sequence_capacity_bounds = _slot_task_sequence_capacity_bounds(
+        data,
+        model_tasks=tuple(str(task_id) for task_id in model_tasks),
+        slot_feasible_tasks=slot_feasible_tasks,
+        min_active_duration=float(min_active_duration),
+        min_depot_outbound_travel=float(slot_bound["min_depot_outbound_travel_lower_bound"]),
+        min_return_travel=min(float(value) for value in min_return_travel_by_task.values()),
+    )
+    preflight_slot_sequence_capacity_by_slot = {
+        int(slot): int(capacity)
+        for slot, capacity in enumerate(
+            preflight_slot_sequence_capacity_bounds.get(
+                "slot_sequence_capacity_by_slot",
+                [],
+            )
+        )
+    }
+    preflight_task_count_slot_sequence_capacity_upper_bound = int(
+        preflight_slot_sequence_capacity_bounds["slot_sequence_capacity_upper_bound"]
+    )
+    preflight_task_count_slot_matching_capacity_upper_bound = int(
+        preflight_slot_sequence_capacity_bounds["slot_matching_capacity_upper_bound"]
+    )
+    pre_active_slot_sequence_capacity_bounds = preflight_slot_sequence_capacity_bounds
+    if (
+        required_active_sortie_count_normalized is not None
+        and required_task_size_for_active_bounds is not None
+        and int(pre_active_sortie_slot_count) > int(sortie_slots)
+    ):
+        pre_active_slot_feasible_tasks, _ignored_assignments, _ignored_due, _ignored_horizon = (
+            build_slot_feasible_tasks(int(pre_active_sortie_slot_count))
+        )
+        pre_active_slot_sequence_capacity_bounds = _slot_task_sequence_capacity_bounds(
+            data,
+            model_tasks=tuple(str(task_id) for task_id in model_tasks),
+            slot_feasible_tasks=pre_active_slot_feasible_tasks,
+            min_active_duration=float(min_active_duration),
+            min_depot_outbound_travel=float(slot_bound["min_depot_outbound_travel_lower_bound"]),
+            min_return_travel=min(float(value) for value in min_return_travel_by_task.values()),
+        )
+    preflight_required_active_sortie_count_capacity_min = (
+        _min_prefix_slots_for_task_count(
+            pre_active_slot_sequence_capacity_bounds["slot_sequence_capacity_by_slot"],
+            int(required_task_size_for_active_bounds),
+        )
+        if required_task_size_for_active_bounds is not None
+        else None
+    )
+    preflight_required_active_sortie_count_infeasible_by_capacity_min = bool(
+        required_active_sortie_count_normalized is not None
+        and preflight_required_active_sortie_count_capacity_min is not None
+        and int(required_active_sortie_count_normalized)
+        < int(preflight_required_active_sortie_count_capacity_min)
+    )
+    preflight_required_task_set_size = (
+        len(required_task_set_normalized)
+        if required_task_set_normalized is not None
+        else 0
+    )
+    preflight_required_task_set_min_active_sorties = (
+        int(math.ceil(float(preflight_required_task_set_size) / max(1.0, float(data.max_tasks_per_trip))))
+        if required_task_set_normalized is not None
+        else 0
+    )
+    preflight_required_task_set_infeasible_by_feasible_task_count = bool(
+        required_task_set_normalized is not None
+        and int(preflight_required_task_set_size) > int(preflight_task_count_feasible_task_count)
+    )
+    preflight_required_task_set_infeasible_by_slot_capacity = bool(
+        required_task_set_normalized is not None
+        and (
+            int(preflight_required_task_set_size) > int(preflight_task_count_slot_capacity_upper_bound)
+            or int(preflight_required_task_set_min_active_sorties) > int(sortie_slots)
+        )
+    )
+    preflight_required_task_set_infeasible_by_slot_sequence_capacity = bool(
+        required_task_set_normalized is not None
+        and int(preflight_required_task_set_size) > int(preflight_task_count_slot_sequence_capacity_upper_bound)
+    )
+    preflight_required_task_set_infeasible_by_slot_matching = bool(
+        required_task_set_normalized is not None
+        and int(preflight_required_task_set_size) > int(preflight_task_count_slot_matching_capacity_upper_bound)
+    )
+    preflight_required_task_count_min_active_sorties = (
+        int(math.ceil(float(required_task_count_normalized) / max(1.0, float(data.max_tasks_per_trip))))
+        if required_task_count_normalized is not None
+        else 0
+    )
+    preflight_required_task_count_infeasible_by_feasible_task_count = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) > int(preflight_task_count_feasible_task_count)
+    )
+    preflight_required_task_count_infeasible_by_slot_capacity = bool(
+        required_task_count_normalized is not None
+        and (
+            int(required_task_count_normalized) > int(preflight_task_count_slot_capacity_upper_bound)
+            or int(preflight_required_task_count_min_active_sorties) > int(sortie_slots)
+        )
+    )
+    preflight_required_task_count_infeasible_by_slot_sequence_capacity = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) > int(preflight_task_count_slot_sequence_capacity_upper_bound)
+    )
+    preflight_required_task_count_infeasible_by_slot_matching = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) > int(preflight_task_count_slot_matching_capacity_upper_bound)
+    )
+    preflight_required_active_sortie_count_infeasible = bool(
+        required_active_sortie_count_normalized is not None
+        and (
+            int(required_active_sortie_count_normalized) < int(required_active_sortie_count_min)
+            or int(required_active_sortie_count_normalized) > int(required_active_sortie_count_max)
+            or int(required_active_sortie_count_normalized) > int(sortie_slots)
+            or preflight_required_active_sortie_count_infeasible_by_capacity_min
+        )
+    )
+    if (
+        (
+            required_task_set_normalized is not None
+            and (
+                preflight_required_task_set_infeasible_by_feasible_task_count
+                or preflight_required_task_set_infeasible_by_slot_capacity
+                or preflight_required_task_set_infeasible_by_slot_sequence_capacity
+                or preflight_required_task_set_infeasible_by_slot_matching
+            )
+        )
+        or
+        (
+            required_task_count_normalized is not None
+            and (
+                preflight_required_task_count_infeasible_by_feasible_task_count
+                or preflight_required_task_count_infeasible_by_slot_capacity
+                or preflight_required_task_count_infeasible_by_slot_sequence_capacity
+                or preflight_required_task_count_infeasible_by_slot_matching
+            )
+        )
+        or preflight_required_active_sortie_count_infeasible
+    ):
+        active_sortie_infeasible_only = bool(
+            preflight_required_active_sortie_count_infeasible
+            and not preflight_required_task_count_infeasible_by_feasible_task_count
+            and not preflight_required_task_count_infeasible_by_slot_capacity
+            and not preflight_required_task_count_infeasible_by_slot_sequence_capacity
+            and not preflight_required_task_count_infeasible_by_slot_matching
+            and not preflight_required_task_set_infeasible_by_feasible_task_count
+            and not preflight_required_task_set_infeasible_by_slot_capacity
+            and not preflight_required_task_set_infeasible_by_slot_sequence_capacity
+            and not preflight_required_task_set_infeasible_by_slot_matching
+        )
+        status = (
+            "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE"
+            if active_sortie_infeasible_only
+            else "COMPACT_HIGHS_PRICING_REQUIRED_TASK_SET_INFEASIBLE"
+            if required_task_set_normalized is not None
+            and (
+                preflight_required_task_set_infeasible_by_feasible_task_count
+                or preflight_required_task_set_infeasible_by_slot_capacity
+                or preflight_required_task_set_infeasible_by_slot_sequence_capacity
+                or preflight_required_task_set_infeasible_by_slot_matching
+            )
+            else "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE"
+        )
+        exact_status = (
+            "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_INFEASIBLE"
+            if active_sortie_infeasible_only
+            else "REQUIRED_TASK_SET_PRICING_INFEASIBLE"
+            if required_task_set_normalized is not None
+            and (
+                preflight_required_task_set_infeasible_by_feasible_task_count
+                or preflight_required_task_set_infeasible_by_slot_capacity
+                or preflight_required_task_set_infeasible_by_slot_sequence_capacity
+                or preflight_required_task_set_infeasible_by_slot_matching
+            )
+            else "REQUIRED_TASK_COUNT_PRICING_INFEASIBLE"
+        )
+        return {
+            "status": status,
+            "algorithm_status": status,
+            "exact_status": exact_status,
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "best_reduced_cost": None,
+            "dual_bound": None,
+            "negative_found": False,
+            "can_certify_no_negative": False,
+            "journeys": tuple(),
+            "task_count": len(tasks),
+            "pricing_model_task_count": len(model_tasks),
+            "sortie_slots_per_journey": int(sortie_slots),
+            "pricing_complete_for_all_task_subsets": False,
+            "pricing_complete_by_compact_milp": False,
+            "required_task_set_enabled": bool(required_task_set_normalized is not None),
+            "required_task_set": list(required_task_set_normalized or tuple()),
+            "required_task_set_count": int(preflight_required_task_set_size),
+            "pricing_complete_for_required_task_set": bool(
+                required_task_set_normalized is not None
+            ),
+            "required_task_set_region_can_certify_no_negative": bool(
+                required_task_set_normalized is not None
+            ),
+            "required_task_set_can_certify_full_space": False,
+            "required_task_set_model_reduction_enabled": bool(required_task_set_normalized is not None),
+            "required_task_set_model_task_count": (
+                len(model_tasks) if required_task_set_normalized is not None else None
+            ),
+            "required_task_set_model_task_reduction_count": (
+                int(len(tasks) - len(model_tasks))
+                if required_task_set_normalized is not None
+                else 0
+            ),
+            "required_task_set_infeasible_by_feasible_task_count": bool(
+                preflight_required_task_set_infeasible_by_feasible_task_count
+            ),
+            "required_task_set_infeasible_by_slot_capacity": bool(
+                preflight_required_task_set_infeasible_by_slot_capacity
+            ),
+            "required_task_set_infeasible_by_slot_sequence_capacity": bool(
+                preflight_required_task_set_infeasible_by_slot_sequence_capacity
+            ),
+            "required_task_set_infeasible_by_slot_matching": bool(
+                preflight_required_task_set_infeasible_by_slot_matching
+            ),
+            "required_task_count_enabled": bool(required_task_count_normalized is not None),
+            "required_task_count": required_task_count_normalized,
+            "pricing_complete_for_required_task_count": bool(
+                required_task_count_normalized is not None
+            ),
+            "required_task_count_region_can_certify_no_negative": bool(
+                required_task_count_normalized is not None
+            ),
+            "required_task_count_can_certify_full_space": False,
+            "required_task_count_feasible_task_count": int(preflight_task_count_feasible_task_count),
+            "required_task_count_slot_capacity_task_upper_bound": int(
+                preflight_task_count_slot_capacity_upper_bound
+            ),
+            "required_task_count_slot_sequence_capacity_upper_bound": int(
+                preflight_task_count_slot_sequence_capacity_upper_bound
+            ),
+            "required_task_count_slot_matching_capacity_upper_bound": int(
+                preflight_task_count_slot_matching_capacity_upper_bound
+            ),
+            "required_task_count_pair_conflict_capacity_upper_bound": None,
+            "required_task_count_min_active_sorties": int(preflight_required_task_count_min_active_sorties),
+            "required_task_count_active_sortie_lb_count": 0,
+            "required_task_count_infeasible_by_feasible_task_count": bool(
+                preflight_required_task_count_infeasible_by_feasible_task_count
+            ),
+            "required_task_count_infeasible_by_slot_capacity": bool(
+                preflight_required_task_count_infeasible_by_slot_capacity
+            ),
+            "required_task_count_infeasible_by_slot_sequence_capacity": bool(
+                preflight_required_task_count_infeasible_by_slot_sequence_capacity
+            ),
+            "required_task_count_infeasible_by_slot_matching": bool(
+                preflight_required_task_count_infeasible_by_slot_matching
+            ),
+            "required_task_count_infeasible_by_pair_conflict_capacity": False,
+            "required_task_count_certified_by_dual_task_slot_lower_bound": False,
+            "required_task_count_infeasible_by_dual_task_slot_lower_bound": False,
+            "dual_task_slot_lower_bound_enabled": bool(dual_task_slot_lower_bound),
+            "dual_task_slot_lower_bound_applicable": False,
+            "dual_task_slot_lower_bound_optimal": False,
+            "dual_task_slot_lower_bound_status": "",
+            "dual_task_slot_lower_bound_value": None,
+            "dual_task_slot_lower_bound_region_infeasible": False,
+            "dual_task_slot_lower_bound_wall_time_sec": 0.0,
+            "dual_task_slot_lower_bound_variable_count": 0,
+            "dual_task_slot_lower_bound_constraint_count": 0,
+            "dual_task_slot_lower_bound_pair_conflict_row_count": 0,
+            "dual_task_slot_lower_bound_hyperedge_conflict_row_count": 0,
+            "dual_task_slot_full_space_lower_bound_enabled": bool(dual_task_slot_full_space_lower_bound),
+            "dual_task_slot_full_space_lower_bound_applicable": False,
+            "dual_task_slot_full_space_lower_bound_early_stop_on_negative": bool(
+                dual_task_slot_full_space_lb_early_stop_on_negative
+            ),
+            "dual_task_slot_full_space_lower_bound_early_stopped_on_negative": False,
+            "dual_task_slot_full_space_lower_bound_coverage_complete": False,
+            "dual_task_slot_full_space_lower_bound_can_certify": False,
+            "dual_task_slot_full_space_lower_bound_region_count": 0,
+            "dual_task_slot_full_space_lower_bound_optimal_region_count": 0,
+            "dual_task_slot_full_space_lower_bound_infeasible_region_count": 0,
+            "dual_task_slot_full_space_lower_bound_unsupported_region_count": 0,
+            "dual_task_slot_full_space_lower_bound_negative_region_count": 0,
+            "dual_task_slot_full_space_lower_bound_value": None,
+            "dual_task_slot_full_space_lower_bound_task_count": None,
+            "dual_task_slot_full_space_lower_bound_active_sortie_count": None,
+            "dual_task_slot_full_space_lower_bound_wall_time_sec": 0.0,
+            "dual_task_slot_full_space_lower_bound_status": "",
+            "required_active_sortie_count_enabled": bool(
+                required_active_sortie_count_normalized is not None
+            ),
+            "required_active_sortie_count": required_active_sortie_count_normalized,
+            "pricing_complete_for_required_active_sortie_count": bool(
+                required_active_sortie_count_normalized is not None
+            ),
+            "required_active_sortie_count_region_can_certify_no_negative": bool(
+                required_active_sortie_count_normalized is not None
+                and preflight_required_active_sortie_count_infeasible
+            ),
+            "required_active_sortie_count_can_certify_full_space": False,
+            "required_active_sortie_count_min": int(required_active_sortie_count_min),
+            "required_active_sortie_count_max": int(required_active_sortie_count_max),
+            "required_active_sortie_count_capacity_min": (
+                None
+                if preflight_required_active_sortie_count_capacity_min is None
+                else int(preflight_required_active_sortie_count_capacity_min)
+            ),
+            "required_active_sortie_count_expected_counts": required_active_sortie_count_expected_counts,
+            "required_active_sortie_count_infeasible": bool(
+                preflight_required_active_sortie_count_infeasible
+            ),
+            "required_active_sortie_count_infeasible_by_empty_slot": False,
+            "required_active_sortie_count_infeasible_by_capacity_min": bool(
+                preflight_required_active_sortie_count_infeasible_by_capacity_min
+            ),
+            "required_active_sortie_count_slots_fixed": bool(required_active_sortie_count_slots_fixed),
+            "required_active_sortie_count_fixed_slot_count": (
+                int(sortie_slots) if required_active_sortie_count_slots_fixed else 0
+            ),
+            "slot_task_time_pruning_enabled": bool(slot_task_time_pruning),
+            "slot_task_time_feasible_assignment_count": int(slot_task_time_feasible_assignment_count),
+            "slot_task_time_pruned_assignment_count": int(slot_task_time_pruned_assignment_count),
+            "slot_task_time_pruned_due_count": int(slot_task_time_pruned_due_count),
+            "slot_task_time_pruned_horizon_count": int(slot_task_time_pruned_horizon_count),
+            "slot_task_time_total_assignment_count": int(sortie_slots * len(model_tasks)),
+            "slot_task_time_original_total_assignment_count": int(sortie_slots * len(model_tasks)),
+            "slot_task_model_assignment_count": int(slot_task_time_feasible_assignment_count),
+            "slot_arc_support_pruning_enabled": bool(slot_arc_support_pruning),
+            "slot_arc_support_feasible_assignment_count": int(slot_task_time_feasible_assignment_count),
+            "slot_arc_support_pruned_assignment_count": 0,
+            "slot_arc_support_pruned_unreachable_count": 0,
+            "slot_arc_support_pruned_no_return_count": 0,
+            "slot_arc_support_pruned_option_count": 0,
+            "slot_arc_time_pruned_option_count": 0,
+            "single_task_per_active_sortie_arc_pruning_enabled": bool(
+                single_task_per_active_sortie_arc_pruning_enabled
+            ),
+            "single_task_per_active_sortie_arc_pruned_option_count": 0,
+            "single_task_per_active_sortie_mtz_disabled": bool(
+                single_task_per_active_sortie_arc_pruning_enabled and mtz_connectivity
+            ),
+            "mtz_connectivity_effective": bool(
+                mtz_connectivity and not single_task_per_active_sortie_arc_pruning_enabled
+            ),
+            "fixed_active_sortie_redundant_constraint_skipped_count": 0,
+            "single_task_per_active_sortie_slot_visit_eq_count": 0,
+            "single_task_per_active_sortie_y_z_link_skipped_count": 0,
+            "resource_arc_pruning_enabled": bool(resource_arc_pruning),
+            "resource_arc_pruned_option_count": 0,
+            "resource_arc_energy_pruned_option_count": 0,
+            "resource_arc_shadow_pruned_option_count": 0,
+            "resource_arc_demand_pruned_option_count": 0,
+            "task_slot_pair_conflict_capacity_bound_enabled": False,
+            "task_slot_pair_conflict_capacity_near_matching_cap": False,
+            "task_slot_pair_conflict_capacity_bound_optimal": False,
+            "task_slot_pair_conflict_capacity_bound_status": "",
+            "task_slot_pair_conflict_capacity_bound_wall_time_sec": 0.0,
+            "task_slot_pair_conflict_capacity_bound_variable_count": 0,
+            "task_slot_pair_conflict_capacity_bound_constraint_count": 0,
+            "task_slot_pair_conflict_capacity_pair_count": 0,
+            "task_slot_pair_conflict_capacity_row_count": 0,
+            "task_slot_pair_conflict_capacity_hyperedge_count": 0,
+            "task_slot_pair_conflict_capacity_hyperedge_row_count": 0,
+            "variable_count": 0,
+            "constraint_count": 0,
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "note": (
+                "Required region was proven infeasible by pre-MILP slot-task capacity "
+                "bounds before building compact arc variables."
+            ),
+        }
+
+    slot_arc_time_pruned_option_count = 0
+    resource_arc_pruned_option_count = 0
+    resource_arc_energy_pruned_option_count = 0
+    resource_arc_shadow_pruned_option_count = 0
+    resource_arc_demand_pruned_option_count = 0
+    candidate_arc_options_by_slot: dict[int, list[tuple[str, str, str]]] = {
+        slot: [] for slot in range(sortie_slots)
+    }
+    for slot in range(sortie_slots):
+        feasible_task_lookup = set(slot_feasible_tasks[slot])
+        for source in nodes:
+            if source != "depot" and str(source) not in feasible_task_lookup:
+                continue
+            for target in nodes:
+                if source == target or (source == "depot" and target == "depot"):
+                    continue
+                if target != "depot" and str(target) not in feasible_task_lookup:
+                    continue
+                arc_key = (str(source), str(target))
+                if arc_key not in path_type_cache:
+                    continue
+                for path_type in path_type_cache[arc_key]:
+                    if (
+                        single_task_per_active_sortie_arc_pruning_enabled
+                        and source != "depot"
+                        and target != "depot"
+                    ):
+                        single_task_per_active_sortie_arc_pruned_option_count += 1
+                        continue
+                    if (
+                        bool(slot_sequence_capacity_arc_pruning)
+                        and int(
+                            preflight_slot_sequence_capacity_by_slot.get(
+                                int(slot),
+                                int(data.max_tasks_per_trip),
+                            )
+                        )
+                        <= 1
+                        and source != "depot"
+                        and target != "depot"
+                    ):
+                        slot_sequence_capacity_arc_pruned_option_count += 1
+                        continue
+                    if bool(resource_arc_pruning):
+                        resource_impossible, resource_reason = _arc_option_resource_impossible(
+                            data,
+                            str(source),
+                            str(target),
+                            str(path_type),
+                            depot_energy_lb_by_task=depot_energy_lb_by_task,
+                            task_to_depot_energy_lb_by_task=task_to_depot_energy_lb_by_task,
+                            depot_shadow_lb_by_task=depot_shadow_lb_by_task,
+                            task_to_depot_shadow_lb_by_task=task_to_depot_shadow_lb_by_task,
+                        )
+                        if resource_impossible:
+                            resource_arc_pruned_option_count += 1
+                            if resource_reason == "energy":
+                                resource_arc_energy_pruned_option_count += 1
+                            elif resource_reason == "shadow":
+                                resource_arc_shadow_pruned_option_count += 1
+                            elif resource_reason == "demand":
+                                resource_arc_demand_pruned_option_count += 1
+                            continue
+                    option = data.option(source, target, path_type)
+                    if bool(slot_task_time_pruning) and source != "depot" and target != "depot":
+                        source_task = data.tasks[str(source)]
+                        target_task = data.tasks[str(target)]
+                        earliest_source_start = max(
+                            float(source_task.ready_time),
+                            float(slot) * min_active_duration + float(min_depot_travel_by_task[str(source)]),
+                        )
+                        latest_target_start = float(target_task.due_time) - float(target_task.service_time)
+                        earliest_target_start = (
+                            earliest_source_start
+                            + float(source_task.service_time)
+                            + float(option.travel_time_min)
+                        )
+                        if earliest_target_start > latest_target_start + 1.0e-9:
+                            slot_arc_time_pruned_option_count += 1
+                            continue
+                    candidate_arc_options_by_slot[slot].append(
+                        (str(source), str(target), str(path_type))
+                    )
+
+    slot_arc_support_pruned_assignment_count = 0
+    slot_arc_support_pruned_unreachable_count = 0
+    slot_arc_support_pruned_no_return_count = 0
+    slot_arc_support_pruned_option_count = 0
+    if bool(slot_arc_support_pruning):
+
+        def reachable_from(seed: str, adjacency: dict[str, set[str]]) -> set[str]:
+            seen = {str(seed)}
+            stack = [str(seed)]
+            while stack:
+                current = stack.pop()
+                for nxt in adjacency.get(current, set()):
+                    if nxt in seen:
+                        continue
+                    seen.add(nxt)
+                    stack.append(nxt)
+            return seen
+
+        for slot in range(sortie_slots):
+            slot_arcs = candidate_arc_options_by_slot[slot]
+            adjacency: dict[str, set[str]] = defaultdict(set)
+            reverse_adjacency: dict[str, set[str]] = defaultdict(set)
+            for source, target, _path_type in slot_arcs:
+                adjacency[str(source)].add(str(target))
+                reverse_adjacency[str(target)].add(str(source))
+            depot_reachable = reachable_from("depot", adjacency)
+            can_return_to_depot = reachable_from("depot", reverse_adjacency)
+            supported_tasks: list[str] = []
+            for task_id in slot_feasible_tasks[slot]:
+                reachable = str(task_id) in depot_reachable
+                can_return = str(task_id) in can_return_to_depot
+                if reachable and can_return:
+                    supported_tasks.append(str(task_id))
+                    continue
+                slot_arc_support_pruned_assignment_count += 1
+                if not reachable:
+                    slot_arc_support_pruned_unreachable_count += 1
+                if not can_return:
+                    slot_arc_support_pruned_no_return_count += 1
+            supported_lookup = set(supported_tasks)
+            slot_feasible_tasks[slot] = tuple(supported_tasks)
+            filtered_arcs = [
+                (source, target, path_type)
+                for source, target, path_type in slot_arcs
+                if (source == "depot" or source in supported_lookup)
+                and (target == "depot" or target in supported_lookup)
+            ]
+            slot_arc_support_pruned_option_count += len(slot_arcs) - len(filtered_arcs)
+            candidate_arc_options_by_slot[slot] = filtered_arcs
+
+    slot_task_model_assignment_count = sum(len(row) for row in slot_feasible_tasks.values())
+    task_count_feasible_task_count = len(
+        {task_id for feasible_tasks in slot_feasible_tasks.values() for task_id in feasible_tasks}
+    )
+    task_count_slot_capacity_upper_bound = sum(
+        min(int(data.max_tasks_per_trip), len(feasible_tasks))
+        for feasible_tasks in slot_feasible_tasks.values()
+    )
+    zero_capacity_slot_truncation_original_slot_count = int(sortie_slots)
+    zero_capacity_slot_truncation_effective_slot_count = int(sortie_slots)
+    zero_capacity_slot_truncation_trimmed_slot_count = 0
+    zero_capacity_slot_truncation_first_zero_slot = None
+    slot_sequence_capacity_bounds = (
+        _slot_task_sequence_capacity_bounds(
+            data,
+            model_tasks=tuple(str(task_id) for task_id in model_tasks),
+            slot_feasible_tasks=slot_feasible_tasks,
+            min_active_duration=float(min_active_duration),
+            min_depot_outbound_travel=float(slot_bound["min_depot_outbound_travel_lower_bound"]),
+            min_return_travel=min(float(value) for value in min_return_travel_by_task.values()),
+        )
+        if bool(slot_arc_support_pruning)
+        else preflight_slot_sequence_capacity_bounds
+    )
+    if bool(zero_capacity_slot_truncation) and not bool(required_active_sortie_count_slots_fixed):
+        first_zero_slot = _first_zero_capacity_slot(
+            slot_sequence_capacity_bounds["slot_sequence_capacity_by_slot"]
+        )
+        if first_zero_slot is not None and int(first_zero_slot) < int(sortie_slots):
+            # z is a prefix-contiguous active-sortie vector.  If slot k cannot
+            # carry any task, z_k is forced to zero by the visit lower-bound
+            # row, so every later slot is impossible as well.
+            zero_capacity_slot_truncation_first_zero_slot = int(first_zero_slot)
+            effective_slot_count = max(1, int(first_zero_slot))
+            if effective_slot_count < int(sortie_slots):
+                sortie_slots = int(effective_slot_count)
+                slot_feasible_tasks = {
+                    int(slot): tuple(tasks_for_slot)
+                    for slot, tasks_for_slot in slot_feasible_tasks.items()
+                    if int(slot) < int(sortie_slots)
+                }
+                candidate_arc_options_by_slot = {
+                    int(slot): list(options)
+                    for slot, options in candidate_arc_options_by_slot.items()
+                    if int(slot) < int(sortie_slots)
+                }
+                slot_task_model_assignment_count = sum(
+                    len(row) for row in slot_feasible_tasks.values()
+                )
+                task_count_feasible_task_count = len(
+                    {
+                        task_id
+                        for feasible_tasks in slot_feasible_tasks.values()
+                        for task_id in feasible_tasks
+                    }
+                )
+                task_count_slot_capacity_upper_bound = sum(
+                    min(int(data.max_tasks_per_trip), len(feasible_tasks))
+                    for feasible_tasks in slot_feasible_tasks.values()
+                )
+                slot_sequence_capacity_bounds = _slot_task_sequence_capacity_bounds(
+                    data,
+                    model_tasks=tuple(str(task_id) for task_id in model_tasks),
+                    slot_feasible_tasks=slot_feasible_tasks,
+                    min_active_duration=float(min_active_duration),
+                    min_depot_outbound_travel=float(
+                        slot_bound["min_depot_outbound_travel_lower_bound"]
+                    ),
+                    min_return_travel=min(float(value) for value in min_return_travel_by_task.values()),
+                )
+                zero_capacity_slot_truncation_effective_slot_count = int(sortie_slots)
+                zero_capacity_slot_truncation_trimmed_slot_count = (
+                    int(zero_capacity_slot_truncation_original_slot_count) - int(sortie_slots)
+                )
+    task_count_slot_sequence_capacity_upper_bound = int(
+        slot_sequence_capacity_bounds["slot_sequence_capacity_upper_bound"]
+    )
+    task_count_slot_matching_capacity_upper_bound = int(
+        slot_sequence_capacity_bounds["slot_matching_capacity_upper_bound"]
+    )
+    slot_capacity_by_slot = {
+        int(slot): int(capacity)
+        for slot, capacity in zip(
+            sorted(slot_feasible_tasks),
+            slot_sequence_capacity_bounds["slot_sequence_capacity_by_slot"],
+        )
+    }
+    slot_sequence_capacity_mtz_disabled_by_slot = {
+        int(slot): bool(
+            slot_sequence_capacity_arc_pruning
+            and int(slot_capacity_by_slot.get(int(slot), int(data.max_tasks_per_trip))) <= 1
+        )
+        for slot in range(sortie_slots)
+    }
+    slot_sequence_capacity_mtz_disabled_slot_count = sum(
+        1 for disabled in slot_sequence_capacity_mtz_disabled_by_slot.values() if disabled
+    )
+    slot_sequence_capacity_live_bound_by_slot: dict[int, int] = {}
+    slot_sequence_capacity_live_bound_tightened_slot_count = 0
+    for slot in range(sortie_slots):
+        default_capacity = max(1, int(data.max_tasks_per_trip))
+        if bool(slot_sequence_capacity_live_bound):
+            live_capacity = min(default_capacity, max(0, int(slot_capacity_by_slot.get(slot, 0))))
+        else:
+            live_capacity = default_capacity
+        slot_sequence_capacity_live_bound_by_slot[int(slot)] = int(live_capacity)
+        effective_existing_capacity = min(default_capacity, len(slot_feasible_tasks.get(slot, tuple())))
+        if bool(slot_sequence_capacity_live_bound) and int(live_capacity) < int(effective_existing_capacity):
+            slot_sequence_capacity_live_bound_tightened_slot_count += 1
+    pair_energy_lb_by_pair = (
+        _pair_route_energy_lower_bounds(data)
+        if pair_energy_lb or pair_energy_infeasible_cut or triple_energy_infeasible_cut
+        else {}
+    )
+    pair_time_window_infeasible_by_pair = (
+        _pair_time_window_infeasible_pairs(data)
+        if pair_time_window_infeasible_cut
+        else {}
+    )
+    pair_shadow_lb_by_pair = (
+        _pair_route_shadow_lower_bounds(data)
+        if pair_shadow_lb or pair_shadow_infeasible_cut or triple_shadow_infeasible_cut
+        else {}
+    )
+    pair_conflicts_for_capacity: set[tuple[str, str]] = set()
+    if pair_energy_infeasible_cut:
+        pair_conflicts_for_capacity.update(
+            tuple(sorted((str(left_task), str(right_task))))
+            for (left_task, right_task), energy_lb in pair_energy_lb_by_pair.items()
+            if float(energy_lb) > float(data.energy_limit) + 1.0e-9
+        )
+    if pair_time_window_infeasible_cut:
+        pair_conflicts_for_capacity.update(
+            tuple(sorted((str(left_task), str(right_task))))
+            for left_task, right_task in pair_time_window_infeasible_by_pair
+        )
+    if pair_shadow_infeasible_cut:
+        pair_conflicts_for_capacity.update(
+            tuple(sorted((str(left_task), str(right_task))))
+            for (left_task, right_task), shadow_lb in pair_shadow_lb_by_pair.items()
+            if float(shadow_lb) > float(data.max_shadow_exposure_per_sortie) + 1.0e-9
+        )
+    triple_time_window_infeasible_by_triple = (
+        _triple_time_window_infeasible_triples(
+            data,
+            pair_time_window_infeasible_by_pair=pair_time_window_infeasible_by_pair
+            if pair_time_window_infeasible_cut
+            else {},
+        )
+        if triple_time_window_infeasible_cut
+        else {}
+    )
+    quad_time_window_infeasible_by_quad = (
+        _quad_time_window_infeasible_quads(
+            data,
+            pair_time_window_infeasible_by_pair=pair_time_window_infeasible_by_pair
+            if pair_time_window_infeasible_cut
+            else {},
+            triple_time_window_infeasible_by_triple=triple_time_window_infeasible_by_triple
+            if triple_time_window_infeasible_cut
+            else {},
+        )
+        if quad_time_window_infeasible_cut
+        else {}
+    )
+    triple_shadow_infeasible_lb_by_triple = (
+        _triple_route_shadow_infeasible_lower_bounds(data, pair_shadow_lb_by_pair)
+        if triple_shadow_infeasible_cut
+        else {}
+    )
+    triple_energy_infeasible_lb_by_triple = (
+        _triple_route_energy_infeasible_lower_bounds(data, pair_energy_lb_by_pair)
+        if triple_energy_infeasible_cut
+        else {}
+    )
+    hyperedge_conflicts_for_capacity: set[tuple[str, ...]] = set()
+    if triple_time_window_infeasible_cut:
+        hyperedge_conflicts_for_capacity.update(
+            tuple(sorted(str(task_id) for task_id in triple))
+            for triple in triple_time_window_infeasible_by_triple
+        )
+    if quad_time_window_infeasible_cut:
+        hyperedge_conflicts_for_capacity.update(
+            tuple(sorted(str(task_id) for task_id in quad))
+            for quad in quad_time_window_infeasible_by_quad
+        )
+    if triple_shadow_infeasible_cut:
+        hyperedge_conflicts_for_capacity.update(
+            tuple(sorted(str(task_id) for task_id in triple))
+            for triple in triple_shadow_infeasible_lb_by_triple
+        )
+    if triple_energy_infeasible_cut:
+        hyperedge_conflicts_for_capacity.update(
+            tuple(sorted(str(task_id) for task_id in triple))
+            for triple in triple_energy_infeasible_lb_by_triple
+        )
+    refs = objective_references(data)
+    cost_coeff = float(data.objective.weight_operating_cost) / float(refs.reference_cost)
+    risk_coeff = float(data.objective.weight_risk) / float(refs.reference_risk)
+    completion_coeff = float(data.objective.weight_completion) / float(refs.reference_completion)
+    pair_conflict_capacity_result = {
+        "enabled": False,
+        "optimal": False,
+        "upper_bound": None,
+        "variable_count": 0,
+        "constraint_count": 0,
+        "pair_conflict_count": int(len(pair_conflicts_for_capacity)),
+        "pair_conflict_row_count": 0,
+        "hyperedge_conflict_count": int(len(hyperedge_conflicts_for_capacity)),
+        "hyperedge_conflict_row_count": 0,
+        "wall_time_sec": 0.0,
+        "status": "",
+    }
+    dual_task_slot_lb_result = {
+        "enabled": bool(dual_task_slot_lower_bound),
+        "applicable": False,
+        "optimal": False,
+        "region_infeasible": False,
+        "lower_bound": None,
+        "constant_lower_bound": None,
+        "depot_outbound_arc_lower_bound": None,
+        "depot_return_arc_lower_bound": None,
+        "intertask_arc_lower_bound": None,
+        "route_arc_lower_bound_mode": "",
+        "route_arc_lower_bound_value": None,
+        "route_arc_lower_bound_row_count": 0,
+        "route_arc_global_constant_lower_bound": None,
+        "route_arc_slot_constant_lower_bound": None,
+        "route_arc_constant_lower_bound": None,
+        "route_arc_slot_outbound_lower_bound_sum": None,
+        "route_arc_slot_return_lower_bound_sum": None,
+        "single_task_route_arc_bound_row_count": 0,
+        "single_task_route_arc_bound_min": None,
+        "single_task_route_arc_bound_max": None,
+        "one_pair_rest_single_route_arc_var_count": 0,
+        "one_pair_rest_single_route_arc_row_count": 0,
+        "one_pair_rest_single_route_arc_pair_count": 0,
+        "one_pair_rest_single_route_arc_separation_row_count": 0,
+        "one_pair_rest_single_route_arc_separation_iteration_count": 0,
+        "pair_route_arc_bound_row_count": 0,
+        "pair_route_arc_bound_min": None,
+        "pair_route_arc_bound_max": None,
+        "triple_route_arc_bound_row_count": 0,
+        "triple_route_arc_bound_min": None,
+        "triple_route_arc_bound_max": None,
+        "pair_completion_lift_var_count": 0,
+        "pair_completion_lift_row_count": 0,
+        "pair_completion_lift_min": None,
+        "pair_completion_lift_max": None,
+        "cross_slot_completion_lift_var_count": 0,
+        "cross_slot_completion_lift_row_count": 0,
+        "cross_slot_pair_completion_separation_row_count": 0,
+        "cross_slot_completion_lift_min": None,
+        "cross_slot_completion_lift_max": None,
+        "selected_task_set": [],
+        "selected_slot_task_sets": {},
+        "variable_count": 0,
+        "constraint_count": 0,
+        "pair_conflict_row_count": 0,
+        "hyperedge_conflict_row_count": 0,
+        "wall_time_sec": 0.0,
+        "status": "",
+    }
+    dual_task_slot_full_space_lb_result = {
+        "enabled": bool(dual_task_slot_full_space_lower_bound),
+        "applicable": False,
+        "coverage_complete": False,
+        "can_certify_no_negative": False,
+        "region_count": 0,
+        "optimal_region_count": 0,
+        "infeasible_region_count": 0,
+        "unsupported_region_count": 0,
+        "negative_bound_region_count": 0,
+        "min_lower_bound": None,
+        "min_lower_bound_task_count": None,
+        "min_lower_bound_active_sortie_count": None,
+        "wall_time_sec": 0.0,
+        "status": "",
+    }
+    pair_conflict_capacity_near_matching_cap = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) <= int(task_count_feasible_task_count)
+        and int(required_task_count_normalized) <= int(task_count_slot_capacity_upper_bound)
+        and int(required_task_count_normalized) <= int(task_count_slot_sequence_capacity_upper_bound)
+        and int(required_task_count_normalized) <= int(task_count_slot_matching_capacity_upper_bound)
+        and int(required_task_count_normalized)
+        > max(0, int(task_count_slot_matching_capacity_upper_bound) - 2)
+    )
+    pair_conflict_capacity_bound_requested = bool(
+        pair_conflict_capacity_near_matching_cap
+        or task_slot_pair_conflict_capacity_bound
+    )
+    if (
+        pair_conflict_capacity_bound_requested
+        and required_active_sortie_count_normalized is not None
+        and (pair_conflicts_for_capacity or hyperedge_conflicts_for_capacity)
+    ):
+        pair_conflict_capacity_result = _task_slot_pair_conflict_capacity_upper_bound(
+            highspy_module=highspy,
+            model_tasks=tuple(str(task_id) for task_id in model_tasks),
+            slot_feasible_tasks=slot_feasible_tasks,
+            slot_capacities=slot_capacity_by_slot,
+            pair_conflicts=pair_conflicts_for_capacity,
+            hyperedge_conflicts=hyperedge_conflicts_for_capacity,
+            time_limit_sec=min(1.0, max(0.001, float(time_limit_sec or 1.0))),
+            threads=int(threads),
+        )
+    task_count_pair_conflict_capacity_upper_bound = pair_conflict_capacity_result.get("upper_bound")
+    required_task_count_min_active_sorties = (
+        int(math.ceil(float(required_task_count_normalized) / max(1.0, float(data.max_tasks_per_trip))))
+        if required_task_count_normalized is not None
+        else 0
+    )
+    required_task_count_infeasible_by_feasible_task_count = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) > int(task_count_feasible_task_count)
+    )
+    required_task_count_infeasible_by_slot_capacity = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) > int(task_count_slot_capacity_upper_bound)
+    )
+    required_task_count_infeasible_by_slot_sequence_capacity = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) > int(task_count_slot_sequence_capacity_upper_bound)
+    )
+    required_task_count_infeasible_by_slot_matching = bool(
+        required_task_count_normalized is not None
+        and int(required_task_count_normalized) > int(task_count_slot_matching_capacity_upper_bound)
+    )
+    required_task_count_infeasible_by_pair_conflict_capacity = bool(
+        required_task_count_normalized is not None
+        and bool(pair_conflict_capacity_result.get("optimal"))
+        and task_count_pair_conflict_capacity_upper_bound is not None
+        and int(required_task_count_normalized) > int(task_count_pair_conflict_capacity_upper_bound)
+    )
+    required_active_sortie_count_infeasible_by_empty_slot = bool(
+        required_active_sortie_count_normalized is not None
+        and required_active_sortie_count_slots_fixed
+        and any(
+            int(capacity) <= 0
+            for capacity in slot_sequence_capacity_bounds["slot_sequence_capacity_by_slot"][
+                : int(sortie_slots)
+            ]
+        )
+    )
+    required_active_sortie_count_capacity_min = (
+        preflight_required_active_sortie_count_capacity_min
+    )
+    required_active_sortie_count_infeasible_by_capacity_min = bool(
+        preflight_required_active_sortie_count_infeasible_by_capacity_min
+    )
+    required_active_sortie_count_infeasible = bool(
+        required_active_sortie_count_normalized is not None
+        and (
+            int(required_active_sortie_count_normalized) < int(required_active_sortie_count_min)
+            or int(required_active_sortie_count_normalized) > int(required_active_sortie_count_max)
+            or int(required_active_sortie_count_normalized) > int(sortie_slots)
+            or required_active_sortie_count_infeasible_by_empty_slot
+            or required_active_sortie_count_infeasible_by_capacity_min
+        )
+    )
+    if (
+        bool(dual_task_slot_lower_bound)
+        and not bool(negative_feasibility_search)
+        and not bool(duals.cuts)
+        and required_task_count_normalized is not None
+        and required_active_sortie_count_normalized is not None
+        and required_active_sortie_count_slots_fixed
+        and not required_task_count_infeasible_by_feasible_task_count
+        and not required_task_count_infeasible_by_slot_capacity
+        and not required_task_count_infeasible_by_slot_sequence_capacity
+        and not required_task_count_infeasible_by_slot_matching
+        and not required_task_count_infeasible_by_pair_conflict_capacity
+        and not required_active_sortie_count_infeasible
+        and required_task_count_min_active_sorties <= int(sortie_slots)
+    ):
+        dual_task_slot_lb_result = _dual_task_slot_reduced_cost_lower_bound(
+            highspy_module=highspy,
+            data=data,
+            duals=duals,
+            model_tasks=tuple(str(task_id) for task_id in model_tasks),
+            slot_feasible_tasks=slot_feasible_tasks,
+            slot_capacities=slot_capacity_by_slot,
+            required_task_count=int(required_task_count_normalized),
+            required_active_sortie_count=int(required_active_sortie_count_normalized),
+            cost_coeff=float(cost_coeff),
+            risk_coeff=float(risk_coeff),
+            completion_coeff=float(completion_coeff),
+            min_active_duration=float(min_active_duration),
+            min_depot_travel_by_task=min_depot_travel_by_task,
+            pair_conflicts=pair_conflicts_for_capacity,
+            hyperedge_conflicts=hyperedge_conflicts_for_capacity,
+            time_limit_sec=min(5.0, max(0.001, float(time_limit_sec or 5.0))),
+            threads=int(threads),
+        )
+    if (
+        bool(dual_task_slot_full_space_lower_bound)
+        and not bool(negative_feasibility_search)
+        and not bool(duals.cuts)
+        and required_task_set_normalized is None
+        and required_task_count_normalized is None
+        and required_active_sortie_count_normalized is None
+        and not forbidden_arc_patterns
+        and not forbidden_task_sets
+    ):
+        dual_task_slot_full_space_lb_result = _dual_task_slot_full_space_lower_bound_scan(
+            highspy,
+            data,
+            duals,
+            model_tasks=tuple(str(task_id) for task_id in model_tasks),
+            slot_feasible_tasks=slot_feasible_tasks,
+            slot_capacities=slot_capacity_by_slot,
+            cost_coeff=float(cost_coeff),
+            risk_coeff=float(risk_coeff),
+            completion_coeff=float(completion_coeff),
+            min_active_duration=float(min_active_duration),
+            min_depot_travel_by_task=min_depot_travel_by_task,
+            pair_conflicts=pair_conflicts_for_capacity,
+            hyperedge_conflicts=hyperedge_conflicts_for_capacity,
+            negative_eps=float(negative_eps),
+            per_region_time_limit_sec=float(dual_task_slot_full_space_lb_time_limit_sec),
+            early_stop_on_negative_bound=bool(
+                dual_task_slot_full_space_lb_early_stop_on_negative
+            ),
+            threads=int(threads),
+        )
+    dual_task_slot_lb_value = dual_task_slot_lb_result.get("lower_bound")
+    dual_task_slot_full_space_lb_value = dual_task_slot_full_space_lb_result.get("min_lower_bound")
+    if bool(dual_task_slot_full_space_lb_result.get("can_certify_no_negative")):
+        return {
+            "status": "COMPACT_HIGHS_PRICING_DUAL_TASK_SLOT_FULL_SPACE_LB_CERTIFIED",
+            "algorithm_status": "COMPACT_HIGHS_PRICING_DUAL_TASK_SLOT_FULL_SPACE_LB_CERTIFIED",
+            "exact_status": "EXACT_PRICING_DUAL_TASK_SLOT_FULL_SPACE_LB_CERTIFIED",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "best_reduced_cost": None,
+            "dual_bound": (
+                None
+                if dual_task_slot_full_space_lb_value is None
+                else round(float(dual_task_slot_full_space_lb_value), 9)
+            ),
+            "bound": (
+                None
+                if dual_task_slot_full_space_lb_value is None
+                else round(float(dual_task_slot_full_space_lb_value), 9)
+            ),
+            "global_remaining_rc_lb": (
+                None
+                if dual_task_slot_full_space_lb_value is None
+                else round(float(dual_task_slot_full_space_lb_value), 9)
+            ),
+            "global_remaining_rc_lb_valid": True,
+            "global_remaining_rc_lb_coverage_complete": True,
+            "frontier_region_count": int(dual_task_slot_full_space_lb_result.get("region_count") or 0),
+            "frontier_unsupported_region_count": 0,
+            "negative_found": False,
+            "can_certify_no_negative": True,
+            "pricing_rc_audit_pass": True,
+            "journeys": tuple(),
+            "task_count": len(tasks),
+            "pricing_model_task_count": len(model_tasks),
+            "dual_task_slot_full_space_lower_bound_enabled": True,
+            "dual_task_slot_full_space_lower_bound_applicable": True,
+            "dual_task_slot_full_space_lower_bound_early_stop_on_negative": bool(
+                dual_task_slot_full_space_lb_result.get("early_stop_on_negative_bound")
+            ),
+            "dual_task_slot_full_space_lower_bound_early_stopped_on_negative": bool(
+                dual_task_slot_full_space_lb_result.get("early_stopped_on_negative_bound")
+            ),
+            "dual_task_slot_full_space_lower_bound_coverage_complete": True,
+            "dual_task_slot_full_space_lower_bound_can_certify": True,
+            "dual_task_slot_full_space_lower_bound_region_count": int(
+                dual_task_slot_full_space_lb_result.get("region_count") or 0
+            ),
+            "dual_task_slot_full_space_lower_bound_optimal_region_count": int(
+                dual_task_slot_full_space_lb_result.get("optimal_region_count") or 0
+            ),
+            "dual_task_slot_full_space_lower_bound_infeasible_region_count": int(
+                dual_task_slot_full_space_lb_result.get("infeasible_region_count") or 0
+            ),
+            "dual_task_slot_full_space_lower_bound_unsupported_region_count": int(
+                dual_task_slot_full_space_lb_result.get("unsupported_region_count") or 0
+            ),
+            "dual_task_slot_full_space_lower_bound_negative_region_count": int(
+                dual_task_slot_full_space_lb_result.get("negative_bound_region_count") or 0
+            ),
+            "dual_task_slot_full_space_lower_bound_value": dual_task_slot_full_space_lb_value,
+            "dual_task_slot_full_space_lower_bound_task_count": (
+                dual_task_slot_full_space_lb_result.get("min_lower_bound_task_count")
+            ),
+            "dual_task_slot_full_space_lower_bound_active_sortie_count": (
+                dual_task_slot_full_space_lb_result.get("min_lower_bound_active_sortie_count")
+            ),
+            "dual_task_slot_full_space_lower_bound_wall_time_sec": float(
+                dual_task_slot_full_space_lb_result.get("wall_time_sec") or 0.0
+            ),
+            "variable_count": 0,
+            "constraint_count": 0,
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "note": "Full pricing space has no negative reduced-cost column by safe dual task-slot lower-bound partition scan.",
+        }
+    required_task_count_certified_by_dual_task_slot_lb = bool(
+        required_task_count_normalized is not None
+        and bool(dual_task_slot_lb_result.get("optimal"))
+        and dual_task_slot_lb_value is not None
+        and float(dual_task_slot_lb_value) >= -abs(float(negative_eps))
+    )
+    required_task_count_infeasible_by_dual_task_slot_lb = bool(
+        required_task_count_normalized is not None
+        and bool(dual_task_slot_lb_result.get("region_infeasible"))
+    )
+    if (
+        required_task_count_normalized is not None
+        and (
+            required_task_count_infeasible_by_feasible_task_count
+            or required_task_count_infeasible_by_slot_capacity
+            or required_task_count_infeasible_by_slot_sequence_capacity
+            or required_task_count_infeasible_by_slot_matching
+            or required_task_count_infeasible_by_pair_conflict_capacity
+            or required_task_count_certified_by_dual_task_slot_lb
+            or required_task_count_infeasible_by_dual_task_slot_lb
+            or required_task_count_min_active_sorties > int(sortie_slots)
+        )
+    ) or required_active_sortie_count_infeasible:
+        active_sortie_infeasible_only = bool(
+            required_active_sortie_count_infeasible
+            and not required_task_count_infeasible_by_feasible_task_count
+            and not required_task_count_infeasible_by_slot_capacity
+            and not required_task_count_infeasible_by_slot_sequence_capacity
+            and not required_task_count_infeasible_by_slot_matching
+            and not required_task_count_infeasible_by_pair_conflict_capacity
+            and required_task_count_min_active_sorties <= int(sortie_slots)
+        )
+        return {
+            "status": (
+                "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_DUAL_TASK_SLOT_LB_CERTIFIED"
+                if required_task_count_certified_by_dual_task_slot_lb
+                else (
+                "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE"
+                if active_sortie_infeasible_only
+                else "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE"
+                )
+            ),
+            "algorithm_status": (
+                "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_DUAL_TASK_SLOT_LB_CERTIFIED"
+                if required_task_count_certified_by_dual_task_slot_lb
+                else (
+                "COMPACT_HIGHS_PRICING_REQUIRED_ACTIVE_SORTIE_COUNT_INFEASIBLE"
+                if active_sortie_infeasible_only
+                else "COMPACT_HIGHS_PRICING_REQUIRED_TASK_COUNT_INFEASIBLE"
+                )
+            ),
+            "exact_status": (
+                "REQUIRED_TASK_COUNT_PRICING_DUAL_TASK_SLOT_LB_CERTIFIED"
+                if required_task_count_certified_by_dual_task_slot_lb
+                else (
+                "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_INFEASIBLE"
+                if active_sortie_infeasible_only
+                else "REQUIRED_TASK_COUNT_PRICING_INFEASIBLE"
+                )
+            ),
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "best_reduced_cost": None,
+            "dual_bound": (
+                None
+                if dual_task_slot_lb_value is None
+                else round(float(dual_task_slot_lb_value), 9)
+            ),
+            "negative_found": False,
+            "can_certify_no_negative": False,
+            "journeys": tuple(),
+            "task_count": len(tasks),
+            "pricing_model_task_count": len(model_tasks),
+            "required_task_count_enabled": bool(required_task_count_normalized is not None),
+            "required_task_count": required_task_count_normalized,
+            "pricing_complete_for_required_task_count": bool(
+                required_task_count_normalized is not None
+            ),
+            "required_task_count_region_can_certify_no_negative": bool(
+                required_task_count_normalized is not None
+            ),
+            "required_task_count_can_certify_full_space": False,
+            "required_task_count_feasible_task_count": int(task_count_feasible_task_count),
+            "required_task_count_slot_capacity_task_upper_bound": int(task_count_slot_capacity_upper_bound),
+            "required_task_count_slot_sequence_capacity_upper_bound": int(
+                task_count_slot_sequence_capacity_upper_bound
+            ),
+            "required_task_count_slot_matching_capacity_upper_bound": int(
+                task_count_slot_matching_capacity_upper_bound
+            ),
+            "required_task_count_pair_conflict_capacity_upper_bound": (
+                None
+                if task_count_pair_conflict_capacity_upper_bound is None
+                else int(task_count_pair_conflict_capacity_upper_bound)
+            ),
+            "required_task_count_min_active_sorties": int(required_task_count_min_active_sorties),
+            "required_task_count_active_sortie_lb_count": 0,
+            "required_task_count_infeasible_by_feasible_task_count": required_task_count_infeasible_by_feasible_task_count,
+            "required_task_count_infeasible_by_slot_capacity": bool(
+                required_task_count_infeasible_by_slot_capacity
+                or required_task_count_min_active_sorties > int(sortie_slots)
+            ),
+            "required_task_count_infeasible_by_slot_sequence_capacity": bool(
+                required_task_count_infeasible_by_slot_sequence_capacity
+            ),
+            "required_task_count_infeasible_by_slot_matching": bool(
+                required_task_count_infeasible_by_slot_matching
+            ),
+            "required_task_count_infeasible_by_pair_conflict_capacity": bool(
+                required_task_count_infeasible_by_pair_conflict_capacity
+            ),
+            "required_task_count_certified_by_dual_task_slot_lower_bound": bool(
+                required_task_count_certified_by_dual_task_slot_lb
+            ),
+            "required_task_count_infeasible_by_dual_task_slot_lower_bound": bool(
+                required_task_count_infeasible_by_dual_task_slot_lb
+            ),
+            "dual_task_slot_lower_bound_enabled": bool(dual_task_slot_lb_result.get("enabled")),
+            "dual_task_slot_lower_bound_applicable": bool(dual_task_slot_lb_result.get("applicable")),
+            "dual_task_slot_lower_bound_optimal": bool(dual_task_slot_lb_result.get("optimal")),
+            "dual_task_slot_lower_bound_status": str(dual_task_slot_lb_result.get("status") or ""),
+            "dual_task_slot_lower_bound_value": (
+                None
+                if dual_task_slot_lb_value is None
+                else round(float(dual_task_slot_lb_value), 9)
+            ),
+            "dual_task_slot_lower_bound_region_infeasible": bool(
+                dual_task_slot_lb_result.get("region_infeasible")
+            ),
+            "dual_task_slot_lower_bound_constant": dual_task_slot_lb_result.get("constant_lower_bound"),
+            "dual_task_slot_lower_bound_depot_outbound_arc": dual_task_slot_lb_result.get(
+                "depot_outbound_arc_lower_bound"
+            ),
+            "dual_task_slot_lower_bound_depot_return_arc": dual_task_slot_lb_result.get(
+                "depot_return_arc_lower_bound"
+            ),
+            "dual_task_slot_lower_bound_intertask_arc": dual_task_slot_lb_result.get(
+                "intertask_arc_lower_bound"
+            ),
+            "dual_task_slot_lower_bound_route_arc_mode": dual_task_slot_lb_result.get(
+                "route_arc_lower_bound_mode"
+            ),
+            "dual_task_slot_lower_bound_route_arc_value": dual_task_slot_lb_result.get(
+                "route_arc_lower_bound_value"
+            ),
+            "dual_task_slot_lower_bound_route_arc_row_count": int(
+                dual_task_slot_lb_result.get("route_arc_lower_bound_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_route_arc_global_constant": dual_task_slot_lb_result.get(
+                "route_arc_global_constant_lower_bound"
+            ),
+            "dual_task_slot_lower_bound_route_arc_slot_constant": dual_task_slot_lb_result.get(
+                "route_arc_slot_constant_lower_bound"
+            ),
+            "dual_task_slot_lower_bound_route_arc_constant": dual_task_slot_lb_result.get(
+                "route_arc_constant_lower_bound"
+            ),
+            "dual_task_slot_lower_bound_route_arc_slot_outbound_sum": dual_task_slot_lb_result.get(
+                "route_arc_slot_outbound_lower_bound_sum"
+            ),
+            "dual_task_slot_lower_bound_route_arc_slot_return_sum": dual_task_slot_lb_result.get(
+                "route_arc_slot_return_lower_bound_sum"
+            ),
+            "dual_task_slot_lower_bound_single_task_route_arc_bound_row_count": int(
+                dual_task_slot_lb_result.get("single_task_route_arc_bound_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_single_task_route_arc_bound_min": dual_task_slot_lb_result.get(
+                "single_task_route_arc_bound_min"
+            ),
+            "dual_task_slot_lower_bound_single_task_route_arc_bound_max": dual_task_slot_lb_result.get(
+                "single_task_route_arc_bound_max"
+            ),
+            "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_var_count": int(
+                dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_var_count") or 0
+            ),
+            "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_row_count": int(
+                dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_pair_count": int(
+                dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_pair_count") or 0
+            ),
+            "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_row_count": int(
+                dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_separation_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_iteration_count": int(
+                dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_separation_iteration_count") or 0
+            ),
+            "dual_task_slot_lower_bound_pair_route_arc_bound_row_count": int(
+                dual_task_slot_lb_result.get("pair_route_arc_bound_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_pair_route_arc_bound_min": dual_task_slot_lb_result.get(
+                "pair_route_arc_bound_min"
+            ),
+            "dual_task_slot_lower_bound_pair_route_arc_bound_max": dual_task_slot_lb_result.get(
+                "pair_route_arc_bound_max"
+            ),
+            "dual_task_slot_lower_bound_triple_route_arc_bound_row_count": int(
+                dual_task_slot_lb_result.get("triple_route_arc_bound_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_triple_route_arc_bound_min": dual_task_slot_lb_result.get(
+                "triple_route_arc_bound_min"
+            ),
+            "dual_task_slot_lower_bound_triple_route_arc_bound_max": dual_task_slot_lb_result.get(
+                "triple_route_arc_bound_max"
+            ),
+            "dual_task_slot_lower_bound_pair_completion_lift_var_count": int(
+                dual_task_slot_lb_result.get("pair_completion_lift_var_count") or 0
+            ),
+            "dual_task_slot_lower_bound_pair_completion_lift_row_count": int(
+                dual_task_slot_lb_result.get("pair_completion_lift_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_pair_completion_lift_min": dual_task_slot_lb_result.get(
+                "pair_completion_lift_min"
+            ),
+            "dual_task_slot_lower_bound_pair_completion_lift_max": dual_task_slot_lb_result.get(
+                "pair_completion_lift_max"
+            ),
+            "dual_task_slot_lower_bound_cross_slot_completion_lift_var_count": int(
+                dual_task_slot_lb_result.get("cross_slot_completion_lift_var_count") or 0
+            ),
+            "dual_task_slot_lower_bound_cross_slot_completion_lift_row_count": int(
+                dual_task_slot_lb_result.get("cross_slot_completion_lift_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_cross_slot_pair_completion_separation_row_count": int(
+                dual_task_slot_lb_result.get("cross_slot_pair_completion_separation_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_cross_slot_completion_lift_min": dual_task_slot_lb_result.get(
+                "cross_slot_completion_lift_min"
+            ),
+            "dual_task_slot_lower_bound_cross_slot_completion_lift_max": dual_task_slot_lb_result.get(
+                "cross_slot_completion_lift_max"
+            ),
+            "dual_task_slot_lower_bound_selected_task_set": list(
+                dual_task_slot_lb_result.get("selected_task_set") or []
+            ),
+            "dual_task_slot_lower_bound_selected_slot_task_sets": dict(
+                dual_task_slot_lb_result.get("selected_slot_task_sets") or {}
+            ),
+            "dual_task_slot_lower_bound_wall_time_sec": float(
+                dual_task_slot_lb_result.get("wall_time_sec") or 0.0
+            ),
+            "dual_task_slot_lower_bound_variable_count": int(
+                dual_task_slot_lb_result.get("variable_count") or 0
+            ),
+            "dual_task_slot_lower_bound_constraint_count": int(
+                dual_task_slot_lb_result.get("constraint_count") or 0
+            ),
+            "dual_task_slot_lower_bound_pair_conflict_row_count": int(
+                dual_task_slot_lb_result.get("pair_conflict_row_count") or 0
+            ),
+            "dual_task_slot_lower_bound_hyperedge_conflict_row_count": int(
+                dual_task_slot_lb_result.get("hyperedge_conflict_row_count") or 0
+            ),
+            "task_slot_pair_conflict_capacity_bound_enabled": bool(
+                pair_conflict_capacity_result.get("enabled")
+            ),
+            "task_slot_pair_conflict_capacity_near_matching_cap": bool(
+                pair_conflict_capacity_near_matching_cap
+            ),
+            "task_slot_pair_conflict_capacity_bound_requested": bool(
+                pair_conflict_capacity_bound_requested
+            ),
+            "task_slot_pair_conflict_capacity_bound_optimal": bool(
+                pair_conflict_capacity_result.get("optimal")
+            ),
+            "task_slot_pair_conflict_capacity_bound_status": str(
+                pair_conflict_capacity_result.get("status") or ""
+            ),
+            "task_slot_pair_conflict_capacity_bound_wall_time_sec": float(
+                pair_conflict_capacity_result.get("wall_time_sec") or 0.0
+            ),
+            "task_slot_pair_conflict_capacity_bound_variable_count": int(
+                pair_conflict_capacity_result.get("variable_count") or 0
+            ),
+            "task_slot_pair_conflict_capacity_bound_constraint_count": int(
+                pair_conflict_capacity_result.get("constraint_count") or 0
+            ),
+            "task_slot_pair_conflict_capacity_pair_count": int(
+                pair_conflict_capacity_result.get("pair_conflict_count") or 0
+            ),
+            "task_slot_pair_conflict_capacity_row_count": int(
+                pair_conflict_capacity_result.get("pair_conflict_row_count") or 0
+            ),
+            "task_slot_pair_conflict_capacity_hyperedge_count": int(
+                pair_conflict_capacity_result.get("hyperedge_conflict_count") or 0
+            ),
+            "task_slot_pair_conflict_capacity_hyperedge_row_count": int(
+                pair_conflict_capacity_result.get("hyperedge_conflict_row_count") or 0
+            ),
+            "required_active_sortie_count_enabled": bool(
+                required_active_sortie_count_normalized is not None
+            ),
+            "required_active_sortie_count": required_active_sortie_count_normalized,
+            "pricing_complete_for_required_active_sortie_count": bool(
+                required_active_sortie_count_normalized is not None
+            ),
+            "required_active_sortie_count_region_can_certify_no_negative": bool(
+                required_active_sortie_count_normalized is not None
+            ),
+            "required_active_sortie_count_can_certify_full_space": False,
+            "required_active_sortie_count_min": int(required_active_sortie_count_min),
+            "required_active_sortie_count_max": int(required_active_sortie_count_max),
+            "required_active_sortie_count_capacity_min": (
+                None
+                if required_active_sortie_count_capacity_min is None
+                else int(required_active_sortie_count_capacity_min)
+            ),
+            "required_active_sortie_count_expected_counts": required_active_sortie_count_expected_counts,
+            "required_active_sortie_count_infeasible": bool(required_active_sortie_count_infeasible),
+            "required_active_sortie_count_infeasible_by_empty_slot": bool(
+                required_active_sortie_count_infeasible_by_empty_slot
+            ),
+            "required_active_sortie_count_infeasible_by_capacity_min": bool(
+                required_active_sortie_count_infeasible_by_capacity_min
+            ),
+            "required_active_sortie_count_slots_fixed": bool(required_active_sortie_count_slots_fixed),
+            "required_active_sortie_count_fixed_slot_count": (
+                int(sortie_slots) if required_active_sortie_count_slots_fixed else 0
+            ),
+            "sortie_slots_per_journey": int(sortie_slots),
+            "slot_task_time_pruning_enabled": bool(slot_task_time_pruning),
+            "slot_task_time_feasible_assignment_count": int(slot_task_time_feasible_assignment_count),
+            "slot_task_time_pruned_assignment_count": int(slot_task_time_pruned_assignment_count),
+            "slot_task_time_pruned_due_count": int(slot_task_time_pruned_due_count),
+            "slot_task_time_pruned_horizon_count": int(slot_task_time_pruned_horizon_count),
+            "slot_task_time_total_assignment_count": int(len(model_tasks) * sortie_slots),
+            "slot_task_time_original_total_assignment_count": int(len(tasks) * sortie_slots),
+            "slot_task_model_assignment_count": int(slot_task_model_assignment_count),
+            "slot_arc_support_pruning_enabled": bool(slot_arc_support_pruning),
+            "slot_arc_support_feasible_assignment_count": int(slot_task_model_assignment_count),
+            "slot_arc_support_pruned_assignment_count": int(slot_arc_support_pruned_assignment_count),
+            "slot_arc_support_pruned_unreachable_count": int(
+                slot_arc_support_pruned_unreachable_count
+            ),
+            "slot_arc_support_pruned_no_return_count": int(
+                slot_arc_support_pruned_no_return_count
+            ),
+            "slot_arc_support_pruned_option_count": int(slot_arc_support_pruned_option_count),
+            "slot_arc_time_pruned_option_count": int(slot_arc_time_pruned_option_count),
+            "single_task_per_active_sortie_arc_pruning_enabled": bool(
+                single_task_per_active_sortie_arc_pruning_enabled
+            ),
+            "single_task_per_active_sortie_arc_pruned_option_count": int(
+                single_task_per_active_sortie_arc_pruned_option_count
+            ),
+            "single_task_per_active_sortie_mtz_disabled": bool(
+                single_task_per_active_sortie_arc_pruning_enabled and mtz_connectivity
+            ),
+            "mtz_connectivity_effective": bool(mtz_connectivity_effective),
+            "fixed_active_sortie_redundant_constraint_skipped_count": 0,
+            "single_task_per_active_sortie_slot_visit_eq_count": 0,
+            "single_task_per_active_sortie_y_z_link_skipped_count": 0,
+            "resource_arc_pruning_enabled": bool(resource_arc_pruning),
+            "resource_arc_pruned_option_count": int(resource_arc_pruned_option_count),
+            "resource_arc_energy_pruned_option_count": int(resource_arc_energy_pruned_option_count),
+            "resource_arc_shadow_pruned_option_count": int(resource_arc_shadow_pruned_option_count),
+            "resource_arc_demand_pruned_option_count": int(resource_arc_demand_pruned_option_count),
+            "slot_task_sequence_capacity_by_slot": list(
+                slot_sequence_capacity_bounds["slot_sequence_capacity_by_slot"]
+            ),
+            "slot_task_sequence_capacity_upper_bound": int(
+                slot_sequence_capacity_bounds["slot_sequence_capacity_upper_bound"]
+            ),
+            "slot_task_sequence_capacity_limited_slot_count": int(
+                slot_sequence_capacity_bounds["slot_sequence_capacity_limited_slot_count"]
+            ),
+            "slot_task_sequence_capacity_empty_slot_count": int(
+                slot_sequence_capacity_bounds["slot_sequence_capacity_empty_slot_count"]
+            ),
+            "slot_task_matching_capacity_upper_bound": int(
+                slot_sequence_capacity_bounds["slot_matching_capacity_upper_bound"]
+            ),
+            "variable_count": 0,
+            "constraint_count": 0,
+            "wall_time_sec": round(perf_counter() - start_wall, 6),
+            "note": (
+                "Required task-count pricing region has no negative reduced-cost column by safe dual task-slot lower bound."
+                if required_task_count_certified_by_dual_task_slot_lb
+                else "Required task-count pricing region is infeasible by safe task/slot count bounds."
+            ),
+        }
     forbidden_patterns = tuple(_normalize_forbidden_arc_pattern(row) for row in (forbidden_arc_patterns or tuple()))
     forbidden_patterns = tuple(row for row in forbidden_patterns if row)
     forbidden_task_sets_normalized = tuple(
@@ -1776,57 +4976,9 @@ def solve_highs_compact_single_journey_pricing(
         if single_task_shadow_lb
         else {}
     )
-    pair_energy_lb_by_pair = (
-        _pair_route_energy_lower_bounds(data)
-        if pair_energy_lb or pair_energy_infeasible_cut or triple_energy_infeasible_cut
-        else {}
-    )
-    pair_time_window_infeasible_by_pair = (
-        _pair_time_window_infeasible_pairs(data)
-        if pair_time_window_infeasible_cut
-        else {}
-    )
     pair_time_window_precedence_by_pair = (
         _pair_time_window_forced_precedence_pairs(data)
-        if pair_time_window_precedence_cut and mtz_connectivity
-        else {}
-    )
-    triple_time_window_infeasible_by_triple = (
-        _triple_time_window_infeasible_triples(
-            data,
-            pair_time_window_infeasible_by_pair=pair_time_window_infeasible_by_pair
-            if pair_time_window_infeasible_cut
-            else {},
-        )
-        if triple_time_window_infeasible_cut
-        else {}
-    )
-    quad_time_window_infeasible_by_quad = (
-        _quad_time_window_infeasible_quads(
-            data,
-            pair_time_window_infeasible_by_pair=pair_time_window_infeasible_by_pair
-            if pair_time_window_infeasible_cut
-            else {},
-            triple_time_window_infeasible_by_triple=triple_time_window_infeasible_by_triple
-            if triple_time_window_infeasible_cut
-            else {},
-        )
-        if quad_time_window_infeasible_cut
-        else {}
-    )
-    pair_shadow_lb_by_pair = (
-        _pair_route_shadow_lower_bounds(data)
-        if pair_shadow_lb or pair_shadow_infeasible_cut or triple_shadow_infeasible_cut
-        else {}
-    )
-    triple_shadow_infeasible_lb_by_triple = (
-        _triple_route_shadow_infeasible_lower_bounds(data, pair_shadow_lb_by_pair)
-        if triple_shadow_infeasible_cut
-        else {}
-    )
-    triple_energy_infeasible_lb_by_triple = (
-        _triple_route_energy_infeasible_lower_bounds(data, pair_energy_lb_by_pair)
-        if triple_energy_infeasible_cut
+        if pair_time_window_precedence_cut_effective
         else {}
     )
 
@@ -1834,9 +4986,21 @@ def solve_highs_compact_single_journey_pricing(
     highs.setOptionValue("output_flag", bool(output_flag))
     highs.setOptionValue("threads", max(1, int(threads)))
     highs.setOptionValue("mip_rel_gap", max(0.0, float(mip_gap)))
+    objective_bound_no_negative_cutoff_enabled = bool(
+        objective_bound_no_negative_cutoff and not negative_feasibility_search
+    )
+    objective_bound_no_negative_cutoff_value = (
+        -abs(float(negative_eps)) if objective_bound_no_negative_cutoff_enabled else None
+    )
     if time_limit_sec is not None:
         highs.setOptionValue("time_limit", max(0.001, float(time_limit_sec)))
     highs.setMinimize()
+    if objective_bound_no_negative_cutoff_enabled:
+        # For a minimization model, HiGHS' objective_bound is a cutoff. If the
+        # model is infeasible under objective <= -eps, no negative reduced-cost
+        # journey exists. This is a proof target, not a heuristic incumbent stop.
+        highs.setOptionValue("objective_bound", float(objective_bound_no_negative_cutoff_value))
+    highs_option_overrides = _apply_compact_highs_option_overrides(highs)
     infinity = highs.getInfinity()
 
     def add_var(lb: float, ub: float, cost: float = 0.0, *, integer: bool = False) -> int:
@@ -1860,10 +5024,6 @@ def solve_highs_compact_single_journey_pricing(
     def add_ge(coefficients: dict[int, float], rhs: float) -> None:
         add_row(coefficients, float(rhs), infinity)
 
-    refs = objective_references(data)
-    cost_coeff = float(data.objective.weight_operating_cost) / float(refs.reference_cost)
-    risk_coeff = float(data.objective.weight_risk) / float(refs.reference_risk)
-    completion_coeff = float(data.objective.weight_completion) / float(refs.reference_completion)
     reduced_cost_coefficients: dict[int, float] = {}
 
     def add_reduced_cost_coefficient(col: int, value: float) -> None:
@@ -1877,30 +5037,29 @@ def solve_highs_compact_single_journey_pricing(
     incoming: dict[tuple[int, int, str], list[tuple[int, int, str, str, str]]] = defaultdict(list)
     vehicle = 0
     for slot in range(sortie_slots):
-        for source in nodes:
-            for target in nodes:
-                if source == target or (source == "depot" and target == "depot"):
-                    continue
-                arc_key = (str(source), str(target))
-                if arc_key not in path_type_cache:
-                    continue
-                for path_type in path_type_cache[arc_key]:
-                    option = data.option(source, target, path_type)
-                    objective = cost_coeff * (float(option.distance_km) + float(option.energy_proxy))
-                    objective += risk_coeff * float(option.risk_integral)
-                    key = (vehicle, slot, str(source), str(target), str(path_type))
-                    x[key] = add_var(0.0, 1.0, objective, integer=True)
-                    add_reduced_cost_coefficient(x[key], objective)
-                    if flow_connectivity:
-                        flow[key] = add_var(0.0, float(data.max_tasks_per_trip), 0.0, integer=False)
-                    outgoing[(vehicle, slot, str(source))].append(key)
-                    incoming[(vehicle, slot, str(target))].append(key)
+        for source, target, path_type in candidate_arc_options_by_slot[slot]:
+            option = data.option(source, target, path_type)
+            objective = cost_coeff * (float(option.distance_km) + float(option.energy_proxy))
+            objective += risk_coeff * float(option.risk_integral)
+            key = (vehicle, slot, str(source), str(target), str(path_type))
+            x[key] = add_var(0.0, 1.0, objective, integer=True)
+            add_reduced_cost_coefficient(x[key], objective)
+            if flow_connectivity:
+                flow[key] = add_var(0.0, float(data.max_tasks_per_trip), 0.0, integer=False)
+            outgoing[(vehicle, slot, str(source))].append(key)
+            incoming[(vehicle, slot, str(target))].append(key)
 
     y: dict[tuple[int, int, str], int] = {}
     service_start: dict[tuple[int, int, str], int] = {}
     visit_order: dict[tuple[int, int, str], int] = {}
+    horizon = float(data.horizon)
+    tight_service_start_bound_values: list[float] = []
+    tight_service_start_bound_count = 0
+    slot_service_start_y_lower_bound_count = 0
+    slot_service_start_y_lower_bound_max_lift = 0.0
+    slot_service_start_y_lower_bound_values: list[float] = []
     for slot in range(sortie_slots):
-        for task_id in tasks:
+        for task_id in slot_feasible_tasks[slot]:
             task = data.tasks[task_id]
             y_cost = cost_coeff * (float(task.service_cost) + float(task.service_energy))
             y_cost += risk_coeff * service_risk_value(task)
@@ -1908,9 +5067,15 @@ def solve_highs_compact_single_journey_pricing(
             y_cost -= float(duals.cover.get(str(task_id), 0.0))
             y[vehicle, slot, task_id] = add_var(0.0, 1.0, y_cost, integer=True)
             add_reduced_cost_coefficient(y[vehicle, slot, task_id], y_cost)
+            service_start_ub = horizon
+            if bool(tight_service_start_bounds):
+                service_start_ub = min(horizon, max(0.0, _latest_task_service_start(data, task_id)))
+                tight_service_start_bound_values.append(float(service_start_ub))
+                if service_start_ub < horizon - 1.0e-9:
+                    tight_service_start_bound_count += 1
             service_start[vehicle, slot, task_id] = add_var(
                 0.0,
-                float(data.horizon),
+                service_start_ub,
                 completion_coeff * float(task.science_weight),
                 integer=False,
             )
@@ -1918,13 +5083,14 @@ def solve_highs_compact_single_journey_pricing(
                 service_start[vehicle, slot, task_id],
                 completion_coeff * float(task.science_weight),
             )
-            if mtz_connectivity:
-                visit_order[vehicle, slot, task_id] = add_var(
-                    0.0,
-                    float(data.max_tasks_per_trip),
-                    0.0,
-                    integer=False,
-                )
+            if mtz_connectivity_effective:
+                if not slot_sequence_capacity_mtz_disabled_by_slot.get(slot, False):
+                    visit_order[vehicle, slot, task_id] = add_var(
+                        0.0,
+                        float(data.max_tasks_per_trip),
+                        0.0,
+                        integer=False,
+                    )
 
     journey_active = add_var(1.0, 1.0, -float(duals.fleet_limit), integer=True)
     add_reduced_cost_coefficient(journey_active, -float(duals.fleet_limit))
@@ -1933,14 +5099,40 @@ def solve_highs_compact_single_journey_pricing(
     sortie_return: dict[tuple[int, int], int] = {}
     sortie_end: dict[tuple[int, int], int] = {}
     for slot in range(sortie_slots):
-        z[vehicle, slot] = add_var(0.0, 1.0, 0.0, integer=True)
-        sortie_start[vehicle, slot] = add_var(0.0, float(data.horizon), 0.0)
+        z_lb = 1.0 if required_active_sortie_count_slots_fixed else 0.0
+        z[vehicle, slot] = add_var(z_lb, 1.0, 0.0, integer=True)
+        sortie_start[vehicle, slot] = add_var(0.0, float(sortie_start_upper_bound), 0.0)
         sortie_return[vehicle, slot] = add_var(0.0, float(data.horizon), 0.0)
         sortie_end[vehicle, slot] = add_var(0.0, float(data.horizon), 0.0)
 
-    for task_id in tasks:
-        add_le({y[vehicle, slot, task_id]: 1.0 for slot in range(sortie_slots)}, 1.0)
-    add_ge({z[vehicle, slot]: 1.0 for slot in range(sortie_slots)}, 1.0)
+    all_task_slot_coefficients: dict[int, float] = {}
+    for task_id in model_tasks:
+        task_slot_coefficients = {
+            y[vehicle, slot, task_id]: 1.0
+            for slot in range(sortie_slots)
+            if (vehicle, slot, task_id) in y
+        }
+        all_task_slot_coefficients.update(task_slot_coefficients)
+        if task_slot_coefficients:
+            add_le(task_slot_coefficients, 1.0)
+        if required_task_set_normalized is not None:
+            required_rhs = 1.0 if str(task_id) in set(required_task_set_normalized) else 0.0
+            add_eq(task_slot_coefficients, required_rhs)
+    if required_task_count_normalized is not None:
+        add_eq(all_task_slot_coefficients, float(required_task_count_normalized))
+    if not required_active_sortie_count_slots_fixed:
+        add_ge({z[vehicle, slot]: 1.0 for slot in range(sortie_slots)}, 1.0)
+    if required_active_sortie_count_normalized is not None and not required_active_sortie_count_slots_fixed:
+        add_eq(
+            {z[vehicle, slot]: 1.0 for slot in range(sortie_slots)},
+            float(required_active_sortie_count_normalized),
+        )
+    required_task_count_active_sortie_lb_count_total = 0
+    if required_task_count_normalized is not None:
+        for slot in range(min(int(required_task_count_min_active_sorties), int(sortie_slots))):
+            if not required_active_sortie_count_slots_fixed:
+                add_ge({z[vehicle, slot]: 1.0}, 1.0)
+                required_task_count_active_sortie_lb_count_total += 1
 
     pair_adjacency_cut_count_total = 0
     mtz_endpoint_order_cut_count_total = 0
@@ -1962,14 +5154,84 @@ def solve_highs_compact_single_journey_pricing(
     pair_shadow_infeasible_cut_count_total = 0
     triple_shadow_infeasible_cut_count_total = 0
     triple_energy_infeasible_cut_count_total = 0
+    fixed_active_sortie_redundant_constraint_skipped_count = 0
+    single_task_per_active_sortie_slot_visit_eq_count = 0
+    single_task_per_active_sortie_y_z_link_skipped_count = 0
+    tight_time_arc_big_m_active_time_bound_count_total = 0
+    tight_time_arc_big_m_depot_arc_count_total = 0
+    tight_time_arc_big_m_max_reduction = 0.0
+    tight_conditional_sequence_big_m_count_total = 0
+    tight_conditional_sequence_big_m_max_reduction = 0.0
     for slot in range(sortie_slots):
+        feasible_tasks_for_slot = slot_feasible_tasks[slot]
+        feasible_task_lookup = set(feasible_tasks_for_slot)
         z_col = z[vehicle, slot]
-        add_le({z_col: 1.0, journey_active: -1.0}, 0.0)
+        # journey_active is fixed to one in single-journey pricing, and z_col already
+        # has ub=1. The z <= journey_active row is therefore redundant in every
+        # region, not only when active sortie slots are fixed.
+        fixed_active_sortie_redundant_constraint_skipped_count += 1
         if slot + 1 < sortie_slots:
-            add_le({z[vehicle, slot + 1]: 1.0, z_col: -1.0}, 0.0)
+            if required_active_sortie_count_slots_fixed:
+                fixed_active_sortie_redundant_constraint_skipped_count += 1
+            else:
+                add_le({z[vehicle, slot + 1]: 1.0, z_col: -1.0}, 0.0)
         if slot > 0:
-            add_ge({sortie_start[vehicle, slot]: 1.0, sortie_end[vehicle, slot - 1]: -1.0}, 0.0)
+            sequence_m = float(data.horizon)
+            if required_active_sortie_count_slots_fixed:
+                sequence_m = 0.0
+            elif (
+                not active_time_z_bounds_enabled
+                and float(sortie_start_upper_bound) >= float(data.horizon) - 1.0e-9
+            ):
+                # Legacy V4S/V4SZ semantics: inactive slots keep dummy time
+                # variables free, so the sequence chain can remain unconditional.
+                # This tightens only dummy timing; it does not remove any active
+                # journey route.  If active_time_z_bounds fixes inactive times to
+                # zero, or tight-time lowers the start upper bound below the
+                # horizon, a Big-M relaxation is still required.
+                sequence_m = 0.0
+            elif tight_time_arc_big_m_enabled and not active_time_z_bounds_enabled:
+                # If the current slot is inactive, sortie_start is a dummy time
+                # variable. It can safely take any value up to its variable upper
+                # bound, so only the part of the previous end time above that
+                # bound needs Big-M relaxation. When active_time_z_bounds is on,
+                # inactive start is fixed to zero and this tightening is invalid.
+                sequence_m = max(
+                    0.0,
+                    float(data.horizon) - float(sortie_start_upper_bound),
+                )
+            sequence_reduction = float(data.horizon) - float(sequence_m)
+            if sequence_reduction > 1.0e-9:
+                tight_conditional_sequence_big_m_count_total += 1
+                tight_conditional_sequence_big_m_max_reduction = max(
+                    float(tight_conditional_sequence_big_m_max_reduction),
+                    float(sequence_reduction),
+                )
+            add_ge(
+                {
+                    sortie_start[vehicle, slot]: 1.0,
+                    sortie_end[vehicle, slot - 1]: -1.0,
+                    z_col: -float(sequence_m),
+                },
+                -float(sequence_m),
+            )
         add_ge({sortie_end[vehicle, slot]: 1.0, sortie_start[vehicle, slot]: -1.0}, 0.0)
+        if bool(active_time_z_bounds_enabled):
+            add_le(
+                {
+                    sortie_start[vehicle, slot]: 1.0,
+                    z_col: -float(sortie_start_upper_bound),
+                },
+                0.0,
+            )
+            add_le(
+                {
+                    sortie_end[vehicle, slot]: 1.0,
+                    z_col: -float(data.horizon),
+                },
+                0.0,
+            )
+            tight_time_arc_big_m_active_time_bound_count_total += 2
         if sortie_slot_position_bounds:
             start_lb = float(slot) * min_active_duration
             if start_lb > 1.0e-9:
@@ -2007,9 +5269,19 @@ def solve_highs_compact_single_journey_pricing(
         )
         add_eq({**{x[key]: 1.0 for key in outgoing[(vehicle, slot, "depot")]}, z_col: -1.0}, 0.0)
         add_eq({**{x[key]: 1.0 for key in incoming[(vehicle, slot, "depot")]}, z_col: -1.0}, 0.0)
-        total_task_expr = {y[vehicle, slot, task_id]: 1.0 for task_id in tasks}
-        add_le({**total_task_expr, z_col: -float(data.max_tasks_per_trip)}, 0.0)
-        add_ge({**total_task_expr, z_col: -1.0}, 0.0)
+        total_task_expr = {y[vehicle, slot, task_id]: 1.0 for task_id in feasible_tasks_for_slot}
+        if single_task_per_active_sortie_arc_pruning_enabled:
+            add_eq({**total_task_expr, z_col: -1.0}, 0.0)
+            single_task_per_active_sortie_slot_visit_eq_count += 1
+        else:
+            add_le(
+                {
+                    **total_task_expr,
+                    z_col: -float(slot_sequence_capacity_live_bound_by_slot.get(slot, int(data.max_tasks_per_trip))),
+                },
+                0.0,
+            )
+            add_ge({**total_task_expr, z_col: -1.0}, 0.0)
         if flow_connectivity:
             depot_flow = {flow[key]: 1.0 for key in outgoing[(vehicle, slot, "depot")]}
             for key in incoming[(vehicle, slot, "depot")]:
@@ -2027,11 +5299,14 @@ def solve_highs_compact_single_journey_pricing(
             shadow_coefficients[x[key]] = shadow_coefficients.get(x[key], 0.0) + float(option.shadow_exposure_min)
             if flow_connectivity:
                 add_le({flow[key]: 1.0, x[key]: -float(data.max_tasks_per_trip)}, 0.0)
-        for task_id in tasks:
+        for task_id in feasible_tasks_for_slot:
             task = data.tasks[task_id]
             y_col = y[vehicle, slot, task_id]
             start_col = service_start[vehicle, slot, task_id]
-            add_le({y_col: 1.0, z_col: -1.0}, 0.0)
+            if single_task_per_active_sortie_arc_pruning_enabled:
+                single_task_per_active_sortie_y_z_link_skipped_count += 1
+            else:
+                add_le({y_col: 1.0, z_col: -1.0}, 0.0)
             add_eq({**{x[key]: 1.0 for key in outgoing[(vehicle, slot, task_id)]}, y_col: -1.0}, 0.0)
             add_eq({**{x[key]: 1.0 for key in incoming[(vehicle, slot, task_id)]}, y_col: -1.0}, 0.0)
             if flow_connectivity:
@@ -2039,11 +5314,27 @@ def solve_highs_compact_single_journey_pricing(
                 for key in outgoing[(vehicle, slot, task_id)]:
                     task_flow[flow[key]] = task_flow.get(flow[key], 0.0) - 1.0
                 add_eq({**task_flow, y_col: -1.0}, 0.0)
-            if mtz_connectivity:
+            if mtz_connectivity_effective and not slot_sequence_capacity_mtz_disabled_by_slot.get(slot, False):
                 order_col = visit_order[vehicle, slot, task_id]
                 add_le({order_col: 1.0, y_col: -float(data.max_tasks_per_trip)}, 0.0)
                 add_ge({order_col: 1.0, y_col: -1.0}, 0.0)
-            add_ge({start_col: 1.0, y_col: -float(task.ready_time)}, 0.0)
+            service_start_y_lb = float(task.ready_time)
+            if bool(slot_service_start_y_lower_bound):
+                slot_lb = (
+                    float(slot) * float(min_active_duration)
+                    + float(min_depot_travel_by_task[str(task_id)])
+                )
+                tightened_lb = max(float(service_start_y_lb), float(slot_lb))
+                lift = float(tightened_lb) - float(service_start_y_lb)
+                if lift > 1.0e-9:
+                    slot_service_start_y_lower_bound_count += 1
+                    slot_service_start_y_lower_bound_max_lift = max(
+                        float(slot_service_start_y_lower_bound_max_lift),
+                        float(lift),
+                    )
+                service_start_y_lb = float(tightened_lb)
+                slot_service_start_y_lower_bound_values.append(float(service_start_y_lb))
+            add_ge({start_col: 1.0, y_col: -float(service_start_y_lb)}, 0.0)
             depot_travel_lb = float(service_start_lb_by_task.get(str(task_id), 0.0))
             if service_start_depot_travel_lb and depot_travel_lb > 1.0e-9:
                 time_m = float(data.horizon)
@@ -2080,8 +5371,8 @@ def solve_highs_compact_single_journey_pricing(
             )
 
         if pair_adjacency_cuts:
-            for left_index, left_task in enumerate(tasks):
-                for right_task in tasks[left_index + 1 :]:
+            for left_index, left_task in enumerate(feasible_tasks_for_slot):
+                for right_task in feasible_tasks_for_slot[left_index + 1 :]:
                     coefficients: dict[int, float] = {}
                     for key in outgoing[(vehicle, slot, left_task)]:
                         _vehicle, _slot, _source, target, _path_type = key
@@ -2106,6 +5397,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if pair_route_duration_lb:
             for (left_task, right_task), duration_lb in pair_route_duration_lb_by_pair.items():
+                if left_task not in feasible_task_lookup or right_task not in feasible_task_lookup:
+                    continue
                 pair_lb = float(duration_lb)
                 if pair_lb <= 1.0e-9:
                     continue
@@ -2123,6 +5416,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if pair_weighted_completion_lb:
             for (left_task, right_task), completion_lb in pair_weighted_completion_lb_by_pair.items():
+                if left_task not in feasible_task_lookup or right_task not in feasible_task_lookup:
+                    continue
                 pair_lb = float(completion_lb)
                 if pair_lb <= 1.0e-9:
                     continue
@@ -2146,6 +5441,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if demand_cover_cut:
             for cover in demand_cover_by_subset:
+                if any(task_id not in feasible_task_lookup for task_id in cover):
+                    continue
                 add_le(
                     {y[vehicle, slot, task_id]: 1.0 for task_id in cover},
                     float(len(cover) - 1),
@@ -2154,6 +5451,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if single_task_energy_lb:
             for task_id, energy_lb in single_task_energy_lb_by_task.items():
+                if task_id not in feasible_task_lookup:
+                    continue
                 lb = float(energy_lb)
                 if lb <= 1.0e-9:
                     continue
@@ -2165,6 +5464,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if single_task_shadow_lb:
             for task_id, shadow_lb in single_task_shadow_lb_by_task.items():
+                if task_id not in feasible_task_lookup:
+                    continue
                 lb = float(shadow_lb)
                 if lb <= 1.0e-9:
                     continue
@@ -2176,6 +5477,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if pair_energy_infeasible_cut:
             for (left_task, right_task), energy_lb in pair_energy_lb_by_pair.items():
+                if left_task not in feasible_task_lookup or right_task not in feasible_task_lookup:
+                    continue
                 if float(energy_lb) <= float(data.energy_limit) + 1.0e-9:
                     continue
                 add_le(
@@ -2189,6 +5492,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if pair_time_window_infeasible_cut:
             for left_task, right_task in pair_time_window_infeasible_by_pair:
+                if left_task not in feasible_task_lookup or right_task not in feasible_task_lookup:
+                    continue
                 add_le(
                     {
                         y[vehicle, slot, left_task]: 1.0,
@@ -2198,9 +5503,17 @@ def solve_highs_compact_single_journey_pricing(
                 )
                 pair_time_window_infeasible_cut_count_total += 1
 
-        if mtz_connectivity and pair_time_window_precedence_cut:
+        if (
+            pair_time_window_precedence_cut_effective
+            and not slot_sequence_capacity_mtz_disabled_by_slot.get(slot, False)
+        ):
             order_m = float(data.max_tasks_per_trip)
             for must_precede_task, must_follow_task in pair_time_window_precedence_by_pair:
+                if (
+                    must_precede_task not in feasible_task_lookup
+                    or must_follow_task not in feasible_task_lookup
+                ):
+                    continue
                 add_ge(
                     {
                         visit_order[vehicle, slot, must_follow_task]: 1.0,
@@ -2214,6 +5527,12 @@ def solve_highs_compact_single_journey_pricing(
 
         if triple_time_window_infeasible_cut:
             for left_task, middle_task, right_task in triple_time_window_infeasible_by_triple:
+                if (
+                    left_task not in feasible_task_lookup
+                    or middle_task not in feasible_task_lookup
+                    or right_task not in feasible_task_lookup
+                ):
+                    continue
                 add_le(
                     {
                         y[vehicle, slot, left_task]: 1.0,
@@ -2227,6 +5546,8 @@ def solve_highs_compact_single_journey_pricing(
         if quad_time_window_infeasible_cut:
             for quad in quad_time_window_infeasible_by_quad:
                 first_task, second_task, third_task, fourth_task = quad
+                if any(task_id not in feasible_task_lookup for task_id in quad):
+                    continue
                 add_le(
                     {
                         y[vehicle, slot, first_task]: 1.0,
@@ -2240,6 +5561,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if pair_shadow_infeasible_cut:
             for (left_task, right_task), shadow_lb in pair_shadow_lb_by_pair.items():
+                if left_task not in feasible_task_lookup or right_task not in feasible_task_lookup:
+                    continue
                 if float(shadow_lb) <= float(data.max_shadow_exposure_per_sortie) + 1.0e-9:
                     continue
                 add_le(
@@ -2254,6 +5577,8 @@ def solve_highs_compact_single_journey_pricing(
         if triple_energy_infeasible_cut:
             for triple in triple_energy_infeasible_lb_by_triple:
                 left_task, middle_task, right_task = triple
+                if any(task_id not in feasible_task_lookup for task_id in triple):
+                    continue
                 add_le(
                     {
                         y[vehicle, slot, left_task]: 1.0,
@@ -2267,6 +5592,8 @@ def solve_highs_compact_single_journey_pricing(
         if triple_shadow_infeasible_cut:
             for triple in triple_shadow_infeasible_lb_by_triple:
                 left_task, middle_task, right_task = triple
+                if any(task_id not in feasible_task_lookup for task_id in triple):
+                    continue
                 add_le(
                     {
                         y[vehicle, slot, left_task]: 1.0,
@@ -2279,6 +5606,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if pair_energy_lb:
             for (left_task, right_task), energy_lb in pair_energy_lb_by_pair.items():
+                if left_task not in feasible_task_lookup or right_task not in feasible_task_lookup:
+                    continue
                 pair_lb = float(energy_lb)
                 if pair_lb <= 1.0e-9:
                     continue
@@ -2298,6 +5627,8 @@ def solve_highs_compact_single_journey_pricing(
 
         if pair_shadow_lb:
             for (left_task, right_task), shadow_lb in pair_shadow_lb_by_pair.items():
+                if left_task not in feasible_task_lookup or right_task not in feasible_task_lookup:
+                    continue
                 pair_lb = float(shadow_lb)
                 if pair_lb <= 1.0e-9:
                     continue
@@ -2346,7 +5677,20 @@ def solve_highs_compact_single_journey_pricing(
             travel = float(option.travel_time_min)
             x_col = x[key]
             if source == "depot" and target != "depot":
-                time_m = _time_arc_big_m(data, travel=travel)
+                loose_time_m = _time_arc_big_m(data, travel=travel)
+                time_m = _time_arc_big_m(
+                    data,
+                    travel=travel,
+                    source_start_upper_bound=sortie_start_upper_bound
+                    if tight_time_arc_big_m_enabled
+                    else None,
+                )
+                if tight_time_arc_big_m_enabled:
+                    tight_time_arc_big_m_depot_arc_count_total += 1
+                    tight_time_arc_big_m_max_reduction = max(
+                        float(tight_time_arc_big_m_max_reduction),
+                        float(loose_time_m) - float(time_m),
+                    )
                 add_ge(
                     {
                         service_start[vehicle, slot, target]: 1.0,
@@ -2377,7 +5721,15 @@ def solve_highs_compact_single_journey_pricing(
                     },
                     service + travel - time_m,
                 )
-            if mtz_connectivity and mtz_endpoint_order_cuts and source == "depot" and target != "depot":
+            slot_mtz_connectivity_effective = bool(
+                mtz_connectivity_effective
+                and not slot_sequence_capacity_mtz_disabled_by_slot.get(slot, False)
+            )
+            slot_mtz_endpoint_order_cuts_effective = bool(
+                mtz_endpoint_order_cuts_effective
+                and not slot_sequence_capacity_mtz_disabled_by_slot.get(slot, False)
+            )
+            if slot_mtz_endpoint_order_cuts_effective and source == "depot" and target != "depot":
                 # If a task is the first task after the depot, its visit order is 1.
                 order_m = float(data.max_tasks_per_trip)
                 add_le(
@@ -2388,19 +5740,19 @@ def solve_highs_compact_single_journey_pricing(
                     order_m,
                 )
                 mtz_endpoint_order_cut_count_total += 1
-            elif mtz_connectivity and mtz_endpoint_order_cuts and source != "depot" and target == "depot":
+            elif slot_mtz_endpoint_order_cuts_effective and source != "depot" and target == "depot":
                 # If a task returns to the depot, it is the last task in that sortie.
                 order_m = float(data.max_tasks_per_trip)
                 coefficients = {
                     visit_order[vehicle, slot, source]: 1.0,
                     x_col: -order_m,
                 }
-                for task_id in tasks:
+                for task_id in feasible_tasks_for_slot:
                     y_col = y[vehicle, slot, task_id]
                     coefficients[y_col] = coefficients.get(y_col, 0.0) - 1.0
                 add_ge(coefficients, -order_m)
                 mtz_endpoint_order_cut_count_total += 1
-            if mtz_connectivity and source != "depot" and target != "depot":
+            if slot_mtz_connectivity_effective and source != "depot" and target != "depot":
                 order_m = float(data.max_tasks_per_trip)
                 add_ge(
                     {
@@ -2411,12 +5763,16 @@ def solve_highs_compact_single_journey_pricing(
                     1.0 - order_m,
                 )
 
+    negative_feasibility_zero_objective_enabled = False
     if negative_feasibility_search:
         # Exact alternative to minimizing reduced cost: ask whether any journey
         # column with rc <= -eps exists.  Infeasibility is then a no-negative
         # proof; a feasible solution is a negative column; time limits remain
         # fail-closed.
         add_le(reduced_cost_coefficients, -abs(float(negative_eps)))
+        for col in range(highs.getNumCol()):
+            highs.changeColCost(col, 0.0)
+        negative_feasibility_zero_objective_enabled = True
 
     forbidden_pattern_count = 0
     for pattern in forbidden_patterns:
@@ -2431,13 +5787,24 @@ def solve_highs_compact_single_journey_pricing(
         forbidden_pattern_count += 1
 
     forbidden_task_set_count = 0
+    forbidden_task_set_skipped_by_required_task_count = 0
     for task_set in forbidden_task_sets_normalized:
+        if required_task_count_normalized is not None and len(task_set) != int(required_task_count_normalized):
+            forbidden_task_set_skipped_by_required_task_count += 1
+            continue
+        if any(
+            not any((vehicle, slot, task_id) in y for slot in range(sortie_slots))
+            for task_id in task_set
+        ):
+            continue
         coefficients: dict[int, float] = {}
         forbidden_lookup = set(task_set)
         for task_id in tasks:
             sign = 1.0 if task_id in forbidden_lookup else -1.0
             for slot in range(sortie_slots):
-                coefficients[y[vehicle, slot, task_id]] = sign
+                col = y.get((vehicle, slot, task_id))
+                if col is not None:
+                    coefficients[col] = sign
         if not coefficients:
             continue
         # Forbid exactly this task set while still allowing proper subsets and
@@ -2445,6 +5812,35 @@ def solve_highs_compact_single_journey_pricing(
         # no-negative certificate for the full pricing space.
         add_le(coefficients, float(len(task_set) - 1))
         forbidden_task_set_count += 1
+
+    mip_start_payload = _set_highs_single_journey_mip_start(
+        highs,
+        data=data,
+        duals=duals,
+        journey=mip_start_journey,
+        vehicle=vehicle,
+        sortie_slots=sortie_slots,
+        flow_connectivity=bool(flow_connectivity),
+        x=x,
+        y=y,
+        z=z,
+        service_start=service_start,
+        sortie_start=sortie_start,
+        sortie_return=sortie_return,
+        sortie_end=sortie_end,
+        visit_order=visit_order,
+        forbidden_patterns=forbidden_patterns,
+        forbidden_task_sets=forbidden_task_sets_normalized,
+        required_task_set=required_task_set_normalized,
+        required_task_count=required_task_count_normalized,
+        required_active_sortie_count=required_active_sortie_count_normalized,
+        journey_active=journey_active,
+        zero_fill_integers=bool(mip_start_zero_fill_integers),
+        inactive_tail_time_upper_bound=float(sortie_start_upper_bound)
+        if bool(mip_start_inactive_tail_time)
+        else None,
+        inactive_tail_time_mode=str(mip_start_inactive_tail_time_mode),
+    )
 
     highs.run()
     status = highs.getModelStatus()
@@ -2489,12 +5885,63 @@ def solve_highs_compact_single_journey_pricing(
     optimal = status == highspy.HighsModelStatus.kOptimal
     infeasible = status == highspy.HighsModelStatus.kInfeasible
     best_rc = manual_rc if manual_rc is not None else model_objective
+    pricing_model_reduced_cost = (
+        best_rc
+        if negative_feasibility_zero_objective_enabled and best_rc is not None
+        else model_objective
+    )
     negative_found = bool(best_rc is not None and float(best_rc) < -abs(float(negative_eps)))
-    restricted_by_forbidden_patterns = forbidden_pattern_count > 0 or forbidden_task_set_count > 0
+    dual_bound_can_certify_no_negative = bool(
+        bound is not None
+        and float(bound) >= -abs(float(negative_eps))
+        and not negative_found
+        and not negative_feasibility_search
+        and not negative_feasibility_zero_objective_enabled
+    )
+    restricted_by_required_task_set = required_task_set_normalized is not None
+    restricted_by_required_task_count = required_task_count_normalized is not None
+    restricted_by_required_active_sortie_count = required_active_sortie_count_normalized is not None
+    restricted_by_forbidden_patterns = (
+        forbidden_pattern_count > 0
+        or forbidden_task_set_count > 0
+        or restricted_by_required_task_set
+        or restricted_by_required_task_count
+        or restricted_by_required_active_sortie_count
+    )
+    required_task_set_region_can_certify_no_negative = bool(
+        restricted_by_required_task_set
+        and (
+            (optimal and not negative_found and best_rc is not None)
+            or infeasible
+            or dual_bound_can_certify_no_negative
+        )
+    )
+    required_task_count_region_can_certify_no_negative = bool(
+        restricted_by_required_task_count
+        and (
+            (optimal and not negative_found and best_rc is not None)
+            or infeasible
+            or dual_bound_can_certify_no_negative
+        )
+    )
+    required_active_sortie_count_region_can_certify_no_negative = bool(
+        restricted_by_required_active_sortie_count
+        and (
+            (optimal and not negative_found and best_rc is not None)
+            or infeasible
+            or dual_bound_can_certify_no_negative
+        )
+    )
+    objective_bound_cutoff_can_certify_no_negative = bool(
+        objective_bound_no_negative_cutoff_enabled
+        and infeasible
+        and not negative_found
+    )
     can_certify_no_negative = bool(
         (
             (optimal and not negative_found and best_rc is not None and not negative_feasibility_search)
             or infeasible
+            or dual_bound_can_certify_no_negative
         )
         and not restricted_by_forbidden_patterns
     )
@@ -2508,6 +5955,13 @@ def solve_highs_compact_single_journey_pricing(
         algorithm_status = "COMPACT_HIGHS_PRICING_OPTIMAL"
     elif infeasible:
         algorithm_status = (
+            "COMPACT_HIGHS_PRICING_OBJECTIVE_BOUND_NO_NEGATIVE"
+            if objective_bound_cutoff_can_certify_no_negative
+            and not restricted_by_forbidden_patterns
+            else "COMPACT_HIGHS_PRICING_RESTRICTED_OBJECTIVE_BOUND_NO_NEGATIVE"
+            if objective_bound_cutoff_can_certify_no_negative
+            and restricted_by_forbidden_patterns
+            else
             "COMPACT_HIGHS_PRICING_RESTRICTED_INFEASIBLE"
             if restricted_by_forbidden_patterns
             else "COMPACT_HIGHS_PRICING_INFEASIBLE_NO_NEGATIVE"
@@ -2521,31 +5975,372 @@ def solve_highs_compact_single_journey_pricing(
         "algorithm_status": algorithm_status,
         "exact_status": (
             (
+                "RESTRICTED_OBJECTIVE_BOUND_NO_NEGATIVE"
+                if restricted_by_forbidden_patterns
+                else "EXACT_OBJECTIVE_BOUND_NO_NEGATIVE"
+            )
+            if objective_bound_cutoff_can_certify_no_negative
+            else
+            (
                 "RESTRICTED_NEGATIVE_FEASIBILITY_INFEASIBLE"
                 if restricted_by_forbidden_patterns
                 else "EXACT_NEGATIVE_FEASIBILITY_INFEASIBLE"
             )
             if infeasible and negative_feasibility_search
+            else "REQUIRED_TASK_SET_PRICING_INFEASIBLE"
+            if infeasible and restricted_by_required_task_set
+            else "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_INFEASIBLE"
+            if infeasible and restricted_by_required_active_sortie_count
+            else "REQUIRED_TASK_COUNT_PRICING_INFEASIBLE"
+            if infeasible and restricted_by_required_task_count
+            else "RESTRICTED_PRICING_INFEASIBLE"
+            if infeasible and restricted_by_forbidden_patterns
+            else "EXACT_PRICING_INFEASIBLE_NO_COLUMNS"
+            if infeasible
             else "EXACT_PRICING_OPTIMAL"
             if optimal and not restricted_by_forbidden_patterns
+            else "REQUIRED_TASK_SET_PRICING_OPTIMAL"
+            if optimal and restricted_by_required_task_set
+            else "REQUIRED_ACTIVE_SORTIE_COUNT_PRICING_OPTIMAL"
+            if optimal and restricted_by_required_active_sortie_count
+            else "REQUIRED_TASK_COUNT_PRICING_OPTIMAL"
+            if optimal and restricted_by_required_task_count
             else "RESTRICTED_PRICING_OPTIMAL"
             if optimal
             else "NOT_SOLVED"
         ),
         "pricing_state": pricing_state,
         "task_count": len(tasks),
+        "pricing_model_task_count": len(model_tasks),
+        "required_task_set_model_reduction_enabled": bool(required_task_set_normalized is not None),
+        "required_task_set_model_task_count": len(model_tasks)
+        if required_task_set_normalized is not None
+        else None,
+        "required_task_set_model_task_reduction_count": int(len(tasks) - len(model_tasks))
+        if required_task_set_normalized is not None
+        else 0,
         "solver_backend": "HiGHS compact single-journey pricing MILP",
-        "pricing_complete_by_compact_milp": bool((optimal or infeasible) and not restricted_by_forbidden_patterns),
-        "pricing_complete_for_all_tasks": bool((optimal or infeasible) and not restricted_by_forbidden_patterns),
-        "pricing_complete_for_all_task_subsets": bool((optimal or infeasible) and not restricted_by_forbidden_patterns),
+        "pricing_complete_by_compact_milp": bool(
+            (optimal or infeasible or dual_bound_can_certify_no_negative)
+            and not restricted_by_forbidden_patterns
+        ),
+        "pricing_complete_by_dual_bound": bool(dual_bound_can_certify_no_negative),
+        "dual_bound_can_certify_no_negative": bool(dual_bound_can_certify_no_negative),
+        "pricing_complete_for_all_tasks": bool(
+            (optimal or infeasible or dual_bound_can_certify_no_negative)
+            and not restricted_by_forbidden_patterns
+        ),
+        "pricing_complete_for_all_task_subsets": bool(
+            (optimal or infeasible or dual_bound_can_certify_no_negative)
+            and not restricted_by_forbidden_patterns
+        ),
+        "pricing_complete_for_required_task_set": bool(
+            (optimal or infeasible or dual_bound_can_certify_no_negative)
+            and restricted_by_required_task_set
+        ),
+        "pricing_complete_for_required_task_count": bool(
+            (optimal or infeasible or dual_bound_can_certify_no_negative)
+            and restricted_by_required_task_count
+        ),
+        "pricing_complete_for_required_active_sortie_count": bool(
+            (optimal or infeasible or dual_bound_can_certify_no_negative)
+            and restricted_by_required_active_sortie_count
+        ),
+        "required_task_set_enabled": bool(restricted_by_required_task_set),
+        "required_task_set": list(required_task_set_normalized or tuple()),
+        "required_task_set_count": 0 if required_task_set_normalized is None else len(required_task_set_normalized),
+        "required_task_set_region_can_certify_no_negative": required_task_set_region_can_certify_no_negative,
+        "required_task_set_can_certify_full_space": False,
+        "required_task_set_infeasible_by_feasible_task_count": False,
+        "required_task_set_infeasible_by_slot_capacity": False,
+        "required_task_set_infeasible_by_slot_sequence_capacity": False,
+        "required_task_set_infeasible_by_slot_matching": False,
+        "required_task_count_enabled": bool(restricted_by_required_task_count),
+        "required_task_count": required_task_count_normalized,
+        "required_task_count_region_can_certify_no_negative": required_task_count_region_can_certify_no_negative,
+        "required_task_count_can_certify_full_space": False,
+        "required_task_count_feasible_task_count": int(task_count_feasible_task_count),
+        "required_task_count_slot_capacity_task_upper_bound": int(task_count_slot_capacity_upper_bound),
+        "required_task_count_slot_sequence_capacity_upper_bound": int(
+            task_count_slot_sequence_capacity_upper_bound
+        ),
+        "required_task_count_slot_matching_capacity_upper_bound": int(
+            task_count_slot_matching_capacity_upper_bound
+        ),
+        "required_task_count_pair_conflict_capacity_upper_bound": (
+            None
+            if task_count_pair_conflict_capacity_upper_bound is None
+            else int(task_count_pair_conflict_capacity_upper_bound)
+        ),
+        "required_task_count_min_active_sorties": int(required_task_count_min_active_sorties),
+        "required_task_count_active_sortie_lb_count": int(required_task_count_active_sortie_lb_count_total),
+        "required_task_count_infeasible_by_feasible_task_count": required_task_count_infeasible_by_feasible_task_count,
+        "required_task_count_infeasible_by_slot_capacity": required_task_count_infeasible_by_slot_capacity,
+        "required_task_count_infeasible_by_slot_sequence_capacity": bool(
+            required_task_count_infeasible_by_slot_sequence_capacity
+        ),
+        "required_task_count_infeasible_by_slot_matching": bool(
+            required_task_count_infeasible_by_slot_matching
+        ),
+        "required_task_count_infeasible_by_pair_conflict_capacity": bool(
+            required_task_count_infeasible_by_pair_conflict_capacity
+        ),
+        "required_task_count_certified_by_dual_task_slot_lower_bound": bool(
+            required_task_count_certified_by_dual_task_slot_lb
+        ),
+        "required_task_count_infeasible_by_dual_task_slot_lower_bound": bool(
+            required_task_count_infeasible_by_dual_task_slot_lb
+        ),
+        "dual_task_slot_lower_bound_enabled": bool(dual_task_slot_lb_result.get("enabled")),
+        "dual_task_slot_lower_bound_applicable": bool(dual_task_slot_lb_result.get("applicable")),
+        "dual_task_slot_lower_bound_optimal": bool(dual_task_slot_lb_result.get("optimal")),
+        "dual_task_slot_lower_bound_status": str(dual_task_slot_lb_result.get("status") or ""),
+        "dual_task_slot_lower_bound_value": (
+            None if dual_task_slot_lb_value is None else round(float(dual_task_slot_lb_value), 9)
+        ),
+        "dual_task_slot_lower_bound_region_infeasible": bool(
+            dual_task_slot_lb_result.get("region_infeasible")
+        ),
+        "dual_task_slot_lower_bound_constant": dual_task_slot_lb_result.get("constant_lower_bound"),
+        "dual_task_slot_lower_bound_depot_outbound_arc": dual_task_slot_lb_result.get(
+            "depot_outbound_arc_lower_bound"
+        ),
+        "dual_task_slot_lower_bound_depot_return_arc": dual_task_slot_lb_result.get(
+            "depot_return_arc_lower_bound"
+        ),
+        "dual_task_slot_lower_bound_intertask_arc": dual_task_slot_lb_result.get("intertask_arc_lower_bound"),
+        "dual_task_slot_lower_bound_route_arc_mode": dual_task_slot_lb_result.get(
+            "route_arc_lower_bound_mode"
+        ),
+        "dual_task_slot_lower_bound_route_arc_value": dual_task_slot_lb_result.get(
+            "route_arc_lower_bound_value"
+        ),
+        "dual_task_slot_lower_bound_route_arc_row_count": int(
+            dual_task_slot_lb_result.get("route_arc_lower_bound_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_route_arc_global_constant": dual_task_slot_lb_result.get(
+            "route_arc_global_constant_lower_bound"
+        ),
+        "dual_task_slot_lower_bound_route_arc_slot_constant": dual_task_slot_lb_result.get(
+            "route_arc_slot_constant_lower_bound"
+        ),
+        "dual_task_slot_lower_bound_route_arc_constant": dual_task_slot_lb_result.get(
+            "route_arc_constant_lower_bound"
+        ),
+        "dual_task_slot_lower_bound_route_arc_slot_outbound_sum": dual_task_slot_lb_result.get(
+            "route_arc_slot_outbound_lower_bound_sum"
+        ),
+        "dual_task_slot_lower_bound_route_arc_slot_return_sum": dual_task_slot_lb_result.get(
+            "route_arc_slot_return_lower_bound_sum"
+        ),
+        "dual_task_slot_lower_bound_single_task_route_arc_bound_row_count": int(
+            dual_task_slot_lb_result.get("single_task_route_arc_bound_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_single_task_route_arc_bound_min": dual_task_slot_lb_result.get(
+            "single_task_route_arc_bound_min"
+        ),
+        "dual_task_slot_lower_bound_single_task_route_arc_bound_max": dual_task_slot_lb_result.get(
+            "single_task_route_arc_bound_max"
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_var_count": int(
+            dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_var_count") or 0
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_row_count": int(
+            dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_pair_count": int(
+            dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_pair_count") or 0
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_row_count": int(
+            dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_separation_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_one_pair_rest_single_route_arc_separation_iteration_count": int(
+            dual_task_slot_lb_result.get("one_pair_rest_single_route_arc_separation_iteration_count") or 0
+        ),
+        "dual_task_slot_lower_bound_pair_route_arc_bound_row_count": int(
+            dual_task_slot_lb_result.get("pair_route_arc_bound_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_pair_route_arc_bound_min": dual_task_slot_lb_result.get(
+            "pair_route_arc_bound_min"
+        ),
+        "dual_task_slot_lower_bound_pair_route_arc_bound_max": dual_task_slot_lb_result.get(
+            "pair_route_arc_bound_max"
+        ),
+        "dual_task_slot_lower_bound_triple_route_arc_bound_row_count": int(
+            dual_task_slot_lb_result.get("triple_route_arc_bound_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_triple_route_arc_bound_min": dual_task_slot_lb_result.get(
+            "triple_route_arc_bound_min"
+        ),
+        "dual_task_slot_lower_bound_triple_route_arc_bound_max": dual_task_slot_lb_result.get(
+            "triple_route_arc_bound_max"
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_var_count": int(
+            dual_task_slot_lb_result.get("pair_completion_lift_var_count") or 0
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_row_count": int(
+            dual_task_slot_lb_result.get("pair_completion_lift_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_min": dual_task_slot_lb_result.get(
+            "pair_completion_lift_min"
+        ),
+        "dual_task_slot_lower_bound_pair_completion_lift_max": dual_task_slot_lb_result.get(
+            "pair_completion_lift_max"
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_var_count": int(
+            dual_task_slot_lb_result.get("cross_slot_completion_lift_var_count") or 0
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_row_count": int(
+            dual_task_slot_lb_result.get("cross_slot_completion_lift_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_cross_slot_pair_completion_separation_row_count": int(
+            dual_task_slot_lb_result.get("cross_slot_pair_completion_separation_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_min": dual_task_slot_lb_result.get(
+            "cross_slot_completion_lift_min"
+        ),
+        "dual_task_slot_lower_bound_cross_slot_completion_lift_max": dual_task_slot_lb_result.get(
+            "cross_slot_completion_lift_max"
+        ),
+        "dual_task_slot_lower_bound_selected_task_set": list(
+            dual_task_slot_lb_result.get("selected_task_set") or []
+        ),
+        "dual_task_slot_lower_bound_selected_slot_task_sets": dict(
+            dual_task_slot_lb_result.get("selected_slot_task_sets") or {}
+        ),
+        "dual_task_slot_lower_bound_wall_time_sec": float(
+            dual_task_slot_lb_result.get("wall_time_sec") or 0.0
+        ),
+        "dual_task_slot_lower_bound_variable_count": int(
+            dual_task_slot_lb_result.get("variable_count") or 0
+        ),
+        "dual_task_slot_lower_bound_constraint_count": int(
+            dual_task_slot_lb_result.get("constraint_count") or 0
+        ),
+        "dual_task_slot_lower_bound_pair_conflict_row_count": int(
+            dual_task_slot_lb_result.get("pair_conflict_row_count") or 0
+        ),
+        "dual_task_slot_lower_bound_hyperedge_conflict_row_count": int(
+            dual_task_slot_lb_result.get("hyperedge_conflict_row_count") or 0
+        ),
+        "dual_task_slot_full_space_lower_bound_enabled": bool(
+            dual_task_slot_full_space_lb_result.get("enabled")
+        ),
+        "dual_task_slot_full_space_lower_bound_applicable": bool(
+            dual_task_slot_full_space_lb_result.get("applicable")
+        ),
+        "dual_task_slot_full_space_lower_bound_early_stop_on_negative": bool(
+            dual_task_slot_full_space_lb_result.get("early_stop_on_negative_bound")
+        ),
+        "dual_task_slot_full_space_lower_bound_early_stopped_on_negative": bool(
+            dual_task_slot_full_space_lb_result.get("early_stopped_on_negative_bound")
+        ),
+        "dual_task_slot_full_space_lower_bound_coverage_complete": bool(
+            dual_task_slot_full_space_lb_result.get("coverage_complete")
+        ),
+        "dual_task_slot_full_space_lower_bound_can_certify": bool(
+            dual_task_slot_full_space_lb_result.get("can_certify_no_negative")
+        ),
+        "dual_task_slot_full_space_lower_bound_region_count": int(
+            dual_task_slot_full_space_lb_result.get("region_count") or 0
+        ),
+        "dual_task_slot_full_space_lower_bound_optimal_region_count": int(
+            dual_task_slot_full_space_lb_result.get("optimal_region_count") or 0
+        ),
+        "dual_task_slot_full_space_lower_bound_infeasible_region_count": int(
+            dual_task_slot_full_space_lb_result.get("infeasible_region_count") or 0
+        ),
+        "dual_task_slot_full_space_lower_bound_unsupported_region_count": int(
+            dual_task_slot_full_space_lb_result.get("unsupported_region_count") or 0
+        ),
+        "dual_task_slot_full_space_lower_bound_negative_region_count": int(
+            dual_task_slot_full_space_lb_result.get("negative_bound_region_count") or 0
+        ),
+        "dual_task_slot_full_space_lower_bound_value": dual_task_slot_full_space_lb_value,
+        "dual_task_slot_full_space_lower_bound_task_count": (
+            dual_task_slot_full_space_lb_result.get("min_lower_bound_task_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_active_sortie_count": (
+            dual_task_slot_full_space_lb_result.get("min_lower_bound_active_sortie_count")
+        ),
+        "dual_task_slot_full_space_lower_bound_wall_time_sec": float(
+            dual_task_slot_full_space_lb_result.get("wall_time_sec") or 0.0
+        ),
+        "dual_task_slot_full_space_lower_bound_status": str(
+            dual_task_slot_full_space_lb_result.get("status") or ""
+        ),
+        "task_slot_pair_conflict_capacity_bound_enabled": bool(
+            pair_conflict_capacity_result.get("enabled")
+        ),
+        "task_slot_pair_conflict_capacity_near_matching_cap": bool(
+            pair_conflict_capacity_near_matching_cap
+        ),
+        "task_slot_pair_conflict_capacity_bound_requested": bool(
+            pair_conflict_capacity_bound_requested
+        ),
+        "task_slot_pair_conflict_capacity_bound_optimal": bool(
+            pair_conflict_capacity_result.get("optimal")
+        ),
+        "task_slot_pair_conflict_capacity_bound_status": str(
+            pair_conflict_capacity_result.get("status") or ""
+        ),
+        "task_slot_pair_conflict_capacity_bound_wall_time_sec": float(
+            pair_conflict_capacity_result.get("wall_time_sec") or 0.0
+        ),
+        "task_slot_pair_conflict_capacity_bound_variable_count": int(
+            pair_conflict_capacity_result.get("variable_count") or 0
+        ),
+        "task_slot_pair_conflict_capacity_bound_constraint_count": int(
+            pair_conflict_capacity_result.get("constraint_count") or 0
+        ),
+        "task_slot_pair_conflict_capacity_pair_count": int(
+            pair_conflict_capacity_result.get("pair_conflict_count") or 0
+        ),
+        "task_slot_pair_conflict_capacity_row_count": int(
+            pair_conflict_capacity_result.get("pair_conflict_row_count") or 0
+        ),
+        "task_slot_pair_conflict_capacity_hyperedge_count": int(
+            pair_conflict_capacity_result.get("hyperedge_conflict_count") or 0
+        ),
+        "task_slot_pair_conflict_capacity_hyperedge_row_count": int(
+            pair_conflict_capacity_result.get("hyperedge_conflict_row_count") or 0
+        ),
+        "required_active_sortie_count_enabled": bool(restricted_by_required_active_sortie_count),
+        "required_active_sortie_count": required_active_sortie_count_normalized,
+        "required_active_sortie_count_region_can_certify_no_negative": (
+            required_active_sortie_count_region_can_certify_no_negative
+        ),
+        "required_active_sortie_count_can_certify_full_space": False,
+        "required_active_sortie_count_min": int(required_active_sortie_count_min),
+        "required_active_sortie_count_max": int(required_active_sortie_count_max),
+        "required_active_sortie_count_capacity_min": (
+            None
+            if required_active_sortie_count_capacity_min is None
+            else int(required_active_sortie_count_capacity_min)
+        ),
+        "required_active_sortie_count_expected_counts": required_active_sortie_count_expected_counts,
+        "required_active_sortie_count_infeasible": bool(required_active_sortie_count_infeasible),
+        "required_active_sortie_count_infeasible_by_empty_slot": bool(
+            required_active_sortie_count_infeasible_by_empty_slot
+        ),
+        "required_active_sortie_count_infeasible_by_capacity_min": bool(
+            required_active_sortie_count_infeasible_by_capacity_min
+        ),
+        "required_active_sortie_count_slots_fixed": bool(required_active_sortie_count_slots_fixed),
+        "required_active_sortie_count_fixed_slot_count": (
+            int(sortie_slots) if required_active_sortie_count_slots_fixed else 0
+        ),
         "best_reduced_cost": None if best_rc is None else round(float(best_rc), 9),
         "model_objective": None if model_objective is None else round(float(model_objective), 9),
-        "pricing_model_reduced_cost": None if model_objective is None else round(float(model_objective), 9),
+        "pricing_model_reduced_cost": None
+        if pricing_model_reduced_cost is None
+        else round(float(pricing_model_reduced_cost), 9),
         "manual_best_reduced_cost": None if manual_rc is None else round(float(manual_rc), 9),
         "pricing_best_reduced_cost": None if best_rc is None else round(float(best_rc), 9),
         "dual_bound": None if bound is None else round(float(bound), 9),
         "bound": None if bound is None else round(float(bound), 9),
         "gap": None if gap is None else round(float(gap), 9),
+        "highs_option_overrides": dict(highs_option_overrides),
         "negative_found": negative_found,
         "negative_column_count": int(negative_found),
         "can_certify_no_negative": can_certify_no_negative,
@@ -2559,18 +6354,96 @@ def solve_highs_compact_single_journey_pricing(
         "journey_count": len(journeys),
         "has_feasible_incumbent": bool(journeys),
         "best_column": _pricing_best_column_payload(best_journey),
+        "single_journey_mip_start": mip_start_payload,
+        "single_journey_mip_start_enabled": bool(mip_start_payload.get("enabled")),
+        "single_journey_mip_start_status": str(mip_start_payload.get("status") or ""),
+        "single_journey_mip_start_source": str(mip_start_payload.get("source") or ""),
+        "single_journey_mip_start_entry_count": int(mip_start_payload.get("entry_count") or 0),
+        "single_journey_mip_start_zero_fill_integers": bool(
+            mip_start_payload.get("zero_fill_integers")
+        ),
+        "single_journey_mip_start_zero_fill_integer_entry_count": int(
+            mip_start_payload.get("zero_fill_integer_entry_count") or 0
+        ),
+        "single_journey_mip_start_inactive_tail_time_entry_count": int(
+            mip_start_payload.get("inactive_tail_time_entry_count") or 0
+        ),
+        "single_journey_mip_start_inactive_tail_time_mode": str(
+            mip_start_payload.get("inactive_tail_time_mode") or ""
+        ),
+        "single_journey_mip_start_sort_indices": bool(
+            mip_start_payload.get("sort_indices", True)
+        ),
+        "single_journey_mip_start_sortie_count": int(mip_start_payload.get("sortie_count") or 0),
+        "single_journey_mip_start_task_count": int(mip_start_payload.get("task_count") or 0),
+        "single_journey_mip_start_objective": mip_start_payload.get("objective"),
+        "single_journey_mip_start_reduced_cost": mip_start_payload.get("reduced_cost"),
         "model_status_code": int(status),
         "model_status_name": status_name,
         "solver_info": solver_info,
         "flow_connectivity_enabled": bool(flow_connectivity),
         "mtz_connectivity_enabled": bool(mtz_connectivity),
-        "mtz_endpoint_order_cuts_enabled": bool(mtz_connectivity and mtz_endpoint_order_cuts),
+        "mtz_connectivity_effective": bool(mtz_connectivity_effective),
+        "single_task_per_active_sortie_mtz_disabled": bool(
+            single_task_per_active_sortie_arc_pruning_enabled and mtz_connectivity
+        ),
+        "fixed_active_sortie_redundant_constraint_skipped_count": int(
+            fixed_active_sortie_redundant_constraint_skipped_count
+        ),
+        "single_task_per_active_sortie_slot_visit_eq_count": int(
+            single_task_per_active_sortie_slot_visit_eq_count
+        ),
+        "single_task_per_active_sortie_y_z_link_skipped_count": int(
+            single_task_per_active_sortie_y_z_link_skipped_count
+        ),
+        "mtz_endpoint_order_cuts_enabled": bool(mtz_endpoint_order_cuts_effective),
         "mtz_endpoint_order_cut_count": int(mtz_endpoint_order_cut_count_total),
         "pair_adjacency_cuts_enabled": bool(pair_adjacency_cuts),
         "pair_adjacency_cut_count": int(pair_adjacency_cut_count_total),
         "sortie_slot_position_bounds_enabled": bool(sortie_slot_position_bounds),
         "sortie_slot_position_bound_count": int(sortie_slot_position_bound_count_total),
         "sortie_slot_latest_start_upper_bound": round(float(latest_sortie_start_upper_bound), 9),
+        "sortie_start_upper_bound": round(float(sortie_start_upper_bound), 9),
+        "tight_time_arc_big_m_enabled": bool(tight_time_arc_big_m_enabled),
+        "active_time_z_bounds_enabled": bool(active_time_z_bounds_enabled),
+        "tight_time_arc_big_m_depot_arc_count": int(
+            tight_time_arc_big_m_depot_arc_count_total
+        ),
+        "tight_time_arc_big_m_active_time_bound_count": int(
+            tight_time_arc_big_m_active_time_bound_count_total
+        ),
+        "tight_time_arc_big_m_max_reduction": round(
+            float(tight_time_arc_big_m_max_reduction),
+            9,
+        ),
+        "tight_conditional_sequence_big_m_enabled": bool(
+            tight_conditional_sequence_big_m_count_total > 0
+        ),
+        "tight_conditional_sequence_big_m_count": int(
+            tight_conditional_sequence_big_m_count_total
+        ),
+        "tight_conditional_sequence_big_m_max_reduction": round(
+            float(tight_conditional_sequence_big_m_max_reduction),
+            9,
+        ),
+        "slot_service_start_y_lower_bound_enabled": bool(slot_service_start_y_lower_bound),
+        "slot_service_start_y_lower_bound_count": int(
+            slot_service_start_y_lower_bound_count
+        ),
+        "slot_service_start_y_lower_bound_max_lift": round(
+            float(slot_service_start_y_lower_bound_max_lift),
+            9,
+        ),
+        "slot_service_start_y_lower_bound_min": (
+            None
+            if not slot_service_start_y_lower_bound_values
+            else round(float(min(slot_service_start_y_lower_bound_values)), 9)
+        ),
+        "slot_service_start_y_lower_bound_max": (
+            None
+            if not slot_service_start_y_lower_bound_values
+            else round(float(max(slot_service_start_y_lower_bound_values)), 9)
+        ),
         "service_start_depot_travel_lb_enabled": bool(service_start_depot_travel_lb),
         "service_start_depot_travel_lb_count": int(service_start_depot_travel_lb_count_total),
         "service_start_depot_travel_lb_min": (
@@ -2682,7 +6555,7 @@ def solve_highs_compact_single_journey_pricing(
             else None
         ),
         "pair_time_window_precedence_cut_enabled": bool(
-            mtz_connectivity and pair_time_window_precedence_cut
+            pair_time_window_precedence_cut_effective
         ),
         "pair_time_window_precedence_cut_count": int(pair_time_window_precedence_cut_count_total),
         "pair_time_window_precedence_pair_count": int(len(pair_time_window_precedence_by_pair)),
@@ -2764,9 +6637,61 @@ def solve_highs_compact_single_journey_pricing(
             else None
         ),
         "negative_feasibility_search_enabled": bool(negative_feasibility_search),
+        "negative_feasibility_zero_objective_enabled": bool(
+            negative_feasibility_zero_objective_enabled
+        ),
+        "objective_bound_no_negative_cutoff_enabled": bool(
+            objective_bound_no_negative_cutoff_enabled
+        ),
+        "objective_bound_no_negative_cutoff_value": (
+            None
+            if objective_bound_no_negative_cutoff_value is None
+            else round(float(objective_bound_no_negative_cutoff_value), 9)
+        ),
+        "objective_bound_no_negative_cutoff_can_certify": bool(
+            objective_bound_cutoff_can_certify_no_negative
+        ),
+        "zero_capacity_slot_truncation_enabled": bool(zero_capacity_slot_truncation),
+        "zero_capacity_slot_truncation_original_slot_count": int(
+            zero_capacity_slot_truncation_original_slot_count
+        ),
+        "zero_capacity_slot_truncation_effective_slot_count": int(
+            zero_capacity_slot_truncation_effective_slot_count
+        ),
+        "zero_capacity_slot_truncation_trimmed_slot_count": int(
+            zero_capacity_slot_truncation_trimmed_slot_count
+        ),
+        "zero_capacity_slot_truncation_first_zero_slot": (
+            None
+            if zero_capacity_slot_truncation_first_zero_slot is None
+            else int(zero_capacity_slot_truncation_first_zero_slot)
+        ),
+        "slot_sequence_capacity_live_bound_enabled": bool(slot_sequence_capacity_live_bound),
+        "slot_sequence_capacity_live_bound_by_slot": [
+            int(slot_sequence_capacity_live_bound_by_slot.get(slot, int(data.max_tasks_per_trip)))
+            for slot in range(sortie_slots)
+        ],
+        "slot_sequence_capacity_live_bound_tightened_slot_count": int(
+            slot_sequence_capacity_live_bound_tightened_slot_count
+        ),
+        "tight_service_start_bounds_enabled": bool(tight_service_start_bounds),
+        "tight_service_start_bound_count": int(tight_service_start_bound_count),
+        "tight_service_start_bound_min": (
+            round(min(tight_service_start_bound_values), 9)
+            if tight_service_start_bound_values
+            else None
+        ),
+        "tight_service_start_bound_max": (
+            round(max(tight_service_start_bound_values), 9)
+            if tight_service_start_bound_values
+            else None
+        ),
         "forbidden_arc_pattern_count": int(forbidden_pattern_count),
         "forbidden_arc_patterns_can_certify_full_space": bool(forbidden_pattern_count == 0),
         "forbidden_task_set_count": int(forbidden_task_set_count),
+        "forbidden_task_set_skipped_by_required_task_count": int(
+            forbidden_task_set_skipped_by_required_task_count
+        ),
         "forbidden_task_sets_can_certify_full_space": bool(forbidden_task_set_count == 0),
         "sortie_slots_per_journey": sortie_slots,
         "sortie_slot_bound_source": slot_bound["source"] if max_sorties_per_journey is None else "explicit",
@@ -2780,6 +6705,73 @@ def solve_highs_compact_single_journey_pricing(
         "sortie_slot_min_duration_lower_bound": slot_bound["min_duration_lower_bound"],
         "sortie_slot_min_return_duration_lower_bound": slot_bound["min_return_duration_lower_bound"],
         "sortie_slot_min_out_return_travel_lower_bound": slot_bound["min_out_return_travel_lower_bound"],
+        "sortie_slot_min_sortie_energy_lower_bound": slot_bound["min_sortie_energy_lower_bound"],
+        "sortie_slot_min_energy_recharge_duration_lower_bound": (
+            slot_bound["min_energy_recharge_duration_lower_bound"]
+        ),
+        "slot_task_time_pruning_enabled": bool(slot_task_time_pruning),
+        "slot_task_time_feasible_assignment_count": int(slot_task_time_feasible_assignment_count),
+        "slot_task_time_pruned_assignment_count": int(slot_task_time_pruned_assignment_count),
+        "slot_task_time_pruned_due_count": int(slot_task_time_pruned_due_count),
+        "slot_task_time_pruned_horizon_count": int(slot_task_time_pruned_horizon_count),
+        "slot_task_time_total_assignment_count": int(len(model_tasks) * sortie_slots),
+        "slot_task_time_original_total_assignment_count": int(len(tasks) * sortie_slots),
+        "slot_task_model_assignment_count": int(slot_task_model_assignment_count),
+        "slot_arc_support_pruning_enabled": bool(slot_arc_support_pruning),
+        "slot_arc_support_feasible_assignment_count": int(slot_task_model_assignment_count),
+        "slot_arc_support_pruned_assignment_count": int(slot_arc_support_pruned_assignment_count),
+        "slot_arc_support_pruned_unreachable_count": int(
+            slot_arc_support_pruned_unreachable_count
+        ),
+        "slot_arc_support_pruned_no_return_count": int(slot_arc_support_pruned_no_return_count),
+        "slot_arc_support_pruned_option_count": int(slot_arc_support_pruned_option_count),
+        "slot_task_sequence_capacity_by_slot": list(
+            slot_sequence_capacity_bounds["slot_sequence_capacity_by_slot"]
+        ),
+        "slot_task_sequence_capacity_upper_bound": int(
+            slot_sequence_capacity_bounds["slot_sequence_capacity_upper_bound"]
+        ),
+        "slot_task_sequence_capacity_limited_slot_count": int(
+            slot_sequence_capacity_bounds["slot_sequence_capacity_limited_slot_count"]
+        ),
+        "slot_task_sequence_capacity_empty_slot_count": int(
+            slot_sequence_capacity_bounds["slot_sequence_capacity_empty_slot_count"]
+        ),
+        "slot_task_matching_capacity_upper_bound": int(
+            slot_sequence_capacity_bounds["slot_matching_capacity_upper_bound"]
+        ),
+        "slot_arc_time_pruned_option_count": int(slot_arc_time_pruned_option_count),
+        "slot_sequence_capacity_arc_pruning_enabled": bool(slot_sequence_capacity_arc_pruning),
+        "slot_sequence_capacity_arc_pruned_option_count": int(
+            slot_sequence_capacity_arc_pruned_option_count
+        ),
+        "slot_sequence_capacity_mtz_disabled_slot_count": int(
+            slot_sequence_capacity_mtz_disabled_slot_count
+        ),
+        "single_task_per_active_sortie_arc_pruning_enabled": bool(
+            single_task_per_active_sortie_arc_pruning_enabled
+        ),
+        "single_task_per_active_sortie_arc_pruned_option_count": int(
+            single_task_per_active_sortie_arc_pruned_option_count
+        ),
+        "single_task_per_active_sortie_mtz_disabled": bool(
+            single_task_per_active_sortie_arc_pruning_enabled and mtz_connectivity
+        ),
+        "mtz_connectivity_effective": bool(mtz_connectivity_effective),
+        "fixed_active_sortie_redundant_constraint_skipped_count": int(
+            fixed_active_sortie_redundant_constraint_skipped_count
+        ),
+        "single_task_per_active_sortie_slot_visit_eq_count": int(
+            single_task_per_active_sortie_slot_visit_eq_count
+        ),
+        "single_task_per_active_sortie_y_z_link_skipped_count": int(
+            single_task_per_active_sortie_y_z_link_skipped_count
+        ),
+        "resource_arc_pruning_enabled": bool(resource_arc_pruning),
+        "resource_arc_pruned_option_count": int(resource_arc_pruned_option_count),
+        "resource_arc_energy_pruned_option_count": int(resource_arc_energy_pruned_option_count),
+        "resource_arc_shadow_pruned_option_count": int(resource_arc_shadow_pruned_option_count),
+        "resource_arc_demand_pruned_option_count": int(resource_arc_demand_pruned_option_count),
         **pruning,
         "variable_count": int(highs.getNumCol()),
         "constraint_count": int(highs.getNumRow()),
@@ -2788,6 +6780,9 @@ def solve_highs_compact_single_journey_pricing(
             "Compact HiGHS single-journey pricing solved exactly."
             if optimal
             else (
+                "Compact HiGHS single-journey objective-bound cutoff proved no journey has reduced cost <= -eps."
+                if objective_bound_cutoff_can_certify_no_negative
+                else
                 (
                     "Compact HiGHS single-journey negative-feasibility model proved no negative reduced-cost journey exists."
                     if forbidden_pattern_count == 0
@@ -2972,10 +6967,7 @@ def _set_highs_singleton_mip_start(
                     values[x[key]] = 1.0
                 previous_end = float(sortie.end_time)
             else:
-                # Inactive slots after active sorties must still respect sortie_start[q] >= sortie_end[q-1].
-                if previous_end > 0.0:
-                    values[sortie_start[vehicle, slot]] = previous_end
-                    values[sortie_end[vehicle, slot]] = previous_end
+                values[z[vehicle, slot]] = 0.0
 
     try:
         import numpy as np
@@ -2984,7 +6976,8 @@ def _set_highs_singleton_mip_start(
         payload["note"] = f"Could not pass sparse HiGHS solution without numpy: {type(exc).__name__}: {exc}"
         return payload
 
-    indices = np.array(sorted(values), dtype=np.int32)
+    ordered_indices = sorted(values) if payload["sort_indices"] else list(values)
+    indices = np.array(ordered_indices, dtype=np.int32)
     col_values = np.array([values[int(index)] for index in indices], dtype=np.float64)
     try:
         status = highs.setSolution(len(indices), indices, col_values)
@@ -3006,6 +6999,191 @@ def _set_highs_singleton_mip_start(
     payload["objective"] = round(sum(journey.objective for journey in journeys), 6) if journeys else None
     payload["source"] = source
     payload["note"] = f"{source} warm start was passed to HiGHS."
+    return payload
+
+
+def _set_highs_single_journey_mip_start(
+    highs,
+    *,
+    data: LunarIceData,
+    duals: JourneyDuals,
+    journey: JourneyColumn | None,
+    vehicle: int,
+    sortie_slots: int,
+    flow_connectivity: bool,
+    x: dict[tuple[int, int, str, str, str], int],
+    y: dict[tuple[int, int, str], int],
+    z: dict[tuple[int, int], int],
+    service_start: dict[tuple[int, int, str], int],
+    sortie_start: dict[tuple[int, int], int],
+    sortie_return: dict[tuple[int, int], int],
+    sortie_end: dict[tuple[int, int], int],
+    visit_order: dict[tuple[int, int, str], int],
+    forbidden_patterns: tuple[tuple[tuple[int, str, str, str], ...], ...],
+    forbidden_task_sets: tuple[tuple[str, ...], ...],
+    required_task_set: tuple[str, ...] | None = None,
+    required_task_count: int | None = None,
+    required_active_sortie_count: int | None = None,
+    journey_active: int | None = None,
+    zero_fill_integers: bool = False,
+    inactive_tail_time_upper_bound: float | None = None,
+    inactive_tail_time_mode: str = "zero",
+) -> dict:
+    payload = {
+        "enabled": bool(journey is not None),
+        "status": "DISABLED",
+        "entry_count": 0,
+        "zero_fill_integers": bool(zero_fill_integers),
+        "zero_fill_integer_entry_count": 0,
+        "inactive_tail_time_entry_count": 0,
+        "inactive_tail_time_mode": str(inactive_tail_time_mode or "zero"),
+        "sort_indices": _compact_mip_start_sort_indices_enabled(),
+        "sortie_count": 0,
+        "task_count": 0,
+        "objective": None,
+        "reduced_cost": None,
+        "source": "column_pool_journey",
+        "note": "",
+    }
+    if journey is None:
+        payload["note"] = "No single-journey MIP start was provided."
+        return payload
+    payload["status"] = "NOT_SET"
+    payload["sortie_count"] = len(journey.sorties)
+    payload["task_count"] = len(journey.task_set)
+    payload["objective"] = round(float(journey.objective), 9)
+    payload["reduced_cost"] = round(float(manual_journey_reduced_cost(journey, duals)), 9)
+    if flow_connectivity:
+        payload["status"] = "UNSUPPORTED_FLOW_CONNECTIVITY"
+        payload["note"] = "Single-journey MIP start is disabled when flow-connectivity variables are active."
+        return payload
+    if len(journey.sorties) > int(sortie_slots):
+        payload["status"] = "TOO_MANY_SORTIES"
+        payload["note"] = f"Warm-start sortie_count={len(journey.sorties)} exceeds slots={sortie_slots}."
+        return payload
+    if not all(sortie.feasible for sortie in journey.sorties):
+        payload["status"] = "INFEASIBLE_JOURNEY"
+        payload["note"] = "Warm-start journey contains an infeasible sortie."
+        return payload
+    valid_tasks = set(data.task_ids)
+    if any(str(task_id) not in valid_tasks for task_id in journey.task_set):
+        payload["status"] = "UNKNOWN_TASK"
+        payload["note"] = "Warm-start journey contains a task outside the pricing instance."
+        return payload
+    task_set = tuple(sorted(str(task_id) for task_id in journey.task_set))
+    if required_task_set is not None and task_set != tuple(required_task_set):
+        payload["status"] = "MISMATCH_REQUIRED_TASK_SET"
+        payload["note"] = "Warm-start journey task set does not match the required task-set region."
+        return payload
+    if required_task_count is not None and len(task_set) != int(required_task_count):
+        payload["status"] = "MISMATCH_REQUIRED_TASK_COUNT"
+        payload["note"] = "Warm-start journey task count does not match the required task-count region."
+        return payload
+    if required_active_sortie_count is not None and len(journey.sorties) != int(required_active_sortie_count):
+        payload["status"] = "MISMATCH_REQUIRED_ACTIVE_SORTIE_COUNT"
+        payload["note"] = "Warm-start journey sortie count does not match the required active-sortie-count region."
+        return payload
+    if task_set in set(forbidden_task_sets):
+        payload["status"] = "FORBIDDEN_BY_RESTRICTED_TASK_SET"
+        payload["note"] = "Warm-start journey is excluded by a restricted task-set no-good row."
+        return payload
+    arc_pattern = tuple(
+        (int(slot), str(leg.source), str(leg.target), str(leg.path_type))
+        for slot, sortie in enumerate(journey.sorties)
+        for leg in sortie.legs
+    )
+    if arc_pattern and arc_pattern in set(forbidden_patterns):
+        payload["status"] = "FORBIDDEN_BY_RESTRICTED_ARC_PATTERN"
+        payload["note"] = "Warm-start journey is excluded by a restricted arc-pattern no-good row."
+        return payload
+
+    values: dict[int, float] = {}
+    if zero_fill_integers:
+        for col in x.values():
+            values[int(col)] = 0.0
+        for col in y.values():
+            values[int(col)] = 0.0
+        for col in z.values():
+            values[int(col)] = 0.0
+        if journey_active is not None:
+            values[int(journey_active)] = 1.0
+        payload["zero_fill_integer_entry_count"] = int(len(values))
+    values[z[vehicle, 0]] = 1.0 if journey.sorties else 0.0
+    previous_end = 0.0
+    for slot in range(sortie_slots):
+        if slot < len(journey.sorties):
+            sortie = journey.sorties[slot]
+            z_key = (vehicle, slot)
+            values[z[z_key]] = 1.0
+            values[sortie_start[z_key]] = float(sortie.start_time)
+            values[sortie_return[z_key]] = float(sortie.return_time)
+            values[sortie_end[z_key]] = float(sortie.end_time)
+            for order, task_id in enumerate(sortie.tasks, start=1):
+                task_key = (vehicle, slot, str(task_id))
+                if task_key not in y or task_key not in service_start:
+                    payload["status"] = "MISSING_TASK_VARIABLE"
+                    payload["note"] = f"Warm-start task has no compact y/service variable: {task_key!r}."
+                    return payload
+                values[y[task_key]] = 1.0
+                values[service_start[task_key]] = float(sortie.service_starts[str(task_id)])
+                if task_key in visit_order:
+                    values[visit_order[task_key]] = float(order)
+            for leg in sortie.legs:
+                arc_key = (vehicle, slot, str(leg.source), str(leg.target), str(leg.path_type))
+                if arc_key not in x:
+                    payload["status"] = "MISSING_ARC_VARIABLE"
+                    payload["note"] = f"Warm-start leg has no compact x variable: {arc_key!r}."
+                    return payload
+                values[x[arc_key]] = 1.0
+            previous_end = float(sortie.end_time)
+        else:
+            z_key = (vehicle, slot)
+            values[z[z_key]] = 0.0
+            if inactive_tail_time_upper_bound is not None:
+                mode = str(inactive_tail_time_mode or "zero").strip().lower()
+                bounded_previous_end = min(
+                    max(0.0, float(previous_end)),
+                    max(0.0, float(inactive_tail_time_upper_bound)),
+                )
+                if mode == "previous_end":
+                    start_value = float(bounded_previous_end)
+                    return_value = 0.0
+                    end_value = float(bounded_previous_end)
+                elif mode == "previous_end_all":
+                    start_value = float(bounded_previous_end)
+                    return_value = float(bounded_previous_end)
+                    end_value = float(bounded_previous_end)
+                else:
+                    start_value = 0.0
+                    return_value = 0.0
+                    end_value = 0.0
+                values[sortie_start[z_key]] = float(start_value)
+                values[sortie_return[z_key]] = float(return_value)
+                values[sortie_end[z_key]] = float(end_value)
+                payload["inactive_tail_time_entry_count"] = int(
+                    payload["inactive_tail_time_entry_count"]
+                ) + 3
+
+    try:
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - numpy is part of highspy's runtime stack locally
+        payload["status"] = "NUMPY_UNAVAILABLE"
+        payload["note"] = f"Could not pass sparse HiGHS solution without numpy: {type(exc).__name__}: {exc}"
+        return payload
+
+    indices = np.array(sorted(values), dtype=np.int32)
+    col_values = np.array([values[int(index)] for index in indices], dtype=np.float64)
+    try:
+        status = highs.setSolution(len(indices), indices, col_values)
+    except Exception as exc:
+        payload["status"] = "SET_SOLUTION_ERROR"
+        payload["entry_count"] = int(len(indices))
+        payload["note"] = f"highs.setSolution failed: {type(exc).__name__}: {exc}"
+        return payload
+
+    payload["status"] = _highs_status_name(status)
+    payload["entry_count"] = int(len(indices))
+    payload["note"] = "Column-pool journey warm start was passed to HiGHS as a solver hint."
     return payload
 
 

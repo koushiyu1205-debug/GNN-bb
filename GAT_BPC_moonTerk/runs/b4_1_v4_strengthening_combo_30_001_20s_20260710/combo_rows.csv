@@ -1,0 +1,3 @@
+variant,status,pricing_state,exact_status,variable_count,constraint_count,dual_bound,best_reduced_cost,wall_time_sec,outer_wall_sec,sortie_slot_position_bound_count,pair_weighted_completion_lb_count,pair_energy_infeasible_cut_count,pair_time_window_infeasible_cut_count,pair_shadow_infeasible_cut_count
+sortie_plus_pair_weighted,COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED,INCOMPLETE_LIMIT,NOT_SOLVED,6009,13921,-0.227465477,0.031976,17.465444,17.465867,62,2422,0,0,0
+sortie_pair_weighted_pair_infeasible,COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED,INCOMPLETE_LIMIT,NOT_SOLVED,6009,14743,-0.215175684,0.08621,20.233389,20.23371,62,2422,333,489,0

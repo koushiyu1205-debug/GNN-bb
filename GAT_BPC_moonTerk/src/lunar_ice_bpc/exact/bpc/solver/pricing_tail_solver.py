@@ -285,10 +285,11 @@ def solve_node_pricing_with_b2b_r3(
 
     active_context = branch_context or BranchContext()
     active_node_id = str(node_id)
+    started_at = perf_counter()
     completion_policy = build_completion_bound_tail_policy(pruning_opt_in=False)
     proof_debt = ProofDebtQueue()
     profiling = PruningCounter()
-    if b0_direct is None:
+    if b0_direct is None and initial_columns is None:
         b0_direct = solve_direct_journey_baseline(
             data,
             max_exact_tasks=int(max_direct_tasks),
@@ -378,6 +379,36 @@ def solve_node_pricing_with_b2b_r3(
     tail_dual_history: list[JourneyDuals] = []
 
     for round_index in range(1, max(1, int(max_rounds)) + 1):
+        if _wall_time_limit_exceeded(wall_time_limit_sec, started_at=started_at):
+            profile_totals["exit_reason"] = "ROW_TIME_LIMIT_BEFORE_ROUND"
+            return _node_engine_payload(
+                data=data,
+                node_id=active_node_id,
+                branch_context=active_context,
+                incumbent_objective=incumbent_objective,
+                completion_policy=completion_policy,
+                proof_debt=proof_debt,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                profile_totals=profile_totals,
+                seed_report=seed_report,
+                loaded_column_count=loaded_count,
+                seed_branch_filtered_column_count=seed_branch_filtered_count,
+                master=last_master,
+                final_judge=last_judge_payload,
+                final_judge_columns=last_final_judge_columns,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+                pricing_state=PricingState.INCOMPLETE_LIMIT,
+                node_status="NODE_INCOMPLETE",
+                note=f"{B2B_R3_MODE} node stopped before round {round_index}: wall_time_limit_sec={wall_time_limit_sec} exhausted.",
+            )
         master_columns = _master_columns(pool, view, node_id=active_node_id)
         rmp_start = perf_counter()
         master = solve_root_journey_master(
@@ -515,12 +546,44 @@ def solve_node_pricing_with_b2b_r3(
             profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL_BEFORE_FINAL_JUDGE"
             continue
 
+        remaining_for_judge = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
+        if remaining_for_judge is not None and remaining_for_judge <= 0.0:
+            profile_totals["exit_reason"] = "ROW_TIME_LIMIT_BEFORE_FINAL_JUDGE"
+            return _node_engine_payload(
+                data=data,
+                node_id=active_node_id,
+                branch_context=active_context,
+                incumbent_objective=incumbent_objective,
+                completion_policy=completion_policy,
+                proof_debt=proof_debt,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                profile_totals=profile_totals,
+                seed_report=seed_report,
+                loaded_column_count=loaded_count,
+                seed_branch_filtered_column_count=seed_branch_filtered_count,
+                master=last_master,
+                final_judge=last_judge_payload,
+                final_judge_columns=last_final_judge_columns,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+                pricing_state=PricingState.INCOMPLETE_LIMIT,
+                node_status="NODE_INCOMPLETE",
+                note=f"{B2B_R3_MODE} node stopped before final judge: wall_time_limit_sec={wall_time_limit_sec} exhausted.",
+            )
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
             data,
             master.reduced_cost_context,
             max_direct_tasks=max_direct_tasks,
             negative_eps=negative_eps,
+            wall_time_limit_sec=remaining_for_judge,
             cache=cache,
             branch_context=active_context,
             column_pool=pool,
@@ -605,12 +668,58 @@ def solve_node_pricing_with_b2b_r3(
                 "worker_wall_time": worker.payload.get("worker_wall_time"),
                 **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
+                "final_judge_status": judge.pricing_payload.get("status"),
+                "compact_pricing_phase": judge.pricing_payload.get("compact_pricing_phase"),
                 "final_judge_wall_time": round(judge_wall_time, 6),
+                "negative_column_count": int(
+                    judge.pricing_payload.get("negative_column_count")
+                    or len(getattr(judge, "negative_columns", tuple()))
+                ),
                 "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                 "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                 "selected_count": int(harvest_payload["selected_count"]),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
+                "harvest_source_phase": judge.pricing_payload.get("harvest_source_phase"),
+                "harvest_selected_count": judge.pricing_payload.get("harvest_selected_count"),
+                "harvest_candidate_negative_count": judge.pricing_payload.get("harvest_candidate_negative_count"),
+                "harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
+                "route_template_pre_harvest_enabled": bool(
+                    judge.pricing_payload.get("route_template_pre_harvest_enabled")
+                ),
+                "route_template_pre_harvest_status": judge.pricing_payload.get(
+                    "route_template_pre_harvest_status"
+                ),
+                "route_template_pre_harvest_target": judge.pricing_payload.get(
+                    "route_template_pre_harvest_target"
+                ),
+                "route_template_pre_harvest_seed_strategy": judge.pricing_payload.get(
+                    "route_template_pre_harvest_seed_strategy"
+                ),
+                "route_template_pre_harvest_neighborhood_enabled": judge.pricing_payload.get(
+                    "route_template_pre_harvest_neighborhood_enabled"
+                ),
+                "route_template_pre_harvest_max_neighborhood_seeds": judge.pricing_payload.get(
+                    "route_template_pre_harvest_max_neighborhood_seeds"
+                ),
+                "route_template_pre_harvest_seed_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_seed_count"
+                ),
+                "route_template_pre_harvest_candidate_round_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_candidate_round_count"
+                ),
+                "route_template_pre_harvest_selected_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_selected_count"
+                ),
+                "route_template_pre_harvest_selected_new_task_set_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_selected_new_task_set_count"
+                ),
+                "route_template_pre_harvest_pricing_wall_time_sec": judge.pricing_payload.get(
+                    "route_template_pre_harvest_pricing_wall_time_sec"
+                ),
+                "route_template_pre_harvest_fallback_enabled": judge.pricing_payload.get(
+                    "route_template_pre_harvest_fallback_enabled"
+                ),
                 "duplicate_only_audit_status": None if duplicate_audit is None else duplicate_audit.get("status"),
                 "branch_context_active": not active_context.empty,
                 "branch_filtered_count": int(harvest_payload.get("branch_filtered_count") or 0),
@@ -675,6 +784,38 @@ def solve_node_pricing_with_b2b_r3(
                 pricing_state=PricingState.DUPLICATE_ONLY,
                 node_status="DUPLICATE_ONLY",
                 note="DUPLICATE_ONLY: branch-aware true-RC negative candidates were found but none entered the node master.",
+            )
+        if judge.pricing_state != PricingState.FOUND_NEGATIVE and added == 0:
+            return _node_engine_payload(
+                data=data,
+                node_id=active_node_id,
+                branch_context=active_context,
+                incumbent_objective=incumbent_objective,
+                completion_policy=completion_policy,
+                proof_debt=proof_debt,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                profile_totals=profile_totals,
+                seed_report=seed_report,
+                loaded_column_count=loaded_count,
+                seed_branch_filtered_column_count=seed_branch_filtered_count,
+                master=master,
+                final_judge=judge.pricing_payload,
+                final_judge_columns=judge.all_priced_columns,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+                pricing_state=judge.pricing_state,
+                node_status="NODE_INCOMPLETE",
+                note=(
+                    "B2B_R3 final judge did not certify no-negative and did not return an "
+                    "addable negative column; stopping this node fail-closed."
+                ),
             )
 
     profile_totals["exit_reason"] = str(profile_totals.get("exit_reason") or "WORKER_INCOMPLETE_LIMIT")
@@ -1596,12 +1737,58 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "worker_wall_time": worker.payload.get("worker_wall_time"),
                 **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
+                "final_judge_status": judge.pricing_payload.get("status"),
+                "compact_pricing_phase": judge.pricing_payload.get("compact_pricing_phase"),
                 "final_judge_wall_time": round(judge_wall_time, 6),
+                "negative_column_count": int(
+                    judge.pricing_payload.get("negative_column_count")
+                    or len(getattr(judge, "negative_columns", tuple()))
+                ),
                 "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                 "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                 "selected_count": int(harvest_payload["selected_count"]),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
+                "harvest_source_phase": judge.pricing_payload.get("harvest_source_phase"),
+                "harvest_selected_count": judge.pricing_payload.get("harvest_selected_count"),
+                "harvest_candidate_negative_count": judge.pricing_payload.get("harvest_candidate_negative_count"),
+                "harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
+                "route_template_pre_harvest_enabled": bool(
+                    judge.pricing_payload.get("route_template_pre_harvest_enabled")
+                ),
+                "route_template_pre_harvest_status": judge.pricing_payload.get(
+                    "route_template_pre_harvest_status"
+                ),
+                "route_template_pre_harvest_target": judge.pricing_payload.get(
+                    "route_template_pre_harvest_target"
+                ),
+                "route_template_pre_harvest_seed_strategy": judge.pricing_payload.get(
+                    "route_template_pre_harvest_seed_strategy"
+                ),
+                "route_template_pre_harvest_neighborhood_enabled": judge.pricing_payload.get(
+                    "route_template_pre_harvest_neighborhood_enabled"
+                ),
+                "route_template_pre_harvest_max_neighborhood_seeds": judge.pricing_payload.get(
+                    "route_template_pre_harvest_max_neighborhood_seeds"
+                ),
+                "route_template_pre_harvest_seed_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_seed_count"
+                ),
+                "route_template_pre_harvest_candidate_round_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_candidate_round_count"
+                ),
+                "route_template_pre_harvest_selected_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_selected_count"
+                ),
+                "route_template_pre_harvest_selected_new_task_set_count": judge.pricing_payload.get(
+                    "route_template_pre_harvest_selected_new_task_set_count"
+                ),
+                "route_template_pre_harvest_pricing_wall_time_sec": judge.pricing_payload.get(
+                    "route_template_pre_harvest_pricing_wall_time_sec"
+                ),
+                "route_template_pre_harvest_fallback_enabled": judge.pricing_payload.get(
+                    "route_template_pre_harvest_fallback_enabled"
+                ),
                 "duplicate_only_audit_status": None if duplicate_audit is None else duplicate_audit.get("status"),
                 "completion_bound_pruning_enabled": False,
             }
@@ -1663,6 +1850,38 @@ def _solve_b2b_r2_worker_before_final_judge(
                 certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
                 pricing_state=PricingState.DUPLICATE_ONLY,
                 note="DUPLICATE_ONLY: true-RC negative candidates were found but none entered the current master; certificate blocked.",
+                profile_totals=profile_totals,
+            )
+        if judge.pricing_state != PricingState.FOUND_NEGATIVE and added == 0:
+            return _payload(
+                data=data,
+                b0_direct=b0_direct,
+                previous_baseline=previous_baseline,
+                proof_debt=proof_debt,
+                completion_policy=completion_policy,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=replacement_only_round_count,
+                added_to_master_count=added_total,
+                master=master,
+                final_judge=judge.pricing_payload,
+                duplicate_audit=last_duplicate_audit,
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
+                manual_rc_audit=None,
+                mode=active_mode,
+                seed_report=seed_report,
+                algorithm_status=AlgorithmStatus.BPC_INCOMPLETE_PRICING,
+                certificate_scope=CertificateScope.DIAGNOSTIC_PRICING_FRONTIER,
+                pricing_state=judge.pricing_state,
+                note=(
+                    f"{active_mode} final judge did not certify no-negative and did not "
+                    "return an addable negative column; stopping fail-closed."
+                ),
                 profile_totals=profile_totals,
             )
 

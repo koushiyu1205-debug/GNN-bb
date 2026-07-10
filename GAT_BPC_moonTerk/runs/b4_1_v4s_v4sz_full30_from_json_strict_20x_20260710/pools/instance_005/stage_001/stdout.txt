@@ -1,0 +1,2 @@
+{"elapsed_sec": 102.819334, "algorithm_status": "BPC_INCOMPLETE_PRICING", "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER", "pricing_state": "INCOMPLETE_LIMIT", "pricing_round_count": 1, "added_column_count": 5, "active_column_count": 39}
+report /home/kai/work/GAT_BPC_moonTerk/runs/b4_1_v4s_v4sz_full30_from_json_strict_20x_20260710/pools/instance_005/stage_001/probe_report_zh.md

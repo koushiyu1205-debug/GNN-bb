@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import heapq
 from itertools import combinations, permutations, product
+from time import perf_counter
 
 from lunar_ice_bpc.domain.scenario import PATH_TYPES
 from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
@@ -22,7 +24,10 @@ from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, solve_restricte
 from lunar_ice_bpc.exact.pricing.completion_bounds import build_positive_cover_completion_bound
 from lunar_ice_bpc.exact.solver.column_pool import select_journey_column_pool
 from lunar_ice_bpc.exact.solver.journey_driver import (
+    DirectBaselineTimeLimitExceeded,
+    _direct_sortie_candidates_from_start,
     _nondominated_path_type_cache,
+    _path_type_lower_bound_cache,
     enumerate_canonical_journey_columns,
 )
 
@@ -280,7 +285,12 @@ def price_direct_journey_columns(
         if complete_for_all_tasks
         else _select_direct_candidate_sets(data, duals, int(max_direct_tasks))
     )
-    candidate_sets = _merge_candidate_sets(data, candidate_sets, seed_task_sets)
+    candidate_sets = _merge_candidate_sets(
+        data,
+        candidate_sets,
+        seed_task_sets,
+        max_candidate_task_count=int(max_direct_tasks),
+    )
     if max_candidate_sets is not None:
         candidate_sets = candidate_sets[: max(0, int(max_candidate_sets))]
     attempt_count = 0
@@ -438,6 +448,153 @@ def price_direct_journey_columns(
         ),
     }
     return payload, tuple(column for _, _, column in priced_columns)
+
+
+def price_direct_journey_columns_incremental(
+    data: LunarIceData,
+    duals: JourneyDuals,
+    *,
+    negative_eps: float = 1.0e-6,
+    max_direct_tasks: int = 12,
+    seed_task_sets: tuple[tuple[str, ...], ...] = tuple(),
+    max_candidate_sets: int | None = None,
+    wall_time_limit_sec: float | None = None,
+    stop_at_first_negative: bool = True,
+    cut_context: CutContext | None = None,
+    branch_context: BranchContext | None = None,
+) -> tuple[dict, tuple[JourneyColumn, ...]]:
+    """Reduced-cost route-template pricing over selected multi-sortie task sets.
+
+    This opt-in probe is exact for each selected candidate task set, but it is not
+    an exhaustive full-space pricing certificate unless the selected sets cover
+    the full pricing space.  A returned negative column is still valid because it
+    is audited with the current true RMP duals before being reported.
+    """
+
+    start = perf_counter()
+    deadline = None if wall_time_limit_sec is None else start + max(0.0, float(wall_time_limit_sec))
+    context = cut_context or CutContext()
+    branch = branch_context or BranchContext()
+    candidate_sets = _select_direct_candidate_sets(data, duals, int(max_direct_tasks))
+    candidate_sets = _merge_candidate_sets(
+        data,
+        seed_task_sets,
+        candidate_sets,
+        max_candidate_task_count=int(max_direct_tasks),
+    )
+    if max_candidate_sets is not None:
+        candidate_sets = candidate_sets[: max(0, int(max_candidate_sets))]
+
+    priced_columns: list[tuple[float, tuple[str, ...], JourneyColumn]] = []
+    candidate_summaries: list[dict] = []
+    attempt_count = 0
+    feasible_template_count = 0
+    pareto_count = 0
+    timed_out = False
+    timeout_stage = ""
+    branch_filtered_count = 0
+
+    for candidate_task_ids in candidate_sets:
+        if _deadline_exceeded(deadline):
+            timed_out = True
+            timeout_stage = "candidate_loop"
+            break
+        try:
+            label, stats = _best_direct_label_incremental(
+                data,
+                duals,
+                tuple(sorted(candidate_task_ids)),
+                deadline=deadline,
+                cut_context=context,
+            )
+        except DirectBaselineTimeLimitExceeded as exc:
+            timed_out = True
+            timeout_stage = f"incremental_route_template:{exc.stage}"
+            attempt_count += int(exc.generated_sortie_count)
+            feasible_template_count += int(exc.route_template_count)
+            pareto_count += int(exc.pareto_label_count)
+            break
+        attempt_count += int(stats["sortie_attempt_count"])
+        feasible_template_count += int(stats["feasible_sortie_template_count"])
+        pareto_count += int(stats["pareto_label_count"])
+        summary = {
+            "candidate_task_ids": list(candidate_task_ids),
+            "sortie_attempt_count": int(stats["sortie_attempt_count"]),
+            "feasible_sortie_template_count": int(stats["feasible_sortie_template_count"]),
+            "pareto_label_count": int(stats["pareto_label_count"]),
+            "best_reduced_cost": None,
+            "negative_found": False,
+            "branch_feasible": None,
+        }
+        if label is not None:
+            column = build_journey_column(data, label.sorties)
+            rc = manual_journey_reduced_cost(
+                column,
+                duals,
+                cut_coefficients=context.coefficients_for(column),
+            )
+            summary["best_reduced_cost"] = rc
+            summary["negative_found"] = bool(rc < -abs(float(negative_eps)))
+            branch_feasible = journey_satisfies_branch_context(column, branch)
+            summary["branch_feasible"] = bool(branch_feasible)
+            if branch_feasible:
+                priced_columns.append((rc, tuple(sorted(candidate_task_ids)), column))
+                if bool(stop_at_first_negative) and rc < -abs(float(negative_eps)):
+                    candidate_summaries.append(summary)
+                    break
+            else:
+                branch_filtered_count += 1
+        candidate_summaries.append(summary)
+
+    priced_columns.sort(key=lambda item: item[0])
+    negative_columns = tuple(
+        column for rc, _, column in priced_columns if rc < -abs(float(negative_eps))
+    )
+    best_rc = priced_columns[0][0] if priced_columns else None
+    best_column = priced_columns[0][2] if priced_columns else None
+    status = (
+        "INCREMENTAL_DIRECT_LABEL_PRICING_TIME_LIMIT"
+        if timed_out
+        else "INCREMENTAL_DIRECT_LABEL_NEGATIVE_FOUND"
+        if negative_columns
+        else "INCREMENTAL_DIRECT_LABEL_NO_NEGATIVE_IN_SELECTED_SETS"
+    )
+    payload = {
+        "status": status,
+        "exact_status": "NOT_SOLVED",
+        "task_count": len(data.task_ids),
+        "max_direct_tasks": int(max_direct_tasks),
+        "candidate_round_count": len(candidate_summaries),
+        "candidate_round_limit": int(max_candidate_sets) if max_candidate_sets is not None else None,
+        "candidate_sets": [list(row) for row in candidate_sets],
+        "seed_task_sets_first": True,
+        "seed_task_set_count": len(seed_task_sets),
+        "candidate_summaries": candidate_summaries,
+        "pricing_complete_for_all_tasks": False,
+        "pricing_complete_for_all_task_subsets": False,
+        "sortie_attempt_count": int(attempt_count),
+        "feasible_sortie_template_count": int(feasible_template_count),
+        "pareto_label_count": int(pareto_count),
+        "best_reduced_cost": best_rc,
+        "negative_found": bool(negative_columns),
+        "negative_column_count": len(negative_columns),
+        "branch_context_active": not branch.empty,
+        "branch_decision_count": len(branch.pair_decisions),
+        "branch_filtered_column_count": branch_filtered_count,
+        "cut_context_active": not context.empty,
+        "cut_count": len(context.cuts),
+        "can_certify_no_negative": False,
+        "uses_true_dual_bpc_certificate": False,
+        "timeout_stage": timeout_stage,
+        "wall_time_sec": round(perf_counter() - start, 6),
+        "best_column": None if best_column is None else _best_column_payload(best_column),
+        "note": (
+            "Incremental direct-label route-template pricing over selected task sets. "
+            "Negative columns are true-dual audited and addable diagnostics; no-column "
+            "results are not exhaustive certificates."
+        ),
+    }
+    return payload, negative_columns or tuple(column for _, _, column in priced_columns)
 
 
 def price_exhaustive_direct_journey_columns(
@@ -664,6 +821,27 @@ def _cache_payload(cache: DirectPricingCache | None) -> dict:
     return cache.stats()
 
 
+def _deadline_exceeded(deadline: float | None) -> bool:
+    return deadline is not None and perf_counter() > float(deadline)
+
+
+def _best_column_payload(column: JourneyColumn) -> dict:
+    return {
+        "task_count": len(column.task_set),
+        "tasks": sorted(column.task_set),
+        "objective": column.objective,
+        "end_time": column.end_time,
+        "sortie_count": len(column.sorties),
+        "legs": [
+            [
+                {"from": leg.source, "to": leg.target, "path_type": leg.path_type}
+                for leg in sortie.legs
+            ]
+            for sortie in column.sorties
+        ],
+    }
+
+
 def _disabled_completion_bound_payload() -> dict:
     return {
         "enabled": False,
@@ -729,9 +907,15 @@ def _merge_candidate_sets(
     data: LunarIceData,
     candidate_sets: tuple[tuple[str, ...], ...],
     seed_task_sets: tuple[tuple[str, ...], ...],
+    *,
+    max_candidate_task_count: int | None = None,
 ) -> tuple[tuple[str, ...], ...]:
     all_tasks = set(data.task_ids)
-    max_size = int(data.max_tasks_per_trip)
+    max_size = (
+        int(max_candidate_task_count)
+        if max_candidate_task_count is not None
+        else int(data.max_tasks_per_trip)
+    )
     unique: list[tuple[str, ...]] = []
     seen: set[tuple[str, ...]] = set()
 
@@ -897,6 +1081,119 @@ def _best_direct_label(
             ),
         )
     return best, best_full, pareto_count, completion_payload
+
+
+def _best_direct_label_incremental(
+    data: LunarIceData,
+    duals: JourneyDuals,
+    candidate_task_ids: tuple[str, ...],
+    *,
+    deadline: float | None = None,
+    cut_context: CutContext | None = None,
+) -> tuple[_DirectJourneyLabel | None, dict]:
+    task_index = TaskIndexMap(candidate_task_ids)
+    full_mask = task_index.full_mask
+    task_to_bit = {task_id: task_index.mask_of(task_id) for task_id in task_index.external_ids}
+    context = cut_context or CutContext()
+    path_type_cache = _nondominated_path_type_cache(data)
+    path_type_lb_cache = _path_type_lower_bound_cache(data, path_type_cache)
+    labels_by_mask: dict[int, list[_DirectJourneyLabel]] = {
+        0: [_DirectJourneyLabel(task_mask=0, sorties=tuple(), end_time=0.0, reduced_base=0.0)]
+    }
+    pending_masks = [0]
+    queued_masks = {0}
+    processed_masks: set[int] = set()
+    generated_sortie_count = 0
+    route_template_count = 0
+    best: _DirectJourneyLabel | None = None
+
+    while pending_masks:
+        if _deadline_exceeded(deadline):
+            raise DirectBaselineTimeLimitExceeded(
+                stage="incremental_journey_label_dp",
+                generated_sortie_count=generated_sortie_count,
+                route_template_count=route_template_count,
+                pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
+            )
+        current_mask = heapq.heappop(pending_masks)
+        if current_mask in processed_masks:
+            continue
+        processed_masks.add(current_mask)
+        current_labels = list(labels_by_mask.get(current_mask, []))
+        if not current_labels:
+            continue
+        remaining_mask = full_mask ^ current_mask
+        if remaining_mask == 0:
+            continue
+        for label_index, label in enumerate(current_labels):
+            if label_index % 32 == 0 and _deadline_exceeded(deadline):
+                raise DirectBaselineTimeLimitExceeded(
+                    stage="incremental_journey_label_dp",
+                    generated_sortie_count=generated_sortie_count,
+                    route_template_count=route_template_count,
+                    pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
+                )
+            try:
+                candidates, generated_count, route_count, _ = _direct_sortie_candidates_from_start(
+                    data,
+                    task_to_bit,
+                    remaining_mask=remaining_mask,
+                    start_time=float(label.end_time),
+                    deadline=deadline,
+                    path_type_cache=path_type_cache,
+                    path_type_lb_cache=path_type_lb_cache,
+                )
+            except DirectBaselineTimeLimitExceeded as exc:
+                raise DirectBaselineTimeLimitExceeded(
+                    stage=f"sortie_candidate_generation:{exc.stage}",
+                    generated_sortie_count=generated_sortie_count + int(exc.generated_sortie_count),
+                    route_template_count=route_template_count + int(exc.route_template_count),
+                    pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
+                ) from exc
+            generated_sortie_count += int(generated_count)
+            route_template_count += int(route_count)
+            for candidate_index, candidate in enumerate(candidates):
+                if candidate_index % 1024 == 0 and _deadline_exceeded(deadline):
+                    raise DirectBaselineTimeLimitExceeded(
+                        stage="incremental_candidate_extension",
+                        generated_sortie_count=generated_sortie_count,
+                        route_template_count=route_template_count,
+                        pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
+                    )
+                if candidate.task_mask & current_mask:
+                    continue
+                new_mask = current_mask | candidate.task_mask
+                if new_mask == current_mask:
+                    continue
+                if new_mask not in queued_masks:
+                    heapq.heappush(pending_masks, new_mask)
+                    queued_masks.add(new_mask)
+                new_label = _extend_direct_label(data, duals, label, candidate.sortie, candidate.task_mask)
+                _add_direct_pareto_label(labels_by_mask.setdefault(new_mask, []), new_label)
+                if (
+                    best is None
+                    or new_label.reduced_cost(
+                        data,
+                        duals,
+                        cut_context=context,
+                        candidate_task_ids=candidate_task_ids,
+                    )
+                    < best.reduced_cost(
+                        data,
+                        duals,
+                        cut_context=context,
+                        candidate_task_ids=candidate_task_ids,
+                    )
+                    - 1.0e-9
+                ):
+                    best = new_label
+
+    stats = {
+        "sortie_attempt_count": int(generated_sortie_count),
+        "feasible_sortie_template_count": int(route_template_count),
+        "pareto_label_count": sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
+    }
+    return best, stats
 
 
 def _select_direct_candidate_sets(data: LunarIceData, duals: JourneyDuals, limit: int) -> tuple[tuple[str, ...], ...]:

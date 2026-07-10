@@ -1,0 +1,37 @@
+{
+  "pool_certified_count": 1,
+  "pool_row_count": 20,
+  "profiles": {
+    "V4S": {
+      "exact_certificate_count": 0,
+      "failed_or_skipped_count": 20,
+      "mean_active_column_count_certified": null,
+      "mean_final_judge_wall_time_sec_certified": null,
+      "mean_wall_time_sec_certified": null,
+      "rows": 20,
+      "strict_from_json_exact_certificate_count": 0,
+      "strict_from_json_failed_or_skipped_count": 20,
+      "strict_from_json_mean_end_to_end_stage_sum_sec_certified": null,
+      "strict_from_json_mean_end_to_end_wall_time_sec_certified": null,
+      "strict_from_json_rows": 20
+    },
+    "V4SZ": {
+      "exact_certificate_count": 0,
+      "failed_or_skipped_count": 20,
+      "mean_active_column_count_certified": null,
+      "mean_final_judge_wall_time_sec_certified": null,
+      "mean_wall_time_sec_certified": null,
+      "rows": 20,
+      "strict_from_json_exact_certificate_count": 0,
+      "strict_from_json_failed_or_skipped_count": 20,
+      "strict_from_json_mean_end_to_end_stage_sum_sec_certified": null,
+      "strict_from_json_mean_end_to_end_wall_time_sec_certified": null,
+      "strict_from_json_rows": 20
+    }
+  },
+  "proof_row_count": 40,
+  "row_count": 60,
+  "strict_from_json_pool_certified_count": 1,
+  "strict_from_json_pool_row_count": 20,
+  "strict_from_json_proof_row_count": 40
+}

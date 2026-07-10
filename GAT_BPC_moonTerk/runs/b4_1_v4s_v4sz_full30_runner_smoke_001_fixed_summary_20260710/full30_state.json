@@ -1,0 +1,23 @@
+{
+  "rows": [
+    {
+      "algorithm_status": "BPC_GAP_AVAILABLE",
+      "certificate_scope": "BPC_NODE_LP_CERTIFIED",
+      "instance_key": "instance_001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+      "note": "external reuse probe; pool build skipped",
+      "phase": "pool_build",
+      "pool_active_column_count": 371,
+      "pool_added_column_count_last_stage": 0,
+      "pool_build_wall_time_sec": 0.00538,
+      "pool_certified": true,
+      "pool_elapsed_stage_sum_sec": 0.0,
+      "pool_phase_mode": "external_reuse",
+      "pool_profile": "external_reuse",
+      "pool_stage_count": 0,
+      "pricing_state": "CERTIFIED_NO_NEGATIVE",
+      "profile": "POOL",
+      "source_probe_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_1_true_dual_proof_tail_stage_b_30_v4_after_epsilon_band_merge_official_eps_600s/stage_002/probe.json"
+    }
+  ]
+}

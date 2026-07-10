@@ -1,0 +1,265 @@
+{
+  "best_lb": -0.440181786,
+  "certified_no_negative": false,
+  "coverage_complete": true,
+  "dual_refresh_status": "RESTRICTED_RMP_OPTIMAL",
+  "dual_scope_mismatch_count": 0,
+  "duplicate_region_count": 0,
+  "expected_region_count": 465,
+  "incomplete_region_count": 19,
+  "issue_codes": [
+    "best_lb_negative",
+    "incomplete_regions",
+    "negative_regions"
+  ],
+  "missing_region_count": 0,
+  "negative_rc_audit_fail_count": 0,
+  "negative_region_count": 19,
+  "redline_count": 0,
+  "region_count": 465,
+  "schema_version": "lunar_ice_bpc.b4_2.parallel_partition_summary.v1",
+  "task_count": 30,
+  "unexpected_region_count": 0,
+  "worker_results": [
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_01_k001_001",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_01_k001_001/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 2.305692
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_02_k002_002",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_02_k002_002/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 2.763613
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_03_k003_003",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_03_k003_003/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 3.516779
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_04_k004_004",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_04_k004_004/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 6.592413
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_05_k005_005",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_05_k005_005/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 12.140891
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_06_k006_006",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_06_k006_006/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 23.578561
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_07_k007_007",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_07_k007_007/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 36.419668
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_08_k008_008",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_08_k008_008/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 54.965008
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_09_k009_009",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_09_k009_009/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 70.159131
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_10_k010_010",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_10_k010_010/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 77.693978
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_11_k011_011",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_11_k011_011/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 70.095289
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_12_k012_012",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_12_k012_012/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 56.204293
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_13_k013_013",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_13_k013_013/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 43.84382
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_14_k014_014",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_14_k014_014/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 28.165678
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_15_k015_015",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_15_k015_015/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 26.66209
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_16_k016_016",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_16_k016_016/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 20.17101
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_17_k017_017",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_17_k017_017/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 11.091429
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_18_k018_018",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_18_k018_018/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 11.232734
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_19_k019_019",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_19_k019_019/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 10.387786
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_20_k020_020",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_20_k020_020/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 10.681794
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_21_k021_021",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_21_k021_021/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 10.760402
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_22_k022_022",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_22_k022_022/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 10.761149
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_23_k023_023",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_23_k023_023/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 10.659753
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_24_k024_024",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_24_k024_024/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 10.972854
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_25_k025_025",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_25_k025_025/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 9.736044
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_29_k029_029",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_29_k029_029/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 3.183681
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_26_k026_026",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_26_k026_026/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 9.736457
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_30_k030_030",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_30_k030_030/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 3.104653
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_27_k027_027",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_27_k027_027/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 9.94417
+    },
+    {
+      "error": "",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_28_k028_028",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_3600s_instance001_current_model_profile/proofs/scale_030/instance_001/root_partition_proof/worker_28_k028_028/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 9.895781
+    }
+  ]
+}

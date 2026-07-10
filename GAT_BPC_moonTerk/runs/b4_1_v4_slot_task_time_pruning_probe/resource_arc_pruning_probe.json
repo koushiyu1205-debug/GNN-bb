@@ -1,0 +1,51 @@
+{
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "rows": [
+    {
+      "best_reduced_cost": null,
+      "can_certify_no_negative": false,
+      "constraint_count": 15712,
+      "dual_bound": null,
+      "exact_status": "NOT_SOLVED",
+      "gap": null,
+      "model_status_name": "TIME_LIMIT_REACHED",
+      "negative_found": false,
+      "resource_arc_demand_pruned_option_count": 0,
+      "resource_arc_energy_pruned_option_count": 0,
+      "resource_arc_pruned_option_count": 0,
+      "resource_arc_pruning": false,
+      "resource_arc_shadow_pruned_option_count": 0,
+      "slot_arc_time_pruned_option_count": 19,
+      "slot_task_time_pruned_assignment_count": 355,
+      "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "time_window_impossible_arc_option_count": 1193,
+      "variable_count": 6660,
+      "wall_time_sec_outer": 3.306469,
+      "wall_time_sec_payload": 3.30606
+    },
+    {
+      "best_reduced_cost": 0.101660333,
+      "can_certify_no_negative": false,
+      "constraint_count": 14237,
+      "dual_bound": -0.261058237,
+      "exact_status": "NOT_SOLVED",
+      "gap": 3.567947758,
+      "model_status_name": "TIME_LIMIT_REACHED",
+      "negative_found": false,
+      "resource_arc_demand_pruned_option_count": 0,
+      "resource_arc_energy_pruned_option_count": 653,
+      "resource_arc_pruned_option_count": 653,
+      "resource_arc_pruning": true,
+      "resource_arc_shadow_pruned_option_count": 0,
+      "slot_arc_time_pruned_option_count": 17,
+      "slot_task_time_pruned_assignment_count": 355,
+      "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "time_window_impossible_arc_option_count": 1193,
+      "variable_count": 6009,
+      "wall_time_sec_outer": 3.243497,
+      "wall_time_sec_payload": 3.243124
+    }
+  ],
+  "source_probe_json": "runs/b4_1_true_dual_proof_tail_stage_b_30_v4_optimization_harvest_taskset_after_355_600s/stage_001/probe.json",
+  "time_limit_sec": 3.0
+}

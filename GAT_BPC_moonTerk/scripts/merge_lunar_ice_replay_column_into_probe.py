@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merge a compact-pricing replay best column into a resumable probe payload."""
+"""Merge a replay/region-proof negative column into a resumable probe payload."""
 
 from __future__ import annotations
 
@@ -17,10 +17,20 @@ def main() -> int:
         help="Optional B4.1 targeted restricted-region probe JSON containing targeted_negative_solution_payload.",
     )
     parser.add_argument(
+        "--partition-json",
+        help="Optional B4.1 required task-set partition probe JSON containing partition_negative_solution_payload.",
+    )
+    parser.add_argument(
         "--targeted-row-index",
         type=int,
         default=-1,
         help="0-based targeted row index to merge; default selects the most negative addable payload row.",
+    )
+    parser.add_argument(
+        "--partition-row-index",
+        type=int,
+        default=-1,
+        help="0-based partition row index to merge; default selects the most negative payload row.",
     )
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--vehicle-id", default="compact_replay_best")
@@ -32,16 +42,19 @@ def main() -> int:
     source_path, source_payload = _load_source_payload(
         replay_json=args.replay_json,
         targeted_json=args.targeted_json,
+        partition_json=args.partition_json,
     )
     best_payload, source_meta = _extract_best_payload(
         source_payload,
         source_path=source_path,
         targeted_row_index=int(args.targeted_row_index),
+        partition_row_index=int(args.partition_row_index),
     )
     if not isinstance(best_payload, dict):
         raise SystemExit(
             "source JSON has no mergeable column payload "
-            "(expected replay result.best_solution_payload or targeted_negative_solution_payload)"
+            "(expected replay result.best_solution_payload, targeted_negative_solution_payload, "
+            "or partition_negative_solution_payload)"
         )
     if base.get("instance_id") not in {None, "", source_payload.get("instance_id")}:
         raise SystemExit(
@@ -71,10 +84,15 @@ def main() -> int:
     return 0
 
 
-def _load_source_payload(*, replay_json: str | None, targeted_json: str | None) -> tuple[Path, dict]:
-    provided = [path for path in (replay_json, targeted_json) if path]
+def _load_source_payload(
+    *,
+    replay_json: str | None,
+    targeted_json: str | None,
+    partition_json: str | None,
+) -> tuple[Path, dict]:
+    provided = [path for path in (replay_json, targeted_json, partition_json) if path]
     if len(provided) != 1:
-        raise SystemExit("pass exactly one of --replay-json or --targeted-json")
+        raise SystemExit("pass exactly one of --replay-json, --targeted-json, or --partition-json")
     source_path = Path(provided[0])
     source_payload = json.loads(source_path.read_text(encoding="utf-8"))
     if not isinstance(source_payload, dict):
@@ -87,6 +105,7 @@ def _extract_best_payload(
     *,
     source_path: Path,
     targeted_row_index: int,
+    partition_row_index: int,
 ) -> tuple[dict | None, dict]:
     replay_payload = (source.get("result") or {}).get("best_solution_payload")
     if isinstance(replay_payload, dict):
@@ -97,40 +116,91 @@ def _extract_best_payload(
             "replay_dual_bound": (source.get("result") or {}).get("dual_bound"),
         }
 
+    targeted = _select_payload_row(
+        source,
+        payload_key="targeted_negative_solution_payload",
+        rc_keys=("targeted_negative_true_rc", "best_reduced_cost"),
+        requested_index=targeted_row_index,
+        index_label="targeted",
+    )
+    if targeted is not None:
+        selected_index, selected = targeted
+        return selected.get("targeted_negative_solution_payload"), {
+            "source_kind": "b4_1_targeted_restricted_region_probe",
+            "source_json": str(source_path),
+            "targeted_row_index": int(selected_index),
+            "targeted_region_id": selected.get("region_id"),
+            "targeted_variant": selected.get("variant"),
+            "targeted_negative_task_set": selected.get("targeted_negative_task_set"),
+            "targeted_negative_true_rc": selected.get("targeted_negative_true_rc"),
+            "replay_best_reduced_cost": selected.get("targeted_negative_true_rc"),
+            "replay_dual_bound": selected.get("dual_bound"),
+        }
+
+    partition = _select_payload_row(
+        source,
+        payload_key="partition_negative_solution_payload",
+        rc_keys=("partition_negative_true_rc", "best_reduced_cost"),
+        requested_index=partition_row_index,
+        index_label="partition",
+    )
+    if partition is not None:
+        selected_index, selected = partition
+        selected_rc = _first_present(selected, "partition_negative_true_rc", "best_reduced_cost")
+        return selected.get("partition_negative_solution_payload"), {
+            "source_kind": "b4_1_required_task_set_partition_probe",
+            "source_json": str(source_path),
+            "partition_row_index": int(selected_index),
+            "partition_region_id": selected.get("region_id"),
+            "partition_region_kind": selected.get("region_kind"),
+            "partition_variant": selected.get("variant"),
+            "partition_negative_task_set": selected.get("partition_negative_task_set"),
+            "partition_negative_true_rc": selected_rc,
+            "replay_best_reduced_cost": selected_rc,
+            "replay_dual_bound": selected.get("dual_bound"),
+        }
+
+    return None, {
+        "source_kind": "unknown_negative_column_source",
+        "source_json": str(source_path),
+    }
+
+
+def _select_payload_row(
+    source: dict,
+    *,
+    payload_key: str,
+    rc_keys: tuple[str, ...],
+    requested_index: int,
+    index_label: str,
+) -> tuple[int, dict] | None:
     rows = source.get("rows") if isinstance(source.get("rows"), list) else []
     candidates: list[tuple[int, dict]] = []
     for index, row in enumerate(rows):
-        if isinstance(row, dict) and isinstance(row.get("targeted_negative_solution_payload"), dict):
+        if isinstance(row, dict) and isinstance(row.get(payload_key), dict):
             candidates.append((index, row))
     if not candidates:
-        return None, {
-            "source_kind": "b4_1_targeted_restricted_region_probe",
-            "source_json": str(source_path),
-        }
-    if targeted_row_index >= 0:
-        matching = [row for row in candidates if row[0] == targeted_row_index]
+        return None
+    if requested_index >= 0:
+        matching = [row for row in candidates if row[0] == requested_index]
         if not matching:
-            raise SystemExit(f"targeted row index {targeted_row_index} has no targeted_negative_solution_payload")
-        selected_index, selected = matching[0]
-    else:
-        selected_index, selected = min(
-            candidates,
-            key=lambda item: (
-                _float_or_inf(item[1].get("targeted_negative_true_rc")),
-                item[0],
-            ),
-        )
-    return selected.get("targeted_negative_solution_payload"), {
-        "source_kind": "b4_1_targeted_restricted_region_probe",
-        "source_json": str(source_path),
-        "targeted_row_index": int(selected_index),
-        "targeted_region_id": selected.get("region_id"),
-        "targeted_variant": selected.get("variant"),
-        "targeted_negative_task_set": selected.get("targeted_negative_task_set"),
-        "targeted_negative_true_rc": selected.get("targeted_negative_true_rc"),
-        "replay_best_reduced_cost": selected.get("targeted_negative_true_rc"),
-        "replay_dual_bound": selected.get("dual_bound"),
-    }
+            raise SystemExit(f"{index_label} row index {requested_index} has no {payload_key}")
+        return matching[0]
+    return min(
+        candidates,
+        key=lambda item: (
+            _float_or_inf(_first_present(item[1], *rc_keys)),
+            item[0],
+        ),
+    )
+
+
+def _first_present(row: dict, *keys: str):
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return value
+    return None
 
 
 def _float_or_inf(value) -> float:

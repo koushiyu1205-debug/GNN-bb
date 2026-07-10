@@ -1,0 +1,2 @@
+{"stage_count": 3, "latest_stage": 3, "latest_scope": "BPC_NODE_LP_CERTIFIED", "latest_state": "CERTIFIED_NO_NEGATIVE", "latest_compact_final_judge_profile": "V4S", "latest_compact_final_judge_phase_mode": "proof_only", "latest_final_best_reduced_cost": 0.0, "latest_final_dual_bound": -3.68e-07, "latest_active_column_count": 151, "latest_added_column_count": 48}
+report /home/kai/work/GAT_BPC_moonTerk/runs/b4_1_v4s_v4sz_full30_from_json_strict_20x_20260710/pools/instance_001/staged_resume_report_zh.md

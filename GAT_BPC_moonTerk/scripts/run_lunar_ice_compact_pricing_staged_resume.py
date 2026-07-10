@@ -44,7 +44,22 @@ def main() -> int:
     )
     parser.add_argument(
         "--compact-final-judge-profile",
-        choices=("B4V2", "V4"),
+        choices=(
+            "B4V2",
+            "V4",
+            "V4S",
+            "V4SR",
+            "V4SC",
+            "V4SZ",
+            "V4SZW",
+            "V4SZCAP",
+            "V4SZPC",
+            "V4SL",
+            "V4ST",
+            "V4SZT",
+            "V4SZTP",
+            "V4SH",
+        ),
         default="",
         help="Optional compact final judge diagnostic profile. Empty preserves current environment/default.",
     )

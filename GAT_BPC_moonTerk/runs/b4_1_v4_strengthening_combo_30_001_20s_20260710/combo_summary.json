@@ -1,0 +1,40 @@
+{
+  "rows": [
+    {
+      "best_reduced_cost": 0.031976,
+      "constraint_count": 13921,
+      "dual_bound": -0.227465477,
+      "exact_status": "NOT_SOLVED",
+      "outer_wall_sec": 17.465867,
+      "pair_energy_infeasible_cut_count": 0,
+      "pair_shadow_infeasible_cut_count": 0,
+      "pair_time_window_infeasible_cut_count": 0,
+      "pair_weighted_completion_lb_count": 2422,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "sortie_slot_position_bound_count": 62,
+      "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "variable_count": 6009,
+      "variant": "sortie_plus_pair_weighted",
+      "wall_time_sec": 17.465444
+    },
+    {
+      "best_reduced_cost": 0.08621,
+      "constraint_count": 14743,
+      "dual_bound": -0.215175684,
+      "exact_status": "NOT_SOLVED",
+      "outer_wall_sec": 20.23371,
+      "pair_energy_infeasible_cut_count": 333,
+      "pair_shadow_infeasible_cut_count": 0,
+      "pair_time_window_infeasible_cut_count": 489,
+      "pair_weighted_completion_lb_count": 2422,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "sortie_slot_position_bound_count": 62,
+      "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+      "variable_count": 6009,
+      "variant": "sortie_pair_weighted_pair_infeasible",
+      "wall_time_sec": 20.233389
+    }
+  ],
+  "source_probe_json": "runs/b4_1_true_dual_proof_tail_stage_b_30_v4_after_epsilon_band_merge_official_eps_600s/stage_002/probe.json",
+  "time_limit_sec": 20.0
+}

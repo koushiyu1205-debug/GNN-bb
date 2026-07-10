@@ -77,6 +77,7 @@ CSV_COLUMNS = (
     "optimization_proof_missing",
     "pricing_complete_by_compact_milp",
     "negative_feasibility_search_enabled",
+    "negative_feasibility_zero_objective_enabled",
     "mtz_endpoint_order_cuts_enabled",
     "mtz_endpoint_order_cut_count",
     "pair_adjacency_cuts_enabled",
@@ -119,6 +120,47 @@ CSV_COLUMNS = (
     "time_window_arc_pruning_enabled",
     "time_window_arc_option_count",
     "time_window_impossible_arc_option_count",
+    "slot_task_time_pruning_enabled",
+    "slot_task_time_feasible_assignment_count",
+    "slot_task_time_pruned_assignment_count",
+    "slot_task_time_pruned_due_count",
+    "slot_task_time_pruned_horizon_count",
+    "slot_task_time_total_assignment_count",
+    "slot_task_time_original_total_assignment_count",
+    "slot_task_model_assignment_count",
+    "slot_arc_support_pruning_enabled",
+    "slot_arc_support_feasible_assignment_count",
+    "slot_arc_support_pruned_assignment_count",
+    "slot_arc_support_pruned_unreachable_count",
+    "slot_arc_support_pruned_no_return_count",
+    "slot_arc_support_pruned_option_count",
+    "slot_arc_time_pruned_option_count",
+    "slot_sequence_capacity_arc_pruning_enabled",
+    "slot_sequence_capacity_arc_pruned_option_count",
+    "slot_sequence_capacity_mtz_disabled_slot_count",
+    "resource_arc_pruning_enabled",
+    "resource_arc_pruned_option_count",
+    "resource_arc_energy_pruned_option_count",
+    "resource_arc_shadow_pruned_option_count",
+    "resource_arc_demand_pruned_option_count",
+    "single_journey_mip_start_enabled",
+    "single_journey_mip_start_status",
+    "single_journey_mip_start_source",
+    "single_journey_mip_start_entry_count",
+    "single_journey_mip_start_zero_fill_integers",
+    "single_journey_mip_start_zero_fill_integer_entry_count",
+    "single_journey_mip_start_sortie_count",
+    "single_journey_mip_start_task_count",
+    "single_journey_mip_start_objective",
+    "single_journey_mip_start_reduced_cost",
+    "required_task_set_enabled",
+    "required_task_set_count",
+    "pricing_model_task_count",
+    "required_task_set_model_reduction_enabled",
+    "required_task_set_model_task_count",
+    "required_task_set_model_task_reduction_count",
+    "required_task_set_region_can_certify_no_negative",
+    "pricing_complete_for_required_task_set",
     "restricted_negative_feasibility_claimed_certificate",
     "positive_incumbent_rc_claimed_certificate",
 )
@@ -140,6 +182,9 @@ B4D_VARIANT_CONFIGS = {
         "pair_adjacency_cuts": False,
         "latest_service_start_slot_bound": False,
         "time_window_arc_pruning": False,
+        "resource_arc_pruning": False,
+        "slot_task_time_pruning": False,
+        "slot_arc_support_pruning": False,
     },
     "V1_endpoint_order_plus_pair_adjacency": {
         "formulation_kind": "endpoint_order+pair_adjacency",
@@ -148,6 +193,9 @@ B4D_VARIANT_CONFIGS = {
         "pair_adjacency_cuts": True,
         "latest_service_start_slot_bound": False,
         "time_window_arc_pruning": False,
+        "resource_arc_pruning": False,
+        "slot_task_time_pruning": False,
+        "slot_arc_support_pruning": False,
     },
     "V2_latest_service_start_slot_bound": {
         "formulation_kind": "latest_service_start_slot_bound",
@@ -156,6 +204,9 @@ B4D_VARIANT_CONFIGS = {
         "pair_adjacency_cuts": False,
         "latest_service_start_slot_bound": True,
         "time_window_arc_pruning": False,
+        "resource_arc_pruning": False,
+        "slot_task_time_pruning": False,
+        "slot_arc_support_pruning": False,
     },
     "V3_time_window_arc_pruning": {
         "formulation_kind": "time_window_arc_pruning",
@@ -164,6 +215,9 @@ B4D_VARIANT_CONFIGS = {
         "pair_adjacency_cuts": False,
         "latest_service_start_slot_bound": False,
         "time_window_arc_pruning": True,
+        "resource_arc_pruning": False,
+        "slot_task_time_pruning": False,
+        "slot_arc_support_pruning": False,
     },
     "V4_combined_endpoint_pair_latest_start_time_window": {
         "formulation_kind": "endpoint_order+pair_adjacency+latest_service_start_slot_bound+time_window_arc_pruning",
@@ -172,6 +226,9 @@ B4D_VARIANT_CONFIGS = {
         "pair_adjacency_cuts": True,
         "latest_service_start_slot_bound": True,
         "time_window_arc_pruning": True,
+        "resource_arc_pruning": True,
+        "slot_task_time_pruning": True,
+        "slot_arc_support_pruning": False,
     },
 }
 
@@ -283,6 +340,9 @@ def iter_b4_pricing_formulation_matrix_rows_from_probe(
                 pair_adjacency_cuts=bool(config["pair_adjacency_cuts"]),
                 latest_service_start_slot_bound=bool(config["latest_service_start_slot_bound"]),
                 time_window_arc_pruning=bool(config["time_window_arc_pruning"]),
+                resource_arc_pruning=bool(config.get("resource_arc_pruning", False)),
+                slot_task_time_pruning=bool(config.get("slot_task_time_pruning", False)),
+                slot_arc_support_pruning=bool(config.get("slot_arc_support_pruning", False)),
                 negative_feasibility_search=bool(negative_feasibility),
             )
             result = dict(result)
@@ -705,6 +765,9 @@ def _row_from_pricing_payload(
         "optimization_proof_missing": optimization_proof_missing,
         "pricing_complete_by_compact_milp": bool(payload.get("pricing_complete_by_compact_milp")),
         "negative_feasibility_search_enabled": negative_feasibility,
+        "negative_feasibility_zero_objective_enabled": bool(
+            payload.get("negative_feasibility_zero_objective_enabled")
+        ),
         "mtz_endpoint_order_cuts_enabled": bool(payload.get("mtz_endpoint_order_cuts_enabled")),
         "mtz_endpoint_order_cut_count": endpoint_count,
         "pair_adjacency_cuts_enabled": bool(payload.get("pair_adjacency_cuts_enabled")),
@@ -747,6 +810,79 @@ def _row_from_pricing_payload(
         "time_window_arc_pruning_enabled": bool(payload.get("time_window_arc_pruning_enabled")),
         "time_window_arc_option_count": payload.get("time_window_arc_option_count"),
         "time_window_impossible_arc_option_count": impossible_arcs,
+        "slot_task_time_pruning_enabled": bool(payload.get("slot_task_time_pruning_enabled")),
+        "slot_task_time_feasible_assignment_count": payload.get("slot_task_time_feasible_assignment_count"),
+        "slot_task_time_pruned_assignment_count": payload.get("slot_task_time_pruned_assignment_count"),
+        "slot_task_time_pruned_due_count": payload.get("slot_task_time_pruned_due_count"),
+        "slot_task_time_pruned_horizon_count": payload.get("slot_task_time_pruned_horizon_count"),
+        "slot_task_time_total_assignment_count": payload.get("slot_task_time_total_assignment_count"),
+        "slot_task_time_original_total_assignment_count": payload.get(
+            "slot_task_time_original_total_assignment_count"
+        ),
+        "slot_task_model_assignment_count": payload.get("slot_task_model_assignment_count"),
+        "slot_arc_support_pruning_enabled": bool(payload.get("slot_arc_support_pruning_enabled")),
+        "slot_arc_support_feasible_assignment_count": payload.get(
+            "slot_arc_support_feasible_assignment_count"
+        ),
+        "slot_arc_support_pruned_assignment_count": payload.get(
+            "slot_arc_support_pruned_assignment_count"
+        ),
+        "slot_arc_support_pruned_unreachable_count": payload.get(
+            "slot_arc_support_pruned_unreachable_count"
+        ),
+        "slot_arc_support_pruned_no_return_count": payload.get(
+            "slot_arc_support_pruned_no_return_count"
+        ),
+        "slot_arc_support_pruned_option_count": payload.get("slot_arc_support_pruned_option_count"),
+        "slot_arc_time_pruned_option_count": payload.get("slot_arc_time_pruned_option_count"),
+        "slot_sequence_capacity_arc_pruning_enabled": bool(
+            payload.get("slot_sequence_capacity_arc_pruning_enabled")
+        ),
+        "slot_sequence_capacity_arc_pruned_option_count": payload.get(
+            "slot_sequence_capacity_arc_pruned_option_count"
+        ),
+        "slot_sequence_capacity_mtz_disabled_slot_count": payload.get(
+            "slot_sequence_capacity_mtz_disabled_slot_count"
+        ),
+        "resource_arc_pruning_enabled": bool(payload.get("resource_arc_pruning_enabled")),
+        "resource_arc_pruned_option_count": payload.get("resource_arc_pruned_option_count"),
+        "resource_arc_energy_pruned_option_count": payload.get(
+            "resource_arc_energy_pruned_option_count"
+        ),
+        "resource_arc_shadow_pruned_option_count": payload.get(
+            "resource_arc_shadow_pruned_option_count"
+        ),
+        "resource_arc_demand_pruned_option_count": payload.get(
+            "resource_arc_demand_pruned_option_count"
+        ),
+        "single_journey_mip_start_enabled": bool(payload.get("single_journey_mip_start_enabled")),
+        "single_journey_mip_start_status": payload.get("single_journey_mip_start_status") or "",
+        "single_journey_mip_start_source": payload.get("single_journey_mip_start_source") or "",
+        "single_journey_mip_start_entry_count": payload.get("single_journey_mip_start_entry_count"),
+        "single_journey_mip_start_zero_fill_integers": bool(
+            payload.get("single_journey_mip_start_zero_fill_integers")
+        ),
+        "single_journey_mip_start_zero_fill_integer_entry_count": payload.get(
+            "single_journey_mip_start_zero_fill_integer_entry_count"
+        ),
+        "single_journey_mip_start_sortie_count": payload.get("single_journey_mip_start_sortie_count"),
+        "single_journey_mip_start_task_count": payload.get("single_journey_mip_start_task_count"),
+        "single_journey_mip_start_objective": payload.get("single_journey_mip_start_objective"),
+        "single_journey_mip_start_reduced_cost": payload.get("single_journey_mip_start_reduced_cost"),
+        "required_task_set_enabled": bool(payload.get("required_task_set_enabled")),
+        "required_task_set_count": payload.get("required_task_set_count"),
+        "pricing_model_task_count": payload.get("pricing_model_task_count"),
+        "required_task_set_model_reduction_enabled": bool(
+            payload.get("required_task_set_model_reduction_enabled")
+        ),
+        "required_task_set_model_task_count": payload.get("required_task_set_model_task_count"),
+        "required_task_set_model_task_reduction_count": payload.get(
+            "required_task_set_model_task_reduction_count"
+        ),
+        "required_task_set_region_can_certify_no_negative": bool(
+            payload.get("required_task_set_region_can_certify_no_negative")
+        ),
+        "pricing_complete_for_required_task_set": bool(payload.get("pricing_complete_for_required_task_set")),
         "restricted_negative_feasibility_claimed_certificate": restricted_negative_cert,
         "positive_incumbent_rc_claimed_certificate": positive_claim,
     }
@@ -887,6 +1023,12 @@ def _variant(payload: dict) -> tuple[str, str]:
         kinds.append("latest_service_start_slot_bound")
     if payload.get("time_window_arc_pruning_enabled"):
         kinds.append("time_window_arc_pruning")
+    if payload.get("resource_arc_pruning_enabled"):
+        kinds.append("resource_arc_pruning")
+    if payload.get("slot_task_time_pruning_enabled"):
+        kinds.append("slot_task_time_pruning")
+    if payload.get("slot_arc_support_pruning_enabled"):
+        kinds.append("slot_arc_support_pruning")
     if payload.get("service_start_depot_travel_lb_enabled"):
         kinds.append("service_start_depot_travel_lb")
     if payload.get("task_to_depot_return_travel_lb_enabled"):

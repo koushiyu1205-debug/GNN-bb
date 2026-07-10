@@ -1316,7 +1316,9 @@ def _columns_from_primal_context(
     }
     if not primal_task_sets:
         return tuple()
-    universe = priced_columns or enumerate_direct_journey_columns(data, max_exact_tasks=len(data.task_ids)).columns
+    if not priced_columns:
+        return tuple()
+    universe = priced_columns
     selected = []
     seen: set[tuple[str, ...]] = set()
     for column in universe:

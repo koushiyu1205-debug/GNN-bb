@@ -1,0 +1,91 @@
+{
+  "purpose": "B4V4 compact final judge proof-tail strengthening probe",
+  "scope": "short model-build probe only; not a long exact closure run",
+  "instance_path": "data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "objective": "normalized_cost + normalized_risk + 0.4 * normalized_weighted_completion",
+  "makespan_role": "metric only",
+  "change": "slot-task/slot-arc time pruning enabled for B4V4 compact pricing profile; V4 proof phase can use a current column-pool JourneyColumn as a HiGHS MIP-start solver hint",
+  "basis": "If slot * min_active_sortie_duration + shortest depot-to-task travel exceeds task latest service start, that task cannot be served in that slot. If earliest slot/source arrival plus service plus source-target travel misses the target latest service start, that task-task arc cannot be used in that slot.",
+  "v4_without_slot_task_pruning": {
+    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "variable_count": 24109,
+    "constraint_count": 57086,
+    "slot_task_time_total_assignment_count": 630,
+    "slot_task_time_feasible_assignment_count": 630,
+    "slot_task_time_pruned_assignment_count": 0,
+    "wall_time_sec": 0.811576
+  },
+  "v4_with_slot_task_pruning": {
+    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "variable_count": 6660,
+    "constraint_count": 15712,
+    "slot_task_time_total_assignment_count": 630,
+    "slot_task_time_feasible_assignment_count": 275,
+    "slot_task_time_pruned_assignment_count": 355,
+    "slot_task_time_pruned_due_count": 355,
+    "slot_task_time_pruned_horizon_count": 0,
+    "slot_arc_time_pruned_option_count": 19,
+    "wall_time_sec": 0.20065
+  },
+  "observed_reduction": {
+    "variable_count_delta": -17449,
+    "constraint_count_delta": -41374,
+    "assignment_pruned_ratio": 0.5634920635
+  },
+  "v4_with_slot_task_pruning_cold_short_probe": {
+    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "pricing_state": "INCOMPLETE_LIMIT",
+    "variable_count": 6660,
+    "constraint_count": 15712,
+    "wall_time_sec": 0.479372,
+    "single_journey_mip_start_status": "DISABLED"
+  },
+  "v4_with_slot_task_pruning_warm_start_short_probe": {
+    "status": "COMPACT_HIGHS_PRICING_TIME_LIMIT_REACHED",
+    "pricing_state": "INCOMPLETE_LIMIT",
+    "variable_count": 6660,
+    "constraint_count": 15712,
+    "wall_time_sec": 0.407867,
+    "single_journey_mip_start_enabled": true,
+    "single_journey_mip_start_status": "OK",
+    "single_journey_mip_start_entry_count": 89,
+    "single_journey_mip_start_sortie_count": 1,
+    "single_journey_mip_start_task_count": 1,
+    "single_journey_mip_start_reduced_cost": 0.019611
+  },
+  "restricted_region_bound_ledger_enhancement": {
+    "fields_added": [
+      "supported_bound_region_count",
+      "unsupported_bound_region_count",
+      "nonnegative_bound_region_count",
+      "negative_bound_region_count",
+      "time_limit_bound_region_count",
+      "exact_bound_region_count",
+      "region_bound_gap_to_zero",
+      "region_bound_gap_source_region_id",
+      "region_bound_gap_source"
+    ],
+    "certificate_boundary": "Even if all listed restricted/no-good regions have nonnegative best-known bounds, they remain diagnostic unless a complete full-space partition and coverage proof is available."
+  },
+  "required_task_set_region_pricing": {
+    "status": "implemented_and_unit_tested",
+    "search_space": "all compact single-journey route variants whose task set is exactly the requested required_task_set",
+    "exact_status": "REQUIRED_TASK_SET_PRICING_OPTIMAL when solved optimally",
+    "certificate_boundary": "Can certify a single exact task-set region only; cannot claim full-space no-negative or BPC_TREE_OPTIMAL by itself.",
+    "telemetry": [
+      "required_task_set_enabled",
+      "required_task_set_count",
+      "required_task_set_region_can_certify_no_negative",
+      "pricing_complete_for_required_task_set"
+    ]
+  },
+  "required_task_set_partition_probe": {
+    "status": "implemented_and_unit_tested",
+    "partition_model": "exact_task_set_regions_plus_final_residual",
+    "exact_regions": "one required_task_set pricing solve per unique harvested task set",
+    "residual_region": "one restricted residual pricing solve forbidding all harvested exact task sets",
+    "candidate_signal": "partition_candidate_can_certify_no_negative",
+    "certificate_boundary": "The runner can report a complete no-negative partition candidate, but official_certificate_allowed and can_claim_certificate remain false until final judge/certificate ledger integration consumes it."
+  },
+  "certificate_boundary": "This pruning removes only time-bound infeasible slot-task placements. MIP start is only a primal solver hint. No restricted/no-good result or warm-start telemetry is promoted to no-negative certificate."
+}

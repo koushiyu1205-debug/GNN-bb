@@ -1,0 +1,88 @@
+{
+  "acceptance": {
+    "b4_2_cold_exact_accepted": false,
+    "full_scale30_run_complete": false,
+    "same_model_config_hash": true,
+    "scale30_all_bpc_tree_optimal": false,
+    "scale30_all_under_500": false
+  },
+  "by_scale": {
+    "30": {
+      "exact_count": 0,
+      "fail_closed_count": 1,
+      "max_cold_start_total_sec": 505.014203,
+      "mean_cold_start_total_sec": 505.014203,
+      "mean_exact_cold_start_total_sec": null,
+      "mean_root_cg_sec": 279.988163,
+      "mean_root_partition_sec": 223.796346,
+      "mean_tree_sec": null,
+      "row_count": 1,
+      "under_500_exact_count": 0
+    }
+  },
+  "config": {
+    "column_provenance": "instance_json_fixed_seed_and_same_run_checkpoints",
+    "live_master_cuts": false,
+    "makespan_scope": "metric_only",
+    "model_id": "B4_2_COLD_EXACT_V1",
+    "no_cheat_policy": {
+      "checkpoint_time_counted": true,
+      "external_mature_pool_allowed": false,
+      "external_source_probe_allowed": false,
+      "manual_columns_allowed": false,
+      "per_instance_override_allowed": false,
+      "same_run_checkpoint_resume_allowed": true,
+      "starts_from_instance_json": true
+    },
+    "official_objective": "normalized_cost + normalized_risk + 0.4 * normalized_weighted_completion",
+    "partition_ledger_official": true,
+    "partition_refresh_dual_from_active_pool": true,
+    "partition_refresh_rmp_max_iterations": 200,
+    "partition_region_time_limit_sec": 20.0,
+    "partition_time_reserve_sec": 220.0,
+    "partition_variant": "V4_current_pair_conflict_capacity_bound",
+    "pool_batch_target": 32,
+    "pool_max_rounds_per_stage": 4,
+    "pool_max_stages": 10,
+    "pool_negative_search_cap_sec": 90.0,
+    "pool_optimization_harvest_no_good_scope": "task_set",
+    "pool_optimization_harvest_target": 16,
+    "pool_phase_mode": "harvest_then_proof",
+    "pool_stage_time_slice_sec": 150.0,
+    "profile": "V4SH",
+    "root_partition_proof": true,
+    "root_tree_pricing_oracle": "compact_final_judge_profile_shared",
+    "route_template_pre_harvest_max_active_seeds": 240,
+    "route_template_pre_harvest_max_candidate_sets": 1200,
+    "route_template_pre_harvest_max_direct_tasks": 12,
+    "route_template_pre_harvest_max_neighborhood_seeds": 480,
+    "route_template_pre_harvest_target": 32,
+    "route_template_pre_harvest_time_cap_sec": 20.0,
+    "row_limit_sec": 500.0,
+    "schema_version": "lunar_ice_bpc.b4_2_cold_exact_config.v1",
+    "seed_mode": "b0_incumbent_plus_singletons",
+    "threads": 4,
+    "tree_closure_max_branch_depth": 4,
+    "tree_closure_max_columns_per_round": 128,
+    "tree_closure_max_nodes": 31,
+    "tree_closure_max_rounds": 16
+  },
+  "config_hash": "21dae61108bfe941",
+  "config_hashes": [
+    "21dae61108bfe941"
+  ],
+  "discovered_instance_count": 1,
+  "expected_scale_counts": {
+    "30": 1
+  },
+  "limited_run": true,
+  "redlines": {
+    "certificate_leak_count": 0,
+    "manual_rc_fail_count": 0,
+    "no_cheat_fail_count": 0,
+    "pricing_rc_fail_count": 0
+  },
+  "row_count": 1,
+  "schema_version": "lunar_ice_bpc.b4_2_cold_exact_summary.v1",
+  "unique_config_hash_count": 1
+}
