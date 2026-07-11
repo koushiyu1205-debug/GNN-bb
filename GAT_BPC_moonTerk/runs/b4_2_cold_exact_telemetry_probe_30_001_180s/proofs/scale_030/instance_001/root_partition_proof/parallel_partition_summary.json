@@ -1,0 +1,266 @@
+{
+  "best_lb": null,
+  "certified_no_negative": false,
+  "coverage_complete": false,
+  "dual_refresh_status": "",
+  "dual_scope_mismatch_count": 0,
+  "duplicate_region_count": 0,
+  "expected_region_count": 465,
+  "incomplete_region_count": 0,
+  "issue_codes": [
+    "best_lb_missing",
+    "dual_refresh_not_optimal",
+    "missing_regions",
+    "worker_returncode_nonzero"
+  ],
+  "missing_region_count": 465,
+  "negative_rc_audit_fail_count": 0,
+  "negative_region_count": 0,
+  "redline_count": 0,
+  "region_count": 0,
+  "schema_version": "lunar_ice_bpc.b4_2.parallel_partition_summary.v1",
+  "task_count": 30,
+  "unexpected_region_count": 0,
+  "worker_results": [
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_02_k002_002",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.406127
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_03_k003_003",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.405589
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_01_k001_001",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.407738
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_04_k004_004",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.408391
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_05_k005_005",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.227202
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_06_k006_006",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.227666
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_07_k007_007",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.227418
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_08_k008_008",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.225235
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_10_k010_010",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.22405
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_12_k012_012",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.223985
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_11_k011_011",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.224667
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_09_k009_009",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.226328
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_15_k015_015",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.222085
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_16_k016_016",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.221879
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_13_k013_013",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.224485
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_14_k014_014",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.226617
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_20_k020_020",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.222723
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_19_k019_019",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.227004
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_17_k017_017",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.228498
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_18_k018_018",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.228269
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_22_k022_022",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.224766
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_23_k023_023",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.22466
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_24_k024_024",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.224555
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_21_k021_021",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.227368
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_28_k028_028",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.224633
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_25_k025_025",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.225923
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_26_k026_026",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.225999
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_27_k027_027",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.225303
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_30_k030_030",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.189781
+    },
+    {
+      "error": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 969, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py\", line 295, in main\n    partition = run_b4_1_required_task_set_partition_probe(\n        _resolve(probe),\n    ...<17 lines>...\n        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py\", line 1637, in run_b4_1_required_task_set_partition_probe\n    raise ValueError(\"selected history row has no dual_context\")\nValueError: selected history row has no dual_context\n",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_telemetry_probe_30_001_180s/proofs/scale_030/instance_001/root_partition_proof/worker_29_k029_029",
+      "partition_json": "",
+      "returncode": 1,
+      "timeout": false,
+      "wall_time_sec": 0.190532
+    }
+  ]
+}

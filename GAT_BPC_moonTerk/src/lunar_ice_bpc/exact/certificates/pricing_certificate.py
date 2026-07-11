@@ -78,7 +78,7 @@ def build_pricing_certificate(
     min_rc = frontier.min_reduced_cost
     issues = list(frontier.issues)
 
-    can_certify = not issues
+    can_certify = bool(frontier.can_certify_no_negative and not issues)
     status = "CERTIFIED_NO_NEGATIVE" if can_certify else "NOT_PORTED_TRUE_DUAL_BPC"
     exact_status = "BPC_NO_NEGATIVE_CERTIFIED" if can_certify else "NOT_SOLVED"
     return PricingCertificate(

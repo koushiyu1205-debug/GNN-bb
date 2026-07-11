@@ -13,7 +13,16 @@ from time import perf_counter
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from lunar_ice_bpc.exact.bpc.solver.root_node_solver import solve_b1_root_node_baseline  # noqa: E402
+from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (  # noqa: E402
+    DIRECT_LABEL_WORKER,
+    RELAXED_LABELING_WORKER,
+    solve_node_pricing_with_b2b_r3,
+)
+from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (  # noqa: E402
+    _reference_seed_direct_placeholder,
+    build_b1_seed_columns,
+    solve_b1_root_node_baseline,
+)
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data  # noqa: E402
 from lunar_ice_bpc.exact.core.journey import journey_column_from_solution_payload  # noqa: E402
 
@@ -29,6 +38,20 @@ def main() -> int:
     parser.add_argument("--solve-b0-direct-first", action="store_true")
     parser.add_argument("--resume-probe", default="")
     parser.add_argument("--write-active-columns", action="store_true")
+    parser.add_argument("--batch-target", type=int, default=2)
+    parser.add_argument(
+        "--root-engine",
+        choices=("b1_compact_final_judge", "b2b_r3_worker"),
+        default="b1_compact_final_judge",
+    )
+    parser.add_argument(
+        "--worker-pricer-kind",
+        choices=(DIRECT_LABEL_WORKER, RELAXED_LABELING_WORKER),
+        default=DIRECT_LABEL_WORKER,
+    )
+    parser.add_argument("--tail-dual-stabilization-enabled", action="store_true")
+    parser.add_argument("--tail-dual-stabilization-alpha", type=float, default=0.7)
+    parser.add_argument("--tail-dual-stabilization-window", type=int, default=5)
     args = parser.parse_args()
 
     instance_path = _resolve(args.instance)
@@ -39,16 +62,44 @@ def main() -> int:
     resume_payload = _load_resume_payload(args.resume_probe)
     initial_columns = _resume_initial_columns(data, resume_payload)
     started = perf_counter()
-    result = solve_b1_root_node_baseline(
-        data,
-        initial_columns=initial_columns,
-        max_direct_tasks=int(args.max_direct_tasks),
-        max_rounds=int(args.max_rounds),
-        wall_time_limit_sec=float(args.time_limit_sec),
-        seed_mode=str(args.seed_mode),
-        solve_b0_direct_first=bool(args.solve_b0_direct_first),
-        return_active_columns_payload=bool(args.write_active_columns or initial_columns),
-    )
+    b0_seed = None
+    if str(args.root_engine) == "b2b_r3_worker":
+        if initial_columns is None:
+            b0_seed = _reference_seed_direct_placeholder(data)
+            initial_columns, _seed_report = build_b1_seed_columns(
+                data,
+                b0_direct=b0_seed,
+                seed_mode=str(args.seed_mode),
+                max_direct_tasks=int(args.max_direct_tasks),
+            )
+        else:
+            b0_seed = _reference_seed_direct_placeholder(data)
+        result = solve_node_pricing_with_b2b_r3(
+            data,
+            initial_columns=initial_columns,
+            b0_direct=b0_seed,
+            max_direct_tasks=int(args.max_direct_tasks),
+            max_rounds=int(args.max_rounds),
+            wall_time_limit_sec=float(args.time_limit_sec),
+            seed_mode=str(args.seed_mode),
+            max_columns_per_round=int(args.batch_target),
+            worker_pricer_kind=str(args.worker_pricer_kind),
+            tail_dual_stabilization_enabled=bool(args.tail_dual_stabilization_enabled),
+            tail_dual_stabilization_alpha=float(args.tail_dual_stabilization_alpha),
+            tail_dual_stabilization_window=int(args.tail_dual_stabilization_window),
+            return_active_columns_payload=bool(args.write_active_columns or initial_columns),
+        )
+    else:
+        result = solve_b1_root_node_baseline(
+            data,
+            initial_columns=initial_columns,
+            max_direct_tasks=int(args.max_direct_tasks),
+            max_rounds=int(args.max_rounds),
+            wall_time_limit_sec=float(args.time_limit_sec),
+            seed_mode=str(args.seed_mode),
+            solve_b0_direct_first=bool(args.solve_b0_direct_first),
+            return_active_columns_payload=bool(args.write_active_columns or initial_columns),
+        )
     elapsed = perf_counter() - started
     final_judge = result.get("final_judge") or {}
     payload = {
@@ -61,6 +112,11 @@ def main() -> int:
             "wall_time_limit_sec": float(args.time_limit_sec),
             "seed_mode": str(args.seed_mode),
             "solve_b0_direct_first": bool(args.solve_b0_direct_first),
+            "root_engine": str(args.root_engine),
+            "worker_pricer_kind": str(args.worker_pricer_kind),
+            "tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
+            "tail_dual_stabilization_alpha": float(args.tail_dual_stabilization_alpha),
+            "tail_dual_stabilization_window": int(args.tail_dual_stabilization_window),
             "env_compact_negative_batch_target": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_BATCH_TARGET", ""),
             "env_compact_negative_search_cap_sec": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_SEARCH_CAP_SEC", ""),
             "env_compact_negative_no_good_scope": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_NO_GOOD_SCOPE", ""),
@@ -74,6 +130,8 @@ def main() -> int:
             ),
             "env_compact_final_judge_profile": os.environ.get("LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE", ""),
             "env_compact_final_judge_phase_mode": os.environ.get("LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE", ""),
+            "env_labeling_final_judge": os.environ.get("LUNAR_ICE_LABELING_FINAL_JUDGE", ""),
+            "env_labeling_final_judge_max_tasks": os.environ.get("LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS", ""),
             "env_compact_service_start_depot_travel_lb": os.environ.get(
                 "LUNAR_ICE_COMPACT_SERVICE_START_DEPOT_TRAVEL_LB",
                 "",
@@ -138,8 +196,10 @@ def main() -> int:
         "algorithm_status": result.get("algorithm_status"),
         "certificate_scope": result.get("certificate_scope"),
         "pricing_state": result.get("pricing_state"),
-        "root_lp_bound": result.get("root_lp_bound"),
-        "root_rmp_objective": result.get("root_rmp_objective"),
+        "root_engine": str(args.root_engine),
+        "worker_pricer_kind": str(args.worker_pricer_kind),
+        "root_lp_bound": result.get("root_lp_bound", result.get("node_lp_bound")),
+        "root_rmp_objective": result.get("root_rmp_objective", result.get("node_lp_bound")),
         "root_lp_vs_direct_dp_gap": result.get("root_lp_vs_direct_dp_gap"),
         "integral_root": result.get("integral_root"),
         "b0_ablation": result.get("b0_ablation") or {},
@@ -186,6 +246,9 @@ def _render_report(payload: dict) -> str:
         f"- algorithm_status: `{payload['algorithm_status']}`",
         f"- certificate_scope: `{payload['certificate_scope']}`",
         f"- pricing_state: `{payload['pricing_state']}`",
+        f"- root_engine: `{payload.get('root_engine')}`",
+        f"- worker_pricer_kind: `{payload.get('worker_pricer_kind')}`",
+        f"- tail_dual_stabilization_enabled: `{payload.get('config', {}).get('tail_dual_stabilization_enabled')}`",
         f"- pricing_round_count: `{payload['pricing_round_count']}`",
         f"- added_column_count: `{payload['added_column_count']}`",
         f"- final_judge_call_count: `{payload['final_judge_call_count']}`",

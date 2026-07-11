@@ -413,6 +413,8 @@ def _true_dual_pricing_tail_payload(restricted_rmp: dict, direct_root_certificat
             "dual_vector_bound_to_rmp": bool(dual_binding.get("dual_vector_bound_to_rmp")),
             "dual_vector_fingerprint": dual_binding.get("dual_vector_fingerprint"),
         }
+        if closure_certifies:
+            pricing_payload["pricing_proof_kind"] = "EXHAUSTIVE_NO_NEGATIVE"
         return build_true_dual_pricing_tail(
             source=(
                 "true_dual_fixed_graph_pricing_closure"
@@ -442,6 +444,8 @@ def _true_dual_pricing_tail_payload(restricted_rmp: dict, direct_root_certificat
             "dual_vector_bound_to_rmp": bool(dual_binding.get("dual_vector_bound_to_rmp")),
             "dual_vector_fingerprint": dual_binding.get("dual_vector_fingerprint"),
         }
+        if root_certifies:
+            pricing_payload["pricing_proof_kind"] = "EXHAUSTIVE_NO_NEGATIVE"
         return build_true_dual_pricing_tail(
             source=(
                 "true_dual_fixed_graph_root_lp"

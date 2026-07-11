@@ -1,0 +1,2 @@
+{"elapsed_sec": 0.354488, "algorithm_status": "BPC_GAP_AVAILABLE", "certificate_scope": "BPC_NODE_LP_CERTIFIED", "pricing_state": "CERTIFIED_NO_NEGATIVE", "pricing_round_count": 2, "added_column_count": 18, "active_column_count": 24}
+report /home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_worker_deadline_smoke_5_001/pools/scale_005/instance_001/stage_001/probe_report_zh.md

@@ -35,6 +35,10 @@ from lunar_ice_bpc.runners.b4_1_true_dual_proof_tail import (  # noqa: E402
     write_b4_1_required_task_set_partition_probe,
     write_b4_1_targeted_restricted_region_probe,
 )
+from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (  # noqa: E402
+    DIRECT_LABEL_WORKER,
+    RELAXED_LABELING_WORKER,
+)
 
 B41_ROOT_TAIL_PARTITION_DEFAULT_MAX_TASK_SETS = 5
 
@@ -56,6 +60,15 @@ def main() -> int:
     parser.add_argument("--max-columns-per-round", type=int, default=128)
     parser.add_argument("--max-tree-nodes", type=int, default=31)
     parser.add_argument("--max-branch-depth", type=int, default=4)
+    parser.add_argument(
+        "--labeling-final-judge-exact-harvest-target",
+        type=int,
+        default=5,
+        help=(
+            "Opt-in exact true-dual labeling final-judge negative harvest target. "
+            "This controls candidate harvesting only; no-column certificates still require exact proof."
+        ),
+    )
     parser.add_argument("--source-probe-json", action="append", default=[])
     parser.add_argument("--import-rows-jsonl", action="append", default=[])
     parser.add_argument("--stage-b", action="store_true")
@@ -91,6 +104,21 @@ def main() -> int:
     parser.add_argument("--tree-closure-max-columns-per-round", type=int, default=128)
     parser.add_argument("--tree-closure-max-nodes", type=int, default=31)
     parser.add_argument("--tree-closure-max-branch-depth", type=int, default=4)
+    parser.add_argument(
+        "--tree-closure-worker-pricer-kind",
+        choices=(DIRECT_LABEL_WORKER, RELAXED_LABELING_WORKER),
+        default=DIRECT_LABEL_WORKER,
+    )
+    parser.add_argument("--tree-closure-tail-dual-stabilization-enabled", action="store_true")
+    parser.add_argument("--tree-closure-tail-dual-stabilization-alpha", type=float, default=0.7)
+    parser.add_argument("--tree-closure-tail-dual-stabilization-window", type=int, default=5)
+    parser.add_argument(
+        "--tree-closure-labeling-final-judge-mode",
+        choices=("env", "off", "on", "auto"),
+        default="env",
+    )
+    parser.add_argument("--tree-closure-labeling-final-judge-max-exact-tasks", type=int)
+    parser.add_argument("--tree-closure-labeling-final-judge-exact-harvest-target", type=int)
     parser.add_argument("--tree-closure-result-subdir", default="tree_closure_results")
     parser.add_argument("--history-round", type=int, default=-1)
     parser.add_argument("--negative-feasibility-time-limit-sec", type=float, default=600.0)
@@ -381,6 +409,9 @@ def main() -> int:
                     max_columns_per_round=int(args.max_columns_per_round),
                     max_tree_nodes=int(args.max_tree_nodes),
                     max_branch_depth=int(args.max_branch_depth),
+                    labeling_final_judge_exact_harvest_target=int(
+                        args.labeling_final_judge_exact_harvest_target
+                    ),
                 )
                 for row in report["rows"]:
                     rows.append(row)
@@ -429,6 +460,9 @@ def main() -> int:
                     max_columns_per_round=int(args.stage_b_worker_tail_max_columns_per_round),
                     skip_b0_direct=bool(args.stage_b_worker_tail_skip_b0_direct),
                     tail_dual_stabilization_enabled=bool(args.stage_b_worker_tail_tail_dual_stabilization),
+                    labeling_final_judge_exact_harvest_target=int(
+                        args.labeling_final_judge_exact_harvest_target
+                    ),
                     skip_keys=stage_b_keys,
                 )
             for row in report["rows"]:
@@ -545,6 +579,19 @@ def main() -> int:
                 max_columns_per_round=int(args.tree_closure_max_columns_per_round),
                 max_tree_nodes=int(args.tree_closure_max_nodes),
                 max_branch_depth=int(args.tree_closure_max_branch_depth),
+                worker_pricer_kind=str(args.tree_closure_worker_pricer_kind),
+                tail_dual_stabilization_enabled=bool(args.tree_closure_tail_dual_stabilization_enabled),
+                tail_dual_stabilization_alpha=float(args.tree_closure_tail_dual_stabilization_alpha),
+                tail_dual_stabilization_window=int(args.tree_closure_tail_dual_stabilization_window),
+                labeling_final_judge_enabled=_tree_closure_labeling_final_judge_enabled(
+                    str(args.tree_closure_labeling_final_judge_mode)
+                ),
+                labeling_final_judge_max_exact_tasks=args.tree_closure_labeling_final_judge_max_exact_tasks,
+                labeling_final_judge_exact_harvest_target=int(
+                    args.tree_closure_labeling_final_judge_exact_harvest_target
+                    if args.tree_closure_labeling_final_judge_exact_harvest_target is not None
+                    else args.labeling_final_judge_exact_harvest_target
+                ),
             )
             raw_results = report.get("tree_closure_raw_results") or []
             if raw_results:
@@ -731,6 +778,17 @@ def _append_row_jsonl(path: Path, row: dict) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
         handle.flush()
+
+
+def _tree_closure_labeling_final_judge_enabled(mode: str) -> bool | None:
+    normalized = str(mode or "env").strip().lower()
+    if normalized == "on":
+        return True
+    if normalized == "off":
+        return False
+    if normalized in {"env", "auto"}:
+        return None
+    raise ValueError(f"unsupported tree closure labeling final judge mode: {mode!r}")
 
 
 def _resource_gate(

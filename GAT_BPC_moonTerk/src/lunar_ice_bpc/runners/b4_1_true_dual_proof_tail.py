@@ -18,6 +18,7 @@ from lunar_ice_bpc.exact.bpc.solver.branch_tree_solver import solve_b3_branch_pr
 from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2B_R2_MODE,
     B2B_R3_MODE,
+    DIRECT_LABEL_WORKER,
     solve_b2_pricing_tail_baseline,
 )
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
@@ -341,6 +342,14 @@ CSV_COLUMNS = (
     "last_best_reduced_cost",
     "final_judge_wall_time",
     "rmp_round_count",
+    "labeling_final_judge_exact_harvest_target",
+    "labeling_final_judge_exact_harvest_target_source",
+    "exact_negative_harvest_target",
+    "exact_negative_harvest_candidate_count",
+    "exact_negative_harvest_selected_count",
+    "exact_negative_harvest_selected_new_task_set_count",
+    "exact_negative_harvest_selected_replacement_task_set_count",
+    "exact_negative_harvest_selection_policy",
     "harvest_selected_count",
     "harvest_candidate_negative_count",
     "harvest_selected_new_task_set_count",
@@ -380,6 +389,7 @@ CSV_COLUMNS = (
     "harvest_pricing_rc_audit_available",
     "harvest_pricing_rc_audit_pass",
     "harvest_pricing_rc_max_abs_diff",
+    "worker_pricer_kind",
     "tail_dual_stabilization_enabled",
     "worker_dual_only",
     "true_dual_rc_recomputed",
@@ -390,6 +400,17 @@ CSV_COLUMNS = (
     "tail_dual_center_task_count",
     "tail_dual_current_task_count",
     "tail_dual_no_column_can_certify",
+    "candidate_search_false_positive_rate",
+    "true_negative_candidate_search_miss_rate",
+    "candidate_search_false_positive_row_count",
+    "true_negative_candidate_search_miss_row_count",
+    "candidate_search_negative_true_nonnegative_count",
+    "true_negative_candidate_search_nonnegative_count",
+    "candidate_search_dual_matches_true_dual",
+    "candidate_search_rc_recomputed_under_true_dual",
+    "worker_true_dual_candidate_audit_pass",
+    "worker_candidate_universe_task_set_count",
+    "worker_generated_column_task_set_count",
     "global_remaining_rc_lb",
     "underlying_global_remaining_rc_lb",
     "frontier_lb_official",
@@ -733,6 +754,7 @@ def run_b4_1_stage_a_regression(
     max_columns_per_round: int = 128,
     max_tree_nodes: int = 31,
     max_branch_depth: int = 4,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> dict:
     rows: list[dict] = []
     for item in instances:
@@ -759,6 +781,7 @@ def run_b4_1_stage_a_regression(
                     max_columns_per_round=max_columns_per_round,
                     max_tree_nodes=max_tree_nodes,
                     max_branch_depth=max_branch_depth,
+                    labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
                 )
                 row = _stage_a_row(
                     raw_result,
@@ -860,6 +883,7 @@ def run_b4_1_stage_b_worker_tail_hidden_probe(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    labeling_final_judge_exact_harvest_target: int | None = None,
     skip_keys: Iterable[tuple[str, str, str, str]] = (),
 ) -> dict:
     raw, instance_path = _load_instance(instance)
@@ -880,6 +904,7 @@ def run_b4_1_stage_b_worker_tail_hidden_probe(
         tail_dual_stabilization_enabled=bool(tail_dual_stabilization_enabled),
         tail_dual_stabilization_alpha=float(tail_dual_stabilization_alpha),
         tail_dual_stabilization_window=int(tail_dual_stabilization_window),
+        labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
     )
     elapsed = perf_counter() - started
     payload = _worker_tail_probe_payload(
@@ -896,6 +921,7 @@ def run_b4_1_stage_b_worker_tail_hidden_probe(
         tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
         tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
         tail_dual_stabilization_window=tail_dual_stabilization_window,
+        labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
     )
     output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return run_b4_1_stage_b_from_probe(
@@ -915,6 +941,13 @@ def run_b4_1_tree_closure_from_probe(
     max_columns_per_round: int = 128,
     max_tree_nodes: int = 31,
     max_branch_depth: int = 4,
+    tail_dual_stabilization_enabled: bool = False,
+    tail_dual_stabilization_alpha: float = 0.7,
+    tail_dual_stabilization_window: int = 5,
+    worker_pricer_kind: str = DIRECT_LABEL_WORKER,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> dict:
     """Rebuild a B3 tree certificate from a saved active-column root probe."""
 
@@ -947,6 +980,13 @@ def run_b4_1_tree_closure_from_probe(
         use_complete_universe_audit=False,
         run_b2_root_diagnostic=False,
         solve_b0_direct_first=False,
+        tail_dual_stabilization_enabled=bool(tail_dual_stabilization_enabled),
+        tail_dual_stabilization_alpha=float(tail_dual_stabilization_alpha),
+        tail_dual_stabilization_window=int(tail_dual_stabilization_window),
+        worker_pricer_kind=str(worker_pricer_kind),
+        labeling_final_judge_enabled=labeling_final_judge_enabled,
+        labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+        labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
     )
     root_node = (raw_result.get("nodes") or [{}])[0]
     final_judge = probe.get("final_judge") if isinstance(probe.get("final_judge"), dict) else {}
@@ -971,6 +1011,13 @@ def run_b4_1_tree_closure_from_probe(
             "b4_1_proof_tail_component": "root_tail_no_negative_to_tree_gate",
             "b4_1_formulation_profile": "B3B_warm_started_true_dual_tree_gate",
             "b4_1_official_certificate_allowed": True,
+            "worker_pricer_kind": str(worker_pricer_kind),
+            "tail_dual_stabilization_enabled": bool(tail_dual_stabilization_enabled),
+            "tail_dual_stabilization_alpha": float(tail_dual_stabilization_alpha),
+            "tail_dual_stabilization_window": int(tail_dual_stabilization_window),
+            "labeling_final_judge_enabled": labeling_final_judge_enabled,
+            "labeling_final_judge_max_exact_tasks": labeling_final_judge_max_exact_tasks,
+            "labeling_final_judge_exact_harvest_target": labeling_final_judge_exact_harvest_target,
             "active_column_count": len(initial_columns),
             "active_columns_after_merge": len(initial_columns),
             "columns_added": root_node.get("added_column_count", raw_result.get("added_column_count", "")),
@@ -1000,6 +1047,14 @@ def build_b4_1_report(rows: Iterable[dict]) -> dict:
     variant_counts = _count_by(materialized, "variant")
     hidden_miss_reason_counts = _aggregate_hidden_negative_miss_reason_counts(materialized)
     tail_dual_rows = [row for row in materialized if _bool_value(row.get("tail_dual_stabilization_enabled"))]
+    dual_search_rows = [
+        row
+        for row in materialized
+        if _has_value(row.get("candidate_search_false_positive_rate"))
+        or _has_value(row.get("true_negative_candidate_search_miss_rate"))
+        or _has_value(row.get("candidate_search_false_positive_row_count"))
+        or _has_value(row.get("true_negative_candidate_search_miss_row_count"))
+    ]
     partition_rows = [
         row for row in materialized if str(row.get("mode") or "") == "B4.1_partition_candidate_audit"
     ]
@@ -1025,13 +1080,7 @@ def build_b4_1_report(rows: Iterable[dict]) -> dict:
             and str(row.get("certificate_scope") or "") != CertificateScope.BPC_TREE_OPTIMAL.value
         ),
         "tail_dual_certificate_leak_count": sum(
-            1
-            for row in tail_dual_rows
-            if _bool_value(row.get("can_certify_no_negative"))
-            or _bool_value(row.get("tail_dual_no_column_can_certify"))
-            or not _bool_value(row.get("worker_dual_only"))
-            or not _bool_value(row.get("true_dual_rc_recomputed"))
-            or str(row.get("official_dual_source") or "") != "current_true_rmp_dual"
+            1 for row in tail_dual_rows if _tail_dual_certificate_leak(row)
         ),
         "partition_candidate_certificate_leak_count": sum(
             int(row.get("partition_candidate_redline_fail_count") or 0) for row in partition_rows
@@ -1073,6 +1122,19 @@ def build_b4_1_report(rows: Iterable[dict]) -> dict:
         ),
         "tail_dual_official_true_dual_source_count": sum(
             1 for row in tail_dual_rows if str(row.get("official_dual_source") or "") == "current_true_rmp_dual"
+        ),
+        "dual_search_diagnostic_row_count": len(dual_search_rows),
+        "candidate_search_false_positive_row_count": sum(
+            int(row.get("candidate_search_false_positive_row_count") or 0) for row in dual_search_rows
+        ),
+        "true_negative_candidate_search_miss_row_count": sum(
+            int(row.get("true_negative_candidate_search_miss_row_count") or 0) for row in dual_search_rows
+        ),
+        "mean_candidate_search_false_positive_rate": _mean_present_float(
+            row.get("candidate_search_false_positive_rate") for row in dual_search_rows
+        ),
+        "mean_true_negative_candidate_search_miss_rate": _mean_present_float(
+            row.get("true_negative_candidate_search_miss_rate") for row in dual_search_rows
         ),
         "stage_a_required_regression_modes": list(B41_STAGE_A_REQUIRED_REGRESSION_MODES),
         "stage_a_observed_regression_modes": stage_a_coverage["observed"],
@@ -1420,6 +1482,8 @@ def run_b4_1_targeted_restricted_region_probe(
     history_row = _select_history_row(history, int(history_round))
     dual_context = history_row.get("dual_context")
     if not isinstance(dual_context, dict):
+        dual_context = payload.get("dual_context")
+    if not isinstance(dual_context, dict):
         raise ValueError("selected history row has no dual_context")
     duals = JourneyDuals(
         cover={str(key): float(value) for key, value in (dual_context.get("task_duals") or {}).items()},
@@ -1571,6 +1635,8 @@ def run_b4_1_required_task_set_partition_probe(
     history = payload.get("history") if isinstance(payload.get("history"), list) else []
     history_row = _select_history_row(history, int(history_round))
     dual_context = history_row.get("dual_context")
+    if not isinstance(dual_context, dict):
+        dual_context = payload.get("dual_context")
     if not isinstance(dual_context, dict):
         raise ValueError("selected history row has no dual_context")
     history_duals = JourneyDuals(
@@ -5930,6 +5996,11 @@ def render_b4_1_markdown(report: dict, *, rows_csv: str | Path, summary_json: st
             f"worker-only `{diagnostics.get('tail_dual_worker_only_count', 0)}`；"
             f"true-dual RC recomputed `{diagnostics.get('tail_dual_true_dual_recomputed_count', 0)}`；"
             f"tail no-column certifies `{diagnostics.get('tail_dual_no_column_can_certify_count', 0)}`。",
+            f"- Dual-search audit rows: `{diagnostics.get('dual_search_diagnostic_row_count', 0)}`；"
+            f"false-positive rows `{diagnostics.get('candidate_search_false_positive_row_count', 0)}`；"
+            f"miss rows `{diagnostics.get('true_negative_candidate_search_miss_row_count', 0)}`；"
+            f"mean false+ `{diagnostics.get('mean_candidate_search_false_positive_rate')}`；"
+            f"mean miss `{diagnostics.get('mean_true_negative_candidate_search_miss_rate')}`。",
             f"- Partition candidate audit rows: `{diagnostics.get('partition_candidate_audit_row_count', 0)}`；"
             f"gate pass `{diagnostics.get('partition_candidate_gate_pass_count', 0)}`；"
             f"gate fail `{diagnostics.get('partition_candidate_gate_fail_count', 0)}`；"
@@ -5990,6 +6061,7 @@ def _run_stage_a_mode(
     max_columns_per_round: int,
     max_tree_nodes: int,
     max_branch_depth: int,
+    labeling_final_judge_exact_harvest_target: int | None,
 ) -> dict:
     if mode in {B41_STAGE_A_B3B_BASELINE, B41_STAGE_A_B4V2_HARVEST}:
         return solve_b3_branch_price_tree_baseline(
@@ -6001,6 +6073,11 @@ def _run_stage_a_mode(
             max_columns_per_round=max_columns_per_round,
             max_tree_nodes=max_tree_nodes,
             max_branch_depth=max_branch_depth,
+            labeling_final_judge_exact_harvest_target=(
+                labeling_final_judge_exact_harvest_target
+                if mode == B41_STAGE_A_B4V2_HARVEST
+                else None
+            ),
         )
     if mode in {B41_STAGE_A_TAIL_DUAL_OFF, B41_STAGE_A_TAIL_DUAL_ON}:
         return solve_b2_pricing_tail_baseline(
@@ -6012,6 +6089,7 @@ def _run_stage_a_mode(
             max_columns_per_round=max_columns_per_round,
             mode=B2B_R2_MODE,
             tail_dual_stabilization_enabled=mode == B41_STAGE_A_TAIL_DUAL_ON,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
     raise ValueError(f"unknown B4.1 Stage A mode: {mode}")
 
@@ -6046,10 +6124,24 @@ def _stage_a_row(
     root_history = root_node.get("history") if isinstance(root_node.get("history"), list) else []
     root_last = root_history[-1] if root_history and isinstance(root_history[-1], dict) else {}
     last_worker = _last_worker_payload(history)
+    if not last_worker and root_last:
+        last_worker = root_last
     tail_payload = last_worker.get("tail_dual_stabilization") if isinstance(last_worker, dict) else {}
     if not isinstance(tail_payload, dict):
         tail_payload = {}
+    if not tail_payload and _bool_value(raw.get("tail_dual_stabilization_enabled")):
+        tail_payload = {
+            "tail_dual_stabilization_enabled": True,
+            "worker_dual_only": root_last.get("worker_dual_only"),
+            "true_dual_rc_recomputed": root_last.get("true_dual_rc_recomputed"),
+            "official_dual_source": _first_str(
+                root_last.get("official_dual_source"),
+                final_judge.get("official_pricing_dual_source"),
+            ),
+            "tail_dual_no_column_can_certify": root_last.get("tail_dual_no_column_can_certify"),
+        }
     tail_fields = _tail_dual_safety_fields(last_worker, tail_payload)
+    dual_search_fields = _dual_search_diagnostic_fields(last_worker)
     return {
         "stage": stage,
         "matrix_group": matrix_group,
@@ -6118,6 +6210,39 @@ def _stage_a_row(
         "last_best_reduced_cost": final_judge.get("best_reduced_cost", raw.get("last_best_reduced_cost", "")),
         "final_judge_wall_time": final_judge.get("final_judge_wall_time", ""),
         "rmp_round_count": _first_int(root_node.get("round_count")),
+        "labeling_final_judge_exact_harvest_target": _first_int(
+            final_judge.get("labeling_final_judge_exact_harvest_target"),
+            raw.get("labeling_final_judge_exact_harvest_target"),
+            root_last.get("labeling_final_judge_exact_harvest_target"),
+        ),
+        "labeling_final_judge_exact_harvest_target_source": _first_str(
+            final_judge.get("labeling_final_judge_exact_harvest_target_source"),
+            root_last.get("labeling_final_judge_exact_harvest_target_source"),
+        ),
+        "exact_negative_harvest_target": _first_int(
+            final_judge.get("exact_negative_harvest_target"),
+            root_last.get("exact_negative_harvest_target"),
+        ),
+        "exact_negative_harvest_candidate_count": _first_int(
+            final_judge.get("exact_negative_harvest_candidate_count"),
+            root_last.get("exact_negative_harvest_candidate_count"),
+        ),
+        "exact_negative_harvest_selected_count": _first_int(
+            final_judge.get("exact_negative_harvest_selected_count"),
+            root_last.get("exact_negative_harvest_selected_count"),
+        ),
+        "exact_negative_harvest_selected_new_task_set_count": _first_int(
+            final_judge.get("exact_negative_harvest_selected_new_task_set_count"),
+            root_last.get("exact_negative_harvest_selected_new_task_set_count"),
+        ),
+        "exact_negative_harvest_selected_replacement_task_set_count": _first_int(
+            final_judge.get("exact_negative_harvest_selected_replacement_task_set_count"),
+            root_last.get("exact_negative_harvest_selected_replacement_task_set_count"),
+        ),
+        "exact_negative_harvest_selection_policy": _first_str(
+            final_judge.get("exact_negative_harvest_selection_policy"),
+            root_last.get("exact_negative_harvest_selection_policy"),
+        ),
         "harvest_selected_count": _first_int(final_judge.get("harvest_selected_count"), raw.get("harvest_selected_count")),
         "harvest_candidate_negative_count": _first_int(
             final_judge.get("harvest_candidate_negative_count"),
@@ -6205,6 +6330,7 @@ def _stage_a_row(
         "harvest_pricing_rc_audit_pass": final_judge.get("harvest_pricing_rc_audit_pass"),
         "harvest_pricing_rc_max_abs_diff": final_judge.get("harvest_pricing_rc_max_abs_diff"),
         **tail_fields,
+        **dual_search_fields,
         "global_remaining_rc_lb": final_judge.get("global_remaining_rc_lb"),
         "frontier_coverage_complete": bool(final_judge.get("global_remaining_rc_lb_coverage_complete")),
         "frontier_unsupported_region_count": final_judge.get("frontier_unsupported_region_count"),
@@ -6597,6 +6723,36 @@ def _stage_probe_row(row: dict, *, stage: str, mode: str, matrix_group: str) -> 
         "tail_dual_center_task_count": "",
         "tail_dual_current_task_count": "",
         "tail_dual_no_column_can_certify": False,
+        "candidate_search_false_positive_rate": row.get("candidate_search_false_positive_rate", ""),
+        "true_negative_candidate_search_miss_rate": row.get("true_negative_candidate_search_miss_rate", ""),
+        "candidate_search_false_positive_row_count": _first_int(
+            row.get("candidate_search_false_positive_row_count"),
+            len(row.get("candidate_search_false_positive_rows") or [])
+            if isinstance(row.get("candidate_search_false_positive_rows"), list)
+            else None,
+        ),
+        "true_negative_candidate_search_miss_row_count": _first_int(
+            row.get("true_negative_candidate_search_miss_row_count"),
+            len(row.get("true_negative_candidate_search_miss_rows") or [])
+            if isinstance(row.get("true_negative_candidate_search_miss_rows"), list)
+            else None,
+        ),
+        "candidate_search_negative_true_nonnegative_count": row.get(
+            "candidate_search_negative_true_nonnegative_count",
+            "",
+        ),
+        "true_negative_candidate_search_nonnegative_count": row.get(
+            "true_negative_candidate_search_nonnegative_count",
+            "",
+        ),
+        "candidate_search_dual_matches_true_dual": row.get("candidate_search_dual_matches_true_dual", ""),
+        "candidate_search_rc_recomputed_under_true_dual": row.get(
+            "candidate_search_rc_recomputed_under_true_dual",
+            "",
+        ),
+        "worker_true_dual_candidate_audit_pass": row.get("worker_true_dual_candidate_audit_pass", ""),
+        "worker_candidate_universe_task_set_count": row.get("worker_candidate_universe_task_set_count", ""),
+        "worker_generated_column_task_set_count": row.get("worker_generated_column_task_set_count", ""),
         "global_remaining_rc_lb": row.get("global_remaining_rc_lb"),
         "underlying_global_remaining_rc_lb": row.get("global_remaining_rc_lb"),
         "frontier_lb_official": False,
@@ -6971,6 +7127,40 @@ def _stage_b_probe_evidence_rows(
             ),
             "final_judge_wall_time": final_judge.get("final_judge_wall_time") or payload.get("elapsed_sec"),
             "rmp_round_count": payload.get("pricing_round_count") or final_judge.get("round") or "",
+            "labeling_final_judge_exact_harvest_target": _first_int(
+                final_judge.get("labeling_final_judge_exact_harvest_target"),
+                payload.get("labeling_final_judge_exact_harvest_target"),
+                (payload.get("config") or {}).get("labeling_final_judge_exact_harvest_target")
+                if isinstance(payload.get("config"), dict)
+                else None,
+            ),
+            "labeling_final_judge_exact_harvest_target_source": _first_str(
+                final_judge.get("labeling_final_judge_exact_harvest_target_source"),
+            ),
+            "exact_negative_harvest_target": _first_int(
+                final_judge.get("exact_negative_harvest_target"),
+                payload.get("exact_negative_harvest_target"),
+            ),
+            "exact_negative_harvest_candidate_count": _first_int(
+                final_judge.get("exact_negative_harvest_candidate_count"),
+                payload.get("exact_negative_harvest_candidate_count"),
+            ),
+            "exact_negative_harvest_selected_count": _first_int(
+                final_judge.get("exact_negative_harvest_selected_count"),
+                payload.get("exact_negative_harvest_selected_count"),
+            ),
+            "exact_negative_harvest_selected_new_task_set_count": _first_int(
+                final_judge.get("exact_negative_harvest_selected_new_task_set_count"),
+                payload.get("exact_negative_harvest_selected_new_task_set_count"),
+            ),
+            "exact_negative_harvest_selected_replacement_task_set_count": _first_int(
+                final_judge.get("exact_negative_harvest_selected_replacement_task_set_count"),
+                payload.get("exact_negative_harvest_selected_replacement_task_set_count"),
+            ),
+            "exact_negative_harvest_selection_policy": _first_str(
+                final_judge.get("exact_negative_harvest_selection_policy"),
+                payload.get("exact_negative_harvest_selection_policy"),
+            ),
             "harvest_source_phase": final_judge.get("harvest_source_phase"),
             "harvest_pricing_rc_audit_available": final_judge.get("harvest_pricing_rc_audit_available"),
             "harvest_pricing_rc_audit_pass": final_judge.get("harvest_pricing_rc_audit_pass"),
@@ -7070,6 +7260,7 @@ def _worker_tail_probe_payload(
     tail_dual_stabilization_enabled: bool,
     tail_dual_stabilization_alpha: float,
     tail_dual_stabilization_window: int,
+    labeling_final_judge_exact_harvest_target: int | None,
 ) -> dict:
     final_judge = result.get("final_judge") if isinstance(result.get("final_judge"), dict) else {}
     final_judge_call_count = int(result.get("final_judge_call_count") or 0)
@@ -7081,6 +7272,7 @@ def _worker_tail_probe_payload(
     last_worker = _last_worker_payload(history)
     tail_payload = last_worker.get("tail_dual_stabilization") if isinstance(last_worker.get("tail_dual_stabilization"), dict) else {}
     tail_fields = _tail_dual_safety_fields(last_worker, tail_payload)
+    dual_search_fields = _dual_search_diagnostic_fields(last_worker)
     return {
         "schema_version": "lunar_ice_bpc.b4_1_worker_tail_hidden_negative_probe.v1",
         "instance_path": str(instance_path),
@@ -7097,6 +7289,7 @@ def _worker_tail_probe_payload(
             "tail_dual_stabilization_enabled": bool(tail_dual_stabilization_enabled),
             "tail_dual_stabilization_alpha": float(tail_dual_stabilization_alpha),
             "tail_dual_stabilization_window": int(tail_dual_stabilization_window),
+            "labeling_final_judge_exact_harvest_target": labeling_final_judge_exact_harvest_target,
             "official_certificate_allowed": False,
         },
         "elapsed_sec": round(float(elapsed), 6),
@@ -7128,6 +7321,7 @@ def _worker_tail_probe_payload(
         "harvest_pricing_rc_audit_pass": result.get("harvest_pricing_rc_audit_pass"),
         "harvest_pricing_rc_max_abs_diff": result.get("harvest_pricing_rc_max_abs_diff"),
         **tail_fields,
+        **dual_search_fields,
         "tail_dual_stabilization": tail_payload,
         "final_judge": final_judge,
         "history": history,
@@ -7399,6 +7593,39 @@ def _stage_b_worker_tail_hidden_negative_evidence_row(
         final_judge.get("best_reduced_cost"),
         payload.get("harvest_best_true_rc"),
     )
+    payload_config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+    base["labeling_final_judge_exact_harvest_target"] = _first_int(
+        final_judge.get("labeling_final_judge_exact_harvest_target"),
+        payload.get("labeling_final_judge_exact_harvest_target"),
+        payload_config.get("labeling_final_judge_exact_harvest_target"),
+    )
+    base["labeling_final_judge_exact_harvest_target_source"] = _first_str(
+        final_judge.get("labeling_final_judge_exact_harvest_target_source")
+    )
+    base["exact_negative_harvest_target"] = _first_int(
+        final_judge.get("exact_negative_harvest_target"),
+        payload.get("exact_negative_harvest_target"),
+    )
+    base["exact_negative_harvest_candidate_count"] = _first_int(
+        final_judge.get("exact_negative_harvest_candidate_count"),
+        payload.get("exact_negative_harvest_candidate_count"),
+    )
+    base["exact_negative_harvest_selected_count"] = _first_int(
+        final_judge.get("exact_negative_harvest_selected_count"),
+        payload.get("exact_negative_harvest_selected_count"),
+    )
+    base["exact_negative_harvest_selected_new_task_set_count"] = _first_int(
+        final_judge.get("exact_negative_harvest_selected_new_task_set_count"),
+        payload.get("exact_negative_harvest_selected_new_task_set_count"),
+    )
+    base["exact_negative_harvest_selected_replacement_task_set_count"] = _first_int(
+        final_judge.get("exact_negative_harvest_selected_replacement_task_set_count"),
+        payload.get("exact_negative_harvest_selected_replacement_task_set_count"),
+    )
+    base["exact_negative_harvest_selection_policy"] = _first_str(
+        final_judge.get("exact_negative_harvest_selection_policy"),
+        payload.get("exact_negative_harvest_selection_policy"),
+    )
     base["last_best_reduced_cost"] = _first_float(
         final_judge.get("best_reduced_cost"),
         final_judge.get("pending_complete_min_rc"),
@@ -7640,6 +7867,49 @@ def _tail_dual_safety_fields(worker_payload: dict | None = None, tail_payload: d
         "tail_dual_center_task_count": tail_payload.get("tail_dual_center_task_count", ""),
         "tail_dual_current_task_count": tail_payload.get("tail_dual_current_task_count", ""),
         "tail_dual_no_column_can_certify": bool(tail_payload.get("tail_dual_no_column_can_certify", False)),
+    }
+
+
+def _dual_search_diagnostic_fields(worker_payload: dict | None = None) -> dict:
+    worker_payload = worker_payload if isinstance(worker_payload, dict) else {}
+    false_positive_rows = worker_payload.get("candidate_search_false_positive_rows") or []
+    miss_rows = worker_payload.get("true_negative_candidate_search_miss_rows") or []
+    candidate_universe_task_sets = worker_payload.get("worker_candidate_universe_task_sets") or []
+    generated_column_task_sets = worker_payload.get("worker_generated_column_task_sets") or []
+    return {
+        "candidate_search_false_positive_rate": worker_payload.get("candidate_search_false_positive_rate", ""),
+        "true_negative_candidate_search_miss_rate": worker_payload.get("true_negative_candidate_search_miss_rate", ""),
+        "candidate_search_false_positive_row_count": len(false_positive_rows)
+        if isinstance(false_positive_rows, list)
+        else "",
+        "true_negative_candidate_search_miss_row_count": len(miss_rows) if isinstance(miss_rows, list) else "",
+        "candidate_search_negative_true_nonnegative_count": worker_payload.get(
+            "candidate_search_negative_true_nonnegative_count",
+            "",
+        ),
+        "true_negative_candidate_search_nonnegative_count": worker_payload.get(
+            "true_negative_candidate_search_nonnegative_count",
+            "",
+        ),
+        "candidate_search_dual_matches_true_dual": worker_payload.get(
+            "candidate_search_dual_matches_true_dual",
+            "",
+        ),
+        "candidate_search_rc_recomputed_under_true_dual": worker_payload.get(
+            "candidate_search_rc_recomputed_under_true_dual",
+            "",
+        ),
+        "worker_true_dual_candidate_audit_pass": worker_payload.get(
+            "worker_true_dual_candidate_audit_pass",
+            "",
+        ),
+        "worker_candidate_universe_task_set_count": len(candidate_universe_task_sets)
+        if isinstance(candidate_universe_task_sets, list)
+        else "",
+        "worker_generated_column_task_set_count": worker_payload.get(
+            "worker_generated_column_task_set_count",
+            len(generated_column_task_sets) if isinstance(generated_column_task_sets, list) else "",
+        ),
     }
 
 
@@ -7930,6 +8200,14 @@ def _normalize_b4_1_row(row: dict) -> dict:
         "route_template_pre_harvest_selected_replacement_task_set_count",
         "route_template_pre_harvest_pricing_wall_time_sec",
         "route_template_pre_harvest_fallback_enabled",
+        "labeling_final_judge_exact_harvest_target",
+        "labeling_final_judge_exact_harvest_target_source",
+        "exact_negative_harvest_target",
+        "exact_negative_harvest_candidate_count",
+        "exact_negative_harvest_selected_count",
+        "exact_negative_harvest_selected_new_task_set_count",
+        "exact_negative_harvest_selected_replacement_task_set_count",
+        "exact_negative_harvest_selection_policy",
         "harvest_source_phase",
         "harvest_selected_count",
         "harvest_candidate_negative_count",
@@ -7974,6 +8252,9 @@ def _normalize_b4_1_row(row: dict) -> dict:
     tail_fields = _tail_dual_safety_fields(last_worker, tail_payload)
     for key, value in tail_fields.items():
         if tail_fields["tail_dual_stabilization_enabled"] or not _has_value(normalized.get(key)):
+            normalized[key] = value
+    for key, value in _dual_search_diagnostic_fields(last_worker).items():
+        if not _has_value(normalized.get(key)):
             normalized[key] = value
     for key in (
         "active_column_count",
@@ -8258,6 +8539,30 @@ def _build_requirement_audit(
     return audit
 
 
+def _tail_dual_certificate_leak(row: dict) -> bool:
+    if _bool_value(row.get("tail_dual_no_column_can_certify")):
+        return True
+    if not _bool_value(row.get("worker_dual_only")):
+        return True
+    if not _bool_value(row.get("true_dual_rc_recomputed")):
+        return True
+    if (
+        _has_value(row.get("worker_true_dual_candidate_audit_pass"))
+        and not _bool_value(row.get("worker_true_dual_candidate_audit_pass"))
+    ):
+        return True
+    if str(row.get("official_dual_source") or "") != "current_true_rmp_dual":
+        return True
+    if not _bool_value(row.get("can_certify_no_negative")):
+        return False
+    proof_kind = str(
+        row.get("pricing_proof_kind")
+        or row.get("underlying_pricing_proof_kind")
+        or ""
+    )
+    return proof_kind != "EXHAUSTIVE_NO_NEGATIVE"
+
+
 def _requirement_item(
     requirement_id: str,
     requirement: str,
@@ -8376,6 +8681,12 @@ def _max_present_float(values: Iterable[object]) -> float | None:
     parsed = [_first_float(value) for value in values]
     present = [float(value) for value in parsed if value is not None]
     return None if not present else round(max(present), 9)
+
+
+def _mean_present_float(values: Iterable[object]) -> float | None:
+    parsed = [_first_float(value) for value in values]
+    present = [float(value) for value in parsed if value is not None]
+    return None if not present else round(mean(present), 9)
 
 
 def _max_present_int(values: Iterable[object]) -> int:

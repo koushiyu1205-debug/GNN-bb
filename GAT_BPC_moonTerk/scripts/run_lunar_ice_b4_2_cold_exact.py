@@ -26,17 +26,56 @@ from time import perf_counter
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
+from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+    RELAXED_NG_ROUTE_MODE,
+    LabelingPricingConfig,
+)
+from lunar_ice_bpc.exact.solver.gurobi_compact import _safe_sortie_slot_bound
+from lunar_ice_bpc.io.instance_io import read_json
+
 STAGED_RESUME = ROOT / "scripts" / "run_lunar_ice_compact_pricing_staged_resume.py"
 B41_RUNNER = ROOT / "scripts" / "run_lunar_ice_b4_1_true_dual_proof_tail.py"
 
 MODEL_ID = "B4_2_COLD_EXACT_V1"
-OUTPUT_DIR = "runs/b4_2_cold_exact_500s_full"
-ROW_LIMIT_SEC = 500.0
-ACCEPTANCE_LIMIT_SEC = 500.0
+OUTPUT_DIR = "runs/b4_2_cold_exact_300s_full"
+ROW_LIMIT_SEC = 300.0
+ACCEPTANCE_LIMIT_SEC = 300.0
 THREADS = 4
 PROFILE = "V4SH"
 SEED_MODE = "b0_incumbent_plus_singletons"
 COLUMN_PROVENANCE = "instance_json_fixed_seed_same_run_checkpoint_and_partition_feedback"
+ROOT_ENGINE = "b2b_r3_worker"
+WORKER_PRICER_KIND = "relaxed_labeling"
+LABELING_WORKER_MAX_TASK_CAP = 4
+TAIL_DUAL_STABILIZATION_ENABLED = True
+TAIL_DUAL_STABILIZATION_ALPHA = 0.7
+TAIL_DUAL_STABILIZATION_WINDOW = 5
+LABELING_FINAL_JUDGE_MODE = "auto"
+LABELING_FINAL_JUDGE_MAX_EXACT_TASKS = 10
+LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET = 5
+_DEFAULT_LABELING_WORKER_CONFIG = LabelingPricingConfig(mode=RELAXED_NG_ROUTE_MODE)
+LABELING_SUPPORT_AWARE_HARVEST_ENABLED = _DEFAULT_LABELING_WORKER_CONFIG.support_aware_harvest_enabled
+LABELING_SUPPORT_OVERLAP_THRESHOLD = _DEFAULT_LABELING_WORKER_CONFIG.support_overlap_threshold
+LABELING_MAX_SELECTED_JACCARD = _DEFAULT_LABELING_WORKER_CONFIG.max_selected_jaccard
+LABELING_MAX_SELECTED_CONTAINMENT = _DEFAULT_LABELING_WORKER_CONFIG.max_selected_containment
+LABELING_WEAK_REPLACEMENT_CAP = _DEFAULT_LABELING_WORKER_CONFIG.weak_replacement_cap
+LABELING_STRONG_REPLACEMENT_THRESHOLD = _DEFAULT_LABELING_WORKER_CONFIG.strong_replacement_threshold
+LABELING_SUPPORT_CONTINUATION_SEED_ENABLED = _DEFAULT_LABELING_WORKER_CONFIG.support_continuation_seed_enabled
+LABELING_SUPPORT_CONTINUATION_MAX_SEED_SETS = _DEFAULT_LABELING_WORKER_CONFIG.support_continuation_max_seed_sets
+LABELING_SUPPORT_CONTINUATION_MAX_NEIGHBORS = _DEFAULT_LABELING_WORKER_CONFIG.support_continuation_max_neighbors
+LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT = (
+    _DEFAULT_LABELING_WORKER_CONFIG.support_continuation_protected_seed_count
+)
+LARGE_TASK_DIRECT_WORKER_ENABLED = True
+LARGE_TASK_DIRECT_WORKER_MAX_TASKS = 12
+LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS = 240
+LARGE_TASK_DIRECT_WORKER_TIME_CAP_SEC = 25.0
+LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH = 5
 
 
 def main() -> int:
@@ -60,6 +99,7 @@ def main() -> int:
     report_path = output_dir / "b4_2_cold_exact_full_report_zh.md"
 
     state = _load_state(state_path) if args.resume else {}
+    _enforce_resume_config(state, config_hash=config_hash, parser=parser)
     rows = _dedupe_rows(list(state.get("rows") or []))
     completed_keys = {
         str(row.get("instance_key") or "")
@@ -100,7 +140,14 @@ def main() -> int:
             )
             return 2
 
-        row = _run_instance_cold(args, config_hash=config_hash, instance_index=index, instance_path=instance_path)
+        previous_row = _row_for_instance(rows, instance_key) if args.resume else None
+        row = _run_instance_cold(
+            args,
+            config_hash=config_hash,
+            instance_index=index,
+            instance_path=instance_path,
+            previous_row=previous_row,
+        )
         rows = _upsert_row(rows, row)
         _write_artifacts(
             rows,
@@ -159,6 +206,102 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threads", type=int, default=THREADS)
     parser.add_argument("--profile", choices=("V4S", "V4SZ", "V4SH", "V4"), default=PROFILE)
     parser.add_argument("--seed-mode", choices=("b0_incumbent_plus_singletons", "b0_incumbent"), default=SEED_MODE)
+    parser.add_argument(
+        "--root-engine",
+        choices=("b1_compact_final_judge", "b2b_r3_worker"),
+        default=ROOT_ENGINE,
+    )
+    parser.add_argument(
+        "--worker-pricer-kind",
+        choices=("direct_label", "relaxed_labeling"),
+        default=WORKER_PRICER_KIND,
+    )
+    parser.add_argument(
+        "--labeling-worker-max-task-cap",
+        type=int,
+        default=LABELING_WORKER_MAX_TASK_CAP,
+        help=(
+            "Fixed global worker-only maximum priced task-set size. This is "
+            "part of the official config hash and never a per-instance override."
+        ),
+    )
+    parser.add_argument(
+        "--tail-dual-stabilization-enabled",
+        dest="tail_dual_stabilization_enabled",
+        action="store_true",
+        default=TAIL_DUAL_STABILIZATION_ENABLED,
+    )
+    parser.add_argument(
+        "--no-tail-dual-stabilization",
+        dest="tail_dual_stabilization_enabled",
+        action="store_false",
+    )
+    parser.add_argument("--tail-dual-stabilization-alpha", type=float, default=TAIL_DUAL_STABILIZATION_ALPHA)
+    parser.add_argument("--tail-dual-stabilization-window", type=int, default=TAIL_DUAL_STABILIZATION_WINDOW)
+    parser.add_argument(
+        "--labeling-final-judge-mode",
+        choices=("off", "on", "auto"),
+        default=LABELING_FINAL_JUDGE_MODE,
+    )
+    parser.add_argument("--labeling-final-judge-max-exact-tasks", type=int, default=LABELING_FINAL_JUDGE_MAX_EXACT_TASKS)
+    parser.add_argument(
+        "--labeling-final-judge-exact-harvest-target",
+        type=int,
+        default=LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET,
+    )
+    parser.add_argument(
+        "--labeling-support-continuation-seed-enabled",
+        dest="labeling_support_continuation_seed_enabled",
+        action="store_true",
+        default=LABELING_SUPPORT_CONTINUATION_SEED_ENABLED,
+    )
+    parser.add_argument(
+        "--no-labeling-support-continuation-seed",
+        dest="labeling_support_continuation_seed_enabled",
+        action="store_false",
+    )
+    parser.add_argument(
+        "--labeling-support-continuation-max-seed-sets",
+        type=int,
+        default=LABELING_SUPPORT_CONTINUATION_MAX_SEED_SETS,
+    )
+    parser.add_argument(
+        "--labeling-support-continuation-max-neighbors",
+        type=int,
+        default=LABELING_SUPPORT_CONTINUATION_MAX_NEIGHBORS,
+    )
+    parser.add_argument(
+        "--labeling-support-continuation-protected-seed-count",
+        type=int,
+        default=LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT,
+    )
+    parser.add_argument(
+        "--large-task-direct-worker-enabled",
+        dest="large_task_direct_worker_enabled",
+        action="store_true",
+        default=LARGE_TASK_DIRECT_WORKER_ENABLED,
+    )
+    parser.add_argument(
+        "--no-large-task-direct-worker",
+        dest="large_task_direct_worker_enabled",
+        action="store_false",
+    )
+    parser.add_argument("--large-task-direct-worker-max-tasks", type=int, default=LARGE_TASK_DIRECT_WORKER_MAX_TASKS)
+    parser.add_argument(
+        "--large-task-direct-worker-max-candidate-sets",
+        type=int,
+        default=LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS,
+    )
+    parser.add_argument(
+        "--large-task-direct-worker-time-cap-sec",
+        type=float,
+        default=LARGE_TASK_DIRECT_WORKER_TIME_CAP_SEC,
+    )
+    parser.add_argument(
+        "--large-task-direct-worker-neighborhood-width",
+        type=int,
+        default=LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH,
+    )
     parser.add_argument("--pool-stage-time-slice-sec", type=float, default=150.0)
     parser.add_argument("--pool-min-stage-sec", type=float, default=60.0)
     parser.add_argument("--pool-max-stages", type=int, default=10)
@@ -183,6 +326,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--partition-worker-count", type=int, default=4)
     parser.add_argument("--partition-k-chunk-size", type=int, default=1)
     parser.add_argument(
+        "--partition-k-order",
+        choices=("ascending", "low_high_interleave"),
+        default="low_high_interleave",
+    )
+    parser.add_argument(
         "--partition-variant",
         choices=("V4_current_strengthening", "V4_current_pair_conflict_capacity_bound"),
         default="V4_current_pair_conflict_capacity_bound",
@@ -191,8 +339,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--partition-feedback-rounds", type=int, default=1)
     parser.add_argument("--partition-feedback-harvest-sec", type=float, default=45.0)
     parser.add_argument("--partition-feedback-stage-time-sec", type=float, default=45.0)
-    parser.add_argument("--partition-feedback-merge-limit", type=int, default=16)
+    parser.add_argument("--partition-feedback-merge-limit", type=int, default=32)
     parser.add_argument("--partition-feedback-min-final-proof-sec", type=float, default=120.0)
+    parser.add_argument(
+        "--partition-adaptive-active-sortie-refinement",
+        dest="partition_adaptive_active_sortie_refinement",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--no-partition-adaptive-active-sortie-refinement",
+        dest="partition_adaptive_active_sortie_refinement",
+        action="store_false",
+    )
     parser.add_argument("--tree-closure-max-rounds", type=int, default=16)
     parser.add_argument("--tree-closure-max-columns-per-round", type=int, default=128)
     parser.add_argument("--tree-closure-max-nodes", type=int, default=31)
@@ -229,6 +388,42 @@ def _official_config(args: argparse.Namespace) -> dict:
         "threads": int(args.threads),
         "profile": str(args.profile),
         "seed_mode": str(args.seed_mode),
+        "root_engine": str(args.root_engine),
+        "worker_pricer_kind": str(args.worker_pricer_kind),
+        "labeling_worker_max_task_cap": int(args.labeling_worker_max_task_cap),
+        "tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
+        "tail_dual_stabilization_alpha": float(args.tail_dual_stabilization_alpha),
+        "tail_dual_stabilization_window": int(args.tail_dual_stabilization_window),
+        "labeling_support_aware_harvest_enabled": bool(LABELING_SUPPORT_AWARE_HARVEST_ENABLED),
+        "labeling_support_overlap_threshold": float(LABELING_SUPPORT_OVERLAP_THRESHOLD),
+        "labeling_max_selected_jaccard": float(LABELING_MAX_SELECTED_JACCARD),
+        "labeling_max_selected_containment": float(LABELING_MAX_SELECTED_CONTAINMENT),
+        "labeling_weak_replacement_cap": int(LABELING_WEAK_REPLACEMENT_CAP),
+        "labeling_strong_replacement_threshold": float(LABELING_STRONG_REPLACEMENT_THRESHOLD),
+        "labeling_final_judge_mode": str(args.labeling_final_judge_mode),
+        "labeling_final_judge_max_exact_tasks": int(args.labeling_final_judge_max_exact_tasks),
+        "labeling_final_judge_exact_harvest_target": int(args.labeling_final_judge_exact_harvest_target),
+        "labeling_support_continuation_seed_enabled": bool(
+            args.labeling_support_continuation_seed_enabled
+        ),
+        "labeling_support_continuation_max_seed_sets": int(
+            args.labeling_support_continuation_max_seed_sets
+        ),
+        "labeling_support_continuation_max_neighbors": int(
+            args.labeling_support_continuation_max_neighbors
+        ),
+        "labeling_support_continuation_protected_seed_count": int(
+            args.labeling_support_continuation_protected_seed_count
+        ),
+        "large_task_direct_worker_enabled": bool(args.large_task_direct_worker_enabled),
+        "large_task_direct_worker_max_tasks": int(args.large_task_direct_worker_max_tasks),
+        "large_task_direct_worker_max_candidate_sets": int(
+            args.large_task_direct_worker_max_candidate_sets
+        ),
+        "large_task_direct_worker_time_cap_sec": float(args.large_task_direct_worker_time_cap_sec),
+        "large_task_direct_worker_neighborhood_width": int(
+            args.large_task_direct_worker_neighborhood_width
+        ),
         "column_provenance": COLUMN_PROVENANCE,
         "row_limit_sec": float(args.row_limit_sec),
         "acceptance_limit_sec": float(ACCEPTANCE_LIMIT_SEC),
@@ -246,6 +441,7 @@ def _official_config(args: argparse.Namespace) -> dict:
         "partition_region_time_limit_sec": float(args.partition_region_time_limit_sec),
         "partition_worker_count": int(args.partition_worker_count),
         "partition_k_chunk_size": int(args.partition_k_chunk_size),
+        "partition_k_order": str(args.partition_k_order),
         "partition_variant": str(args.partition_variant),
         "partition_refresh_dual_from_active_pool": True,
         "partition_refresh_rmp_max_iterations": int(args.partition_refresh_rmp_max_iterations),
@@ -254,6 +450,7 @@ def _official_config(args: argparse.Namespace) -> dict:
         "partition_feedback_stage_time_sec": float(args.partition_feedback_stage_time_sec),
         "partition_feedback_merge_limit": int(args.partition_feedback_merge_limit),
         "partition_feedback_min_final_proof_sec": float(args.partition_feedback_min_final_proof_sec),
+        "partition_adaptive_active_sortie_refinement": bool(args.partition_adaptive_active_sortie_refinement),
         "tree_closure_max_rounds": int(args.tree_closure_max_rounds),
         "tree_closure_max_columns_per_round": int(args.tree_closure_max_columns_per_round),
         "tree_closure_max_nodes": int(args.tree_closure_max_nodes),
@@ -266,7 +463,7 @@ def _official_config(args: argparse.Namespace) -> dict:
             args.route_template_pre_harvest_max_neighborhood_seeds
         ),
         "route_template_pre_harvest_max_candidate_sets": int(args.route_template_pre_harvest_max_candidate_sets),
-        "root_tree_pricing_oracle": "compact_final_judge_profile_shared",
+        "root_tree_pricing_oracle": "b2b_r3_worker_candidate_search_with_true_dual_final_judge",
         "live_master_cuts": False,
         "partition_ledger_official": bool(args.root_partition_proof),
     }
@@ -275,6 +472,32 @@ def _official_config(args: argparse.Namespace) -> dict:
 def _config_hash(config: dict) -> str:
     payload = json.dumps(config, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _enforce_resume_config(
+    state: dict,
+    *,
+    config_hash: str,
+    parser: argparse.ArgumentParser,
+) -> None:
+    """Refuse to mix old checkpoints from a different official model config."""
+
+    if not state:
+        return
+    hashes = {
+        str(row.get("config_hash") or "")
+        for row in state.get("rows") or []
+        if isinstance(row, dict) and row.get("config_hash")
+    }
+    state_hash = str(state.get("config_hash") or "")
+    if state_hash:
+        hashes.add(state_hash)
+    hashes.discard("")
+    if hashes and hashes != {str(config_hash)}:
+        parser.error(
+            "existing B4.2 state was produced with a different config_hash; "
+            "use a fresh output directory or the exact same fixed config"
+        )
 
 
 def _instance_paths(args: argparse.Namespace) -> list[Path]:
@@ -303,14 +526,30 @@ def _scale_counts(paths: list[Path]) -> dict[str, int]:
     return counts
 
 
+def _row_for_instance(rows: list[dict], instance_key: str) -> dict | None:
+    for row in reversed(rows):
+        if isinstance(row, dict) and str(row.get("instance_key") or "") == str(instance_key):
+            return row
+    return None
+
+
+def _resume_elapsed_sec(previous_row: dict | None) -> float:
+    if not isinstance(previous_row, dict) or bool(previous_row.get("row_terminal")):
+        return 0.0
+    elapsed = _first_float(previous_row.get("cold_start_total_sec"))
+    return max(0.0, float(elapsed or 0.0))
+
+
 def _run_instance_cold(
     args: argparse.Namespace,
     *,
     config_hash: str,
     instance_index: int,
     instance_path: Path,
+    previous_row: dict | None = None,
 ) -> dict:
-    started = perf_counter()
+    previous_elapsed = _resume_elapsed_sec(previous_row)
+    started = perf_counter() - previous_elapsed
     row = _base_row(
         args,
         config_hash=config_hash,
@@ -318,6 +557,8 @@ def _run_instance_cold(
         instance_path=instance_path,
         status="B4_2_ROW_STARTED",
     )
+    row["cold_start_resume_previous_sec"] = round(previous_elapsed, 6)
+    row["same_run_checkpoint_resume_used"] = bool(previous_elapsed > 0.0)
     scale = len(_load_task_ids(instance_path))
     pool_dir = _resolve(args.output_dir) / "pools" / f"scale_{scale:03d}" / _instance_key(instance_path)
     proof_dir = _resolve(args.output_dir) / "proofs" / f"scale_{scale:03d}" / _instance_key(instance_path)
@@ -392,10 +633,36 @@ def _run_instance_cold(
             "root_pool_certificate_scope": latest_stage.get("certificate_scope") or "",
             "root_pool_pricing_state": latest_stage.get("pricing_state") or "",
             "root_pool_active_column_count": latest_stage.get("active_column_count"),
+            "root_pool_env_labeling_final_judge": latest_stage.get("env_labeling_final_judge") or "",
+            "root_pool_env_labeling_final_judge_max_tasks": latest_stage.get(
+                "env_labeling_final_judge_max_tasks"
+            )
+            or "",
+            "root_pool_env_labeling_final_judge_exact_harvest_target": latest_stage.get(
+                "env_labeling_final_judge_exact_harvest_target"
+            )
+            or "",
+            "root_pool_labeling_final_judge_enabled": bool(
+                latest_stage.get("labeling_final_judge_enabled")
+            ),
+            "root_pool_labeling_final_judge_auto_mode": bool(
+                latest_stage.get("labeling_final_judge_auto_mode")
+            ),
+            "root_pool_labeling_final_judge_auto_selected": bool(
+                latest_stage.get("labeling_final_judge_auto_selected")
+            ),
+            "root_pool_labeling_final_judge_auto_skip_reason": latest_stage.get(
+                "labeling_final_judge_auto_skip_reason"
+            )
+            or "",
             "root_pool_latest_probe_json": str(latest_probe or ""),
             "source_probe_json": str(latest_probe or ""),
         }
     )
+    _apply_root_pool_safety(row, _root_pool_safety_fields(stages))
+    _apply_root_pool_harvest(row, _root_pool_harvest_fields(stages))
+    _apply_root_pool_support_continuation(row, latest_probe)
+    _apply_root_pool_large_task_direct_worker(row, latest_probe)
     if bool(args.root_partition_proof) and latest_probe is not None and not pool_certified:
         feedback_row = _run_partition_feedback_rounds(
             args,
@@ -424,10 +691,37 @@ def _run_instance_cold(
                 "root_pool_certificate_scope": latest_stage.get("certificate_scope") or "",
                 "root_pool_pricing_state": latest_stage.get("pricing_state") or "",
                 "root_pool_active_column_count": latest_stage.get("active_column_count"),
+                "root_pool_env_labeling_final_judge": latest_stage.get("env_labeling_final_judge") or "",
+                "root_pool_env_labeling_final_judge_max_tasks": latest_stage.get(
+                    "env_labeling_final_judge_max_tasks"
+                )
+                or "",
+                "root_pool_env_labeling_final_judge_exact_harvest_target": latest_stage.get(
+                    "env_labeling_final_judge_exact_harvest_target"
+                )
+                or "",
+                "root_pool_labeling_final_judge_enabled": bool(
+                    latest_stage.get("labeling_final_judge_enabled")
+                ),
+                "root_pool_labeling_final_judge_auto_mode": bool(
+                    latest_stage.get("labeling_final_judge_auto_mode")
+                ),
+                "root_pool_labeling_final_judge_auto_selected": bool(
+                    latest_stage.get("labeling_final_judge_auto_selected")
+                ),
+                "root_pool_labeling_final_judge_auto_skip_reason": latest_stage.get(
+                    "labeling_final_judge_auto_skip_reason"
+                )
+                or "",
                 "root_pool_latest_probe_json": str(latest_probe or ""),
                 "source_probe_json": str(latest_probe or ""),
             }
         )
+        _apply_root_pool_safety(row, _root_pool_safety_fields(stages))
+        _apply_root_pool_harvest(row, _root_pool_harvest_fields(stages))
+        _apply_root_pool_support_continuation(row, latest_probe)
+        _apply_root_pool_large_task_direct_worker(row, latest_probe)
+        _apply_root_pool_large_task_direct_worker(row, latest_probe)
     partition_row = {}
     if bool(args.root_partition_proof) and latest_probe is not None and not pool_certified:
         remaining_for_partition = float(args.row_limit_sec) - (perf_counter() - started)
@@ -456,6 +750,16 @@ def _run_instance_cold(
                 }
             )
     if not pool_certified:
+        post_final_feedback = {}
+        if bool(args.root_partition_proof) and latest_probe is not None:
+            post_final_feedback = _checkpoint_post_final_partition_feedback(
+                args,
+                pool_dir=pool_dir,
+                proof_dir=proof_dir,
+                latest_probe=latest_probe,
+                partition_dir=proof_dir / "root_partition_proof",
+            )
+            row.update(post_final_feedback)
         row.update(
             {
                 "algorithm_status": "BPC_INCOMPLETE_PRICING",
@@ -466,8 +770,13 @@ def _run_instance_cold(
                 "under_300": False,
                 "under_acceptance_limit": False,
                 "under_500": False,
-                "row_terminal": True,
+                "row_terminal": not bool(post_final_feedback.get("root_partition_post_final_feedback_added_column_count")),
                 "fail_reason": (
+                    "post-final partition feedback checkpointed addable negative columns; resume counts prior cold-start time"
+                    if post_final_feedback.get("root_partition_post_final_feedback_added_column_count")
+                    else ""
+                )
+                or (
                     row.get("root_partition_fail_reason")
                     or stage_error
                     or "root pool did not certify no-negative within cold-start row limit"
@@ -479,6 +788,9 @@ def _run_instance_cold(
     if bool(partition_row.get("root_partition_certified_no_negative")):
         root_gate = _root_partition_tree_gate(latest_probe, partition_row)
         row.update(root_gate)
+        _apply_root_pool_safety(row, _root_pool_safety_fields(stages))
+        _apply_root_pool_harvest(row, _root_pool_harvest_fields(stages))
+        _apply_root_pool_support_continuation(row, latest_probe)
         if bool(root_gate.get("exact_certificate")):
             row["tree_sec"] = 0.0
             row["pricing_proof_sec"] = row.get("root_partition_sec")
@@ -512,6 +824,10 @@ def _run_instance_cold(
         time_limit_sec=remaining_for_tree,
     )
     row.update(tree_row)
+    _apply_root_pool_safety(row, _root_pool_safety_fields(stages))
+    _apply_root_pool_harvest(row, _root_pool_harvest_fields(stages))
+    _apply_root_pool_support_continuation(row, latest_probe)
+    _apply_root_pool_large_task_direct_worker(row, latest_probe)
     row["tree_sec"] = tree_row.get("tree_sec")
     row["pricing_proof_sec"] = tree_row.get("pricing_proof_sec")
     row["row_terminal"] = True
@@ -617,6 +933,40 @@ def _run_partition_feedback_rounds(
     }
 
 
+def _checkpoint_post_final_partition_feedback(
+    args: argparse.Namespace,
+    *,
+    pool_dir: Path,
+    proof_dir: Path,
+    latest_probe: Path,
+    partition_dir: Path,
+) -> dict:
+    output_probe = proof_dir / "root_partition_post_final_feedback" / "post_final_merged_probe.json"
+    merge = _merge_partition_negative_columns_into_probe(
+        source_probe=latest_probe,
+        partition_dir=partition_dir,
+        output_probe=output_probe,
+        max_columns=max(0, int(args.partition_feedback_merge_limit)),
+        negative_eps=1.0e-6,
+        round_index=max(1, int(args.partition_feedback_rounds) + 1),
+    )
+    added = int(merge.get("added_count") or 0)
+    if added > 0:
+        _set_pool_latest_probe(pool_dir, output_probe, merge)
+    return {
+        "root_partition_post_final_feedback_enabled": True,
+        "root_partition_post_final_feedback_output_probe": str(output_probe if output_probe.exists() else ""),
+        "root_partition_post_final_feedback_candidate_count": int(merge.get("candidate_count") or 0),
+        "root_partition_post_final_feedback_eligible_count": int(merge.get("eligible_count") or 0),
+        "root_partition_post_final_feedback_selected_column_count": int(merge.get("selected_count") or 0),
+        "root_partition_post_final_feedback_added_column_count": added,
+        "root_partition_post_final_feedback_rejected_column_count": int(merge.get("rejected_count") or 0),
+        "root_partition_post_final_feedback_best_true_rc": merge.get("best_true_rc"),
+        "root_partition_post_final_feedback_mutates_certificate": False,
+        "root_partition_post_final_feedback_resume_counts_prior_time": bool(added > 0),
+    }
+
+
 def _run_stage(
     args: argparse.Namespace,
     *,
@@ -641,6 +991,10 @@ def _run_stage(
         str(len(_load_task_ids(instance_path))),
         "--seed-mode",
         str(args.seed_mode),
+        "--root-engine",
+        str(args.root_engine),
+        "--worker-pricer-kind",
+        str(args.worker_pricer_kind),
         "--batch-target",
         str(int(args.pool_batch_target)),
         "--negative-search-cap-sec",
@@ -660,6 +1014,16 @@ def _run_stage(
         "--compact-pair-energy-infeasible-cut",
         "--compact-triple-time-window-infeasible-cut",
     ]
+    if bool(args.tail_dual_stabilization_enabled):
+        command.append("--tail-dual-stabilization-enabled")
+    command.extend(
+        [
+            "--tail-dual-stabilization-alpha",
+            str(float(args.tail_dual_stabilization_alpha)),
+            "--tail-dual-stabilization-window",
+            str(int(args.tail_dual_stabilization_window)),
+        ]
+    )
     env = _solver_env(args)
     completed = subprocess.run(
         command,
@@ -706,6 +1070,18 @@ def _run_tree_closure(
         str(int(args.tree_closure_max_nodes)),
         "--tree-closure-max-branch-depth",
         str(int(args.tree_closure_max_branch_depth)),
+        "--tree-closure-worker-pricer-kind",
+        str(args.worker_pricer_kind),
+        "--tree-closure-tail-dual-stabilization-alpha",
+        str(float(args.tail_dual_stabilization_alpha)),
+        "--tree-closure-tail-dual-stabilization-window",
+        str(int(args.tail_dual_stabilization_window)),
+        "--tree-closure-labeling-final-judge-mode",
+        str(args.labeling_final_judge_mode),
+        "--tree-closure-labeling-final-judge-max-exact-tasks",
+        str(int(args.labeling_final_judge_max_exact_tasks)),
+        "--tree-closure-labeling-final-judge-exact-harvest-target",
+        str(int(args.labeling_final_judge_exact_harvest_target)),
         "--threads",
         str(int(args.threads)),
         "--min-available-mem-gb",
@@ -717,6 +1093,8 @@ def _run_tree_closure(
         "--resource-check-action",
         "stop",
     ]
+    if bool(args.tail_dual_stabilization_enabled):
+        command.append("--tree-closure-tail-dual-stabilization-enabled")
     env = _solver_env(args)
     env["LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE"] = "proof_only"
     started = perf_counter()
@@ -745,12 +1123,33 @@ def _run_tree_closure(
             "under_500": False,
             "tree_sec": round(wall, 6),
             "pricing_proof_sec": None,
+            "tree_closure_worker_pricer_kind": str(args.worker_pricer_kind),
+            "tree_closure_tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
+            "tree_closure_labeling_final_judge_mode": str(args.labeling_final_judge_mode),
+            "tree_closure_labeling_final_judge_max_exact_tasks": int(args.labeling_final_judge_max_exact_tasks),
+            "tree_closure_labeling_final_judge_exact_harvest_target": int(
+                args.labeling_final_judge_exact_harvest_target
+            ),
             "tree_result_json": str(result_path if result_path.exists() else ""),
             "fail_reason": completed.stderr[-1200:] or completed.stdout[-1200:] or "tree closure result missing",
         }
     raw = json.loads(result_path.read_text(encoding="utf-8"))
+    summary_path = output_dir / "b4_1_summary.json"
+    b41_summary = _load_json_if_exists(summary_path)
+    b41_redlines = b41_summary.get("redlines") if isinstance(b41_summary.get("redlines"), dict) else {}
     root_node = (raw.get("nodes") or [{}])[0]
     final_judge = root_node.get("final_judge") if isinstance(root_node.get("final_judge"), dict) else {}
+    worker_payload = _last_worker_payload_from_tree_raw(raw)
+    safety = _worker_safety_redline_fields(
+        worker_payload,
+        tail_dual_stabilization_enabled=bool(
+            raw.get("tail_dual_stabilization_enabled", args.tail_dual_stabilization_enabled)
+        ),
+    )
+    b41_tail_dual_leak = _int(b41_redlines.get("tail_dual_certificate_leak_count"))
+    b41_certificate_leak = _int(b41_redlines.get("certificate_leak_count"))
+    b41_manual_rc_fail = _int(b41_redlines.get("manual_rc_fail_count"))
+    b41_pricing_rc_fail = _int(b41_redlines.get("pricing_rc_fail_count"))
     algorithm_status = raw.get("algorithm_status") or root_node.get("algorithm_status") or ""
     certificate_scope = raw.get("certificate_scope") or root_node.get("certificate_scope") or ""
     pricing_state = root_node.get("pricing_state") or final_judge.get("pricing_state") or ""
@@ -773,6 +1172,16 @@ def _run_tree_closure(
             raw.get("wall_time"),
         ),
         "tree_result_json": str(result_path),
+        "tree_closure_worker_pricer_kind": raw.get("worker_pricer_kind") or str(args.worker_pricer_kind),
+        "tree_closure_tail_dual_stabilization_enabled": bool(
+            raw.get("tail_dual_stabilization_enabled", args.tail_dual_stabilization_enabled)
+        ),
+        "tree_closure_labeling_final_judge_mode": str(args.labeling_final_judge_mode),
+        "tree_closure_labeling_final_judge_max_exact_tasks": int(args.labeling_final_judge_max_exact_tasks),
+        "tree_closure_labeling_final_judge_exact_harvest_target": int(
+            args.labeling_final_judge_exact_harvest_target
+        ),
+        "tree_closure_labeling_final_judge_enabled": raw.get("labeling_final_judge_enabled"),
         "tree_loaded_column_count": root_node.get("loaded_column_count"),
         "tree_columns_added": root_node.get("added_column_count"),
         "tree_round_count": root_node.get("round_count"),
@@ -782,9 +1191,32 @@ def _run_tree_closure(
         "pricing_proof_kind": final_judge.get("pricing_proof_kind"),
         "best_reduced_cost": final_judge.get("best_reduced_cost"),
         "global_remaining_rc_lb": final_judge.get("global_remaining_rc_lb"),
-        "manual_rc_fail": 0 if bool(final_judge.get("pricing_rc_audit_pass", True)) else 1,
-        "pricing_rc_fail": 0 if bool(final_judge.get("pricing_rc_audit_pass", True)) else 1,
-        "certificate_leak": 0,
+        "manual_rc_fail": max(
+            b41_manual_rc_fail,
+            0 if bool(final_judge.get("pricing_rc_audit_pass", True)) else 1,
+        ),
+        "pricing_rc_fail": max(
+            b41_pricing_rc_fail,
+            0 if bool(final_judge.get("pricing_rc_audit_pass", True)) else 1,
+        ),
+        "certificate_leak": max(
+            b41_certificate_leak,
+            int(bool(safety["worker_certificate_leak"])),
+        ),
+        "worker_certificate_leak": int(bool(safety["worker_certificate_leak"])),
+        "tail_dual_certificate_leak": max(
+            b41_tail_dual_leak,
+            int(bool(safety["tail_dual_certificate_leak"])),
+        ),
+        "true_dual_rc_recompute_missing": int(bool(safety["true_dual_rc_recompute_missing"])),
+        "worker_can_certify_no_negative": bool(safety["worker_can_certify_no_negative"]),
+        "worker_uses_true_dual_bpc_certificate": bool(safety["worker_uses_true_dual_bpc_certificate"]),
+        "worker_root_lp_bound_official": bool(safety["worker_root_lp_bound_official"]),
+        "worker_dual_only": bool(safety["worker_dual_only"]),
+        "true_dual_rc_recomputed": bool(safety["true_dual_rc_recomputed"]),
+        "tail_dual_no_column_can_certify": bool(safety["tail_dual_no_column_can_certify"]),
+        "official_dual_source": safety["official_dual_source"],
+        "b4_1_redline_summary_json": str(summary_path if summary_path.exists() else ""),
         "fail_reason": "" if exact_certificate else "tree closure did not produce BPC_TREE_OPTIMAL",
     }
 
@@ -839,6 +1271,8 @@ def _run_root_partition_proof(
         "stop",
         "--no-resume",
     ]
+    if bool(args.partition_adaptive_active_sortie_refinement):
+        command.append("--partition-adaptive-active-sortie-refinement")
     env = _solver_env(args)
     started = perf_counter()
     try:
@@ -957,6 +1391,13 @@ def _run_root_partition_proof_parallel(
         worker_count,
         k_chunk_size=max(1, int(args.partition_k_chunk_size)),
     )
+    chunks = _order_partition_k_chunks(
+        chunks,
+        task_count=task_count,
+        mode=str(args.partition_k_order),
+    )
+    active_sortie_max_payload = _source_probe_active_sortie_global_max(source_probe)
+    active_sortie_global_max = int(active_sortie_max_payload.get("active_sortie_global_max") or 0)
     started = perf_counter()
     worker_results: list[dict] = []
     deadline = started + max(1.0, float(time_limit_sec))
@@ -981,6 +1422,7 @@ def _run_root_partition_proof_parallel(
                     output_dir=worker_dir,
                     k_min=k_min,
                     k_max=k_max,
+                    active_sortie_global_max=active_sortie_global_max,
                     threads=1,
                 )
                 future = executor.submit(
@@ -989,6 +1431,9 @@ def _run_root_partition_proof_parallel(
                     output_dir=worker_dir,
                     time_limit_sec=remaining,
                     env=_solver_env(args),
+                    worker_index=worker_index,
+                    k_min=k_min,
+                    k_max=k_max,
                 )
                 futures[future] = {
                     "worker_index": worker_index,
@@ -1006,8 +1451,15 @@ def _run_root_partition_proof_parallel(
                     break
                 continue
             for future in done:
-                futures.pop(future, None)
-                worker_results.append(future.result())
+                meta = futures.pop(future, None) or {}
+                result = dict(future.result())
+                if "k_min" not in result and meta.get("k_min") is not None:
+                    result["k_min"] = int(meta["k_min"])
+                if "k_max" not in result and meta.get("k_max") is not None:
+                    result["k_max"] = int(meta["k_max"])
+                if "worker_index" not in result and meta.get("worker_index") is not None:
+                    result["worker_index"] = int(meta["worker_index"])
+                worker_results.append(result)
             submit_available()
         for meta in futures.values():
             worker_results.append(
@@ -1040,8 +1492,12 @@ def _run_root_partition_proof_parallel(
     aggregate = _aggregate_partition_workers(
         worker_results,
         task_count=task_count,
+        active_sortie_global_max=active_sortie_global_max,
+        active_sortie_global_max_source=str(active_sortie_max_payload.get("active_sortie_global_max_source") or ""),
         negative_eps=1.0e-6,
     )
+    aggregate["partition_k_order"] = str(args.partition_k_order)
+    aggregate["partition_k_chunk_order"] = [[int(k_min), int(k_max)] for k_min, k_max in chunks]
     summary_path = output_dir / "parallel_partition_summary.json"
     summary_path.write_text(json.dumps(aggregate, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     certified = bool(aggregate["certified_no_negative"])
@@ -1051,6 +1507,12 @@ def _run_root_partition_proof_parallel(
         "root_partition_worker_count": len(chunks),
         "root_partition_parallel_slots": int(worker_count),
         "root_partition_k_chunk_size": int(args.partition_k_chunk_size),
+        "root_partition_k_order": str(args.partition_k_order),
+        "root_partition_k_order_preview": json.dumps(
+            [[int(k_min), int(k_max)] for k_min, k_max in chunks[:8]],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ),
         "root_partition_sec": round(wall, 6),
         "root_partition_probe_json": "",
         "root_partition_audit_json": str(summary_path),
@@ -1061,6 +1523,15 @@ def _run_root_partition_proof_parallel(
         "root_partition_issue_codes": aggregate["issue_codes"],
         "root_partition_region_count": int(aggregate["region_count"]),
         "root_partition_expected_region_count": int(aggregate["expected_region_count"]),
+        "root_partition_active_sortie_global_max": int(aggregate["active_sortie_global_max"]),
+        "root_partition_active_sortie_global_max_source": aggregate["active_sortie_global_max_source"],
+        "root_partition_active_sortie_bound_pruned_region_count": int(
+            aggregate["active_sortie_bound_pruned_region_count"]
+        ),
+        "root_partition_auxiliary_exact_region_count": int(aggregate["auxiliary_exact_region_count"]),
+        "root_partition_coarse_region_count": int(aggregate["coarse_region_count"]),
+        "root_partition_coarse_covered_region_count": int(aggregate["coarse_covered_region_count"]),
+        "root_partition_coarse_incomplete_region_count": int(aggregate["coarse_incomplete_region_count"]),
         "root_partition_best_lb": aggregate["best_lb"],
         "root_partition_bound_gap_to_zero": (
             None if aggregate["best_lb"] is None else round(max(0.0, -float(aggregate["best_lb"])), 9)
@@ -1083,9 +1554,10 @@ def _partition_worker_command(
     output_dir: Path,
     k_min: int,
     k_max: int,
+    active_sortie_global_max: int = 0,
     threads: int,
 ) -> list[str]:
-    return [
+    command = [
         sys.executable,
         str(B41_RUNNER),
         "--output-dir",
@@ -1120,6 +1592,16 @@ def _partition_worker_command(
         "stop",
         "--no-resume",
     ]
+    if bool(args.partition_adaptive_active_sortie_refinement):
+        command.append("--partition-adaptive-active-sortie-refinement")
+    if int(active_sortie_global_max or 0) > 0:
+        command.extend(
+            [
+                "--partition-residual-active-sortie-count-max",
+                str(int(active_sortie_global_max)),
+            ]
+        )
+    return command
 
 
 def _run_partition_worker(
@@ -1128,7 +1610,15 @@ def _run_partition_worker(
     output_dir: Path,
     time_limit_sec: float,
     env: dict[str, str],
+    worker_index: int | None = None,
+    k_min: int | None = None,
+    k_max: int | None = None,
 ) -> dict:
+    meta = {
+        "worker_index": None if worker_index is None else int(worker_index),
+        "k_min": None if k_min is None else int(k_min),
+        "k_max": None if k_max is None else int(k_max),
+    }
     started = perf_counter()
     try:
         completed = subprocess.run(
@@ -1145,6 +1635,7 @@ def _run_partition_worker(
         (output_dir / "stdout.txt").write_text(exc.stdout or "", encoding="utf-8")
         (output_dir / "stderr.txt").write_text(exc.stderr or "", encoding="utf-8")
         return {
+            **meta,
             "output_dir": str(output_dir),
             "returncode": None,
             "wall_time_sec": round(wall, 6),
@@ -1157,6 +1648,7 @@ def _run_partition_worker(
     (output_dir / "stderr.txt").write_text(completed.stderr, encoding="utf-8")
     partition_json = output_dir / "required_task_set_partition_probe.json"
     return {
+        **meta,
         "output_dir": str(output_dir),
         "returncode": int(completed.returncode),
         "wall_time_sec": round(wall, 6),
@@ -1172,9 +1664,18 @@ def _aggregate_partition_workers(
     worker_results: list[dict],
     *,
     task_count: int,
+    active_sortie_global_max: int = 0,
+    active_sortie_global_max_source: str = "",
     negative_eps: float,
 ) -> dict:
-    expected = {(k, m) for k in range(1, int(task_count) + 1) for m in range(1, k + 1)}
+    active_bound = int(active_sortie_global_max or 0)
+    expected = {
+        (k, m)
+        for k in range(1, int(task_count) + 1)
+        for m in range(1, min(k, active_bound if active_bound > 0 else k) + 1)
+    }
+    unbounded_expected_count = sum(range(1, int(task_count) + 1))
+    active_sortie_bound_pruned_region_count = max(0, int(unbounded_expected_count) - len(expected))
     seen: dict[tuple[int, int], dict] = {}
     duplicates = 0
     negative_count = 0
@@ -1182,6 +1683,10 @@ def _aggregate_partition_workers(
     redline_count = 0
     rc_audit_fail_count = 0
     dual_scope_mismatch_count = 0
+    auxiliary_exact_region_count = 0
+    coarse_region_count = 0
+    coarse_covered_region_count = 0
+    coarse_incomplete_region_count = 0
     best_values: list[float] = []
     issue_codes: list[str] = []
     refresh_statuses: set[str] = set()
@@ -1211,6 +1716,53 @@ def _aggregate_partition_workers(
                 continue
             pair = _partition_region_pair(row.get("region_id"))
             if pair is None:
+                task_count_region = _partition_region_task_count(row.get("region_id"))
+                if task_count_region is not None:
+                    coarse_region_count += 1
+                    best_rc = _first_float(row.get("best_reduced_cost"), row.get("dual_bound"))
+                    if best_rc is not None:
+                        best_values.append(float(best_rc))
+                    negative = bool(row.get("negative_found")) or (
+                        best_rc is not None and float(best_rc) < -abs(float(negative_eps))
+                    )
+                    if negative:
+                        negative_count += 1
+                    complete = bool(row.get("region_pricing_complete"))
+                    can_certify = bool(row.get("region_can_certify_no_negative"))
+                    if not complete or not can_certify:
+                        incomplete_count += 1
+                        coarse_incomplete_region_count += 1
+                        continue
+                    covered_pairs = _partition_pairs_for_task_count(
+                        task_count_region,
+                        task_count=task_count,
+                        active_sortie_global_max=active_bound,
+                    )
+                    if not covered_pairs:
+                        issue_codes.append("coarse_region_out_of_expected_range")
+                        continue
+                    coarse_covered_region_count += len(covered_pairs)
+                    for covered_pair in covered_pairs:
+                        if covered_pair in seen:
+                            duplicates += 1
+                            continue
+                        seen[covered_pair] = row
+                    continue
+                if _partition_auxiliary_exact_region(row.get("region_id")):
+                    auxiliary_exact_region_count += 1
+                    best_rc = _first_float(row.get("best_reduced_cost"), row.get("dual_bound"))
+                    if best_rc is not None:
+                        best_values.append(float(best_rc))
+                    negative = bool(row.get("negative_found")) or (
+                        best_rc is not None and float(best_rc) < -abs(float(negative_eps))
+                    )
+                    if negative:
+                        negative_count += 1
+                    complete = bool(row.get("region_pricing_complete"))
+                    can_certify = bool(row.get("region_can_certify_no_negative"))
+                    if not complete or not can_certify:
+                        incomplete_count += 1
+                    continue
                 issue_codes.append("region_id_unparsed")
                 continue
             if pair in seen:
@@ -1265,8 +1817,15 @@ def _aggregate_partition_workers(
         "certified_no_negative": certified,
         "coverage_complete": coverage_complete,
         "task_count": int(task_count),
+        "active_sortie_global_max": int(active_bound),
+        "active_sortie_global_max_source": str(active_sortie_global_max_source or ""),
+        "active_sortie_bound_pruned_region_count": int(active_sortie_bound_pruned_region_count),
         "expected_region_count": len(expected),
         "region_count": len(seen),
+        "auxiliary_exact_region_count": int(auxiliary_exact_region_count),
+        "coarse_region_count": int(coarse_region_count),
+        "coarse_covered_region_count": int(coarse_covered_region_count),
+        "coarse_incomplete_region_count": int(coarse_incomplete_region_count),
         "missing_region_count": len(missing),
         "duplicate_region_count": duplicates,
         "unexpected_region_count": len(unexpected),
@@ -1298,8 +1857,8 @@ def _merge_partition_negative_columns_into_probe(
         partition_dir=partition_dir,
         negative_eps=negative_eps,
     )
-    selected: list[dict] = []
     rejected = 0
+    eligible: list[dict] = []
     for candidate in candidates:
         payload = dict(candidate["payload"])
         key = _column_payload_key(payload)
@@ -1307,10 +1866,13 @@ def _merge_partition_negative_columns_into_probe(
             rejected += 1
             continue
         existing_keys.add(key)
-        payload["vehicle_id"] = f"b4_2_partition_feedback_r{round_index:02d}_{len(selected) + 1:03d}"
-        selected.append({**candidate, "payload": payload})
-        if len(selected) >= max(0, int(max_columns)):
-            break
+        eligible.append({**candidate, "payload": payload})
+    selected = _select_partition_feedback_candidates(
+        eligible,
+        max_columns=max(0, int(max_columns)),
+    )
+    for index, item in enumerate(selected, start=1):
+        item["payload"]["vehicle_id"] = f"b4_2_partition_feedback_r{round_index:02d}_{index:03d}"
     merged = dict(source)
     before = len(active_columns)
     merged["active_columns_payload_version"] = "journey_solution_payload.v1"
@@ -1321,8 +1883,23 @@ def _merge_partition_negative_columns_into_probe(
         "partition_dir": str(partition_dir),
         "round_index": int(round_index),
         "candidate_count": len(candidates),
+        "eligible_count": len(eligible),
         "selected_count": len(selected),
         "rejected_duplicate_count": int(rejected),
+        "selection_policy": "most_negative_with_task_count_active_sortie_and_task_set_diversity_v2",
+        "selection_max_columns": max(0, int(max_columns)),
+        "selection_diversity_jaccard_threshold": 0.8,
+        "selected_required_task_count_count": len(
+            {int(item.get("required_task_count") or 0) for item in selected}
+        ),
+        "selected_active_sortie_count_count": len(
+            {int(item.get("required_active_sortie_count") or 0) for item in selected}
+        ),
+        "selected_task_set_count": len({_task_set_key(item.get("task_set") or []) for item in selected}),
+        "selected_by_required_task_count": _count_by_key(selected, "required_task_count"),
+        "selected_by_required_active_sortie_count": _count_by_key(selected, "required_active_sortie_count"),
+        "selected_best_true_rc": None if not selected else min(float(item["true_rc"]) for item in selected),
+        "selected_worst_true_rc": None if not selected else max(float(item["true_rc"]) for item in selected),
         "before_active_column_count": before,
         "after_active_column_count": len(merged["active_columns"]),
         "selected": [
@@ -1330,6 +1907,8 @@ def _merge_partition_negative_columns_into_probe(
                 "source_json": item["source_json"],
                 "row_index": item["row_index"],
                 "region_id": item["region_id"],
+                "required_task_count": item.get("required_task_count"),
+                "required_active_sortie_count": item.get("required_active_sortie_count"),
                 "task_set": item["task_set"],
                 "true_rc": item["true_rc"],
                 "replacement_or_new_task_set": item["replacement_or_new_task_set"],
@@ -1342,6 +1921,7 @@ def _merge_partition_negative_columns_into_probe(
     return {
         "output_probe": str(output_probe),
         "candidate_count": len(candidates),
+        "eligible_count": len(eligible),
         "selected_count": len(selected),
         "added_count": len(merged["active_columns"]) - before,
         "rejected_count": int(rejected),
@@ -1378,6 +1958,8 @@ def _partition_negative_payload_candidates(*, partition_dir: Path, negative_eps:
                     "source_json": str(path),
                     "row_index": int(index),
                     "region_id": str(row.get("region_id") or ""),
+                    "required_task_count": _int(row.get("required_task_count")),
+                    "required_active_sortie_count": _int(row.get("required_active_sortie_count")),
                     "task_set": list(row.get("partition_negative_task_set") or []),
                     "task_set_size": _int(row.get("partition_negative_task_set_size")),
                     "true_rc": float(true_rc),
@@ -1391,13 +1973,117 @@ def _partition_negative_payload_candidates(*, partition_dir: Path, negative_eps:
             )
     return sorted(
         candidates,
-        key=lambda item: (
-            0 if item["replacement_or_new_task_set"] == "new_task_set" else 1,
-            float(item["true_rc"]),
-            int(item["task_set_size"] or 9999),
-            str(item["region_id"]),
-        ),
+        key=_partition_feedback_candidate_sort_key,
     )
+
+
+def _partition_feedback_candidate_sort_key(item: dict) -> tuple:
+    return (
+        0 if item.get("replacement_or_new_task_set") == "new_task_set" else 1,
+        float(item.get("true_rc") or 0.0),
+        int(item.get("task_set_size") or 9999),
+        int(item.get("required_task_count") or 9999),
+        int(item.get("required_active_sortie_count") or 9999),
+        str(item.get("region_id") or ""),
+    )
+
+
+def _select_partition_feedback_candidates(candidates: list[dict], *, max_columns: int) -> list[dict]:
+    limit = max(0, int(max_columns))
+    if limit <= 0 or not candidates:
+        return []
+    ordered = sorted(candidates, key=_partition_feedback_candidate_sort_key)
+    if len(ordered) <= limit:
+        return ordered
+
+    selected: list[dict] = []
+    selected_ids: set[tuple] = set()
+
+    def candidate_id(item: dict) -> tuple:
+        return (
+            str(item.get("source_json") or ""),
+            int(item.get("row_index") or 0),
+            str(item.get("region_id") or ""),
+            _task_set_key(item.get("task_set") or []),
+        )
+
+    def add(item: dict) -> bool:
+        if len(selected) >= limit:
+            return False
+        ident = candidate_id(item)
+        if ident in selected_ids:
+            return False
+        selected_ids.add(ident)
+        selected.append(item)
+        return True
+
+    # Protect the strongest column from as many residual task-count layers as
+    # possible.  The final proof fails by region, not only by global best RC, so
+    # spending the whole feedback budget on one dense neighborhood leaves other
+    # failing layers untouched.
+    by_task_count: dict[int, dict] = {}
+    for item in ordered:
+        task_count = int(item.get("required_task_count") or 0)
+        if task_count <= 0:
+            continue
+        by_task_count.setdefault(task_count, item)
+    for item in sorted(by_task_count.values(), key=_partition_feedback_candidate_sort_key):
+        add(item)
+        if len(selected) >= max(1, limit // 2):
+            break
+
+    # Then cover active-sortie slices, which often correspond to different
+    # route packing shapes for the same task count.
+    by_active_sortie: dict[int, dict] = {}
+    for item in ordered:
+        active_sorties = int(item.get("required_active_sortie_count") or 0)
+        if active_sorties <= 0:
+            continue
+        by_active_sortie.setdefault(active_sorties, item)
+    for item in sorted(by_active_sortie.values(), key=_partition_feedback_candidate_sort_key):
+        add(item)
+        if len(selected) >= max(1, (limit * 3) // 4):
+            break
+
+    # Fill the rest greedily, preferring candidates that are not near-duplicates
+    # of already selected task sets.  If all remaining candidates are similar,
+    # fall back to the original most-negative order.
+    threshold = 0.8
+    for item in ordered:
+        if len(selected) >= limit:
+            break
+        key = _task_set_key(item.get("task_set") or [])
+        if any(_task_set_jaccard(key, _task_set_key(row.get("task_set") or [])) > threshold for row in selected):
+            continue
+        add(item)
+    for item in ordered:
+        if len(selected) >= limit:
+            break
+        add(item)
+    return selected
+
+
+def _task_set_key(task_set) -> tuple[str, ...]:
+    return tuple(sorted(str(task_id) for task_id in (task_set or [])))
+
+
+def _task_set_jaccard(left: tuple[str, ...], right: tuple[str, ...]) -> float:
+    left_set = set(left)
+    right_set = set(right)
+    if not left_set and not right_set:
+        return 1.0
+    union = left_set | right_set
+    if not union:
+        return 0.0
+    return len(left_set & right_set) / len(union)
+
+
+def _count_by_key(rows: list[dict], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key) or 0)
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (int(item[0]) if item[0].isdigit() else 0, item[0])))
 
 
 def _partition_probe_json_paths(partition_dir: Path) -> list[Path]:
@@ -1451,6 +2137,36 @@ def _partition_region_pair(region_id) -> tuple[int, int] | None:
         return None
 
 
+def _partition_region_task_count(region_id) -> int | None:
+    text = str(region_id or "")
+    prefix = "residual_task_count_"
+    marker = "_active_sorties_"
+    if not text.startswith(prefix) or marker in text:
+        return None
+    try:
+        return int(text[len(prefix):])
+    except ValueError:
+        return None
+
+
+def _partition_pairs_for_task_count(
+    required_task_count: int,
+    *,
+    task_count: int,
+    active_sortie_global_max: int = 0,
+) -> set[tuple[int, int]]:
+    k = int(required_task_count)
+    if k < 1 or k > int(task_count):
+        return set()
+    active_bound = int(active_sortie_global_max or 0)
+    max_active = min(k, active_bound if active_bound > 0 else k)
+    return {(k, m) for m in range(1, max_active + 1)}
+
+
+def _partition_auxiliary_exact_region(region_id) -> bool:
+    return str(region_id or "").startswith("exact_")
+
+
 def _partition_k_chunks(task_count: int, worker_count: int, *, k_chunk_size: int = 2) -> list[tuple[int, int]]:
     k_chunk_size = max(1, int(k_chunk_size))
     chunks: list[tuple[int, int]] = []
@@ -1462,6 +2178,50 @@ def _partition_k_chunks(task_count: int, worker_count: int, *, k_chunk_size: int
     return chunks
 
 
+def _order_partition_k_chunks(
+    chunks: list[tuple[int, int]],
+    *,
+    task_count: int,
+    mode: str,
+) -> list[tuple[int, int]]:
+    """Return a fixed proof-priority order without changing coverage.
+
+    This only changes which k-regions are attempted first under a tight wall-clock
+    budget.  It is not a certificate shortcut: the ledger still requires every
+    expected (k, m) region to be covered before no-negative can be certified.
+    """
+    base = [(int(k_min), int(k_max)) for k_min, k_max in chunks]
+    if str(mode) == "ascending":
+        return base
+    if str(mode) != "low_high_interleave":
+        raise ValueError(f"unsupported partition k order: {mode}")
+
+    ordered: list[tuple[int, int]] = []
+    left = 0
+    right = len(base) - 1
+    take_low = True
+    while left <= right:
+        if take_low:
+            ordered.append(base[left])
+            left += 1
+        else:
+            ordered.append(base[right])
+            right -= 1
+        take_low = not take_low
+
+    if sorted(ordered) != sorted(base):
+        raise AssertionError("partition k order must be a permutation of k chunks")
+    covered = [
+        k
+        for k_min, k_max in ordered
+        for k in range(int(k_min), int(k_max) + 1)
+    ]
+    expected = list(range(1, int(task_count) + 1))
+    if sorted(covered) != expected:
+        raise AssertionError("partition k order must cover every required task count exactly once")
+    return ordered
+
+
 def _source_probe_task_count(source_probe: Path) -> int:
     try:
         payload = json.loads(Path(source_probe).read_text(encoding="utf-8"))
@@ -1471,6 +2231,45 @@ def _source_probe_task_count(source_probe: Path) -> int:
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return 0
     return 0
+
+
+def _source_probe_active_sortie_global_max(source_probe: Path) -> dict:
+    """Return an exact-safe active-sortie upper bound for partition coverage.
+
+    The compact pricing model already uses ``_safe_sortie_slot_bound`` to bound
+    the number of sortie slots in a single journey.  Reusing that bound here only
+    removes partition regions with more active sorties than available slots; the
+    proof ledger records the source and the number of pruned infeasible regions.
+    If anything cannot be loaded, return zero and the caller keeps the older
+    unbounded ``m <= k`` partition.
+    """
+
+    try:
+        payload = json.loads(Path(source_probe).read_text(encoding="utf-8"))
+        instance_path = payload.get("instance_path")
+        if not instance_path:
+            return {
+                "active_sortie_global_max": 0,
+                "active_sortie_global_max_source": "unavailable_source_probe_missing_instance_path",
+            }
+        data = load_lunar_ice_data(read_json(_resolve(instance_path)))
+        bound = _safe_sortie_slot_bound(data)
+        slot_count = int(bound.get("slot_count") or 0)
+        if slot_count <= 0:
+            return {
+                "active_sortie_global_max": 0,
+                "active_sortie_global_max_source": "unavailable_nonpositive_safe_sortie_slot_bound",
+            }
+        return {
+            "active_sortie_global_max": int(slot_count),
+            "active_sortie_global_max_source": str(bound.get("source") or "safe_sortie_slot_bound"),
+            "active_sortie_global_max_payload": bound,
+        }
+    except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError):
+        return {
+            "active_sortie_global_max": 0,
+            "active_sortie_global_max_source": "unavailable_exception_fail_safe_unbounded",
+        }
 
 
 def _root_partition_tree_gate(source_probe: Path | None, partition_row: dict) -> dict:
@@ -1522,12 +2321,137 @@ def _root_partition_tree_gate(source_probe: Path | None, partition_row: dict) ->
     }
 
 
+def _load_json_if_exists(path: Path) -> dict:
+    try:
+        if not path.exists():
+            return {}
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _last_worker_payload_from_tree_raw(raw: dict) -> dict:
+    nodes = raw.get("nodes") if isinstance(raw.get("nodes"), list) else []
+    for node in reversed(nodes):
+        if not isinstance(node, dict):
+            continue
+        history = node.get("history") if isinstance(node.get("history"), list) else []
+        for row in reversed(history):
+            if not isinstance(row, dict):
+                continue
+            if (
+                row.get("worker_pricer_kind")
+                or row.get("worker_dual_only") is not None
+                or row.get("tail_dual_stabilization")
+                or row.get("candidate_search_rc_recomputed_under_true_dual") is not None
+            ):
+                return row
+    return {}
+
+
+def _worker_safety_redline_fields(
+    worker_payload: dict,
+    *,
+    tail_dual_stabilization_enabled: bool,
+) -> dict:
+    worker_payload = worker_payload if isinstance(worker_payload, dict) else {}
+    worker_can_certify = _truthy(worker_payload.get("can_certify_no_negative"))
+    worker_uses_true_dual = _truthy(worker_payload.get("uses_true_dual_bpc_certificate"))
+    worker_root_lp_bound_official = _truthy(worker_payload.get("root_lp_bound_official"))
+    completion_bound_certifies = _truthy(worker_payload.get("completion_bound_can_certify_no_negative"))
+    tail_dual_no_column_can_certify = _truthy(worker_payload.get("tail_dual_no_column_can_certify"))
+    worker_certificate_leak = bool(
+        worker_can_certify
+        or worker_uses_true_dual
+        or worker_root_lp_bound_official
+        or completion_bound_certifies
+        or tail_dual_no_column_can_certify
+    )
+    true_dual_rc_recomputed = _truthy(
+        worker_payload.get("true_dual_rc_recomputed"),
+        default=not bool(tail_dual_stabilization_enabled),
+    )
+    worker_dual_only = _truthy(
+        worker_payload.get("worker_dual_only"),
+        default=not bool(tail_dual_stabilization_enabled),
+    )
+    official_dual_source = str(worker_payload.get("official_dual_source") or "")
+    true_dual_rc_recompute_missing = bool(
+        tail_dual_stabilization_enabled and worker_payload and not true_dual_rc_recomputed
+    )
+    tail_dual_certificate_leak = bool(
+        tail_dual_stabilization_enabled
+        and (
+            worker_certificate_leak
+            or tail_dual_no_column_can_certify
+            or (worker_payload and not worker_dual_only)
+            or true_dual_rc_recompute_missing
+            or (worker_payload and official_dual_source not in {"", "current_true_rmp_dual"})
+        )
+    )
+    return {
+        "worker_can_certify_no_negative": worker_can_certify,
+        "worker_uses_true_dual_bpc_certificate": worker_uses_true_dual,
+        "worker_root_lp_bound_official": worker_root_lp_bound_official,
+        "worker_certificate_leak": worker_certificate_leak,
+        "worker_dual_only": worker_dual_only,
+        "true_dual_rc_recomputed": true_dual_rc_recomputed,
+        "tail_dual_no_column_can_certify": tail_dual_no_column_can_certify,
+        "tail_dual_certificate_leak": tail_dual_certificate_leak,
+        "true_dual_rc_recompute_missing": true_dual_rc_recompute_missing,
+        "official_dual_source": official_dual_source,
+    }
+
+
 def _solver_env(args: argparse.Namespace) -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = _prepend_pythonpath(env.get("PYTHONPATH", ""), ROOT / "src")
     env["LUNAR_ICE_COMPACT_FINAL_JUDGE_PROFILE"] = str(args.profile)
     env["LUNAR_ICE_COMPACT_FINAL_JUDGE_THREADS"] = str(int(args.threads))
     env["LUNAR_ICE_COMPACT_HIGHS_THREADS"] = str(int(args.threads))
+    label_mode = str(args.labeling_final_judge_mode)
+    env["LUNAR_ICE_LABELING_FINAL_JUDGE"] = {
+        "off": "0",
+        "on": "1",
+        "auto": "auto",
+    }[label_mode]
+    env["LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS"] = str(
+        max(1, int(args.labeling_final_judge_max_exact_tasks))
+    )
+    env["LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET"] = str(
+        max(1, int(args.labeling_final_judge_exact_harvest_target))
+    )
+    env["LUNAR_ICE_LABELING_WORKER_MAX_TASK_CAP"] = str(
+        max(1, int(args.labeling_worker_max_task_cap))
+    )
+    env["LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_SEED"] = (
+        "1" if bool(args.labeling_support_continuation_seed_enabled) else "0"
+    )
+    env["LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_MAX_SEED_SETS"] = str(
+        max(0, int(args.labeling_support_continuation_max_seed_sets))
+    )
+    env["LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_MAX_NEIGHBORS"] = str(
+        max(1, int(args.labeling_support_continuation_max_neighbors))
+    )
+    env["LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT"] = str(
+        max(0, int(args.labeling_support_continuation_protected_seed_count))
+    )
+    env["LUNAR_ICE_LARGE_TASK_DIRECT_WORKER"] = (
+        "1" if bool(args.large_task_direct_worker_enabled) else "0"
+    )
+    env["LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_MAX_TASKS"] = str(
+        max(1, int(args.large_task_direct_worker_max_tasks))
+    )
+    env["LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS"] = str(
+        max(0, int(args.large_task_direct_worker_max_candidate_sets))
+    )
+    env["LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_TIME_CAP_SEC"] = str(
+        max(0.0, float(args.large_task_direct_worker_time_cap_sec))
+    )
+    env["LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH"] = str(
+        max(1, int(args.large_task_direct_worker_neighborhood_width))
+    )
     env.setdefault("LUNAR_ICE_COMPACT_HIGHS_PARALLEL", "on")
     env["LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST"] = "1"
     env["LUNAR_ICE_COMPACT_ROUTE_TEMPLATE_PRE_HARVEST_TARGET"] = str(
@@ -1575,12 +2499,52 @@ def _base_row(
         "threads": int(args.threads),
         "profile": str(args.profile),
         "seed_mode": str(args.seed_mode),
+        "root_engine": str(args.root_engine),
+        "worker_pricer_kind": str(args.worker_pricer_kind),
+        "labeling_worker_max_task_cap": int(args.labeling_worker_max_task_cap),
+        "tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
+        "tail_dual_stabilization_alpha": float(args.tail_dual_stabilization_alpha),
+        "tail_dual_stabilization_window": int(args.tail_dual_stabilization_window),
+        "labeling_support_aware_harvest_enabled": bool(LABELING_SUPPORT_AWARE_HARVEST_ENABLED),
+        "labeling_support_overlap_threshold": float(LABELING_SUPPORT_OVERLAP_THRESHOLD),
+        "labeling_max_selected_jaccard": float(LABELING_MAX_SELECTED_JACCARD),
+        "labeling_max_selected_containment": float(LABELING_MAX_SELECTED_CONTAINMENT),
+        "labeling_weak_replacement_cap": int(LABELING_WEAK_REPLACEMENT_CAP),
+        "labeling_strong_replacement_threshold": float(LABELING_STRONG_REPLACEMENT_THRESHOLD),
+        "labeling_final_judge_mode": str(args.labeling_final_judge_mode),
+        "labeling_final_judge_max_exact_tasks": int(args.labeling_final_judge_max_exact_tasks),
+        "labeling_final_judge_exact_harvest_target": int(args.labeling_final_judge_exact_harvest_target),
+        "labeling_support_continuation_seed_enabled": bool(
+            args.labeling_support_continuation_seed_enabled
+        ),
+        "labeling_support_continuation_max_seed_sets": int(
+            args.labeling_support_continuation_max_seed_sets
+        ),
+        "labeling_support_continuation_max_neighbors": int(
+            args.labeling_support_continuation_max_neighbors
+        ),
+        "labeling_support_continuation_protected_seed_count": int(
+            args.labeling_support_continuation_protected_seed_count
+        ),
+        "large_task_direct_worker_enabled": bool(args.large_task_direct_worker_enabled),
+        "large_task_direct_worker_max_tasks": int(args.large_task_direct_worker_max_tasks),
+        "large_task_direct_worker_max_candidate_sets": int(
+            args.large_task_direct_worker_max_candidate_sets
+        ),
+        "large_task_direct_worker_time_cap_sec": float(args.large_task_direct_worker_time_cap_sec),
+        "large_task_direct_worker_neighborhood_width": int(
+            args.large_task_direct_worker_neighborhood_width
+        ),
         "column_provenance": COLUMN_PROVENANCE,
+        "row_limit_sec": float(args.row_limit_sec),
         "external_probe_used": False,
         "mature_pool_used": False,
         "manual_columns_used": False,
         "per_instance_override_used": False,
         "same_run_checkpoint_resume_allowed": True,
+        "same_run_checkpoint_resume_used": False,
+        "same_run_checkpoint_resume_eligible": False,
+        "row_budget_exhausted": False,
         "no_cheat_pass": True,
         "algorithm_status": str(status),
         "certificate_scope": "",
@@ -1591,6 +2555,7 @@ def _base_row(
         "under_acceptance_limit": False,
         "under_500": False,
         "cold_start_total_sec": None,
+        "cold_start_resume_previous_sec": 0.0,
         "cold_start_stage_sum_sec": None,
         "seed_sec": None,
         "root_cg_sec": None,
@@ -1598,13 +2563,88 @@ def _base_row(
         "root_partition_feedback_sec": 0.0,
         "root_partition_feedback_round_count": 0,
         "root_partition_feedback_added_column_count": 0,
+        "root_partition_post_final_feedback_enabled": False,
+        "root_partition_post_final_feedback_output_probe": "",
+        "root_partition_post_final_feedback_candidate_count": 0,
+        "root_partition_post_final_feedback_eligible_count": 0,
+        "root_partition_post_final_feedback_selected_column_count": 0,
+        "root_partition_post_final_feedback_added_column_count": 0,
+        "root_partition_post_final_feedback_rejected_column_count": 0,
+        "root_partition_post_final_feedback_best_true_rc": None,
+        "root_partition_post_final_feedback_mutates_certificate": False,
+        "root_partition_post_final_feedback_resume_counts_prior_time": False,
         "root_partition_proof_enabled": False,
         "root_partition_certified_no_negative": False,
+        "root_partition_expected_region_count": 0,
+        "root_partition_auxiliary_exact_region_count": 0,
+        "root_partition_coarse_region_count": 0,
+        "root_partition_coarse_covered_region_count": 0,
+        "root_partition_coarse_incomplete_region_count": 0,
+        "root_partition_active_sortie_global_max": 0,
+        "root_partition_active_sortie_global_max_source": "",
+        "root_partition_active_sortie_bound_pruned_region_count": 0,
         "tree_sec": None,
         "pricing_proof_sec": None,
         "manual_rc_fail": 0,
         "pricing_rc_fail": 0,
         "certificate_leak": 0,
+        "root_pool_worker_certificate_leak_count": 0,
+        "root_pool_tail_dual_certificate_leak_count": 0,
+        "root_pool_true_dual_rc_recompute_missing_count": 0,
+        "root_pool_worker_can_certify_no_negative": False,
+        "root_pool_worker_uses_true_dual_bpc_certificate": False,
+        "root_pool_worker_root_lp_bound_official": False,
+        "root_pool_worker_dual_only": False,
+        "root_pool_true_dual_rc_recomputed": False,
+        "root_pool_tail_dual_no_column_can_certify": False,
+        "root_pool_official_dual_source": "",
+        "root_pool_env_labeling_final_judge_exact_harvest_target": "",
+        "root_pool_labeling_final_judge_exact_harvest_target": 0,
+        "root_pool_labeling_final_judge_exact_harvest_target_source": "",
+        "root_pool_exact_negative_harvest_target": 0,
+        "root_pool_exact_negative_harvest_candidate_count": 0,
+        "root_pool_exact_negative_harvest_selected_count": 0,
+        "root_pool_exact_negative_harvest_selected_new_task_set_count": 0,
+        "root_pool_exact_negative_harvest_selected_replacement_task_set_count": 0,
+        "root_pool_exact_negative_harvest_selection_policy": "",
+        "root_pool_support_continuation_seed_count": 0,
+        "root_pool_support_continuation_active_seed_count": 0,
+        "root_pool_support_continuation_max_seed_sets": 0,
+        "root_pool_support_continuation_max_neighbors": 0,
+        "root_pool_support_continuation_protected_seed_count": 0,
+        "root_pool_support_continuation_active_protected_seed_count": 0,
+        "root_pool_support_continuation_certificate_leak_count": 0,
+        "root_pool_support_continuation_seed_policy": "",
+        "root_pool_support_continuation_can_certify_no_negative": False,
+        "root_pool_large_task_direct_worker_seed_count": 0,
+        "root_pool_large_task_direct_worker_candidate_round_count": 0,
+        "root_pool_large_task_direct_worker_column_count": 0,
+        "root_pool_large_task_direct_worker_true_negative_count": 0,
+        "root_pool_large_task_direct_worker_certificate_leak_count": 0,
+        "root_pool_large_task_direct_worker_can_certify_no_negative": False,
+        "root_pool_worker_harvest_candidate_negative_count": 0,
+        "root_pool_worker_harvest_selected_count": 0,
+        "root_pool_worker_harvest_selected_new_task_set_count": 0,
+        "root_pool_worker_harvest_selected_replacement_task_set_count": 0,
+        "root_pool_worker_harvest_rejected_duplicate_count": 0,
+        "root_pool_worker_harvest_rejected_not_addable_count": 0,
+        "root_pool_post_final_judge_harvest_candidate_negative_count": 0,
+        "root_pool_post_final_judge_harvest_selected_count": 0,
+        "root_pool_post_final_judge_harvest_selected_new_task_set_count": 0,
+        "root_pool_post_final_judge_harvest_selected_replacement_task_set_count": 0,
+        "root_pool_post_final_judge_harvest_rejected_duplicate_count": 0,
+        "root_pool_post_final_judge_harvest_rejected_not_addable_count": 0,
+        "root_pool_post_final_judge_harvest_added_to_master_count": 0,
+        "worker_certificate_leak": 0,
+        "tail_dual_certificate_leak": 0,
+        "true_dual_rc_recompute_missing": 0,
+        "worker_can_certify_no_negative": False,
+        "worker_uses_true_dual_bpc_certificate": False,
+        "worker_root_lp_bound_official": False,
+        "worker_dual_only": False,
+        "true_dual_rc_recomputed": False,
+        "tail_dual_no_column_can_certify": False,
+        "official_dual_source": "",
         "row_terminal": False,
         "fail_reason": "",
         "note": str(note),
@@ -1612,8 +2652,39 @@ def _base_row(
 
 
 def _finish_timing(row: dict, started: float) -> dict:
+    if _row_safety_redline_count(row) > 0:
+        if bool(row.get("exact_certificate")):
+            row["underlying_algorithm_status"] = row.get("algorithm_status")
+            row["underlying_certificate_scope"] = row.get("certificate_scope")
+            row["underlying_pricing_state"] = row.get("pricing_state")
+        row["algorithm_status"] = "BPC_INCOMPLETE_PRICING"
+        row["certificate_scope"] = "DIAGNOSTIC_PRICING_FRONTIER"
+        row["pricing_state"] = "INCOMPLETE_LIMIT"
+        row["exact_certificate"] = False
+        row["bpc_tree_optimal"] = False
+        row["fail_reason"] = (
+            row.get("fail_reason")
+            or "safety redline blocked official B4.2 exact certificate"
+        )
     total = round(perf_counter() - started, 6)
     row["cold_start_total_sec"] = total
+    row_limit = _first_float(row.get("row_limit_sec"))
+    budget_exhausted = bool(row_limit is not None and total >= float(row_limit) - 1.0e-6)
+    row["row_budget_exhausted"] = budget_exhausted
+    checkpoint_added = _int(row.get("root_partition_post_final_feedback_added_column_count")) > 0
+    if checkpoint_added and not bool(row.get("exact_certificate")):
+        row["same_run_checkpoint_resume_eligible"] = bool(not budget_exhausted)
+        if budget_exhausted:
+            row["row_terminal"] = True
+            row["root_partition_post_final_feedback_resume_counts_prior_time"] = False
+            if str(row.get("fail_reason") or "").startswith("post-final partition feedback checkpointed"):
+                row["fail_reason"] = (
+                    "post-final partition feedback checkpointed addable negative columns, "
+                    "but fixed row budget is exhausted"
+                )
+        else:
+            row["row_terminal"] = False
+            row["root_partition_post_final_feedback_resume_counts_prior_time"] = True
     row["cold_start_stage_sum_sec"] = _add_optional(
         _add_optional(
             _add_optional(row.get("root_cg_sec"), row.get("root_partition_feedback_sec")),
@@ -1628,12 +2699,420 @@ def _finish_timing(row: dict, started: float) -> dict:
     return row
 
 
+def _row_safety_redline_count(row: dict) -> int:
+    return sum(
+        _int(row.get(key))
+        for key in (
+            "manual_rc_fail",
+            "pricing_rc_fail",
+            "certificate_leak",
+            "worker_certificate_leak",
+            "tail_dual_certificate_leak",
+            "true_dual_rc_recompute_missing",
+            "root_pool_worker_certificate_leak_count",
+            "root_pool_tail_dual_certificate_leak_count",
+            "root_pool_true_dual_rc_recompute_missing_count",
+        )
+    )
+
+
 def _pool_manifest(pool_dir: Path) -> dict:
     path = pool_dir / "staged_resume_manifest.json"
     if not path.exists():
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else {}
+
+
+def _root_pool_safety_fields(stages: list[dict]) -> dict:
+    rows = [row for row in stages if isinstance(row, dict)]
+    latest = next(
+        (
+            row
+            for row in reversed(rows)
+            if any(
+                key in row
+                for key in (
+                    "worker_certificate_leak",
+                    "tail_dual_certificate_leak",
+                    "true_dual_rc_recompute_missing",
+                    "worker_dual_only",
+                    "official_dual_source",
+                )
+            )
+        ),
+        {},
+    )
+    return {
+        "root_pool_worker_certificate_leak_count": sum(
+            _int(row.get("worker_certificate_leak")) for row in rows
+        ),
+        "root_pool_tail_dual_certificate_leak_count": sum(
+            _int(row.get("tail_dual_certificate_leak")) for row in rows
+        ),
+        "root_pool_true_dual_rc_recompute_missing_count": sum(
+            _int(row.get("true_dual_rc_recompute_missing")) for row in rows
+        ),
+        "root_pool_worker_can_certify_no_negative": bool(
+            latest.get("worker_can_certify_no_negative")
+        ),
+        "root_pool_worker_uses_true_dual_bpc_certificate": bool(
+            latest.get("worker_uses_true_dual_bpc_certificate")
+        ),
+        "root_pool_worker_root_lp_bound_official": bool(
+            latest.get("worker_root_lp_bound_official")
+        ),
+        "root_pool_worker_dual_only": bool(latest.get("worker_dual_only")),
+        "root_pool_true_dual_rc_recomputed": bool(latest.get("true_dual_rc_recomputed")),
+        "root_pool_tail_dual_no_column_can_certify": bool(
+            latest.get("tail_dual_no_column_can_certify")
+        ),
+        "root_pool_official_dual_source": str(latest.get("official_dual_source") or ""),
+    }
+
+
+def _root_pool_harvest_fields(stages: list[dict]) -> dict:
+    rows = [row for row in stages if isinstance(row, dict)]
+    exact_rows = [
+        row
+        for row in rows
+        if any(
+            row.get(key) not in (None, "")
+            for key in (
+                "exact_negative_harvest_candidate_count",
+                "exact_negative_harvest_selected_count",
+                "labeling_final_judge_exact_harvest_target",
+            )
+        )
+    ]
+    post_rows = [
+        row
+        for row in rows
+        if "post_final_judge" in str(row.get("harvest_source_phase") or "")
+    ]
+    exact_row_ids = {id(row) for row in exact_rows}
+    post_row_ids = {id(row) for row in post_rows}
+    worker_rows = [
+        row
+        for row in rows
+        if id(row) not in exact_row_ids
+        and id(row) not in post_row_ids
+        and row.get("harvest_selected_count") not in (None, "")
+    ]
+    latest_exact = exact_rows[-1] if exact_rows else {}
+    latest_source = next(
+        (
+            row
+            for row in reversed(exact_rows)
+            if row.get("labeling_final_judge_exact_harvest_target_source") not in (None, "")
+        ),
+        latest_exact,
+    )
+    support_rows = [
+        row
+        for row in rows
+        if any(
+            row.get(key) not in (None, "")
+            for key in (
+                "support_continuation_seed_count",
+                "support_continuation_active_seed_count",
+                "support_continuation_can_certify_no_negative",
+            )
+        )
+    ]
+    latest_support = support_rows[-1] if support_rows else {}
+    return {
+        "root_pool_labeling_final_judge_exact_harvest_target": _int(
+            latest_exact.get("labeling_final_judge_exact_harvest_target")
+        ),
+        "root_pool_labeling_final_judge_exact_harvest_target_source": str(
+            latest_source.get("labeling_final_judge_exact_harvest_target_source") or ""
+        ),
+        "root_pool_exact_negative_harvest_target": _int(
+            latest_exact.get("exact_negative_harvest_target")
+        ),
+        "root_pool_exact_negative_harvest_candidate_count": sum(
+            _int(row.get("exact_negative_harvest_candidate_count")) for row in exact_rows
+        ),
+        "root_pool_exact_negative_harvest_selected_count": sum(
+            _int(row.get("exact_negative_harvest_selected_count")) for row in exact_rows
+        ),
+        "root_pool_exact_negative_harvest_selected_new_task_set_count": sum(
+            _int(row.get("exact_negative_harvest_selected_new_task_set_count")) for row in exact_rows
+        ),
+        "root_pool_exact_negative_harvest_selected_replacement_task_set_count": sum(
+            _int(row.get("exact_negative_harvest_selected_replacement_task_set_count")) for row in exact_rows
+        ),
+        "root_pool_exact_negative_harvest_selection_policy": str(
+            latest_exact.get("exact_negative_harvest_selection_policy") or ""
+        ),
+        "root_pool_support_continuation_seed_count": sum(
+            _int(row.get("support_continuation_seed_count")) for row in support_rows
+        ),
+        "root_pool_support_continuation_active_seed_count": sum(
+            _int(row.get("support_continuation_active_seed_count")) for row in support_rows
+        ),
+        "root_pool_support_continuation_max_seed_sets": _int(
+            latest_support.get("support_continuation_max_seed_sets")
+        ),
+        "root_pool_support_continuation_max_neighbors": _int(
+            latest_support.get("support_continuation_max_neighbors")
+        ),
+        "root_pool_support_continuation_protected_seed_count": _int(
+            latest_support.get("support_continuation_protected_seed_count")
+        ),
+        "root_pool_support_continuation_active_protected_seed_count": sum(
+            _int(row.get("support_continuation_active_protected_seed_count"))
+            for row in support_rows
+        ),
+        "root_pool_support_continuation_certificate_leak_count": sum(
+            1 for row in support_rows if bool(row.get("support_continuation_can_certify_no_negative"))
+        ),
+        "root_pool_support_continuation_seed_policy": str(
+            latest_support.get("support_continuation_seed_policy") or ""
+        ),
+        "root_pool_support_continuation_can_certify_no_negative": bool(
+            latest_support.get("support_continuation_can_certify_no_negative")
+        ),
+        "root_pool_worker_harvest_candidate_negative_count": sum(
+            _int(row.get("harvest_candidate_negative_count")) for row in worker_rows
+        ),
+        "root_pool_worker_harvest_selected_count": sum(
+            _int(row.get("harvest_selected_count")) for row in worker_rows
+        ),
+        "root_pool_worker_harvest_selected_new_task_set_count": sum(
+            _int(row.get("harvest_selected_new_task_set_count")) for row in worker_rows
+        ),
+        "root_pool_worker_harvest_selected_replacement_task_set_count": sum(
+            _int(row.get("harvest_selected_replacement_task_set_count")) for row in worker_rows
+        ),
+        "root_pool_worker_harvest_rejected_duplicate_count": sum(
+            _int(row.get("harvest_rejected_duplicate_count")) for row in worker_rows
+        ),
+        "root_pool_worker_harvest_rejected_not_addable_count": sum(
+            _int(row.get("harvest_rejected_not_addable_count")) for row in worker_rows
+        ),
+        "root_pool_post_final_judge_harvest_candidate_negative_count": sum(
+            _int(row.get("harvest_candidate_negative_count")) for row in post_rows
+        ),
+        "root_pool_post_final_judge_harvest_selected_count": sum(
+            _int(row.get("harvest_selected_count")) for row in post_rows
+        ),
+        "root_pool_post_final_judge_harvest_selected_new_task_set_count": sum(
+            _int(row.get("harvest_selected_new_task_set_count")) for row in post_rows
+        ),
+        "root_pool_post_final_judge_harvest_selected_replacement_task_set_count": sum(
+            _int(row.get("harvest_selected_replacement_task_set_count")) for row in post_rows
+        ),
+        "root_pool_post_final_judge_harvest_rejected_duplicate_count": sum(
+            _int(row.get("harvest_rejected_duplicate_count")) for row in post_rows
+        ),
+        "root_pool_post_final_judge_harvest_rejected_not_addable_count": sum(
+            _int(row.get("harvest_rejected_not_addable_count")) for row in post_rows
+        ),
+        "root_pool_post_final_judge_harvest_added_to_master_count": sum(
+            _int(row.get("columns_added", row.get("added_column_count"))) for row in post_rows
+        ),
+    }
+
+
+def _apply_root_pool_harvest(row: dict, harvest: dict) -> None:
+    row.update(harvest)
+
+
+def _apply_root_pool_support_continuation(row: dict, probe_path: Path | None) -> None:
+    row.update(_root_pool_support_continuation_fields(probe_path))
+
+
+def _apply_root_pool_large_task_direct_worker(row: dict, probe_path: Path | None) -> None:
+    row.update(_root_pool_large_task_direct_worker_fields(probe_path))
+
+
+def _root_pool_support_continuation_fields(probe_path: Path | None) -> dict:
+    if probe_path is None:
+        return {}
+    raw = _load_json_if_exists(Path(probe_path))
+    if not raw:
+        return {}
+    payloads: list[dict] = []
+    _collect_support_continuation_payloads(raw, payloads)
+    if not payloads:
+        return {}
+    seed_count = sum(_support_continuation_seed_count(payload) for payload in payloads)
+    active_seed_count = sum(_support_continuation_active_seed_count(payload) for payload in payloads)
+    active_protected_seed_count = sum(
+        _support_continuation_active_protected_seed_count(payload) for payload in payloads
+    )
+    leak_count = sum(1 for payload in payloads if bool(payload.get("support_continuation_can_certify_no_negative")))
+    latest_policy = next(
+        (
+            str(payload.get("support_continuation_seed_policy") or "")
+            for payload in reversed(payloads)
+            if payload.get("support_continuation_seed_policy") not in (None, "")
+        ),
+        "rmp_support_add_drop_swap_by_worker_dual_worker_only" if seed_count or active_seed_count else "",
+    )
+    return {
+        "root_pool_support_continuation_seed_count": seed_count,
+        "root_pool_support_continuation_active_seed_count": active_seed_count,
+        "root_pool_support_continuation_max_seed_sets": max(
+            (_int(payload.get("support_continuation_max_seed_sets")) for payload in payloads),
+            default=0,
+        ),
+        "root_pool_support_continuation_max_neighbors": max(
+            (_int(payload.get("support_continuation_max_neighbors")) for payload in payloads),
+            default=0,
+        ),
+        "root_pool_support_continuation_protected_seed_count": max(
+            (
+                _int(
+                    payload.get("support_continuation_protected_seed_count")
+                    or payload.get("protected_support_continuation_seed_budget")
+                )
+                for payload in payloads
+            ),
+            default=0,
+        ),
+        "root_pool_support_continuation_active_protected_seed_count": active_protected_seed_count,
+        "root_pool_support_continuation_certificate_leak_count": leak_count,
+        "root_pool_support_continuation_seed_policy": latest_policy,
+        "root_pool_support_continuation_can_certify_no_negative": bool(leak_count),
+    }
+
+
+def _root_pool_large_task_direct_worker_fields(probe_path: Path | None) -> dict:
+    if probe_path is None:
+        return {}
+    raw = _load_json_if_exists(Path(probe_path))
+    if not raw:
+        return {}
+    payloads: list[dict] = []
+    _collect_large_task_direct_worker_payloads(raw, payloads)
+    if not payloads:
+        return {}
+    latest = payloads[-1]
+    leak_count = sum(
+        1
+        for payload in payloads
+        if bool(payload.get("large_task_direct_worker_can_certify_no_negative"))
+        or bool(payload.get("large_task_direct_worker_no_column_can_certify"))
+    )
+    return {
+        "root_pool_large_task_direct_worker_seed_count": sum(
+            _int(payload.get("large_task_direct_worker_seed_count")) for payload in payloads
+        ),
+        "root_pool_large_task_direct_worker_candidate_round_count": sum(
+            _int(payload.get("large_task_direct_worker_candidate_round_count")) for payload in payloads
+        ),
+        "root_pool_large_task_direct_worker_column_count": sum(
+            _int(payload.get("large_task_direct_worker_column_count")) for payload in payloads
+        ),
+        "root_pool_large_task_direct_worker_true_negative_count": sum(
+            _int(payload.get("large_task_direct_worker_true_negative_count")) for payload in payloads
+        ),
+        "root_pool_large_task_direct_worker_max_tasks": _int(
+            latest.get("large_task_direct_worker_max_tasks")
+        ),
+        "root_pool_large_task_direct_worker_max_candidate_sets": _int(
+            latest.get("large_task_direct_worker_max_candidate_sets")
+        ),
+        "root_pool_large_task_direct_worker_time_cap_sec": _first_float(
+            latest.get("large_task_direct_worker_time_cap_sec")
+        ),
+        "root_pool_large_task_direct_worker_skip_reason": str(
+            latest.get("large_task_direct_worker_skip_reason") or ""
+        ),
+        "root_pool_large_task_direct_worker_certificate_leak_count": leak_count,
+        "root_pool_large_task_direct_worker_can_certify_no_negative": bool(leak_count),
+    }
+
+
+def _collect_large_task_direct_worker_payloads(value, out: list[dict]) -> None:
+    if isinstance(value, dict):
+        if any(str(key).startswith("large_task_direct_worker_") for key in value):
+            out.append(value)
+        for item in value.values():
+            _collect_large_task_direct_worker_payloads(item, out)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_large_task_direct_worker_payloads(item, out)
+
+
+def _collect_support_continuation_payloads(value, out: list[dict]) -> None:
+    if isinstance(value, dict):
+        if _dict_has_support_continuation(value):
+            out.append(value)
+        for item in value.values():
+            _collect_support_continuation_payloads(item, out)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_support_continuation_payloads(item, out)
+
+
+def _dict_has_support_continuation(payload: dict) -> bool:
+    if any(str(key).startswith("support_continuation_") for key in payload):
+        return True
+    for key in (
+        "active_seed_task_set_source_counts",
+        "priced_candidate_task_set_source_counts",
+        "labeling_harvest_candidate_seed_source_counts",
+        "labeling_harvest_selected_seed_source_counts",
+    ):
+        counts = payload.get(key)
+        if isinstance(counts, dict) and _int(counts.get("support_continuation")):
+            return True
+    return False
+
+
+def _support_continuation_seed_count(payload: dict) -> int:
+    explicit = _int(payload.get("support_continuation_seed_count"))
+    if explicit:
+        return explicit
+    counts = payload.get("priced_candidate_task_set_source_counts")
+    if isinstance(counts, dict) and _int(counts.get("support_continuation")):
+        return _int(counts.get("support_continuation"))
+    counts = payload.get("active_seed_task_set_source_counts")
+    if isinstance(counts, dict):
+        return _int(counts.get("support_continuation"))
+    return 0
+
+
+def _support_continuation_active_seed_count(payload: dict) -> int:
+    explicit = _int(payload.get("support_continuation_active_seed_count"))
+    if explicit:
+        return explicit
+    counts = payload.get("active_seed_task_set_source_counts")
+    if isinstance(counts, dict):
+        return _int(counts.get("support_continuation"))
+    return 0
+
+
+def _support_continuation_active_protected_seed_count(payload: dict) -> int:
+    explicit = _int(payload.get("support_continuation_active_protected_seed_count"))
+    if explicit:
+        return explicit
+    return _int(payload.get("active_protected_support_continuation_seed_task_set_count"))
+
+
+def _apply_root_pool_safety(row: dict, safety: dict) -> None:
+    row.update(safety)
+    row["worker_certificate_leak"] = max(
+        _int(row.get("worker_certificate_leak")),
+        _int(safety.get("root_pool_worker_certificate_leak_count")),
+    )
+    row["tail_dual_certificate_leak"] = max(
+        _int(row.get("tail_dual_certificate_leak")),
+        _int(safety.get("root_pool_tail_dual_certificate_leak_count")),
+    )
+    row["true_dual_rc_recompute_missing"] = max(
+        _int(row.get("true_dual_rc_recompute_missing")),
+        _int(safety.get("root_pool_true_dual_rc_recompute_missing_count")),
+    )
+    row["certificate_leak"] = max(
+        _int(row.get("certificate_leak")),
+        _int(row.get("worker_certificate_leak")),
+        _int(row.get("tail_dual_certificate_leak")),
+    )
 
 
 def _latest_stage(manifest: dict) -> dict:
@@ -1666,7 +3145,18 @@ def _write_artifacts(
 ) -> None:
     rows_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
-        json.dumps({"rows": rows}, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(
+            {
+                "schema_version": "lunar_ice_bpc.b4_2_cold_exact_state.v1",
+                "config_hash": _config_hash(config),
+                "config": config,
+                "rows": rows,
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
     fieldnames = sorted({key for row in rows for key in row})
@@ -1700,12 +3190,13 @@ def _summary(
         scale_rows = [row for row in rows if int(row.get("scale") or 0) == scale]
         exact_rows = [row for row in scale_rows if bool(row.get("exact_certificate"))]
         under_rows = [row for row in exact_rows if _row_under_acceptance_limit(row)]
+        under_500_rows = [row for row in exact_rows if bool(row.get("under_500"))]
         under_300_rows = [row for row in exact_rows if bool(row.get("under_300"))]
         by_scale[str(scale)] = {
             "row_count": len(scale_rows),
             "exact_count": len(exact_rows),
             "under_acceptance_limit_exact_count": len(under_rows),
-            "under_500_exact_count": len(under_rows),
+            "under_500_exact_count": len(under_500_rows),
             "under_300_exact_count": len(under_300_rows),
             "fail_closed_count": len(scale_rows) - len(exact_rows),
             "mean_cold_start_total_sec": _mean(row.get("cold_start_total_sec") for row in scale_rows),
@@ -1727,6 +3218,98 @@ def _summary(
     scale30_rows = [row for row in rows if int(row.get("scale") or 0) == 30]
     expected_scale30_count = int(expected_scale_counts.get("30") or discovered_instance_count)
     scale30_complete = not limited_run and scale30_rows and len(scale30_rows) == expected_scale30_count
+    redlines = {
+        "no_cheat_fail_count": len(no_cheat_fail),
+        "manual_rc_fail_count": sum(_int(row.get("manual_rc_fail")) for row in rows),
+        "pricing_rc_fail_count": sum(_int(row.get("pricing_rc_fail")) for row in rows),
+        "certificate_leak_count": sum(_int(row.get("certificate_leak")) for row in rows),
+        "worker_certificate_leak_count": sum(_int(row.get("worker_certificate_leak")) for row in rows),
+        "tail_dual_certificate_leak_count": sum(
+            _int(row.get("tail_dual_certificate_leak")) for row in rows
+        ),
+        "true_dual_rc_recompute_missing_count": sum(
+            _int(row.get("true_dual_rc_recompute_missing")) for row in rows
+        ),
+        "root_pool_worker_certificate_leak_count": sum(
+            _int(row.get("root_pool_worker_certificate_leak_count")) for row in rows
+        ),
+        "root_pool_tail_dual_certificate_leak_count": sum(
+            _int(row.get("root_pool_tail_dual_certificate_leak_count")) for row in rows
+        ),
+        "root_pool_true_dual_rc_recompute_missing_count": sum(
+            _int(row.get("root_pool_true_dual_rc_recompute_missing_count")) for row in rows
+        ),
+        "root_pool_support_continuation_certificate_leak_count": sum(
+            _int(row.get("root_pool_support_continuation_certificate_leak_count")) for row in rows
+        ),
+        "root_pool_large_task_direct_worker_certificate_leak_count": sum(
+            _int(row.get("root_pool_large_task_direct_worker_certificate_leak_count")) for row in rows
+        ),
+        "root_partition_redline_count": sum(_int(row.get("root_partition_redline_count")) for row in rows),
+    }
+    harvest_telemetry = {
+        "root_pool_exact_negative_harvest_candidate_count": sum(
+            _int(row.get("root_pool_exact_negative_harvest_candidate_count")) for row in rows
+        ),
+        "root_pool_exact_negative_harvest_selected_count": sum(
+            _int(row.get("root_pool_exact_negative_harvest_selected_count")) for row in rows
+        ),
+        "root_pool_exact_negative_harvest_selected_new_task_set_count": sum(
+            _int(row.get("root_pool_exact_negative_harvest_selected_new_task_set_count")) for row in rows
+        ),
+        "root_pool_exact_negative_harvest_selected_replacement_task_set_count": sum(
+            _int(row.get("root_pool_exact_negative_harvest_selected_replacement_task_set_count")) for row in rows
+        ),
+        "root_pool_support_continuation_seed_count": sum(
+            _int(row.get("root_pool_support_continuation_seed_count")) for row in rows
+        ),
+        "root_pool_support_continuation_active_seed_count": sum(
+            _int(row.get("root_pool_support_continuation_active_seed_count")) for row in rows
+        ),
+        "root_pool_support_continuation_active_protected_seed_count": sum(
+            _int(row.get("root_pool_support_continuation_active_protected_seed_count")) for row in rows
+        ),
+        "root_pool_large_task_direct_worker_seed_count": sum(
+            _int(row.get("root_pool_large_task_direct_worker_seed_count")) for row in rows
+        ),
+        "root_pool_large_task_direct_worker_candidate_round_count": sum(
+            _int(row.get("root_pool_large_task_direct_worker_candidate_round_count")) for row in rows
+        ),
+        "root_pool_large_task_direct_worker_column_count": sum(
+            _int(row.get("root_pool_large_task_direct_worker_column_count")) for row in rows
+        ),
+        "root_pool_large_task_direct_worker_true_negative_count": sum(
+            _int(row.get("root_pool_large_task_direct_worker_true_negative_count")) for row in rows
+        ),
+        "root_pool_worker_harvest_selected_count": sum(
+            _int(row.get("root_pool_worker_harvest_selected_count")) for row in rows
+        ),
+        "root_pool_worker_harvest_selected_new_task_set_count": sum(
+            _int(row.get("root_pool_worker_harvest_selected_new_task_set_count")) for row in rows
+        ),
+        "root_pool_worker_harvest_selected_replacement_task_set_count": sum(
+            _int(row.get("root_pool_worker_harvest_selected_replacement_task_set_count")) for row in rows
+        ),
+        "root_pool_post_final_judge_harvest_selected_count": sum(
+            _int(row.get("root_pool_post_final_judge_harvest_selected_count")) for row in rows
+        ),
+        "root_pool_post_final_judge_harvest_selected_new_task_set_count": sum(
+            _int(row.get("root_pool_post_final_judge_harvest_selected_new_task_set_count")) for row in rows
+        ),
+        "root_pool_post_final_judge_harvest_selected_replacement_task_set_count": sum(
+            _int(row.get("root_pool_post_final_judge_harvest_selected_replacement_task_set_count")) for row in rows
+        ),
+        "root_pool_post_final_judge_harvest_added_to_master_count": sum(
+            _int(row.get("root_pool_post_final_judge_harvest_added_to_master_count")) for row in rows
+        ),
+        "root_partition_post_final_feedback_selected_column_count": sum(
+            _int(row.get("root_partition_post_final_feedback_selected_column_count")) for row in rows
+        ),
+        "root_partition_post_final_feedback_added_column_count": sum(
+            _int(row.get("root_partition_post_final_feedback_added_column_count")) for row in rows
+        ),
+    }
+    redlines_zero = all(_int(value) == 0 for value in redlines.values())
     return {
         "schema_version": "lunar_ice_bpc.b4_2_cold_exact_summary.v1",
         "config": config,
@@ -1738,21 +3321,18 @@ def _summary(
         "discovered_instance_count": int(discovered_instance_count),
         "expected_scale_counts": expected_scale_counts,
         "by_scale": by_scale,
-        "redlines": {
-            "no_cheat_fail_count": len(no_cheat_fail),
-            "manual_rc_fail_count": sum(_int(row.get("manual_rc_fail")) for row in rows),
-            "pricing_rc_fail_count": sum(_int(row.get("pricing_rc_fail")) for row in rows),
-            "certificate_leak_count": sum(_int(row.get("certificate_leak")) for row in rows),
-        },
+        "redlines": redlines,
+        "harvest_telemetry": harvest_telemetry,
         "acceptance": {
             "same_model_config_hash": len(config_hashes) <= 1,
+            "redlines_zero": bool(redlines_zero),
             "full_scale30_run_complete": bool(scale30_complete),
             "scale30_all_bpc_tree_optimal": bool(scale30_complete and all(row.get("certificate_scope") == "BPC_TREE_OPTIMAL" for row in scale30_rows)),
             "scale30_all_under_acceptance_limit": bool(
                 scale30_complete and all(_row_under_acceptance_limit(row) for row in scale30_rows)
             ),
             "scale30_all_under_500": bool(
-                scale30_complete and all(_row_under_acceptance_limit(row) for row in scale30_rows)
+                scale30_complete and all(bool(row.get("under_500")) for row in scale30_rows)
             ),
             "scale30_all_under_300": bool(
                 scale30_complete and all(bool(row.get("under_300")) for row in scale30_rows)
@@ -1761,6 +3341,7 @@ def _summary(
                 scale30_complete
                 and len(config_hashes) == 1
                 and not no_cheat_fail
+                and redlines_zero
                 and all(
                     bool(row.get("exact_certificate")) and _row_under_acceptance_limit(row)
                     for row in scale30_rows
@@ -1773,15 +3354,13 @@ def _summary(
 def _row_under_acceptance_limit(row: dict) -> bool:
     if "under_acceptance_limit" in row:
         return bool(row.get("under_acceptance_limit"))
-    if "under_500" in row:
-        return bool(row.get("under_500"))
     total = _first_float(row.get("cold_start_total_sec"))
     return bool(row.get("exact_certificate")) and total is not None and total < ACCEPTANCE_LIMIT_SEC
 
 
 def _render_report(rows: list[dict], summary: dict) -> str:
     lines = [
-        "# B4.2 Cold-Start Exact 500s Report",
+        "# B4.2 Cold-Start Exact 300s Report",
         "",
         "## 边界",
         "",
@@ -1790,22 +3369,79 @@ def _render_report(rows: list[dict], summary: dict) -> str:
         "- 同一次 run 内 staged checkpoint 可以续跑，但所有 stage 时间计入 `cold_start_total_sec`。",
         "- `BPC_TREE_OPTIMAL` 只证明 normalized additive objective，不证明 makespan-in-objective。",
         "- B4.2 V1 固定 seed 为 B0 incumbent + singleton，并启用固定 route-template pre-harvest worker；worker 只找列，不给 no-negative 证书。",
+        "- root pool 使用固定 `b2b_r3_worker`，默认 worker 为 `relaxed_labeling`；fixed worker max task cap 是全局 config/hash 字段，不允许按实例调参。",
+        "- tail dual stabilization 只作用于 worker candidate search。",
+        "- support-continuation seed 只基于当前 RMP support 自动生成 add/drop/swap 邻域列；只找列，不给 no-negative 证书。",
+        "- final judge 使用 `labeling_final_judge=auto`：5/10 默认走 exact labeling proof，超过 fixed max exact tasks 时自动回到 compact/exhaustive proof。",
         "",
         "## 汇总",
         "",
         f"- model: `{summary.get('config', {}).get('model_id')}`",
         f"- config hash: `{summary.get('config_hash')}`",
+        f"- root engine: `{summary.get('config', {}).get('root_engine')}`",
+        f"- worker pricer: `{summary.get('config', {}).get('worker_pricer_kind')}`, "
+        f"max task cap `{summary.get('config', {}).get('labeling_worker_max_task_cap')}`",
+        f"- labeling harvest: support-aware `{summary.get('config', {}).get('labeling_support_aware_harvest_enabled')}`, "
+        f"weak replacement cap `{summary.get('config', {}).get('labeling_weak_replacement_cap')}`, "
+        f"support overlap `{summary.get('config', {}).get('labeling_support_overlap_threshold')}`",
+        f"- labeling support-continuation: enabled `{summary.get('config', {}).get('labeling_support_continuation_seed_enabled')}`, "
+        f"max seed sets `{summary.get('config', {}).get('labeling_support_continuation_max_seed_sets')}`, "
+        f"max neighbors `{summary.get('config', {}).get('labeling_support_continuation_max_neighbors')}`, "
+        f"protected `{summary.get('config', {}).get('labeling_support_continuation_protected_seed_count')}`",
+        f"- large-task direct worker: enabled `{summary.get('config', {}).get('large_task_direct_worker_enabled')}`, "
+        f"max tasks `{summary.get('config', {}).get('large_task_direct_worker_max_tasks')}`, "
+        f"candidate sets `{summary.get('config', {}).get('large_task_direct_worker_max_candidate_sets')}`, "
+        f"time cap `{summary.get('config', {}).get('large_task_direct_worker_time_cap_sec')}`",
+        f"- labeling final judge: `{summary.get('config', {}).get('labeling_final_judge_mode')}`, "
+        f"max exact tasks `{summary.get('config', {}).get('labeling_final_judge_max_exact_tasks')}`, "
+        f"exact harvest target `{summary.get('config', {}).get('labeling_final_judge_exact_harvest_target')}`",
         f"- rows: `{summary.get('row_count')}`",
         f"- no-cheat fail: `{summary.get('redlines', {}).get('no_cheat_fail_count')}`",
+        f"- worker certificate leaks: `{summary.get('redlines', {}).get('worker_certificate_leak_count')}`",
+        f"- tail-dual certificate leaks: `{summary.get('redlines', {}).get('tail_dual_certificate_leak_count')}`",
+        f"- true-dual RC recompute missing: `{summary.get('redlines', {}).get('true_dual_rc_recompute_missing_count')}`",
+        f"- root-pool worker/tail-dual/redline counts: "
+        f"`{summary.get('redlines', {}).get('root_pool_worker_certificate_leak_count')}` / "
+        f"`{summary.get('redlines', {}).get('root_pool_tail_dual_certificate_leak_count')}` / "
+        f"`{summary.get('redlines', {}).get('root_pool_true_dual_rc_recompute_missing_count')}`",
+        f"- root-pool support-continuation seeds/active/protected/leaks: "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_support_continuation_seed_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_support_continuation_active_seed_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_support_continuation_active_protected_seed_count')}` / "
+        f"`{summary.get('redlines', {}).get('root_pool_support_continuation_certificate_leak_count')}`",
+        f"- root-pool large-task direct worker seeds/rounds/columns/true-negatives/leaks: "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_large_task_direct_worker_seed_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_large_task_direct_worker_candidate_round_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_large_task_direct_worker_column_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_large_task_direct_worker_true_negative_count')}` / "
+        f"`{summary.get('redlines', {}).get('root_pool_large_task_direct_worker_certificate_leak_count')}`",
+        f"- root-pool exact harvest candidates/selected/new/replacement: "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_exact_negative_harvest_candidate_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_exact_negative_harvest_selected_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_exact_negative_harvest_selected_new_task_set_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_exact_negative_harvest_selected_replacement_task_set_count')}`",
+        f"- root-pool worker selected/new/replacement: "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_worker_harvest_selected_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_worker_harvest_selected_new_task_set_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_worker_harvest_selected_replacement_task_set_count')}`",
+        f"- root-pool post-final-judge selected/new/replacement/added: "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_post_final_judge_harvest_selected_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_post_final_judge_harvest_selected_new_task_set_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_post_final_judge_harvest_selected_replacement_task_set_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_pool_post_final_judge_harvest_added_to_master_count')}`",
+        f"- root-partition post-final feedback selected/added: "
+        f"`{summary.get('harvest_telemetry', {}).get('root_partition_post_final_feedback_selected_column_count')}` / "
+        f"`{summary.get('harvest_telemetry', {}).get('root_partition_post_final_feedback_added_column_count')}`",
+        f"- all redlines zero: `{summary.get('acceptance', {}).get('redlines_zero')}`",
         f"- accepted: `{summary.get('acceptance', {}).get('b4_2_cold_exact_accepted')}`",
         "",
-        "| scale | rows | exact | under500 exact | fail-closed | mean total | max total | mean root | mean partition | mean tree |",
+        "| scale | rows | exact | under300 exact | fail-closed | mean total | max total | mean root | mean partition | mean tree |",
         "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for scale, item in (summary.get("by_scale") or {}).items():
         lines.append(
             f"| {scale} | {item.get('row_count')} | {item.get('exact_count')} | "
-            f"{item.get('under_acceptance_limit_exact_count')} | {item.get('fail_closed_count')} | "
+            f"{item.get('under_300_exact_count')} | {item.get('fail_closed_count')} | "
             f"{item.get('mean_cold_start_total_sec')} | {item.get('max_cold_start_total_sec')} | "
             f"{item.get('mean_root_cg_sec')} | {item.get('mean_root_partition_sec')} | {item.get('mean_tree_sec')} |"
         )
@@ -1814,18 +3450,23 @@ def _render_report(rows: list[dict], summary: dict) -> str:
             "",
             "## Per-Instance",
             "",
-            "| scale | instance | status | scope | pricing | exact | under500 | total | root | partition | tree | active cols | provenance | fail reason |",
-            "|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---|---|",
+            "| scale | instance | status | scope | pricing | exact | under300 | total | root | partition | tree | active cols | exact harvest | worker harvest | post-FJ added | post-partition added | terminal | provenance | fail reason |",
+            "|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|",
         ]
     )
     for row in rows:
         lines.append(
             f"| {row.get('scale')} | {row.get('instance_key')} | {row.get('algorithm_status')} | "
             f"{row.get('certificate_scope')} | {row.get('pricing_state')} | "
-            f"{row.get('exact_certificate')} | {_row_under_acceptance_limit(row)} | "
+            f"{row.get('exact_certificate')} | {bool(row.get('under_300'))} | "
             f"{row.get('cold_start_total_sec')} | {row.get('root_cg_sec')} | "
             f"{row.get('root_partition_sec')} | {row.get('tree_sec')} | "
             f"{row.get('root_pool_active_column_count') or row.get('tree_loaded_column_count')} | "
+            f"{row.get('root_pool_exact_negative_harvest_selected_count')} | "
+            f"{row.get('root_pool_worker_harvest_selected_count')} | "
+            f"{row.get('root_pool_post_final_judge_harvest_added_to_master_count')} | "
+            f"{row.get('root_partition_post_final_feedback_added_column_count')} | "
+            f"{row.get('row_terminal')} | "
             f"{row.get('column_provenance')} | {str(row.get('fail_reason') or '')[:140]} |"
         )
     return "\n".join(lines) + "\n"
@@ -1981,6 +3622,21 @@ def _int(value) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _truthy(value, *, default: bool = False) -> bool:
+    if value is None or value == "":
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off", "none", "null"}:
+        return False
+    return bool(default)
 
 
 def _mean(values) -> float | None:

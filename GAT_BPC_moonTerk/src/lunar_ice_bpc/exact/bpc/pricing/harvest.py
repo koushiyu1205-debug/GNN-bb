@@ -8,9 +8,11 @@ from typing import Iterable
 
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
+from lunar_ice_bpc.exact.bpc.cuts.cut_audit import cut_aware_column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.pricing.profiling import PruningCounter
 from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
+from lunar_ice_bpc.exact.core.cuts import CutContext
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 
 
@@ -42,6 +44,7 @@ def harvest_addable_negative_columns(
     forbidden_signatures: set | None = None,
     active_task_sets: set[frozenset[str]] | None = None,
     branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
     profiling: PruningCounter | None = None,
     source_phase: str = "addability_harvest",
 ) -> tuple[tuple[JourneyColumn, ...], dict]:
@@ -49,6 +52,7 @@ def harvest_addable_negative_columns(
 
     counter = profiling or PruningCounter()
     start = perf_counter()
+    cuts = cut_context or CutContext()
     reports: list[HarvestCandidateReport] = []
     active_task_set_lookup = {
         frozenset(str(task_id) for task_id in row)
@@ -65,7 +69,11 @@ def harvest_addable_negative_columns(
     dominance_filtered_count = 0
     negative_count = 0
     for true_rc, column in candidates:
-        signature = column_signature_from_journey(column)
+        signature = _column_signature_for_harvest(
+            column,
+            branch_context=branch_context,
+            cut_context=cuts,
+        )
         task_set = tuple(sorted(str(task_id) for task_id in column.task_set))
         is_negative = float(true_rc) < -abs(float(negative_eps))
         if not is_negative:
@@ -85,6 +93,9 @@ def harvest_addable_negative_columns(
                 "forbidden_signatures": forbidden_signatures or set(),
                 "active_task_sets": active_task_sets or set(),
                 "is_allowed_by_branch": branch_allowed,
+                "cut_coefficients": cuts.coefficients_for(column),
+                "branch_signature": getattr(signature, "branch_signature", tuple()),
+                "dominance_key": _column_dominance_key_for_harvest(signature),
             },
         )
         if report.is_forbidden_signature:
@@ -139,6 +150,8 @@ def harvest_addable_negative_columns(
     payload = {
         "schema_version": "lunar_ice_bpc.b2_harvest.v1",
         "harvest_source_phase": str(source_phase),
+        "cut_context_active": not cuts.empty,
+        "cut_count": len(cuts.cuts),
         "candidate_negative_count": int(negative_count),
         "addable_negative_count": len(addable),
         "duplicate_in_current_master_count": int(duplicate_in_current_master_count),
@@ -186,6 +199,37 @@ def harvest_addable_negative_columns(
         "profiling": counter.to_payload(),
     }
     return selected, payload
+
+
+def _column_signature_for_harvest(
+    column: JourneyColumn,
+    *,
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+):
+    context = cut_context or CutContext()
+    if context.empty and (branch_context is None or branch_context.empty):
+        return column_signature_from_journey(column)
+    return cut_aware_column_signature_from_journey(
+        column,
+        cut_context=context,
+        branch_context=branch_context,
+    )
+
+
+def _column_dominance_key_for_harvest(signature) -> tuple:
+    key = tuple(signature.task_set)
+    if getattr(signature, "branch_signature", tuple()) or getattr(
+        signature,
+        "cut_coefficient_vector_hash",
+        "",
+    ):
+        return (
+            tuple(signature.task_set),
+            tuple(getattr(signature, "branch_signature", tuple())),
+            str(getattr(signature, "cut_coefficient_vector_hash", "")),
+        )
+    return key
 
 
 def _avg_pairwise_jaccard(task_sets: tuple[tuple[str, ...], ...]) -> float | None:

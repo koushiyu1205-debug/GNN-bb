@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py", line 969, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py", line 295, in main
+    partition = run_b4_1_required_task_set_partition_probe(
+        _resolve(probe),
+    ...<17 lines>...
+        negative_feasibility_fallback=bool(args.partition_negative_feasibility_fallback),
+    )
+  File "/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py", line 1637, in run_b4_1_required_task_set_partition_probe
+    raise ValueError("selected history row has no dual_context")
+ValueError: selected history row has no dual_context

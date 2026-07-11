@@ -17,6 +17,7 @@ from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
 from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     B2B_R3_MODE,
+    DIRECT_LABEL_WORKER,
     solve_b2_pricing_tail_baseline,
     solve_node_pricing_with_b2b_r3,
 )
@@ -45,6 +46,12 @@ from lunar_ice_bpc.exact.solver.journey_driver import (
 B3_COMPLETE_UNIVERSE_NODE_MODE = "B3_complete_universe_branch_rc_audit"
 TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS = "best_task_subset_representative_fixed_graph_columns"
 TREE_OBJECTIVE_TOLERANCE = 5.0e-6
+CERTIFYING_PRICING_PROOF_KINDS = frozenset(
+    {
+        "EXHAUSTIVE_NO_NEGATIVE",
+        "FRONTIER_BOUND_NO_NEGATIVE",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +79,13 @@ def solve_b3_branch_price_tree_baseline(
     use_complete_universe_audit: bool = True,
     run_b2_root_diagnostic: bool | None = None,
     solve_b0_direct_first: bool = True,
+    tail_dual_stabilization_enabled: bool = False,
+    tail_dual_stabilization_alpha: float = 0.7,
+    tail_dual_stabilization_window: int = 5,
+    worker_pricer_kind: str = DIRECT_LABEL_WORKER,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> dict:
     """Run B3 = B2 plus a proof-gated branch-and-price tree.
 
@@ -96,6 +110,13 @@ def solve_b3_branch_price_tree_baseline(
             negative_eps=negative_eps,
             max_columns_per_round=max_columns_per_round,
             mode=B2B_R3_MODE,
+            tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+            tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+            tail_dual_stabilization_window=tail_dual_stabilization_window,
+            worker_pricer_kind=worker_pricer_kind,
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
     else:
         b2 = _b2_not_run_payload(data, max_direct_tasks=max_direct_tasks)
@@ -208,6 +229,13 @@ def solve_b3_branch_price_tree_baseline(
             wall_time_limit_sec=wall_time_limit_sec,
             negative_eps=negative_eps,
             max_columns_per_round=max_columns_per_round,
+            tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+            tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+            tail_dual_stabilization_window=tail_dual_stabilization_window,
+            worker_pricer_kind=worker_pricer_kind,
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
         status = str(node["node_status"])
         if status == "NODE_LP_CERTIFIED":
@@ -293,6 +321,13 @@ def solve_b3_branch_price_tree_baseline(
         max_branch_depth=max_branch_depth,
         negative_eps=negative_eps,
     )
+    payload["worker_pricer_kind"] = str(worker_pricer_kind)
+    payload["tail_dual_stabilization_enabled"] = bool(tail_dual_stabilization_enabled)
+    payload["tail_dual_stabilization_alpha"] = float(tail_dual_stabilization_alpha)
+    payload["tail_dual_stabilization_window"] = int(tail_dual_stabilization_window)
+    payload["labeling_final_judge_enabled"] = labeling_final_judge_enabled
+    payload["labeling_final_judge_max_exact_tasks"] = labeling_final_judge_max_exact_tasks
+    payload["labeling_final_judge_exact_harvest_target"] = labeling_final_judge_exact_harvest_target
     payload["initial_tree_seed_column_count"] = len(provided_initial_columns)
     payload["tree_seed_source"] = "provided_initial_columns" if provided_initial_columns else "b3_internal_seed"
     payload["solve_b0_direct_first"] = bool(solve_b0_direct_first)
@@ -313,6 +348,13 @@ def _solve_b3_node(
     wall_time_limit_sec: float | None,
     negative_eps: float,
     max_columns_per_round: int,
+    tail_dual_stabilization_enabled: bool,
+    tail_dual_stabilization_alpha: float,
+    tail_dual_stabilization_window: int,
+    worker_pricer_kind: str,
+    labeling_final_judge_enabled: bool | None,
+    labeling_final_judge_max_exact_tasks: int | None,
+    labeling_final_judge_exact_harvest_target: int | None,
 ) -> dict:
     if use_complete_universe_audit and universe:
         return _solve_b3_node_with_complete_universe_audit(
@@ -326,6 +368,9 @@ def _solve_b3_node(
             max_rounds=max_rounds,
             negative_eps=negative_eps,
             max_columns_per_round=max_columns_per_round,
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
     initial_columns = tuple(universe) if universe else None
     engine = solve_node_pricing_with_b2b_r3(
@@ -340,6 +385,13 @@ def _solve_b3_node(
         negative_eps=negative_eps,
         max_columns_per_round=max_columns_per_round,
         b0_direct=b0_direct,
+        tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+        tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+        tail_dual_stabilization_window=tail_dual_stabilization_window,
+        worker_pricer_kind=worker_pricer_kind,
+        labeling_final_judge_enabled=labeling_final_judge_enabled,
+        labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+        labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
     )
     return _node_payload(
         data=data,
@@ -373,6 +425,9 @@ def _solve_b3_node_with_complete_universe_audit(
     max_rounds: int,
     negative_eps: float,
     max_columns_per_round: int,
+    labeling_final_judge_enabled: bool | None,
+    labeling_final_judge_max_exact_tasks: int | None,
+    labeling_final_judge_exact_harvest_target: int | None,
 ) -> dict:
     """Close a branch node by RMP plus RC audit over task-subset representatives."""
 
@@ -466,6 +521,9 @@ def _solve_b3_node_with_complete_universe_audit(
             master_view=view,
             node_id=queued.node_id,
             active_task_sets={frozenset(column.task_set) for column in master_columns},
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
         last_judge = judge
         last_final_judge_columns = judge.all_priced_columns
@@ -845,6 +903,7 @@ def _node_payload(
         )
     )
     pricing_rc_audit_pass = bool(final_judge and final_judge.get("pricing_rc_audit_pass") is True)
+    final_judge_certifying_proof_kind = _final_judge_has_certifying_proof_kind(final_judge)
     branch_pricing_pass = bool(
         final_judge is None
         or final_judge.get("all_priced_columns_satisfy_branch_context") is True
@@ -854,8 +913,17 @@ def _node_payload(
         issues.append("manual_reduced_cost_audit_failed")
     if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not pricing_rc_audit_pass:
         issues.append("pricing_reduced_cost_audit_failed")
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not final_judge_certifying_proof_kind:
+        issues.append("pricing_proof_kind_not_certifying")
     if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not branch_pricing_pass:
         issues.append("branch_filtered_pricing_audit_failed")
+    requested_certificate_scope = certificate_scope
+    requested_pricing_state = pricing_state
+    requested_node_status = str(node_status)
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and issues:
+        certificate_scope = CertificateScope.DIAGNOSTIC_PRICING_FRONTIER
+        pricing_state = PricingState.INCOMPLETE_LIMIT
+        node_status = "INCOMPLETE"
     node_debt = ProofDebtQueue()
     ledger = CertificateLedger(
         algorithm_status=AlgorithmStatus.BPC_GAP_AVAILABLE,
@@ -907,9 +975,12 @@ def _node_payload(
         "branch_context": queued.context.to_payload(),
         "node_pricing_mode": B2B_R3_MODE,
         "node_status": str(node_status),
+        "requested_node_status": requested_node_status,
         "rmp_status": None if master is None else master.rmp.status,
         "pricing_state": pricing_state.value,
         "certificate_scope": certificate_scope.value,
+        "requested_certificate_scope": requested_certificate_scope.value,
+        "requested_pricing_state": requested_pricing_state.value,
         "uses_true_dual_bpc_certificate": bool(ledger["uses_true_dual_bpc_certificate"]),
         "certificate_ledger": ledger,
         "proof_debt_queue": node_debt.audit(),
@@ -927,6 +998,17 @@ def _node_payload(
         "final_judge": final_judge or {},
         "final_judge_status": None if not final_judge else final_judge.get("status"),
         "final_judge_min_reduced_cost": None if not final_judge else final_judge.get("best_reduced_cost"),
+        "pricing_proof_kind": "" if not final_judge else str(final_judge.get("pricing_proof_kind") or ""),
+        "underlying_pricing_proof_kind": ""
+        if not final_judge
+        else str(final_judge.get("underlying_pricing_proof_kind") or ""),
+        "final_judge_can_certify_no_negative": bool(
+            final_judge and final_judge.get("can_certify_no_negative") is True
+        ),
+        "final_judge_uses_true_dual_bpc_certificate": bool(
+            final_judge and final_judge.get("uses_true_dual_bpc_certificate") is True
+        ),
+        "final_judge_certifying_proof_kind": bool(final_judge_certifying_proof_kind),
         "manual_rc_audit_pass": manual_rc_audit_pass,
         "pricing_rc_audit_pass": pricing_rc_audit_pass,
         "all_priced_columns_satisfy_branch_context": branch_pricing_pass,
@@ -967,6 +1049,11 @@ def _tree_payload(
         for node in nodes
         if node.get("node_status") not in {"INFEASIBLE_CERTIFIED"}
     )
+    all_node_pricing_proofs_certifying = bool(nodes) and all(
+        bool(node.get("final_judge_certifying_proof_kind"))
+        for node in nodes
+        if node.get("node_status") not in {"INFEASIBLE_CERTIFIED"}
+    )
     leaf_bounds = [
         float(node["node_lp_bound"])
         for node in leaf_nodes
@@ -995,6 +1082,7 @@ def _tree_payload(
         incumbent_objective=incumbent_objective,
         global_lower_bound=global_lower_bound,
         all_node_lower_bounds_official=all_node_lower_bounds_official,
+        all_node_pricing_proofs_certifying=all_node_pricing_proofs_certifying,
         node_ledgers_valid=node_ledgers_valid,
         proof_debt=proof_debt,
         negative_eps=negative_eps,
@@ -1004,7 +1092,7 @@ def _tree_payload(
         algorithm_status = AlgorithmStatus.BPC_OPTIMAL
         certificate_scope = CertificateScope.BPC_TREE_OPTIMAL
         pricing_state = PricingState.CERTIFIED_NO_NEGATIVE
-    elif root.get("node_lp_bound_official"):
+    elif root.get("node_lp_bound_official") and root.get("final_judge_certifying_proof_kind"):
         algorithm_status = AlgorithmStatus.BPC_GAP_AVAILABLE
         certificate_scope = CertificateScope.BPC_NODE_LP_CERTIFIED
         pricing_state = PricingState.CERTIFIED_NO_NEGATIVE
@@ -1027,7 +1115,7 @@ def _tree_payload(
             if issue not in tree_gate_issues:
                 tree_gate_issues.append(issue)
         tree_optimal = False
-        if root.get("node_lp_bound_official"):
+        if root.get("node_lp_bound_official") and root.get("final_judge_certifying_proof_kind"):
             algorithm_status = AlgorithmStatus.BPC_GAP_AVAILABLE
             certificate_scope = CertificateScope.BPC_NODE_LP_CERTIFIED
             pricing_state = PricingState.CERTIFIED_NO_NEGATIVE
@@ -1090,6 +1178,7 @@ def _tree_payload(
         "tree_closed": bool(tree_closed),
         "all_nodes_fathomed": bool(tree_closed),
         "all_node_lower_bounds_official": bool(all_node_lower_bounds_official),
+        "all_node_pricing_proofs_certifying": bool(all_node_pricing_proofs_certifying),
         "all_certificate_ledgers_valid": bool(node_ledgers_valid and ledger["valid"]),
         "global_lb": global_lower_bound,
         "global_lower_bound": global_lower_bound,
@@ -1363,12 +1452,23 @@ def _leaf_nodes(nodes: list[dict]) -> list[dict]:
     return [node for node in nodes if not node.get("child_node_ids")]
 
 
+def _final_judge_has_certifying_proof_kind(final_judge: dict | None) -> bool:
+    payload = final_judge or {}
+    return bool(
+        payload.get("can_certify_no_negative") is True
+        and payload.get("uses_true_dual_bpc_certificate") is True
+        and payload.get("pricing_rc_audit_pass") is True
+        and str(payload.get("pricing_proof_kind") or "") in CERTIFYING_PRICING_PROOF_KINDS
+    )
+
+
 def _tree_gate_issues(
     *,
     tree_closed: bool,
     incumbent_objective: float | None,
     global_lower_bound: float | None,
     all_node_lower_bounds_official: bool,
+    all_node_pricing_proofs_certifying: bool,
     node_ledgers_valid: bool,
     proof_debt: ProofDebtQueue,
     negative_eps: float,
@@ -1380,6 +1480,8 @@ def _tree_gate_issues(
         issues.append("tree_not_closed")
     if not all_node_lower_bounds_official:
         issues.append("node_lower_bound_not_official")
+    if not all_node_pricing_proofs_certifying:
+        issues.append("node_pricing_proof_kind_not_certifying")
     if global_lower_bound is None:
         issues.append("global_lower_bound_missing")
     elif incumbent_objective is not None and global_lower_bound < incumbent_objective - max(abs(float(negative_eps)), TREE_OBJECTIVE_TOLERANCE):

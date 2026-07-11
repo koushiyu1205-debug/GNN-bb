@@ -112,6 +112,9 @@ def _missing_inputs(
         missing.append("pricing_not_complete")
     if not coverage_complete:
         missing.append("pricing_coverage_not_complete")
+    proof_kind = _pricing_proof_kind(pricing_payload)
+    if proof_kind not in {"EXHAUSTIVE_NO_NEGATIVE", "FRONTIER_BOUND_NO_NEGATIVE"}:
+        missing.append("pricing_proof_kind_not_certifying")
     if min_rc is None:
         missing.append("min_reduced_cost_missing")
     elif min_rc < -abs(float(negative_eps)):
@@ -150,3 +153,10 @@ def _first_float(*values: object) -> float | None:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _pricing_proof_kind(payload: dict[str, Any]) -> str:
+    raw = str(payload.get("pricing_proof_kind") or "NONE")
+    if raw in {"EXHAUSTIVE_NO_NEGATIVE", "FRONTIER_BOUND_NO_NEGATIVE"}:
+        return raw
+    return "NONE"

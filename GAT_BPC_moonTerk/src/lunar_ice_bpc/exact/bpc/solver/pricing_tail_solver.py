@@ -10,13 +10,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import combinations
+import os
 from time import perf_counter
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateLedger
 from lunar_ice_bpc.exact.bpc.certificates.proof_debt_queue import ProofDebtQueue
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
+from lunar_ice_bpc.exact.bpc.cuts.cut_audit import cut_aware_column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
 from lunar_ice_bpc.exact.bpc.pricing.completion_bounds import build_completion_bound_tail_policy
@@ -28,6 +30,16 @@ from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
 from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
+from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+    RELAXED_NG_ROUTE_MODE,
+    LabelingPricingConfig,
+    run_bpc_labeling_pricer,
+)
+from lunar_ice_bpc.exact.bpc.pricing.resource_label_core import (
+    CORE_DIRECT_SELECTED_SET_WORKER,
+    ResourceLabelCoreConfig,
+    run_resource_label_core,
+)
 from lunar_ice_bpc.exact.bpc.pricing.profiling import PruningCounter
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
 from lunar_ice_bpc.exact.bpc.pricing.worker_seed_catalog import WorkerSeedCatalog
@@ -37,11 +49,17 @@ from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (
     representative_universe_column_count,
 )
 from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
+from lunar_ice_bpc.exact.core.columns import build_timed_sortie
+from lunar_ice_bpc.exact.core.cuts import CutContext
 from lunar_ice_bpc.exact.core.data import LunarIceData
-from lunar_ice_bpc.exact.core.journey import JourneyColumn
+from lunar_ice_bpc.exact.core.journey import JourneyColumn, build_journey_column
 from lunar_ice_bpc.exact.master.journey_rmp import manual_journey_reduced_cost
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals
-from lunar_ice_bpc.exact.pricing.journey_pricing import DirectPricingCache, price_direct_journey_columns
+from lunar_ice_bpc.exact.pricing.journey_pricing import (
+    DirectPricingCache,
+    price_direct_journey_columns,
+    price_direct_journey_columns_incremental,
+)
 from lunar_ice_bpc.exact.solver.journey_driver import (
     enumerate_direct_journey_columns,
     solve_direct_journey_baseline,
@@ -55,6 +73,31 @@ B2B_R3_MODE = "B2B_R3_true_dual_negative_search_worker"
 B2C_MODE = "B2C_limited_pricing_diagnostic"
 B2D_MODE = "B2D_proof_tail_kernel_profile"
 B2_PRODUCT_MODE = "B2_PRODUCT_EXACT_SOLVER"
+DIRECT_LABEL_WORKER = "direct_label"
+RELAXED_LABELING_WORKER = "relaxed_labeling"
+NEGATIVE_SEARCH_WORKER_KINDS = (DIRECT_LABEL_WORKER, RELAXED_LABELING_WORKER)
+LABELING_SUPPORT_CONTINUATION_SEED_ENV = "LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_SEED"
+LABELING_SUPPORT_CONTINUATION_MAX_SEED_SETS_ENV = "LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_MAX_SEED_SETS"
+LABELING_SUPPORT_CONTINUATION_MAX_NEIGHBORS_ENV = "LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_MAX_NEIGHBORS"
+LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT_ENV = (
+    "LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT"
+)
+LABELING_WORKER_MAX_TASK_CAP_ENV = "LUNAR_ICE_LABELING_WORKER_MAX_TASK_CAP"
+LARGE_TASK_DIRECT_WORKER_ENV = "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER"
+LARGE_TASK_DIRECT_WORKER_MAX_TASKS_ENV = "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_MAX_TASKS"
+LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS_ENV = (
+    "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS"
+)
+LARGE_TASK_DIRECT_WORKER_TIME_CAP_SEC_ENV = "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_TIME_CAP_SEC"
+LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH_ENV = (
+    "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH"
+)
+CERTIFYING_PRICING_PROOF_KINDS = frozenset(
+    {
+        "EXHAUSTIVE_NO_NEGATIVE",
+        "FRONTIER_BOUND_NO_NEGATIVE",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -102,6 +145,10 @@ def solve_b2_pricing_tail_baseline(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    worker_pricer_kind: str = DIRECT_LABEL_WORKER,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> dict:
     """Run a B2 root pricing-tail candidate without pre-running B1.
 
@@ -182,6 +229,10 @@ def solve_b2_pricing_tail_baseline(
             tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
             tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
             tail_dual_stabilization_window=tail_dual_stabilization_window,
+            worker_pricer_kind=worker_pricer_kind,
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
     if mode != B2B_MODE:
         raise ValueError(f"unsupported B2 mode={mode!r}")
@@ -196,6 +247,9 @@ def solve_b2_pricing_tail_baseline(
         max_columns_per_round=int(max_columns_per_round),
         worker_payload=worker_payload,
         seed_mode=seed_mode,
+        labeling_final_judge_enabled=labeling_final_judge_enabled,
+        labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+        labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
     )
 
 
@@ -267,6 +321,7 @@ def solve_node_pricing_with_b2b_r3(
     data: LunarIceData,
     *,
     branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
     node_id: str = "root",
     initial_columns: Iterable[JourneyColumn] | None = None,
     incumbent_objective: float | None = None,
@@ -280,13 +335,23 @@ def solve_node_pricing_with_b2b_r3(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    worker_pricer_kind: str = DIRECT_LABEL_WORKER,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
+    return_active_columns_payload: bool = False,
 ) -> dict:
     """Solve one B3 branch node with the accepted B2B_R3 pricing order."""
 
     active_context = branch_context or BranchContext()
+    active_cut_context = cut_context or CutContext()
     active_node_id = str(node_id)
     started_at = perf_counter()
-    completion_policy = build_completion_bound_tail_policy(pruning_opt_in=False)
+    completion_policy = build_completion_bound_tail_policy(
+        pruning_opt_in=False,
+        branch_context_active=not active_context.empty,
+        cut_context_active=not active_cut_context.empty,
+    )
     proof_debt = ProofDebtQueue()
     profiling = PruningCounter()
     if b0_direct is None and initial_columns is None:
@@ -300,6 +365,7 @@ def solve_node_pricing_with_b2b_r3(
             data=data,
             node_id=active_node_id,
             branch_context=active_context,
+            cut_context=active_cut_context,
             incumbent_objective=incumbent_objective,
             completion_policy=completion_policy,
             proof_debt=proof_debt,
@@ -329,6 +395,7 @@ def solve_node_pricing_with_b2b_r3(
             pricing_state=PricingState.INCOMPLETE_LIMIT,
             node_status="NODE_INCOMPLETE",
             note=f"task_count={len(data.task_ids)} exceeds B2B_R3 node max_direct_tasks={max_direct_tasks}; fail closed.",
+            active_columns=tuple() if return_active_columns_payload else None,
         )
 
     if initial_columns is None:
@@ -359,6 +426,7 @@ def solve_node_pricing_with_b2b_r3(
         seed_columns,
         node_id=active_node_id,
         branch_context=active_context,
+        cut_context=active_cut_context,
     )
     cache = DirectPricingCache()
     seed_catalog = WorkerSeedCatalog()
@@ -378,6 +446,11 @@ def solve_node_pricing_with_b2b_r3(
     worker_only_success_count = 0
     tail_dual_history: list[JourneyDuals] = []
 
+    def export_active_columns() -> tuple[JourneyColumn, ...] | None:
+        if not return_active_columns_payload:
+            return None
+        return _master_columns(pool, view, node_id=active_node_id)
+
     for round_index in range(1, max(1, int(max_rounds)) + 1):
         if _wall_time_limit_exceeded(wall_time_limit_sec, started_at=started_at):
             profile_totals["exit_reason"] = "ROW_TIME_LIMIT_BEFORE_ROUND"
@@ -385,6 +458,7 @@ def solve_node_pricing_with_b2b_r3(
                 data=data,
                 node_id=active_node_id,
                 branch_context=active_context,
+                cut_context=active_cut_context,
                 incumbent_objective=incumbent_objective,
                 completion_policy=completion_policy,
                 proof_debt=proof_debt,
@@ -408,6 +482,9 @@ def solve_node_pricing_with_b2b_r3(
                 pricing_state=PricingState.INCOMPLETE_LIMIT,
                 node_status="NODE_INCOMPLETE",
                 note=f"{B2B_R3_MODE} node stopped before round {round_index}: wall_time_limit_sec={wall_time_limit_sec} exhausted.",
+                active_columns=export_active_columns(),
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
             )
         master_columns = _master_columns(pool, view, node_id=active_node_id)
         rmp_start = perf_counter()
@@ -417,6 +494,7 @@ def solve_node_pricing_with_b2b_r3(
             negative_eps=negative_eps,
             rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}",
             branch_context=active_context,
+            cut_context=active_cut_context,
         )
         profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
         last_master = master
@@ -426,6 +504,7 @@ def solve_node_pricing_with_b2b_r3(
                 data=data,
                 node_id=active_node_id,
                 branch_context=active_context,
+                cut_context=active_cut_context,
                 incumbent_objective=incumbent_objective,
                 completion_policy=completion_policy,
                 proof_debt=proof_debt,
@@ -449,8 +528,12 @@ def solve_node_pricing_with_b2b_r3(
                 pricing_state=PricingState.INCOMPLETE_LIMIT,
                 node_status="NODE_RMP_INFEASIBLE_UNCERTIFIED",
                 note="Node RMP did not solve to optimality; restricted-pool no-cover is not an infeasibility certificate.",
+                active_columns=export_active_columns(),
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
             )
 
+        remaining_for_worker = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
         worker = _run_negative_search_worker(
             data,
             master=master,
@@ -477,6 +560,9 @@ def solve_node_pricing_with_b2b_r3(
             tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
             tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
             tail_dual_stabilization_window=tail_dual_stabilization_window,
+            worker_pricer_kind=worker_pricer_kind,
+            cut_context=active_cut_context,
+            wall_time_limit_sec=remaining_for_worker,
         )
         tail_dual_history.append(_duals_from_reduced_cost_context(master.reduced_cost_context))
         _accumulate_worker_profile(profile_totals, worker.payload)
@@ -487,6 +573,7 @@ def solve_node_pricing_with_b2b_r3(
                 worker.selected_columns,
                 node_id=active_node_id,
                 branch_context=active_context,
+                cut_context=active_cut_context,
             )
             harvest_payload = dict(worker.harvest_payload)
             harvest_payload["added_to_master_count"] = int(added)
@@ -510,6 +597,7 @@ def solve_node_pricing_with_b2b_r3(
                         "round": round_index,
                         "node_id": active_node_id,
                         "node_lp_bound": master.rmp.objective_bound,
+                        "dual_context": _dual_context_payload(master.reduced_cost_context),
                         "pricing_state": PricingState.FOUND_NEGATIVE.value,
                         "worker_status": worker.status.value,
                         "worker_exit_reason": worker.payload.get("exit_reason"),
@@ -523,7 +611,7 @@ def solve_node_pricing_with_b2b_r3(
                         "added_column_count": int(added),
                         "branch_context_active": not active_context.empty,
                         "branch_filtered_count": int(harvest_payload.get("branch_filtered_count") or 0),
-                        "completion_bound_pruning_enabled": False,
+                        "completion_bound_pruning_scope": "worker_candidate_search_only",
                     }
                 )
                 profile_totals["final_judge_saved_by_worker_count"] += 1
@@ -539,6 +627,7 @@ def solve_node_pricing_with_b2b_r3(
             negative_eps=negative_eps,
             rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}-closure",
             branch_context=active_context,
+            cut_context=active_cut_context,
         )
         profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
         last_master = master
@@ -553,6 +642,7 @@ def solve_node_pricing_with_b2b_r3(
                 data=data,
                 node_id=active_node_id,
                 branch_context=active_context,
+                cut_context=active_cut_context,
                 incumbent_objective=incumbent_objective,
                 completion_policy=completion_policy,
                 proof_debt=proof_debt,
@@ -576,6 +666,9 @@ def solve_node_pricing_with_b2b_r3(
                 pricing_state=PricingState.INCOMPLETE_LIMIT,
                 node_status="NODE_INCOMPLETE",
                 note=f"{B2B_R3_MODE} node stopped before final judge: wall_time_limit_sec={wall_time_limit_sec} exhausted.",
+                active_columns=export_active_columns(),
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
             )
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
@@ -586,10 +679,14 @@ def solve_node_pricing_with_b2b_r3(
             wall_time_limit_sec=remaining_for_judge,
             cache=cache,
             branch_context=active_context,
+            cut_context=active_cut_context,
             column_pool=pool,
             master_view=view,
             node_id=active_node_id,
             active_task_sets={frozenset(column.task_set) for column in master_columns},
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
@@ -604,6 +701,7 @@ def solve_node_pricing_with_b2b_r3(
             duals=master.rmp.duals,
             negative_eps=negative_eps,
             branch_context=active_context,
+            cut_context=active_cut_context,
         )
         hidden_audit = build_hidden_negative_audit(
             worker_payload=worker.payload,
@@ -624,6 +722,7 @@ def solve_node_pricing_with_b2b_r3(
             max_selected=max_columns_per_round,
             active_task_sets={frozenset(column.task_set) for column in master_columns},
             branch_context=active_context,
+            cut_context=active_cut_context,
             profiling=profiling,
             source_phase="b3_node_post_final_judge_addability_harvest",
         )
@@ -633,6 +732,7 @@ def solve_node_pricing_with_b2b_r3(
             selected,
             node_id=active_node_id,
             branch_context=active_context,
+            cut_context=active_cut_context,
         )
         harvest_payload["added_to_master_count"] = int(added)
         _accumulate_harvest_totals(harvest_totals, harvest_payload)
@@ -647,7 +747,10 @@ def solve_node_pricing_with_b2b_r3(
                 pool=pool,
                 view=view,
                 duals=master.rmp.duals,
+                node_id=active_node_id,
                 negative_eps=negative_eps,
+                branch_context=active_context,
+                cut_context=active_cut_context,
             )
             last_duplicate_audit = duplicate_audit
         profile_totals["exit_reason"] = (
@@ -662,6 +765,7 @@ def solve_node_pricing_with_b2b_r3(
                 "round": round_index,
                 "node_id": active_node_id,
                 "node_lp_bound": master.rmp.objective_bound,
+                "dual_context": _dual_context_payload(master.reduced_cost_context),
                 "pricing_state": judge.pricing_state.value,
                 "worker_status": worker.status.value,
                 "worker_exit_reason": worker.payload.get("exit_reason"),
@@ -680,10 +784,28 @@ def solve_node_pricing_with_b2b_r3(
                 "selected_count": int(harvest_payload["selected_count"]),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
-                "harvest_source_phase": judge.pricing_payload.get("harvest_source_phase"),
-                "harvest_selected_count": judge.pricing_payload.get("harvest_selected_count"),
-                "harvest_candidate_negative_count": judge.pricing_payload.get("harvest_candidate_negative_count"),
-                "harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
+                "harvest_source_phase": harvest_payload.get("harvest_source_phase"),
+                "harvest_selected_count": harvest_payload.get("harvest_selected_count"),
+                "harvest_candidate_negative_count": harvest_payload.get("harvest_candidate_negative_count"),
+                "harvest_selected_new_task_set_count": harvest_payload.get(
+                    "harvest_selected_new_task_set_count"
+                ),
+                "harvest_selected_replacement_task_set_count": harvest_payload.get(
+                    "harvest_selected_replacement_task_set_count"
+                ),
+                "harvest_rejected_duplicate_count": harvest_payload.get(
+                    "harvest_rejected_duplicate_count"
+                ),
+                "harvest_rejected_not_addable_count": harvest_payload.get(
+                    "harvest_rejected_not_addable_count"
+                ),
+                "harvest_best_true_rc": harvest_payload.get("harvest_best_true_rc"),
+                "final_judge_harvest_source_phase": judge.pricing_payload.get("harvest_source_phase"),
+                "final_judge_harvest_selected_count": judge.pricing_payload.get("harvest_selected_count"),
+                "final_judge_harvest_candidate_negative_count": judge.pricing_payload.get(
+                    "harvest_candidate_negative_count"
+                ),
+                "final_judge_harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
                 "route_template_pre_harvest_enabled": bool(
                     judge.pricing_payload.get("route_template_pre_harvest_enabled")
                 ),
@@ -731,6 +853,7 @@ def solve_node_pricing_with_b2b_r3(
                 data=data,
                 node_id=active_node_id,
                 branch_context=active_context,
+                cut_context=active_cut_context,
                 incumbent_objective=incumbent_objective,
                 completion_policy=completion_policy,
                 proof_debt=proof_debt,
@@ -754,6 +877,9 @@ def solve_node_pricing_with_b2b_r3(
                 pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
                 node_status="NODE_LP_CERTIFIED",
                 note="B2B_R3 node LP certificate came only from the branch-aware true-dual final judge.",
+                active_columns=export_active_columns(),
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
             )
         if duplicate_only_round:
             profile_totals["exit_reason"] = "DUPLICATE_ONLY"
@@ -761,6 +887,7 @@ def solve_node_pricing_with_b2b_r3(
                 data=data,
                 node_id=active_node_id,
                 branch_context=active_context,
+                cut_context=active_cut_context,
                 incumbent_objective=incumbent_objective,
                 completion_policy=completion_policy,
                 proof_debt=proof_debt,
@@ -784,12 +911,16 @@ def solve_node_pricing_with_b2b_r3(
                 pricing_state=PricingState.DUPLICATE_ONLY,
                 node_status="DUPLICATE_ONLY",
                 note="DUPLICATE_ONLY: branch-aware true-RC negative candidates were found but none entered the node master.",
+                active_columns=export_active_columns(),
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
             )
         if judge.pricing_state != PricingState.FOUND_NEGATIVE and added == 0:
             return _node_engine_payload(
                 data=data,
                 node_id=active_node_id,
                 branch_context=active_context,
+                cut_context=active_cut_context,
                 incumbent_objective=incumbent_objective,
                 completion_policy=completion_policy,
                 proof_debt=proof_debt,
@@ -816,6 +947,9 @@ def solve_node_pricing_with_b2b_r3(
                     "B2B_R3 final judge did not certify no-negative and did not return an "
                     "addable negative column; stopping this node fail-closed."
                 ),
+                active_columns=export_active_columns(),
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
             )
 
     profile_totals["exit_reason"] = str(profile_totals.get("exit_reason") or "WORKER_INCOMPLETE_LIMIT")
@@ -823,6 +957,7 @@ def solve_node_pricing_with_b2b_r3(
         data=data,
         node_id=active_node_id,
         branch_context=active_context,
+        cut_context=active_cut_context,
         incumbent_objective=incumbent_objective,
         completion_policy=completion_policy,
         proof_debt=proof_debt,
@@ -846,6 +981,9 @@ def solve_node_pricing_with_b2b_r3(
         pricing_state=PricingState.INCOMPLETE_LIMIT,
         node_status="NODE_INCOMPLETE",
         note=f"Stopped after max_rounds={max_rounds}; B2B_R3 node proof is incomplete.",
+        active_columns=export_active_columns(),
+        hidden_audit=last_hidden_audit,
+        seed_catalog=seed_catalog,
     )
 
 
@@ -1101,6 +1239,7 @@ def _solve_b2a_full_universe_audit(
         {
             "round": 1,
             "root_lp_bound": master.rmp.objective_bound,
+            "dual_context": _dual_context_payload(master.reduced_cost_context),
             "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value if audit.pass_ else PricingState.INCOMPLETE_LIMIT.value,
             "full_universe_membership_rc_audit_status": audit.status,
             "full_universe_manual_min_reduced_cost": audit.min_reduced_cost,
@@ -1171,6 +1310,9 @@ def _solve_b2b_seeded_tail_cg(
     max_columns_per_round: int,
     worker_payload: dict | None,
     seed_mode: str,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> dict:
     seed_columns, seed_report = build_b1_seed_columns(
         data,
@@ -1247,6 +1389,9 @@ def _solve_b2b_seeded_tail_cg(
             master_view=view,
             node_id="root",
             active_task_sets={frozenset(column.task_set) for column in master_columns},
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
@@ -1411,6 +1556,10 @@ def _solve_b2b_r2_worker_before_final_judge(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    worker_pricer_kind: str = DIRECT_LABEL_WORKER,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> dict:
     started_at = perf_counter()
     active_mode = str(mode)
@@ -1516,6 +1665,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                 profile_totals=profile_totals,
             )
 
+        remaining_for_worker = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
         worker = _run_negative_search_worker(
             data,
             master=master,
@@ -1540,6 +1690,8 @@ def _solve_b2b_r2_worker_before_final_judge(
             tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
             tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
             tail_dual_stabilization_window=tail_dual_stabilization_window,
+            worker_pricer_kind=worker_pricer_kind,
+            wall_time_limit_sec=remaining_for_worker,
         )
         tail_dual_history.append(_duals_from_reduced_cost_context(master.reduced_cost_context))
         _accumulate_worker_profile(profile_totals, worker.payload)
@@ -1565,6 +1717,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                         {
                             "round": round_index,
                             "root_lp_bound": master.rmp.objective_bound,
+                            "dual_context": _dual_context_payload(master.reduced_cost_context),
                             "pricing_state": PricingState.FOUND_NEGATIVE.value,
                             "worker_status": worker.status.value,
                             "worker_exit_reason": worker.payload.get("exit_reason"),
@@ -1576,7 +1729,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                             "selected_count": int(harvest_payload["selected_count"]),
                             "added_to_master_count": int(added),
                             "added_column_count": int(added),
-                            "completion_bound_pruning_enabled": False,
+                            "completion_bound_pruning_scope": "worker_candidate_search_only",
                         }
                     )
                     continue
@@ -1669,6 +1822,9 @@ def _solve_b2b_r2_worker_before_final_judge(
             master_view=view,
             node_id="root",
             active_task_sets={frozenset(column.task_set) for column in master_columns},
+            labeling_final_judge_enabled=labeling_final_judge_enabled,
+            labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
+            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
@@ -1731,6 +1887,7 @@ def _solve_b2b_r2_worker_before_final_judge(
             {
                 "round": round_index,
                 "root_lp_bound": master.rmp.objective_bound,
+                "dual_context": _dual_context_payload(master.reduced_cost_context),
                 "pricing_state": judge.pricing_state.value,
                 "worker_status": worker.status.value,
                 "worker_exit_reason": worker.payload.get("exit_reason"),
@@ -1749,10 +1906,28 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "selected_count": int(harvest_payload["selected_count"]),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
-                "harvest_source_phase": judge.pricing_payload.get("harvest_source_phase"),
-                "harvest_selected_count": judge.pricing_payload.get("harvest_selected_count"),
-                "harvest_candidate_negative_count": judge.pricing_payload.get("harvest_candidate_negative_count"),
-                "harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
+                "harvest_source_phase": harvest_payload.get("harvest_source_phase"),
+                "harvest_selected_count": harvest_payload.get("harvest_selected_count"),
+                "harvest_candidate_negative_count": harvest_payload.get("harvest_candidate_negative_count"),
+                "harvest_selected_new_task_set_count": harvest_payload.get(
+                    "harvest_selected_new_task_set_count"
+                ),
+                "harvest_selected_replacement_task_set_count": harvest_payload.get(
+                    "harvest_selected_replacement_task_set_count"
+                ),
+                "harvest_rejected_duplicate_count": harvest_payload.get(
+                    "harvest_rejected_duplicate_count"
+                ),
+                "harvest_rejected_not_addable_count": harvest_payload.get(
+                    "harvest_rejected_not_addable_count"
+                ),
+                "harvest_best_true_rc": harvest_payload.get("harvest_best_true_rc"),
+                "final_judge_harvest_source_phase": judge.pricing_payload.get("harvest_source_phase"),
+                "final_judge_harvest_selected_count": judge.pricing_payload.get("harvest_selected_count"),
+                "final_judge_harvest_candidate_negative_count": judge.pricing_payload.get(
+                    "harvest_candidate_negative_count"
+                ),
+                "final_judge_harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
                 "route_template_pre_harvest_enabled": bool(
                     judge.pricing_payload.get("route_template_pre_harvest_enabled")
                 ),
@@ -1917,7 +2092,469 @@ def _solve_b2b_r2_worker_before_final_judge(
 
 
 def _worker_round_diagnostic_fields(payload: dict) -> dict:
+    candidate_rc_recomputed = bool(payload.get("candidate_search_rc_recomputed_under_true_dual"))
+    branch_audit_pass = bool(payload.get("branch_context_audit_pass"))
+    worker_candidate_audit_pass = bool(
+        payload.get("worker_true_dual_candidate_audit_pass")
+        if payload.get("worker_true_dual_candidate_audit_pass") is not None
+        else candidate_rc_recomputed and branch_audit_pass
+    )
     return {
+        "worker_pricer_kind": payload.get("worker_pricer_kind") or DIRECT_LABEL_WORKER,
+        "labeling_worker_enabled": bool(payload.get("labeling_worker_enabled")),
+        "labeling_algorithm": payload.get("labeling_algorithm") or "",
+        "resource_label_algorithm": payload.get("resource_label_algorithm") or "",
+        "resource_label_core_mode": payload.get("resource_label_core_mode") or "",
+        "pricing_engine_role": payload.get("pricing_engine_role") or "",
+        "candidate_search_only": bool(payload.get("candidate_search_only")),
+        "relaxed_candidate_search_can_certify_no_negative": bool(
+            payload.get("relaxed_candidate_search_can_certify_no_negative")
+        ),
+        "no_column_certificate_allowed": bool(payload.get("no_column_certificate_allowed")),
+        "ng_route_relaxation_kind": payload.get("ng_route_relaxation_kind") or "",
+        "ng_route_relaxation_is_certificate_relaxation": bool(
+            payload.get("ng_route_relaxation_is_certificate_relaxation")
+        ),
+        "relaxed_route_elementarity_proof_supported": bool(
+            payload.get("relaxed_route_elementarity_proof_supported")
+        ),
+        "dssr_refinement_status": payload.get("dssr_refinement_status") or "",
+        "exact_final_proof_required_after_worker": bool(
+            payload.get("exact_final_proof_required_after_worker")
+        ),
+        "exact_final_proof_expected_mode": payload.get("exact_final_proof_expected_mode") or "",
+        "resource_dimensions": payload.get("resource_dimensions") or [],
+        "dominance_policy": payload.get("dominance_policy") or "",
+        "elementarity_policy": payload.get("elementarity_policy") or "",
+        "worker_underlying_incomplete": bool(payload.get("worker_underlying_incomplete")),
+        "worker_underlying_pricing_state": str(payload.get("worker_underlying_pricing_state") or ""),
+        "worker_underlying_status": str(payload.get("worker_underlying_status") or ""),
+        "labeling_seed_task_set_count": int(payload.get("labeling_seed_task_set_count") or 0),
+        "ng_seed_task_set_count": int(payload.get("ng_seed_task_set_count") or 0),
+        "resource_extension_seed_enabled": bool(payload.get("resource_extension_seed_enabled")),
+        "resource_extension_seed_task_set_count": int(
+            payload.get("resource_extension_seed_task_set_count") or 0
+        ),
+        "active_resource_extension_seed_task_set_count": int(
+            payload.get("active_resource_extension_seed_task_set_count") or 0
+        ),
+        "resource_extension_seed_task_set_count_by_size": payload.get(
+            "resource_extension_seed_task_set_count_by_size"
+        )
+        or {},
+        "resource_extension_label_column_worker_enabled": bool(
+            payload.get("resource_extension_label_column_worker_enabled")
+        ),
+        "resource_extension_label_column_count": int(
+            payload.get("resource_extension_label_column_count") or 0
+        ),
+        "resource_extension_label_column_task_set_count": int(
+            payload.get("resource_extension_label_column_task_set_count") or 0
+        ),
+        "resource_extension_label_column_task_sets": payload.get(
+            "resource_extension_label_column_task_sets"
+        )
+        or [],
+        "resource_extension_label_column_policy": payload.get(
+            "resource_extension_label_column_policy"
+        )
+        or "",
+        "resource_extension_label_columns_can_certify_no_negative": bool(
+            payload.get("resource_extension_label_columns_can_certify_no_negative")
+        ),
+        "resource_extension_label_stats": payload.get("resource_extension_label_stats") or {},
+        "resource_extension_label_attempt_count": int(
+            payload.get("resource_extension_label_attempt_count") or 0
+        ),
+        "resource_extension_label_dominance_rejected_count": int(
+            payload.get("resource_extension_label_dominance_rejected_count") or 0
+        ),
+        "resource_extension_label_capacity_truncated_count": int(
+            payload.get("resource_extension_label_capacity_truncated_count") or 0
+        ),
+        "resource_extension_label_path_variant_candidate_count": int(
+            payload.get("resource_extension_label_path_variant_candidate_count") or 0
+        ),
+        "resource_extension_label_path_variant_duplicate_count": int(
+            payload.get("resource_extension_label_path_variant_duplicate_count") or 0
+        ),
+        "resource_extension_label_path_variant_feasible_count": int(
+            payload.get("resource_extension_label_path_variant_feasible_count") or 0
+        ),
+        "resource_extension_label_path_variant_infeasible_count": int(
+            payload.get("resource_extension_label_path_variant_infeasible_count") or 0
+        ),
+        "resource_extension_proxy_profiles": payload.get("resource_extension_proxy_profiles") or [],
+        "resource_extension_proxy_profile_count": int(payload.get("resource_extension_proxy_profile_count") or 0),
+        "active_seed_task_set_source_counts": payload.get("active_seed_task_set_source_counts") or {},
+        "active_seed_task_set_source_task_count_counts": payload.get(
+            "active_seed_task_set_source_task_count_counts"
+        )
+        or {},
+        "active_seed_task_set_sources": payload.get("active_seed_task_set_sources") or [],
+        "active_seed_selection_policy": payload.get("active_seed_selection_policy") or "",
+        "protected_refinement_seed_task_set_count": int(
+            payload.get("protected_refinement_seed_task_set_count") or 0
+        ),
+        "active_protected_refinement_seed_task_set_count": int(
+            payload.get("active_protected_refinement_seed_task_set_count") or 0
+        ),
+        "protected_refinement_seed_task_set_count_by_size": payload.get(
+            "protected_refinement_seed_task_set_count_by_size"
+        )
+        or {},
+        "protected_refinement_seed_budget_truncated_count": int(
+            payload.get("protected_refinement_seed_budget_truncated_count") or 0
+        ),
+        "protected_support_continuation_seed_budget": int(
+            payload.get("protected_support_continuation_seed_budget") or 0
+        ),
+        "protected_support_continuation_seed_task_set_count": int(
+            payload.get("protected_support_continuation_seed_task_set_count") or 0
+        ),
+        "active_protected_support_continuation_seed_task_set_count": int(
+            payload.get("active_protected_support_continuation_seed_task_set_count") or 0
+        ),
+        "protected_support_continuation_seed_task_set_count_by_size": payload.get(
+            "protected_support_continuation_seed_task_set_count_by_size"
+        )
+        or {},
+        "protected_support_continuation_seed_budget_truncated_count": int(
+            payload.get("protected_support_continuation_seed_budget_truncated_count") or 0
+        ),
+        "active_seed_task_set_count_by_size": payload.get("active_seed_task_set_count_by_size") or {},
+        "branch_seed_filter_enabled": bool(payload.get("branch_seed_filter_enabled")),
+        "branch_seed_filtered_input_count": int(payload.get("branch_seed_filtered_input_count") or 0),
+        "branch_seed_filtered_ng_count": int(payload.get("branch_seed_filtered_ng_count") or 0),
+        "branch_seed_filtered_resource_extension_count": int(
+            payload.get("branch_seed_filtered_resource_extension_count") or 0
+        ),
+        "priced_candidate_task_set_source_counts": payload.get(
+            "priced_candidate_task_set_source_counts"
+        )
+        or {},
+        "priced_candidate_task_set_source_task_count_counts": payload.get(
+            "priced_candidate_task_set_source_task_count_counts"
+        )
+        or {},
+        "priced_candidate_task_set_sources": payload.get("priced_candidate_task_set_sources") or [],
+        "direct_candidate_task_set_count": int(payload.get("direct_candidate_task_set_count") or 0),
+        "candidate_seed_source_precedence": payload.get("candidate_seed_source_precedence") or [],
+        "input_seed_task_set_count": int(payload.get("input_seed_task_set_count") or 0),
+        "merged_seed_task_set_count": int(payload.get("merged_seed_task_set_count") or 0),
+        "active_seed_task_set_count": int(payload.get("active_seed_task_set_count") or 0),
+        "active_ng_seed_task_set_count": int(payload.get("active_ng_seed_task_set_count") or 0),
+        "active_input_seed_task_set_count": int(payload.get("active_input_seed_task_set_count") or 0),
+        "ng_neighborhood_size": int(payload.get("ng_neighborhood_size") or 0),
+        "ng_neighborhood_sizes": payload.get("ng_neighborhood_sizes") or [],
+        "ng_neighborhood_stage_count": int(payload.get("ng_neighborhood_stage_count") or 0),
+        "ng_seed_task_set_count_by_size": payload.get("ng_seed_task_set_count_by_size") or {},
+        "labeling_no_column_uncertified": bool(payload.get("labeling_no_column_uncertified")),
+        "worker_task_cap": payload.get("worker_task_cap"),
+        "pricing_proof_kind": payload.get("pricing_proof_kind") or "",
+        "completion_bound_pruning_enabled": bool(payload.get("completion_bound_pruning_enabled")),
+        "completion_bound_evaluated_label_count": int(
+            payload.get("completion_bound_evaluated_label_count") or 0
+        ),
+        "completion_bound_pruned_label_count": int(payload.get("completion_bound_pruned_label_count") or 0),
+        "completion_bound_can_certify_no_negative": bool(payload.get("completion_bound_can_certify_no_negative")),
+        "bound_prune_count": int(payload.get("bound_prune_count") or 0),
+        "generated_task_sets": payload.get("generated_task_sets") or [],
+        "worker_seen_task_sets": payload.get("worker_seen_task_sets") or [],
+        "worker_candidate_universe_task_sets": payload.get("worker_candidate_universe_task_sets") or [],
+        "worker_generated_column_task_sets": payload.get("worker_generated_column_task_sets") or [],
+        "worker_generated_column_task_set_count": int(
+            payload.get("worker_generated_column_task_set_count") or 0
+        ),
+        "labeling_harvest_candidate_negative_count": int(
+            payload.get("harvest_candidate_negative_count")
+            if payload.get("harvest_candidate_negative_count") is not None
+            else payload.get("labeling_harvest_candidate_negative_count") or 0
+        ),
+        "labeling_harvest_candidate_new_task_set_count": int(
+            payload.get("harvest_candidate_new_task_set_count")
+            if payload.get("harvest_candidate_new_task_set_count") is not None
+            else payload.get("labeling_harvest_candidate_new_task_set_count") or 0
+        ),
+        "labeling_harvest_candidate_replacement_task_set_count": int(
+            payload.get("harvest_candidate_replacement_task_set_count")
+            if payload.get("harvest_candidate_replacement_task_set_count") is not None
+            else payload.get("labeling_harvest_candidate_replacement_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_count": int(
+            payload.get("harvest_selected_count")
+            if payload.get("harvest_selected_count") is not None
+            else payload.get("labeling_harvest_selected_count") or 0
+        ),
+        "labeling_harvest_selected_new_task_set_count": int(
+            payload.get("harvest_selected_new_task_set_count")
+            if payload.get("harvest_selected_new_task_set_count") is not None
+            else payload.get("labeling_harvest_selected_new_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_replacement_task_set_count": int(
+            payload.get("harvest_selected_replacement_task_set_count")
+            if payload.get("harvest_selected_replacement_task_set_count") is not None
+            else payload.get("labeling_harvest_selected_replacement_task_set_count") or 0
+        ),
+        "labeling_harvest_candidate_support_changing_count": int(
+            payload.get("harvest_candidate_support_changing_count")
+            if payload.get("harvest_candidate_support_changing_count") is not None
+            else payload.get("labeling_harvest_candidate_support_changing_count") or 0
+        ),
+        "labeling_harvest_candidate_strong_replacement_count": int(
+            payload.get("harvest_candidate_strong_replacement_count")
+            if payload.get("harvest_candidate_strong_replacement_count") is not None
+            else payload.get("labeling_harvest_candidate_strong_replacement_count") or 0
+        ),
+        "labeling_harvest_candidate_weak_replacement_count": int(
+            payload.get("harvest_candidate_weak_replacement_count")
+            if payload.get("harvest_candidate_weak_replacement_count") is not None
+            else payload.get("labeling_harvest_candidate_weak_replacement_count") or 0
+        ),
+        "labeling_harvest_selected_support_changing_count": int(
+            payload.get("harvest_selected_support_changing_count")
+            if payload.get("harvest_selected_support_changing_count") is not None
+            else payload.get("labeling_harvest_selected_support_changing_count") or 0
+        ),
+        "labeling_harvest_selected_strong_replacement_count": int(
+            payload.get("harvest_selected_strong_replacement_count")
+            if payload.get("harvest_selected_strong_replacement_count") is not None
+            else payload.get("labeling_harvest_selected_strong_replacement_count") or 0
+        ),
+        "labeling_harvest_selected_weak_replacement_count": int(
+            payload.get("harvest_selected_weak_replacement_count")
+            if payload.get("harvest_selected_weak_replacement_count") is not None
+            else payload.get("labeling_harvest_selected_weak_replacement_count") or 0
+        ),
+        "labeling_harvest_selected_distinct_task_set_count": int(
+            payload.get("harvest_selected_distinct_task_set_count")
+            if payload.get("harvest_selected_distinct_task_set_count") is not None
+            else payload.get("labeling_harvest_selected_distinct_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_duplicate_task_set_count": int(
+            payload.get("harvest_selected_duplicate_task_set_count")
+            if payload.get("harvest_selected_duplicate_task_set_count") is not None
+            else payload.get("labeling_harvest_selected_duplicate_task_set_count") or 0
+        ),
+        "labeling_harvest_existing_master_task_set_count": int(
+            payload.get("harvest_existing_master_task_set_count")
+            if payload.get("harvest_existing_master_task_set_count") is not None
+            else payload.get("labeling_harvest_existing_master_task_set_count") or 0
+        ),
+        "labeling_harvest_support_task_set_count": int(
+            payload.get("harvest_support_task_set_count")
+            if payload.get("harvest_support_task_set_count") is not None
+            else payload.get("labeling_harvest_support_task_set_count") or 0
+        ),
+        "labeling_harvest_support_aware_enabled": bool(
+            payload.get("harvest_support_aware_enabled")
+            if payload.get("harvest_support_aware_enabled") is not None
+            else payload.get("labeling_harvest_support_aware_enabled")
+        ),
+        "labeling_harvest_weak_replacement_cap": int(
+            payload.get("harvest_weak_replacement_cap")
+            if payload.get("harvest_weak_replacement_cap") is not None
+            else payload.get("labeling_harvest_weak_replacement_cap") or 0
+        ),
+        "labeling_harvest_selection_policy": (
+            payload.get("harvest_selection_policy")
+            or payload.get("labeling_harvest_selection_policy")
+            or ""
+        ),
+        "labeling_harvest_avg_pairwise_jaccard": (
+            payload.get("harvest_avg_pairwise_jaccard")
+            if payload.get("harvest_avg_pairwise_jaccard") is not None
+            else payload.get("labeling_harvest_avg_pairwise_jaccard")
+        ),
+        "labeling_harvest_max_pairwise_jaccard": (
+            payload.get("harvest_max_pairwise_jaccard")
+            if payload.get("harvest_max_pairwise_jaccard") is not None
+            else payload.get("labeling_harvest_max_pairwise_jaccard")
+        ),
+        "labeling_harvest_candidate_seed_source_counts": (
+            payload.get("harvest_candidate_seed_source_counts")
+            or payload.get("labeling_harvest_candidate_seed_source_counts")
+            or {}
+        ),
+        "labeling_harvest_selected_seed_source_counts": (
+            payload.get("harvest_selected_seed_source_counts")
+            or payload.get("labeling_harvest_selected_seed_source_counts")
+            or {}
+        ),
+        "worker_generated_count": int(payload.get("worker_generated_count") or 0),
+        "worker_candidate_budget": int(payload.get("worker_candidate_budget") or 0),
+        "worker_harvest_selected_new_task_set_count": int(
+            payload.get("worker_harvest_selected_new_task_set_count") or 0
+        ),
+        "worker_harvest_selected_replacement_task_set_count": int(
+            payload.get("worker_harvest_selected_replacement_task_set_count") or 0
+        ),
+        "worker_harvest_avg_pairwise_jaccard": payload.get("worker_harvest_avg_pairwise_jaccard"),
+        "worker_harvest_priority": payload.get("worker_harvest_priority") or "",
+        "worker_harvest_best_true_rc": payload.get("worker_harvest_best_true_rc"),
+        "worker_harvest_worst_selected_true_rc": payload.get(
+            "worker_harvest_worst_selected_true_rc"
+        ),
+        "task_bound_pruned_count": int(payload.get("task_bound_pruned_count") or 0),
+        "resource_bound_pruned_count": int(payload.get("resource_bound_pruned_count") or 0),
+        "dominance_filtered_count": int(payload.get("dominance_filtered_count") or 0),
+        "duplicate_filtered_count": int(payload.get("duplicate_filtered_count") or 0),
+        "pricing_timeout": bool(payload.get("pricing_timeout")),
+        "refinement_seed_count": int(payload.get("refinement_seed_count") or 0),
+        "active_refinement_seed_count": int(payload.get("active_refinement_seed_count") or 0),
+        "refinement_seed_task_sets": payload.get("refinement_seed_task_sets") or [],
+        "refinement_seed_task_count_counts": payload.get("refinement_seed_task_count_counts") or {},
+        "refinement_expanded_seed_count": int(payload.get("refinement_expanded_seed_count") or 0),
+        "active_refinement_expanded_seed_count": int(
+            payload.get("active_refinement_expanded_seed_count") or 0
+        ),
+        "refinement_expanded_seed_task_sets": payload.get("refinement_expanded_seed_task_sets") or [],
+        "refinement_expanded_seed_task_count_counts": payload.get(
+            "refinement_expanded_seed_task_count_counts"
+        )
+        or {},
+        "refinement_seed_source": payload.get("refinement_seed_source") or "",
+        "refinement_seed_source_rows": payload.get("refinement_seed_source_rows") or [],
+        "refinement_seed_policy": payload.get("refinement_seed_policy") or "",
+        "refinement_seed_budget_limit": int(payload.get("refinement_seed_budget_limit") or 0),
+        "refinement_seed_budget_reserves_first_expansion": bool(
+            payload.get("refinement_seed_budget_reserves_first_expansion")
+        ),
+        "refinement_seed_source_match_counts": payload.get("refinement_seed_source_match_counts") or {},
+        "refinement_seed_catalog_payload": payload.get("refinement_seed_catalog_payload") or {},
+        "refinement_seed_mutates_certificate": bool(payload.get("refinement_seed_mutates_certificate")),
+        "global_remaining_rc_lb": payload.get("global_remaining_rc_lb"),
+        "global_remaining_rc_lb_valid": bool(payload.get("global_remaining_rc_lb_valid")),
+        "global_remaining_rc_lb_coverage_complete": bool(payload.get("global_remaining_rc_lb_coverage_complete")),
+        "frontier_region_count": payload.get("frontier_region_count"),
+        "frontier_unsupported_region_count": payload.get("frontier_unsupported_region_count"),
+        "frontier_unsupported_task_count_regions": payload.get(
+            "frontier_unsupported_task_count_regions"
+        )
+        or [],
+        "branch_context_audit_pass": bool(payload.get("branch_context_audit_pass")),
+        "branch_invalid_column_count": int(payload.get("branch_invalid_column_count") or 0),
+        "true_dual_audited_column_count": int(payload.get("true_dual_audited_column_count") or 0),
+        "true_dual_selected_negative_count": int(payload.get("true_dual_selected_negative_count") or 0),
+        "candidate_search_best_reduced_cost": payload.get("candidate_search_best_reduced_cost"),
+        "candidate_search_negative_column_count": int(
+            payload.get("candidate_search_negative_column_count") or 0
+        ),
+        "candidate_search_negative_true_negative_count": int(
+            payload.get("candidate_search_negative_true_negative_count") or 0
+        ),
+        "candidate_search_negative_true_nonnegative_count": int(
+            payload.get("candidate_search_negative_true_nonnegative_count") or 0
+        ),
+        "true_negative_candidate_search_nonnegative_count": int(
+            payload.get("true_negative_candidate_search_nonnegative_count") or 0
+        ),
+        "candidate_search_false_positive_rate": payload.get("candidate_search_false_positive_rate"),
+        "true_negative_candidate_search_miss_rate": payload.get(
+            "true_negative_candidate_search_miss_rate"
+        ),
+        "candidate_search_false_positive_rows": payload.get("candidate_search_false_positive_rows") or [],
+        "true_negative_candidate_search_miss_rows": payload.get(
+            "true_negative_candidate_search_miss_rows"
+        )
+        or [],
+        "candidate_search_dual_matches_true_dual": bool(
+            payload.get("candidate_search_dual_matches_true_dual")
+        ),
+        "candidate_search_rc_recomputed_under_true_dual": bool(
+            candidate_rc_recomputed
+        ),
+        "worker_true_dual_candidate_audit_pass": worker_candidate_audit_pass,
+        "selected_column_entry_audit_available": bool(
+            payload.get("selected_column_entry_audit_available")
+        ),
+        "selected_column_entry_audit_pass": bool(
+            payload.get("selected_column_entry_audit_pass")
+        ),
+        "selected_column_true_dual_rc_audit_pass": bool(
+            payload.get("selected_column_true_dual_rc_audit_pass")
+        ),
+        "selected_column_branch_audit_pass": bool(
+            payload.get("selected_column_branch_audit_pass")
+        ),
+        "selected_column_cut_audit_pass": bool(
+            payload.get("selected_column_cut_audit_pass")
+        ),
+        "selected_column_addability_audit_pass": bool(
+            payload.get("selected_column_addability_audit_pass")
+        ),
+        "selected_column_audited_count": int(payload.get("selected_column_audited_count") or 0),
+        "selected_column_entry_audit_rejected_count": int(
+            payload.get("selected_column_entry_audit_rejected_count") or 0
+        ),
+        "selected_count_before_entry_audit": int(
+            payload.get("selected_count_before_entry_audit")
+            if payload.get("selected_count_before_entry_audit") is not None
+            else payload.get("selected_count")
+            or 0
+        ),
+        "entry_audit_rejected_selected_count": int(
+            payload.get("entry_audit_rejected_selected_count") or 0
+        ),
+        "selected_would_enter_master_count": int(
+            payload.get("selected_would_enter_master_count") or 0
+        ),
+        "selected_all_would_enter_master": bool(
+            payload.get("selected_all_would_enter_master")
+        ),
+        "worker_selected_columns_audit_pass": bool(
+            payload.get("worker_selected_columns_audit_pass")
+        ),
+        "worker_selected_columns_true_dual_audit_pass": bool(
+            payload.get("worker_selected_columns_true_dual_audit_pass")
+        ),
+        "worker_selected_columns_branch_audit_pass": bool(
+            payload.get("worker_selected_columns_branch_audit_pass")
+        ),
+        "worker_selected_columns_cut_audit_pass": bool(
+            payload.get("worker_selected_columns_cut_audit_pass")
+        ),
+        "worker_selected_columns_addability_audit_pass": bool(
+            payload.get("worker_selected_columns_addability_audit_pass")
+        ),
+        "labeling_harvest_candidate_negative_count": int(
+            payload.get("labeling_harvest_candidate_negative_count") or 0
+        ),
+        "labeling_harvest_candidate_new_task_set_count": int(
+            payload.get("labeling_harvest_candidate_new_task_set_count") or 0
+        ),
+        "labeling_harvest_candidate_replacement_task_set_count": int(
+            payload.get("labeling_harvest_candidate_replacement_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_count": int(payload.get("labeling_harvest_selected_count") or 0),
+        "labeling_harvest_selected_new_task_set_count": int(
+            payload.get("labeling_harvest_selected_new_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_replacement_task_set_count": int(
+            payload.get("labeling_harvest_selected_replacement_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_distinct_task_set_count": int(
+            payload.get("labeling_harvest_selected_distinct_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_duplicate_task_set_count": int(
+            payload.get("labeling_harvest_selected_duplicate_task_set_count") or 0
+        ),
+        "labeling_harvest_existing_master_task_set_count": int(
+            payload.get("labeling_harvest_existing_master_task_set_count") or 0
+        ),
+        "labeling_harvest_selection_policy": payload.get("labeling_harvest_selection_policy") or "",
+        "labeling_harvest_avg_pairwise_jaccard": payload.get("labeling_harvest_avg_pairwise_jaccard"),
+        "labeling_harvest_max_pairwise_jaccard": payload.get("labeling_harvest_max_pairwise_jaccard"),
+        "labeling_harvest_candidate_seed_source_counts": payload.get(
+            "labeling_harvest_candidate_seed_source_counts"
+        )
+        or {},
+        "labeling_harvest_selected_seed_source_counts": payload.get(
+            "labeling_harvest_selected_seed_source_counts"
+        )
+        or {},
+        "candidate_task_set_count": int(payload.get("candidate_task_set_count") or 0),
+        "candidate_sequence_count": int(payload.get("candidate_sequence_count") or payload.get("candidate_sequences") or 0),
         "diagnostic_dual_source": payload.get("diagnostic_dual_source") or "",
         "diagnostic_rmp_iteration_id": payload.get("diagnostic_rmp_iteration_id") or "",
         "diagnostic_dual_fingerprint": payload.get("diagnostic_dual_fingerprint") or "",
@@ -1943,6 +2580,26 @@ def _worker_round_diagnostic_fields(payload: dict) -> dict:
     }
 
 
+def _normalize_worker_pricer_kind(value: str) -> str:
+    normalized = str(value or DIRECT_LABEL_WORKER).strip().lower()
+    aliases = {
+        "": DIRECT_LABEL_WORKER,
+        "direct": DIRECT_LABEL_WORKER,
+        "direct_label": DIRECT_LABEL_WORKER,
+        "route_template": DIRECT_LABEL_WORKER,
+        "label": RELAXED_LABELING_WORKER,
+        "labeling": RELAXED_LABELING_WORKER,
+        "relaxed_labeling": RELAXED_LABELING_WORKER,
+        "ng": RELAXED_LABELING_WORKER,
+        "ng_route": RELAXED_LABELING_WORKER,
+        "relaxed_ng_route": RELAXED_LABELING_WORKER,
+    }
+    resolved = aliases.get(normalized)
+    if resolved is None or resolved not in NEGATIVE_SEARCH_WORKER_KINDS:
+        raise ValueError(f"unsupported worker_pricer_kind={value!r}")
+    return resolved
+
+
 def _run_negative_search_worker(
     data: LunarIceData,
     *,
@@ -1966,9 +2623,19 @@ def _run_negative_search_worker(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    worker_pricer_kind: str = DIRECT_LABEL_WORKER,
+    cut_context: CutContext | None = None,
+    wall_time_limit_sec: float | None = None,
 ) -> _NegativeSearchWorkerResult:
     worker_start = perf_counter()
+    active_worker_kind = _normalize_worker_pricer_kind(worker_pricer_kind)
+    active_cut_context = cut_context or CutContext()
     true_duals = _duals_from_reduced_cost_context(reduced_cost_context)
+    worker_deadline = (
+        None
+        if wall_time_limit_sec is None
+        else worker_start + max(0.0, float(wall_time_limit_sec))
+    )
     tail_center = build_tail_dual_center(
         tail_dual_history or (true_duals,),
         window=tail_dual_stabilization_window,
@@ -1990,24 +2657,136 @@ def _run_negative_search_worker(
         max_direct_tasks=worker_task_cap,
         max_seed_sets=max(1, int(max_candidate_sets)),
     )
-    pricing, priced_columns = price_direct_journey_columns(
+    refinement_seed_task_sets = _catalog_refinement_seed_task_sets(
         data,
-        worker_duals,
-        negative_eps=negative_eps,
+        seed_catalog=seed_catalog,
         max_direct_tasks=worker_task_cap,
-        allow_partial=True,
-        seed_task_sets=seed_task_sets,
-        cache=cache,
-        max_candidate_sets=max(1, int(max_candidate_sets)),
-        completion_bound_enabled=False,
+    )
+    refinement_expanded_seed_task_sets = _catalog_refinement_neighborhood_seed_task_sets(
+        data,
+        duals=worker_duals,
+        seed_catalog=seed_catalog,
+        max_direct_tasks=worker_task_cap,
+    )
+    active_refinement_seed_count = _count_task_set_intersection(seed_task_sets, refinement_seed_task_sets)
+    active_refinement_expanded_seed_count = _count_task_set_intersection(
+        seed_task_sets,
+        refinement_expanded_seed_task_sets,
+    )
+    refinement_seed_source_rows = _refinement_seed_source_rows(
+        refinement_seed_task_sets=refinement_seed_task_sets,
+        refinement_expanded_seed_task_sets=refinement_expanded_seed_task_sets,
+    )
+    physical_seed_columns, physical_seed_payload = _catalog_physical_seed_columns(
+        data,
+        seed_catalog=seed_catalog,
         branch_context=branch_context,
+        max_columns=max(1, int(max_candidate_sets)),
+    )
+    if active_worker_kind == RELAXED_LABELING_WORKER:
+        pricing, priced_columns = run_bpc_labeling_pricer(
+            data,
+            true_duals,
+            config=LabelingPricingConfig(
+                mode=RELAXED_NG_ROUTE_MODE,
+                max_label_task_count=worker_task_cap,
+                max_candidate_sets=max(1, int(max_candidate_sets)),
+                harvest_target=max_selected,
+                negative_eps=negative_eps,
+                dual_stabilization_enabled=tail_dual_stabilization_enabled,
+                dual_stabilization_alpha=tail_dual_stabilization_alpha,
+                dual_stabilization_window=tail_dual_stabilization_window,
+                support_continuation_seed_enabled=_env_bool(
+                    LABELING_SUPPORT_CONTINUATION_SEED_ENV,
+                    default=True,
+                ),
+                support_continuation_max_seed_sets=_env_int(
+                    LABELING_SUPPORT_CONTINUATION_MAX_SEED_SETS_ENV,
+                    default=240,
+                    minimum=0,
+                    maximum=5000,
+                ),
+                support_continuation_max_neighbors=_env_int(
+                    LABELING_SUPPORT_CONTINUATION_MAX_NEIGHBORS_ENV,
+                    default=4,
+                    minimum=1,
+                    maximum=100,
+                ),
+                support_continuation_protected_seed_count=_env_int(
+                    LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT_ENV,
+                    default=8,
+                    minimum=0,
+                    maximum=5000,
+                ),
+                stop_at_first_negative=False,
+                wall_time_limit_sec=wall_time_limit_sec,
+            ),
+            branch_context=branch_context,
+            cut_context=active_cut_context,
+            seed_task_sets=seed_task_sets,
+            seed_source_rows=refinement_seed_source_rows,
+            existing_task_sets=tuple(tuple(str(task_id) for task_id in column.task_set) for column in master_columns),
+            support_task_sets=_rmp_support_task_sets(master),
+            dual_history=tail_dual_history or (true_duals,),
+        )
+    else:
+        pricing, priced_columns = run_resource_label_core(
+            data,
+            worker_duals,
+            config=ResourceLabelCoreConfig(
+                mode=CORE_DIRECT_SELECTED_SET_WORKER,
+                max_task_count=worker_task_cap,
+                max_candidate_sets=max(1, int(max_candidate_sets)),
+                negative_eps=negative_eps,
+                wall_time_limit_sec=wall_time_limit_sec,
+            ),
+            seed_task_sets=seed_task_sets,
+            seed_source_rows=refinement_seed_source_rows,
+            branch_context=branch_context,
+            cut_context=active_cut_context,
+            cache=cache,
+        )
+    large_direct_payload, large_direct_columns = _run_large_task_direct_worker(
+        data,
+        worker_duals=worker_duals,
+        true_duals=true_duals,
+        master_columns=master_columns,
+        b0_direct=b0_direct,
+        support_task_sets=_rmp_support_task_sets(master),
+        worker_task_cap=worker_task_cap,
+        max_direct_tasks=max_direct_tasks,
+        max_candidate_sets=max_candidate_sets,
+        negative_eps=negative_eps,
+        branch_context=branch_context,
+        cut_context=active_cut_context,
+        deadline=worker_deadline,
+    )
+    priced_columns = _dedupe_journey_columns(
+        (*physical_seed_columns, *priced_columns, *large_direct_columns)
     )
     negative_pairs = _manual_negative_pairs(
         priced_columns,
         duals=true_duals,
         negative_eps=negative_eps,
         branch_context=branch_context,
+        cut_context=active_cut_context,
     )
+    candidate_audit_payload = _candidate_search_true_dual_audit_payload(
+        priced_columns,
+        search_duals=worker_duals,
+        true_duals=true_duals,
+        negative_eps=negative_eps,
+        branch_context=branch_context,
+        cut_context=active_cut_context,
+    )
+    candidate_search_dual_matches_true_dual = pricing.get("candidate_search_dual_matches_true_dual")
+    if candidate_search_dual_matches_true_dual is None:
+        candidate_search_dual_matches_true_dual = _journey_duals_match(worker_duals, true_duals)
+    candidate_search_rc_recomputed_under_true_dual = pricing.get(
+        "candidate_search_rc_recomputed_under_true_dual"
+    )
+    if candidate_search_rc_recomputed_under_true_dual is None:
+        candidate_search_rc_recomputed_under_true_dual = True
     selected, harvest_payload = harvest_addable_negative_columns(
         negative_pairs,
         pool=pool,
@@ -2017,14 +2796,88 @@ def _run_negative_search_worker(
         max_selected=max_selected,
         active_task_sets={frozenset(column.task_set) for column in master_columns},
         branch_context=branch_context,
+        cut_context=active_cut_context,
         profiling=profiling,
         source_phase="worker_candidate_search_addability_harvest",
     )
+    selected_audit_payload = _audit_selected_columns_for_master_entry(
+        selected,
+        duals=true_duals,
+        pool=pool,
+        view=view,
+        node_id=node_id,
+        negative_eps=negative_eps,
+        active_task_sets={frozenset(column.task_set) for column in master_columns},
+        branch_context=branch_context,
+        cut_context=active_cut_context,
+    )
+    harvest_payload = dict(harvest_payload)
+    harvest_payload.update(selected_audit_payload)
+    if selected and not selected_audit_payload["selected_column_entry_audit_pass"]:
+        harvest_payload["selected_count_before_entry_audit"] = int(len(selected))
+        harvest_payload["entry_audit_rejected_selected_count"] = int(len(selected))
+        harvest_payload["selected_count"] = 0
+        harvest_payload["selected_would_enter_master_count"] = 0
+        harvest_payload["selected_all_would_enter_master"] = False
+        harvest_payload["harvest_selected_count"] = 0
+        selected = tuple()
     worker_wall_time = perf_counter() - worker_start
     cache_stats = cache.stats()
     completion_payload = pricing.get("completion_bound") if isinstance(pricing.get("completion_bound"), dict) else {}
     labels_generated = int(pricing.get("pareto_label_count") or 0)
-    status = PricingState.FOUND_NEGATIVE if negative_pairs else PricingState.LOCAL_NO_COLUMN_UNCERTIFIED
+    generated_task_sets = _worker_generated_task_sets(pricing)
+    worker_seen_task_sets = _worker_seen_task_sets(pricing, priced_columns)
+    branch_invalid_column_count = int(
+        pricing.get("branch_invalid_column_count")
+        if pricing.get("branch_invalid_column_count") is not None
+        else sum(
+            1 for column in priced_columns if not journey_satisfies_branch_context(column, branch_context)
+        )
+    )
+    branch_context_audit_pass = bool(
+        pricing.get("branch_context_audit_pass")
+        if pricing.get("branch_context_audit_pass") is not None
+        else branch_invalid_column_count == 0
+    )
+    worker_true_dual_candidate_audit_pass = bool(
+        candidate_search_rc_recomputed_under_true_dual
+        and branch_context_audit_pass
+    )
+    task_bound_pruned_count = int(completion_payload.get("pruned_label_count") or 0)
+    resource_bound_pruned_count = int(
+        pricing.get("resource_bound_pruned_count")
+        or pricing.get("resource_prune_count")
+        or 0
+    )
+    dominance_filtered_count = int(
+        harvest_payload.get("harvest_dominance_filtered_count")
+        or pricing.get("dominance_filtered_count")
+        or pricing.get("dominance_prune_count")
+        or 0
+    )
+    duplicate_filtered_count = int(
+        harvest_payload.get("duplicate_in_current_master_count")
+        or harvest_payload.get("harvest_duplicate_in_current_master_count")
+        or pricing.get("duplicate_filtered_count")
+        or 0
+    )
+    pricing_timeout = bool(
+        pricing.get("pricing_timeout")
+        or str(pricing.get("status") or "").endswith("TIME_LIMIT")
+        or str(pricing.get("status") or "").endswith("_TIME_LIMIT")
+    )
+    underlying_incomplete = bool(
+        pricing_timeout
+        or pricing.get("pricing_state") == PricingState.INCOMPLETE_LIMIT.value
+        or str(pricing.get("status") or "").startswith("SKIPPED")
+    )
+    status = (
+        PricingState.FOUND_NEGATIVE
+        if negative_pairs
+        else PricingState.INCOMPLETE_LIMIT
+        if underlying_incomplete
+        else PricingState.LOCAL_NO_COLUMN_UNCERTIFIED
+    )
     if str(pricing.get("status") or "").startswith("SKIPPED"):
         status = PricingState.INCOMPLETE_LIMIT
     exit_reason = (
@@ -2039,10 +2892,59 @@ def _run_negative_search_worker(
     payload = {
         "schema_version": "lunar_ice_bpc.b2e_negative_search_worker.v1",
         "worker_kind": "B2E_negative_search_worker",
+        "worker_pricer_kind": active_worker_kind,
+        "labeling_worker_enabled": active_worker_kind == RELAXED_LABELING_WORKER,
+        "labeling_algorithm": pricing.get("labeling_algorithm"),
+        "resource_label_algorithm": pricing.get("resource_label_algorithm"),
+        "resource_label_core_mode": pricing.get("resource_label_core_mode"),
+        "pricing_engine_role": pricing.get("pricing_engine_role") or "",
+        "candidate_search_only": bool(pricing.get("candidate_search_only")),
+        "relaxed_candidate_search_can_certify_no_negative": bool(
+            pricing.get("relaxed_candidate_search_can_certify_no_negative")
+        ),
+        "no_column_certificate_allowed": bool(pricing.get("no_column_certificate_allowed")),
+        "ng_route_relaxation_kind": pricing.get("ng_route_relaxation_kind") or "",
+        "ng_route_relaxation_is_certificate_relaxation": bool(
+            pricing.get("ng_route_relaxation_is_certificate_relaxation")
+        ),
+        "relaxed_route_elementarity_proof_supported": bool(
+            pricing.get("relaxed_route_elementarity_proof_supported")
+        ),
+        "dssr_refinement_status": pricing.get("dssr_refinement_status") or "",
+        "exact_final_proof_required_after_worker": bool(
+            pricing.get("exact_final_proof_required_after_worker")
+        ),
+        "exact_final_proof_expected_mode": pricing.get("exact_final_proof_expected_mode") or "",
+        "resource_dimensions": pricing.get("resource_dimensions") or [],
+        "dominance_policy": pricing.get("dominance_policy"),
+        "elementarity_policy": pricing.get("elementarity_policy"),
         "round": int(round_index),
         "worker_status": status.value,
         "pricing_state": status.value,
         "exit_reason": exit_reason,
+        "worker_underlying_incomplete": bool(underlying_incomplete),
+        "worker_underlying_pricing_state": str(pricing.get("pricing_state") or ""),
+        "worker_underlying_status": str(pricing.get("status") or ""),
+        "pricing_proof_kind": pricing.get("pricing_proof_kind") or (
+            "DIRECT_WORKER_UNCERTIFIED"
+            if active_worker_kind == DIRECT_LABEL_WORKER
+            else "RELAXED_WORKER_UNCERTIFIED"
+        ),
+        "global_remaining_rc_lb": pricing.get("global_remaining_rc_lb"),
+        "global_remaining_rc_lb_valid": bool(pricing.get("global_remaining_rc_lb_valid")),
+        "global_remaining_rc_lb_coverage_complete": bool(
+            pricing.get("global_remaining_rc_lb_coverage_complete")
+        ),
+        "frontier_region_count": pricing.get("frontier_region_count"),
+        "frontier_unsupported_region_count": pricing.get("frontier_unsupported_region_count"),
+        "frontier_unsupported_task_count_regions": pricing.get(
+            "frontier_unsupported_task_count_regions"
+        )
+        or [],
+        "branch_context_audit_pass": branch_context_audit_pass,
+        "branch_invalid_column_count": branch_invalid_column_count,
+        "cut_context_active": not active_cut_context.empty,
+        "cut_count": len(active_cut_context.cuts),
         "can_certify_no_negative": False,
         "uses_true_dual_bpc_certificate": False,
         "root_lp_bound_official": False,
@@ -2057,12 +2959,56 @@ def _run_negative_search_worker(
         "worker_dual_only": True,
         "requires_true_dual_rc_recompute": True,
         "true_dual_rc_recomputed": True,
+        "selected_column_entry_audit_available": True,
+        "selected_column_entry_audit_pass": bool(
+            selected_audit_payload["selected_column_entry_audit_pass"]
+        ),
+        "selected_column_true_dual_rc_audit_pass": bool(
+            selected_audit_payload["selected_column_true_dual_rc_audit_pass"]
+        ),
+        "selected_column_branch_audit_pass": bool(
+            selected_audit_payload["selected_column_branch_audit_pass"]
+        ),
+        "selected_column_cut_audit_pass": bool(
+            selected_audit_payload["selected_column_cut_audit_pass"]
+        ),
+        "selected_column_addability_audit_pass": bool(
+            selected_audit_payload["selected_column_addability_audit_pass"]
+        ),
+        "selected_column_audited_count": int(
+            selected_audit_payload["selected_column_audited_count"]
+        ),
+        "selected_column_entry_audit_rejected_count": int(
+            selected_audit_payload["selected_column_entry_audit_rejected_count"]
+        ),
+        "worker_selected_columns_audit_pass": bool(
+            selected_audit_payload["selected_column_entry_audit_pass"]
+        ),
+        "worker_selected_columns_true_dual_audit_pass": bool(
+            selected_audit_payload["selected_column_true_dual_rc_audit_pass"]
+        ),
+        "worker_selected_columns_branch_audit_pass": bool(
+            selected_audit_payload["selected_column_branch_audit_pass"]
+        ),
+        "worker_selected_columns_cut_audit_pass": bool(
+            selected_audit_payload["selected_column_cut_audit_pass"]
+        ),
+        "worker_selected_columns_addability_audit_pass": bool(
+            selected_audit_payload["selected_column_addability_audit_pass"]
+        ),
         "tail_dual_no_column_can_certify": False,
         "tail_dual_stabilization": tail_dual_payload,
         "diagnostic_rmp_iteration_id": str(getattr(reduced_cost_context, "rmp_iteration_id", "") or ""),
         "diagnostic_dual_fingerprint": str(getattr(reduced_cost_context, "dual_fingerprint", "") or ""),
-        "completion_bound_pruning_enabled": False,
+        "completion_bound_pruning_enabled": bool(completion_payload.get("enabled")),
+        "completion_bound": completion_payload,
+        "completion_bound_evaluated_label_count": int(completion_payload.get("evaluated_label_count") or 0),
+        "completion_bound_pruned_label_count": int(completion_payload.get("pruned_label_count") or 0),
+        "completion_bound_can_certify_no_negative": bool(
+            completion_payload.get("can_certify_no_negative")
+        ),
         "worker_wall_time": round(worker_wall_time, 6),
+        "worker_wall_time_limit_sec": wall_time_limit_sec,
         "time_to_first_negative": round(worker_wall_time, 6) if negative_pairs else None,
         "time_to_first_addable_negative": round(worker_wall_time, 6) if selected else None,
         "candidate_task_set_count": int(pricing.get("candidate_round_count") or 0),
@@ -2075,18 +3021,330 @@ def _run_negative_search_worker(
         "journey_labels": len(priced_columns),
         "candidate_sequences": int(pricing.get("candidate_round_count") or 0),
         "path_option_assignments": int(pricing.get("sortie_attempt_count") or 0),
-        "resource_prune_count": 0,
+        "generated_task_sets": generated_task_sets,
+        "worker_seen_task_sets": worker_seen_task_sets,
+        "worker_candidate_universe_task_sets": pricing.get("worker_candidate_universe_task_sets")
+        or pricing.get("active_seed_task_sets")
+        or [],
+        "worker_generated_column_task_sets": pricing.get("worker_generated_column_task_sets")
+        or worker_seen_task_sets,
+        "worker_generated_column_task_set_count": int(
+            pricing.get("worker_generated_column_task_set_count") or len(worker_seen_task_sets)
+        ),
+        "worker_generated_count": len(generated_task_sets),
+        "worker_candidate_budget": int(max_candidate_sets),
+        "task_bound_pruned_count": task_bound_pruned_count,
+        "resource_bound_pruned_count": resource_bound_pruned_count,
+        "dominance_filtered_count": dominance_filtered_count,
+        "duplicate_filtered_count": duplicate_filtered_count,
+        "pricing_timeout": pricing_timeout,
+        "resource_prune_count": resource_bound_pruned_count,
         "time_window_prune_count": 0,
-        "dominance_prune_count": int((harvest_payload.get("harvest_dominance_filtered_count") or 0)),
-        "bound_prune_count": int(completion_payload.get("pruned_label_count") or 0),
+        "dominance_prune_count": dominance_filtered_count,
+        "bound_prune_count": task_bound_pruned_count,
         "cache_hit_count": int(cache_stats.get("hit_count") or 0),
         "cache_miss_count": int(cache_stats.get("miss_count") or 0),
         "candidate_negative_count": int(harvest_payload.get("candidate_negative_count") or 0),
         "addable_negative_count": int(harvest_payload.get("addable_negative_count") or 0),
         "duplicate_negative_count": int(harvest_payload.get("duplicate_in_current_master_count") or 0),
         "selected_count": int(harvest_payload.get("selected_count") or 0),
+        "selected_count_before_entry_audit": int(
+            harvest_payload.get("selected_count_before_entry_audit")
+            if harvest_payload.get("selected_count_before_entry_audit") is not None
+            else harvest_payload.get("selected_count")
+            or 0
+        ),
+        "entry_audit_rejected_selected_count": int(
+            harvest_payload.get("entry_audit_rejected_selected_count") or 0
+        ),
+        "selected_would_enter_master_count": int(
+            harvest_payload.get("selected_would_enter_master_count") or 0
+        ),
+        "selected_all_would_enter_master": bool(
+            harvest_payload.get("selected_all_would_enter_master")
+        ),
+        "worker_harvest_selected_new_task_set_count": int(
+            harvest_payload.get("harvest_selected_new_task_set_count") or 0
+        ),
+        "worker_harvest_selected_replacement_task_set_count": int(
+            harvest_payload.get("harvest_selected_replacement_task_set_count") or 0
+        ),
+        "worker_harvest_avg_pairwise_jaccard": harvest_payload.get("harvest_avg_pairwise_jaccard"),
+        "worker_harvest_priority": harvest_payload.get("harvest_priority") or "",
+        "worker_harvest_best_true_rc": harvest_payload.get("harvest_best_true_rc"),
+        "worker_harvest_worst_selected_true_rc": harvest_payload.get("harvest_worst_selected_true_rc"),
         "manual_rc_validated_negative_count": len(negative_pairs),
         "seed_task_set_count": len(seed_task_sets),
+        "refinement_seed_count": len(refinement_seed_task_sets),
+        "active_refinement_seed_count": active_refinement_seed_count,
+        "refinement_seed_task_sets": [list(row) for row in refinement_seed_task_sets],
+        "refinement_seed_task_count_counts": _task_set_count_by_size(refinement_seed_task_sets),
+        "refinement_expanded_seed_count": len(refinement_expanded_seed_task_sets),
+        "active_refinement_expanded_seed_count": active_refinement_expanded_seed_count,
+        "refinement_expanded_seed_task_sets": [list(row) for row in refinement_expanded_seed_task_sets],
+        "refinement_expanded_seed_task_count_counts": _task_set_count_by_size(
+            refinement_expanded_seed_task_sets
+        ),
+        "refinement_seed_source": "hidden_negative_audit_catalog",
+        "refinement_seed_source_rows": refinement_seed_source_rows,
+        "refinement_seed_policy": (
+            "hidden_negative_unseen_first_then_superset_then_exact_with_first_expansion_reserve"
+        ),
+        "refinement_seed_budget_limit": int(max_candidate_sets),
+        "refinement_seed_budget_reserves_first_expansion": True,
+        "refinement_seed_source_match_counts": _catalog_refinement_source_match_counts(seed_catalog),
+        "refinement_seed_catalog_payload": seed_catalog.to_payload(),
+        "refinement_seed_mutates_certificate": False,
+        **large_direct_payload,
+        **physical_seed_payload,
+        "labeling_seed_task_set_count": int(pricing.get("merged_seed_task_set_count") or len(seed_task_sets)),
+        "ng_seed_task_set_count": int(pricing.get("ng_seed_task_set_count") or 0),
+        "resource_extension_seed_enabled": bool(pricing.get("resource_extension_seed_enabled")),
+        "resource_extension_seed_task_set_count": int(
+            pricing.get("resource_extension_seed_task_set_count") or 0
+        ),
+        "active_resource_extension_seed_task_set_count": int(
+            pricing.get("active_resource_extension_seed_task_set_count") or 0
+        ),
+        "resource_extension_seed_task_set_count_by_size": pricing.get(
+            "resource_extension_seed_task_set_count_by_size"
+        )
+        or {},
+        "resource_extension_label_column_worker_enabled": bool(
+            pricing.get("resource_extension_label_column_worker_enabled")
+        ),
+        "resource_extension_label_column_count": int(
+            pricing.get("resource_extension_label_column_count") or 0
+        ),
+        "resource_extension_label_column_task_set_count": int(
+            pricing.get("resource_extension_label_column_task_set_count") or 0
+        ),
+        "resource_extension_label_column_task_sets": pricing.get(
+            "resource_extension_label_column_task_sets"
+        )
+        or [],
+        "resource_extension_label_column_policy": pricing.get(
+            "resource_extension_label_column_policy"
+        )
+        or "",
+        "resource_extension_label_columns_can_certify_no_negative": bool(
+            pricing.get("resource_extension_label_columns_can_certify_no_negative")
+        ),
+        "resource_extension_label_stats": pricing.get("resource_extension_label_stats") or {},
+        "resource_extension_label_attempt_count": int(
+            pricing.get("resource_extension_label_attempt_count") or 0
+        ),
+        "resource_extension_label_dominance_rejected_count": int(
+            pricing.get("resource_extension_label_dominance_rejected_count") or 0
+        ),
+        "resource_extension_label_capacity_truncated_count": int(
+            pricing.get("resource_extension_label_capacity_truncated_count") or 0
+        ),
+        "resource_extension_label_path_variant_candidate_count": int(
+            pricing.get("resource_extension_label_path_variant_candidate_count") or 0
+        ),
+        "resource_extension_label_path_variant_duplicate_count": int(
+            pricing.get("resource_extension_label_path_variant_duplicate_count") or 0
+        ),
+        "resource_extension_label_path_variant_feasible_count": int(
+            pricing.get("resource_extension_label_path_variant_feasible_count") or 0
+        ),
+        "resource_extension_label_path_variant_infeasible_count": int(
+            pricing.get("resource_extension_label_path_variant_infeasible_count") or 0
+        ),
+        "resource_extension_proxy_profiles": pricing.get("resource_extension_proxy_profiles") or [],
+        "resource_extension_proxy_profile_count": int(pricing.get("resource_extension_proxy_profile_count") or 0),
+        "active_seed_task_set_source_counts": pricing.get("active_seed_task_set_source_counts") or {},
+        "active_seed_task_set_source_task_count_counts": pricing.get(
+            "active_seed_task_set_source_task_count_counts"
+        )
+        or {},
+        "active_seed_task_set_sources": pricing.get("active_seed_task_set_sources") or [],
+        "active_seed_selection_policy": pricing.get("active_seed_selection_policy") or "",
+        "protected_refinement_seed_task_set_count": int(
+            pricing.get("protected_refinement_seed_task_set_count") or 0
+        ),
+        "active_protected_refinement_seed_task_set_count": int(
+            pricing.get("active_protected_refinement_seed_task_set_count") or 0
+        ),
+        "protected_refinement_seed_task_set_count_by_size": pricing.get(
+            "protected_refinement_seed_task_set_count_by_size"
+        )
+        or {},
+        "protected_refinement_seed_budget_truncated_count": int(
+            pricing.get("protected_refinement_seed_budget_truncated_count") or 0
+        ),
+        "protected_support_continuation_seed_budget": int(
+            pricing.get("protected_support_continuation_seed_budget") or 0
+        ),
+        "protected_support_continuation_seed_task_set_count": int(
+            pricing.get("protected_support_continuation_seed_task_set_count") or 0
+        ),
+        "active_protected_support_continuation_seed_task_set_count": int(
+            pricing.get("active_protected_support_continuation_seed_task_set_count") or 0
+        ),
+        "protected_support_continuation_seed_task_set_count_by_size": pricing.get(
+            "protected_support_continuation_seed_task_set_count_by_size"
+        )
+        or {},
+        "protected_support_continuation_seed_budget_truncated_count": int(
+            pricing.get("protected_support_continuation_seed_budget_truncated_count") or 0
+        ),
+        "active_seed_task_set_count_by_size": pricing.get("active_seed_task_set_count_by_size") or {},
+        "branch_seed_filter_enabled": bool(pricing.get("branch_seed_filter_enabled")),
+        "branch_seed_filtered_input_count": int(pricing.get("branch_seed_filtered_input_count") or 0),
+        "branch_seed_filtered_ng_count": int(pricing.get("branch_seed_filtered_ng_count") or 0),
+        "branch_seed_filtered_resource_extension_count": int(
+            pricing.get("branch_seed_filtered_resource_extension_count") or 0
+        ),
+        "priced_candidate_task_set_source_counts": pricing.get(
+            "priced_candidate_task_set_source_counts"
+        )
+        or {},
+        "priced_candidate_task_set_source_task_count_counts": pricing.get(
+            "priced_candidate_task_set_source_task_count_counts"
+        )
+        or {},
+        "priced_candidate_task_set_sources": pricing.get("priced_candidate_task_set_sources") or [],
+        "direct_candidate_task_set_count": int(pricing.get("direct_candidate_task_set_count") or 0),
+        "candidate_seed_source_precedence": pricing.get("candidate_seed_source_precedence") or [],
+        "input_seed_task_set_count": int(pricing.get("seed_task_set_count") or len(seed_task_sets)),
+        "merged_seed_task_set_count": int(pricing.get("merged_seed_task_set_count") or len(seed_task_sets)),
+        "active_seed_task_set_count": int(pricing.get("active_seed_task_set_count") or 0),
+        "active_ng_seed_task_set_count": int(pricing.get("active_ng_seed_task_set_count") or 0),
+        "active_input_seed_task_set_count": int(pricing.get("active_input_seed_task_set_count") or 0),
+        "ng_neighborhood_size": int(pricing.get("ng_neighborhood_size") or 0),
+        "ng_neighborhood_sizes": pricing.get("ng_neighborhood_sizes") or [],
+        "ng_neighborhood_stage_count": int(pricing.get("ng_neighborhood_stage_count") or 0),
+        "ng_seed_task_set_count_by_size": pricing.get("ng_seed_task_set_count_by_size") or {},
+        "true_dual_audited_column_count": int(pricing.get("true_audited_column_count") or len(priced_columns)),
+        "true_dual_selected_negative_count": int(pricing.get("true_selected_negative_count") or 0),
+        "candidate_search_best_reduced_cost": _payload_or_fallback(
+            pricing,
+            "candidate_search_best_reduced_cost",
+            candidate_audit_payload,
+        ),
+        "candidate_search_negative_column_count": int(
+            _payload_or_fallback(
+                pricing,
+                "candidate_search_negative_column_count",
+                candidate_audit_payload,
+            )
+            or 0
+        ),
+        "candidate_search_negative_true_negative_count": int(
+            _payload_or_fallback(
+                pricing,
+                "candidate_search_negative_true_negative_count",
+                candidate_audit_payload,
+            )
+            or 0
+        ),
+        "candidate_search_negative_true_nonnegative_count": int(
+            _payload_or_fallback(
+                pricing,
+                "candidate_search_negative_true_nonnegative_count",
+                candidate_audit_payload,
+            )
+            or 0
+        ),
+        "true_negative_candidate_search_nonnegative_count": int(
+            _payload_or_fallback(
+                pricing,
+                "true_negative_candidate_search_nonnegative_count",
+                candidate_audit_payload,
+            )
+            or 0
+        ),
+        "candidate_search_false_positive_rate": _payload_or_fallback(
+            pricing,
+            "candidate_search_false_positive_rate",
+            candidate_audit_payload,
+        ),
+        "true_negative_candidate_search_miss_rate": _payload_or_fallback(
+            pricing,
+            "true_negative_candidate_search_miss_rate",
+            candidate_audit_payload,
+        ),
+        "candidate_search_false_positive_rows": _payload_or_fallback(
+            pricing,
+            "candidate_search_false_positive_rows",
+            candidate_audit_payload,
+        )
+        or [],
+        "true_negative_candidate_search_miss_rows": _payload_or_fallback(
+            pricing,
+            "true_negative_candidate_search_miss_rows",
+            candidate_audit_payload,
+        )
+        or [],
+        "candidate_search_dual_matches_true_dual": bool(candidate_search_dual_matches_true_dual),
+        "candidate_search_rc_recomputed_under_true_dual": bool(
+            candidate_search_rc_recomputed_under_true_dual
+        ),
+        "worker_true_dual_candidate_audit_pass": bool(worker_true_dual_candidate_audit_pass),
+        "labeling_harvest_candidate_negative_count": int(pricing.get("harvest_candidate_negative_count") or 0),
+        "labeling_harvest_candidate_new_task_set_count": int(
+            pricing.get("harvest_candidate_new_task_set_count") or 0
+        ),
+        "labeling_harvest_candidate_replacement_task_set_count": int(
+            pricing.get("harvest_candidate_replacement_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_count": int(pricing.get("harvest_selected_count") or 0),
+        "labeling_harvest_selected_new_task_set_count": int(
+            pricing.get("harvest_selected_new_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_replacement_task_set_count": int(
+            pricing.get("harvest_selected_replacement_task_set_count") or 0
+        ),
+        "labeling_harvest_candidate_support_changing_count": int(
+            pricing.get("harvest_candidate_support_changing_count") or 0
+        ),
+        "labeling_harvest_candidate_strong_replacement_count": int(
+            pricing.get("harvest_candidate_strong_replacement_count") or 0
+        ),
+        "labeling_harvest_candidate_weak_replacement_count": int(
+            pricing.get("harvest_candidate_weak_replacement_count") or 0
+        ),
+        "labeling_harvest_selected_support_changing_count": int(
+            pricing.get("harvest_selected_support_changing_count") or 0
+        ),
+        "labeling_harvest_selected_strong_replacement_count": int(
+            pricing.get("harvest_selected_strong_replacement_count") or 0
+        ),
+        "labeling_harvest_selected_weak_replacement_count": int(
+            pricing.get("harvest_selected_weak_replacement_count") or 0
+        ),
+        "labeling_harvest_selected_distinct_task_set_count": int(
+            pricing.get("harvest_selected_distinct_task_set_count") or 0
+        ),
+        "labeling_harvest_selected_duplicate_task_set_count": int(
+            pricing.get("harvest_selected_duplicate_task_set_count") or 0
+        ),
+        "labeling_harvest_existing_master_task_set_count": int(
+            pricing.get("harvest_existing_master_task_set_count") or 0
+        ),
+        "labeling_harvest_support_task_set_count": int(
+            pricing.get("harvest_support_task_set_count") or 0
+        ),
+        "labeling_harvest_support_aware_enabled": bool(
+            pricing.get("harvest_support_aware_enabled")
+        ),
+        "labeling_harvest_weak_replacement_cap": int(
+            pricing.get("harvest_weak_replacement_cap") or 0
+        ),
+        "labeling_harvest_selection_policy": pricing.get("harvest_selection_policy") or "",
+        "labeling_harvest_avg_pairwise_jaccard": pricing.get("harvest_avg_pairwise_jaccard"),
+        "labeling_harvest_max_pairwise_jaccard": pricing.get("harvest_max_pairwise_jaccard"),
+        "labeling_harvest_candidate_seed_source_counts": pricing.get(
+            "harvest_candidate_seed_source_counts"
+        )
+        or {},
+        "labeling_harvest_selected_seed_source_counts": pricing.get(
+            "harvest_selected_seed_source_counts"
+        )
+        or {},
+        "labeling_no_column_uncertified": bool(pricing.get("no_column_uncertified")),
         "worker_task_cap": int(worker_task_cap),
         "pricing_payload": pricing,
         "harvest_payload": harvest_payload,
@@ -2193,16 +3451,316 @@ def _manual_negative_pairs(
     duals: JourneyDuals,
     negative_eps: float,
     branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
 ) -> tuple[tuple[float, JourneyColumn], ...]:
     pairs: list[tuple[float, JourneyColumn]] = []
     threshold = -abs(float(negative_eps))
+    context = cut_context or CutContext()
     for column in columns:
         if not journey_satisfies_branch_context(column, branch_context):
             continue
-        rc = manual_journey_reduced_cost(column, duals)
+        rc = manual_journey_reduced_cost(
+            column,
+            duals,
+            cut_coefficients=context.coefficients_for(column),
+        )
         if rc < threshold:
             pairs.append((rc, column))
     return tuple(pairs)
+
+
+def _payload_or_fallback(primary: Mapping[str, object], key: str, fallback: Mapping[str, object]) -> object:
+    value = primary.get(key)
+    return fallback.get(key) if value is None else value
+
+
+def _journey_duals_match(left: JourneyDuals, right: JourneyDuals, *, eps: float = 1.0e-9) -> bool:
+    if abs(float(left.fleet_limit) - float(right.fleet_limit)) > eps:
+        return False
+    cover_keys = {str(key) for key in left.cover} | {str(key) for key in right.cover}
+    for key in cover_keys:
+        if abs(float(left.cover.get(key, 0.0)) - float(right.cover.get(key, 0.0))) > eps:
+            return False
+    left_cuts = left.cuts or {}
+    right_cuts = right.cuts or {}
+    cut_keys = {str(key) for key in left_cuts} | {str(key) for key in right_cuts}
+    for key in cut_keys:
+        if abs(float(left_cuts.get(key, 0.0)) - float(right_cuts.get(key, 0.0))) > eps:
+            return False
+    return True
+
+
+def _candidate_search_true_dual_audit_payload(
+    columns: Iterable[JourneyColumn],
+    *,
+    search_duals: JourneyDuals,
+    true_duals: JourneyDuals,
+    negative_eps: float,
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+) -> dict:
+    threshold = -abs(float(negative_eps))
+    context = cut_context or CutContext()
+    best_search_rc: float | None = None
+    search_negative_count = 0
+    search_negative_true_negative_count = 0
+    search_negative_true_nonnegative_count = 0
+    true_negative_count = 0
+    true_negative_search_nonnegative_count = 0
+    false_positive_rows: list[dict] = []
+    miss_rows: list[dict] = []
+    for column in columns:
+        if not journey_satisfies_branch_context(column, branch_context):
+            continue
+        cut_coefficients = context.coefficients_for(column)
+        search_rc = manual_journey_reduced_cost(
+            column,
+            search_duals,
+            cut_coefficients=cut_coefficients,
+        )
+        true_rc = manual_journey_reduced_cost(
+            column,
+            true_duals,
+            cut_coefficients=cut_coefficients,
+        )
+        best_search_rc = (
+            float(search_rc)
+            if best_search_rc is None
+            else min(float(best_search_rc), float(search_rc))
+        )
+        search_negative = float(search_rc) < threshold
+        true_negative = float(true_rc) < threshold
+        if search_negative:
+            search_negative_count += 1
+            if true_negative:
+                search_negative_true_negative_count += 1
+            else:
+                search_negative_true_nonnegative_count += 1
+                if len(false_positive_rows) < 20:
+                    false_positive_rows.append(
+                        {
+                            "task_set": sorted(str(task_id) for task_id in column.task_set),
+                            "candidate_search_rc": round(float(search_rc), 9),
+                            "true_rc": round(float(true_rc), 9),
+                        }
+                    )
+        if true_negative:
+            true_negative_count += 1
+            if not search_negative:
+                true_negative_search_nonnegative_count += 1
+                if len(miss_rows) < 20:
+                    miss_rows.append(
+                        {
+                            "task_set": sorted(str(task_id) for task_id in column.task_set),
+                            "candidate_search_rc": round(float(search_rc), 9),
+                            "true_rc": round(float(true_rc), 9),
+                        }
+                    )
+    return {
+        "candidate_search_best_reduced_cost": (
+            None if best_search_rc is None else round(float(best_search_rc), 9)
+        ),
+        "candidate_search_negative_column_count": int(search_negative_count),
+        "candidate_search_negative_true_negative_count": int(search_negative_true_negative_count),
+        "candidate_search_negative_true_nonnegative_count": int(
+            search_negative_true_nonnegative_count
+        ),
+        "true_negative_candidate_search_nonnegative_count": int(
+            true_negative_search_nonnegative_count
+        ),
+        "candidate_search_false_positive_rate": (
+            0.0
+            if search_negative_count == 0
+            else round(float(search_negative_true_nonnegative_count) / float(search_negative_count), 9)
+        ),
+        "true_negative_candidate_search_miss_rate": (
+            0.0
+            if true_negative_count == 0
+            else round(float(true_negative_search_nonnegative_count) / float(true_negative_count), 9)
+        ),
+        "candidate_search_false_positive_rows": false_positive_rows,
+        "true_negative_candidate_search_miss_rows": miss_rows,
+    }
+
+
+def _catalog_physical_seed_columns(
+    data: LunarIceData,
+    *,
+    seed_catalog: WorkerSeedCatalog,
+    branch_context: BranchContext | None = None,
+    max_columns: int,
+) -> tuple[tuple[JourneyColumn, ...], dict]:
+    """Rebuild worker-only candidate columns from prior hidden-negative paths."""
+
+    max_columns = max(0, int(max_columns))
+    valid_tasks = {str(task_id) for task_id in data.task_ids}
+    active_branch = branch_context or BranchContext()
+    rows = sorted(
+        enumerate(seed_catalog.rows),
+        key=lambda item: _catalog_refinement_sort_key(item[1], item[0]),
+    )
+    columns: list[JourneyColumn] = []
+    invalid_count = 0
+    infeasible_count = 0
+    branch_filtered_count = 0
+    duplicate_count = 0
+    seen_signatures = set()
+    seen_task_sets: set[tuple[str, ...]] = set()
+
+    for _index, row in rows:
+        if len(columns) >= max_columns:
+            break
+        raw_sequences = row.get("ordered_task_sequences") or row.get("hidden_sequence") or tuple()
+        raw_path_signature = row.get("path_signature") or row.get("hidden_path_signature") or tuple()
+        sequences = tuple(
+            tuple(str(task_id) for task_id in sequence)
+            for sequence in raw_sequences
+        )
+        path_signature = tuple(
+            tuple(str(path_type) for path_type in path_types)
+            for path_types in raw_path_signature
+        )
+        if not sequences or len(sequences) != len(path_signature):
+            invalid_count += 1
+            continue
+
+        task_seen: set[str] = set()
+        sorties = []
+        invalid_row = False
+        infeasible_row = False
+        for sequence, path_types in zip(sequences, path_signature):
+            if (
+                not sequence
+                or len(path_types) != len(sequence) + 1
+                or any(task_id not in valid_tasks for task_id in sequence)
+                or bool(task_seen.intersection(sequence))
+            ):
+                invalid_row = True
+                break
+            task_seen.update(sequence)
+            try:
+                sortie = build_timed_sortie(
+                    data,
+                    sequence,
+                    path_types,
+                    start_time=0.0,
+                )
+            except (KeyError, ValueError):
+                invalid_row = True
+                break
+            if not sortie.feasible:
+                infeasible_row = True
+                break
+            sorties.append(sortie)
+
+        if invalid_row:
+            invalid_count += 1
+            continue
+        if infeasible_row or not sorties:
+            infeasible_count += 1
+            continue
+        try:
+            column = build_journey_column(data, tuple(sorties))
+        except ValueError:
+            invalid_count += 1
+            continue
+        if not journey_satisfies_branch_context(column, active_branch):
+            branch_filtered_count += 1
+            continue
+        signature = column_signature_from_journey(column)
+        if signature in seen_signatures:
+            duplicate_count += 1
+            continue
+        seen_signatures.add(signature)
+        task_set = tuple(sorted(str(task_id) for task_id in column.task_set))
+        seen_task_sets.add(task_set)
+        columns.append(column)
+
+    payload = {
+        "hidden_negative_physical_seed_enabled": True,
+        "hidden_negative_physical_seed_catalog_row_count": len(seed_catalog.rows),
+        "hidden_negative_physical_seed_column_count": len(columns),
+        "hidden_negative_physical_seed_invalid_count": invalid_count,
+        "hidden_negative_physical_seed_infeasible_count": infeasible_count,
+        "hidden_negative_physical_seed_branch_filtered_count": branch_filtered_count,
+        "hidden_negative_physical_seed_duplicate_count": duplicate_count,
+        "hidden_negative_physical_seed_task_sets": [list(row) for row in sorted(seen_task_sets)],
+        "hidden_negative_physical_seed_start_time_assumption": 0.0,
+        "hidden_negative_physical_seed_mutates_certificate": False,
+        "hidden_negative_physical_seed_certificate_role": "worker_candidate_search_only",
+        "hidden_negative_physical_seed_can_certify_no_negative": False,
+    }
+    return tuple(columns), payload
+
+
+def _worker_generated_task_sets(pricing_payload: dict) -> list[list[str]]:
+    rows: list[tuple[str, ...]] = []
+    actual_keys = (
+        "worker_generated_column_task_sets",
+        "worker_seen_task_sets",
+        "seen_task_sets",
+    )
+    for key in actual_keys:
+        raw_rows = pricing_payload.get(key) or ()
+        for raw in raw_rows:
+            normalized = _normalize_task_set_row(raw)
+            if normalized:
+                rows.append(normalized)
+    if rows:
+        return [list(row) for row in _dedupe_task_set_rows(rows)]
+
+    # Backward-compatible fallback for older payloads that did not separate
+    # actual generated column task sets from candidate universes.
+    for key in ("generated_task_sets", "active_seed_task_sets", "candidate_sets"):
+        raw_rows = pricing_payload.get(key) or ()
+        for raw in raw_rows:
+            normalized = _normalize_task_set_row(raw)
+            if normalized:
+                rows.append(normalized)
+    for summary in pricing_payload.get("candidate_summaries") or ():
+        if isinstance(summary, dict):
+            normalized = _normalize_task_set_row(summary.get("candidate_task_ids") or ())
+            if normalized:
+                rows.append(normalized)
+    return [list(row) for row in _dedupe_task_set_rows(rows)]
+
+
+def _worker_seen_task_sets(pricing_payload: dict, priced_columns: Iterable[JourneyColumn]) -> list[list[str]]:
+    rows = [tuple(row) for row in _worker_generated_task_sets(pricing_payload)]
+    for column in priced_columns:
+        normalized = _normalize_task_set_row(column.task_set)
+        if normalized:
+            rows.append(normalized)
+    return [list(row) for row in _dedupe_task_set_rows(rows)]
+
+
+def _normalize_task_set_row(raw: object) -> tuple[str, ...]:
+    if raw is None:
+        return tuple()
+    try:
+        return tuple(sorted({str(task_id) for task_id in raw if str(task_id)}))
+    except TypeError:
+        return tuple()
+
+
+def _dedupe_task_set_rows(rows: Iterable[Iterable[str]]) -> tuple[tuple[str, ...], ...]:
+    seen: set[tuple[str, ...]] = set()
+    result: list[tuple[str, ...]] = []
+    for row in rows:
+        normalized = _normalize_task_set_row(row)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return tuple(result)
+
+
+def _task_set_count_by_size(rows: Iterable[Iterable[str]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in _dedupe_task_set_rows(rows):
+        key = str(len(row))
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _duals_from_reduced_cost_context(context) -> JourneyDuals:
@@ -2211,6 +3769,27 @@ def _duals_from_reduced_cost_context(context) -> JourneyDuals:
         fleet_limit=float(getattr(context, "fleet_dual", 0.0)),
         cuts={str(key): float(value) for key, value in getattr(context, "cut_duals", {}).items()},
     )
+
+
+def _dual_context_payload(context) -> dict:
+    """Serialize current true RMP duals for downstream exact proof probes."""
+
+    if context is None:
+        return {}
+    return {
+        "dual_source": "master.reduced_cost_context",
+        "dual_fingerprint": str(getattr(context, "dual_fingerprint", "") or ""),
+        "rmp_iteration_id": str(getattr(context, "rmp_iteration_id", "") or ""),
+        "fleet_dual": float(getattr(context, "fleet_dual", 0.0)),
+        "task_duals": {
+            str(key): float(value)
+            for key, value in getattr(context, "task_duals", {}).items()
+        },
+        "cut_duals": {
+            str(key): float(value)
+            for key, value in getattr(context, "cut_duals", {}).items()
+        },
+    }
 
 
 def _tail_dual_history_with_current(
@@ -2273,7 +3852,384 @@ def _rmp_dual_diagnostic_payload(
 def _worker_task_cap(data: LunarIceData, max_direct_tasks: int) -> int:
     if len(data.task_ids) <= 5:
         return min(len(data.task_ids), int(max_direct_tasks))
-    return max(1, min(int(max_direct_tasks), int(data.max_tasks_per_trip), 3, len(data.task_ids) - 1))
+    configured_cap = _env_int(
+        LABELING_WORKER_MAX_TASK_CAP_ENV,
+        default=3,
+        minimum=1,
+        maximum=max(1, int(data.max_tasks_per_trip)),
+    )
+    return max(
+        1,
+        min(
+            int(max_direct_tasks),
+            int(data.max_tasks_per_trip),
+            int(configured_cap),
+            len(data.task_ids) - 1,
+        ),
+    )
+
+
+def _run_large_task_direct_worker(
+    data: LunarIceData,
+    *,
+    worker_duals: JourneyDuals,
+    true_duals: JourneyDuals,
+    master_columns: tuple[JourneyColumn, ...],
+    b0_direct,
+    support_task_sets: tuple[tuple[str, ...], ...],
+    worker_task_cap: int,
+    max_direct_tasks: int,
+    max_candidate_sets: int,
+    negative_eps: float,
+    branch_context: BranchContext | None,
+    cut_context: CutContext,
+    deadline: float | None,
+) -> tuple[dict, tuple[JourneyColumn, ...]]:
+    enabled = _env_bool(LARGE_TASK_DIRECT_WORKER_ENV, default=False)
+    large_cap = _env_int(
+        LARGE_TASK_DIRECT_WORKER_MAX_TASKS_ENV,
+        default=min(12, int(max_direct_tasks), int(data.max_tasks_per_trip)),
+        minimum=1,
+        maximum=max(1, min(int(max_direct_tasks), int(data.max_tasks_per_trip), len(data.task_ids))),
+    )
+    candidate_cap = _env_int(
+        LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS_ENV,
+        default=160,
+        minimum=0,
+        maximum=10000,
+    )
+    time_cap = _env_float(
+        LARGE_TASK_DIRECT_WORKER_TIME_CAP_SEC_ENV,
+        default=0.0,
+        minimum=0.0,
+        maximum=3600.0,
+    )
+    neighborhood_width = _env_int(
+        LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH_ENV,
+        default=4,
+        minimum=1,
+        maximum=100,
+    )
+    min_task_count = max(1, int(worker_task_cap) + 1)
+    base_payload = {
+        "large_task_direct_worker_enabled": bool(enabled),
+        "large_task_direct_worker_can_certify_no_negative": False,
+        "large_task_direct_worker_no_column_can_certify": False,
+        "large_task_direct_worker_mutates_certificate": False,
+        "large_task_direct_worker_pricing_proof_kind": "DIRECT_LARGE_TASK_WORKER_UNCERTIFIED",
+        "large_task_direct_worker_min_tasks": int(min_task_count),
+        "large_task_direct_worker_max_tasks": int(large_cap),
+        "large_task_direct_worker_max_candidate_sets": int(candidate_cap),
+        "large_task_direct_worker_time_cap_sec": float(time_cap),
+        "large_task_direct_worker_neighborhood_width": int(neighborhood_width),
+    }
+    if not enabled:
+        return {**base_payload, "large_task_direct_worker_skip_reason": "disabled"}, tuple()
+    if large_cap < min_task_count:
+        return {**base_payload, "large_task_direct_worker_skip_reason": "cap_not_above_labeling_worker"}, tuple()
+    remaining = None if deadline is None else max(0.0, float(deadline) - perf_counter())
+    if remaining is not None and remaining <= 1.0:
+        return {**base_payload, "large_task_direct_worker_skip_reason": "worker_deadline_exhausted"}, tuple()
+    if time_cap <= 0.0 or candidate_cap <= 0:
+        return {**base_payload, "large_task_direct_worker_skip_reason": "nonpositive_budget"}, tuple()
+
+    seeds, source_rows = _large_task_direct_worker_seed_task_sets(
+        data,
+        duals=worker_duals,
+        master_columns=master_columns,
+        b0_direct=b0_direct,
+        support_task_sets=support_task_sets,
+        min_task_count=min_task_count,
+        max_task_count=large_cap,
+        max_seed_sets=candidate_cap,
+        neighborhood_width=neighborhood_width,
+    )
+    if not seeds:
+        return {**base_payload, "large_task_direct_worker_skip_reason": "no_seed_task_sets"}, tuple()
+    run_time_cap = min(float(time_cap), remaining) if remaining is not None else float(time_cap)
+    start = perf_counter()
+    pricing, columns = price_direct_journey_columns_incremental(
+        data,
+        worker_duals,
+        negative_eps=negative_eps,
+        max_direct_tasks=large_cap,
+        seed_task_sets=seeds,
+        max_candidate_sets=len(seeds),
+        wall_time_limit_sec=run_time_cap,
+        stop_at_first_negative=False,
+        completion_bound_enabled=True,
+        branch_context=branch_context,
+        cut_context=cut_context,
+    )
+    true_negative_count = 0
+    for column in columns:
+        if (
+            manual_journey_reduced_cost(
+                column,
+                true_duals,
+                cut_coefficients=cut_context.coefficients_for(column),
+            )
+            < -abs(float(negative_eps))
+        ):
+            true_negative_count += 1
+    payload = {
+        **base_payload,
+        "large_task_direct_worker_skip_reason": "",
+        "large_task_direct_worker_wall_time": round(perf_counter() - start, 6),
+        "large_task_direct_worker_dual_source": "tail_dual_stabilized_worker_dual_or_true_worker_dual",
+        "large_task_direct_worker_official_dual_source": "current_true_rmp_dual_reaudit_required",
+        "large_task_direct_worker_seed_count": len(seeds),
+        "large_task_direct_worker_seed_task_count_counts": _task_set_count_by_size(seeds),
+        "large_task_direct_worker_seed_task_sets": [list(row) for row in seeds],
+        "large_task_direct_worker_seed_source_rows": source_rows,
+        "large_task_direct_worker_status": pricing.get("status") or "",
+        "large_task_direct_worker_pricing_state": pricing.get("pricing_state") or "",
+        "large_task_direct_worker_candidate_round_count": int(pricing.get("candidate_round_count") or 0),
+        "large_task_direct_worker_candidate_round_limit": int(pricing.get("candidate_round_limit") or len(seeds)),
+        "large_task_direct_worker_sortie_template_count": int(
+            pricing.get("feasible_sortie_template_count") or 0
+        ),
+        "large_task_direct_worker_pareto_label_count": int(pricing.get("pareto_label_count") or 0),
+        "large_task_direct_worker_column_count": len(columns),
+        "large_task_direct_worker_true_negative_count": int(true_negative_count),
+        "large_task_direct_worker_candidate_search_best_reduced_cost": pricing.get("best_reduced_cost"),
+        "large_task_direct_worker_candidate_search_negative_count": int(
+            pricing.get("negative_column_count") or 0
+        ),
+        "large_task_direct_worker_timeout_stage": pricing.get("timeout_stage") or "",
+        "large_task_direct_worker_pricing_timeout": str(pricing.get("status") or "").endswith("TIME_LIMIT"),
+    }
+    return payload, tuple(columns)
+
+
+def _large_task_direct_worker_seed_task_sets(
+    data: LunarIceData,
+    *,
+    duals: JourneyDuals,
+    master_columns: tuple[JourneyColumn, ...],
+    b0_direct,
+    support_task_sets: Iterable[Iterable[str]],
+    min_task_count: int,
+    max_task_count: int,
+    max_seed_sets: int,
+    neighborhood_width: int,
+) -> tuple[tuple[tuple[str, ...], ...], list[dict]]:
+    valid_tasks = {str(task_id) for task_id in data.task_ids}
+    if not valid_tasks or int(max_seed_sets) <= 0:
+        return tuple(), []
+    min_size = max(1, int(min_task_count))
+    max_size = max(min_size, min(int(max_task_count), int(data.max_tasks_per_trip), len(valid_tasks)))
+    width = max(1, int(neighborhood_width))
+    scored: dict[tuple[str, ...], tuple[tuple, set[str]]] = {}
+
+    def add(row: Iterable[str], *, source: str, priority: int) -> None:
+        normalized = tuple(sorted({str(task_id) for task_id in row if str(task_id) in valid_tasks}))
+        if len(normalized) < min_size or len(normalized) > max_size:
+            return
+        score = (
+            int(priority),
+            -sum(float(duals.cover.get(task_id, 0.0)) for task_id in normalized),
+            -len(normalized),
+            _task_set_spread(data, normalized),
+            normalized,
+        )
+        old = scored.get(normalized)
+        if old is None or score < old[0]:
+            scored[normalized] = (score, {str(source)})
+        else:
+            old[1].add(str(source))
+
+    def add_projected(row: Iterable[str], *, source: str, priority: int) -> None:
+        normalized = tuple(sorted({str(task_id) for task_id in row if str(task_id) in valid_tasks}))
+        if not normalized:
+            return
+        if len(normalized) <= max_size:
+            add(normalized, source=source, priority=priority)
+            return
+        for projection in _project_large_task_set_for_direct_worker(
+            data,
+            duals,
+            normalized,
+            max_task_count=max_size,
+            neighborhood_width=width,
+        ):
+            add(projection, source=f"{source}_projection", priority=priority)
+
+    ranked_tasks = tuple(
+        task_id
+        for task_id in sorted(
+            valid_tasks,
+            key=lambda task_id: (
+                -float(duals.cover.get(task_id, 0.0)),
+                -float(data.tasks[task_id].science_weight),
+                task_id,
+            ),
+        )
+    )
+    support_rows = _dedupe_task_set_rows(
+        tuple(str(task_id) for task_id in row)
+        for row in (
+            *tuple(column.task_set for column in master_columns),
+            *tuple(getattr(column, "task_set", tuple()) for column in getattr(b0_direct, "journeys", tuple()) or tuple()),
+            *tuple(support_task_sets or tuple()),
+        )
+    )
+    for row in support_rows:
+        add_projected(row, source="large_task_support", priority=0)
+        _add_large_task_neighbors(
+            data,
+            duals,
+            row,
+            add=add,
+            source="large_task_support_neighborhood",
+            priority=1,
+            min_task_count=min_size,
+            max_task_count=max_size,
+            neighborhood_width=width,
+        )
+
+    for size in range(min_size, max_size + 1):
+        add(ranked_tasks[:size], source="large_task_dual_prefix", priority=2)
+    for start in range(0, len(ranked_tasks), max(1, max_size)):
+        for size in range(min_size, max_size + 1):
+            chunk = ranked_tasks[start : start + size]
+            if len(chunk) == size:
+                add(chunk, source="large_task_dual_chunk", priority=3)
+
+    anchor_count = min(len(ranked_tasks), max(width * 2, max_size))
+    for anchor in ranked_tasks[:anchor_count]:
+        nearest = tuple(
+            task_id
+            for task_id in sorted(
+                (task_id for task_id in valid_tasks if task_id != anchor),
+                key=lambda task_id: (
+                    _task_xy_distance_for_solver(data, anchor, task_id),
+                    -float(duals.cover.get(task_id, 0.0)),
+                    -float(data.tasks[task_id].science_weight),
+                    task_id,
+                ),
+            )
+        )
+        for size in range(min_size, max_size + 1):
+            add((anchor, *nearest[: size - 1]), source="large_task_spatial_cluster", priority=4)
+
+    ordered = tuple(row for row, _value in sorted(scored.items(), key=lambda item: item[1][0]))
+    selected = ordered[: max(0, int(max_seed_sets))]
+    source_rows = [
+        {"task_set": list(row), "sources": sorted(scored[row][1])}
+        for row in selected
+    ]
+    return selected, source_rows
+
+
+def _add_large_task_neighbors(
+    data: LunarIceData,
+    duals: JourneyDuals,
+    base: Iterable[str],
+    *,
+    add,
+    source: str,
+    priority: int,
+    min_task_count: int,
+    max_task_count: int,
+    neighborhood_width: int,
+) -> None:
+    base_tuple = _normalize_task_set_row(base)
+    if not base_tuple:
+        return
+    base_set = set(base_tuple)
+    inside_by_low_dual = sorted(
+        base_tuple,
+        key=lambda task_id: (
+            float(duals.cover.get(task_id, 0.0)),
+            float(data.tasks[task_id].science_weight),
+            task_id,
+        ),
+    )
+    outside = tuple(
+        task_id
+        for task_id in sorted(
+            (str(task_id) for task_id in data.task_ids if str(task_id) not in base_set),
+            key=lambda task_id: (
+                _min_distance_to_task_set(data, task_id, base_set),
+                -float(duals.cover.get(task_id, 0.0)),
+                -float(data.tasks[task_id].science_weight),
+                task_id,
+            ),
+        )
+    )[: max(1, int(neighborhood_width))]
+    if len(base_tuple) > int(min_task_count):
+        for removed in inside_by_low_dual[: max(1, int(neighborhood_width))]:
+            add((task_id for task_id in base_tuple if task_id != removed), source=source, priority=priority)
+    if len(base_tuple) < int(max_task_count):
+        for task_id in outside:
+            add((*base_tuple, task_id), source=source, priority=priority)
+    for removed in inside_by_low_dual[: max(1, int(neighborhood_width))]:
+        reduced = tuple(task_id for task_id in base_tuple if task_id != removed)
+        for task_id in outside:
+            add((*reduced, task_id), source=source, priority=priority)
+
+
+def _project_large_task_set_for_direct_worker(
+    data: LunarIceData,
+    duals: JourneyDuals,
+    task_set: Iterable[str],
+    *,
+    max_task_count: int,
+    neighborhood_width: int,
+) -> tuple[tuple[str, ...], ...]:
+    row = _normalize_task_set_row(task_set)
+    if not row:
+        return tuple()
+    cap = max(1, min(int(max_task_count), len(row)))
+    if len(row) <= cap:
+        return (row,)
+    ranked = tuple(
+        task_id
+        for task_id in sorted(
+            row,
+            key=lambda task_id: (
+                -float(duals.cover.get(task_id, 0.0)),
+                -float(data.tasks[task_id].science_weight),
+                task_id,
+            ),
+        )
+    )
+    projections: list[tuple[str, ...]] = [tuple(sorted(ranked[:cap]))]
+    for anchor in ranked[: max(1, int(neighborhood_width))]:
+        nearest = tuple(
+            task_id
+            for task_id in sorted(
+                (task_id for task_id in row if task_id != anchor),
+                key=lambda task_id: (
+                    _task_xy_distance_for_solver(data, anchor, task_id),
+                    -float(duals.cover.get(task_id, 0.0)),
+                    -float(data.tasks[task_id].science_weight),
+                    task_id,
+                ),
+            )
+        )
+        projections.append(tuple(sorted((anchor, *nearest[: cap - 1]))))
+    return _dedupe_task_set_rows(projections)
+
+
+def _task_xy_distance_for_solver(data: LunarIceData, left: str, right: str) -> float:
+    left_xy = data.tasks[str(left)].xy_km
+    right_xy = data.tasks[str(right)].xy_km
+    return ((left_xy[0] - right_xy[0]) ** 2 + (left_xy[1] - right_xy[1]) ** 2) ** 0.5
+
+
+def _task_set_spread(data: LunarIceData, row: Iterable[str]) -> float:
+    tasks = tuple(str(task_id) for task_id in row)
+    if len(tasks) <= 1:
+        return 0.0
+    total = 0.0
+    count = 0
+    for index, left in enumerate(tasks):
+        for right in tasks[index + 1 :]:
+            total += _task_xy_distance_for_solver(data, left, right)
+            count += 1
+    return total / max(1, count)
 
 
 def _b2b_r2_worker_only_round_limit(max_rounds: int) -> int:
@@ -2311,18 +4267,263 @@ def _negative_worker_seed_task_sets(
         seen.add(normalized)
         rows.append(normalized)
 
+    # DSSR-style refinement seeds from prior hidden-negative audits must survive
+    # the bounded worker budget. They are worker-only candidate search hints.
+    for row in _catalog_refinement_seed_portfolio(
+        data,
+        duals=duals,
+        seed_catalog=seed_catalog,
+        max_direct_tasks=max_direct_tasks,
+        max_seed_sets=max_seed_sets,
+    ):
+        add(row)
     if len(data.task_ids) <= 5:
         add(tuple(ranked[: min(int(max_direct_tasks), len(ranked))]))
     for column in tuple(getattr(b0_direct, "journeys", tuple()) or tuple()):
         add(tuple(sorted(column.task_set)))
     for column in master_columns:
         add(tuple(sorted(column.task_set)))
-    for row in seed_catalog.rows:
-        add(tuple(row.get("task_set") or tuple()))
     for size in range(1, max_size + 1):
         for combo in combinations(ranked[: max(int(max_direct_tasks) + 3, max_size)], size):
             add(combo)
     return tuple(rows[: max(1, int(max_seed_sets))])
+
+
+def _catalog_refinement_seed_task_sets(
+    data: LunarIceData,
+    *,
+    seed_catalog: WorkerSeedCatalog,
+    max_direct_tasks: int,
+) -> tuple[tuple[str, ...], ...]:
+    all_tasks = {str(task_id) for task_id in data.task_ids}
+    rows: list[tuple[tuple, tuple[str, ...]]] = []
+    for index, row in enumerate(seed_catalog.rows):
+        raw = row.get("task_set") or tuple()
+        normalized = tuple(sorted(str(task_id) for task_id in raw if str(task_id) in all_tasks))
+        if normalized and len(normalized) <= int(max_direct_tasks):
+            rows.append((_catalog_refinement_sort_key(row, index), normalized))
+    rows.sort(key=lambda item: item[0])
+    return _dedupe_task_set_rows(row for _key, row in rows)
+
+
+def _catalog_refinement_seed_portfolio(
+    data: LunarIceData,
+    *,
+    duals: JourneyDuals,
+    seed_catalog: WorkerSeedCatalog,
+    max_direct_tasks: int,
+    max_seed_sets: int,
+) -> tuple[tuple[str, ...], ...]:
+    limit = max(0, int(max_seed_sets))
+    if limit == 0:
+        return tuple()
+    base_rows = _catalog_refinement_seed_task_sets(
+        data,
+        seed_catalog=seed_catalog,
+        max_direct_tasks=max_direct_tasks,
+    )
+    expanded_rows = _catalog_refinement_neighborhood_seed_task_sets(
+        data,
+        duals=duals,
+        seed_catalog=seed_catalog,
+        max_direct_tasks=max_direct_tasks,
+    )
+    if not base_rows:
+        return tuple(expanded_rows[:limit])
+
+    result: list[tuple[str, ...]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def add(row: tuple[str, ...]) -> bool:
+        if not row or row in seen or len(result) >= limit:
+            return False
+        seen.add(row)
+        result.append(row)
+        return True
+
+    first_base = base_rows[0]
+    add(first_base)
+    if len(result) < limit:
+        first_expansion = _first_refinement_expansion_for_base(first_base, expanded_rows)
+        if first_expansion is not None:
+            add(first_expansion)
+
+    for row in base_rows:
+        add(row)
+        if len(result) >= limit:
+            return tuple(result)
+    for row in expanded_rows:
+        add(row)
+        if len(result) >= limit:
+            return tuple(result)
+    return tuple(result)
+
+
+def _first_refinement_expansion_for_base(
+    base: tuple[str, ...],
+    expanded_rows: Iterable[tuple[str, ...]],
+) -> tuple[str, ...] | None:
+    base_set = set(base)
+    for row in expanded_rows:
+        if base_set.issubset(set(row)) and tuple(row) != tuple(base):
+            return tuple(row)
+    return None
+
+
+def _catalog_refinement_sort_key(row: dict, index: int) -> tuple:
+    match = str(row.get("worker_priced_candidate_source_match") or "none")
+    match_priority = {
+        "none": 0,
+        "superset": 1,
+        "exact": 2,
+    }.get(match, 3)
+    miss_reason = str(row.get("miss_reason") or "unknown")
+    miss_priority = {
+        "worker_not_generated": 0,
+        "pricing_timeout_only": 1,
+        "pruned_by_task_bound": 2,
+        "pruned_by_resource_bound": 3,
+        "pruned_by_dominance": 4,
+        "duplicate_filtered": 5,
+        "reduced_cost_mismatch": 6,
+        "unknown": 7,
+    }.get(miss_reason, 8)
+    try:
+        true_rc = float(row.get("true_reduced_cost"))
+    except (TypeError, ValueError):
+        true_rc = 0.0
+    return (match_priority, miss_priority, true_rc, int(index))
+
+
+def _catalog_refinement_source_match_counts(seed_catalog: WorkerSeedCatalog) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in seed_catalog.rows:
+        key = str(row.get("worker_priced_candidate_source_match") or "none")
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _hidden_negative_refinement_summary(
+    hidden_audit: dict | None,
+    seed_catalog: WorkerSeedCatalog | None,
+) -> dict:
+    audit = hidden_audit or {}
+    catalog = seed_catalog or WorkerSeedCatalog()
+    catalog_counts = _catalog_refinement_coverage_counts(catalog)
+    catalog_exact = int(catalog_counts.get("exact") or 0)
+    catalog_superset = int(catalog_counts.get("superset") or 0)
+    catalog_uncovered = int(catalog_counts.get("uncovered") or 0)
+    return {
+        "hidden_negative_refinement_coverage_counts": audit.get(
+            "hidden_negative_refinement_coverage_counts"
+        )
+        or {},
+        "hidden_negative_refinement_exact_count": int(
+            audit.get("hidden_negative_refinement_exact_count") or 0
+        ),
+        "hidden_negative_refinement_superset_count": int(
+            audit.get("hidden_negative_refinement_superset_count") or 0
+        ),
+        "hidden_negative_refinement_covered_count": int(
+            audit.get("hidden_negative_refinement_covered_count") or 0
+        ),
+        "hidden_negative_refinement_uncovered_count": int(
+            audit.get("hidden_negative_refinement_uncovered_count") or 0
+        ),
+        "hidden_negative_refinement_catalog_coverage_counts": catalog_counts,
+        "hidden_negative_refinement_catalog_exact_count": catalog_exact,
+        "hidden_negative_refinement_catalog_superset_count": catalog_superset,
+        "hidden_negative_refinement_catalog_covered_count": catalog_exact + catalog_superset,
+        "hidden_negative_refinement_catalog_uncovered_count": catalog_uncovered,
+        "hidden_negative_refinement_catalog_seed_count": len(catalog.rows),
+        "hidden_negative_refinement_coverage_diagnostic_only": True,
+    }
+
+
+def _catalog_refinement_coverage_counts(seed_catalog: WorkerSeedCatalog) -> dict[str, int]:
+    counts = {"exact": 0, "superset": 0, "uncovered": 0}
+    for row in seed_catalog.rows:
+        match = str(row.get("worker_priced_candidate_source_match") or "none")
+        sources = tuple(str(source) for source in row.get("worker_priced_candidate_seed_sources") or tuple())
+        from_refinement = any(source.startswith("hidden_negative_refinement") for source in sources)
+        if from_refinement and match in {"exact", "superset"}:
+            counts[match] += 1
+        else:
+            counts["uncovered"] += 1
+    return {key: value for key, value in counts.items() if value > 0}
+
+
+def _catalog_refinement_neighborhood_seed_task_sets(
+    data: LunarIceData,
+    *,
+    duals: JourneyDuals,
+    seed_catalog: WorkerSeedCatalog,
+    max_direct_tasks: int,
+    expansion_width: int = 2,
+) -> tuple[tuple[str, ...], ...]:
+    base_rows = _catalog_refinement_seed_task_sets(
+        data,
+        seed_catalog=seed_catalog,
+        max_direct_tasks=max_direct_tasks,
+    )
+    if not base_rows:
+        return tuple()
+    all_tasks = tuple(sorted(str(task_id) for task_id in data.task_ids))
+    rows: list[tuple[str, ...]] = []
+    for base in base_rows:
+        base_set = set(base)
+        if len(base_set) >= int(max_direct_tasks):
+            continue
+        candidates = sorted(
+            (task_id for task_id in all_tasks if task_id not in base_set),
+            key=lambda task_id: (
+                _min_distance_to_task_set(data, task_id, base_set),
+                -float(duals.cover.get(task_id, 0.0)),
+                -float(data.tasks[task_id].science_weight),
+                task_id,
+            ),
+        )
+        for task_id in candidates[: max(0, int(expansion_width))]:
+            expanded = tuple(sorted((*base, task_id)))
+            if len(expanded) <= int(max_direct_tasks):
+                rows.append(expanded)
+    return _dedupe_task_set_rows(rows)
+
+
+def _refinement_seed_source_rows(
+    *,
+    refinement_seed_task_sets: Iterable[Iterable[str]],
+    refinement_expanded_seed_task_sets: Iterable[Iterable[str]],
+) -> tuple[dict, ...]:
+    rows: dict[tuple[str, ...], list[str]] = {}
+    for task_set in _dedupe_task_set_rows(refinement_seed_task_sets):
+        rows.setdefault(task_set, []).append("hidden_negative_refinement")
+    for task_set in _dedupe_task_set_rows(refinement_expanded_seed_task_sets):
+        sources = rows.setdefault(task_set, [])
+        if "hidden_negative_refinement_expansion" not in sources:
+            sources.append("hidden_negative_refinement_expansion")
+    return tuple(
+        {"task_set": list(task_set), "sources": sources}
+        for task_set, sources in sorted(rows.items())
+    )
+
+
+def _min_distance_to_task_set(data: LunarIceData, task_id: str, task_set: set[str]) -> float:
+    if not task_set:
+        return 0.0
+    xy = data.tasks[str(task_id)].xy_km
+    return min(
+        ((xy[0] - data.tasks[str(other)].xy_km[0]) ** 2 + (xy[1] - data.tasks[str(other)].xy_km[1]) ** 2) ** 0.5
+        for other in task_set
+    )
+
+
+def _count_task_set_intersection(
+    left: Iterable[Iterable[str]],
+    right: Iterable[Iterable[str]],
+) -> int:
+    right_set = set(_dedupe_task_set_rows(right))
+    return sum(1 for row in _dedupe_task_set_rows(left) if row in right_set)
 
 
 def _manual_full_universe_rc_audit(
@@ -2355,8 +4556,14 @@ def _manual_full_universe_rc_audit(
     )
 
 
-def _load_columns(pool: ColumnPool, view: MasterColumnView, columns: Iterable[JourneyColumn]) -> None:
-    _load_columns_for_node(pool, view, columns, node_id="root", branch_context=None)
+def _load_columns(
+    pool: ColumnPool,
+    view: MasterColumnView,
+    columns: Iterable[JourneyColumn],
+    *,
+    cut_context: CutContext | None = None,
+) -> None:
+    _load_columns_for_node(pool, view, columns, node_id="root", branch_context=None, cut_context=cut_context)
 
 
 def _load_columns_for_node(
@@ -2366,15 +4573,21 @@ def _load_columns_for_node(
     *,
     node_id: str = "root",
     branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
 ) -> tuple[int, int]:
     loaded = 0
     branch_filtered = 0
+    context = cut_context or CutContext()
     for column in columns:
         allowed = journey_satisfies_branch_context(column, branch_context)
         if not allowed:
             branch_filtered += 1
             continue
-        signature = column_signature_from_journey(column)
+        signature = _column_signature_for_active_context(
+            column,
+            branch_context=branch_context,
+            cut_context=context,
+        )
         bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
         pool.add(
             bpc_column,
@@ -2382,6 +4595,9 @@ def _load_columns_for_node(
                 "master_view": view,
                 "node_id": node_id,
                 "is_allowed_by_branch": allowed,
+                "cut_coefficients": context.coefficients_for(column),
+                "branch_signature": signature.branch_signature,
+                "dominance_key": _column_dominance_key_for_active_context(signature),
             },
         )
         stored = pool.get(signature)
@@ -2400,6 +4616,142 @@ def _master_columns(pool: ColumnPool, view: MasterColumnView, *, node_id: str = 
     return tuple(columns)
 
 
+def _rmp_support_task_sets(master) -> tuple[tuple[str, ...], ...]:
+    """Return task sets with positive lambda in the current RMP solution."""
+
+    rmp = getattr(master, "rmp", None)
+    rows = getattr(rmp, "primal_columns", tuple()) or tuple()
+    support: set[tuple[str, ...]] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            lambda_value = float(row.get("lambda_value") or 0.0)
+        except (TypeError, ValueError):
+            lambda_value = 0.0
+        if lambda_value <= 1.0e-9:
+            continue
+        task_set = tuple(sorted(str(task_id) for task_id in (row.get("tasks") or tuple())))
+        if task_set:
+            support.add(task_set)
+    return tuple(sorted(support))
+
+
+def _audit_selected_columns_for_master_entry(
+    columns: tuple[JourneyColumn, ...],
+    *,
+    duals: JourneyDuals,
+    pool: ColumnPool,
+    view: MasterColumnView,
+    node_id: str = "root",
+    negative_eps: float = 1.0e-6,
+    active_task_sets: set[frozenset[str]] | None = None,
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+) -> dict:
+    """Audit selected worker columns immediately before master insertion."""
+
+    context = cut_context or CutContext()
+    active_task_set_lookup = {
+        frozenset(str(task_id) for task_id in row)
+        for row in (active_task_sets or set())
+    }
+    threshold = -abs(float(negative_eps))
+    reports: list[dict] = []
+    seen_signatures: set[object] = set()
+    duplicate_signature_count = 0
+    min_rc: float | None = None
+    max_rc: float | None = None
+    true_dual_pass = True
+    branch_pass = True
+    cut_pass = True
+    addability_pass = True
+    for column in columns:
+        signature = _column_signature_for_active_context(
+            column,
+            branch_context=branch_context,
+            cut_context=context,
+        )
+        duplicate_selected_signature = signature in seen_signatures
+        if duplicate_selected_signature:
+            duplicate_signature_count += 1
+        seen_signatures.add(signature)
+        cut_coefficients = context.coefficients_for(column)
+        rc = manual_journey_reduced_cost(
+            column,
+            duals,
+            cut_coefficients=cut_coefficients,
+        )
+        min_rc = float(rc) if min_rc is None else min(float(min_rc), float(rc))
+        max_rc = float(rc) if max_rc is None else max(float(max_rc), float(rc))
+        is_negative = float(rc) < threshold
+        branch_allowed = journey_satisfies_branch_context(column, branch_context)
+        bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
+        addability = pool.addability_check(
+            bpc_column,
+            {
+                "master_view": view,
+                "node_id": node_id,
+                "active_task_sets": active_task_set_lookup,
+                "is_allowed_by_branch": branch_allowed,
+                "cut_coefficients": cut_coefficients,
+                "branch_signature": getattr(signature, "branch_signature", tuple()),
+                "dominance_key": _column_dominance_key_for_active_context(signature),
+            },
+        )
+        would_enter = bool(addability.would_enter_master and not duplicate_selected_signature)
+        true_dual_pass = true_dual_pass and is_negative
+        branch_pass = branch_pass and bool(addability.is_allowed_by_branch)
+        cut_pass = cut_pass and bool(addability.is_allowed_by_cut_context)
+        addability_pass = addability_pass and would_enter
+        reports.append(
+            {
+                "task_set": sorted(str(task_id) for task_id in column.task_set),
+                "true_reduced_cost": round(float(rc), 9),
+                "is_true_negative": bool(is_negative),
+                "would_enter_master": would_enter,
+                "addability_reason": (
+                    "duplicate_selected_signature"
+                    if duplicate_selected_signature
+                    else addability.reason
+                ),
+                "reject_reason": (
+                    "duplicate_selected_signature"
+                    if duplicate_selected_signature
+                    else addability.reject_reason
+                ),
+                "pool_contains_signature": bool(addability.pool_contains_signature),
+                "current_master_contains_signature": bool(addability.current_master_contains_signature),
+                "is_allowed_by_branch": bool(addability.is_allowed_by_branch),
+                "is_allowed_by_cut_context": bool(addability.is_allowed_by_cut_context),
+                "would_change_active_support": bool(addability.would_change_active_support),
+                "duplicate_selected_signature": bool(duplicate_selected_signature),
+            }
+        )
+    audited_count = len(columns)
+    audit_pass = bool(
+        true_dual_pass
+        and branch_pass
+        and cut_pass
+        and addability_pass
+        and duplicate_signature_count == 0
+    )
+    return {
+        "selected_column_entry_audit_available": True,
+        "selected_column_entry_audit_pass": audit_pass,
+        "selected_column_true_dual_rc_audit_pass": bool(true_dual_pass),
+        "selected_column_branch_audit_pass": bool(branch_pass),
+        "selected_column_cut_audit_pass": bool(cut_pass),
+        "selected_column_addability_audit_pass": bool(addability_pass),
+        "selected_column_audited_count": int(audited_count),
+        "selected_column_entry_audit_rejected_count": 0 if audit_pass else int(audited_count),
+        "selected_column_duplicate_signature_count": int(duplicate_signature_count),
+        "selected_column_min_true_rc": None if min_rc is None else round(float(min_rc), 9),
+        "selected_column_max_true_rc": None if max_rc is None else round(float(max_rc), 9),
+        "selected_column_entry_audit_reports": reports,
+    }
+
+
 def _add_selected_to_pool_and_master(
     pool: ColumnPool,
     view: MasterColumnView,
@@ -2407,13 +4759,19 @@ def _add_selected_to_pool_and_master(
     *,
     node_id: str = "root",
     branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
 ) -> int:
     added = 0
+    context = cut_context or CutContext()
     for column in columns:
         allowed = journey_satisfies_branch_context(column, branch_context)
         if not allowed:
             continue
-        signature = column_signature_from_journey(column)
+        signature = _column_signature_for_active_context(
+            column,
+            branch_context=branch_context,
+            cut_context=context,
+        )
         bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
         pool.add(
             bpc_column,
@@ -2421,6 +4779,9 @@ def _add_selected_to_pool_and_master(
                 "master_view": view,
                 "node_id": node_id,
                 "is_allowed_by_branch": allowed,
+                "cut_coefficients": context.coefficients_for(column),
+                "branch_signature": signature.branch_signature,
+                "dominance_key": _column_dominance_key_for_active_context(signature),
             },
         )
         stored = pool.get(signature)
@@ -2429,12 +4790,40 @@ def _add_selected_to_pool_and_master(
     return added
 
 
+def _column_signature_for_active_context(
+    column: JourneyColumn,
+    *,
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+):
+    context = cut_context or CutContext()
+    if context.empty and (branch_context is None or branch_context.empty):
+        return column_signature_from_journey(column)
+    return cut_aware_column_signature_from_journey(
+        column,
+        cut_context=context,
+        branch_context=branch_context,
+    )
+
+
+def _column_dominance_key_for_active_context(signature) -> tuple:
+    key = tuple(signature.task_set)
+    if signature.branch_signature or signature.cut_coefficient_vector_hash:
+        return (
+            tuple(signature.task_set),
+            tuple(signature.branch_signature),
+            str(signature.cut_coefficient_vector_hash),
+        )
+    return key
+
+
 def _node_engine_payload(
     *,
     data: LunarIceData,
     node_id: str,
     branch_context: BranchContext,
     incumbent_objective: float | None,
+    cut_context: CutContext | None = None,
     completion_policy: dict,
     proof_debt: ProofDebtQueue,
     profiling: PruningCounter,
@@ -2457,21 +4846,47 @@ def _node_engine_payload(
     pricing_state: PricingState,
     node_status: str,
     note: str,
+    active_columns: Iterable[JourneyColumn] | None = None,
+    hidden_audit: dict | None = None,
+    seed_catalog: WorkerSeedCatalog | None = None,
 ) -> dict:
+    active_cut_context = cut_context or CutContext()
     node_bound = None if master is None else master.rmp.objective_bound
     manual_rc_audit_pass = _manual_rc_audit_pass(master, None)
     pricing_rc_audit_pass = bool(final_judge and final_judge.get("pricing_rc_audit_pass") is True)
+    final_judge_certifying_proof_kind = _final_judge_has_certifying_proof_kind(final_judge)
     branch_pricing_audit_pass = bool(
         final_judge is None
         or final_judge.get("all_priced_columns_satisfy_branch_context") is True
+    )
+    cut_pricing_audit_pass = bool(
+        active_cut_context.empty
+        or (
+            final_judge is not None
+            and final_judge.get("cut_context_active") is True
+            and final_judge.get("live_cut_certificate_supported") is True
+        )
     )
     gate_issues: list[str] = []
     if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not manual_rc_audit_pass:
         gate_issues.append("manual_reduced_cost_audit_failed")
     if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not pricing_rc_audit_pass:
         gate_issues.append("pricing_reduced_cost_audit_failed")
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not final_judge_certifying_proof_kind:
+        gate_issues.append("pricing_proof_kind_not_certifying")
     if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not branch_pricing_audit_pass:
         gate_issues.append("branch_filtered_pricing_audit_failed")
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not cut_pricing_audit_pass:
+        gate_issues.append("cut_context_pricing_audit_failed")
+    requested_algorithm_status = algorithm_status
+    requested_certificate_scope = certificate_scope
+    requested_pricing_state = pricing_state
+    requested_node_status = str(node_status)
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and gate_issues:
+        algorithm_status = AlgorithmStatus.BPC_INCOMPLETE_PRICING
+        certificate_scope = CertificateScope.DIAGNOSTIC_PRICING_FRONTIER
+        pricing_state = PricingState.INCOMPLETE_LIMIT
+        node_status = "NODE_INCOMPLETE"
     ledger = CertificateLedger(
         algorithm_status=algorithm_status,
         certificate_scope=certificate_scope,
@@ -2489,12 +4904,13 @@ def _node_engine_payload(
     selected_count = int(harvest_totals.get("selected_count") or 0)
     selected_would_enter_master_count = int(harvest_totals.get("selected_would_enter_master_count") or 0)
     profile_payload = _profile_payload(profile_totals, profiling, final_judge)
+    hidden_refinement_payload = _hidden_negative_refinement_summary(hidden_audit, seed_catalog)
     branch_filtered_count = max(
         int(seed_branch_filtered_column_count),
         int((final_judge or {}).get("branch_filtered_column_count") or 0),
         int(harvest_totals.get("branch_filtered_count") or 0),
     )
-    return {
+    payload = {
         "schema_version": "lunar_ice_bpc.b2b_r3_node_pricing_engine.v1",
         "node_id": str(node_id),
         "node_pricing_mode": B2B_R3_MODE,
@@ -2503,11 +4919,18 @@ def _node_engine_payload(
         "branch_context": branch_context.to_payload(),
         "branch_context_active": not branch_context.empty,
         "branch_decision_count": len(branch_context.pair_decisions),
+        "cut_context": active_cut_context.to_payload(),
+        "cut_context_active": not active_cut_context.empty,
+        "cut_count": len(active_cut_context.cuts),
         "incumbent_objective_at_entry": incumbent_objective,
         "algorithm_status": algorithm_status.value,
         "certificate_scope": certificate_scope.value,
         "pricing_state": pricing_state.value,
+        "requested_algorithm_status": requested_algorithm_status.value,
+        "requested_certificate_scope": requested_certificate_scope.value,
+        "requested_pricing_state": requested_pricing_state.value,
         "node_status": str(node_status),
+        "requested_node_status": requested_node_status,
         "uses_true_dual_bpc_certificate": ledger["uses_true_dual_bpc_certificate"],
         "certificate_ledger": ledger,
         "proof_debt_queue": proof_debt.audit(),
@@ -2525,13 +4948,17 @@ def _node_engine_payload(
         "node_lp_bound": node_bound,
         "node_lp_bound_official": node_lp_bound_official,
         "rmp_iteration_count": 0 if master is None else master.rmp.iteration_count,
+        "dual_context": {} if master is None else _dual_context_payload(master.reduced_cost_context),
         "pricing_round_count": len(history),
         "final_judge_call_count": int(final_judge_call_count),
         "final_judge": final_judge or {},
+        **_final_judge_summary_fields(final_judge),
+        "final_judge_certifying_proof_kind": bool(final_judge_certifying_proof_kind),
         "history": list(history),
         "manual_rc_audit_pass": manual_rc_audit_pass,
         "pricing_rc_audit_pass": pricing_rc_audit_pass,
         "branch_pricing_audit_pass": branch_pricing_audit_pass,
+        "cut_pricing_audit_pass": cut_pricing_audit_pass,
         "candidate_negative_count": candidate_negative_count,
         "addable_negative_count": addable_negative_count,
         "selected_count": selected_count,
@@ -2542,6 +4969,7 @@ def _node_engine_payload(
         "added_column_count": int(added_to_master_count),
         "duplicate_only_count": int(duplicate_only_count),
         "hidden_negative_count": int(hidden_negative_count),
+        **hidden_refinement_payload,
         "replacement_only_round_count": int(replacement_only_round_count),
         **profile_payload,
         **harvest_totals,
@@ -2555,6 +4983,14 @@ def _node_engine_payload(
         "_master": master,
         "_all_priced_columns": tuple(final_judge_columns),
     }
+    if active_columns is not None:
+        active_columns_tuple = tuple(active_columns)
+        payload["active_columns_payload_version"] = "journey_solution_payload.v1"
+        payload["active_columns"] = [
+            column.to_solution_payload(vehicle_id=f"active_column_{index:06d}")
+            for index, column in enumerate(active_columns_tuple, start=1)
+        ]
+    return payload
 
 
 def _payload(
@@ -2601,6 +5037,7 @@ def _payload(
     )
     manual_rc_audit_pass = _manual_rc_audit_pass(master, manual_rc_audit)
     pricing_rc_audit_pass = bool(final_judge and final_judge.get("pricing_rc_audit_pass") is True)
+    final_judge_certifying_proof_kind = _final_judge_has_certifying_proof_kind(final_judge)
     previous_diff = _previous_baseline_diff(previous_baseline, root_objective, certificate_scope)
     gate_issues: list[str] = []
     if root_le_b0 is False:
@@ -2613,6 +5050,15 @@ def _payload(
         gate_issues.append("manual_reduced_cost_audit_failed")
     if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not pricing_rc_audit_pass:
         gate_issues.append("pricing_reduced_cost_audit_failed")
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and not final_judge_certifying_proof_kind:
+        gate_issues.append("pricing_proof_kind_not_certifying")
+    requested_algorithm_status = algorithm_status
+    requested_certificate_scope = certificate_scope
+    requested_pricing_state = pricing_state
+    if certificate_scope == CertificateScope.BPC_NODE_LP_CERTIFIED and gate_issues:
+        algorithm_status = AlgorithmStatus.BPC_INCOMPLETE_PRICING
+        certificate_scope = CertificateScope.DIAGNOSTIC_PRICING_FRONTIER
+        pricing_state = PricingState.INCOMPLETE_LIMIT
     ledger = CertificateLedger(
         algorithm_status=algorithm_status,
         certificate_scope=certificate_scope,
@@ -2628,6 +5074,7 @@ def _payload(
     )
     duplicate_audit = duplicate_audit or {}
     hidden_audit = hidden_audit or {"hidden_negative_count": 0, "rows": []}
+    hidden_refinement_payload = _hidden_negative_refinement_summary(hidden_audit, seed_catalog)
     candidate_negative_count = int(harvest_totals.get("candidate_negative_count") or 0)
     addable_negative_count = int(harvest_totals.get("addable_negative_count") or 0)
     selected_count = int(harvest_totals.get("selected_count") or 0)
@@ -2647,6 +5094,9 @@ def _payload(
         "algorithm_status": algorithm_status.value,
         "certificate_scope": certificate_scope.value,
         "pricing_state": pricing_state.value,
+        "requested_algorithm_status": requested_algorithm_status.value,
+        "requested_certificate_scope": requested_certificate_scope.value,
+        "requested_pricing_state": requested_pricing_state.value,
         "uses_true_dual_bpc_certificate": ledger_payload["uses_true_dual_bpc_certificate"],
         "certificate_ledger": ledger_payload,
         "completion_bound_policy": completion_policy,
@@ -2658,9 +5108,12 @@ def _payload(
         "root_lp_vs_direct_dp_gap": root_gap,
         "integral_root": None if root_gap is None else abs(float(root_gap)) <= 1.0e-6,
         "rmp_iteration_count": 0 if master is None else master.rmp.iteration_count,
+        "dual_context": {} if master is None else _dual_context_payload(master.reduced_cost_context),
         "pricing_round_count": len(history),
         "final_judge_call_count": int(final_judge_call_count),
         "final_judge": final_judge or {},
+        **_final_judge_summary_fields(final_judge),
+        "final_judge_certifying_proof_kind": bool(final_judge_certifying_proof_kind),
         "history": list(history),
         "proof_debt_queue": proof_debt.audit(),
         "proof_debt_unreleased_count": len(proof_debt.unreleased),
@@ -2705,6 +5158,7 @@ def _payload(
         ),
         "duplicate_only_count": int(duplicate_only_count),
         "hidden_negative_count": int(hidden_negative_count),
+        **hidden_refinement_payload,
         "replacement_only_round_count": int(replacement_only_round_count),
         **profile_payload,
         **harvest_totals,
@@ -2754,6 +5208,85 @@ def _manual_rc_audit_pass(master, manual_rc_audit: _ManualRcAudit | None) -> boo
             master.reduced_cost_audit.get("min_reduced_cost") is None
             or float(master.reduced_cost_audit["min_reduced_cost"]) >= -1.0e-6
         )
+    )
+
+
+def _final_judge_summary_fields(final_judge: dict | None) -> dict:
+    payload = final_judge or {}
+    return {
+        "final_judge_status": payload.get("status") or "",
+        "final_judge_exact_status": payload.get("exact_status") or "",
+        "pricing_proof_kind": payload.get("pricing_proof_kind") or "",
+        "underlying_pricing_proof_kind": payload.get("underlying_pricing_proof_kind") or "",
+        "final_judge_can_certify_no_negative": bool(payload.get("can_certify_no_negative")),
+        "final_judge_uses_true_dual_bpc_certificate": bool(
+            payload.get("uses_true_dual_bpc_certificate")
+        ),
+        "final_judge_pricing_rc_audit_pass": payload.get("pricing_rc_audit_pass"),
+        "final_judge_manual_rc_audit_pass": payload.get("manual_rc_audit_pass"),
+        "final_judge_cut_context_active": bool(payload.get("cut_context_active")),
+        "final_judge_cut_count": payload.get("cut_count"),
+        "final_judge_live_cut_certificate_supported": bool(
+            payload.get("live_cut_certificate_supported")
+        ),
+        "labeling_final_judge_enabled": bool(payload.get("labeling_final_judge_enabled")),
+        "labeling_final_judge_auto_mode": bool(payload.get("labeling_final_judge_auto_mode")),
+        "labeling_final_judge_auto_selected": bool(payload.get("labeling_final_judge_auto_selected")),
+        "labeling_final_judge_auto_skip_reason": payload.get("labeling_final_judge_auto_skip_reason") or "",
+        "labeling_final_judge_opt_in_source": payload.get("labeling_final_judge_opt_in_source") or "",
+        "labeling_final_judge_selection_reason": payload.get(
+            "labeling_final_judge_selection_reason"
+        )
+        or "",
+        "labeling_final_judge_certificate_role": payload.get(
+            "labeling_final_judge_certificate_role"
+        )
+        or "",
+        "labeling_final_judge_can_certify": bool(payload.get("labeling_final_judge_can_certify")),
+        "labeling_final_judge_downgrade_reason": payload.get(
+            "labeling_final_judge_downgrade_reason"
+        )
+        or "",
+        "labeling_final_judge_task_count": payload.get("labeling_final_judge_task_count"),
+        "labeling_final_judge_max_exact_tasks": payload.get("labeling_final_judge_max_exact_tasks"),
+        "labeling_final_judge_max_exact_tasks_source": payload.get(
+            "labeling_final_judge_max_exact_tasks_source"
+        )
+        or "",
+        "labeling_final_judge_exact_harvest_target": payload.get(
+            "labeling_final_judge_exact_harvest_target"
+        ),
+        "labeling_final_judge_exact_harvest_target_source": payload.get(
+            "labeling_final_judge_exact_harvest_target_source"
+        )
+        or "",
+        "exact_negative_harvest_target": payload.get("exact_negative_harvest_target"),
+        "exact_negative_harvest_candidate_count": payload.get(
+            "exact_negative_harvest_candidate_count"
+        ),
+        "exact_negative_harvest_selected_count": payload.get(
+            "exact_negative_harvest_selected_count"
+        ),
+        "exact_negative_harvest_selected_new_task_set_count": payload.get(
+            "exact_negative_harvest_selected_new_task_set_count"
+        ),
+        "exact_negative_harvest_selected_replacement_task_set_count": payload.get(
+            "exact_negative_harvest_selected_replacement_task_set_count"
+        ),
+        "exact_negative_harvest_selection_policy": payload.get(
+            "exact_negative_harvest_selection_policy"
+        )
+        or "",
+    }
+
+
+def _final_judge_has_certifying_proof_kind(final_judge: dict | None) -> bool:
+    payload = final_judge or {}
+    return bool(
+        payload.get("can_certify_no_negative") is True
+        and payload.get("uses_true_dual_bpc_certificate") is True
+        and payload.get("pricing_rc_audit_pass") is True
+        and str(payload.get("pricing_proof_kind") or "") in CERTIFYING_PRICING_PROOF_KINDS
     )
 
 
@@ -3099,6 +5632,37 @@ def _remaining_wall_time_limit(wall_time_limit_sec: float | None, *, started_at:
 def _wall_time_limit_exceeded(wall_time_limit_sec: float | None, *, started_at: float) -> bool:
     remaining = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
     return bool(remaining is not None and remaining <= 0.0)
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(str(name))
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() not in {"", "0", "false", "off", "no"}
+
+
+def _env_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
+    raw = os.environ.get(str(name))
+    if raw is None:
+        value = int(default)
+    else:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            value = int(default)
+    return max(int(minimum), min(int(maximum), value))
+
+
+def _env_float(name: str, *, default: float, minimum: float, maximum: float) -> float:
+    raw = os.environ.get(str(name))
+    if raw is None:
+        value = float(default)
+    else:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            value = float(default)
+    return max(float(minimum), min(float(maximum), value))
 
 
 def _feasibility_cache_payload(cache_stats: dict) -> dict:

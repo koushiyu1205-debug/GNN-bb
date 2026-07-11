@@ -110,6 +110,14 @@ def build_pricing_frontier_ledger(
         issues.append("pricing_not_complete")
     if not coverage_complete:
         issues.append("pricing_coverage_not_complete")
+    if proof_kind == "NONE":
+        issues.append("pricing_proof_kind_missing")
+    elif proof_kind == "UNKNOWN":
+        issues.append("pricing_proof_kind_unknown")
+    elif proof_kind == "EXHAUSTIVE_INCOMPLETE":
+        issues.append("exhaustive_pricing_incomplete")
+    elif proof_kind == "EXHAUSTIVE_FOUND_NEGATIVE":
+        issues.append("exhaustive_pricing_found_negative")
     if proof_kind == "FRONTIER_BOUND_INCOMPLETE":
         issues.append("frontier_bound_incomplete")
     if proof_kind == "FRONTIER_BOUND_NO_NEGATIVE" and unsupported_region_count > 0:
@@ -141,7 +149,7 @@ def build_pricing_frontier_ledger(
         and lb_leq_true_best is not False
     )
     exhaustive_no_negative = bool(
-        proof_kind in {"NONE", "EXHAUSTIVE_NO_NEGATIVE"}
+        proof_kind == "EXHAUSTIVE_NO_NEGATIVE"
         and not issues
     )
     can_certify = bool(exhaustive_no_negative or bound_no_negative)
@@ -201,12 +209,14 @@ def _pricing_proof_kind(value: object) -> str:
     raw = str(value or "NONE")
     if raw in {
         "NONE",
+        "EXHAUSTIVE_FOUND_NEGATIVE",
+        "EXHAUSTIVE_INCOMPLETE",
         "EXHAUSTIVE_NO_NEGATIVE",
         "FRONTIER_BOUND_INCOMPLETE",
         "FRONTIER_BOUND_NO_NEGATIVE",
     }:
         return raw
-    return "NONE"
+    return "UNKNOWN"
 
 
 def _nonnegative_int(value: object, *, default: int) -> int:

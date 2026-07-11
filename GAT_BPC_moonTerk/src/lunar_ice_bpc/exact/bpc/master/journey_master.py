@@ -38,19 +38,24 @@ def solve_root_journey_master(
     """Solve a journey RMP and bind its exact context into reduced costs."""
 
     active_columns = tuple(columns)
+    active_cut_context = cut_context or CutContext()
     rmp = solve_restricted_journey_rmp(
         data.task_ids,
         active_columns,
         fleet_size=data.fleet_size,
         negative_eps=negative_eps,
         branch_context=branch_context,
-        cut_context=cut_context,
+        cut_context=active_cut_context,
     )
     context = reduced_cost_context_from_rmp(rmp, rmp_iteration_id=rmp_iteration_id)
     return JourneyMasterSolve(
         rmp=rmp,
         reduced_cost_context=context,
-        reduced_cost_audit=audit_master_column_reduced_costs(active_columns, rmp),
+        reduced_cost_audit=audit_master_column_reduced_costs(
+            active_columns,
+            rmp,
+            cut_context=active_cut_context,
+        ),
     )
 
 
@@ -80,14 +85,23 @@ def reduced_cost_context_from_rmp(
 def audit_master_column_reduced_costs(
     columns: Iterable[JourneyColumn],
     rmp: RestrictedRMPResult,
+    *,
+    cut_context: CutContext | None = None,
 ) -> dict:
+    context = cut_context or CutContext()
     values = [
-        manual_journey_reduced_cost(column, rmp.duals)
+        manual_journey_reduced_cost(
+            column,
+            rmp.duals,
+            cut_coefficients=context.coefficients_for(column),
+        )
         for column in columns
     ]
     return {
         "status": "MASTER_RC_AUDITED" if values else "MASTER_RC_NO_COLUMNS",
         "column_count": len(values),
+        "cut_context_active": not context.empty,
+        "cut_count": len(context.cuts),
         "min_reduced_cost": min(values) if values else None,
         "max_reduced_cost": max(values) if values else None,
         "negative_count": sum(1 for value in values if value < -1.0e-6),

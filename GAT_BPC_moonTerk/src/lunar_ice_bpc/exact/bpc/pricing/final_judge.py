@@ -10,6 +10,15 @@ from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.reduced_cost import ReducedCostContext
+from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+    CERTIFYING_PROOF_KINDS,
+    EXACT_ELEMENTARY_MODE,
+    LabelingPricingConfig,
+    PROOF_KIND_EXHAUSTIVE_FOUND_NEGATIVE,
+    PROOF_KIND_EXHAUSTIVE_INCOMPLETE,
+    PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+    run_bpc_labeling_pricer,
+)
 from lunar_ice_bpc.exact.bpc.pricing.status import PricingState
 from lunar_ice_bpc.exact.core.branching import BranchContext, branch_context_from_payload, journey_satisfies_branch_context
 from lunar_ice_bpc.exact.core.cuts import CutContext, cut_coefficients_for_journey, cut_context_from_payload
@@ -30,6 +39,12 @@ from lunar_ice_bpc.exact.solver.gurobi_compact import solve_highs_compact_single
 
 TASK_SUBSET_REPRESENTATIVE_UNIVERSE_SEMANTICS = "best_task_subset_representative_fixed_graph_columns"
 COMPACT_SINGLE_JOURNEY_PRICING_MIN_TASKS = 25
+LABELING_FINAL_JUDGE_ENV = "LUNAR_ICE_LABELING_FINAL_JUDGE"
+LABELING_FINAL_JUDGE_MAX_TASKS_ENV = "LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS"
+LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET_ENV = (
+    "LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET"
+)
+LABELING_FINAL_JUDGE_AUTO_VALUES = {"auto", "adaptive"}
 COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_CAP_SEC = 60.0
 COMPACT_SINGLE_JOURNEY_NEGATIVE_BATCH_TARGET = 5
 COMPACT_SINGLE_JOURNEY_OPTIMIZATION_HARVEST_TARGET = 5
@@ -520,8 +535,11 @@ def run_true_dual_root_final_judge(
     master_view: MasterColumnView | None = None,
     node_id: str = "root",
     active_task_sets: set[frozenset[str]] | None = None,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> FinalJudgeResult:
-    """Run exhaustive fixed-graph pricing with completion-bound pruning disabled.
+    """Run exhaustive fixed-graph pricing with fail-closed proof semantics.
 
     ``complete_universe_columns`` is a legacy name for the compressed fixed-graph
     universe: one objective-best representative journey per nonempty task subset.
@@ -535,13 +553,82 @@ def run_true_dual_root_final_judge(
         fleet_limit=context.fleet_dual,
         cuts=context.cut_duals,
     )
+    labeling_mode, labeling_source = _labeling_final_judge_mode(labeling_final_judge_enabled)
+    auto_max_exact_tasks = _labeling_final_judge_max_exact_tasks(
+        max_direct_tasks=max_direct_tasks,
+        max_exact_tasks_override=labeling_final_judge_max_exact_tasks,
+    )
+    use_labeling_final_judge = bool(
+        labeling_mode == "enabled"
+        or (labeling_mode == "auto" and len(data.task_ids) <= auto_max_exact_tasks)
+    )
+    labeling_selection_reason = ""
+    if labeling_mode == "enabled":
+        labeling_selection_reason = (
+            "explicit_enabled" if labeling_source == "explicit_parameter" else "environment_enabled"
+        )
+    elif labeling_mode == "auto" and use_labeling_final_judge:
+        labeling_selection_reason = "auto_task_count_within_max_exact_tasks"
+    if use_labeling_final_judge:
+        result = _run_labeling_pricer_final_judge(
+            data,
+            duals,
+            context=context,
+            branch_context=active_branch_context,
+            cut_context=active_cut_context,
+            max_direct_tasks=max_direct_tasks,
+            negative_eps=negative_eps,
+            cache=cache,
+            wall_time_limit_sec=wall_time_limit_sec,
+            max_exact_tasks_override=labeling_final_judge_max_exact_tasks,
+            exact_harvest_target_override=labeling_final_judge_exact_harvest_target,
+            explicit_opt_in=labeling_final_judge_enabled is not None,
+            selection_reason=labeling_selection_reason,
+        )
+        if labeling_mode == "auto":
+            result.pricing_payload.update(
+                {
+                    "labeling_final_judge_auto_mode": True,
+                    "labeling_final_judge_auto_selected": True,
+                    "labeling_final_judge_auto_skip_reason": "",
+                    "labeling_final_judge_opt_in_source": labeling_source,
+                }
+            )
+        return result
+
+    labeling_auto_payload = {}
+    if labeling_mode == "auto":
+        labeling_auto_payload = {
+            "labeling_final_judge_enabled": False,
+            "labeling_final_judge_auto_mode": True,
+            "labeling_final_judge_auto_selected": False,
+            "labeling_final_judge_auto_skip_reason": "task_count_exceeds_max_exact_tasks",
+            "labeling_final_judge_opt_in_source": labeling_source,
+            "labeling_final_judge_env": LABELING_FINAL_JUDGE_ENV,
+            "labeling_final_judge_max_tasks_env": LABELING_FINAL_JUDGE_MAX_TASKS_ENV,
+            "labeling_final_judge_exact_harvest_target_env": LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET_ENV,
+            "labeling_final_judge_max_exact_tasks": int(auto_max_exact_tasks),
+            "labeling_final_judge_max_exact_tasks_source": (
+                "explicit_parameter"
+                if labeling_final_judge_max_exact_tasks is not None
+                else "environment_or_default"
+            ),
+            "labeling_final_judge_task_count": len(data.task_ids),
+            "labeling_final_judge_exact_harvest_target": _labeling_final_judge_exact_harvest_target(
+                exact_harvest_target_override=labeling_final_judge_exact_harvest_target
+            ),
+            "labeling_final_judge_selection_reason": "task_count_exceeds_max_exact_tasks",
+            "labeling_final_judge_certificate_role": "not_selected",
+            "labeling_final_judge_can_certify": False,
+            "labeling_final_judge_downgrade_reason": "",
+        }
     if active_cut_context.empty and (active_branch_context.empty or complete_universe_columns is not None):
         if (
             active_branch_context.empty
             and complete_universe_columns is None
             and len(data.task_ids) >= COMPACT_SINGLE_JOURNEY_PRICING_MIN_TASKS
         ):
-            return _run_compact_single_journey_pricing_final_judge(
+            result = _run_compact_single_journey_pricing_final_judge(
                 data,
                 duals,
                 context=context,
@@ -554,7 +641,9 @@ def run_true_dual_root_final_judge(
                 node_id=node_id,
                 active_task_sets=active_task_sets,
             )
-        return _run_complete_universe_rc_final_judge(
+            result.pricing_payload.update(labeling_auto_payload)
+            return result
+        result = _run_complete_universe_rc_final_judge(
             data,
             duals,
             context=context,
@@ -567,6 +656,8 @@ def run_true_dual_root_final_judge(
             complete_universe_columns=complete_universe_columns,
             complete_universe_counts=complete_universe_counts,
         )
+        result.pricing_payload.update(labeling_auto_payload)
+        return result
 
     pricing, columns = price_exhaustive_direct_journey_columns(
         data,
@@ -575,6 +666,7 @@ def run_true_dual_root_final_judge(
         max_direct_tasks=int(max_direct_tasks),
         cache=cache,
         completion_bound_enabled=False,
+        wall_time_limit_sec=wall_time_limit_sec,
         branch_context=active_branch_context,
         cut_context=active_cut_context,
     )
@@ -625,12 +717,226 @@ def run_true_dual_root_final_judge(
         journey_satisfies_branch_context(column, active_branch_context)
         for column in columns
     )
+    payload.update(labeling_auto_payload)
     return FinalJudgeResult(
         pricing_state=state,
         pricing_payload=payload,
         negative_columns=negative_columns,
         all_priced_columns=tuple(columns),
     )
+
+
+def _run_labeling_pricer_final_judge(
+    data: LunarIceData,
+    duals: JourneyDuals,
+    *,
+    context: ReducedCostContext,
+    branch_context: BranchContext,
+    cut_context: CutContext,
+    max_direct_tasks: int,
+    negative_eps: float,
+    cache: DirectPricingCache | None,
+    wall_time_limit_sec: float | None,
+    max_exact_tasks_override: int | None = None,
+    exact_harvest_target_override: int | None = None,
+    explicit_opt_in: bool = False,
+    selection_reason: str = "",
+) -> FinalJudgeResult:
+    start = perf_counter()
+    max_exact_tasks = (
+        max(1, min(64, int(max_exact_tasks_override)))
+        if max_exact_tasks_override is not None
+        else _env_int(
+            LABELING_FINAL_JUDGE_MAX_TASKS_ENV,
+            default=int(max_direct_tasks),
+            minimum=1,
+            maximum=64,
+        )
+    )
+    exact_harvest_target = _labeling_final_judge_exact_harvest_target(
+        exact_harvest_target_override=exact_harvest_target_override
+    )
+    payload, columns = run_bpc_labeling_pricer(
+        data,
+        duals,
+        config=LabelingPricingConfig(
+            mode=EXACT_ELEMENTARY_MODE,
+            max_exact_tasks=max_exact_tasks,
+            negative_eps=negative_eps,
+            wall_time_limit_sec=wall_time_limit_sec,
+            exact_negative_harvest_target=exact_harvest_target,
+            stop_at_first_negative=True,
+        ),
+        branch_context=branch_context,
+        cut_context=cut_context,
+        cache=cache,
+    )
+    manual_rc_rows = tuple(
+        (
+            manual_journey_reduced_cost(
+                column,
+                duals,
+                cut_coefficients=cut_context.coefficients_for(column),
+            ),
+            column,
+        )
+        for column in columns
+    )
+    manual_negative_rows = tuple(
+        (rc, column)
+        for rc, column in manual_rc_rows
+        if rc < -abs(float(negative_eps))
+    )
+    branch_feasible_negative_rows = tuple(
+        (rc, column)
+        for rc, column in manual_negative_rows
+        if journey_satisfies_branch_context(column, branch_context)
+    )
+    branch_filtered_negative_count = len(manual_negative_rows) - len(branch_feasible_negative_rows)
+    negative_columns = tuple(column for _rc, column in branch_feasible_negative_rows)
+    branch_feasible_rc_values = tuple(
+        rc
+        for rc, column in manual_rc_rows
+        if journey_satisfies_branch_context(column, branch_context)
+    )
+    manual_branch_feasible_best = min(branch_feasible_rc_values) if branch_feasible_rc_values else None
+    payload_true_best = _first_float(payload.get("true_best_reduced_cost"))
+    manual_consistency_pass = bool(
+        (payload_true_best is None and manual_branch_feasible_best is None)
+        or (
+            payload_true_best is not None
+            and manual_branch_feasible_best is not None
+            and abs(float(payload_true_best) - float(manual_branch_feasible_best)) <= 1.0e-6
+        )
+    )
+    underlying_proof_kind = str(payload.get("pricing_proof_kind") or "")
+    underlying_proof_kind_certifying = underlying_proof_kind in CERTIFYING_PROOF_KINDS
+    state = _pricing_state_from_payload(payload.get("pricing_state"))
+    if negative_columns:
+        state = PricingState.FOUND_NEGATIVE
+    elif branch_filtered_negative_count and state == PricingState.FOUND_NEGATIVE:
+        state = PricingState.INCOMPLETE_LIMIT
+    elif state == PricingState.CERTIFIED_NO_NEGATIVE and not manual_consistency_pass:
+        state = PricingState.INCOMPLETE_LIMIT
+    elif state == PricingState.CERTIFIED_NO_NEGATIVE and not underlying_proof_kind_certifying:
+        state = PricingState.INCOMPLETE_LIMIT
+    can_certify = bool(
+        payload.get("can_certify_no_negative") is True
+        and state == PricingState.CERTIFIED_NO_NEGATIVE
+        and manual_consistency_pass
+        and underlying_proof_kind_certifying
+    )
+    final_proof_kind = (
+        PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE
+        if can_certify
+        else PROOF_KIND_EXHAUSTIVE_FOUND_NEGATIVE
+        if negative_columns
+        else PROOF_KIND_EXHAUSTIVE_INCOMPLETE
+    )
+    downgrade_reason = _labeling_final_judge_downgrade_reason(
+        can_certify=can_certify,
+        negative_columns=negative_columns,
+        branch_filtered_negative_count=branch_filtered_negative_count,
+        manual_consistency_pass=manual_consistency_pass,
+        underlying_proof_kind_certifying=underlying_proof_kind_certifying,
+        underlying_proof_kind=underlying_proof_kind,
+    )
+    payload = dict(payload)
+    payload.update(
+        {
+            "status": "LABELING_FINAL_JUDGE_PRICED",
+            "exact_status": (
+                "BPC_NO_NEGATIVE_CERTIFIED"
+                if can_certify
+                else "NOT_SOLVED"
+            ),
+            "pricing_state": state.value,
+            "can_certify_no_negative": can_certify,
+            "uses_true_dual_bpc_certificate": can_certify,
+            "pricing_proof_kind": final_proof_kind,
+            "underlying_pricing_proof_kind": underlying_proof_kind,
+            "underlying_pricing_proof_kind_certifying": underlying_proof_kind_certifying,
+            "pricing_proof_kind_source": "labeling_final_judge_true_dual_reaudit",
+            "labeling_final_judge_enabled": True,
+            "labeling_final_judge_opt_in_source": "explicit_parameter" if explicit_opt_in else "environment",
+            "labeling_final_judge_selection_reason": selection_reason,
+            "labeling_final_judge_task_count": len(data.task_ids),
+            "labeling_final_judge_certificate_role": "true_dual_exact_elementary_final_proof",
+            "labeling_final_judge_can_certify": can_certify,
+            "labeling_final_judge_downgrade_reason": downgrade_reason,
+            "labeling_final_judge_env": LABELING_FINAL_JUDGE_ENV,
+            "labeling_final_judge_max_tasks_env": LABELING_FINAL_JUDGE_MAX_TASKS_ENV,
+            "labeling_final_judge_exact_harvest_target_env": LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET_ENV,
+            "labeling_final_judge_max_exact_tasks": int(max_exact_tasks),
+            "labeling_final_judge_max_exact_tasks_source": (
+                "explicit_parameter" if max_exact_tasks_override is not None else "environment_or_default"
+            ),
+            "labeling_final_judge_exact_harvest_target": int(exact_harvest_target),
+            "labeling_final_judge_exact_harvest_target_source": (
+                "explicit_parameter" if exact_harvest_target_override is not None else "environment_or_default"
+            ),
+            "labeling_final_judge_early_negative_stop_enabled": True,
+            "labeling_final_judge_early_negative_stop_can_certify_no_negative": False,
+            "dual_fingerprint": context.dual_fingerprint,
+            "branch_context": branch_context.to_payload(),
+            "cut_context": cut_context.to_payload(),
+            "manual_best_reduced_cost": payload.get("true_best_reduced_cost"),
+            "manual_branch_feasible_best_reduced_cost": manual_branch_feasible_best,
+            "labeling_final_judge_manual_rc_consistency_pass": manual_consistency_pass,
+            "labeling_final_judge_payload_true_best_reduced_cost": payload_true_best,
+            "manual_branch_feasible_negative_count": len(branch_feasible_negative_rows),
+            "manual_branch_filtered_negative_count": int(branch_filtered_negative_count),
+            "labeling_final_judge_branch_filtered_negative_count": int(
+                branch_filtered_negative_count
+            ),
+            "pricing_best_reduced_cost": payload.get("pricing_best_reduced_cost"),
+            "manual_priced_column_count": int(payload.get("true_audited_column_count") or 0),
+            "completion_bound": payload.get("completion_bound") or {},
+            "all_priced_columns_satisfy_branch_context": all(
+                journey_satisfies_branch_context(column, branch_context)
+                for column in columns
+            ),
+            "completion_bound_pruning_enabled": bool(
+                (payload.get("completion_bound") or {}).get("enabled")
+            ),
+            "final_judge_wall_time": round(perf_counter() - start, 6),
+            "note": (
+                "Opt-in final judge used exact-safe resource-labeling pricing. "
+                "Certificates are allowed only for exact elementary full-subset coverage "
+                "with true-dual reduced-cost audit."
+            ),
+        }
+    )
+    return FinalJudgeResult(
+        pricing_state=state,
+        pricing_payload=payload,
+        negative_columns=negative_columns,
+        all_priced_columns=tuple(columns),
+    )
+
+
+def _labeling_final_judge_downgrade_reason(
+    *,
+    can_certify: bool,
+    negative_columns: tuple[JourneyColumn, ...],
+    branch_filtered_negative_count: int,
+    manual_consistency_pass: bool,
+    underlying_proof_kind_certifying: bool,
+    underlying_proof_kind: str,
+) -> str:
+    if can_certify:
+        return ""
+    if negative_columns:
+        return "found_negative"
+    if int(branch_filtered_negative_count) > 0:
+        return "branch_filtered_negative"
+    if not bool(manual_consistency_pass):
+        return "manual_rc_mismatch"
+    if not bool(underlying_proof_kind_certifying):
+        if str(underlying_proof_kind or "") in {"", PROOF_KIND_EXHAUSTIVE_INCOMPLETE}:
+            return "coverage_incomplete_or_timeout"
+        return "noncertifying_underlying_proof_kind"
+    return "coverage_incomplete_or_timeout"
 
 
 def _run_compact_single_journey_pricing_final_judge(
@@ -1627,6 +1933,56 @@ def _remaining_compact_time(wall_time_limit_sec: float | None, *, started_at: fl
     if wall_time_limit_sec is None:
         return None
     return max(0.001, float(wall_time_limit_sec) - (perf_counter() - float(started_at)))
+
+
+def _pricing_state_from_payload(value: object) -> PricingState:
+    try:
+        return PricingState(str(value))
+    except ValueError:
+        return PricingState.INCOMPLETE_LIMIT
+
+
+def _labeling_final_judge_mode(value: bool | None) -> tuple[str, str]:
+    """Return enabled/disabled/auto for the labeling final-judge switch."""
+
+    if value is not None:
+        return ("enabled" if bool(value) else "disabled", "explicit_parameter")
+    raw = os.environ.get(LABELING_FINAL_JUDGE_ENV)
+    if raw in {None, ""}:
+        return ("disabled", "environment_or_default")
+    normalized = str(raw).strip().lower()
+    if normalized in LABELING_FINAL_JUDGE_AUTO_VALUES:
+        return ("auto", "environment_auto")
+    return ("enabled" if _env_bool(LABELING_FINAL_JUDGE_ENV, default=False) else "disabled", "environment")
+
+
+def _labeling_final_judge_max_exact_tasks(
+    *,
+    max_direct_tasks: int,
+    max_exact_tasks_override: int | None,
+) -> int:
+    if max_exact_tasks_override is not None:
+        return max(1, min(64, int(max_exact_tasks_override)))
+    return _env_int(
+        LABELING_FINAL_JUDGE_MAX_TASKS_ENV,
+        default=int(max_direct_tasks),
+        minimum=1,
+        maximum=64,
+    )
+
+
+def _labeling_final_judge_exact_harvest_target(
+    *,
+    exact_harvest_target_override: int | None,
+) -> int:
+    if exact_harvest_target_override is not None:
+        return max(1, min(32, int(exact_harvest_target_override)))
+    return _env_int(
+        LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET_ENV,
+        default=1,
+        minimum=1,
+        maximum=32,
+    )
 
 
 def _env_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
@@ -3208,6 +3564,13 @@ def _run_complete_universe_rc_final_judge(
         if certified
         else PricingState.INCOMPLETE_LIMIT
     )
+    pricing_proof_kind = (
+        PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE
+        if certified
+        else PROOF_KIND_EXHAUSTIVE_FOUND_NEGATIVE
+        if negative_columns
+        else PROOF_KIND_EXHAUSTIVE_INCOMPLETE
+    )
     payload = {
         "status": "COMPLETE_DIRECT_UNIVERSE_RC_AUDITED",
         "exact_status": "NOT_BPC_CERTIFIED",
@@ -3252,6 +3615,8 @@ def _run_complete_universe_rc_final_judge(
         "pricing_state": state.value,
         "can_certify_no_negative": bool(certified),
         "uses_true_dual_bpc_certificate": bool(certified),
+        "pricing_proof_kind": pricing_proof_kind,
+        "pricing_proof_kind_source": "complete_universe_representative_rc_audit",
         "dual_fingerprint": context.dual_fingerprint,
         "branch_context": branch_context.to_payload(),
         "cut_context": cut_context.to_payload(),

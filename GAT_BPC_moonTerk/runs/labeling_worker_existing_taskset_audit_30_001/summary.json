@@ -1,0 +1,527 @@
+{
+  "certificate_boundary": "worker candidate search only; true-dual addability audit is required; worker no-column is not a no-negative certificate",
+  "config": {
+    "certificate_boundary": "worker candidate search only; true-dual addability audit is required; worker no-column is not a no-negative certificate",
+    "column_provenance": "instance_json_reference_repair_plus_singletons_no_history_no_b0_no_probe",
+    "max_columns_per_round": 16,
+    "max_rounds": 1,
+    "model_id": "LABELING_WORKER_MULTI_NG_V1",
+    "relaxed_ng_route_worker_config": {
+      "certificate_boundary": "worker-only candidate search; no-column cannot certify",
+      "dual_stabilization_alpha": 0.7,
+      "dual_stabilization_enabled_default": false,
+      "dual_stabilization_window": 5,
+      "harvest_target": 16,
+      "max_candidate_sets": 160,
+      "max_label_task_count": 12,
+      "mode": "relaxed_ng_route",
+      "ng_neighborhood_size": 8,
+      "ng_neighborhood_sizes": [
+        3,
+        5,
+        8
+      ],
+      "stop_at_first_negative": false
+    },
+    "row_time_limit_sec": 20.0,
+    "runner": "labeling_worker_diagnostic",
+    "schema_version": "lunar_ice_bpc.labeling_worker_diagnostic.v1",
+    "seed_builder": "instance_json_reference_repair_plus_singletons",
+    "tail_dual_stabilization_alpha": 0.7,
+    "tail_dual_stabilization_enabled": false,
+    "tail_dual_stabilization_window": 5,
+    "workers": [
+      "relaxed_labeling"
+    ]
+  },
+  "config_hash": "ee79b1fc07a38556",
+  "row_count": 1,
+  "rows": [
+    {
+      "active_input_seed_task_set_count": 11,
+      "active_ng_seed_task_set_count": 6,
+      "active_refinement_expanded_seed_count": 0,
+      "active_refinement_seed_count": 0,
+      "active_resource_extension_seed_task_set_count": 3,
+      "active_seed_selection_policy": "protected_refinement_then_source_task_count_coverage_then_low_overlap_fill",
+      "active_seed_task_set_count": 16,
+      "active_seed_task_set_count_by_size": {
+        "1": 11,
+        "2": 2,
+        "3": 3
+      },
+      "active_seed_task_set_source_counts": {
+        "input_seed": 11,
+        "ng_route": 6,
+        "resource_extension": 3
+      },
+      "addable_negative_count": 16,
+      "added_to_master_count": 16,
+      "algorithm_status": "BPC_INCOMPLETE_PRICING",
+      "bound_prune_count": 14,
+      "branch_context_audit_pass": true,
+      "branch_invalid_column_count": 0,
+      "candidate_negative_count": 16,
+      "candidate_search_best_reduced_cost": -0.32228,
+      "candidate_search_dual_matches_true_dual": true,
+      "candidate_search_false_positive_rate": 0.0,
+      "candidate_search_false_positive_rows": [],
+      "candidate_search_negative_column_count": 28,
+      "candidate_search_negative_true_negative_count": 28,
+      "candidate_search_negative_true_nonnegative_count": 0,
+      "candidate_search_rc_recomputed_under_true_dual": true,
+      "candidate_seed_source_precedence": [
+        "hidden_negative_refinement",
+        "hidden_negative_refinement_expansion",
+        "input_seed",
+        "resource_extension",
+        "ng_route",
+        "direct_candidate"
+      ],
+      "candidate_task_set_count": 32,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "column_provenance": "instance_json_reference_repair_plus_singletons_no_history_no_b0_no_probe",
+      "completion_bound_can_certify_no_negative": false,
+      "completion_bound_evaluated_label_count": 70,
+      "completion_bound_pruned_label_count": 14,
+      "completion_bound_pruning_enabled": true,
+      "config_hash": "ee79b1fc07a38556",
+      "diagnostic_dual_source": "master.reduced_cost_context",
+      "direct_candidate_task_set_count": 8,
+      "dominance_filtered_count": 0,
+      "dominance_policy": "same_mask_end_time_and_reduced_base",
+      "duplicate_filtered_count": 0,
+      "elementarity_policy": "selected_elementary_candidate_sets_ng_route_worker",
+      "fail_closed_reason": "Stopped after max_rounds=1; B2B_R3 node proof is incomplete.",
+      "final_judge_call_count": 0,
+      "final_judge_wall_time": 0.0,
+      "frontier_region_count": null,
+      "frontier_unsupported_region_count": 1,
+      "frontier_unsupported_task_count_regions": [],
+      "global_remaining_rc_lb": null,
+      "global_remaining_rc_lb_coverage_complete": false,
+      "global_remaining_rc_lb_valid": false,
+      "input_seed_task_set_count": 16,
+      "instance_id": "lunar_ice_sp50_030_001_seed929001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+      "journey_labels": 16,
+      "labeling_algorithm": "ng_route_relaxed_resource_labeling_plus_direct_seed_portfolio",
+      "labeling_harvest_avg_pairwise_jaccard": 0.096389,
+      "labeling_harvest_candidate_negative_count": 28,
+      "labeling_harvest_candidate_new_task_set_count": 28,
+      "labeling_harvest_candidate_replacement_task_set_count": 0,
+      "labeling_harvest_candidate_seed_source_counts": {
+        "ng_route": 7,
+        "resource_extension": 26
+      },
+      "labeling_harvest_existing_master_task_set_count": 34,
+      "labeling_harvest_max_pairwise_jaccard": 0.5,
+      "labeling_harvest_selected_count": 16,
+      "labeling_harvest_selected_distinct_task_set_count": 16,
+      "labeling_harvest_selected_duplicate_task_set_count": 0,
+      "labeling_harvest_selected_new_task_set_count": 16,
+      "labeling_harvest_selected_replacement_task_set_count": 0,
+      "labeling_harvest_selected_seed_source_counts": {
+        "ng_route": 4,
+        "resource_extension": 14
+      },
+      "labeling_harvest_selection_policy": "best_true_rc_first_then_min_overlap_distinct_task_sets_then_replacements",
+      "labeling_no_column_uncertified": false,
+      "labeling_seed_task_set_count": 99,
+      "labeling_worker_enabled": true,
+      "labels_extended": 4151,
+      "labels_generated_total": 320,
+      "manual_rc_audit_pass": true,
+      "max_columns_per_round": 16,
+      "max_rounds": 1,
+      "max_tasks_per_trip": 6,
+      "merged_seed_task_set_count": 99,
+      "ng_neighborhood_size": 8,
+      "ng_neighborhood_sizes": [
+        3,
+        5,
+        8
+      ],
+      "ng_neighborhood_stage_count": 3,
+      "ng_seed_task_set_count": 63,
+      "ng_seed_task_set_count_by_size": {
+        "3": 63,
+        "5": 63,
+        "8": 63
+      },
+      "node_lp_bound_official": false,
+      "node_status": "NODE_INCOMPLETE",
+      "note": "Stopped after max_rounds=1; B2B_R3 node proof is incomplete.",
+      "official_dual_source": "current_true_rmp_dual",
+      "priced_candidate_task_set_source_counts": {
+        "direct_candidate": 8,
+        "input_seed": 11,
+        "ng_route": 16,
+        "resource_extension": 26
+      },
+      "pricing_proof_kind": "RELAXED_WORKER_UNCERTIFIED",
+      "pricing_rc_audit_pass": false,
+      "pricing_round_count": 1,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "pricing_timeout": false,
+      "refinement_expanded_seed_count": 0,
+      "refinement_seed_count": 0,
+      "refinement_seed_mutates_certificate": false,
+      "refinement_seed_source": "hidden_negative_audit_catalog",
+      "resource_bound_pruned_count": 0,
+      "resource_dimensions": [
+        "time_window",
+        "horizon",
+        "energy",
+        "capacity",
+        "shadow_exposure",
+        "risk",
+        "weighted_completion"
+      ],
+      "resource_extension_label_column_count": 26,
+      "resource_extension_label_column_policy": "feasible_resource_extension_physical_representatives_worker_only",
+      "resource_extension_label_column_task_set_count": 26,
+      "resource_extension_label_column_worker_enabled": true,
+      "resource_extension_label_columns_can_certify_no_negative": false,
+      "resource_extension_label_path_variant_candidate_count": 35236,
+      "resource_extension_label_path_variant_duplicate_count": 19554,
+      "resource_extension_label_path_variant_feasible_count": 15796,
+      "resource_extension_label_path_variant_infeasible_count": 19440,
+      "resource_extension_seed_enabled": true,
+      "resource_extension_seed_task_set_count": 26,
+      "resource_extension_seed_task_set_count_by_size": {
+        "3": 16,
+        "5": 16,
+        "8": 16
+      },
+      "resource_label_algorithm": "ng_route_relaxed_resource_labeling",
+      "resource_label_core_mode": "relaxed_ng_route_worker",
+      "rmp_iteration_count": 1,
+      "row_time_limit_sec": 20.0,
+      "scale": 30,
+      "schema_version": "lunar_ice_bpc.labeling_worker_diagnostic.v1",
+      "seed_builder": "instance_json_reference_repair_plus_singletons",
+      "seed_column_count": 34,
+      "seed_wall_time_sec": 0.052586,
+      "selected_count": 16,
+      "tail_dual_certificate_leak": false,
+      "tail_dual_no_column_can_certify": false,
+      "tail_dual_stabilization_enabled": false,
+      "task_bound_pruned_count": 14,
+      "task_count": 30,
+      "time_to_first_addable_negative": 0.571961,
+      "time_to_first_negative": 0.571961,
+      "true_dual_audited_column_count": 45,
+      "true_dual_rc_recompute_missing": false,
+      "true_dual_rc_recomputed": true,
+      "true_dual_selected_negative_count": 16,
+      "true_negative_candidate_search_miss_rate": 0.0,
+      "true_negative_candidate_search_miss_rows": [],
+      "true_negative_candidate_search_nonnegative_count": 0,
+      "uses_true_dual_bpc_certificate": false,
+      "wall_time_sec": 0.573812,
+      "worker_can_certify_no_negative": false,
+      "worker_candidate_budget": 16,
+      "worker_candidate_universe_task_set_count": 16,
+      "worker_candidate_universe_task_sets": [
+        [
+          "ice_site_001"
+        ],
+        [
+          "ice_site_011"
+        ],
+        [
+          "ice_site_011",
+          "ice_site_012"
+        ],
+        [
+          "ice_site_010",
+          "ice_site_011"
+        ],
+        [
+          "ice_site_011",
+          "ice_site_012",
+          "ice_site_014"
+        ],
+        [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_003"
+        ],
+        [
+          "ice_site_004"
+        ],
+        [
+          "ice_site_005"
+        ],
+        [
+          "ice_site_006"
+        ],
+        [
+          "ice_site_007"
+        ],
+        [
+          "ice_site_008"
+        ],
+        [
+          "ice_site_009"
+        ],
+        [
+          "ice_site_013"
+        ],
+        [
+          "ice_site_015"
+        ],
+        [
+          "ice_site_016"
+        ],
+        [
+          "ice_site_018",
+          "ice_site_019",
+          "ice_site_030"
+        ]
+      ],
+      "worker_certificate_leak": false,
+      "worker_dual_only": true,
+      "worker_dual_source": "current_true_rmp_dual",
+      "worker_exit_reason": "WORKER_FOUND_ADDABLE_NEGATIVE",
+      "worker_generated_column_task_set_count": 45,
+      "worker_generated_column_task_sets": [
+        [
+          "ice_site_011",
+          "ice_site_012",
+          "ice_site_014"
+        ],
+        [
+          "ice_site_003",
+          "ice_site_009",
+          "ice_site_010"
+        ],
+        [
+          "ice_site_011",
+          "ice_site_012"
+        ],
+        [
+          "ice_site_009",
+          "ice_site_010"
+        ],
+        [
+          "ice_site_001",
+          "ice_site_002"
+        ],
+        [
+          "ice_site_004",
+          "ice_site_007"
+        ],
+        [
+          "ice_site_004",
+          "ice_site_005"
+        ],
+        [
+          "ice_site_011",
+          "ice_site_014"
+        ],
+        [
+          "ice_site_012",
+          "ice_site_014"
+        ],
+        [
+          "ice_site_004",
+          "ice_site_008"
+        ],
+        [
+          "ice_site_003",
+          "ice_site_010"
+        ],
+        [
+          "ice_site_005",
+          "ice_site_011"
+        ],
+        [
+          "ice_site_003",
+          "ice_site_010",
+          "ice_site_019"
+        ],
+        [
+          "ice_site_003",
+          "ice_site_010",
+          "ice_site_018"
+        ],
+        [
+          "ice_site_008",
+          "ice_site_010"
+        ],
+        [
+          "ice_site_008",
+          "ice_site_011"
+        ],
+        [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_003"
+        ],
+        [
+          "ice_site_003",
+          "ice_site_010",
+          "ice_site_015"
+        ],
+        [
+          "ice_site_010",
+          "ice_site_015"
+        ],
+        [
+          "ice_site_002",
+          "ice_site_003"
+        ],
+        [
+          "ice_site_004",
+          "ice_site_005",
+          "ice_site_027"
+        ],
+        [
+          "ice_site_011",
+          "ice_site_014",
+          "ice_site_026"
+        ],
+        [
+          "ice_site_004",
+          "ice_site_005",
+          "ice_site_007"
+        ],
+        [
+          "ice_site_001",
+          "ice_site_002",
+          "ice_site_022"
+        ],
+        [
+          "ice_site_005",
+          "ice_site_007"
+        ],
+        [
+          "ice_site_001",
+          "ice_site_003"
+        ],
+        [
+          "ice_site_002",
+          "ice_site_004",
+          "ice_site_007"
+        ],
+        [
+          "ice_site_003",
+          "ice_site_005",
+          "ice_site_014"
+        ],
+        [
+          "ice_site_009"
+        ],
+        [
+          "ice_site_008"
+        ],
+        [
+          "ice_site_008",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        [
+          "ice_site_026"
+        ],
+        [
+          "ice_site_022"
+        ],
+        [
+          "ice_site_008",
+          "ice_site_016",
+          "ice_site_017"
+        ],
+        [
+          "ice_site_018"
+        ],
+        [
+          "ice_site_023"
+        ],
+        [
+          "ice_site_018",
+          "ice_site_024",
+          "ice_site_026"
+        ],
+        [
+          "ice_site_021",
+          "ice_site_022",
+          "ice_site_023"
+        ],
+        [
+          "ice_site_029"
+        ],
+        [
+          "ice_site_013"
+        ],
+        [
+          "ice_site_024",
+          "ice_site_025",
+          "ice_site_026"
+        ],
+        [
+          "ice_site_018",
+          "ice_site_019",
+          "ice_site_020"
+        ],
+        [
+          "ice_site_018",
+          "ice_site_021",
+          "ice_site_027"
+        ],
+        [
+          "ice_site_016",
+          "ice_site_017",
+          "ice_site_029"
+        ],
+        [
+          "ice_site_006",
+          "ice_site_013",
+          "ice_site_028"
+        ]
+      ],
+      "worker_generated_count": 45,
+      "worker_pricer_kind": "relaxed_labeling",
+      "worker_root_lp_bound_official": false,
+      "worker_status": "FOUND_NEGATIVE",
+      "worker_task_cap": 3,
+      "worker_true_dual_candidate_audit_pass": true,
+      "worker_uses_true_dual_bpc_certificate": false,
+      "worker_wall_time": 0.571961
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.labeling_worker_diagnostic.v1",
+  "summary_rows": [
+    {
+      "active_seed_selection_policies": [
+        "protected_refinement_then_source_task_count_coverage_then_low_overlap_fill"
+      ],
+      "candidate_search_false_positive_row_count": 0,
+      "final_judge_call_count": 0,
+      "found_addable_count": 1,
+      "labeling_harvest_selection_policies": [
+        "best_true_rc_first_then_min_overlap_distinct_task_sets_then_replacements"
+      ],
+      "mean_added_to_master": 16.0,
+      "mean_candidate_search_false_positive_rate": 0.0,
+      "mean_labeling_harvest_avg_pairwise_jaccard": 0.096389,
+      "mean_labeling_harvest_max_pairwise_jaccard": 0.5,
+      "mean_labeling_harvest_selected_count": 16.0,
+      "mean_labeling_harvest_selected_new_task_set_count": 16.0,
+      "mean_labeling_harvest_selected_replacement_task_set_count": 0.0,
+      "mean_resource_extension_label_column_count": 26.0,
+      "mean_resource_extension_label_path_variant_candidate_count": 35236.0,
+      "mean_true_negative_candidate_search_miss_rate": 0.0,
+      "mean_wall_time_sec": 0.573812,
+      "mean_worker_wall_time": 0.571961,
+      "row_count": 1,
+      "scale": 30,
+      "tail_dual_certificate_leak_count": 0,
+      "true_dual_rc_recompute_missing_count": 0,
+      "true_negative_candidate_search_miss_row_count": 0,
+      "worker_certificate_leak_count": 0,
+      "worker_pricer_kind": "relaxed_labeling"
+    }
+  ]
+}

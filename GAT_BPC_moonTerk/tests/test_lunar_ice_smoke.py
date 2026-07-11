@@ -173,6 +173,7 @@ from lunar_ice_bpc.runners.b4_cut_formulation_ablation import (
 )
 from lunar_ice_bpc.runners.b4_1_true_dual_proof_tail import (
     build_b4_1_report,
+    render_b4_1_markdown,
     write_b4_1_artifacts,
 )
 from lunar_ice_bpc.runners.b4_pricing_formulation_diagnostic import (
@@ -1386,6 +1387,59 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertGreater(captured_limits[0], 0.0)
         self.assertLessEqual(captured_limits[0], 5.0)
 
+    def test_b4_1_b2b_r2_passes_remaining_wall_time_to_labeling_worker(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        captured_limits = []
+
+        def fake_labeling_worker(*args, **kwargs):
+            config = kwargs.get("config")
+            captured_limits.append(getattr(config, "wall_time_limit_sec", None))
+            return {
+                "pricing_state": PricingState.LOCAL_NO_COLUMN_UNCERTIFIED.value,
+                "status": "RELAXED_LABELING_WORKER_NO_COLUMN",
+                "pricing_proof_kind": "RELAXED_WORKER_UNCERTIFIED",
+                "can_certify_no_negative": False,
+                "uses_true_dual_bpc_certificate": False,
+                "candidate_search_rc_recomputed_under_true_dual": True,
+                "worker_true_dual_candidate_audit_pass": True,
+            }, tuple()
+
+        def fake_final_judge(*args, **kwargs):
+            return SimpleNamespace(
+                pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
+                pricing_payload={
+                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                    "pricing_rc_audit_pass": True,
+                    "all_priced_columns_satisfy_branch_context": True,
+                    "can_certify_no_negative": True,
+                    "negative_column_count": 0,
+                },
+                all_priced_columns=tuple(),
+            )
+
+        with patch(
+            "lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver.run_bpc_labeling_pricer",
+            side_effect=fake_labeling_worker,
+        ), patch(
+            "lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver.run_true_dual_root_final_judge",
+            side_effect=fake_final_judge,
+        ):
+            solve_b2_pricing_tail_baseline(
+                data,
+                max_direct_tasks=5,
+                max_rounds=1,
+                wall_time_limit_sec=5.0,
+                max_columns_per_round=4,
+                mode=B2B_R2_MODE,
+                worker_pricer_kind=pricing_tail_solver_module.RELAXED_LABELING_WORKER,
+            )
+
+        self.assertEqual(len(captured_limits), 1)
+        self.assertIsNotNone(captured_limits[0])
+        self.assertGreater(captured_limits[0], 0.0)
+        self.assertLessEqual(captured_limits[0], 5.0)
+
     def test_b2b_r3_worker_uses_true_rmp_dual_and_cannot_certify_locally(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -1411,6 +1465,13 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertIsNotNone(b2["labels_generated_before_first_negative"])
         self.assertEqual(b2["history"][0]["diagnostic_dual_source"], "master.reduced_cost_context")
         self.assertTrue(b2["history"][0]["diagnostic_dual_fingerprint"])
+        self.assertEqual(b2["dual_context"]["dual_source"], "master.reduced_cost_context")
+        self.assertEqual(set(b2["dual_context"]["task_duals"]), set(data.task_ids))
+        self.assertEqual(
+            b2["history"][0]["dual_context"]["rmp_iteration_id"],
+            b2["history"][0]["diagnostic_rmp_iteration_id"],
+        )
+        self.assertEqual(set(b2["history"][0]["dual_context"]["task_duals"]), set(data.task_ids))
         self.assertFalse(b2["history"][0]["rmp_dual_diagnostic"]["can_certify_no_negative"])
 
     def test_b2a_full_universe_rc_audit_fast_path_is_explicit(self) -> None:
@@ -1605,6 +1666,7 @@ class LunarIceSmokeTests(unittest.TestCase):
             "child_node_ids": [],
             "certificate_ledger": {"valid": True},
             "integer_incumbent": {"matches_node_lp_bound": True},
+            "final_judge_certifying_proof_kind": True,
         }
 
         class FlakyTreeLedger:
@@ -1647,6 +1709,46 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(payload["bpc_tree_optimal_count"], 0)
         self.assertIn("forced_tree_ledger_invalid", payload["tree_certificate_gate_issues"])
 
+    def test_b3_tree_gate_rejects_node_without_certifying_pricing_proof_kind(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        direct = solve_direct_journey_baseline(data, max_exact_tasks=5)
+        node = {
+            "node_id": "node_000",
+            "node_status": "INTEGER_INCUMBENT",
+            "node_lp_bound": direct.objective,
+            "node_lp_bound_official": True,
+            "child_node_ids": [],
+            "certificate_ledger": {"valid": True},
+            "integer_incumbent": {"matches_node_lp_bound": True},
+            "final_judge_certifying_proof_kind": False,
+            "pricing_proof_kind": "RELAXED_WORKER_UNCERTIFIED",
+        }
+
+        payload = _tree_payload(
+            data=data,
+            b2={"root_rmp_objective": direct.objective, "certificate_scope": "BPC_NODE_LP_CERTIFIED"},
+            b0_direct=direct,
+            nodes=[node],
+            open_node_count=0,
+            incumbent_objective=direct.objective,
+            incumbent_source="B3_INTEGER_NODE:node_000",
+            incumbent_columns=tuple(direct.journeys),
+            proof_debt=ProofDebtQueue(),
+            node_limit_hit=False,
+            max_tree_nodes=31,
+            max_branch_depth=4,
+            negative_eps=1.0e-6,
+        )
+
+        self.assertEqual(payload["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(payload["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertEqual(payload["exact_status"], "NOT_SOLVED")
+        self.assertFalse(payload["uses_true_dual_bpc_certificate"])
+        self.assertFalse(payload["all_node_pricing_proofs_certifying"])
+        self.assertEqual(payload["bpc_tree_optimal_count"], 0)
+        self.assertIn("node_pricing_proof_kind_not_certifying", payload["tree_certificate_gate_issues"])
+
     def test_b2b_r3_node_engine_worker_no_column_is_not_certificate(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -1659,8 +1761,12 @@ class LunarIceSmokeTests(unittest.TestCase):
         )
 
         worker_rounds = [row for row in node["history"] if not row.get("final_judge_called")]
+        self.assertEqual(node["dual_context"]["dual_source"], "master.reduced_cost_context")
+        self.assertEqual(set(node["dual_context"]["task_duals"]), set(data.task_ids))
         for row in worker_rounds:
             self.assertNotEqual(row["pricing_state"], "CERTIFIED_NO_NEGATIVE")
+            self.assertEqual(row["dual_context"]["dual_source"], "master.reduced_cost_context")
+            self.assertEqual(set(row["dual_context"]["task_duals"]), set(data.task_ids))
             self.assertFalse(row["rmp_dual_diagnostic"]["can_certify_no_negative"])
         if node["certificate_scope"] == "BPC_NODE_LP_CERTIFIED":
             self.assertGreater(node["final_judge_call_count"], 0)
@@ -2317,6 +2423,161 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertAlmostEqual(payload["harvest_worst_selected_true_rc"], -5.0, delta=1.0e-9)
         self.assertGreaterEqual(payload["harvest_duplicate_signature_count"], 1)
         self.assertTrue(all(row["would_enter_master"] for row in payload["reports"] if row["task_set"] == sorted(fresh.task_set)))
+
+    def test_b2_worker_selected_entry_audit_requires_true_dual_branch_and_addability(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        singleton = next(column for column in universe.columns if len(column.task_set) == 1)
+        task_id = next(iter(singleton.task_set))
+        duals = JourneyDuals(
+            cover={candidate: 0.0 for candidate in data.task_ids},
+            fleet_limit=0.0,
+        )
+        duals.cover[str(task_id)] = float(singleton.objective) + 10.0
+
+        pass_payload = pricing_tail_solver_module._audit_selected_columns_for_master_entry(
+            (singleton,),
+            duals=duals,
+            pool=ColumnPool(),
+            view=MasterColumnView(),
+            negative_eps=1.0e-6,
+        )
+
+        self.assertTrue(pass_payload["selected_column_entry_audit_pass"])
+        self.assertTrue(pass_payload["selected_column_true_dual_rc_audit_pass"])
+        self.assertTrue(pass_payload["selected_column_branch_audit_pass"])
+        self.assertTrue(pass_payload["selected_column_addability_audit_pass"])
+        self.assertLess(pass_payload["selected_column_min_true_rc"], -1.0e-6)
+
+        pool = ColumnPool()
+        view = MasterColumnView()
+        duplicate_bpc = BpcColumn(
+            signature=column_signature_from_journey(singleton),
+            objective=singleton.objective,
+            payload=singleton,
+        )
+        self.assertTrue(pool.add(duplicate_bpc).added)
+        self.assertTrue(view.add_from_pool(duplicate_bpc, node_id="root", pool=pool))
+        duplicate_payload = pricing_tail_solver_module._audit_selected_columns_for_master_entry(
+            (singleton,),
+            duals=duals,
+            pool=pool,
+            view=view,
+            negative_eps=1.0e-6,
+        )
+
+        self.assertFalse(duplicate_payload["selected_column_entry_audit_pass"])
+        self.assertTrue(duplicate_payload["selected_column_true_dual_rc_audit_pass"])
+        self.assertFalse(duplicate_payload["selected_column_addability_audit_pass"])
+        self.assertEqual(duplicate_payload["selected_column_entry_audit_rejected_count"], 1)
+
+        task_a, task_b = data.task_ids[:2]
+        same_context = BranchContext((PairBranchDecision(task_a, task_b, SAME_JOURNEY),))
+        one_only = next(
+            column
+            for column in universe.columns
+            if task_a in column.task_set and task_b not in column.task_set
+        )
+        branch_duals = JourneyDuals(
+            cover={candidate: 0.0 for candidate in data.task_ids},
+            fleet_limit=0.0,
+        )
+        branch_duals.cover[str(task_a)] = float(one_only.objective) + 10.0
+        branch_payload = pricing_tail_solver_module._audit_selected_columns_for_master_entry(
+            (one_only,),
+            duals=branch_duals,
+            pool=ColumnPool(),
+            view=MasterColumnView(),
+            negative_eps=1.0e-6,
+            branch_context=same_context,
+        )
+
+        self.assertFalse(branch_payload["selected_column_entry_audit_pass"])
+        self.assertTrue(branch_payload["selected_column_true_dual_rc_audit_pass"])
+        self.assertFalse(branch_payload["selected_column_branch_audit_pass"])
+        self.assertFalse(branch_payload["selected_column_entry_audit_reports"][0]["is_allowed_by_branch"])
+
+    def test_b2_worker_rejects_selected_columns_that_fail_entry_audit(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        singleton = next(
+            column
+            for column in enumerate_direct_journey_columns(data, max_exact_tasks=5).columns
+            if len(column.task_set) == 1
+        )
+        task_id = next(iter(singleton.task_set))
+        reduced_cost_context = ReducedCostContext(
+            task_duals={str(task_id): float(singleton.objective) + 10.0},
+            fleet_dual=0.0,
+            dual_fingerprint="selected-entry-audit-test",
+            rmp_iteration_id="root-test",
+        )
+        pool = ColumnPool()
+        view = MasterColumnView()
+        duplicate_bpc = BpcColumn(
+            signature=column_signature_from_journey(singleton),
+            objective=singleton.objective,
+            payload=singleton,
+        )
+        self.assertTrue(pool.add(duplicate_bpc).added)
+        self.assertTrue(view.add_from_pool(duplicate_bpc, node_id="root", pool=pool))
+        stale_harvest_payload = {
+            "candidate_negative_count": 1,
+            "addable_negative_count": 1,
+            "selected_count": 1,
+            "selected_would_enter_master_count": 1,
+            "selected_all_would_enter_master": True,
+            "harvest_candidate_negative_count": 1,
+            "harvest_addable_candidate_count": 1,
+            "harvest_selected_count": 1,
+        }
+
+        with patch(
+            "lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver.run_resource_label_core",
+            return_value=(
+                {
+                    "status": "FOUND_NEGATIVE",
+                    "resource_label_core_mode": "test_worker",
+                    "worker_generated_column_task_sets": [sorted(singleton.task_set)],
+                },
+                (singleton,),
+            ),
+        ), patch(
+            "lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver.harvest_addable_negative_columns",
+            return_value=((singleton,), stale_harvest_payload),
+        ):
+            worker = pricing_tail_solver_module._run_negative_search_worker(
+                data,
+                master=SimpleNamespace(),
+                reduced_cost_context=reduced_cost_context,
+                master_columns=(singleton,),
+                b0_direct=SimpleNamespace(journeys=()),
+                pool=pool,
+                view=view,
+                cache=DirectPricingCache(),
+                seed_catalog=pricing_tail_solver_module.WorkerSeedCatalog(),
+                profiling=pricing_tail_solver_module.PruningCounter(),
+                round_index=1,
+                max_direct_tasks=5,
+                max_candidate_sets=4,
+                negative_eps=1.0e-6,
+                max_selected=4,
+            )
+
+        self.assertEqual(worker.status, PricingState.FOUND_NEGATIVE)
+        self.assertEqual(worker.selected_columns, ())
+        self.assertFalse(worker.payload["selected_column_entry_audit_pass"])
+        self.assertFalse(worker.payload["worker_selected_columns_audit_pass"])
+        self.assertEqual(worker.payload["selected_count_before_entry_audit"], 1)
+        self.assertEqual(worker.payload["entry_audit_rejected_selected_count"], 1)
+        self.assertEqual(worker.payload["selected_count"], 0)
+        self.assertEqual(worker.payload["selected_would_enter_master_count"], 0)
+        self.assertFalse(worker.payload["selected_all_would_enter_master"])
+        self.assertEqual(worker.harvest_payload["selected_count_before_entry_audit"], 1)
+        self.assertEqual(worker.harvest_payload["entry_audit_rejected_selected_count"], 1)
+        self.assertEqual(worker.harvest_payload["selected_count"], 0)
+        self.assertEqual(worker.harvest_payload["harvest_selected_count"], 0)
 
     def test_b4_1_harvest_prefers_new_task_sets_and_filters_duplicate_candidates(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -7425,6 +7686,40 @@ class LunarIceSmokeTests(unittest.TestCase):
 
         self.assertTrue(signature.cut_coefficient_vector_hash)
 
+    def test_pricing_tail_column_pool_uses_cut_aware_signature_when_cut_active(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        journey = solve_small_journey_baseline(data).journeys[0]
+        tasks = tuple(sorted(journey.task_set))[:3]
+        cut_context = CutContext((subset_row_cut("sri_pool_signature", tasks),))
+        pool = ColumnPool()
+        view = MasterColumnView()
+
+        loaded_root, filtered_root = pricing_tail_solver_module._load_columns_for_node(
+            pool,
+            view,
+            (journey,),
+            node_id="root",
+        )
+        loaded_cut, filtered_cut = pricing_tail_solver_module._load_columns_for_node(
+            pool,
+            view,
+            (journey,),
+            node_id="cut-node",
+            cut_context=cut_context,
+        )
+
+        root_signatures = view.signatures_by_node["root"]
+        cut_signatures = view.signatures_by_node["cut-node"]
+        root_signature = next(iter(root_signatures))
+        cut_signature = next(iter(cut_signatures))
+        self.assertEqual((loaded_root, filtered_root), (1, 0))
+        self.assertEqual((loaded_cut, filtered_cut), (1, 0))
+        self.assertNotEqual(root_signature, cut_signature)
+        self.assertFalse(root_signature.cut_coefficient_vector_hash)
+        self.assertTrue(cut_signature.cut_coefficient_vector_hash)
+        self.assertEqual(len(pool.columns_by_signature), 2)
+
     def test_task_set_dominance_not_enabled_under_active_resource_sensitive_cut(self) -> None:
         with self.assertRaises(ValueError):
             CutDefinition("resource_sensitive", "resource_profile", tasks=("a", "b"), rhs=1.0)
@@ -7980,6 +8275,17 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "tail_dual_center_task_count": 5,
                 "tail_dual_current_task_count": 5,
                 "tail_dual_no_column_can_certify": False,
+                "candidate_search_false_positive_rate": 0.25,
+                "true_negative_candidate_search_miss_rate": 0.5,
+                "candidate_search_false_positive_row_count": 2,
+                "true_negative_candidate_search_miss_row_count": 3,
+                "candidate_search_negative_true_nonnegative_count": 2,
+                "true_negative_candidate_search_nonnegative_count": 3,
+                "candidate_search_dual_matches_true_dual": False,
+                "candidate_search_rc_recomputed_under_true_dual": True,
+                "worker_true_dual_candidate_audit_pass": True,
+                "worker_candidate_universe_task_set_count": 12,
+                "worker_generated_column_task_set_count": 4,
                 "negative_column_count": 0,
                 "wall_time": 0.01,
             }
@@ -7997,6 +8303,14 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(report["diagnostics"]["tail_dual_worker_only_count"], 1)
         self.assertEqual(report["diagnostics"]["tail_dual_true_dual_recomputed_count"], 1)
         self.assertEqual(report["diagnostics"]["tail_dual_no_column_can_certify_count"], 0)
+        self.assertEqual(report["diagnostics"]["dual_search_diagnostic_row_count"], 1)
+        self.assertEqual(report["diagnostics"]["candidate_search_false_positive_row_count"], 2)
+        self.assertEqual(report["diagnostics"]["true_negative_candidate_search_miss_row_count"], 3)
+        self.assertEqual(report["diagnostics"]["mean_candidate_search_false_positive_rate"], 0.25)
+        self.assertEqual(report["diagnostics"]["mean_true_negative_candidate_search_miss_rate"], 0.5)
+        markdown = render_b4_1_markdown(report, rows_csv="rows.csv", summary_json="summary.json")
+        self.assertIn("Dual-search audit rows", markdown)
+        self.assertIn("false-positive rows `2`", markdown)
         self.assertEqual(
             report["diagnostics"]["stage_a_missing_regression_modes"],
             ["stageA_B3B_accepted_baseline", "stageA_B4V2_default_final_judge_harvesting"],
@@ -8008,6 +8322,17 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(requirement_status["R4_stage_c_selected_diagnostic"], "missing")
         self.assertEqual(requirement_status["R6_tail_dual_worker_only"], "pass")
         self.assertEqual(requirement_status["R7_30_scale_exact_closure"], "incomplete")
+
+        exact_final_proof_tail = dict(
+            rows[0],
+            can_certify_no_negative=True,
+            pricing_proof_kind="EXHAUSTIVE_NO_NEGATIVE",
+            underlying_pricing_proof_kind="EXHAUSTIVE_NO_NEGATIVE",
+        )
+        exact_final_report = build_b4_1_report([exact_final_proof_tail])
+        self.assertEqual(exact_final_report["redlines"]["tail_dual_certificate_leak_count"], 0)
+        exact_final_status = {item["id"]: item["status"] for item in exact_final_report["requirement_audit"]}
+        self.assertEqual(exact_final_status["R6_tail_dual_worker_only"], "pass")
 
         unsafe_tail = dict(rows[0])
         unsafe_tail["can_certify_no_negative"] = True
@@ -8074,6 +8399,14 @@ class LunarIceSmokeTests(unittest.TestCase):
                     "harvest_worst_selected_true_rc": -0.1,
                     "harvest_avg_pairwise_jaccard": 0.333333333,
                     "harvest_addability_audit_pass": True,
+                    "labeling_final_judge_exact_harvest_target": 5,
+                    "labeling_final_judge_exact_harvest_target_source": "explicit_parameter",
+                    "exact_negative_harvest_target": 5,
+                    "exact_negative_harvest_candidate_count": 4,
+                    "exact_negative_harvest_selected_count": 2,
+                    "exact_negative_harvest_selected_new_task_set_count": 1,
+                    "exact_negative_harvest_selected_replacement_task_set_count": 1,
+                    "exact_negative_harvest_selection_policy": "global_min_plus_diverse_negative_harvest",
                 },
                 "max_tree_nodes": 31,
                 "max_branch_depth": 4,
@@ -8122,9 +8455,21 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(stage_a["harvest_rejected_duplicate_count"], 3)
         self.assertEqual(stage_a["harvest_rejected_not_addable_count"], 2)
         self.assertAlmostEqual(stage_a["harvest_avg_pairwise_jaccard"], 0.333333333, delta=1.0e-12)
+        self.assertEqual(stage_a["labeling_final_judge_exact_harvest_target"], 5)
+        self.assertEqual(stage_a["labeling_final_judge_exact_harvest_target_source"], "explicit_parameter")
+        self.assertEqual(stage_a["exact_negative_harvest_target"], 5)
+        self.assertEqual(stage_a["exact_negative_harvest_candidate_count"], 4)
+        self.assertEqual(stage_a["exact_negative_harvest_selected_count"], 2)
+        self.assertEqual(stage_a["exact_negative_harvest_selected_new_task_set_count"], 1)
+        self.assertEqual(stage_a["exact_negative_harvest_selected_replacement_task_set_count"], 1)
+        self.assertEqual(
+            stage_a["exact_negative_harvest_selection_policy"],
+            "global_min_plus_diverse_negative_harvest",
+        )
         signature = inspect.signature(b4_1_runner_module.run_b4_1_stage_a_regression)
         self.assertEqual(signature.parameters["max_columns_per_round"].default, 128)
         self.assertEqual(signature.parameters["max_rounds"].default, 16)
+        self.assertIsNone(signature.parameters["labeling_final_judge_exact_harvest_target"].default)
 
         stage_c_rows = [
             {
@@ -9184,14 +9529,16 @@ class LunarIceSmokeTests(unittest.TestCase):
                     {
                         "instance_id": "partition-probe-smoke",
                         "instance_path": str(instance_path),
+                        "dual_context": {
+                            "dual_source": "master.reduced_cost_context",
+                            "task_duals": {task: 0.1 for task in tasks},
+                            "fleet_dual": 0.0,
+                            "cut_duals": {},
+                        },
                         "history": [
                             {
                                 "round": 1,
-                                "dual_context": {
-                                    "task_duals": {task: 0.1 for task in tasks},
-                                    "fleet_dual": 0.0,
-                                    "cut_duals": {},
-                                },
+                                "pricing_state": "FOUND_NEGATIVE",
                             }
                         ],
                         "active_columns": [
@@ -10776,7 +11123,11 @@ class LunarIceSmokeTests(unittest.TestCase):
                 json.dumps(
                     {
                         "instance_id": "staged-refresh-smoke",
-                        "config": {"resume_initial_column_count": 364},
+                        "config": {
+                            "resume_initial_column_count": 364,
+                            "worker_pricer_kind": "relaxed_labeling",
+                            "tail_dual_stabilization_enabled": True,
+                        },
                         "elapsed_sec": 42.0,
                         "algorithm_status": "BPC_INCOMPLETE_PRICING",
                         "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
@@ -10784,6 +11135,56 @@ class LunarIceSmokeTests(unittest.TestCase):
                         "pricing_round_count": 1,
                         "added_column_count": 1,
                         "active_columns": [{"vehicle_id": "c"}],
+                        "history": [
+                            {
+                                "worker_pricer_kind": "relaxed_labeling",
+                                "worker_dual_only": True,
+                                "true_dual_rc_recomputed": True,
+                                "tail_dual_no_column_can_certify": False,
+                                "official_dual_source": "current_true_rmp_dual",
+                                "can_certify_no_negative": False,
+                                "uses_true_dual_bpc_certificate": False,
+                                "root_lp_bound_official": False,
+                                "worker_generated_column_task_set_count": 12,
+                                "resource_extension_seed_task_set_count": 7,
+                                "active_resource_extension_seed_task_set_count": 3,
+                                "resource_extension_label_column_count": 7,
+                                "resource_extension_label_path_variant_candidate_count": 101,
+                                "resource_extension_label_path_variant_feasible_count": 44,
+                                "labeling_harvest_candidate_negative_count": 6,
+                                "labeling_harvest_selected_count": 4,
+                                "labeling_harvest_selected_new_task_set_count": 3,
+                                "labeling_harvest_selected_replacement_task_set_count": 1,
+                                "labeling_harvest_selection_policy": "best_true_rc_first_then_diversity",
+                                "labeling_harvest_avg_pairwise_jaccard": 0.25,
+                                "labeling_harvest_max_pairwise_jaccard": 0.5,
+                                "added_to_master_count": 4,
+                            },
+                            {
+                                "worker_pricer_kind": "relaxed_labeling",
+                                "worker_dual_only": True,
+                                "true_dual_rc_recomputed": True,
+                                "tail_dual_no_column_can_certify": False,
+                                "official_dual_source": "current_true_rmp_dual",
+                                "can_certify_no_negative": False,
+                                "uses_true_dual_bpc_certificate": False,
+                                "root_lp_bound_official": False,
+                                "worker_generated_column_task_set_count": 9,
+                                "resource_extension_seed_task_set_count": 5,
+                                "active_resource_extension_seed_task_set_count": 2,
+                                "resource_extension_label_column_count": 5,
+                                "resource_extension_label_path_variant_candidate_count": 90,
+                                "resource_extension_label_path_variant_feasible_count": 30,
+                                "labeling_harvest_candidate_negative_count": 3,
+                                "labeling_harvest_selected_count": 2,
+                                "labeling_harvest_selected_new_task_set_count": 2,
+                                "labeling_harvest_selected_replacement_task_set_count": 0,
+                                "labeling_harvest_selection_policy": "best_true_rc_first_then_diversity",
+                                "labeling_harvest_avg_pairwise_jaccard": 0.1,
+                                "labeling_harvest_max_pairwise_jaccard": 0.2,
+                                "added_to_master_count": 2,
+                            }
+                        ],
                         "final_judge": {
                             "compact_pricing_phase": "negative_feasibility_proof",
                             "compact_final_judge_profile": "V4",
@@ -10848,6 +11249,27 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertEqual(row["feasibility_proof_status"], "COMPACT_HIGHS_PRICING_OPTIMAL")
             self.assertTrue(row["feasibility_proof_negative_found"])
             self.assertFalse(row["feasibility_proof_can_certify"])
+            self.assertFalse(row["worker_certificate_leak"])
+            self.assertFalse(row["tail_dual_certificate_leak"])
+            self.assertFalse(row["true_dual_rc_recompute_missing"])
+            self.assertTrue(row["worker_dual_only"])
+            self.assertTrue(row["true_dual_rc_recomputed"])
+            self.assertEqual(row["official_dual_source"], "current_true_rmp_dual")
+            self.assertEqual(row["worker_history_round_count"], 2)
+            self.assertEqual(row["worker_generated_column_task_set_count"], 21)
+            self.assertEqual(row["resource_extension_seed_task_set_count"], 12)
+            self.assertEqual(row["active_resource_extension_seed_task_set_count"], 5)
+            self.assertEqual(row["resource_extension_label_column_count"], 12)
+            self.assertEqual(row["resource_extension_label_path_variant_candidate_count"], 191)
+            self.assertEqual(row["resource_extension_label_path_variant_feasible_count"], 74)
+            self.assertEqual(row["labeling_harvest_candidate_negative_count"], 9)
+            self.assertEqual(row["labeling_harvest_selected_count"], 6)
+            self.assertEqual(row["labeling_harvest_selected_new_task_set_count"], 5)
+            self.assertEqual(row["labeling_harvest_selected_replacement_task_set_count"], 1)
+            self.assertEqual(row["labeling_harvest_added_to_master_count"], 6)
+            self.assertEqual(row["harvest_selected_count"], 6)
+            self.assertEqual(row["harvest_source_phase"], "worker_candidate_search_addability_harvest")
+            self.assertEqual(row["labeling_harvest_avg_pairwise_jaccard"], 0.1)
             report = (out / "staged_resume_report_zh.md").read_text(encoding="utf-8")
             self.assertIn("feas status", report)
             self.assertIn("COMPACT_HIGHS_PRICING_OPTIMAL", report)
@@ -11422,6 +11844,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertFalse(frontier["can_certify_no_negative"])
         self.assertEqual(frontier["pricing_proof_kind"], "NONE")
         self.assertEqual(frontier["global_remaining_rc_lb"], 0.0)
+        self.assertIn("pricing_proof_kind_missing", frontier["issues"])
 
         diagnostic = build_pricing_certificate(
             source="diagnostic_direct_pricing",
@@ -11439,7 +11862,7 @@ class LunarIceSmokeTests(unittest.TestCase):
 
         certified = build_pricing_certificate(
             source="true_dual_pricing",
-            pricing_payload={"best_reduced_cost": 0.0},
+            pricing_payload={"best_reduced_cost": 0.0, "pricing_proof_kind": "EXHAUSTIVE_NO_NEGATIVE"},
             rmp_payload={"min_reduced_cost": 0.0},
             uses_true_dual_bpc_certificate=True,
             pricing_complete=True,
@@ -11450,6 +11873,18 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(certified["issues"], [])
         self.assertEqual(certified["frontier_ledger"]["status"], "CERTIFIED_FRONTIER_NO_NEGATIVE")
         self.assertTrue(certified["frontier_ledger"]["lower_bound_official"])
+
+        missing_proof_kind = build_pricing_certificate(
+            source="true_dual_pricing_without_explicit_proof_kind",
+            pricing_payload={"best_reduced_cost": 0.0},
+            rmp_payload={"min_reduced_cost": 0.0},
+            uses_true_dual_bpc_certificate=True,
+            pricing_complete=True,
+            coverage_complete=True,
+        ).to_payload()
+        self.assertEqual(missing_proof_kind["status"], "NOT_PORTED_TRUE_DUAL_BPC")
+        self.assertFalse(missing_proof_kind["can_certify_no_negative"])
+        self.assertIn("pricing_proof_kind_missing", missing_proof_kind["issues"])
 
         incomplete_frontier = build_pricing_frontier_ledger(
             source="b4_1_frontier_ledger_diagnostic",
@@ -11552,6 +11987,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "coverage_complete": True,
                 "uses_true_dual_bpc_certificate": True,
                 "dual_vector_bound_to_rmp": True,
+                "pricing_proof_kind": "EXHAUSTIVE_NO_NEGATIVE",
             },
             rmp_payload={"status": "RESTRICTED_RMP_OPTIMAL", "min_reduced_cost": 0.0},
         )
@@ -11595,6 +12031,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "coverage_complete": True,
                 "uses_true_dual_bpc_certificate": True,
                 "dual_vector_bound_to_rmp": True,
+                "pricing_proof_kind": "EXHAUSTIVE_NO_NEGATIVE",
             },
             rmp_payload={"status": "RESTRICTED_RMP_OPTIMAL", "min_reduced_cost": 0.0},
         )
@@ -11749,7 +12186,7 @@ class LunarIceSmokeTests(unittest.TestCase):
 
         certified = build_pricing_certificate(
             source="true_dual_pricing",
-            pricing_payload={"best_reduced_cost": 0.0},
+            pricing_payload={"best_reduced_cost": 0.0, "pricing_proof_kind": "EXHAUSTIVE_NO_NEGATIVE"},
             rmp_payload={"min_reduced_cost": 0.0},
             uses_true_dual_bpc_certificate=True,
             pricing_complete=True,
@@ -13089,6 +13526,28 @@ class LunarIceSmokeTests(unittest.TestCase):
         args = module._build_parser().parse_args([])
         config = module._official_config(args)
         self.assertEqual(config["model_id"], "B4_2_COLD_EXACT_V1")
+        self.assertEqual(config["root_engine"], "b2b_r3_worker")
+        self.assertEqual(config["worker_pricer_kind"], "relaxed_labeling")
+        self.assertEqual(config["labeling_worker_max_task_cap"], 4)
+        self.assertTrue(config["tail_dual_stabilization_enabled"])
+        self.assertEqual(config["tail_dual_stabilization_alpha"], 0.7)
+        self.assertEqual(config["tail_dual_stabilization_window"], 5)
+        self.assertTrue(config["labeling_support_aware_harvest_enabled"])
+        self.assertEqual(config["labeling_support_overlap_threshold"], 0.6)
+        self.assertEqual(config["labeling_max_selected_jaccard"], 0.5)
+        self.assertEqual(config["labeling_max_selected_containment"], 0.8)
+        self.assertEqual(config["labeling_weak_replacement_cap"], 8)
+        self.assertEqual(config["labeling_strong_replacement_threshold"], -1.0e-4)
+        self.assertEqual(config["labeling_final_judge_mode"], "auto")
+        self.assertEqual(config["labeling_final_judge_max_exact_tasks"], 10)
+        self.assertEqual(config["labeling_final_judge_exact_harvest_target"], 5)
+        self.assertTrue(config["large_task_direct_worker_enabled"])
+        self.assertEqual(config["large_task_direct_worker_max_tasks"], 12)
+        self.assertEqual(config["large_task_direct_worker_max_candidate_sets"], 240)
+        self.assertEqual(config["large_task_direct_worker_time_cap_sec"], 25.0)
+        self.assertEqual(config["large_task_direct_worker_neighborhood_width"], 5)
+        self.assertEqual(config["partition_k_order"], "low_high_interleave")
+        self.assertFalse(config["partition_adaptive_active_sortie_refinement"])
         self.assertFalse(config["no_cheat_policy"]["external_source_probe_allowed"])
         self.assertTrue(config["no_cheat_policy"]["checkpoint_time_counted"])
         first_hash = module._config_hash(config)
@@ -13096,6 +13555,42 @@ class LunarIceSmokeTests(unittest.TestCase):
         changed = dict(config)
         changed["threads"] = 8
         self.assertNotEqual(first_hash, module._config_hash(changed))
+        changed_harvest = dict(config)
+        changed_harvest["labeling_final_judge_exact_harvest_target"] = 8
+        self.assertNotEqual(first_hash, module._config_hash(changed_harvest))
+        changed_support = dict(config)
+        changed_support["labeling_weak_replacement_cap"] = 4
+        self.assertNotEqual(first_hash, module._config_hash(changed_support))
+        changed_cap = dict(config)
+        changed_cap["labeling_worker_max_task_cap"] = 3
+        self.assertNotEqual(first_hash, module._config_hash(changed_cap))
+        changed_large_worker = dict(config)
+        changed_large_worker["large_task_direct_worker_max_tasks"] = 10
+        self.assertNotEqual(first_hash, module._config_hash(changed_large_worker))
+        changed_partition_order = dict(config)
+        changed_partition_order["partition_k_order"] = "ascending"
+        self.assertNotEqual(first_hash, module._config_hash(changed_partition_order))
+        partition_command = module._partition_worker_command(
+            args,
+            source_probe=Path("probe.json"),
+            output_dir=Path("partition"),
+            k_min=1,
+            k_max=2,
+            active_sortie_global_max=2,
+            threads=1,
+        )
+        self.assertNotIn("--partition-adaptive-active-sortie-refinement", partition_command)
+        adaptive_args = module._build_parser().parse_args(["--partition-adaptive-active-sortie-refinement"])
+        adaptive_command = module._partition_worker_command(
+            adaptive_args,
+            source_probe=Path("probe.json"),
+            output_dir=Path("partition"),
+            k_min=1,
+            k_max=2,
+            active_sortie_global_max=2,
+            threads=1,
+        )
+        self.assertIn("--partition-adaptive-active-sortie-refinement", adaptive_command)
 
         rows = [
             {
@@ -13104,6 +13599,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "config_hash": first_hash,
                 "certificate_scope": "BPC_TREE_OPTIMAL",
                 "exact_certificate": True,
+                "under_300": True,
                 "under_500": True,
                 "cold_start_total_sec": 120.0,
                 "root_cg_sec": 80.0,
@@ -13123,6 +13619,7 @@ class LunarIceSmokeTests(unittest.TestCase):
         )
         self.assertFalse(limited_summary["acceptance"]["b4_2_cold_exact_accepted"])
         self.assertEqual(limited_summary["redlines"]["no_cheat_fail_count"], 0)
+        self.assertTrue(limited_summary["acceptance"]["redlines_zero"])
 
         cheat_rows = [dict(rows[0], external_probe_used=True, no_cheat_pass=False)]
         cheat_summary = module._summary(
@@ -13133,6 +13630,750 @@ class LunarIceSmokeTests(unittest.TestCase):
         )
         self.assertEqual(cheat_summary["redlines"]["no_cheat_fail_count"], 1)
         self.assertFalse(cheat_summary["acceptance"]["b4_2_cold_exact_accepted"])
+        self.assertFalse(cheat_summary["acceptance"]["redlines_zero"])
+
+        leak_rows = [dict(rows[0], worker_certificate_leak=1)]
+        leak_summary = module._summary(
+            leak_rows,
+            config=config,
+            limited_run=False,
+            discovered_instance_count=1,
+        )
+        self.assertEqual(leak_summary["redlines"]["worker_certificate_leak_count"], 1)
+        self.assertFalse(leak_summary["acceptance"]["redlines_zero"])
+        self.assertFalse(leak_summary["acceptance"]["b4_2_cold_exact_accepted"])
+
+        root_pool_leak_rows = [
+            dict(
+                rows[0],
+                root_pool_worker_certificate_leak_count=1,
+                worker_certificate_leak=1,
+            )
+        ]
+        root_pool_leak_summary = module._summary(
+            root_pool_leak_rows,
+            config=config,
+            limited_run=False,
+            discovered_instance_count=1,
+        )
+        self.assertEqual(
+            root_pool_leak_summary["redlines"]["root_pool_worker_certificate_leak_count"],
+            1,
+        )
+        self.assertFalse(root_pool_leak_summary["acceptance"]["redlines_zero"])
+        self.assertFalse(root_pool_leak_summary["acceptance"]["b4_2_cold_exact_accepted"])
+
+        root_pool_safety = module._root_pool_safety_fields(
+            [
+                {
+                    "worker_certificate_leak": False,
+                    "tail_dual_certificate_leak": False,
+                    "true_dual_rc_recompute_missing": False,
+                    "worker_dual_only": True,
+                    "true_dual_rc_recomputed": True,
+                    "official_dual_source": "current_true_rmp_dual",
+                },
+                {
+                    "worker_certificate_leak": True,
+                    "tail_dual_certificate_leak": True,
+                    "true_dual_rc_recompute_missing": True,
+                    "worker_dual_only": False,
+                    "true_dual_rc_recomputed": False,
+                    "official_dual_source": "stabilized_worker_dual",
+                },
+            ]
+        )
+        self.assertEqual(root_pool_safety["root_pool_worker_certificate_leak_count"], 1)
+        self.assertEqual(root_pool_safety["root_pool_tail_dual_certificate_leak_count"], 1)
+        self.assertEqual(root_pool_safety["root_pool_true_dual_rc_recompute_missing_count"], 1)
+        merged_row = dict(rows[0])
+        module._apply_root_pool_safety(merged_row, root_pool_safety)
+        self.assertEqual(merged_row["worker_certificate_leak"], 1)
+        self.assertEqual(merged_row["tail_dual_certificate_leak"], 1)
+        self.assertEqual(merged_row["true_dual_rc_recompute_missing"], 1)
+        self.assertEqual(merged_row["certificate_leak"], 1)
+
+        root_pool_harvest = module._root_pool_harvest_fields(
+            [
+                {
+                    "harvest_source_phase": "relaxed_worker_addability_harvest",
+                    "harvest_candidate_negative_count": 7,
+                    "harvest_selected_count": 3,
+                    "harvest_selected_new_task_set_count": 2,
+                    "harvest_selected_replacement_task_set_count": 1,
+                    "harvest_rejected_duplicate_count": 4,
+                    "harvest_rejected_not_addable_count": 5,
+                },
+                {
+                    "labeling_final_judge_exact_harvest_target": 5,
+                    "labeling_final_judge_exact_harvest_target_source": "environment",
+                    "exact_negative_harvest_target": 5,
+                    "exact_negative_harvest_candidate_count": 13,
+                    "exact_negative_harvest_selected_count": 5,
+                    "exact_negative_harvest_selected_new_task_set_count": 4,
+                    "exact_negative_harvest_selected_replacement_task_set_count": 1,
+                    "exact_negative_harvest_selection_policy": "true_rc_then_task_set_diversity",
+                },
+                {
+                    "harvest_source_phase": "b3_node_post_final_judge_addability_harvest",
+                    "final_judge_harvest_source_phase": "compact_final_judge_optimization_harvest",
+                    "final_judge_harvest_selected_count": 2,
+                    "harvest_candidate_negative_count": 5,
+                    "harvest_selected_count": 4,
+                    "harvest_selected_new_task_set_count": 3,
+                    "harvest_selected_replacement_task_set_count": 1,
+                    "harvest_rejected_duplicate_count": 1,
+                    "harvest_rejected_not_addable_count": 2,
+                    "columns_added": 4,
+                },
+            ]
+        )
+        self.assertEqual(root_pool_harvest["root_pool_labeling_final_judge_exact_harvest_target"], 5)
+        self.assertEqual(root_pool_harvest["root_pool_exact_negative_harvest_candidate_count"], 13)
+        self.assertEqual(root_pool_harvest["root_pool_exact_negative_harvest_selected_count"], 5)
+        self.assertEqual(root_pool_harvest["root_pool_worker_harvest_selected_count"], 3)
+        self.assertEqual(root_pool_harvest["root_pool_worker_harvest_rejected_not_addable_count"], 5)
+        self.assertEqual(root_pool_harvest["root_pool_post_final_judge_harvest_selected_count"], 4)
+        self.assertEqual(root_pool_harvest["root_pool_post_final_judge_harvest_added_to_master_count"], 4)
+        self.assertNotEqual(
+            root_pool_harvest["root_pool_post_final_judge_harvest_selected_count"],
+            2,
+        )
+        harvest_summary = module._summary(
+            [dict(rows[0], **root_pool_harvest)],
+            config=config,
+            limited_run=True,
+            discovered_instance_count=1,
+        )
+        self.assertEqual(
+            harvest_summary["harvest_telemetry"]["root_pool_exact_negative_harvest_selected_count"],
+            5,
+        )
+        self.assertEqual(
+            harvest_summary["harvest_telemetry"]["root_pool_post_final_judge_harvest_added_to_master_count"],
+            4,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            worker_result = module._run_partition_worker(
+                command=[sys.executable, "-c", "pass"],
+                output_dir=Path(tmp),
+                time_limit_sec=5.0,
+                env=os.environ.copy(),
+                worker_index=7,
+                k_min=3,
+                k_max=4,
+            )
+        self.assertEqual(worker_result["returncode"], 0)
+        self.assertEqual(worker_result["worker_index"], 7)
+        self.assertEqual(worker_result["k_min"], 3)
+        self.assertEqual(worker_result["k_max"], 4)
+
+    def test_b4_2_partition_k_order_is_complete_deterministic_priority(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_partition_order",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        chunks = module._partition_k_chunks(8, worker_count=4, k_chunk_size=1)
+        ordered = module._order_partition_k_chunks(
+            chunks,
+            task_count=8,
+            mode="low_high_interleave",
+        )
+        self.assertEqual(
+            ordered,
+            [(1, 1), (8, 8), (2, 2), (7, 7), (3, 3), (6, 6), (4, 4), (5, 5)],
+        )
+        self.assertEqual(sorted(ordered), sorted(chunks))
+        covered = [k for k_min, k_max in ordered for k in range(k_min, k_max + 1)]
+        self.assertEqual(sorted(covered), list(range(1, 9)))
+
+        chunked = module._partition_k_chunks(7, worker_count=4, k_chunk_size=2)
+        chunked_order = module._order_partition_k_chunks(
+            chunked,
+            task_count=7,
+            mode="low_high_interleave",
+        )
+        self.assertEqual(chunked_order, [(1, 2), (7, 7), (3, 4), (5, 6)])
+        chunked_covered = [
+            k
+            for k_min, k_max in chunked_order
+            for k in range(k_min, k_max + 1)
+        ]
+        self.assertEqual(sorted(chunked_covered), list(range(1, 8)))
+        self.assertEqual(
+            module._order_partition_k_chunks(chunked, task_count=7, mode="ascending"),
+            chunked,
+        )
+
+    def test_b4_2_root_stage_subprocess_receives_labeling_final_judge_env(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_root_stage",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        args = module._build_parser().parse_args([])
+        instance_path = project_root / "data" / "instances" / "lunar_ice_sp50_005" / "instance_001_logical_graph.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            pool_dir = Path(tmp) / "pool"
+            captured: dict[str, object] = {}
+
+            def fake_run(command, **kwargs):
+                captured["command"] = list(command)
+                captured["env"] = dict(kwargs.get("env") or {})
+                return SimpleNamespace(returncode=0, stdout="root-stage-ok", stderr="")
+
+            with patch.object(module.subprocess, "run", side_effect=fake_run):
+                module._run_stage(
+                    args,
+                    instance_path=instance_path,
+                    pool_dir=pool_dir,
+                    time_limit_sec=10.0,
+                )
+
+            command = captured["command"]
+            self.assertIn("--root-engine", command)
+            self.assertEqual(command[command.index("--root-engine") + 1], "b2b_r3_worker")
+            self.assertIn("--worker-pricer-kind", command)
+            self.assertEqual(command[command.index("--worker-pricer-kind") + 1], "relaxed_labeling")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE"], "auto")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS"], "10")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET"], "5")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_WORKER_MAX_TASK_CAP"], "4")
+
+    def test_b4_2_partition_aggregate_accepts_auxiliary_exact_rows(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_partition_aggregate",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            partition_json = Path(tmp) / "partition.json"
+            partition_json.write_text(
+                json.dumps(
+                    {
+                        "redlines": {},
+                        "summary": {
+                            "partition_dual_refresh_status": "RESTRICTED_RMP_OPTIMAL",
+                            "partition_dual_scope_mismatch_count": 0,
+                            "partition_negative_rc_audit_fail_count": 0,
+                        },
+                        "rows": [
+                            {
+                                "region_id": "exact_001",
+                                "best_reduced_cost": 0.2,
+                                "region_pricing_complete": True,
+                                "region_can_certify_no_negative": True,
+                            },
+                            {
+                                "region_id": "residual_task_count_001_active_sorties_001",
+                                "best_reduced_cost": 0.1,
+                                "region_pricing_complete": True,
+                                "region_can_certify_no_negative": True,
+                            },
+                            {
+                                "region_id": "residual_task_count_002_active_sorties_001",
+                                "best_reduced_cost": 0.3,
+                                "region_pricing_complete": True,
+                                "region_can_certify_no_negative": True,
+                            },
+                            {
+                                "region_id": "residual_task_count_002_active_sorties_002",
+                                "best_reduced_cost": 0.4,
+                                "region_pricing_complete": True,
+                                "region_can_certify_no_negative": True,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            aggregate = module._aggregate_partition_workers(
+                [
+                    {
+                        "returncode": 0,
+                        "timeout": False,
+                        "partition_json": str(partition_json),
+                    }
+                ],
+                task_count=2,
+                negative_eps=1.0e-6,
+            )
+
+            bounded_partition_json = Path(tmp) / "bounded_partition.json"
+            bounded_partition_json.write_text(
+                json.dumps(
+                    {
+                        "redlines": {},
+                        "summary": {
+                            "partition_dual_refresh_status": "RESTRICTED_RMP_OPTIMAL",
+                            "partition_dual_scope_mismatch_count": 0,
+                            "partition_negative_rc_audit_fail_count": 0,
+                        },
+                        "rows": [
+                            {
+                                "region_id": f"residual_task_count_{k:03d}_active_sorties_{m:03d}",
+                                "best_reduced_cost": 0.1 + 0.01 * k + 0.001 * m,
+                                "region_pricing_complete": True,
+                                "region_can_certify_no_negative": True,
+                            }
+                            for k, m in ((1, 1), (2, 1), (2, 2), (3, 1), (3, 2))
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            bounded_aggregate = module._aggregate_partition_workers(
+                [
+                    {
+                        "returncode": 0,
+                        "timeout": False,
+                        "partition_json": str(bounded_partition_json),
+                    }
+                ],
+                task_count=3,
+                active_sortie_global_max=2,
+                active_sortie_global_max_source="unit_test_safe_slot_bound",
+                negative_eps=1.0e-6,
+            )
+            coarse_partition_json = Path(tmp) / "coarse_partition.json"
+            coarse_partition_json.write_text(
+                json.dumps(
+                    {
+                        "redlines": {},
+                        "summary": {
+                            "partition_dual_refresh_status": "RESTRICTED_RMP_OPTIMAL",
+                            "partition_dual_scope_mismatch_count": 0,
+                            "partition_negative_rc_audit_fail_count": 0,
+                        },
+                        "rows": [
+                            {
+                                "region_id": f"residual_task_count_{k:03d}",
+                                "best_reduced_cost": 0.2 + 0.01 * k,
+                                "region_pricing_complete": True,
+                                "region_can_certify_no_negative": True,
+                            }
+                            for k in (1, 2, 3)
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            coarse_aggregate = module._aggregate_partition_workers(
+                [
+                    {
+                        "returncode": 0,
+                        "timeout": False,
+                        "partition_json": str(coarse_partition_json),
+                    }
+                ],
+                task_count=3,
+                active_sortie_global_max=2,
+                active_sortie_global_max_source="unit_test_safe_slot_bound",
+                negative_eps=1.0e-6,
+            )
+            incomplete_coarse_json = Path(tmp) / "incomplete_coarse_partition.json"
+            incomplete_coarse_json.write_text(
+                json.dumps(
+                    {
+                        "redlines": {},
+                        "summary": {
+                            "partition_dual_refresh_status": "RESTRICTED_RMP_OPTIMAL",
+                            "partition_dual_scope_mismatch_count": 0,
+                            "partition_negative_rc_audit_fail_count": 0,
+                        },
+                        "rows": [
+                            {
+                                "region_id": "residual_task_count_001",
+                                "best_reduced_cost": 0.2,
+                                "region_pricing_complete": True,
+                                "region_can_certify_no_negative": True,
+                            },
+                            {
+                                "region_id": "residual_task_count_002",
+                                "best_reduced_cost": 0.3,
+                                "region_pricing_complete": False,
+                                "region_can_certify_no_negative": False,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            incomplete_coarse_aggregate = module._aggregate_partition_workers(
+                [
+                    {
+                        "returncode": 0,
+                        "timeout": False,
+                        "partition_json": str(incomplete_coarse_json),
+                    }
+                ],
+                task_count=2,
+                negative_eps=1.0e-6,
+            )
+
+        self.assertTrue(aggregate["certified_no_negative"])
+        self.assertEqual(aggregate["region_count"], 3)
+        self.assertEqual(aggregate["expected_region_count"], 3)
+        self.assertEqual(aggregate["auxiliary_exact_region_count"], 1)
+        self.assertNotIn("region_id_unparsed", aggregate["issue_codes"])
+        self.assertEqual(aggregate["best_lb"], 0.1)
+        self.assertTrue(bounded_aggregate["certified_no_negative"])
+        self.assertEqual(bounded_aggregate["region_count"], 5)
+        self.assertEqual(bounded_aggregate["expected_region_count"], 5)
+        self.assertEqual(bounded_aggregate["active_sortie_global_max"], 2)
+        self.assertEqual(
+            bounded_aggregate["active_sortie_global_max_source"],
+            "unit_test_safe_slot_bound",
+        )
+        self.assertEqual(bounded_aggregate["active_sortie_bound_pruned_region_count"], 1)
+        self.assertTrue(coarse_aggregate["certified_no_negative"])
+        self.assertEqual(coarse_aggregate["region_count"], 5)
+        self.assertEqual(coarse_aggregate["expected_region_count"], 5)
+        self.assertEqual(coarse_aggregate["coarse_region_count"], 3)
+        self.assertEqual(coarse_aggregate["coarse_covered_region_count"], 5)
+        self.assertEqual(coarse_aggregate["coarse_incomplete_region_count"], 0)
+        self.assertNotIn("region_id_unparsed", coarse_aggregate["issue_codes"])
+        self.assertFalse(incomplete_coarse_aggregate["certified_no_negative"])
+        self.assertEqual(incomplete_coarse_aggregate["coarse_region_count"], 2)
+        self.assertEqual(incomplete_coarse_aggregate["coarse_incomplete_region_count"], 1)
+        self.assertIn("missing_regions", incomplete_coarse_aggregate["issue_codes"])
+        self.assertIn("incomplete_regions", incomplete_coarse_aggregate["issue_codes"])
+
+    def test_b4_2_tree_closure_subprocess_receives_worker_config(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_tree_closure",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        args = module._build_parser().parse_args([])
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_probe = tmp_path / "root_probe.json"
+            source_probe.write_text("{}", encoding="utf-8")
+            output_dir = tmp_path / "tree"
+            captured: dict[str, object] = {}
+
+            def fake_run(command, **kwargs):
+                captured["command"] = list(command)
+                captured["env"] = dict(kwargs.get("env") or {})
+                result_dir = output_dir / "tree_closure_results"
+                result_dir.mkdir(parents=True, exist_ok=True)
+                (result_dir / "tree_closure_001.json").write_text(
+                    json.dumps(
+                        {
+                            "algorithm_status": "BPC_OPTIMAL",
+                            "certificate_scope": "BPC_TREE_OPTIMAL",
+                            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                            "worker_pricer_kind": "relaxed_labeling",
+                            "tail_dual_stabilization_enabled": True,
+                            "nodes": [
+                                {
+                                    "algorithm_status": "BPC_OPTIMAL",
+                                    "certificate_scope": "BPC_TREE_OPTIMAL",
+                                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                                    "loaded_column_count": 8,
+                                    "added_column_count": 0,
+                                    "round_count": 1,
+                                    "history": [
+                                        {
+                                            "final_judge_called": False,
+                                            "worker_dual_only": True,
+                                            "true_dual_rc_recomputed": True,
+                                            "tail_dual_no_column_can_certify": False,
+                                            "official_dual_source": "current_true_rmp_dual",
+                                        }
+                                    ],
+                                    "final_judge": {
+                                        "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                                        "pricing_rc_audit_pass": True,
+                                    },
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (output_dir / "b4_1_summary.json").write_text(
+                    json.dumps(
+                        {
+                            "redlines": {
+                                "certificate_leak_count": 0,
+                                "manual_rc_fail_count": 0,
+                                "pricing_rc_fail_count": 0,
+                                "tail_dual_certificate_leak_count": 0,
+                            }
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with patch.object(module.subprocess, "run", side_effect=fake_run):
+                row = module._run_tree_closure(
+                    args,
+                    instance_index=1,
+                    instance_path=tmp_path / "instance_001_logical_graph.json",
+                    source_probe=source_probe,
+                    output_dir=output_dir,
+                    time_limit_sec=10.0,
+                )
+
+            command = captured["command"]
+            self.assertIn("--tree-closure-worker-pricer-kind", command)
+            worker_index = command.index("--tree-closure-worker-pricer-kind") + 1
+            self.assertEqual(command[worker_index], "relaxed_labeling")
+            self.assertIn("--tree-closure-tail-dual-stabilization-enabled", command)
+            self.assertIn("--tree-closure-tail-dual-stabilization-alpha", command)
+            self.assertIn("--tree-closure-tail-dual-stabilization-window", command)
+            self.assertIn("--tree-closure-labeling-final-judge-mode", command)
+            label_mode_index = command.index("--tree-closure-labeling-final-judge-mode") + 1
+            self.assertEqual(command[label_mode_index], "auto")
+            self.assertIn("--tree-closure-labeling-final-judge-max-exact-tasks", command)
+            label_max_index = command.index("--tree-closure-labeling-final-judge-max-exact-tasks") + 1
+            self.assertEqual(command[label_max_index], "10")
+            self.assertIn("--tree-closure-labeling-final-judge-exact-harvest-target", command)
+            harvest_index = command.index("--tree-closure-labeling-final-judge-exact-harvest-target") + 1
+            self.assertEqual(command[harvest_index], "5")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE"], "auto")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS"], "10")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET"], "5")
+            self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_WORKER_MAX_TASK_CAP"], "4")
+            self.assertEqual(row["tree_closure_worker_pricer_kind"], "relaxed_labeling")
+            self.assertTrue(row["tree_closure_tail_dual_stabilization_enabled"])
+            self.assertEqual(row["tree_closure_labeling_final_judge_mode"], "auto")
+            self.assertEqual(row["tree_closure_labeling_final_judge_max_exact_tasks"], 10)
+            self.assertEqual(row["tree_closure_labeling_final_judge_exact_harvest_target"], 5)
+            self.assertEqual(row["worker_certificate_leak"], 0)
+            self.assertEqual(row["tail_dual_certificate_leak"], 0)
+            self.assertEqual(row["true_dual_rc_recompute_missing"], 0)
+            self.assertTrue(row["worker_dual_only"])
+            self.assertTrue(row["true_dual_rc_recomputed"])
+            self.assertEqual(row["official_dual_source"], "current_true_rmp_dual")
+
+    def test_b4_2_tree_closure_audits_worker_payload_on_final_judge_rows(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_tree_closure_final_judge_worker",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        args = module._build_parser().parse_args([])
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_probe = tmp_path / "root_probe.json"
+            source_probe.write_text("{}", encoding="utf-8")
+            output_dir = tmp_path / "tree"
+
+            def fake_run(command, **kwargs):
+                result_dir = output_dir / "tree_closure_results"
+                result_dir.mkdir(parents=True, exist_ok=True)
+                (result_dir / "tree_closure_001.json").write_text(
+                    json.dumps(
+                        {
+                            "algorithm_status": "BPC_OPTIMAL",
+                            "certificate_scope": "BPC_TREE_OPTIMAL",
+                            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                            "worker_pricer_kind": "relaxed_labeling",
+                            "tail_dual_stabilization_enabled": True,
+                            "nodes": [
+                                {
+                                    "algorithm_status": "BPC_OPTIMAL",
+                                    "certificate_scope": "BPC_TREE_OPTIMAL",
+                                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                                    "history": [
+                                        {
+                                            "final_judge_called": True,
+                                            "worker_pricer_kind": "relaxed_labeling",
+                                            "can_certify_no_negative": True,
+                                            "uses_true_dual_bpc_certificate": False,
+                                            "root_lp_bound_official": False,
+                                            "worker_dual_only": False,
+                                            "true_dual_rc_recomputed": False,
+                                            "tail_dual_no_column_can_certify": True,
+                                            "official_dual_source": "tail_dual_stabilized_worker_dual",
+                                        }
+                                    ],
+                                    "final_judge": {
+                                        "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                                        "pricing_rc_audit_pass": True,
+                                    },
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (output_dir / "b4_1_summary.json").write_text(
+                    json.dumps(
+                        {
+                            "redlines": {
+                                "certificate_leak_count": 0,
+                                "manual_rc_fail_count": 0,
+                                "pricing_rc_fail_count": 0,
+                                "tail_dual_certificate_leak_count": 0,
+                            }
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with patch.object(module.subprocess, "run", side_effect=fake_run):
+                row = module._run_tree_closure(
+                    args,
+                    instance_index=1,
+                    instance_path=tmp_path / "instance_001_logical_graph.json",
+                    source_probe=source_probe,
+                    output_dir=output_dir,
+                    time_limit_sec=10.0,
+                )
+
+            self.assertEqual(row["worker_certificate_leak"], 1)
+            self.assertEqual(row["tail_dual_certificate_leak"], 1)
+            self.assertEqual(row["true_dual_rc_recompute_missing"], 1)
+            self.assertFalse(row["worker_dual_only"])
+            self.assertFalse(row["true_dual_rc_recomputed"])
+            self.assertEqual(row["official_dual_source"], "tail_dual_stabilized_worker_dual")
+
+    def test_b4_2_finish_timing_downgrades_safety_redline_certificate(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_finish_safety",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        row = {
+            "algorithm_status": "BPC_OPTIMAL",
+            "certificate_scope": "BPC_TREE_OPTIMAL",
+            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+            "exact_certificate": True,
+            "bpc_tree_optimal": True,
+            "root_cg_sec": 1.0,
+            "root_partition_feedback_sec": 0.0,
+            "root_partition_sec": None,
+            "tree_sec": 1.0,
+            "certificate_leak": 1,
+            "fail_reason": "",
+        }
+
+        finished = module._finish_timing(row, module.perf_counter())
+
+        self.assertFalse(finished["exact_certificate"])
+        self.assertFalse(finished["bpc_tree_optimal"])
+        self.assertEqual(finished["algorithm_status"], "BPC_INCOMPLETE_PRICING")
+        self.assertEqual(finished["certificate_scope"], "DIAGNOSTIC_PRICING_FRONTIER")
+        self.assertEqual(finished["pricing_state"], "INCOMPLETE_LIMIT")
+        self.assertEqual(finished["under_300"], False)
+        self.assertEqual(finished["under_500"], False)
+        self.assertEqual(finished["underlying_certificate_scope"], "BPC_TREE_OPTIMAL")
+        self.assertIn("safety redline", finished["fail_reason"])
+
+    def test_b4_2_finish_timing_terminalizes_budget_exhausted_checkpoint(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_finish_budget_exhausted",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        row = {
+            "algorithm_status": "BPC_INCOMPLETE_PRICING",
+            "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "exact_certificate": False,
+            "bpc_tree_optimal": False,
+            "row_terminal": False,
+            "row_limit_sec": 300.0,
+            "root_partition_post_final_feedback_added_column_count": 3,
+            "root_partition_post_final_feedback_resume_counts_prior_time": True,
+            "root_cg_sec": 1.0,
+            "root_partition_feedback_sec": 0.0,
+            "root_partition_sec": 299.0,
+            "tree_sec": None,
+            "fail_reason": (
+                "post-final partition feedback checkpointed addable negative columns; "
+                "resume counts prior cold-start time"
+            ),
+        }
+
+        finished = module._finish_timing(row, module.perf_counter() - 301.0)
+
+        self.assertTrue(finished["row_budget_exhausted"])
+        self.assertTrue(finished["row_terminal"])
+        self.assertFalse(finished["same_run_checkpoint_resume_eligible"])
+        self.assertFalse(finished["root_partition_post_final_feedback_resume_counts_prior_time"])
+        self.assertIn("fixed row budget is exhausted", finished["fail_reason"])
+
+    def test_b4_2_finish_timing_keeps_checkpoint_resume_eligible_with_remaining_budget(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_finish_budget_remaining",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        row = {
+            "algorithm_status": "BPC_INCOMPLETE_PRICING",
+            "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "exact_certificate": False,
+            "bpc_tree_optimal": False,
+            "row_terminal": True,
+            "row_limit_sec": 300.0,
+            "root_partition_post_final_feedback_added_column_count": 3,
+            "root_partition_post_final_feedback_resume_counts_prior_time": False,
+            "root_cg_sec": 1.0,
+            "root_partition_feedback_sec": 0.0,
+            "root_partition_sec": 100.0,
+            "tree_sec": None,
+            "fail_reason": (
+                "post-final partition feedback checkpointed addable negative columns; "
+                "resume counts prior cold-start time"
+            ),
+        }
+
+        finished = module._finish_timing(row, module.perf_counter() - 120.0)
+
+        self.assertFalse(finished["row_budget_exhausted"])
+        self.assertFalse(finished["row_terminal"])
+        self.assertTrue(finished["same_run_checkpoint_resume_eligible"])
+        self.assertTrue(finished["root_partition_post_final_feedback_resume_counts_prior_time"])
 
     def test_b4_2_report_marks_seed_instrumentation_boundary(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
@@ -13157,9 +14398,10 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
                 "pricing_state": "INCOMPLETE_LIMIT",
                 "exact_certificate": False,
+                "under_300": False,
                 "under_500": False,
-                "cold_start_total_sec": 500.1,
-                "root_cg_sec": 500.1,
+                "cold_start_total_sec": 300.1,
+                "root_cg_sec": 300.1,
                 "tree_sec": None,
                 "root_pool_active_column_count": 151,
                 "column_provenance": "instance_json_fixed_seed_same_run_checkpoint_and_partition_feedback",
@@ -13178,10 +14420,35 @@ class LunarIceSmokeTests(unittest.TestCase):
             discovered_instance_count=1,
         )
         report = module._render_report(rows, summary)
-        self.assertIn("B4.2 Cold-Start Exact 500s Report", report)
+        self.assertIn("B4.2 Cold-Start Exact 300s Report", report)
         self.assertIn("B0 incumbent + singleton", report)
+        self.assertIn("labeling_final_judge=auto", report)
         self.assertIn("instance_json_fixed_seed_same_run_checkpoint_and_partition_feedback", report)
         self.assertFalse(summary["acceptance"]["b4_2_cold_exact_accepted"])
+
+    def test_b4_2_resume_state_rejects_config_hash_mismatch(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_resume_guard",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        parser = module._build_parser()
+        with self.assertRaises(SystemExit):
+            module._enforce_resume_config(
+                {"config_hash": "old_hash", "rows": [{"config_hash": "old_hash"}]},
+                config_hash="new_hash",
+                parser=parser,
+            )
+        module._enforce_resume_config(
+            {"config_hash": "same_hash", "rows": [{"config_hash": "same_hash"}]},
+            config_hash="same_hash",
+            parser=parser,
+        )
 
     def test_b4_2_partition_feedback_merges_only_audited_negative_payloads(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
@@ -13295,6 +14562,259 @@ class LunarIceSmokeTests(unittest.TestCase):
                 merged["b4_2_partition_feedback_merge"]["selected"][0]["region_id"],
                 "residual_task_count_002_active_sorties_001",
             )
+
+    def test_b4_2_partition_feedback_selection_keeps_region_diversity(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_partition_feedback_diversity",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def payload(task_ids: list[str], *, offset: float) -> dict:
+            service_starts = {
+                task_id: offset + 10.0 + index for index, task_id in enumerate(task_ids)
+            }
+            legs = [{"from": "depot", "to": task_ids[0], "path_type": "low_time"}]
+            legs.extend(
+                {"from": left, "to": right, "path_type": "low_time"}
+                for left, right in zip(task_ids, task_ids[1:])
+            )
+            legs.append({"from": task_ids[-1], "to": "depot", "path_type": "low_time"})
+            return {
+                "vehicle_id": f"candidate_{offset}",
+                "sorties": [
+                    {
+                        "tasks": task_ids,
+                        "legs": legs,
+                        "start_time": 0.0,
+                        "service_starts": service_starts,
+                    }
+                ],
+            }
+
+        dense_tasks = [f"ice_site_{index:03d}" for index in range(1, 9)]
+        sparse_tasks = ["ice_site_021", "ice_site_022", "ice_site_023"]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_probe = tmp_path / "probe.json"
+            source_probe.write_text(
+                json.dumps(
+                    {
+                        "instance_id": "demo_instance",
+                        "active_columns_payload_version": "journey_solution_payload.v1",
+                        "active_columns": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            partition_dir = tmp_path / "partition"
+            worker_dir = partition_dir / "worker_01_k001_008"
+            worker_dir.mkdir(parents=True)
+            rows = [
+                {
+                    "region_id": "residual_task_count_008_active_sorties_002",
+                    "required_task_count": 8,
+                    "required_active_sortie_count": 2,
+                    "partition_negative_solution_payload": payload(dense_tasks, offset=0.0),
+                    "partition_negative_true_rc": -10.0,
+                    "partition_negative_pricing_rc_diff": 0.0,
+                    "partition_negative_rc_audit_pass": True,
+                    "partition_negative_task_set": dense_tasks,
+                    "partition_negative_task_set_size": 8,
+                    "partition_negative_replacement_or_new_task_set": "new_task_set",
+                },
+                {
+                    "region_id": "residual_task_count_008_active_sorties_003",
+                    "required_task_count": 8,
+                    "required_active_sortie_count": 3,
+                    "partition_negative_solution_payload": payload(dense_tasks, offset=100.0),
+                    "partition_negative_true_rc": -9.0,
+                    "partition_negative_pricing_rc_diff": 0.0,
+                    "partition_negative_rc_audit_pass": True,
+                    "partition_negative_task_set": dense_tasks,
+                    "partition_negative_task_set_size": 8,
+                    "partition_negative_replacement_or_new_task_set": "new_task_set",
+                },
+                {
+                    "region_id": "residual_task_count_003_active_sorties_001",
+                    "required_task_count": 3,
+                    "required_active_sortie_count": 1,
+                    "partition_negative_solution_payload": payload(sparse_tasks, offset=200.0),
+                    "partition_negative_true_rc": -8.0,
+                    "partition_negative_pricing_rc_diff": 0.0,
+                    "partition_negative_rc_audit_pass": True,
+                    "partition_negative_task_set": sparse_tasks,
+                    "partition_negative_task_set_size": 3,
+                    "partition_negative_replacement_or_new_task_set": "new_task_set",
+                },
+            ]
+            (worker_dir / "required_task_set_partition_probe.json").write_text(
+                json.dumps({"rows": rows}),
+                encoding="utf-8",
+            )
+            output_probe = tmp_path / "merged.json"
+            result = module._merge_partition_negative_columns_into_probe(
+                source_probe=source_probe,
+                partition_dir=partition_dir,
+                output_probe=output_probe,
+                max_columns=2,
+                negative_eps=1.0e-6,
+                round_index=1,
+            )
+            self.assertEqual(result["candidate_count"], 3)
+            self.assertEqual(result["selected_count"], 2)
+            merged = json.loads(output_probe.read_text(encoding="utf-8"))
+            selected_regions = {
+                row["region_id"] for row in merged["b4_2_partition_feedback_merge"]["selected"]
+            }
+            self.assertIn("residual_task_count_008_active_sorties_002", selected_regions)
+            self.assertIn("residual_task_count_003_active_sorties_001", selected_regions)
+            self.assertEqual(
+                merged["b4_2_partition_feedback_merge"]["selected_required_task_count_count"],
+                2,
+            )
+
+    def test_compact_staged_resume_preserves_b4_2_feedback_metadata(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "compact_pricing_staged_resume_manifest_metadata",
+            project_root / "scripts" / "run_lunar_ice_compact_pricing_staged_resume.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        preserved = module._preserved_manifest_metadata(
+            {
+                "schema_version": "old",
+                "latest_probe": "stage_001/probe.json",
+                "stages": [{"stage_index": 1}],
+                "b4_2_partition_feedback_merges": [{"selected_count": 23}],
+                "operator_note": "keep",
+            }
+        )
+
+        self.assertNotIn("latest_probe", preserved)
+        self.assertNotIn("stages", preserved)
+        self.assertEqual(
+            preserved["b4_2_partition_feedback_merges"],
+            [{"selected_count": 23}],
+        )
+        self.assertEqual(preserved["operator_note"], "keep")
+
+    def test_b4_2_post_final_partition_feedback_checkpoints_negative_columns(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_post_final_feedback",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        negative_payload = {
+            "vehicle_id": "partition_negative",
+            "sorties": [
+                {
+                    "tasks": ["ice_site_002", "ice_site_003"],
+                    "legs": [
+                        {"from": "depot", "to": "ice_site_002", "path_type": "low_time"},
+                        {"from": "ice_site_002", "to": "ice_site_003", "path_type": "low_risk"},
+                        {"from": "ice_site_003", "to": "depot", "path_type": "low_time"},
+                    ],
+                    "start_time": 0.0,
+                    "service_starts": {"ice_site_002": 20.0, "ice_site_003": 30.0},
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            pool_dir = tmp_path / "pool"
+            proof_dir = tmp_path / "proof"
+            partition_dir = proof_dir / "root_partition_proof"
+            partition_worker = partition_dir / "worker_01_k002_002"
+            pool_dir.mkdir(parents=True)
+            partition_worker.mkdir(parents=True)
+            latest_probe = pool_dir / "stage_001" / "probe.json"
+            latest_probe.parent.mkdir(parents=True)
+            latest_probe.write_text(
+                json.dumps(
+                    {
+                        "active_columns_payload_version": "journey_solution_payload.v1",
+                        "active_columns": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (pool_dir / "staged_resume_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "lunar_ice_bpc.compact_pricing_staged_resume.v1",
+                        "latest_probe": str(latest_probe),
+                        "stages": [{"stage_index": 1, "active_column_count": 0}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (partition_worker / "required_task_set_partition_probe.json").write_text(
+                json.dumps(
+                    {
+                        "rows": [
+                            {
+                                "region_id": "residual_task_count_002_active_sorties_001",
+                                "required_task_count": 2,
+                                "required_active_sortie_count": 1,
+                                "partition_negative_solution_payload": negative_payload,
+                                "partition_negative_true_rc": -0.25,
+                                "partition_negative_pricing_rc_diff": 0.0,
+                                "partition_negative_rc_audit_pass": True,
+                                "partition_negative_task_set": ["ice_site_002", "ice_site_003"],
+                                "partition_negative_task_set_size": 2,
+                                "partition_negative_replacement_or_new_task_set": "new_task_set",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = module._checkpoint_post_final_partition_feedback(
+                SimpleNamespace(partition_feedback_merge_limit=4, partition_feedback_rounds=1),
+                pool_dir=pool_dir,
+                proof_dir=proof_dir,
+                latest_probe=latest_probe,
+                partition_dir=partition_dir,
+            )
+
+            self.assertEqual(result["root_partition_post_final_feedback_added_column_count"], 1)
+            self.assertFalse(result["root_partition_post_final_feedback_mutates_certificate"])
+            self.assertTrue(result["root_partition_post_final_feedback_resume_counts_prior_time"])
+            manifest = json.loads((pool_dir / "staged_resume_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["latest_probe"], result["root_partition_post_final_feedback_output_probe"])
+            self.assertEqual(len(manifest["b4_2_partition_feedback_merges"]), 1)
+            merged = json.loads(Path(manifest["latest_probe"]).read_text(encoding="utf-8"))
+            self.assertEqual(len(merged["active_columns"]), 1)
+
+    def test_b4_2_resume_elapsed_counts_only_incomplete_rows(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_resume_elapsed",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        self.assertEqual(module._resume_elapsed_sec(None), 0.0)
+        self.assertEqual(module._resume_elapsed_sec({"row_terminal": True, "cold_start_total_sec": 12.0}), 0.0)
+        self.assertEqual(module._resume_elapsed_sec({"row_terminal": False, "cold_start_total_sec": 12.5}), 12.5)
 
     def test_b4_2_root_partition_gate_requires_integral_root(self) -> None:
         project_root = Path(__file__).resolve().parents[1]

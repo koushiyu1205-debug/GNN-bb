@@ -26,6 +26,19 @@ def main() -> int:
     parser.add_argument("--seed-mode", default="b0_incumbent_plus_singletons")
     parser.add_argument("--initial-resume-probe", default="")
     parser.add_argument("--batch-target", type=int, default=2)
+    parser.add_argument(
+        "--root-engine",
+        choices=("b1_compact_final_judge", "b2b_r3_worker"),
+        default="b1_compact_final_judge",
+    )
+    parser.add_argument(
+        "--worker-pricer-kind",
+        choices=("direct_label", "relaxed_labeling"),
+        default="direct_label",
+    )
+    parser.add_argument("--tail-dual-stabilization-enabled", action="store_true")
+    parser.add_argument("--tail-dual-stabilization-alpha", type=float, default=0.7)
+    parser.add_argument("--tail-dual-stabilization-window", type=int, default=5)
     parser.add_argument("--negative-search-cap-sec", type=float, default=60.0)
     parser.add_argument(
         "--compact-optimization-harvest-target",
@@ -176,6 +189,11 @@ def main() -> int:
             "max_direct_tasks": int(args.max_direct_tasks),
             "seed_mode": str(args.seed_mode),
             "batch_target": int(args.batch_target),
+            "root_engine": str(args.root_engine),
+            "worker_pricer_kind": str(args.worker_pricer_kind),
+            "tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
+            "tail_dual_stabilization_alpha": float(args.tail_dual_stabilization_alpha),
+            "tail_dual_stabilization_window": int(args.tail_dual_stabilization_window),
             "negative_search_cap_sec": float(args.negative_search_cap_sec),
             "compact_optimization_harvest_target": int(args.compact_optimization_harvest_target),
             "compact_optimization_harvest_no_good_scope": str(
@@ -183,6 +201,12 @@ def main() -> int:
             ),
             "compact_final_judge_profile": str(args.compact_final_judge_profile or ""),
             "compact_final_judge_phase_mode": str(args.compact_final_judge_phase_mode or ""),
+            "env_labeling_final_judge": os.environ.get("LUNAR_ICE_LABELING_FINAL_JUDGE", ""),
+            "env_labeling_final_judge_max_tasks": os.environ.get("LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS", ""),
+            "env_labeling_final_judge_exact_harvest_target": os.environ.get(
+                "LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET",
+                "",
+            ),
             "compact_service_start_depot_travel_lb": bool(args.compact_service_start_depot_travel_lb),
             "compact_task_to_depot_return_travel_lb": bool(args.compact_task_to_depot_return_travel_lb),
             "compact_pair_route_duration_lb": bool(args.compact_pair_route_duration_lb),
@@ -214,8 +238,24 @@ def main() -> int:
             str(int(args.max_direct_tasks)),
             "--seed-mode",
             str(args.seed_mode),
+            "--root-engine",
+            str(args.root_engine),
+            "--worker-pricer-kind",
+            str(args.worker_pricer_kind),
+            "--batch-target",
+            str(int(args.batch_target)),
             "--write-active-columns",
         ]
+        if bool(args.tail_dual_stabilization_enabled):
+            command.append("--tail-dual-stabilization-enabled")
+        command.extend(
+            [
+                "--tail-dual-stabilization-alpha",
+                str(float(args.tail_dual_stabilization_alpha)),
+                "--tail-dual-stabilization-window",
+                str(int(args.tail_dual_stabilization_window)),
+            ]
+        )
         if resume_probe:
             command.extend(["--resume-probe", str(resume_probe)])
 
@@ -296,38 +336,11 @@ def main() -> int:
         rows.append(row)
         resume_probe = probe_path
         manifest = {
+            **_preserved_manifest_metadata(manifest),
             "schema_version": "lunar_ice_bpc.compact_pricing_staged_resume.v1",
             "instance_path": str(instance_path),
             "output_dir": str(output_dir),
-            "config": {
-                "stage_time_limit_sec": float(args.stage_time_limit_sec),
-                "max_rounds_per_stage": int(args.max_rounds_per_stage),
-                "max_direct_tasks": int(args.max_direct_tasks),
-                "seed_mode": str(args.seed_mode),
-                "batch_target": int(args.batch_target),
-                "negative_search_cap_sec": float(args.negative_search_cap_sec),
-                "compact_optimization_harvest_target": int(args.compact_optimization_harvest_target),
-                "compact_optimization_harvest_no_good_scope": str(
-                    args.compact_optimization_harvest_no_good_scope
-                ),
-                "compact_final_judge_profile": str(args.compact_final_judge_profile or ""),
-                "compact_final_judge_phase_mode": str(args.compact_final_judge_phase_mode or ""),
-                "compact_service_start_depot_travel_lb": bool(args.compact_service_start_depot_travel_lb),
-                "compact_task_to_depot_return_travel_lb": bool(args.compact_task_to_depot_return_travel_lb),
-                "compact_pair_route_duration_lb": bool(args.compact_pair_route_duration_lb),
-                "compact_pair_weighted_completion_lb": bool(args.compact_pair_weighted_completion_lb),
-                "compact_sortie_slot_position_bounds": bool(args.compact_sortie_slot_position_bounds),
-                "compact_demand_cover_cut": bool(args.compact_demand_cover_cut),
-                "compact_single_task_energy_lb": bool(args.compact_single_task_energy_lb),
-                "compact_single_task_shadow_lb": bool(args.compact_single_task_shadow_lb),
-                "compact_pair_energy_lb": bool(args.compact_pair_energy_lb),
-                "compact_pair_energy_infeasible_cut": bool(args.compact_pair_energy_infeasible_cut),
-                "compact_pair_shadow_infeasible_cut": bool(args.compact_pair_shadow_infeasible_cut),
-                "compact_triple_time_window_infeasible_cut": bool(args.compact_triple_time_window_infeasible_cut),
-                "compact_quad_time_window_infeasible_cut": bool(args.compact_quad_time_window_infeasible_cut),
-                "compact_triple_shadow_infeasible_cut": bool(args.compact_triple_shadow_infeasible_cut),
-                "compact_triple_energy_infeasible_cut": bool(args.compact_triple_energy_infeasible_cut),
-            },
+            "config": dict(stage_config),
             "latest_probe": str(resume_probe),
             "stages": rows,
         }
@@ -361,6 +374,19 @@ def _load_manifest(path: Path) -> dict:
     if not isinstance(payload, dict):
         raise ValueError(f"manifest must contain a JSON object: {path}")
     return payload
+
+
+def _preserved_manifest_metadata(manifest: dict) -> dict:
+    reserved = {
+        "schema_version",
+        "instance_path",
+        "output_dir",
+        "config",
+        "latest_probe",
+        "stages",
+        "last_error",
+    }
+    return {str(key): value for key, value in manifest.items() if str(key) not in reserved}
 
 
 def _initial_resume_probe(args: argparse.Namespace, manifest: dict) -> Path | None:
@@ -416,6 +442,8 @@ def _refresh_stage_rows(rows: list[dict]) -> list[dict]:
 
 def _stage_row(stage_index: int, probe_path: Path, probe: dict, *, stage_config: dict | None = None) -> dict:
     history = list(probe.get("history") or [])
+    worker_history = _worker_history_rows(probe)
+    worker_telemetry = _worker_history_telemetry(worker_history)
     best_rc_values = [
         row.get("best_reduced_cost")
         for row in history
@@ -426,23 +454,66 @@ def _stage_row(stage_index: int, probe_path: Path, probe: dict, *, stage_config:
     optimization_phase_summary = _optimization_phase_summary(final_judge)
     proof_phase_summary = _proof_phase_summary(final_judge)
     config = dict(stage_config or {})
+    probe_config = probe.get("config") if isinstance(probe.get("config"), dict) else {}
+    tail_dual_enabled = bool(
+        probe_config.get(
+            "tail_dual_stabilization_enabled",
+            config.get("tail_dual_stabilization_enabled", False),
+        )
+    )
+    worker_safety = _worker_safety_redline_fields(
+        _last_worker_payload_from_probe(probe),
+        tail_dual_stabilization_enabled=tail_dual_enabled,
+    )
     return {
         "stage_index": int(stage_index),
         "probe_path": str(probe_path),
         "stage_time_limit_sec": config.get("stage_time_limit_sec"),
         "max_rounds_per_stage": config.get("max_rounds_per_stage"),
         "batch_target": config.get("batch_target"),
+        "root_engine": probe_config.get("root_engine") or config.get("root_engine"),
+        "worker_pricer_kind": probe_config.get("worker_pricer_kind")
+        or config.get("worker_pricer_kind"),
+        "tail_dual_stabilization_enabled": tail_dual_enabled,
+        "tail_dual_stabilization_alpha": probe_config.get(
+            "tail_dual_stabilization_alpha",
+            config.get("tail_dual_stabilization_alpha"),
+        ),
+        "tail_dual_stabilization_window": probe_config.get(
+            "tail_dual_stabilization_window",
+            config.get("tail_dual_stabilization_window"),
+        ),
+        **worker_safety,
         "negative_search_cap_sec": config.get("negative_search_cap_sec"),
         "compact_final_judge_profile": (probe.get("final_judge") or {}).get(
             "compact_final_judge_profile",
-            (probe.get("config") or {}).get("env_compact_final_judge_profile") or config.get("compact_final_judge_profile"),
+            probe_config.get("env_compact_final_judge_profile") or config.get("compact_final_judge_profile"),
         ),
         "compact_final_judge_formulation_profile": (probe.get("final_judge") or {}).get(
             "compact_final_judge_formulation_profile"
         ),
         "compact_final_judge_phase_mode": (probe.get("final_judge") or {}).get(
             "compact_final_judge_phase_mode",
-            (probe.get("config") or {}).get("env_compact_final_judge_phase_mode") or config.get("compact_final_judge_phase_mode"),
+            probe_config.get("env_compact_final_judge_phase_mode") or config.get("compact_final_judge_phase_mode"),
+        ),
+        "env_labeling_final_judge": probe_config.get("env_labeling_final_judge")
+        or config.get("env_labeling_final_judge", ""),
+        "env_labeling_final_judge_max_tasks": probe_config.get(
+            "env_labeling_final_judge_max_tasks"
+        )
+        or config.get("env_labeling_final_judge_max_tasks", ""),
+        "env_labeling_final_judge_exact_harvest_target": probe_config.get(
+            "env_labeling_final_judge_exact_harvest_target"
+        )
+        or config.get("env_labeling_final_judge_exact_harvest_target", ""),
+        "labeling_final_judge_enabled": bool((probe.get("final_judge") or {}).get("labeling_final_judge_enabled")),
+        "labeling_final_judge_auto_mode": bool((probe.get("final_judge") or {}).get("labeling_final_judge_auto_mode")),
+        "labeling_final_judge_auto_selected": bool(
+            (probe.get("final_judge") or {}).get("labeling_final_judge_auto_selected")
+        ),
+        "labeling_final_judge_auto_skip_reason": (probe.get("final_judge") or {}).get(
+            "labeling_final_judge_auto_skip_reason",
+            "",
         ),
         "negative_feasibility_skipped_for_proof_only": bool(
             (probe.get("final_judge") or {}).get("negative_feasibility_skipped_for_proof_only")
@@ -460,7 +531,8 @@ def _stage_row(stage_index: int, probe_path: Path, probe: dict, *, stage_config:
         "pricing_round_count": probe.get("pricing_round_count"),
         "added_column_count": probe.get("added_column_count"),
         "active_column_count": len(probe.get("active_columns") or []),
-        "resume_initial_column_count": (probe.get("config") or {}).get("resume_initial_column_count", 0),
+        "resume_initial_column_count": probe_config.get("resume_initial_column_count", 0),
+        **worker_telemetry,
         "final_judge_found_negative_count": probe.get("final_judge_found_negative_count"),
         "final_judge_incomplete_count": probe.get("final_judge_incomplete_count"),
         "best_negative_reduced_cost": min(negative_rc_values) if negative_rc_values else None,
@@ -486,6 +558,171 @@ def _stage_row(stage_index: int, probe_path: Path, probe: dict, *, stage_config:
         "final_can_certify_no_negative": bool(final_judge.get("can_certify_no_negative")),
         "sortie_slot_position_bounds_enabled": bool(final_judge.get("sortie_slot_position_bounds_enabled")),
         "sortie_slot_position_bound_count": final_judge.get("sortie_slot_position_bound_count"),
+    }
+
+
+def _worker_history_rows(probe: dict) -> list[dict]:
+    history = probe.get("history") if isinstance(probe.get("history"), list) else []
+    rows: list[dict] = []
+    for row in history:
+        if not isinstance(row, dict):
+            continue
+        if row.get("final_judge_called") is True:
+            continue
+        if (
+            row.get("worker_pricer_kind")
+            or row.get("worker_dual_only") is not None
+            or row.get("tail_dual_stabilization")
+            or row.get("candidate_search_rc_recomputed_under_true_dual") is not None
+            or row.get("labeling_harvest_selected_count") is not None
+            or row.get("resource_extension_label_column_count") is not None
+        ):
+            rows.append(row)
+    return rows
+
+
+def _sum_int(rows: list[dict], key: str) -> int:
+    total = 0
+    for row in rows:
+        try:
+            total += int(row.get(key) or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _latest_nonempty(rows: list[dict], key: str):
+    for row in reversed(rows):
+        value = row.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _worker_history_telemetry(rows: list[dict]) -> dict:
+    """Aggregate worker-only harvest telemetry from probe history.
+
+    Stage manifests are consumed by the B4.2 cold-start runner.  The runner only
+    sees stage-level rows, while the batch probe stores worker details per CG
+    round in ``history``.  Keep these fields diagnostic-only: they explain how
+    many true-dual-audited worker columns entered the pool, but they never affect
+    no-negative certification.
+    """
+
+    candidate_count = _sum_int(rows, "labeling_harvest_candidate_negative_count")
+    selected_count = _sum_int(rows, "labeling_harvest_selected_count")
+    new_task_set_count = _sum_int(rows, "labeling_harvest_selected_new_task_set_count")
+    replacement_count = _sum_int(rows, "labeling_harvest_selected_replacement_task_set_count")
+    added_count = _sum_int(rows, "added_to_master_count")
+    generated_count = _sum_int(rows, "worker_generated_column_task_set_count")
+    resource_label_count = _sum_int(rows, "resource_extension_label_column_count")
+    resource_seed_count = _sum_int(rows, "resource_extension_seed_task_set_count")
+    active_resource_seed_count = _sum_int(rows, "active_resource_extension_seed_task_set_count")
+    path_variant_candidate_count = _sum_int(rows, "resource_extension_label_path_variant_candidate_count")
+    path_variant_feasible_count = _sum_int(rows, "resource_extension_label_path_variant_feasible_count")
+    return {
+        "worker_history_round_count": len(rows),
+        "worker_generated_column_task_set_count": generated_count,
+        "resource_extension_seed_task_set_count": resource_seed_count,
+        "active_resource_extension_seed_task_set_count": active_resource_seed_count,
+        "resource_extension_label_column_count": resource_label_count,
+        "resource_extension_label_path_variant_candidate_count": path_variant_candidate_count,
+        "resource_extension_label_path_variant_feasible_count": path_variant_feasible_count,
+        "labeling_harvest_candidate_negative_count": candidate_count,
+        "labeling_harvest_selected_count": selected_count,
+        "labeling_harvest_selected_new_task_set_count": new_task_set_count,
+        "labeling_harvest_selected_replacement_task_set_count": replacement_count,
+        "labeling_harvest_added_to_master_count": added_count,
+        "labeling_harvest_selection_policy": _latest_nonempty(rows, "labeling_harvest_selection_policy") or "",
+        "labeling_harvest_avg_pairwise_jaccard": _latest_nonempty(
+            rows,
+            "labeling_harvest_avg_pairwise_jaccard",
+        ),
+        "labeling_harvest_max_pairwise_jaccard": _latest_nonempty(
+            rows,
+            "labeling_harvest_max_pairwise_jaccard",
+        ),
+        # Compatibility aliases consumed by the B4.2 cold-start summary.
+        "harvest_candidate_negative_count": candidate_count,
+        "harvest_selected_count": selected_count,
+        "harvest_selected_new_task_set_count": new_task_set_count,
+        "harvest_selected_replacement_task_set_count": replacement_count,
+        "harvest_rejected_duplicate_count": _sum_int(rows, "harvest_rejected_duplicate_count"),
+        "harvest_rejected_not_addable_count": _sum_int(rows, "harvest_rejected_not_addable_count"),
+        "harvest_added_to_master_count": added_count,
+        "harvest_source_phase": "worker_candidate_search_addability_harvest",
+    }
+
+
+def _last_worker_payload_from_probe(probe: dict) -> dict:
+    for row in reversed(_worker_history_rows(probe)):
+        return row
+    return {}
+
+
+def _truthy(value: object, *, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def _worker_safety_redline_fields(
+    worker_payload: dict,
+    *,
+    tail_dual_stabilization_enabled: bool,
+) -> dict:
+    worker_payload = worker_payload if isinstance(worker_payload, dict) else {}
+    worker_can_certify = _truthy(worker_payload.get("can_certify_no_negative"))
+    worker_uses_true_dual = _truthy(worker_payload.get("uses_true_dual_bpc_certificate"))
+    worker_root_lp_bound_official = _truthy(worker_payload.get("root_lp_bound_official"))
+    completion_bound_certifies = _truthy(worker_payload.get("completion_bound_can_certify_no_negative"))
+    tail_dual_no_column_can_certify = _truthy(worker_payload.get("tail_dual_no_column_can_certify"))
+    worker_certificate_leak = bool(
+        worker_can_certify
+        or worker_uses_true_dual
+        or worker_root_lp_bound_official
+        or completion_bound_certifies
+        or tail_dual_no_column_can_certify
+    )
+    true_dual_rc_recomputed = _truthy(
+        worker_payload.get("true_dual_rc_recomputed"),
+        default=not bool(tail_dual_stabilization_enabled),
+    )
+    worker_dual_only = _truthy(
+        worker_payload.get("worker_dual_only"),
+        default=not bool(tail_dual_stabilization_enabled),
+    )
+    official_dual_source = str(worker_payload.get("official_dual_source") or "")
+    true_dual_rc_recompute_missing = bool(
+        tail_dual_stabilization_enabled and worker_payload and not true_dual_rc_recomputed
+    )
+    tail_dual_certificate_leak = bool(
+        tail_dual_stabilization_enabled
+        and (
+            worker_certificate_leak
+            or tail_dual_no_column_can_certify
+            or (worker_payload and not worker_dual_only)
+            or true_dual_rc_recompute_missing
+            or (worker_payload and official_dual_source not in {"", "current_true_rmp_dual"})
+        )
+    )
+    return {
+        "worker_can_certify_no_negative": worker_can_certify,
+        "worker_uses_true_dual_bpc_certificate": worker_uses_true_dual,
+        "worker_root_lp_bound_official": worker_root_lp_bound_official,
+        "worker_certificate_leak": worker_certificate_leak,
+        "worker_dual_only": worker_dual_only,
+        "true_dual_rc_recomputed": true_dual_rc_recomputed,
+        "tail_dual_no_column_can_certify": tail_dual_no_column_can_certify,
+        "tail_dual_certificate_leak": tail_dual_certificate_leak,
+        "true_dual_rc_recompute_missing": true_dual_rc_recompute_missing,
+        "official_dual_source": official_dual_source,
     }
 
 

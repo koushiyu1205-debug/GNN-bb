@@ -1,0 +1,343 @@
+{
+  "active_sortie_bound_pruned_region_count": 45,
+  "active_sortie_global_max": 21,
+  "active_sortie_global_max_source": "latest_service_start_min_active_sortie_duration_bound",
+  "auxiliary_exact_region_count": 279,
+  "best_lb": -0.626511964,
+  "certified_no_negative": false,
+  "coarse_covered_region_count": 0,
+  "coarse_incomplete_region_count": 0,
+  "coarse_region_count": 0,
+  "coverage_complete": false,
+  "dual_refresh_status": "RESTRICTED_RMP_OPTIMAL",
+  "dual_scope_mismatch_count": 0,
+  "duplicate_region_count": 0,
+  "expected_region_count": 420,
+  "incomplete_region_count": 34,
+  "issue_codes": [
+    "best_lb_negative",
+    "incomplete_regions",
+    "missing_regions",
+    "negative_regions",
+    "worker_timeout"
+  ],
+  "missing_region_count": 375,
+  "negative_rc_audit_fail_count": 0,
+  "negative_region_count": 34,
+  "redline_count": 0,
+  "region_count": 45,
+  "schema_version": "lunar_ice_bpc.b4_2.parallel_partition_summary.v1",
+  "task_count": 30,
+  "unexpected_region_count": 0,
+  "worker_results": [
+    {
+      "error": "",
+      "k_max": 1,
+      "k_min": 1,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_01_k001_001",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_01_k001_001/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 3.284836,
+      "worker_index": 1
+    },
+    {
+      "error": "",
+      "k_max": 2,
+      "k_min": 2,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_02_k002_002",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_02_k002_002/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 3.79141,
+      "worker_index": 2
+    },
+    {
+      "error": "",
+      "k_max": 3,
+      "k_min": 3,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_03_k003_003",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_03_k003_003/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 4.230146,
+      "worker_index": 3
+    },
+    {
+      "error": "",
+      "k_max": 4,
+      "k_min": 4,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_04_k004_004",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_04_k004_004/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 5.78403,
+      "worker_index": 4
+    },
+    {
+      "error": "",
+      "k_max": 5,
+      "k_min": 5,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_05_k005_005",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_05_k005_005/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 5.757362,
+      "worker_index": 5
+    },
+    {
+      "error": "",
+      "k_max": 6,
+      "k_min": 6,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_06_k006_006",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_06_k006_006/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 7.405658,
+      "worker_index": 6
+    },
+    {
+      "error": "",
+      "k_max": 7,
+      "k_min": 7,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_07_k007_007",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_07_k007_007/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 11.511682,
+      "worker_index": 7
+    },
+    {
+      "error": "",
+      "k_max": 8,
+      "k_min": 8,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_08_k008_008",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_08_k008_008/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 18.007927,
+      "worker_index": 8
+    },
+    {
+      "error": "",
+      "k_max": 9,
+      "k_min": 9,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_09_k009_009",
+      "partition_json": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_09_k009_009/required_task_set_partition_probe.json",
+      "returncode": 0,
+      "timeout": false,
+      "wall_time_sec": 32.254613,
+      "worker_index": 9
+    },
+    {
+      "error": "partition worker global deadline reached",
+      "k_max": 10,
+      "k_min": 10,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_10_k010_010",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": null
+    },
+    {
+      "error": "partition worker global deadline reached",
+      "k_max": 11,
+      "k_min": 11,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_11_k011_011",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": null
+    },
+    {
+      "error": "partition worker global deadline reached",
+      "k_max": 12,
+      "k_min": 12,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_12_k012_012",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": null
+    },
+    {
+      "error": "partition worker global deadline reached",
+      "k_max": 13,
+      "k_min": 13,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_13_k013_013",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": null
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 14,
+      "k_min": 14,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_14_k014_014",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 15,
+      "k_min": 15,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_15_k015_015",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 16,
+      "k_min": 16,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_16_k016_016",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 17,
+      "k_min": 17,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_17_k017_017",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 18,
+      "k_min": 18,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_18_k018_018",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 19,
+      "k_min": 19,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_19_k019_019",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 20,
+      "k_min": 20,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_20_k020_020",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 21,
+      "k_min": 21,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_21_k021_021",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 22,
+      "k_min": 22,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_22_k022_022",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 23,
+      "k_min": 23,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_23_k023_023",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 24,
+      "k_min": 24,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_24_k024_024",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 25,
+      "k_min": 25,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_25_k025_025",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 26,
+      "k_min": 26,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_26_k026_026",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 27,
+      "k_min": 27,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_27_k027_027",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 28,
+      "k_min": 28,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_28_k028_028",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 29,
+      "k_min": 29,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_29_k029_029",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    },
+    {
+      "error": "partition worker not started before global deadline",
+      "k_max": 30,
+      "k_min": 30,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/b4_2_cold_exact_support_continuation_protected_30_001_300s_probe_20260711/proofs/scale_030/instance_001/root_partition_feedback/round_01_partition_harvest/worker_30_k030_030",
+      "partition_json": "",
+      "returncode": null,
+      "timeout": true,
+      "wall_time_sec": 0.0
+    }
+  ]
+}
