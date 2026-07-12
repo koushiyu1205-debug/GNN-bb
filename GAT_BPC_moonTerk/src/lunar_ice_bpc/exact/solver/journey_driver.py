@@ -151,6 +151,8 @@ class DirectBaselineTimeLimitExceeded(RuntimeError):
         journey_label_bound_pruned_count: int = 0,
         direct_bound_pruning_root_bound: float | None = None,
         direct_bound_pruning_active: bool = False,
+        partial_label: object | None = None,
+        partial_stats: dict | None = None,
     ) -> None:
         super().__init__(message)
         self.stage = str(stage)
@@ -162,6 +164,8 @@ class DirectBaselineTimeLimitExceeded(RuntimeError):
         self.journey_label_bound_pruned_count = int(journey_label_bound_pruned_count)
         self.direct_bound_pruning_root_bound = direct_bound_pruning_root_bound
         self.direct_bound_pruning_active = bool(direct_bound_pruning_active)
+        self.partial_label = partial_label
+        self.partial_stats = dict(partial_stats or {})
 
 
 def _task_to_bit_mapping(task_index: TaskIndexMap) -> dict[str, int]:

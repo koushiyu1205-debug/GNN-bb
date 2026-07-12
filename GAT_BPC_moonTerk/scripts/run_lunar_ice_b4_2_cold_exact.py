@@ -22,13 +22,16 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from time import perf_counter
+from time import perf_counter, sleep
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
+SCRIPTS = ROOT / "scripts"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
 
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
@@ -37,6 +40,7 @@ from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
 )
 from lunar_ice_bpc.exact.solver.gurobi_compact import _safe_sortie_slot_bound
 from lunar_ice_bpc.io.instance_io import read_json
+import run_lunar_ice_compact_pricing_staged_resume as staged_resume
 
 STAGED_RESUME = ROOT / "scripts" / "run_lunar_ice_compact_pricing_staged_resume.py"
 B41_RUNNER = ROOT / "scripts" / "run_lunar_ice_b4_1_true_dual_proof_tail.py"
@@ -303,9 +307,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default=LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH,
     )
     parser.add_argument("--pool-stage-time-slice-sec", type=float, default=150.0)
+    parser.add_argument("--pool-stage-batch-time-reserve-sec", type=float, default=10.0)
     parser.add_argument("--pool-min-stage-sec", type=float, default=60.0)
     parser.add_argument("--pool-max-stages", type=int, default=10)
     parser.add_argument("--pool-max-rounds-per-stage", type=int, default=4)
+    parser.add_argument(
+        "--pool-tail-one-round-active-threshold",
+        type=int,
+        default=0,
+        help=(
+            "If positive, switch staged pool subprocesses to "
+            "--pool-tail-max-rounds-per-stage once the latest active column "
+            "count reaches this threshold. This is a fixed config rule, not "
+            "an instance-id override."
+        ),
+    )
+    parser.add_argument("--pool-tail-max-rounds-per-stage", type=int, default=1)
     parser.add_argument("--pool-batch-target", type=int, default=32)
     parser.add_argument("--pool-negative-search-cap-sec", type=float, default=90.0)
     parser.add_argument("--pool-optimization-harvest-target", type=int, default=16)
@@ -428,9 +445,12 @@ def _official_config(args: argparse.Namespace) -> dict:
         "row_limit_sec": float(args.row_limit_sec),
         "acceptance_limit_sec": float(ACCEPTANCE_LIMIT_SEC),
         "pool_stage_time_slice_sec": float(args.pool_stage_time_slice_sec),
+        "pool_stage_batch_time_reserve_sec": float(args.pool_stage_batch_time_reserve_sec),
         "pool_min_stage_sec": float(args.pool_min_stage_sec),
         "pool_max_stages": int(args.pool_max_stages),
         "pool_max_rounds_per_stage": int(args.pool_max_rounds_per_stage),
+        "pool_tail_one_round_active_threshold": int(args.pool_tail_one_round_active_threshold),
+        "pool_tail_max_rounds_per_stage": int(args.pool_tail_max_rounds_per_stage),
         "pool_batch_target": int(args.pool_batch_target),
         "pool_negative_search_cap_sec": float(args.pool_negative_search_cap_sec),
         "pool_optimization_harvest_target": int(args.pool_optimization_harvest_target),
@@ -567,8 +587,10 @@ def _run_instance_cold(
 
     pool_started = perf_counter()
     stage_error = ""
+    stage_subprocess_timeout_with_progress_count = 0
     for _ in range(max(0, int(args.pool_max_stages))):
         manifest = _pool_manifest(pool_dir)
+        stage_count_before = len(list(manifest.get("stages") or []))
         latest = _latest_stage(manifest)
         if str(latest.get("certificate_scope") or "") == "BPC_NODE_LP_CERTIFIED":
             break
@@ -606,8 +628,39 @@ def _run_instance_cold(
             stage_error = "reserved remaining budget for partition feedback/proof instead of starting a short pool stage"
             break
         slice_sec = max(1.0, min(float(args.pool_stage_time_slice_sec), stage_budget))
-        completed = _run_stage(args, instance_path=instance_path, pool_dir=pool_dir, time_limit_sec=slice_sec)
+        effective_max_rounds = _effective_pool_max_rounds_per_stage(args, latest)
+        completed = _run_stage(
+            args,
+            instance_path=instance_path,
+            pool_dir=pool_dir,
+            time_limit_sec=slice_sec,
+            max_rounds_per_stage=effective_max_rounds,
+        )
         if completed.returncode != 0:
+            manifest_after = _pool_manifest(pool_dir)
+            latest_after = _latest_stage(manifest_after)
+            stage_count_after = len(list(manifest_after.get("stages") or []))
+            latest_probe_after = _latest_pool_probe(pool_dir)
+            if stage_count_after <= stage_count_before:
+                recovered = False
+                for _attempt in range(5):
+                    recovered = _recover_orphan_stage_probe(
+                        pool_dir,
+                        stage_index=stage_count_before + 1,
+                    )
+                    if recovered:
+                        break
+                    sleep(0.5)
+                if recovered:
+                    manifest_after = _pool_manifest(pool_dir)
+                    latest_after = _latest_stage(manifest_after)
+                    stage_count_after = len(list(manifest_after.get("stages") or []))
+                    latest_probe_after = _latest_pool_probe(pool_dir)
+            if stage_count_after > stage_count_before and latest_probe_after is not None:
+                stage_subprocess_timeout_with_progress_count += 1
+                if str(latest_after.get("certificate_scope") or "") == "BPC_NODE_LP_CERTIFIED":
+                    break
+                continue
             stage_error = (completed.stderr[-1200:] or completed.stdout[-1200:] or "staged resume failed")
             break
 
@@ -628,6 +681,9 @@ def _run_instance_cold(
             "root_partition_feedback_added_column_count": 0,
             "root_pool_wall_sec": round(pool_wall, 6),
             "root_pool_stage_count": len(stages),
+            "root_pool_stage_subprocess_timeout_with_progress_count": int(
+                stage_subprocess_timeout_with_progress_count
+            ),
             "root_pool_certified": bool(pool_certified),
             "root_pool_algorithm_status": latest_stage.get("algorithm_status") or "",
             "root_pool_certificate_scope": latest_stage.get("certificate_scope") or "",
@@ -973,6 +1029,7 @@ def _run_stage(
     instance_path: Path,
     pool_dir: Path,
     time_limit_sec: float,
+    max_rounds_per_stage: int | None = None,
 ) -> subprocess.CompletedProcess:
     command = [
         sys.executable,
@@ -985,8 +1042,10 @@ def _run_stage(
         "1",
         "--stage-time-limit-sec",
         str(float(time_limit_sec)),
+        "--stage-batch-time-reserve-sec",
+        str(float(args.pool_stage_batch_time_reserve_sec)),
         "--max-rounds-per-stage",
-        str(int(args.pool_max_rounds_per_stage)),
+        str(int(max_rounds_per_stage if max_rounds_per_stage is not None else args.pool_max_rounds_per_stage)),
         "--max-direct-tasks",
         str(len(_load_task_ids(instance_path))),
         "--seed-mode",
@@ -1025,21 +1084,59 @@ def _run_stage(
         ]
     )
     env = _solver_env(args)
-    completed = subprocess.run(
-        command,
-        cwd=str(ROOT),
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=max(10.0, float(time_limit_sec) + 5.0),
-    )
+    try:
+        subprocess_timeout_sec = (
+            max(10.0, float(time_limit_sec))
+            + max(0.0, float(getattr(args, "pool_stage_batch_time_reserve_sec", 0.0) or 0.0))
+            + 5.0
+        )
+        completed = subprocess.run(
+            command,
+            cwd=str(ROOT),
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=subprocess_timeout_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = _timeout_stream_to_text(exc.stdout)
+        stderr = _timeout_stream_to_text(exc.stderr)
+        timeout_note = (
+            f"STAGE_SUBPROCESS_TIMEOUT: command exceeded "
+            f"{subprocess_timeout_sec:.3f}s fail-closed"
+        )
+        completed = subprocess.CompletedProcess(
+            args=command,
+            returncode=124,
+            stdout=stdout,
+            stderr=(stderr + "\n" + timeout_note).strip(),
+        )
     stage_logs = pool_dir / "b4_2_stage_logs"
     stage_logs.mkdir(parents=True, exist_ok=True)
     index = len(list(stage_logs.glob("stage_*_stdout.txt"))) + 1
     (stage_logs / f"stage_{index:03d}_stdout.txt").write_text(completed.stdout, encoding="utf-8")
     (stage_logs / f"stage_{index:03d}_stderr.txt").write_text(completed.stderr, encoding="utf-8")
     return completed
+
+
+def _effective_pool_max_rounds_per_stage(args: argparse.Namespace, latest_stage: dict) -> int:
+    base_rounds = max(1, int(args.pool_max_rounds_per_stage))
+    threshold = max(0, int(getattr(args, "pool_tail_one_round_active_threshold", 0) or 0))
+    if threshold <= 0:
+        return base_rounds
+    active_count = _int((latest_stage or {}).get("active_column_count"))
+    if active_count >= threshold:
+        return max(1, int(getattr(args, "pool_tail_max_rounds_per_stage", 1) or 1))
+    return base_rounds
+
+
+def _timeout_stream_to_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
 
 
 def _run_tree_closure(
@@ -2724,6 +2821,53 @@ def _pool_manifest(pool_dir: Path) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def _recover_orphan_stage_probe(pool_dir: Path, *, stage_index: int) -> bool:
+    """Register a completed stage probe when the wrapper timed out before manifest update."""
+
+    probe_path = pool_dir / f"stage_{int(stage_index):03d}" / "probe.json"
+    if not probe_path.exists():
+        return False
+    try:
+        probe = json.loads(probe_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if not isinstance(probe, dict):
+        return False
+    manifest_path = pool_dir / "staged_resume_manifest.json"
+    manifest = _pool_manifest(pool_dir)
+    rows = [
+        row
+        for row in list(manifest.get("stages") or [])
+        if int(row.get("stage_index") or -1) != int(stage_index)
+    ]
+    stage_config = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
+    try:
+        row = staged_resume._stage_row(  # type: ignore[attr-defined]
+            int(stage_index),
+            probe_path,
+            probe,
+            stage_config=stage_config,
+        )
+    except Exception:
+        return False
+    rows.append(row)
+    rows.sort(key=lambda item: int(item.get("stage_index") or 0))
+    recovered_manifest = {
+        **manifest,
+        "latest_probe": str(probe_path),
+        "stages": rows,
+        "orphan_stage_probe_recovered": True,
+        "orphan_stage_probe_recovered_stage_index": int(stage_index),
+    }
+    _write_json(manifest_path, recovered_manifest)
+    report_path = pool_dir / "staged_resume_report_zh.md"
+    try:
+        report_path.write_text(staged_resume._render_report(recovered_manifest), encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    return True
+
+
 def _root_pool_safety_fields(stages: list[dict]) -> dict:
     rows = [row for row in stages if isinstance(row, dict)]
     latest = next(
@@ -2788,7 +2932,11 @@ def _root_pool_harvest_fields(stages: list[dict]) -> dict:
     post_rows = [
         row
         for row in rows
-        if "post_final_judge" in str(row.get("harvest_source_phase") or "")
+        if "post_final_judge" in str(
+            row.get("post_final_judge_harvest_source_phase")
+            or row.get("harvest_source_phase")
+            or ""
+        )
     ]
     exact_row_ids = {id(row) for row in exact_rows}
     post_row_ids = {id(row) for row in post_rows}
@@ -2893,25 +3041,73 @@ def _root_pool_harvest_fields(stages: list[dict]) -> dict:
             _int(row.get("harvest_rejected_not_addable_count")) for row in worker_rows
         ),
         "root_pool_post_final_judge_harvest_candidate_negative_count": sum(
-            _int(row.get("harvest_candidate_negative_count")) for row in post_rows
+            _int(
+                row.get(
+                    "post_final_judge_harvest_candidate_negative_count",
+                    row.get("harvest_candidate_negative_count"),
+                )
+            )
+            for row in post_rows
         ),
         "root_pool_post_final_judge_harvest_selected_count": sum(
-            _int(row.get("harvest_selected_count")) for row in post_rows
+            _int(
+                row.get(
+                    "post_final_judge_harvest_selected_count",
+                    row.get("harvest_selected_count"),
+                )
+            )
+            for row in post_rows
         ),
         "root_pool_post_final_judge_harvest_selected_new_task_set_count": sum(
-            _int(row.get("harvest_selected_new_task_set_count")) for row in post_rows
+            _int(
+                row.get(
+                    "post_final_judge_harvest_selected_new_task_set_count",
+                    row.get("harvest_selected_new_task_set_count"),
+                )
+            )
+            for row in post_rows
         ),
         "root_pool_post_final_judge_harvest_selected_replacement_task_set_count": sum(
-            _int(row.get("harvest_selected_replacement_task_set_count")) for row in post_rows
+            _int(
+                row.get(
+                    "post_final_judge_harvest_selected_replacement_task_set_count",
+                    row.get("harvest_selected_replacement_task_set_count"),
+                )
+            )
+            for row in post_rows
         ),
         "root_pool_post_final_judge_harvest_rejected_duplicate_count": sum(
-            _int(row.get("harvest_rejected_duplicate_count")) for row in post_rows
+            _int(
+                row.get(
+                    "post_final_judge_harvest_rejected_duplicate_count",
+                    row.get("harvest_rejected_duplicate_count"),
+                )
+            )
+            for row in post_rows
         ),
         "root_pool_post_final_judge_harvest_rejected_not_addable_count": sum(
-            _int(row.get("harvest_rejected_not_addable_count")) for row in post_rows
+            _int(
+                row.get(
+                    "post_final_judge_harvest_rejected_not_addable_count",
+                    row.get("harvest_rejected_not_addable_count"),
+                )
+            )
+            for row in post_rows
         ),
         "root_pool_post_final_judge_harvest_added_to_master_count": sum(
-            _int(row.get("columns_added", row.get("added_column_count"))) for row in post_rows
+            _int(
+                row.get(
+                    "post_final_judge_harvest_added_to_master_count",
+                    row.get("columns_added", row.get("added_column_count")),
+                )
+            )
+            for row in post_rows
+        ),
+        "root_pool_final_judge_history_round_count": sum(
+            _int(row.get("final_judge_history_round_count")) for row in rows
+        ),
+        "root_pool_final_judge_history_wall_time": sum(
+            _first_float(row.get("final_judge_history_wall_time")) or 0.0 for row in rows
         ),
     }
 

@@ -16,6 +16,13 @@ class MasterColumnView:
     def contains_signature(self, sig: ColumnSemanticSignature, node_id: object = "root") -> bool:
         return sig in self.signatures_by_node.get(str(node_id), set())
 
+    def remove_signature(self, sig: ColumnSemanticSignature, node_id: object = "root") -> bool:
+        signatures = self.signatures_by_node.get(str(node_id), set())
+        if sig not in signatures:
+            return False
+        signatures.remove(sig)
+        return True
+
     def add_from_pool(
         self,
         column: BpcColumn,
@@ -32,4 +39,3 @@ class MasterColumnView:
             return False
         signatures.add(column.signature)
         return True
-

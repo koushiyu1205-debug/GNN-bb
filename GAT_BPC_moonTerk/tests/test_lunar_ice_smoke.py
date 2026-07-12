@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import inspect
+import io
 import json
 import os
 import re
@@ -122,7 +123,7 @@ from lunar_ice_bpc.exact.core.cuts import (
     subset_row_cut,
 )
 from lunar_ice_bpc.exact.core.columns import build_timed_sortie
-from lunar_ice_bpc.exact.core.journey import journey_column_from_solution_payload
+from lunar_ice_bpc.exact.core.journey import build_journey_column, journey_column_from_solution_payload
 import lunar_ice_bpc.exact.core.objective as objective_module
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost, solve_restricted_journey_rmp
 from lunar_ice_bpc.exact.pricing.completion_bounds import build_positive_cover_completion_bound
@@ -7720,6 +7721,54 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertTrue(cut_signature.cut_coefficient_vector_hash)
         self.assertEqual(len(pool.columns_by_signature), 2)
 
+    def test_root_master_view_keeps_best_task_set_representative(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        task_id = data.task_ids[0]
+        candidate_columns = []
+        for path_type in PATH_TYPES:
+            sortie = build_timed_sortie(data, (task_id,), (path_type, path_type), start_time=0.0)
+            if sortie.feasible:
+                candidate_columns.append(build_journey_column(data, (sortie,)))
+        distinct_columns = {}
+        for column in candidate_columns:
+            distinct_columns[column_signature_from_journey(column)] = column
+        ordered = sorted(distinct_columns.values(), key=lambda column: column.objective)
+        self.assertGreaterEqual(len(ordered), 2)
+        best = ordered[0]
+        worse = ordered[-1]
+        self.assertLess(best.objective, worse.objective)
+        pool = ColumnPool()
+        view = MasterColumnView()
+
+        loaded_worse, filtered_worse = pricing_tail_solver_module._load_columns_for_node(
+            pool,
+            view,
+            (worse,),
+            node_id="root",
+        )
+        loaded_best, filtered_best = pricing_tail_solver_module._load_columns_for_node(
+            pool,
+            view,
+            (best,),
+            node_id="root",
+        )
+        loaded_worse_again, filtered_worse_again = pricing_tail_solver_module._load_columns_for_node(
+            pool,
+            view,
+            (worse,),
+            node_id="root",
+        )
+
+        active_columns = pricing_tail_solver_module._master_columns(pool, view, node_id="root")
+        self.assertEqual((loaded_worse, filtered_worse), (1, 0))
+        self.assertEqual((loaded_best, filtered_best), (1, 0))
+        self.assertEqual((loaded_worse_again, filtered_worse_again), (0, 0))
+        self.assertEqual(len(active_columns), 1)
+        self.assertEqual(active_columns[0].task_set, best.task_set)
+        self.assertAlmostEqual(active_columns[0].objective, best.objective, places=6)
+        self.assertEqual(len(pool.columns_by_signature), 2)
+
     def test_task_set_dominance_not_enabled_under_active_resource_sensitive_cut(self) -> None:
         with self.assertRaises(ValueError):
             CutDefinition("resource_sensitive", "resource_profile", tasks=("a", "b"), rhs=1.0)
@@ -13851,6 +13900,326 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS"], "10")
             self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET"], "5")
             self.assertEqual(captured["env"]["LUNAR_ICE_LABELING_WORKER_MAX_TASK_CAP"], "4")
+
+    def test_b4_2_root_stage_subprocess_timeout_fails_closed(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_stage_timeout",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        args = module._build_parser().parse_args([])
+        instance_path = project_root / "data" / "instances" / "lunar_ice_sp50_005" / "instance_001_logical_graph.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            pool_dir = Path(tmp) / "pool"
+
+            def fake_run(_command, **_kwargs):
+                raise subprocess.TimeoutExpired(
+                    cmd="staged-resume",
+                    timeout=15.0,
+                    output=b"partial stdout",
+                    stderr=b"partial stderr",
+                )
+
+            with patch.object(module.subprocess, "run", side_effect=fake_run):
+                completed = module._run_stage(
+                    args,
+                    instance_path=instance_path,
+                    pool_dir=pool_dir,
+                    time_limit_sec=10.0,
+                )
+
+            self.assertEqual(completed.returncode, 124)
+            self.assertIn("partial stdout", completed.stdout)
+            self.assertIn("STAGE_SUBPROCESS_TIMEOUT", completed.stderr)
+            stderr_log = pool_dir / "b4_2_stage_logs" / "stage_001_stderr.txt"
+            self.assertTrue(stderr_log.exists())
+            self.assertIn("fail-closed", stderr_log.read_text(encoding="utf-8"))
+
+    def test_b4_2_stage_timeout_with_probe_progress_continues_checkpoint(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_stage_timeout_progress",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        instance_path = (
+            project_root
+            / "data"
+            / "instances"
+            / "lunar_ice_sp50_005"
+            / "instance_001_logical_graph.json"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            args = module._build_parser().parse_args(
+                [
+                    "--output-dir",
+                    tmp,
+                    "--row-limit-sec",
+                    "1000",
+                    "--pool-stage-time-slice-sec",
+                    "10",
+                    "--pool-max-stages",
+                    "2",
+                    "--no-root-partition-proof",
+                    "--min-available-mem-gb",
+                    "0",
+                    "--min-free-disk-gb",
+                    "0",
+                    "--max-output-dir-gb",
+                    "1000",
+                ]
+            )
+            calls = {"count": 0}
+
+            max_rounds_seen = []
+
+            def fake_run_stage(_args, *, instance_path, pool_dir, time_limit_sec, max_rounds_per_stage=None):
+                calls["count"] += 1
+                max_rounds_seen.append(max_rounds_per_stage)
+                stage_index = int(calls["count"])
+                stage_dir = Path(pool_dir) / f"stage_{stage_index:03d}"
+                stage_dir.mkdir(parents=True, exist_ok=True)
+                probe_path = stage_dir / "probe.json"
+                probe_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "probe",
+                            "task_count": 5,
+                            "active_columns_payload_version": "journey_solution_payload.v1",
+                            "active_columns": [],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                stages = []
+                manifest_path = Path(pool_dir) / "staged_resume_manifest.json"
+                if manifest_path.exists():
+                    stages = list(json.loads(manifest_path.read_text(encoding="utf-8")).get("stages") or [])
+                stages.append(
+                    {
+                        "stage_index": stage_index,
+                        "elapsed_sec": float(time_limit_sec),
+                        "algorithm_status": "BPC_INCOMPLETE_PRICING",
+                        "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+                        "pricing_state": "INCOMPLETE_LIMIT",
+                        "active_column_count": stage_index,
+                    }
+                )
+                manifest_path.write_text(
+                    json.dumps({"latest_probe": str(probe_path), "stages": stages}),
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(
+                    returncode=124,
+                    stdout="",
+                    stderr="STAGE_SUBPROCESS_TIMEOUT: command exceeded 15s fail-closed",
+                )
+
+            with patch.object(module, "_run_stage", side_effect=fake_run_stage):
+                row = module._run_instance_cold(
+                    args,
+                    config_hash="test-config",
+                    instance_index=1,
+                    instance_path=instance_path,
+                )
+
+            self.assertEqual(calls["count"], 2)
+            self.assertEqual(max_rounds_seen, [4, 4])
+            self.assertEqual(row["root_pool_stage_count"], 2)
+            self.assertEqual(row["root_pool_stage_subprocess_timeout_with_progress_count"], 2)
+            self.assertEqual(row["root_cg_sec"], 20.0)
+            self.assertEqual(row["root_pool_active_column_count"], 2)
+            self.assertIn("root pool did not certify", row["fail_reason"])
+
+    def test_b4_2_stage_timeout_recovers_orphan_probe_checkpoint(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_orphan_probe_recovery",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pool_dir = Path(tmp) / "pool"
+            stage_dir = pool_dir / "stage_001"
+            stage_dir.mkdir(parents=True)
+            probe_path = stage_dir / "probe.json"
+            probe_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "probe",
+                        "elapsed_sec": 12.5,
+                        "algorithm_status": "BPC_INCOMPLETE_PRICING",
+                        "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+                        "pricing_state": "INCOMPLETE_LIMIT",
+                        "added_column_count": 7,
+                        "active_columns": [{"task_set": ["t1"]}, {"task_set": ["t2"]}],
+                        "history": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            recovered = module._recover_orphan_stage_probe(pool_dir, stage_index=1)
+            manifest = json.loads((pool_dir / "staged_resume_manifest.json").read_text(encoding="utf-8"))
+
+            self.assertTrue(recovered)
+            self.assertTrue(manifest["orphan_stage_probe_recovered"])
+            self.assertEqual(manifest["latest_probe"], str(probe_path))
+            self.assertEqual(len(manifest["stages"]), 1)
+            self.assertEqual(manifest["stages"][0]["stage_index"], 1)
+            self.assertEqual(manifest["stages"][0]["active_column_count"], 2)
+            self.assertEqual(manifest["stages"][0]["added_column_count"], 7)
+
+    def test_b4_3_config_hash_and_summary_gate_no_cheat(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_3_spprc_labeling_runner_summary",
+            project_root / "scripts" / "run_lunar_ice_b4_3_spprc_labeling.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        parser = module._build_parser()
+        help_text = parser.format_help()
+        self.assertNotIn("--reuse-probe", help_text)
+        self.assertNotIn("--initial-resume-probe", help_text)
+        self.assertNotIn("--source-probe-json", help_text)
+        args = parser.parse_args([])
+        module._validate_args(parser, args)
+        config = module._official_config(args)
+        self.assertEqual(config["model_id"], "B4_3_SPPRC_LABELING_V1")
+        self.assertEqual(config["row_limit_sec"], 1800.0)
+        self.assertEqual(config["acceptance_limit_sec"], 1800.0)
+        self.assertEqual(config["threads"], 4)
+        self.assertEqual(config["worker_pricer_kind"], "relaxed_labeling")
+        self.assertEqual(config["labeling_worker_max_task_cap"], 30)
+        self.assertEqual(config["labeling_final_judge_mode"], "on")
+        self.assertEqual(config["labeling_final_judge_max_exact_tasks"], 30)
+        self.assertEqual(config["labeling_final_judge_exact_harvest_target"], 1024)
+        self.assertFalse(config["large_task_direct_worker_enabled"])
+        self.assertEqual(config["pool_stage_time_slice_sec"], 600.0)
+        self.assertEqual(config["pool_stage_batch_time_reserve_sec"], 30.0)
+        self.assertEqual(config["pool_min_stage_sec"], 30.0)
+        self.assertEqual(config["pool_max_stages"], 64)
+        self.assertEqual(config["pool_max_rounds_per_stage"], 1)
+        self.assertEqual(config["pool_tail_one_round_active_threshold"], 6000)
+        self.assertEqual(config["pool_tail_max_rounds_per_stage"], 1)
+        self.assertFalse(config["root_partition_proof"])
+        self.assertFalse(config["partition_ledger_official"])
+        self.assertEqual(config["spprc_ng_sizes"], [6, 10, 14, 30])
+        self.assertTrue(config["spprc_exact_final_judge_first"])
+        self.assertTrue(config["spprc_worker_negative_batch_early_stop"])
+        self.assertEqual(config["spprc_worker_negative_batch_target"], 128)
+        self.assertFalse(config["spprc_worker_resource_extension_seed_enabled"])
+        self.assertEqual(config["spprc_worker_hard_time_cap_sec"], 30.0)
+        self.assertEqual(
+            config["spprc_adaptive_exact_harvest_schedule"],
+            [],
+        )
+        self.assertEqual(config["spprc_active_task_set_hard_preference_limit"], 4000)
+        self.assertEqual(config["spprc_pool_early_max_rounds_per_stage"], 1)
+        self.assertEqual(config["spprc_pool_stage_batch_time_reserve_sec"], 30.0)
+        self.assertEqual(config["spprc_pool_tail_one_round_active_threshold"], 6000)
+        self.assertEqual(config["spprc_pool_tail_max_rounds_per_stage"], 1)
+        self.assertEqual(config["rmp_solver"], "highs")
+        self.assertEqual(config["rmp_highs_threads"], 1)
+        self.assertEqual(config["spprc_worker_mode"], "RELAXED_NG_WORKER")
+        self.assertEqual(config["spprc_exact_mode"], "EXACT_ELEMENTARY_PROOF")
+        self.assertFalse(config["spprc_relaxed_worker_can_certify"])
+        self.assertTrue(config["spprc_exact_proof_required_for_certificate"])
+        self.assertFalse(config["compact_milp_final_judge_official"])
+        self.assertFalse(config["no_cheat_policy"]["external_source_probe_allowed"])
+        self.assertTrue(config["no_cheat_policy"]["checkpoint_time_counted"])
+        first_hash = module.b42._config_hash(config)
+        self.assertEqual(first_hash, module.b42._config_hash(dict(config)))
+        changed = dict(config)
+        changed["spprc_ng_sizes"] = [4, 8, 12, 30]
+        self.assertNotEqual(first_hash, module.b42._config_hash(changed))
+        original_solver_env = module.b42._solver_env
+        try:
+            module._install_b43_solver_env()
+            env = module.b42._solver_env(args)
+        finally:
+            module.b42._solver_env = original_solver_env
+        self.assertEqual(env["LUNAR_ICE_LABELING_WORKER_NG_SIZES"], "6,10,14,30")
+        self.assertEqual(env["LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST"], "1")
+        self.assertEqual(env["LUNAR_ICE_LABELING_WORKER_NEGATIVE_BATCH_EARLY_STOP"], "1")
+        self.assertEqual(env["LUNAR_ICE_LABELING_WORKER_NEGATIVE_BATCH_TARGET"], "128")
+        self.assertEqual(env["LUNAR_ICE_LABELING_WORKER_RESOURCE_EXTENSION_SEED"], "0")
+        self.assertEqual(env["LUNAR_ICE_LABELING_WORKER_HARD_TIME_CAP_SEC"], "30.0")
+        self.assertEqual(
+            env["LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE"],
+            "disabled",
+        )
+        self.assertEqual(env["LUNAR_ICE_RMP_SOLVER"], "highs")
+        self.assertEqual(env["LUNAR_ICE_RMP_HIGHS_THREADS"], "1")
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                bad_threads = parser.parse_args(["--threads", "2"])
+                module._validate_args(parser, bad_threads)
+            with self.assertRaises(SystemExit):
+                bad_partition = parser.parse_args(["--root-partition-proof"])
+                module._validate_args(parser, bad_partition)
+
+        rows = [
+            {
+                "scale": 30,
+                "instance_key": "instance_001",
+                "config_hash": first_hash,
+                "certificate_scope": "BPC_TREE_OPTIMAL",
+                "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                "exact_certificate": True,
+                "under_acceptance_limit": True,
+                "under_300": False,
+                "under_500": False,
+                "cold_start_total_sec": 1200.0,
+                "root_cg_sec": 900.0,
+                "tree_sec": 300.0,
+                "spprc_worker_sec": 900.0,
+                "spprc_exact_sec": 300.0,
+                "spprc_exact_coverage_complete": True,
+                "no_cheat_pass": True,
+                "external_probe_used": False,
+                "mature_pool_used": False,
+                "manual_columns_used": False,
+                "per_instance_override_used": False,
+                "root_partition_certified_no_negative": False,
+            }
+        ]
+        summary = module._summary(
+            rows,
+            config=config,
+            limited_run=False,
+            discovered_instance_count=1,
+            expected_scale_counts={"30": 1},
+        )
+        self.assertTrue(summary["acceptance"]["b4_3_spprc_labeling_accepted"])
+        self.assertTrue(summary["acceptance"]["scale30_all_under_1800"])
+        self.assertEqual(summary["redlines"]["spprc_partition_certificate_leak_count"], 0)
+        leaked_summary = module._summary(
+            [dict(rows[0], root_partition_certified_no_negative=True, certificate_leak=1)],
+            config=config,
+            limited_run=False,
+            discovered_instance_count=1,
+            expected_scale_counts={"30": 1},
+        )
+        self.assertFalse(leaked_summary["acceptance"]["b4_3_spprc_labeling_accepted"])
+        self.assertEqual(leaked_summary["redlines"]["spprc_partition_certificate_leak_count"], 1)
 
     def test_b4_2_partition_aggregate_accepts_auxiliary_exact_rows(self) -> None:
         project_root = Path(__file__).resolve().parents[1]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 import heapq
 from itertools import combinations, permutations, product
@@ -30,6 +31,7 @@ from lunar_ice_bpc.exact.pricing.completion_bounds import build_positive_cover_c
 from lunar_ice_bpc.exact.solver.column_pool import select_journey_column_pool
 from lunar_ice_bpc.exact.solver.journey_driver import (
     DirectBaselineTimeLimitExceeded,
+    _direct_sortie_cache_limit,
     _direct_sortie_candidates_from_start,
     _nondominated_path_type_cache,
     _path_type_lower_bound_cache,
@@ -565,6 +567,7 @@ def price_direct_journey_columns_incremental(
     max_candidate_sets: int | None = None,
     wall_time_limit_sec: float | None = None,
     stop_at_first_negative: bool = True,
+    negative_harvest_target: int = 1,
     completion_bound_enabled: bool = True,
     cut_context: CutContext | None = None,
     branch_context: BranchContext | None = None,
@@ -581,6 +584,7 @@ def price_direct_journey_columns_incremental(
     deadline = None if wall_time_limit_sec is None else start + max(0.0, float(wall_time_limit_sec))
     context = cut_context or CutContext()
     branch = branch_context or BranchContext()
+    negative_harvest_target = max(1, int(negative_harvest_target))
     candidate_sets = _select_direct_candidate_sets(data, duals, int(max_direct_tasks))
     candidate_sets = _merge_candidate_sets(
         data,
@@ -619,6 +623,9 @@ def price_direct_journey_columns_incremental(
                 completion_bound_enabled=active_completion_bound,
                 cut_context=context,
                 branch_context=branch,
+                negative_eps=negative_eps,
+                stop_at_first_negative=bool(stop_at_first_negative),
+                negative_harvest_target=1,
             )
         except DirectBaselineTimeLimitExceeded as exc:
             timed_out = True
@@ -656,7 +663,15 @@ def price_direct_journey_columns_incremental(
             summary["branch_feasible"] = bool(branch_feasible)
             if branch_feasible:
                 priced_columns.append((rc, tuple(sorted(candidate_task_ids)), column))
-                if bool(stop_at_first_negative) and rc < -abs(float(negative_eps)):
+                negative_count = sum(
+                    1 for existing_rc, _, _column in priced_columns
+                    if existing_rc < -abs(float(negative_eps))
+                )
+                if (
+                    bool(stop_at_first_negative)
+                    and rc < -abs(float(negative_eps))
+                    and negative_count >= negative_harvest_target
+                ):
                     candidate_summaries.append(summary)
                     break
             else:
@@ -695,6 +710,12 @@ def price_direct_journey_columns_incremental(
         "best_reduced_cost": best_rc,
         "negative_found": bool(negative_columns),
         "negative_column_count": len(negative_columns),
+        "negative_harvest_target": int(negative_harvest_target),
+        "negative_harvest_early_stop_enabled": bool(stop_at_first_negative),
+        "negative_harvest_early_stop_triggered": bool(
+            stop_at_first_negative and len(negative_columns) >= negative_harvest_target
+        ),
+        "candidate_label_early_negative_stop_enabled": bool(stop_at_first_negative),
         "branch_context_active": not branch.empty,
         "branch_decision_count": len(branch.pair_decisions),
         "branch_filtered_candidate_set_count": int(branch_filtered_candidate_set_count),
@@ -728,6 +749,7 @@ def price_full_universe_incremental_journey_columns(
     cut_context: CutContext | None = None,
     branch_context: BranchContext | None = None,
     stop_at_first_negative: bool = False,
+    active_task_sets_for_harvest: Iterable[Iterable[str]] | None = None,
 ) -> tuple[dict, tuple[JourneyColumn, ...]]:
     """Price the full task universe with one incremental resource-label DP.
 
@@ -786,6 +808,7 @@ def price_full_universe_incremental_journey_columns(
             negative_eps=negative_eps,
             stop_at_first_negative=bool(stop_at_first_negative),
             negative_harvest_target=max_returned_columns,
+            active_task_sets_for_harvest=active_task_sets_for_harvest,
         )
     except DirectBaselineTimeLimitExceeded as exc:
         payload = _full_universe_incremental_fail_payload(
@@ -795,13 +818,72 @@ def price_full_universe_incremental_journey_columns(
             started_at=start,
             note="Full-universe incremental label pricing exceeded its time budget; fail closed.",
         )
+        partial_stats = dict(getattr(exc, "partial_stats", {}) or {})
+        partial_labels = tuple(partial_stats.get("_all_pareto_labels") or tuple())
+        partial_best_label = getattr(exc, "partial_label", None)
+        if partial_best_label is None and partial_labels:
+            branch_feasible_partial_labels = tuple(
+                label
+                for label in partial_labels
+                if _label_satisfies_branch_context(label, TaskIndexMap(task_ids), branch)
+            )
+            if branch_feasible_partial_labels:
+                partial_best_label = min(
+                    branch_feasible_partial_labels,
+                    key=lambda label: label.reduced_cost(
+                        data,
+                        duals,
+                        cut_context=context,
+                        candidate_task_ids=task_ids,
+                    ),
+                )
+        returned_columns: tuple[JourneyColumn, ...] = tuple()
+        harvest_payload: dict = {}
+        if partial_best_label is not None:
+            returned_columns, harvest_payload = _select_full_universe_incremental_return_columns(
+                data,
+                duals,
+                partial_labels or (partial_best_label,),
+                best_label=partial_best_label,
+                candidate_task_ids=task_ids,
+                branch_context=branch,
+                cut_context=context,
+                negative_eps=negative_eps,
+                max_returned_columns=max_returned_columns,
+                active_task_sets=active_task_sets_for_harvest,
+            )
+            payload.update(harvest_payload)
+            payload["returned_column_count"] = len(returned_columns)
+            payload["returned_column_policy"] = harvest_payload.get("returned_column_policy", "")
+            payload["returned_column_semantics"] = (
+                "partial_timeout_negative_columns_from_incremental_labeling"
+                if returned_columns
+                else "partial_timeout_no_columns_returned"
+            )
+            payload["partial_timeout_returned_column_count"] = len(returned_columns)
+            payload["partial_timeout_negative_harvest_enabled"] = True
+        else:
+            payload["returned_column_count"] = 0
+            payload["returned_column_policy"] = "none"
+            payload["returned_column_semantics"] = "timeout_before_any_branch_feasible_label"
+            payload["partial_timeout_returned_column_count"] = 0
+            payload["partial_timeout_negative_harvest_enabled"] = False
         payload["timeout_stage"] = exc.stage
         payload["sortie_attempt_count"] = int(exc.generated_sortie_count)
         payload["feasible_sortie_template_count"] = int(exc.route_template_count)
         payload["pareto_label_count"] = int(exc.pareto_label_count)
+        payload["observed_task_mask_count_by_task_count"] = dict(
+            partial_stats.get("observed_task_mask_count_by_task_count") or {}
+        )
+        payload["processed_task_mask_count_by_task_count"] = dict(
+            partial_stats.get("processed_task_mask_count_by_task_count") or {}
+        )
+        payload["pending_task_mask_count_by_task_count"] = dict(
+            partial_stats.get("pending_task_mask_count_by_task_count") or {}
+        )
         payload["branch_context_active"] = not branch.empty
         payload["branch_decision_count"] = len(branch.pair_decisions)
-        return payload, tuple()
+        return payload, returned_columns
     if label is None:
         payload = _full_universe_incremental_fail_payload(
             data,
@@ -827,6 +909,7 @@ def price_full_universe_incremental_journey_columns(
         cut_context=context,
         negative_eps=negative_eps,
         max_returned_columns=max_returned_columns,
+        active_task_sets=active_task_sets_for_harvest,
     )
     candidate_sets = _all_nonempty_task_subsets(data)
     early_negative_stop = bool(stats.get("early_negative_stop"))
@@ -890,9 +973,33 @@ def price_full_universe_incremental_journey_columns(
         "label_queue_push_count": int(stats.get("label_queue_push_count") or 0),
         "label_queue_stale_pop_count": int(stats.get("label_queue_stale_pop_count") or 0),
         "label_queue_max_pending_count": int(stats.get("label_queue_max_pending_count") or 0),
+        "sortie_candidate_cache_enabled": bool(stats.get("sortie_candidate_cache_enabled")),
+        "sortie_candidate_cache_limit": stats.get("sortie_candidate_cache_limit"),
+        "sortie_candidate_cache_entry_count": int(stats.get("sortie_candidate_cache_entry_count") or 0),
+        "sortie_candidate_cache_hit_count": int(stats.get("sortie_candidate_cache_hit_count") or 0),
+        "sortie_candidate_cache_miss_count": int(stats.get("sortie_candidate_cache_miss_count") or 0),
+        "sortie_candidate_cache_reused_candidate_count": int(
+            stats.get("sortie_candidate_cache_reused_candidate_count") or 0
+        ),
         "early_negative_stop": bool(early_negative_stop),
         "early_negative_stop_can_certify_no_negative": False,
         "early_negative_stop_trigger_count": int(stats.get("early_negative_stop_trigger_count") or 0),
+        "early_negative_distinct_task_set_stop_enabled": bool(
+            stats.get("early_negative_distinct_task_set_stop_enabled")
+        ),
+        "early_negative_distinct_task_set_count": int(
+            stats.get("early_negative_distinct_task_set_count") or 0
+        ),
+        "early_negative_preferred_task_set_count": int(
+            stats.get("early_negative_preferred_task_set_count") or 0
+        ),
+        "early_negative_active_task_set_reference_count": int(
+            stats.get("early_negative_active_task_set_reference_count") or 0
+        ),
+        "early_negative_active_preference_required": bool(
+            stats.get("early_negative_active_preference_required")
+        ),
+        "early_negative_raw_stop_cap": int(stats.get("early_negative_raw_stop_cap") or 0),
         "observed_task_mask_count_by_task_count": dict(
             stats.get("observed_task_mask_count_by_task_count") or {}
         ),
@@ -1683,6 +1790,7 @@ def _best_direct_label_incremental(
     negative_eps: float = 1.0e-6,
     stop_at_first_negative: bool = False,
     negative_harvest_target: int = 1,
+    active_task_sets_for_harvest: Iterable[Iterable[str]] | None = None,
 ) -> tuple[_DirectJourneyLabel | None, dict]:
     task_index = TaskIndexMap(candidate_task_ids)
     full_mask = task_index.full_mask
@@ -1697,6 +1805,11 @@ def _best_direct_label_incremental(
     completion_payload["evaluated_label_count"] = 0
     path_type_cache = _nondominated_path_type_cache(data)
     path_type_lb_cache = _path_type_lower_bound_cache(data, path_type_cache)
+    sortie_candidate_cache_limit = _direct_sortie_cache_limit(data)
+    sortie_candidate_cache = OrderedDict()
+    sortie_candidate_cache_hit_count = 0
+    sortie_candidate_cache_miss_count = 0
+    sortie_candidate_cache_reused_candidate_count = 0
     labels_by_mask: dict[int, list[_DirectJourneyLabel]] = {
         0: [_DirectJourneyLabel(task_mask=0, sorties=tuple(), end_time=0.0, reduced_base=0.0)]
     }
@@ -1726,6 +1839,15 @@ def _best_direct_label_incremental(
     early_negative_count = 0
     negative_threshold = -abs(float(negative_eps))
     negative_harvest_target = max(1, int(negative_harvest_target))
+    active_harvest_masks = {
+        task_index.mask_from_ids(row)
+        for row in (active_task_sets_for_harvest or tuple())
+        if set(str(task_id) for task_id in row).issubset(set(task_index.external_ids))
+    }
+    active_preference_required = len(active_harvest_masks) < 4000
+    early_negative_distinct_task_masks: set[int] = set()
+    early_negative_preferred_task_masks: set[int] = set()
+    early_negative_raw_cap = max(negative_harvest_target, negative_harvest_target * 8)
 
     def build_stats(*, early_negative_stop: bool = False) -> dict:
         return {
@@ -1738,8 +1860,22 @@ def _best_direct_label_incremental(
             "label_queue_push_count": int(push_counter + 1),
             "label_queue_stale_pop_count": int(stale_pop_count),
             "label_queue_max_pending_count": int(max_pending_count),
+            "sortie_candidate_cache_enabled": True,
+            "sortie_candidate_cache_limit": (
+                None if sortie_candidate_cache_limit is None else int(sortie_candidate_cache_limit)
+            ),
+            "sortie_candidate_cache_entry_count": int(len(sortie_candidate_cache)),
+            "sortie_candidate_cache_hit_count": int(sortie_candidate_cache_hit_count),
+            "sortie_candidate_cache_miss_count": int(sortie_candidate_cache_miss_count),
+            "sortie_candidate_cache_reused_candidate_count": int(sortie_candidate_cache_reused_candidate_count),
             "early_negative_stop": bool(early_negative_stop),
             "early_negative_stop_trigger_count": int(early_negative_count),
+            "early_negative_distinct_task_set_stop_enabled": bool(stop_at_first_negative),
+            "early_negative_distinct_task_set_count": int(len(early_negative_distinct_task_masks)),
+            "early_negative_preferred_task_set_count": int(len(early_negative_preferred_task_masks)),
+            "early_negative_active_task_set_reference_count": int(len(active_harvest_masks)),
+            "early_negative_active_preference_required": bool(active_preference_required),
+            "early_negative_raw_stop_cap": int(early_negative_raw_cap),
             "observed_task_mask_count_by_task_count": _mask_count_by_task_count(labels_by_mask.keys()),
             "processed_task_mask_count_by_task_count": _mask_count_by_task_count(processed_masks),
             "pending_task_mask_count_by_task_count": _mask_count_by_task_count(
@@ -1753,14 +1889,22 @@ def _best_direct_label_incremental(
             ),
         }
 
+    def raise_time_limit(stage: str, *, cause: Exception | None = None) -> None:
+        exc = DirectBaselineTimeLimitExceeded(
+            stage=stage,
+            generated_sortie_count=generated_sortie_count,
+            route_template_count=route_template_count,
+            pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
+            partial_label=best,
+            partial_stats=build_stats(early_negative_stop=False),
+        )
+        if cause is not None:
+            raise exc from cause
+        raise exc
+
     while pending_masks:
         if _deadline_exceeded(deadline):
-            raise DirectBaselineTimeLimitExceeded(
-                stage="incremental_journey_label_dp",
-                generated_sortie_count=generated_sortie_count,
-                route_template_count=route_template_count,
-                pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
-            )
+            raise_time_limit("incremental_journey_label_dp")
         _current_count, current_priority, _push_index, current_mask = heapq.heappop(pending_masks)
         if current_mask in processed_masks:
             stale_pop_count += 1
@@ -1777,12 +1921,7 @@ def _best_direct_label_incremental(
             continue
         for label_index, label in enumerate(current_labels):
             if label_index % 32 == 0 and _deadline_exceeded(deadline):
-                raise DirectBaselineTimeLimitExceeded(
-                    stage="incremental_journey_label_dp",
-                    generated_sortie_count=generated_sortie_count,
-                    route_template_count=route_template_count,
-                    pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
-                )
+                raise_time_limit("incremental_journey_label_dp")
             completion_payload["evaluated_label_count"] += 1
             if completion_payload["enabled"] and best is not None:
                 remaining_tasks = tuple(
@@ -1806,32 +1945,39 @@ def _best_direct_label_incremental(
                     completion_payload["pruned_label_count"] += 1
                     continue
             try:
-                candidates, generated_count, route_count, _ = _direct_sortie_candidates_from_start(
-                    data,
-                    task_to_bit,
-                    remaining_mask=remaining_mask,
-                    start_time=float(label.end_time),
-                    deadline=deadline,
-                    path_type_cache=path_type_cache,
-                    path_type_lb_cache=path_type_lb_cache,
-                )
+                cache_key = (round(float(label.end_time), 6), int(remaining_mask))
+                cached = sortie_candidate_cache.get(cache_key)
+                if cached is None:
+                    candidates, generated_count, route_count, _ = _direct_sortie_candidates_from_start(
+                        data,
+                        task_to_bit,
+                        remaining_mask=remaining_mask,
+                        start_time=float(label.end_time),
+                        deadline=deadline,
+                        path_type_cache=path_type_cache,
+                        path_type_lb_cache=path_type_lb_cache,
+                    )
+                    cached = (tuple(candidates), int(generated_count), int(route_count))
+                    sortie_candidate_cache[cache_key] = cached
+                    if sortie_candidate_cache_limit is not None:
+                        while len(sortie_candidate_cache) > int(sortie_candidate_cache_limit):
+                            sortie_candidate_cache.popitem(last=False)
+                    sortie_candidate_cache_miss_count += 1
+                    generated_sortie_count += int(generated_count)
+                    route_template_count += int(route_count)
+                else:
+                    if sortie_candidate_cache_limit is not None:
+                        sortie_candidate_cache.move_to_end(cache_key)
+                    sortie_candidate_cache_hit_count += 1
+                    sortie_candidate_cache_reused_candidate_count += len(cached[0])
+                candidates = cached[0]
             except DirectBaselineTimeLimitExceeded as exc:
-                raise DirectBaselineTimeLimitExceeded(
-                    stage=f"sortie_candidate_generation:{exc.stage}",
-                    generated_sortie_count=generated_sortie_count + int(exc.generated_sortie_count),
-                    route_template_count=route_template_count + int(exc.route_template_count),
-                    pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
-                ) from exc
-            generated_sortie_count += int(generated_count)
-            route_template_count += int(route_count)
+                generated_sortie_count += int(exc.generated_sortie_count)
+                route_template_count += int(exc.route_template_count)
+                raise_time_limit(f"sortie_candidate_generation:{exc.stage}", cause=exc)
             for candidate_index, candidate in enumerate(candidates):
                 if candidate_index % 1024 == 0 and _deadline_exceeded(deadline):
-                    raise DirectBaselineTimeLimitExceeded(
-                        stage="incremental_candidate_extension",
-                        generated_sortie_count=generated_sortie_count,
-                        route_template_count=route_template_count,
-                        pareto_label_count=sum(len(labels) for mask, labels in labels_by_mask.items() if mask),
-                    )
+                    raise_time_limit("incremental_candidate_extension")
                 if candidate.task_mask & current_mask:
                     continue
                 new_mask = current_mask | candidate.task_mask
@@ -1880,8 +2026,16 @@ def _best_direct_label_incremental(
                     best = new_label
                 if candidate_rc < negative_threshold:
                     early_negative_count += 1
+                    early_negative_distinct_task_masks.add(int(new_mask))
+                    if not active_preference_required or int(new_mask) not in active_harvest_masks:
+                        early_negative_preferred_task_masks.add(int(new_mask))
                     if bool(stop_at_first_negative) and early_negative_count >= negative_harvest_target:
-                        return best, build_stats(early_negative_stop=True)
+                        enough_preferred = (
+                            len(early_negative_preferred_task_masks) >= negative_harvest_target
+                        )
+                        raw_cap_reached = early_negative_count >= early_negative_raw_cap
+                        if enough_preferred or raw_cap_reached:
+                            return best, build_stats(early_negative_stop=True)
 
     return best, build_stats(early_negative_stop=False)
 
@@ -1941,9 +2095,14 @@ def _select_full_universe_incremental_return_columns(
     cut_context: CutContext,
     negative_eps: float,
     max_returned_columns: int,
+    active_task_sets: Iterable[Iterable[str]] | None = None,
 ) -> tuple[tuple[JourneyColumn, ...], dict]:
     task_index = TaskIndexMap(candidate_task_ids)
     target = max(1, int(max_returned_columns))
+    active_task_set_lookup = {
+        tuple(sorted(str(task_id) for task_id in row))
+        for row in (active_task_sets or tuple())
+    }
     rows: list[dict] = []
     seen_signatures: set[tuple] = set()
     for label in labels:
@@ -1969,6 +2128,8 @@ def _select_full_universe_incremental_return_columns(
                 "column": column,
                 "signature": signature,
                 "task_set": tuple(sorted(str(task_id) for task_id in column.task_set)),
+                "task_set_is_active": tuple(sorted(str(task_id) for task_id in column.task_set))
+                in active_task_set_lookup,
                 "reduced_cost": float(rc),
                 "objective": float(column.objective),
                 "sortie_count": len(column.sorties),
@@ -2002,13 +2163,25 @@ def _select_full_universe_incremental_return_columns(
     if best_row is not None:
         add(best_row)
     source_rows = negative_rows if negative_rows else rows
-    for row in source_rows:
+    non_active_source_rows = [row for row in source_rows if not bool(row["task_set_is_active"])]
+    active_source_rows = [row for row in source_rows if bool(row["task_set_is_active"])]
+    for row in non_active_source_rows:
         if len(selected) >= target:
             break
         if tuple(row["task_set"]) in selected_task_sets:
             continue
         add(row)
-    for row in source_rows:
+    for row in active_source_rows:
+        if len(selected) >= target:
+            break
+        if tuple(row["task_set"]) in selected_task_sets:
+            continue
+        add(row)
+    for row in non_active_source_rows:
+        if len(selected) >= target:
+            break
+        add(row)
+    for row in active_source_rows:
         if len(selected) >= target:
             break
         add(row)
@@ -2016,6 +2189,8 @@ def _select_full_universe_incremental_return_columns(
     returned = tuple(row["column"] for row in selected)
     selected_negative_count = sum(1 for row in selected if float(row["reduced_cost"]) < threshold)
     selected_new_task_set_count = len({tuple(row["task_set"]) for row in selected})
+    selected_active_task_set_count = sum(1 for row in selected if bool(row["task_set_is_active"]))
+    selected_non_active_task_set_count = len(selected) - int(selected_active_task_set_count)
     policy = (
         "global_min_plus_diverse_negative_harvest"
         if selected_negative_count > 1
@@ -2037,8 +2212,11 @@ def _select_full_universe_incremental_return_columns(
             0,
             int(len(selected)) - int(selected_new_task_set_count),
         ),
+        "exact_negative_harvest_active_task_set_count": int(selected_active_task_set_count),
+        "exact_negative_harvest_non_active_task_set_count": int(selected_non_active_task_set_count),
+        "exact_negative_harvest_active_task_set_reference_count": len(active_task_set_lookup),
         "exact_negative_harvest_selection_policy": (
-            "global_min_first_then_distinct_task_sets_then_replacements"
+            "global_min_first_then_non_active_distinct_task_sets_then_active_distinct_task_sets_then_replacements"
         ),
         "exact_negative_harvest_best_rc": None
         if not negative_rows

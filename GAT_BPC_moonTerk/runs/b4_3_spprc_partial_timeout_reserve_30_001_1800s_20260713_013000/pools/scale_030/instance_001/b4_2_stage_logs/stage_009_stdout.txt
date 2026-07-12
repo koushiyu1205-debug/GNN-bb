@@ -1,0 +1,2 @@
+{"stage_count": 9, "latest_stage": 9, "latest_scope": "DIAGNOSTIC_PRICING_FRONTIER", "latest_state": "INCOMPLETE_LIMIT", "latest_compact_final_judge_profile": "V4SZ", "latest_compact_final_judge_phase_mode": "harvest_then_proof", "latest_final_best_reduced_cost": null, "latest_final_dual_bound": null, "latest_active_column_count": 6913, "latest_added_column_count": 0}
+report /home/kai/work/GAT_BPC_moonTerk/runs/b4_3_spprc_partial_timeout_reserve_30_001_1800s_20260713_013000/pools/scale_030/instance_001/staged_resume_report_zh.md

@@ -110,9 +110,11 @@ class ResourceLabelCoreConfig:
     wall_time_limit_sec: float | None = None
     negative_eps: float = 1.0e-6
     stop_at_first_negative: bool = False
+    negative_harvest_target: int = 1
     run_direct_portfolio: bool = False
     completion_bound_enabled: bool = True
     exact_negative_harvest_target: int = 1
+    active_task_sets_for_exact_harvest: tuple[tuple[str, ...], ...] = tuple()
     ng_neighborhood_size: int = 8
     ng_neighborhood_sizes: tuple[int, ...] | None = None
     resource_extension_seed_enabled: bool = True
@@ -134,6 +136,19 @@ class ResourceLabelCoreConfig:
             self,
             "exact_negative_harvest_target",
             max(1, int(self.exact_negative_harvest_target)),
+        )
+        object.__setattr__(
+            self,
+            "negative_harvest_target",
+            max(1, int(self.negative_harvest_target)),
+        )
+        object.__setattr__(
+            self,
+            "active_task_sets_for_exact_harvest",
+            tuple(
+                tuple(sorted(str(task_id) for task_id in row))
+                for row in (self.active_task_sets_for_exact_harvest or tuple())
+            ),
         )
         ng_size = max(1, int(self.ng_neighborhood_size))
         object.__setattr__(self, "ng_neighborhood_size", ng_size)
@@ -193,6 +208,7 @@ def run_resource_label_core(
                 negative_eps=config.negative_eps,
                 max_direct_tasks=config.max_task_count,
                 max_returned_columns=config.exact_negative_harvest_target,
+                active_task_sets_for_harvest=config.active_task_sets_for_exact_harvest,
                 completion_bound_enabled=bool(config.completion_bound_enabled),
                 wall_time_limit_sec=config.wall_time_limit_sec,
                 branch_context=branch,
@@ -312,11 +328,17 @@ def run_resource_label_core(
             max_candidate_sets=config.max_candidate_sets,
             wall_time_limit_sec=_remaining_wall_time(deadline),
             stop_at_first_negative=bool(config.stop_at_first_negative),
+            negative_harvest_target=config.negative_harvest_target,
             branch_context=branch,
             cut_context=cuts,
         )
         columns = _dedupe_columns((*resource_label_columns, *columns))
-        if config.run_direct_portfolio:
+        direct_negative_count = int(payload.get("negative_column_count") or 0)
+        skip_direct_portfolio = bool(
+            config.stop_at_first_negative
+            and direct_negative_count >= int(config.negative_harvest_target)
+        )
+        if config.run_direct_portfolio and not skip_direct_portfolio:
             direct_payload, direct_columns = price_direct_journey_columns(
                 data,
                 duals,
@@ -333,6 +355,9 @@ def run_resource_label_core(
             columns = _dedupe_columns((*columns, *direct_columns))
             payload = _merge_worker_payload(payload, direct_payload)
             payload["direct_seed_portfolio_column_count"] = len(direct_columns)
+        elif skip_direct_portfolio:
+            payload["direct_seed_portfolio_skipped_by_negative_harvest_target"] = True
+            payload["direct_seed_portfolio_skip_reason"] = "negative_harvest_target_reached"
         payload = _core_payload(
             data,
             payload,
@@ -361,6 +386,8 @@ def run_resource_label_core(
             extra_seed_source_rows=extra_seed_source_rows,
         )
         payload["direct_seed_portfolio_enabled"] = bool(config.run_direct_portfolio)
+        payload["negative_harvest_target"] = int(config.negative_harvest_target)
+        payload["negative_harvest_early_stop_enabled"] = bool(config.stop_at_first_negative)
         payload["pricing_engine_role"] = "worker_candidate_search"
         payload["candidate_search_only"] = True
         payload["relaxed_candidate_search_can_certify_no_negative"] = False

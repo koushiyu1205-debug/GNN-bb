@@ -21,6 +21,15 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--stage-count", type=int, default=1)
     parser.add_argument("--stage-time-limit-sec", type=float, default=120.0)
+    parser.add_argument(
+        "--stage-batch-time-reserve-sec",
+        type=float,
+        default=10.0,
+        help=(
+            "Wall-clock reserve kept outside the inner batch probe so it can "
+            "serialize probe.json before the wrapper or parent timeout fires."
+        ),
+    )
     parser.add_argument("--max-rounds-per-stage", type=int, default=4)
     parser.add_argument("--max-direct-tasks", type=int, default=30)
     parser.add_argument("--seed-mode", default="b0_incumbent_plus_singletons")
@@ -185,6 +194,8 @@ def main() -> int:
         stage_dir.mkdir(parents=True, exist_ok=True)
         stage_config = {
             "stage_time_limit_sec": float(args.stage_time_limit_sec),
+            "stage_batch_time_reserve_sec": float(args.stage_batch_time_reserve_sec),
+            "stage_batch_time_limit_sec": _batch_time_limit(args),
             "max_rounds_per_stage": int(args.max_rounds_per_stage),
             "max_direct_tasks": int(args.max_direct_tasks),
             "seed_mode": str(args.seed_mode),
@@ -207,6 +218,7 @@ def main() -> int:
                 "LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET",
                 "",
             ),
+            "env_exact_final_judge_first": os.environ.get("LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST", ""),
             "compact_service_start_depot_travel_lb": bool(args.compact_service_start_depot_travel_lb),
             "compact_task_to_depot_return_travel_lb": bool(args.compact_task_to_depot_return_travel_lb),
             "compact_pair_route_duration_lb": bool(args.compact_pair_route_duration_lb),
@@ -231,7 +243,7 @@ def main() -> int:
             "--output-dir",
             str(stage_dir),
             "--time-limit-sec",
-            str(float(args.stage_time_limit_sec)),
+            str(_batch_time_limit(args)),
             "--max-rounds",
             str(int(args.max_rounds_per_stage)),
             "--max-direct-tasks",
@@ -367,6 +379,14 @@ def _prepend_pythonpath(existing: str, path: Path) -> str:
     return f"{path}{os.pathsep}{existing}"
 
 
+def _batch_time_limit(args: argparse.Namespace) -> float:
+    stage_limit = max(1.0, float(args.stage_time_limit_sec))
+    reserve = max(0.0, float(args.stage_batch_time_reserve_sec))
+    if stage_limit <= 2.0:
+        return stage_limit
+    return max(1.0, stage_limit - min(reserve, max(0.0, stage_limit / 2.0)))
+
+
 def _load_manifest(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -444,6 +464,8 @@ def _stage_row(stage_index: int, probe_path: Path, probe: dict, *, stage_config:
     history = list(probe.get("history") or [])
     worker_history = _worker_history_rows(probe)
     worker_telemetry = _worker_history_telemetry(worker_history)
+    final_judge_history = _final_judge_history_rows(probe)
+    final_judge_history_telemetry = _final_judge_history_telemetry(final_judge_history)
     best_rc_values = [
         row.get("best_reduced_cost")
         for row in history
@@ -506,6 +528,8 @@ def _stage_row(stage_index: int, probe_path: Path, probe: dict, *, stage_config:
             "env_labeling_final_judge_exact_harvest_target"
         )
         or config.get("env_labeling_final_judge_exact_harvest_target", ""),
+        "env_exact_final_judge_first": probe_config.get("env_exact_final_judge_first")
+        or config.get("env_exact_final_judge_first", ""),
         "labeling_final_judge_enabled": bool((probe.get("final_judge") or {}).get("labeling_final_judge_enabled")),
         "labeling_final_judge_auto_mode": bool((probe.get("final_judge") or {}).get("labeling_final_judge_auto_mode")),
         "labeling_final_judge_auto_selected": bool(
@@ -515,6 +539,13 @@ def _stage_row(stage_index: int, probe_path: Path, probe: dict, *, stage_config:
             "labeling_final_judge_auto_skip_reason",
             "",
         ),
+        "labeling_final_judge_exact_harvest_target": final_judge.get(
+            "labeling_final_judge_exact_harvest_target"
+        ),
+        "labeling_final_judge_exact_harvest_target_source": final_judge.get(
+            "labeling_final_judge_exact_harvest_target_source"
+        ),
+        **final_judge_history_telemetry,
         "negative_feasibility_skipped_for_proof_only": bool(
             (probe.get("final_judge") or {}).get("negative_feasibility_skipped_for_proof_only")
         ),
@@ -579,6 +610,11 @@ def _worker_history_rows(probe: dict) -> list[dict]:
         ):
             rows.append(row)
     return rows
+
+
+def _final_judge_history_rows(probe: dict) -> list[dict]:
+    history = probe.get("history") if isinstance(probe.get("history"), list) else []
+    return [row for row in history if isinstance(row, dict) and row.get("final_judge_called") is True]
 
 
 def _sum_int(rows: list[dict], key: str) -> int:
@@ -651,6 +687,39 @@ def _worker_history_telemetry(rows: list[dict]) -> dict:
         "harvest_rejected_not_addable_count": _sum_int(rows, "harvest_rejected_not_addable_count"),
         "harvest_added_to_master_count": added_count,
         "harvest_source_phase": "worker_candidate_search_addability_harvest",
+    }
+
+
+def _final_judge_history_telemetry(rows: list[dict]) -> dict:
+    candidate_count = _sum_int(rows, "harvest_candidate_negative_count")
+    selected_count = _sum_int(rows, "harvest_selected_count")
+    new_task_set_count = _sum_int(rows, "harvest_selected_new_task_set_count")
+    replacement_count = _sum_int(rows, "harvest_selected_replacement_task_set_count")
+    added_count = _sum_int(rows, "added_to_master_count")
+    wall_time = sum(
+        float(row.get("final_judge_wall_time") or 0.0)
+        for row in rows
+        if isinstance(row.get("final_judge_wall_time"), (int, float))
+    )
+    return {
+        "final_judge_history_round_count": len(rows),
+        "final_judge_history_wall_time": round(float(wall_time), 6),
+        "post_final_judge_harvest_candidate_negative_count": candidate_count,
+        "post_final_judge_harvest_selected_count": selected_count,
+        "post_final_judge_harvest_selected_new_task_set_count": new_task_set_count,
+        "post_final_judge_harvest_selected_replacement_task_set_count": replacement_count,
+        "post_final_judge_harvest_rejected_duplicate_count": _sum_int(
+            rows,
+            "harvest_rejected_duplicate_count",
+        ),
+        "post_final_judge_harvest_rejected_not_addable_count": _sum_int(
+            rows,
+            "harvest_rejected_not_addable_count",
+        ),
+        "post_final_judge_harvest_added_to_master_count": added_count,
+        "post_final_judge_harvest_best_true_rc": _latest_nonempty(rows, "harvest_best_true_rc"),
+        "post_final_judge_harvest_source_phase": _latest_nonempty(rows, "harvest_source_phase")
+        or "post_final_judge_addability_harvest",
     }
 
 

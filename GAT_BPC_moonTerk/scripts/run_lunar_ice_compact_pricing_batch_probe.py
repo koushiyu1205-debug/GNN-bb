@@ -132,6 +132,7 @@ def main() -> int:
             "env_compact_final_judge_phase_mode": os.environ.get("LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE", ""),
             "env_labeling_final_judge": os.environ.get("LUNAR_ICE_LABELING_FINAL_JUDGE", ""),
             "env_labeling_final_judge_max_tasks": os.environ.get("LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS", ""),
+            "env_exact_final_judge_first": os.environ.get("LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST", ""),
             "env_compact_service_start_depot_travel_lb": os.environ.get(
                 "LUNAR_ICE_COMPACT_SERVICE_START_DEPOT_TRAVEL_LB",
                 "",

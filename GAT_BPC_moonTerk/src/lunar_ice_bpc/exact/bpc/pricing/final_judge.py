@@ -584,6 +584,7 @@ def run_true_dual_root_final_judge(
             exact_harvest_target_override=labeling_final_judge_exact_harvest_target,
             explicit_opt_in=labeling_final_judge_enabled is not None,
             selection_reason=labeling_selection_reason,
+            active_task_sets=active_task_sets,
         )
         if labeling_mode == "auto":
             result.pricing_payload.update(
@@ -741,6 +742,7 @@ def _run_labeling_pricer_final_judge(
     exact_harvest_target_override: int | None = None,
     explicit_opt_in: bool = False,
     selection_reason: str = "",
+    active_task_sets: set[frozenset[str]] | None = None,
 ) -> FinalJudgeResult:
     start = perf_counter()
     max_exact_tasks = (
@@ -756,50 +758,129 @@ def _run_labeling_pricer_final_judge(
     exact_harvest_target = _labeling_final_judge_exact_harvest_target(
         exact_harvest_target_override=exact_harvest_target_override
     )
-    payload, columns = run_bpc_labeling_pricer(
-        data,
-        duals,
-        config=LabelingPricingConfig(
-            mode=EXACT_ELEMENTARY_MODE,
-            max_exact_tasks=max_exact_tasks,
-            negative_eps=negative_eps,
-            wall_time_limit_sec=wall_time_limit_sec,
-            exact_negative_harvest_target=exact_harvest_target,
-            stop_at_first_negative=True,
-        ),
-        branch_context=branch_context,
-        cut_context=cut_context,
-        cache=cache,
+    active_task_sets_for_exact_harvest = tuple(
+        tuple(sorted(str(task_id) for task_id in row))
+        for row in (active_task_sets or set())
     )
-    manual_rc_rows = tuple(
-        (
-            manual_journey_reduced_cost(
-                column,
-                duals,
-                cut_coefficients=cut_context.coefficients_for(column),
+
+    def run_labeling_pass(
+        *,
+        stop_at_first_negative: bool,
+        pass_wall_time_limit_sec: float | None,
+    ) -> tuple[dict, tuple[JourneyColumn, ...], float]:
+        pass_start = perf_counter()
+        pass_payload, pass_columns = run_bpc_labeling_pricer(
+            data,
+            duals,
+            config=LabelingPricingConfig(
+                mode=EXACT_ELEMENTARY_MODE,
+                max_exact_tasks=max_exact_tasks,
+                negative_eps=negative_eps,
+                wall_time_limit_sec=pass_wall_time_limit_sec,
+                exact_negative_harvest_target=exact_harvest_target,
+                stop_at_first_negative=bool(stop_at_first_negative),
+                active_task_sets_for_exact_harvest=active_task_sets_for_exact_harvest,
             ),
-            column,
+            branch_context=branch_context,
+            cut_context=cut_context,
+            cache=cache,
         )
-        for column in columns
+        return dict(pass_payload), tuple(pass_columns), perf_counter() - pass_start
+
+    def audit_pass_columns(
+        pass_columns: tuple[JourneyColumn, ...],
+    ) -> tuple[
+        tuple[tuple[float, JourneyColumn], ...],
+        tuple[tuple[float, JourneyColumn], ...],
+        tuple[tuple[float, JourneyColumn], ...],
+        int,
+        tuple[JourneyColumn, ...],
+        float | None,
+    ]:
+        pass_manual_rc_rows = tuple(
+            (
+                manual_journey_reduced_cost(
+                    column,
+                    duals,
+                    cut_coefficients=cut_context.coefficients_for(column),
+                ),
+                column,
+            )
+            for column in pass_columns
+        )
+        pass_manual_negative_rows = tuple(
+            (rc, column)
+            for rc, column in pass_manual_rc_rows
+            if rc < -abs(float(negative_eps))
+        )
+        pass_branch_feasible_negative_rows = tuple(
+            (rc, column)
+            for rc, column in pass_manual_negative_rows
+            if journey_satisfies_branch_context(column, branch_context)
+        )
+        pass_branch_filtered_negative_count = (
+            len(pass_manual_negative_rows) - len(pass_branch_feasible_negative_rows)
+        )
+        pass_negative_columns = tuple(column for _rc, column in pass_branch_feasible_negative_rows)
+        pass_branch_feasible_rc_values = tuple(
+            rc
+            for rc, column in pass_manual_rc_rows
+            if journey_satisfies_branch_context(column, branch_context)
+        )
+        pass_manual_branch_feasible_best = (
+            min(pass_branch_feasible_rc_values)
+            if pass_branch_feasible_rc_values
+            else None
+        )
+        return (
+            pass_manual_rc_rows,
+            pass_manual_negative_rows,
+            pass_branch_feasible_negative_rows,
+            pass_branch_filtered_negative_count,
+            pass_negative_columns,
+            pass_manual_branch_feasible_best,
+        )
+
+    payload, columns, harvest_pass_wall = run_labeling_pass(
+        stop_at_first_negative=True,
+        pass_wall_time_limit_sec=wall_time_limit_sec,
     )
-    manual_negative_rows = tuple(
-        (rc, column)
-        for rc, column in manual_rc_rows
-        if rc < -abs(float(negative_eps))
-    )
-    branch_feasible_negative_rows = tuple(
-        (rc, column)
-        for rc, column in manual_negative_rows
-        if journey_satisfies_branch_context(column, branch_context)
-    )
-    branch_filtered_negative_count = len(manual_negative_rows) - len(branch_feasible_negative_rows)
-    negative_columns = tuple(column for _rc, column in branch_feasible_negative_rows)
-    branch_feasible_rc_values = tuple(
-        rc
-        for rc, column in manual_rc_rows
-        if journey_satisfies_branch_context(column, branch_context)
-    )
-    manual_branch_feasible_best = min(branch_feasible_rc_values) if branch_feasible_rc_values else None
+    harvest_pass_payload = dict(payload)
+    (
+        manual_rc_rows,
+        manual_negative_rows,
+        branch_feasible_negative_rows,
+        branch_filtered_negative_count,
+        negative_columns,
+        manual_branch_feasible_best,
+    ) = audit_pass_columns(columns)
+    proof_pass_attempted = False
+    proof_pass_skip_reason = ""
+    proof_pass_payload: dict = {}
+    proof_pass_wall = 0.0
+    if not negative_columns and _pricing_state_from_payload(payload.get("pricing_state")) != PricingState.CERTIFIED_NO_NEGATIVE:
+        remaining_for_proof = (
+            None
+            if wall_time_limit_sec is None
+            else max(0.0, float(wall_time_limit_sec) - (perf_counter() - start))
+        )
+        if remaining_for_proof is None or remaining_for_proof > 0.0:
+            proof_pass_attempted = True
+            payload, columns, proof_pass_wall = run_labeling_pass(
+                stop_at_first_negative=False,
+                pass_wall_time_limit_sec=remaining_for_proof,
+            )
+            proof_pass_payload = dict(payload)
+            (
+                manual_rc_rows,
+                manual_negative_rows,
+                branch_feasible_negative_rows,
+                branch_filtered_negative_count,
+                negative_columns,
+                manual_branch_feasible_best,
+            ) = audit_pass_columns(columns)
+        else:
+            proof_pass_skip_reason = "no_remaining_wall_time_after_harvest_pass"
     payload_true_best = _first_float(payload.get("true_best_reduced_cost"))
     manual_consistency_pass = bool(
         (payload_true_best is None and manual_branch_feasible_best is None)
@@ -872,11 +953,36 @@ def _run_labeling_pricer_final_judge(
                 "explicit_parameter" if max_exact_tasks_override is not None else "environment_or_default"
             ),
             "labeling_final_judge_exact_harvest_target": int(exact_harvest_target),
+            "labeling_final_judge_active_task_sets_for_harvest_count": len(active_task_sets or set()),
             "labeling_final_judge_exact_harvest_target_source": (
                 "explicit_parameter" if exact_harvest_target_override is not None else "environment_or_default"
             ),
             "labeling_final_judge_early_negative_stop_enabled": True,
             "labeling_final_judge_early_negative_stop_can_certify_no_negative": False,
+            "labeling_final_judge_two_phase_enabled": True,
+            "labeling_final_judge_harvest_pass_status": harvest_pass_payload.get("status"),
+            "labeling_final_judge_harvest_pass_pricing_state": harvest_pass_payload.get("pricing_state"),
+            "labeling_final_judge_harvest_pass_pricing_proof_kind": harvest_pass_payload.get(
+                "pricing_proof_kind"
+            ),
+            "labeling_final_judge_harvest_pass_wall_time": round(harvest_pass_wall, 6),
+            "labeling_final_judge_harvest_pass_column_count": int(
+                harvest_pass_payload.get("returned_column_count")
+                or harvest_pass_payload.get("true_audited_column_count")
+                or 0
+            ),
+            "labeling_final_judge_proof_pass_attempted": bool(proof_pass_attempted),
+            "labeling_final_judge_proof_pass_skip_reason": proof_pass_skip_reason,
+            "labeling_final_judge_proof_pass_status": proof_pass_payload.get("status", ""),
+            "labeling_final_judge_proof_pass_pricing_state": proof_pass_payload.get("pricing_state", ""),
+            "labeling_final_judge_proof_pass_pricing_proof_kind": proof_pass_payload.get(
+                "pricing_proof_kind",
+                "",
+            ),
+            "labeling_final_judge_proof_pass_wall_time": round(proof_pass_wall, 6),
+            "labeling_final_judge_proof_pass_can_certify_no_negative": bool(
+                proof_pass_payload.get("can_certify_no_negative")
+            ),
             "dual_fingerprint": context.dual_fingerprint,
             "branch_context": branch_context.to_payload(),
             "cut_context": cut_context.to_payload(),
@@ -1976,12 +2082,12 @@ def _labeling_final_judge_exact_harvest_target(
     exact_harvest_target_override: int | None,
 ) -> int:
     if exact_harvest_target_override is not None:
-        return max(1, min(32, int(exact_harvest_target_override)))
+        return max(1, min(4096, int(exact_harvest_target_override)))
     return _env_int(
         LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET_ENV,
         default=1,
         minimum=1,
-        maximum=32,
+        maximum=4096,
     )
 
 

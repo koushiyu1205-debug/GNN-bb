@@ -95,6 +95,8 @@ class LabelingPricingConfig:
     support_continuation_max_seed_sets: int = 240
     support_continuation_max_neighbors: int = 4
     support_continuation_protected_seed_count: int = 8
+    resource_extension_seed_enabled: bool = True
+    active_task_sets_for_exact_harvest: tuple[tuple[str, ...], ...] = tuple()
 
     def __post_init__(self) -> None:
         mode = str(self.mode)
@@ -147,6 +149,14 @@ class LabelingPricingConfig:
             self,
             "strong_replacement_threshold",
             float(self.strong_replacement_threshold),
+        )
+        object.__setattr__(
+            self,
+            "active_task_sets_for_exact_harvest",
+            tuple(
+                tuple(sorted(str(task_id) for task_id in row))
+                for row in (self.active_task_sets_for_exact_harvest or tuple())
+            ),
         )
         object.__setattr__(
             self,
@@ -230,6 +240,7 @@ def run_bpc_labeling_pricer(
     payload["max_label_task_count"] = int(cfg.max_label_task_count)
     payload["harvest_target"] = int(cfg.harvest_target)
     payload["exact_negative_harvest_target"] = int(cfg.exact_negative_harvest_target)
+    payload["active_task_sets_for_exact_harvest_count"] = len(cfg.active_task_sets_for_exact_harvest)
     payload["completion_bound_requested"] = bool(cfg.completion_bound_enabled)
     payload["branch_context_active"] = not branch.empty
     payload["branch_decision_count"] = len(branch.pair_decisions)
@@ -270,6 +281,7 @@ def _run_exact_elementary_labeling(
             negative_eps=cfg.negative_eps,
             completion_bound_enabled=bool(cfg.completion_bound_enabled),
             exact_negative_harvest_target=cfg.exact_negative_harvest_target,
+            active_task_sets_for_exact_harvest=cfg.active_task_sets_for_exact_harvest,
             stop_at_first_negative=bool(cfg.stop_at_first_negative),
             wall_time_limit_sec=cfg.wall_time_limit_sec,
         ),
@@ -451,7 +463,9 @@ def _run_worker_labeling(
             wall_time_limit_sec=cfg.wall_time_limit_sec,
             negative_eps=cfg.negative_eps,
             stop_at_first_negative=bool(cfg.stop_at_first_negative),
+            negative_harvest_target=cfg.harvest_target,
             run_direct_portfolio=bool(cfg.relaxed_mode),
+            resource_extension_seed_enabled=bool(cfg.resource_extension_seed_enabled),
             ng_neighborhood_size=cfg.ng_neighborhood_size,
             ng_neighborhood_sizes=cfg.ng_neighborhood_sizes,
             protected_support_continuation_seed_count=cfg.support_continuation_protected_seed_count,

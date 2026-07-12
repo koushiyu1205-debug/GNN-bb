@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import combinations
 import os
+import signal
+import threading
 from time import perf_counter
 from typing import Iterable, Mapping
 
@@ -83,6 +85,23 @@ LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT_ENV = (
     "LUNAR_ICE_LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT"
 )
 LABELING_WORKER_MAX_TASK_CAP_ENV = "LUNAR_ICE_LABELING_WORKER_MAX_TASK_CAP"
+LABELING_WORKER_NG_SIZES_ENV = "LUNAR_ICE_LABELING_WORKER_NG_SIZES"
+LABELING_WORKER_NEGATIVE_BATCH_EARLY_STOP_ENV = (
+    "LUNAR_ICE_LABELING_WORKER_NEGATIVE_BATCH_EARLY_STOP"
+)
+LABELING_WORKER_NEGATIVE_BATCH_TARGET_ENV = (
+    "LUNAR_ICE_LABELING_WORKER_NEGATIVE_BATCH_TARGET"
+)
+LABELING_WORKER_RESOURCE_EXTENSION_SEED_ENV = (
+    "LUNAR_ICE_LABELING_WORKER_RESOURCE_EXTENSION_SEED"
+)
+LABELING_WORKER_HARD_TIME_CAP_SEC_ENV = (
+    "LUNAR_ICE_LABELING_WORKER_HARD_TIME_CAP_SEC"
+)
+LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE_ENV = (
+    "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE"
+)
+EXACT_FINAL_JUDGE_FIRST_ENV = "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST"
 LARGE_TASK_DIRECT_WORKER_ENV = "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER"
 LARGE_TASK_DIRECT_WORKER_MAX_TASKS_ENV = "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_MAX_TASKS"
 LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS_ENV = (
@@ -445,6 +464,7 @@ def solve_node_pricing_with_b2b_r3(
     last_hidden_audit: dict | None = None
     worker_only_success_count = 0
     tail_dual_history: list[JourneyDuals] = []
+    exact_final_judge_first = _env_bool(EXACT_FINAL_JUDGE_FIRST_ENV, default=False)
 
     def export_active_columns() -> tuple[JourneyColumn, ...] | None:
         if not return_active_columns_payload:
@@ -534,38 +554,57 @@ def solve_node_pricing_with_b2b_r3(
             )
 
         remaining_for_worker = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
-        worker = _run_negative_search_worker(
-            data,
-            master=master,
-            reduced_cost_context=master.reduced_cost_context,
-            master_columns=master_columns,
-            b0_direct=b0_direct,
-            pool=pool,
-            view=view,
-            cache=cache,
-            seed_catalog=seed_catalog,
-            profiling=profiling,
-            round_index=round_index,
-            max_direct_tasks=max_direct_tasks,
-            max_candidate_sets=max_columns_per_round,
-            negative_eps=negative_eps,
-            max_selected=max_columns_per_round,
-            node_id=active_node_id,
-            branch_context=active_context,
-            tail_dual_history=_tail_dual_history_with_current(
-                tail_dual_history,
-                master.reduced_cost_context,
-                window=tail_dual_stabilization_window,
-            ),
-            tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
-            tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
-            tail_dual_stabilization_window=tail_dual_stabilization_window,
-            worker_pricer_kind=worker_pricer_kind,
-            cut_context=active_cut_context,
-            wall_time_limit_sec=remaining_for_worker,
-        )
+        if exact_final_judge_first:
+            worker = _exact_final_judge_first_skipped_worker_result(
+                worker_pricer_kind=worker_pricer_kind,
+                remaining_wall_time_sec=remaining_for_worker,
+            )
+            profile_totals["exit_reason"] = "EXACT_FINAL_JUDGE_FIRST_WORKER_SKIPPED"
+        else:
+            worker_hard_cap = _worker_hard_time_cap_sec(remaining_for_worker)
+            worker_started = perf_counter()
+            try:
+                with _worker_hard_timeout(worker_hard_cap):
+                    worker = _run_negative_search_worker(
+                        data,
+                        master=master,
+                        reduced_cost_context=master.reduced_cost_context,
+                        master_columns=master_columns,
+                        b0_direct=b0_direct,
+                        pool=pool,
+                        view=view,
+                        cache=cache,
+                        seed_catalog=seed_catalog,
+                        profiling=profiling,
+                        round_index=round_index,
+                        max_direct_tasks=max_direct_tasks,
+                        max_candidate_sets=max_columns_per_round,
+                        negative_eps=negative_eps,
+                        max_selected=max_columns_per_round,
+                        node_id=active_node_id,
+                        branch_context=active_context,
+                        tail_dual_history=_tail_dual_history_with_current(
+                            tail_dual_history,
+                            master.reduced_cost_context,
+                            window=tail_dual_stabilization_window,
+                        ),
+                        tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+                        tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+                        tail_dual_stabilization_window=tail_dual_stabilization_window,
+                        worker_pricer_kind=worker_pricer_kind,
+                        cut_context=active_cut_context,
+                        wall_time_limit_sec=remaining_for_worker,
+                    )
+            except _WorkerHardTimeLimitExceeded:
+                worker = _worker_hard_timeout_result(
+                    worker_pricer_kind=worker_pricer_kind,
+                    elapsed_sec=perf_counter() - worker_started,
+                    hard_time_cap_sec=worker_hard_cap,
+                    remaining_wall_time_sec=remaining_for_worker,
+                )
         tail_dual_history.append(_duals_from_reduced_cost_context(master.reduced_cost_context))
-        _accumulate_worker_profile(profile_totals, worker.payload)
+        if not exact_final_judge_first:
+            _accumulate_worker_profile(profile_totals, worker.payload)
         if worker.status == PricingState.FOUND_NEGATIVE and worker.selected_columns:
             added = _add_selected_to_pool_and_master(
                 pool,
@@ -619,21 +658,22 @@ def solve_node_pricing_with_b2b_r3(
                 continue
 
         worker_only_success_count = 0
-        master_columns = _master_columns(pool, view, node_id=active_node_id)
-        rmp_start = perf_counter()
-        master = solve_root_journey_master(
-            data,
-            master_columns,
-            negative_eps=negative_eps,
-            rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}-closure",
-            branch_context=active_context,
-            cut_context=active_cut_context,
-        )
-        profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
-        last_master = master
-        if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
-            profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL_BEFORE_FINAL_JUDGE"
-            continue
+        if not exact_final_judge_first:
+            master_columns = _master_columns(pool, view, node_id=active_node_id)
+            rmp_start = perf_counter()
+            master = solve_root_journey_master(
+                data,
+                master_columns,
+                negative_eps=negative_eps,
+                rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}-closure",
+                branch_context=active_context,
+                cut_context=active_cut_context,
+            )
+            profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
+            last_master = master
+            if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
+                profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL_BEFORE_FINAL_JUDGE"
+                continue
 
         remaining_for_judge = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
         if remaining_for_judge is not None and remaining_for_judge <= 0.0:
@@ -670,6 +710,11 @@ def solve_node_pricing_with_b2b_r3(
                 hidden_audit=last_hidden_audit,
                 seed_catalog=seed_catalog,
             )
+        active_task_sets_for_judge = {frozenset(column.task_set) for column in master_columns}
+        effective_exact_harvest_target = _adaptive_labeling_final_judge_exact_harvest_target(
+            labeling_final_judge_exact_harvest_target,
+            active_task_set_count=len(active_task_sets_for_judge),
+        )
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
             data,
@@ -683,10 +728,10 @@ def solve_node_pricing_with_b2b_r3(
             column_pool=pool,
             master_view=view,
             node_id=active_node_id,
-            active_task_sets={frozenset(column.task_set) for column in master_columns},
+            active_task_sets=active_task_sets_for_judge,
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
-            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
+            labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
@@ -770,6 +815,7 @@ def solve_node_pricing_with_b2b_r3(
                 "worker_status": worker.status.value,
                 "worker_exit_reason": worker.payload.get("exit_reason"),
                 "worker_wall_time": worker.payload.get("worker_wall_time"),
+                "exact_final_judge_first_enabled": bool(exact_final_judge_first),
                 **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
                 "final_judge_status": judge.pricing_payload.get("status"),
@@ -806,6 +852,37 @@ def solve_node_pricing_with_b2b_r3(
                     "harvest_candidate_negative_count"
                 ),
                 "final_judge_harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
+                "exact_negative_harvest_active_task_set_count": judge.pricing_payload.get(
+                    "exact_negative_harvest_active_task_set_count"
+                ),
+                "exact_negative_harvest_non_active_task_set_count": judge.pricing_payload.get(
+                    "exact_negative_harvest_non_active_task_set_count"
+                ),
+                "exact_negative_harvest_active_task_set_reference_count": judge.pricing_payload.get(
+                    "exact_negative_harvest_active_task_set_reference_count"
+                ),
+                "labeling_final_judge_effective_exact_harvest_target": effective_exact_harvest_target,
+                "labeling_final_judge_active_task_sets_for_harvest_count": judge.pricing_payload.get(
+                    "labeling_final_judge_active_task_sets_for_harvest_count"
+                ),
+                "labeling_final_judge_two_phase_enabled": judge.pricing_payload.get(
+                    "labeling_final_judge_two_phase_enabled"
+                ),
+                "labeling_final_judge_proof_pass_attempted": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_attempted"
+                ),
+                "labeling_final_judge_proof_pass_pricing_state": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_pricing_state"
+                ),
+                "labeling_final_judge_proof_pass_pricing_proof_kind": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_pricing_proof_kind"
+                ),
+                "labeling_final_judge_proof_pass_wall_time": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_wall_time"
+                ),
+                "labeling_final_judge_harvest_pass_pricing_proof_kind": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_pricing_proof_kind"
+                ),
                 "route_template_pre_harvest_enabled": bool(
                     judge.pricing_payload.get("route_template_pre_harvest_enabled")
                 ),
@@ -1379,6 +1456,11 @@ def _solve_b2b_seeded_tail_cg(
                 note="B2B root RMP did not solve to optimality; fail closed.",
             )
 
+        active_task_sets_for_judge = {frozenset(column.task_set) for column in master_columns}
+        effective_exact_harvest_target = _adaptive_labeling_final_judge_exact_harvest_target(
+            labeling_final_judge_exact_harvest_target,
+            active_task_set_count=len(active_task_sets_for_judge),
+        )
         judge = run_true_dual_root_final_judge(
             data,
             master.reduced_cost_context,
@@ -1388,10 +1470,10 @@ def _solve_b2b_seeded_tail_cg(
             column_pool=pool,
             master_view=view,
             node_id="root",
-            active_task_sets={frozenset(column.task_set) for column in master_columns},
+            active_task_sets=active_task_sets_for_judge,
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
-            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
+            labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
         )
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
@@ -1591,6 +1673,7 @@ def _solve_b2b_r2_worker_before_final_judge(
     last_hidden_audit: dict | None = None
     worker_only_success_count = 0
     tail_dual_history: list[JourneyDuals] = []
+    exact_final_judge_first = _env_bool(EXACT_FINAL_JUDGE_FIRST_ENV, default=False)
 
     for round_index in range(1, max(1, int(max_rounds)) + 1):
         if _wall_time_limit_exceeded(wall_time_limit_sec, started_at=started_at):
@@ -1666,35 +1749,43 @@ def _solve_b2b_r2_worker_before_final_judge(
             )
 
         remaining_for_worker = _remaining_wall_time_limit(wall_time_limit_sec, started_at=started_at)
-        worker = _run_negative_search_worker(
-            data,
-            master=master,
-            reduced_cost_context=master.reduced_cost_context,
-            master_columns=master_columns,
-            b0_direct=b0_direct,
-            pool=pool,
-            view=view,
-            cache=cache,
-            seed_catalog=seed_catalog,
-            profiling=profiling,
-            round_index=round_index,
-            max_direct_tasks=max_direct_tasks,
-            max_candidate_sets=max_columns_per_round,
-            negative_eps=negative_eps,
-            max_selected=max_columns_per_round,
-            tail_dual_history=_tail_dual_history_with_current(
-                tail_dual_history,
-                master.reduced_cost_context,
-                window=tail_dual_stabilization_window,
-            ),
-            tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
-            tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
-            tail_dual_stabilization_window=tail_dual_stabilization_window,
-            worker_pricer_kind=worker_pricer_kind,
-            wall_time_limit_sec=remaining_for_worker,
-        )
+        if exact_final_judge_first:
+            worker = _exact_final_judge_first_skipped_worker_result(
+                worker_pricer_kind=worker_pricer_kind,
+                remaining_wall_time_sec=remaining_for_worker,
+            )
+            profile_totals["exit_reason"] = "EXACT_FINAL_JUDGE_FIRST_WORKER_SKIPPED"
+        else:
+            worker = _run_negative_search_worker(
+                data,
+                master=master,
+                reduced_cost_context=master.reduced_cost_context,
+                master_columns=master_columns,
+                b0_direct=b0_direct,
+                pool=pool,
+                view=view,
+                cache=cache,
+                seed_catalog=seed_catalog,
+                profiling=profiling,
+                round_index=round_index,
+                max_direct_tasks=max_direct_tasks,
+                max_candidate_sets=max_columns_per_round,
+                negative_eps=negative_eps,
+                max_selected=max_columns_per_round,
+                tail_dual_history=_tail_dual_history_with_current(
+                    tail_dual_history,
+                    master.reduced_cost_context,
+                    window=tail_dual_stabilization_window,
+                ),
+                tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
+                tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
+                tail_dual_stabilization_window=tail_dual_stabilization_window,
+                worker_pricer_kind=worker_pricer_kind,
+                wall_time_limit_sec=remaining_for_worker,
+            )
         tail_dual_history.append(_duals_from_reduced_cost_context(master.reduced_cost_context))
-        _accumulate_worker_profile(profile_totals, worker.payload)
+        if not exact_final_judge_first:
+            _accumulate_worker_profile(profile_totals, worker.payload)
         if worker.status == PricingState.FOUND_NEGATIVE and worker.selected_columns:
             added = _add_selected_to_pool_and_master(pool, view, worker.selected_columns)
             harvest_payload = dict(worker.harvest_payload)
@@ -1810,6 +1901,11 @@ def _solve_b2b_r2_worker_before_final_judge(
                 note=f"{active_mode} stopped before final judge: wall_time_limit_sec={wall_time_limit_sec} exhausted.",
                 profile_totals=profile_totals,
             )
+        active_task_sets_for_judge = {frozenset(column.task_set) for column in master_columns}
+        effective_exact_harvest_target = _adaptive_labeling_final_judge_exact_harvest_target(
+            labeling_final_judge_exact_harvest_target,
+            active_task_set_count=len(active_task_sets_for_judge),
+        )
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
             data,
@@ -1821,10 +1917,10 @@ def _solve_b2b_r2_worker_before_final_judge(
             column_pool=pool,
             master_view=view,
             node_id="root",
-            active_task_sets={frozenset(column.task_set) for column in master_columns},
+            active_task_sets=active_task_sets_for_judge,
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
-            labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
+            labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
@@ -1892,6 +1988,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "worker_status": worker.status.value,
                 "worker_exit_reason": worker.payload.get("exit_reason"),
                 "worker_wall_time": worker.payload.get("worker_wall_time"),
+                "exact_final_judge_first_enabled": bool(exact_final_judge_first),
                 **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
                 "final_judge_status": judge.pricing_payload.get("status"),
@@ -1928,6 +2025,37 @@ def _solve_b2b_r2_worker_before_final_judge(
                     "harvest_candidate_negative_count"
                 ),
                 "final_judge_harvest_best_true_rc": judge.pricing_payload.get("harvest_best_true_rc"),
+                "exact_negative_harvest_active_task_set_count": judge.pricing_payload.get(
+                    "exact_negative_harvest_active_task_set_count"
+                ),
+                "exact_negative_harvest_non_active_task_set_count": judge.pricing_payload.get(
+                    "exact_negative_harvest_non_active_task_set_count"
+                ),
+                "exact_negative_harvest_active_task_set_reference_count": judge.pricing_payload.get(
+                    "exact_negative_harvest_active_task_set_reference_count"
+                ),
+                "labeling_final_judge_effective_exact_harvest_target": effective_exact_harvest_target,
+                "labeling_final_judge_active_task_sets_for_harvest_count": judge.pricing_payload.get(
+                    "labeling_final_judge_active_task_sets_for_harvest_count"
+                ),
+                "labeling_final_judge_two_phase_enabled": judge.pricing_payload.get(
+                    "labeling_final_judge_two_phase_enabled"
+                ),
+                "labeling_final_judge_proof_pass_attempted": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_attempted"
+                ),
+                "labeling_final_judge_proof_pass_pricing_state": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_pricing_state"
+                ),
+                "labeling_final_judge_proof_pass_pricing_proof_kind": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_pricing_proof_kind"
+                ),
+                "labeling_final_judge_proof_pass_wall_time": judge.pricing_payload.get(
+                    "labeling_final_judge_proof_pass_wall_time"
+                ),
+                "labeling_final_judge_harvest_pass_pricing_proof_kind": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_pricing_proof_kind"
+                ),
                 "route_template_pre_harvest_enabled": bool(
                     judge.pricing_payload.get("route_template_pre_harvest_enabled")
                 ),
@@ -2580,6 +2708,173 @@ def _worker_round_diagnostic_fields(payload: dict) -> dict:
     }
 
 
+def _exact_final_judge_first_skipped_worker_result(
+    *,
+    worker_pricer_kind: str,
+    remaining_wall_time_sec: float | None,
+) -> _NegativeSearchWorkerResult:
+    """Return an explicit worker-skipped result for exact-pricer-first runs.
+
+    This keeps the BPC proof boundary simple: no skipped or worker no-column
+    state can certify anything; the following true-dual final judge must either
+    add audited negative columns or produce the no-negative certificate.
+    """
+
+    payload = {
+        "worker_status": PricingState.LOCAL_NO_COLUMN_UNCERTIFIED.value,
+        "pricing_state": PricingState.LOCAL_NO_COLUMN_UNCERTIFIED.value,
+        "exit_reason": "EXACT_FINAL_JUDGE_FIRST_WORKER_SKIPPED",
+        "worker_wall_time": 0.0,
+        "worker_pricer_kind": str(worker_pricer_kind),
+        "exact_final_judge_first_enabled": True,
+        "exact_final_judge_first_worker_skipped": True,
+        "exact_final_judge_first_remaining_wall_time_sec": (
+            None
+            if remaining_wall_time_sec is None
+            else round(float(remaining_wall_time_sec), 6)
+        ),
+        "candidate_search_only": True,
+        "can_certify_no_negative": False,
+        "uses_true_dual_bpc_certificate": False,
+        "worker_dual_used_for_candidate_search": False,
+        "candidate_search_rc_recomputed_under_true_dual": True,
+        "candidate_search_dual_matches_true_dual": True,
+        "pricing_proof_kind": "WORKER_SKIPPED_FOR_EXACT_FINAL_JUDGE_FIRST",
+        "no_column_uncertified": True,
+        "worker_no_column_can_certify": False,
+        "worker_uses_true_dual_bpc_certificate": False,
+        "worker_root_lp_bound_official": False,
+        "worker_certificate_leak": False,
+        "true_dual_rc_recomputed": True,
+        "tail_dual_no_column_can_certify": False,
+        "tail_dual_certificate_leak": False,
+        "candidate_negative_count": 0,
+        "addable_negative_count": 0,
+        "harvest_candidate_negative_count": 0,
+        "harvest_selected_count": 0,
+        "harvest_selected_new_task_set_count": 0,
+        "harvest_selected_replacement_task_set_count": 0,
+        "selected_count": 0,
+        "selected_column_entry_audit_pass": True,
+        "selected_column_true_dual_rc_audit_pass": True,
+        "selected_column_branch_audit_pass": True,
+        "selected_column_cut_audit_pass": True,
+        "selected_column_addability_audit_pass": True,
+        "selected_column_audited_count": 0,
+        "selected_would_enter_master_count": 0,
+        "selected_all_would_enter_master": True,
+        "worker_selected_columns_audit_pass": True,
+        "worker_selected_columns_true_dual_audit_pass": True,
+        "worker_selected_columns_branch_audit_pass": True,
+        "worker_selected_columns_cut_audit_pass": True,
+        "worker_selected_columns_addability_audit_pass": True,
+        "worker_seen_task_sets": [],
+        "worker_generated_column_task_sets": [],
+        "worker_generated_column_task_set_count": 0,
+        "worker_candidate_universe_task_sets": [],
+    }
+    return _NegativeSearchWorkerResult(
+        status=PricingState.LOCAL_NO_COLUMN_UNCERTIFIED,
+        selected_columns=tuple(),
+        negative_pairs=tuple(),
+        harvest_payload={},
+        payload=payload,
+    )
+
+
+class _WorkerHardTimeLimitExceeded(TimeoutError):
+    pass
+
+
+class _worker_hard_timeout:
+    def __init__(self, seconds: float | None) -> None:
+        self.seconds = None if seconds is None else float(seconds)
+        self.enabled = False
+        self.previous_handler = None
+        self.previous_timer = (0.0, 0.0)
+
+    def __enter__(self):
+        if self.seconds is None or self.seconds <= 0.0:
+            return self
+        if threading.current_thread() is not threading.main_thread():
+            return self
+        if not hasattr(signal, "setitimer"):
+            return self
+        self.enabled = True
+        self.previous_handler = signal.getsignal(signal.SIGALRM)
+        self.previous_timer = signal.getitimer(signal.ITIMER_REAL)
+
+        def _raise_timeout(_signum, _frame):
+            raise _WorkerHardTimeLimitExceeded()
+
+        signal.signal(signal.SIGALRM, _raise_timeout)
+        signal.setitimer(signal.ITIMER_REAL, max(0.001, float(self.seconds)))
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if self.enabled:
+            signal.setitimer(signal.ITIMER_REAL, 0.0)
+            signal.signal(signal.SIGALRM, self.previous_handler)
+            previous_delay, previous_interval = self.previous_timer
+            if previous_delay > 0.0:
+                signal.setitimer(signal.ITIMER_REAL, previous_delay, previous_interval)
+        return False
+
+
+def _worker_hard_time_cap_sec(remaining_wall_time_sec: float | None) -> float | None:
+    cap = _env_float(
+        LABELING_WORKER_HARD_TIME_CAP_SEC_ENV,
+        default=0.0,
+        minimum=0.0,
+        maximum=3600.0,
+    )
+    if cap <= 0.0:
+        return None
+    if remaining_wall_time_sec is None:
+        return float(cap)
+    return max(0.0, min(float(cap), float(remaining_wall_time_sec)))
+
+
+def _worker_hard_timeout_result(
+    *,
+    worker_pricer_kind: str,
+    elapsed_sec: float,
+    hard_time_cap_sec: float | None,
+    remaining_wall_time_sec: float | None,
+) -> _NegativeSearchWorkerResult:
+    payload = _exact_final_judge_first_skipped_worker_result(
+        worker_pricer_kind=worker_pricer_kind,
+        remaining_wall_time_sec=remaining_wall_time_sec,
+    ).payload
+    payload = dict(payload)
+    payload.update(
+        {
+            "worker_status": PricingState.INCOMPLETE_LIMIT.value,
+            "pricing_state": PricingState.INCOMPLETE_LIMIT.value,
+            "exit_reason": "WORKER_HARD_TIME_LIMIT",
+            "worker_wall_time": round(float(elapsed_sec), 6),
+            "exact_final_judge_first_enabled": False,
+            "exact_final_judge_first_worker_skipped": False,
+            "worker_hard_time_limit_triggered": True,
+            "worker_hard_time_cap_sec": (
+                None if hard_time_cap_sec is None else round(float(hard_time_cap_sec), 6)
+            ),
+            "pricing_proof_kind": "WORKER_HARD_TIME_LIMIT_UNCERTIFIED",
+            "note": (
+                "Worker candidate search hit its hard time cap and was safely "
+                "downgraded; only the following true-dual final judge may certify."
+            ),
+        }
+    )
+    return _NegativeSearchWorkerResult(
+        status=PricingState.INCOMPLETE_LIMIT,
+        selected_columns=tuple(),
+        negative_pairs=tuple(),
+        harvest_payload={},
+        payload=payload,
+    )
+
+
 def _normalize_worker_pricer_kind(value: str) -> str:
     normalized = str(value or DIRECT_LABEL_WORKER).strip().lower()
     aliases = {
@@ -2684,6 +2979,21 @@ def _run_negative_search_worker(
         max_columns=max(1, int(max_candidate_sets)),
     )
     if active_worker_kind == RELAXED_LABELING_WORKER:
+        ng_sizes = _worker_ng_sizes(worker_task_cap)
+        worker_batch_early_stop = _env_bool(
+            LABELING_WORKER_NEGATIVE_BATCH_EARLY_STOP_ENV,
+            default=False,
+        )
+        worker_harvest_target = (
+            _env_int(
+                LABELING_WORKER_NEGATIVE_BATCH_TARGET_ENV,
+                default=max_selected,
+                minimum=1,
+                maximum=max(1, int(max_selected)),
+            )
+            if worker_batch_early_stop
+            else max_selected
+        )
         pricing, priced_columns = run_bpc_labeling_pricer(
             data,
             true_duals,
@@ -2691,8 +3001,10 @@ def _run_negative_search_worker(
                 mode=RELAXED_NG_ROUTE_MODE,
                 max_label_task_count=worker_task_cap,
                 max_candidate_sets=max(1, int(max_candidate_sets)),
-                harvest_target=max_selected,
+                harvest_target=worker_harvest_target,
                 negative_eps=negative_eps,
+                ng_neighborhood_size=ng_sizes[-1],
+                ng_neighborhood_sizes=ng_sizes,
                 dual_stabilization_enabled=tail_dual_stabilization_enabled,
                 dual_stabilization_alpha=tail_dual_stabilization_alpha,
                 dual_stabilization_window=tail_dual_stabilization_window,
@@ -2718,7 +3030,11 @@ def _run_negative_search_worker(
                     minimum=0,
                     maximum=5000,
                 ),
-                stop_at_first_negative=False,
+                resource_extension_seed_enabled=_env_bool(
+                    LABELING_WORKER_RESOURCE_EXTENSION_SEED_ENV,
+                    default=True,
+                ),
+                stop_at_first_negative=bool(worker_batch_early_stop),
                 wall_time_limit_sec=wall_time_limit_sec,
             ),
             branch_context=branch_context,
@@ -2729,6 +3045,8 @@ def _run_negative_search_worker(
             support_task_sets=_rmp_support_task_sets(master),
             dual_history=tail_dual_history or (true_duals,),
         )
+        pricing["worker_negative_batch_early_stop_enabled"] = bool(worker_batch_early_stop)
+        pricing["worker_negative_batch_target"] = int(worker_harvest_target)
     else:
         pricing, priced_columns = run_resource_label_core(
             data,
@@ -3869,6 +4187,80 @@ def _worker_task_cap(data: LunarIceData, max_direct_tasks: int) -> int:
     )
 
 
+def _adaptive_labeling_final_judge_exact_harvest_target(
+    target: int | None,
+    *,
+    active_task_set_count: int,
+) -> int | None:
+    """Use large early harvests, then shrink batches as distinct new sets get sparse."""
+
+    if target is None:
+        raw_target = os.environ.get("LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET")
+        if raw_target in (None, ""):
+            return None
+        try:
+            target = int(str(raw_target))
+        except ValueError:
+            return None
+    value = max(1, int(target))
+    active_count = max(0, int(active_task_set_count))
+    for threshold, cap in _labeling_final_judge_adaptive_harvest_schedule():
+        if active_count >= threshold:
+            return min(value, cap)
+    return value
+
+
+def _labeling_final_judge_adaptive_harvest_schedule() -> tuple[tuple[int, int], ...]:
+    raw = os.environ.get(LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE_ENV)
+    if raw is not None:
+        raw_text = str(raw).strip()
+        if raw_text.lower() in {"", "0", "off", "none", "disabled", "false"}:
+            return tuple()
+        rows: list[tuple[int, int]] = []
+        for piece in raw_text.split(","):
+            text = piece.strip()
+            if not text or ":" not in text:
+                continue
+            threshold_text, cap_text = text.split(":", 1)
+            try:
+                threshold = max(0, int(threshold_text.strip()))
+                cap = max(1, int(cap_text.strip()))
+            except ValueError:
+                continue
+            rows.append((threshold, cap))
+        if rows:
+            return tuple(sorted(rows, key=lambda row: row[0], reverse=True))
+        return tuple()
+    return ((4000, 128), (3000, 256))
+
+
+def _worker_ng_sizes(worker_task_cap: int) -> tuple[int, ...]:
+    cap = max(1, int(worker_task_cap))
+    raw = os.environ.get(LABELING_WORKER_NG_SIZES_ENV)
+    if not raw:
+        return (3, 5, 8)
+    sizes: list[int] = []
+    seen: set[int] = set()
+    for piece in str(raw).split(","):
+        text = piece.strip()
+        if not text:
+            continue
+        try:
+            value = int(text)
+        except ValueError:
+            continue
+        value = max(1, min(cap, value))
+        if value in seen:
+            continue
+        seen.add(value)
+        sizes.append(value)
+    if not sizes:
+        sizes = [cap]
+    if sizes[-1] != cap and cap not in seen:
+        sizes.append(cap)
+    return tuple(sizes)
+
+
 def _run_large_task_direct_worker(
     data: LunarIceData,
     *,
@@ -4601,7 +4993,14 @@ def _load_columns_for_node(
             },
         )
         stored = pool.get(signature)
-        if stored is not None and view.add_from_pool(stored, node_id=node_id, pool=pool):
+        if stored is not None and _activate_column_in_master_view(
+            pool,
+            view,
+            stored,
+            node_id=node_id,
+            branch_context=branch_context,
+            cut_context=context,
+        ):
             loaded += 1
     return loaded, branch_filtered
 
@@ -4785,9 +5184,89 @@ def _add_selected_to_pool_and_master(
             },
         )
         stored = pool.get(signature)
-        if stored is not None and view.add_from_pool(stored, node_id=node_id, pool=pool):
+        if stored is not None and _activate_column_in_master_view(
+            pool,
+            view,
+            stored,
+            node_id=node_id,
+            branch_context=branch_context,
+            cut_context=context,
+        ):
             added += 1
     return added
+
+
+def _activate_column_in_master_view(
+    pool: ColumnPool,
+    view: MasterColumnView,
+    column: BpcColumn,
+    *,
+    node_id: str = "root",
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+) -> bool:
+    context = cut_context or CutContext()
+    if not _root_representative_view_enabled(node_id=node_id, branch_context=branch_context, cut_context=context):
+        return view.add_from_pool(column, node_id=node_id, pool=pool)
+    return _activate_root_best_task_set_representative(pool, view, column, node_id=node_id)
+
+
+def _root_representative_view_enabled(
+    *,
+    node_id: str,
+    branch_context: BranchContext | None,
+    cut_context: CutContext,
+) -> bool:
+    branch = branch_context or BranchContext()
+    return str(node_id) == "root" and branch.empty and cut_context.empty
+
+
+def _activate_root_best_task_set_representative(
+    pool: ColumnPool,
+    view: MasterColumnView,
+    column: BpcColumn,
+    *,
+    node_id: str = "root",
+    objective_eps: float = 1.0e-9,
+) -> bool:
+    """Activate only the best root RMP representative for a task set.
+
+    The root master constraints depend on task coverage and fleet usage.  When
+    branch/cut rows are inactive, two columns with the same task set have the
+    same root coefficients, so the higher-objective one is root-dominated.  The
+    pool still keeps all semantic signatures for later branch/cut contexts.
+    """
+
+    key = str(node_id)
+    signatures = view.signatures_by_node.setdefault(key, set())
+    if column.signature in signatures:
+        return False
+    task_set = tuple(column.signature.task_set)
+    same_task_signatures = [
+        signature
+        for signature in signatures
+        if tuple(signature.task_set) == task_set
+    ]
+    if not same_task_signatures:
+        return view.add_from_pool(column, node_id=node_id, pool=pool)
+    incumbent_rows = [
+        (signature, pool.get(signature))
+        for signature in same_task_signatures
+    ]
+    incumbent_rows = [
+        (signature, stored)
+        for signature, stored in incumbent_rows
+        if stored is not None
+    ]
+    if not incumbent_rows:
+        return view.add_from_pool(column, node_id=node_id, pool=pool)
+    incumbent_best = min(float(stored.objective) for _signature, stored in incumbent_rows)
+    if float(column.objective) >= incumbent_best - abs(float(objective_eps)):
+        return False
+    for signature, stored in incumbent_rows:
+        if float(stored.objective) >= float(column.objective) - abs(float(objective_eps)):
+            view.remove_signature(signature, node_id=node_id)
+    return view.add_from_pool(column, node_id=node_id, pool=pool)
 
 
 def _column_signature_for_active_context(
@@ -5277,6 +5756,26 @@ def _final_judge_summary_fields(final_judge: dict | None) -> dict:
             "exact_negative_harvest_selection_policy"
         )
         or "",
+        "exact_negative_harvest_active_task_set_count": payload.get(
+            "exact_negative_harvest_active_task_set_count"
+        ),
+        "exact_negative_harvest_non_active_task_set_count": payload.get(
+            "exact_negative_harvest_non_active_task_set_count"
+        ),
+        "exact_negative_harvest_active_task_set_reference_count": payload.get(
+            "exact_negative_harvest_active_task_set_reference_count"
+        ),
+        "labeling_final_judge_active_task_sets_for_harvest_count": payload.get(
+            "labeling_final_judge_active_task_sets_for_harvest_count"
+        ),
+        "sortie_candidate_cache_enabled": bool(payload.get("sortie_candidate_cache_enabled")),
+        "sortie_candidate_cache_limit": payload.get("sortie_candidate_cache_limit"),
+        "sortie_candidate_cache_entry_count": payload.get("sortie_candidate_cache_entry_count"),
+        "sortie_candidate_cache_hit_count": payload.get("sortie_candidate_cache_hit_count"),
+        "sortie_candidate_cache_miss_count": payload.get("sortie_candidate_cache_miss_count"),
+        "sortie_candidate_cache_reused_candidate_count": payload.get(
+            "sortie_candidate_cache_reused_candidate_count"
+        ),
     }
 
 

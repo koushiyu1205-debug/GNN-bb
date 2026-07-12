@@ -7,6 +7,7 @@ one exact-safe place for task-cover and fleet-limit dual arithmetic.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Iterable, Mapping
 
 from lunar_ice_bpc.exact.core.branching import BranchContext, filter_journey_columns_by_branch_context
@@ -450,7 +451,116 @@ def _solve_dual_lp(
                 raise ValueError(f"unsupported cut_type {cut.cut_type!r}")
         rows.append(row)
         rhs.append(float(column.objective))
+    solver = os.environ.get("LUNAR_ICE_RMP_SOLVER", "highs").strip().lower()
+    if solver not in {"simplex", "python"}:
+        highs = _highs_max_leq(objective, rows, rhs)
+        if highs is not None:
+            return highs
     return _simplex_max_leq(objective, rows, rhs)
+
+
+def _highs_max_leq(
+    objective: list[float],
+    rows: list[list[float]],
+    rhs: list[float],
+    *,
+    eps: float = 1.0e-9,
+) -> _SimplexResult | None:
+    """Solve max c'x s.t. Ax <= b, x >= 0 through HiGHS.
+
+    HiGHS is called on the equivalent minimization problem min -c'x.  Row
+    duals of the minimization model are therefore negated before being returned
+    as primal lambda values for the original restricted master columns.
+    """
+
+    if not rows:
+        return _SimplexResult(
+            status="NO_CONSTRAINTS",
+            objective=None,
+            solution=tuple(),
+            row_duals=tuple(),
+            iterations=0,
+        )
+    for bound in rhs:
+        if float(bound) < -eps:
+            return _SimplexResult(
+                status="NEGATIVE_RHS",
+                objective=None,
+                solution=tuple(),
+                row_duals=tuple(),
+                iterations=0,
+            )
+    try:
+        import highspy  # type: ignore[import-not-found]
+    except Exception:
+        return None
+
+    try:
+        highs = highspy.Highs()
+        highs.setOptionValue("output_flag", False)
+        thread_count = int(os.environ.get("LUNAR_ICE_RMP_HIGHS_THREADS", "1"))
+        highs.setOptionValue("threads", max(1, thread_count))
+        inf = highs.getInfinity()
+        n = len(objective)
+        min_objective = [-float(value) for value in objective]
+        status = highs.addCols(
+            n,
+            min_objective,
+            [0.0 for _ in range(n)],
+            [inf for _ in range(n)],
+            0,
+            [],
+            [],
+            [],
+        )
+        if str(status) != "HighsStatus.kOk":
+            return None
+        for row, bound in zip(rows, rhs):
+            indices: list[int] = []
+            values: list[float] = []
+            for index, value in enumerate(row):
+                numeric = float(value)
+                if abs(numeric) <= 1.0e-12:
+                    continue
+                indices.append(index)
+                values.append(numeric)
+            status = highs.addRow(-inf, float(bound), len(indices), indices, values)
+            if str(status) != "HighsStatus.kOk":
+                return None
+        highs.run()
+        model_status = highs.modelStatusToString(highs.getModelStatus()).upper()
+        info = highs.getInfo()
+        iterations = int(getattr(info, "simplex_iteration_count", 0) or 0)
+        if model_status == "OPTIMAL":
+            solution = highs.getSolution()
+            objective_value = -float(highs.getObjectiveValue())
+            col_values = tuple(round(float(value), 9) for value in solution.col_value[:n])
+            row_duals = tuple(
+                round(max(0.0, -float(value)), 9)
+                for value in solution.row_dual[: len(rows)]
+            )
+            return _SimplexResult(
+                status="OPTIMAL",
+                objective=round(objective_value, 9),
+                solution=col_values,
+                row_duals=row_duals,
+                iterations=iterations,
+            )
+        if "INFEASIBLE" in model_status:
+            status_name = "INFEASIBLE"
+        elif "UNBOUNDED" in model_status:
+            status_name = "UNBOUNDED"
+        else:
+            status_name = f"HIGHS_{model_status.replace(' ', '_')}"
+        return _SimplexResult(
+            status=status_name,
+            objective=None,
+            solution=tuple(),
+            row_duals=tuple(),
+            iterations=iterations,
+        )
+    except Exception:
+        return None
 
 
 def _simplex_max_leq(

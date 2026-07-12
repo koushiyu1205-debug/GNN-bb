@@ -11,7 +11,11 @@ from unittest.mock import patch
 
 from lunar_ice_bpc.domain.scheduling import generate_instance
 from lunar_ice_bpc.exact.bpc.master.reduced_cost import ReducedCostContext
-from lunar_ice_bpc.exact.bpc.pricing.final_judge import FinalJudgeResult, run_true_dual_root_final_judge
+from lunar_ice_bpc.exact.bpc.pricing.final_judge import (
+    FinalJudgeResult,
+    _labeling_final_judge_exact_harvest_target,
+    run_true_dual_root_final_judge,
+)
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
 from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     EXACT_ELEMENTARY_MODE,
@@ -43,6 +47,14 @@ from lunar_ice_bpc.exact.bpc.pricing.resource_label_core import (
     _seed_source_task_count_counts,
     run_resource_label_core,
 )
+from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import (
+    SPPRC_ENGINE_SOURCE,
+    SPPRC_EXACT_MODE,
+    SPPRC_WORKER_MODE,
+    build_spprc_request,
+    run_spprc_pricer,
+    spprc_request_hash,
+)
 from lunar_ice_bpc.exact.bpc.pricing.status import PricingState
 from lunar_ice_bpc.exact.bpc.pricing.worker_seed_catalog import WorkerSeedCatalog
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
@@ -65,6 +77,7 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     _refinement_seed_source_rows,
     _run_large_task_direct_worker,
     _worker_task_cap,
+    _adaptive_labeling_final_judge_exact_harvest_target,
     _worker_generated_task_sets,
     solve_node_pricing_with_b2b_r3,
     solve_b2_pricing_tail_baseline,
@@ -79,13 +92,17 @@ from lunar_ice_bpc.exact.core.branching import (
 from lunar_ice_bpc.exact.core.cuts import CutContext, fleet_lower_bound_cut, subset_row_cut
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost, solve_restricted_journey_rmp
+import lunar_ice_bpc.exact.pricing.journey_pricing as journey_pricing_module
 from lunar_ice_bpc.exact.pricing.journey_pricing import (
     price_direct_journey_columns,
     price_direct_journey_columns_incremental,
     price_exhaustive_direct_journey_columns,
     price_full_universe_incremental_journey_columns,
 )
-from lunar_ice_bpc.exact.solver.journey_driver import enumerate_direct_journey_columns
+from lunar_ice_bpc.exact.solver.journey_driver import (
+    DirectBaselineTimeLimitExceeded,
+    enumerate_direct_journey_columns,
+)
 from lunar_ice_bpc.runners.b4_1_true_dual_proof_tail import run_b4_1_tree_closure_from_probe
 from lunar_ice_bpc.runners.labeling_worker_diagnostic import run_labeling_worker_diagnostic
 
@@ -138,6 +155,200 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
             "certifying_payload_requires_current_true_rmp_dual",
             contract["certificate_semantics_issues"],
         )
+
+    def test_spprc_worker_mode_is_candidate_search_only(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: -100.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        request = build_spprc_request(
+            data,
+            mode=SPPRC_WORKER_MODE,
+            config_hash="test-config",
+            max_label_task_count=5,
+            max_candidate_sets=8,
+            harvest_target=4,
+            ng_neighborhood_sizes=(3, 5),
+        )
+
+        result = run_spprc_pricer(data, duals, request)
+        payload = result.to_payload()
+
+        self.assertEqual(result.mode, SPPRC_WORKER_MODE)
+        self.assertEqual(result.engine_source, SPPRC_ENGINE_SOURCE)
+        self.assertFalse(result.can_certify_no_negative)
+        self.assertFalse(result.no_column_can_certify)
+        self.assertFalse(payload["spprc_can_certify_no_negative"])
+        self.assertFalse(payload["spprc_no_column_can_certify"])
+        self.assertEqual(result.exact_sec, 0.0)
+        self.assertEqual(payload["pricing_proof_kind"], PROOF_KIND_RELAXED_WORKER_UNCERTIFIED)
+        self.assertEqual(payload["spprc_ng_size_final"], 5)
+
+    def test_incremental_worker_negative_harvest_target_stops_without_certificate(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 100.0 for task_id in data.task_ids}, fleet_limit=0.0)
+
+        payload, columns = price_direct_journey_columns_incremental(
+            data,
+            duals,
+            max_direct_tasks=5,
+            seed_task_sets=tuple((task_id,) for task_id in data.task_ids),
+            max_candidate_sets=10,
+            completion_bound_enabled=False,
+            stop_at_first_negative=True,
+            negative_harvest_target=2,
+        )
+
+        self.assertEqual(payload["negative_harvest_target"], 2)
+        self.assertTrue(payload["negative_harvest_early_stop_enabled"])
+        self.assertTrue(payload["negative_harvest_early_stop_triggered"])
+        self.assertEqual(payload["negative_column_count"], 2)
+        self.assertEqual(len(columns), 2)
+        self.assertLess(payload["candidate_round_count"], 10)
+        self.assertFalse(payload["can_certify_no_negative"])
+        self.assertFalse(payload["uses_true_dual_bpc_certificate"])
+
+    def test_labeling_final_judge_adaptive_harvest_schedule_env_is_used(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE": "4000:128,2000:256"},
+            clear=False,
+        ):
+            self.assertEqual(
+                _adaptive_labeling_final_judge_exact_harvest_target(
+                    1024,
+                    active_task_set_count=1999,
+                ),
+                1024,
+            )
+            self.assertEqual(
+                _adaptive_labeling_final_judge_exact_harvest_target(
+                    1024,
+                    active_task_set_count=2000,
+                ),
+                256,
+            )
+            self.assertEqual(
+                _adaptive_labeling_final_judge_exact_harvest_target(
+                    1024,
+                    active_task_set_count=4000,
+                ),
+                128,
+            )
+        with patch.dict(
+            os.environ,
+            {"LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE": "disabled"},
+            clear=False,
+        ):
+            self.assertEqual(
+                _adaptive_labeling_final_judge_exact_harvest_target(
+                    1024,
+                    active_task_set_count=100000,
+                ),
+                1024,
+            )
+        self.assertEqual(
+            _labeling_final_judge_exact_harvest_target(exact_harvest_target_override=2048),
+            2048,
+        )
+        self.assertEqual(
+            _labeling_final_judge_exact_harvest_target(exact_harvest_target_override=10000),
+            4096,
+        )
+
+    def test_spprc_exact_mode_can_certify_small_full_space(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        rmp = solve_restricted_journey_rmp(data.task_ids, universe.columns, fleet_size=data.fleet_size)
+        self.assertEqual(rmp.status, "RESTRICTED_RMP_OPTIMAL")
+        request = build_spprc_request(
+            data,
+            mode=SPPRC_EXACT_MODE,
+            config_hash="test-config",
+            max_exact_tasks=5,
+            harvest_target=8,
+            exact_negative_harvest_target=4,
+        )
+
+        result = run_spprc_pricer(data, rmp.duals, request)
+        payload = result.to_payload()
+
+        self.assertEqual(result.mode, SPPRC_EXACT_MODE)
+        self.assertTrue(result.can_certify_no_negative)
+        self.assertTrue(result.uses_true_dual_bpc_certificate)
+        self.assertTrue(result.exact_coverage_complete)
+        self.assertFalse(result.no_column_can_certify)
+        self.assertEqual(payload["pricing_state"], PricingState.CERTIFIED_NO_NEGATIVE.value)
+        self.assertEqual(payload["pricing_proof_kind"], PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE)
+        self.assertEqual(payload["spprc_pricing_proof_kind"], PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE)
+        self.assertGreaterEqual(result.exact_sec, 0.0)
+
+    def test_journey_rmp_highs_fast_path_matches_simplex_invariants(self) -> None:
+        try:
+            import highspy  # type: ignore[import-not-found]  # noqa: F401
+        except Exception:
+            self.skipTest("highspy is not installed")
+
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+
+        with patch.dict(os.environ, {"LUNAR_ICE_RMP_SOLVER": "simplex"}, clear=False):
+            simplex_rmp = solve_restricted_journey_rmp(
+                data.task_ids,
+                universe.columns,
+                fleet_size=data.fleet_size,
+            )
+        with patch.dict(
+            os.environ,
+            {"LUNAR_ICE_RMP_SOLVER": "highs", "LUNAR_ICE_RMP_HIGHS_THREADS": "1"},
+            clear=False,
+        ):
+            highs_rmp = solve_restricted_journey_rmp(
+                data.task_ids,
+                universe.columns,
+                fleet_size=data.fleet_size,
+            )
+
+        self.assertEqual(simplex_rmp.status, "RESTRICTED_RMP_OPTIMAL")
+        self.assertEqual(highs_rmp.status, "RESTRICTED_RMP_OPTIMAL")
+        self.assertAlmostEqual(simplex_rmp.objective_bound, highs_rmp.objective_bound, places=6)
+        self.assertEqual(simplex_rmp.active_column_count, highs_rmp.active_column_count)
+        self.assertLessEqual(highs_rmp.primal_cover_residual_max or 0.0, 1.0e-6)
+        self.assertLessEqual(highs_rmp.primal_fleet_usage or 0.0, float(data.fleet_size) + 1.0e-6)
+        highs_min_rc = min(manual_journey_reduced_cost(column, highs_rmp.duals) for column in universe.columns)
+        self.assertGreaterEqual(highs_min_rc, -1.0e-6)
+
+    def test_spprc_request_hash_includes_branch_and_cut_identity(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        task_a, task_b = data.task_ids[:2]
+        base = build_spprc_request(
+            data,
+            mode=SPPRC_WORKER_MODE,
+            config_hash="test-config",
+            max_label_task_count=5,
+            ng_neighborhood_sizes=(3, 5),
+        )
+        branched = build_spprc_request(
+            data,
+            mode=SPPRC_WORKER_MODE,
+            config_hash="test-config",
+            branch_context=BranchContext((PairBranchDecision(task_a, task_b, SAME_JOURNEY),)),
+            max_label_task_count=5,
+            ng_neighborhood_sizes=(3, 5),
+        )
+        different_ng = build_spprc_request(
+            data,
+            mode=SPPRC_WORKER_MODE,
+            config_hash="test-config",
+            max_label_task_count=5,
+            ng_neighborhood_sizes=(2, 5),
+        )
+
+        self.assertNotEqual(spprc_request_hash(base), spprc_request_hash(branched))
+        self.assertNotEqual(spprc_request_hash(base), spprc_request_hash(different_ng))
 
     def test_true_dual_audit_filters_branch_infeasible_negative_candidates(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -1778,6 +1989,10 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
         self.assertEqual(full["global_min_reduced_cost_source"], "full_universe_incremental_label_dp")
         self.assertEqual(full["global_min_reduced_cost_scope"], "all_nonempty_task_subsets")
         self.assertTrue(full["global_min_proof_requires_true_dual_reaudit"])
+        self.assertTrue(full["sortie_candidate_cache_enabled"])
+        self.assertIn("sortie_candidate_cache_hit_count", full)
+        self.assertGreater(full["sortie_candidate_cache_miss_count"], 0)
+        self.assertGreaterEqual(full["sortie_candidate_cache_entry_count"], 1)
         self.assertEqual(full["priced_candidate_set_count_by_task_count"], exhaustive["priced_candidate_set_count_by_task_count"])
         self.assertAlmostEqual(full["best_reduced_cost"], exhaustive["best_reduced_cost"], places=6)
         self.assertAlmostEqual(full["global_min_reduced_cost"], exhaustive["best_reduced_cost"], places=6)
@@ -1832,6 +2047,27 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
         self.assertFalse(full["can_certify_no_negative"])
         self.assertFalse(full["uses_true_dual_bpc_certificate"])
 
+        active_task_sets = tuple(tuple(sorted(column.task_set)) for column in full_columns)
+        active_aware, active_aware_columns = price_full_universe_incremental_journey_columns(
+            data,
+            duals,
+            max_direct_tasks=5,
+            max_returned_columns=4,
+            completion_bound_enabled=False,
+            active_task_sets_for_harvest=active_task_sets,
+        )
+
+        self.assertEqual(active_aware["status"], "FULL_UNIVERSE_INCREMENTAL_LABEL_PRICED")
+        self.assertEqual(active_aware["exact_negative_harvest_active_task_set_reference_count"], len(active_task_sets))
+        self.assertEqual(active_aware["early_negative_active_task_set_reference_count"], len(active_task_sets))
+        self.assertGreater(active_aware["exact_negative_harvest_non_active_task_set_count"], 0)
+        self.assertIn("non_active_distinct_task_sets", active_aware["exact_negative_harvest_selection_policy"])
+        self.assertTrue(
+            any(tuple(sorted(column.task_set)) not in set(active_task_sets) for column in active_aware_columns)
+        )
+        self.assertFalse(active_aware["can_certify_no_negative"])
+        self.assertFalse(active_aware["uses_true_dual_bpc_certificate"])
+
     def test_full_universe_incremental_negative_early_stop_is_not_certificate(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -1847,6 +2083,7 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
             max_returned_columns=2,
             completion_bound_enabled=False,
             stop_at_first_negative=True,
+            active_task_sets_for_harvest=(tuple(sorted(data.task_ids[:1])),),
         )
         returned_rc = [manual_journey_reduced_cost(column, duals) for column in full_columns]
 
@@ -1854,6 +2091,12 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
         self.assertTrue(full["early_negative_stop"])
         self.assertFalse(full["early_negative_stop_can_certify_no_negative"])
         self.assertGreaterEqual(full["early_negative_stop_trigger_count"], 1)
+        self.assertTrue(full["early_negative_distinct_task_set_stop_enabled"])
+        self.assertGreaterEqual(full["early_negative_distinct_task_set_count"], 1)
+        self.assertGreaterEqual(full["early_negative_preferred_task_set_count"], 1)
+        self.assertEqual(full["early_negative_active_task_set_reference_count"], 1)
+        self.assertTrue(full["early_negative_active_preference_required"])
+        self.assertEqual(full["early_negative_raw_stop_cap"], 16)
         self.assertFalse(full["pricing_complete_for_all_tasks"])
         self.assertFalse(full["pricing_complete_for_all_task_subsets"])
         self.assertFalse(full["pricing_complete_for_branch_context"])
@@ -2381,6 +2624,48 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
         self.assertIn("TIME_LIMIT", payload["status"])
         self.assertEqual(columns, tuple())
 
+    def test_full_universe_incremental_timeout_can_return_partial_negatives_without_certificate(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        duals = JourneyDuals(cover={task_id: 10.0 for task_id in data.task_ids}, fleet_limit=0.0)
+        original = journey_pricing_module._best_direct_label_incremental
+
+        def fake_best_direct_label_incremental(*args, **kwargs):
+            safe_kwargs = dict(kwargs)
+            safe_kwargs["deadline"] = None
+            label, stats = original(*args, **safe_kwargs)
+            raise DirectBaselineTimeLimitExceeded(
+                stage="incremental_candidate_extension",
+                generated_sortie_count=int(stats.get("sortie_attempt_count") or 0),
+                route_template_count=int(stats.get("feasible_sortie_template_count") or 0),
+                pareto_label_count=int(stats.get("pareto_label_count") or 0),
+                partial_label=label,
+                partial_stats=stats,
+            )
+
+        with patch.object(
+            journey_pricing_module,
+            "_best_direct_label_incremental",
+            side_effect=fake_best_direct_label_incremental,
+        ):
+            payload, columns = price_full_universe_incremental_journey_columns(
+                data,
+                duals,
+                max_direct_tasks=5,
+                max_returned_columns=3,
+            )
+
+        self.assertIn("TIME_LIMIT", payload["status"])
+        self.assertFalse(payload["pricing_complete_for_all_task_subsets"])
+        self.assertFalse(payload["can_certify_no_negative"])
+        self.assertFalse(payload["uses_true_dual_bpc_certificate"])
+        self.assertTrue(payload["partial_timeout_negative_harvest_enabled"])
+        self.assertGreater(payload["partial_timeout_returned_column_count"], 0)
+        self.assertGreater(len(columns), 0)
+        self.assertTrue(
+            any(manual_journey_reduced_cost(column, duals) < -1.0e-6 for column in columns)
+        )
+
     def test_exact_elementary_found_negative_is_not_no_negative_certificate(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -2812,6 +3097,11 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
         self.assertEqual(result.pricing_payload["labeling_final_judge_task_count"], 5)
         self.assertEqual(result.pricing_payload["pricing_proof_kind"], PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE)
         self.assertTrue(result.pricing_payload["uses_true_dual_bpc_certificate"])
+        self.assertTrue(result.pricing_payload["labeling_final_judge_two_phase_enabled"])
+        self.assertIn("labeling_final_judge_proof_pass_attempted", result.pricing_payload)
+        self.assertFalse(
+            result.pricing_payload["labeling_final_judge_early_negative_stop_can_certify_no_negative"]
+        )
 
     def test_labeling_pricer_final_judge_auto_skips_when_task_count_exceeds_limit(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
@@ -2852,6 +3142,79 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
         self.assertEqual(result.pricing_payload["labeling_final_judge_certificate_role"], "not_selected")
         self.assertFalse(result.pricing_payload["labeling_final_judge_can_certify"])
         self.assertEqual(result.pricing_payload["labeling_final_judge_downgrade_reason"], "")
+
+    def test_labeling_final_judge_runs_proof_pass_after_empty_harvest(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        rmp = solve_restricted_journey_rmp(data.task_ids, universe.columns, fleet_size=data.fleet_size)
+        context = ReducedCostContext(
+            task_duals=rmp.duals.cover,
+            fleet_dual=rmp.duals.fleet_limit,
+            cut_duals=rmp.duals.cuts or {},
+            dual_fingerprint="labeling-proof-pass-test",
+            rmp_iteration_id="root-1",
+        )
+        proof_column = min(
+            universe.columns,
+            key=lambda column: manual_journey_reduced_cost(column, rmp.duals),
+        )
+        proof_rc = manual_journey_reduced_cost(proof_column, rmp.duals)
+        self.assertGreaterEqual(proof_rc, -1.0e-6)
+        incomplete_payload = {
+            "status": "FULL_UNIVERSE_INCREMENTAL_LABEL_FOUND_NO_NEW_COLUMN_UNCERTIFIED",
+            "pricing_state": PricingState.INCOMPLETE_LIMIT.value,
+            "pricing_proof_kind": PROOF_KIND_EXHAUSTIVE_INCOMPLETE,
+            "can_certify_no_negative": False,
+            "uses_true_dual_bpc_certificate": False,
+            "true_best_reduced_cost": None,
+            "pricing_best_reduced_cost": None,
+            "returned_column_count": 0,
+            "true_audited_column_count": 0,
+            "completion_bound": {"enabled": False, "can_certify_no_negative": False},
+        }
+        proof_payload = {
+            "status": "FULL_UNIVERSE_INCREMENTAL_LABEL_PRICED",
+            "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
+            "pricing_proof_kind": PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+            "can_certify_no_negative": True,
+            "uses_true_dual_bpc_certificate": True,
+            "true_best_reduced_cost": proof_rc,
+            "pricing_best_reduced_cost": proof_rc,
+            "returned_column_count": 1,
+            "true_audited_column_count": 1,
+            "pricing_complete_for_all_task_subsets": True,
+            "global_remaining_rc_lb": proof_rc,
+            "global_remaining_rc_lb_valid": True,
+            "global_remaining_rc_lb_coverage_complete": True,
+            "completion_bound": {"enabled": False, "can_certify_no_negative": False},
+        }
+
+        with patch(
+            "lunar_ice_bpc.exact.bpc.pricing.final_judge.run_bpc_labeling_pricer",
+            side_effect=((incomplete_payload, tuple()), (proof_payload, (proof_column,))),
+        ) as mocked:
+            result = run_true_dual_root_final_judge(
+                data,
+                context,
+                max_direct_tasks=5,
+                labeling_final_judge_enabled=True,
+                labeling_final_judge_max_exact_tasks=5,
+                labeling_final_judge_exact_harvest_target=4,
+            )
+
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+        self.assertTrue(result.pricing_payload["can_certify_no_negative"])
+        self.assertTrue(result.pricing_payload["labeling_final_judge_proof_pass_attempted"])
+        self.assertEqual(
+            result.pricing_payload["labeling_final_judge_harvest_pass_pricing_proof_kind"],
+            PROOF_KIND_EXHAUSTIVE_INCOMPLETE,
+        )
+        self.assertEqual(
+            result.pricing_payload["labeling_final_judge_proof_pass_pricing_proof_kind"],
+            PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+        )
 
     def test_labeling_pricer_final_judge_wall_time_limit_fails_closed(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
