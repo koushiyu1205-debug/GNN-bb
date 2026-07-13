@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import SimpleNamespace
+from time import perf_counter
 from typing import Iterable
 
 from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateLedger
@@ -62,6 +63,10 @@ class _QueuedNode:
     context: BranchContext
     branch_pair: dict | None = None
     branch_sense: str | None = None
+    # A certified parent LP bound remains a valid lower bound for every child,
+    # including a child that has not yet been processed or whose own pricing
+    # search ends incomplete.
+    inherited_lower_bound: float | None = None
 
 
 def solve_b3_branch_price_tree_baseline(
@@ -99,6 +104,18 @@ def solve_b3_branch_price_tree_baseline(
     because B3 has no route-dependent cuts or route-order branching.
     """
 
+    tree_started_at = perf_counter()
+    tree_deadline = (
+        None
+        if wall_time_limit_sec is None
+        else tree_started_at + max(0.0, float(wall_time_limit_sec))
+    )
+
+    def remaining_tree_time() -> float | None:
+        if tree_deadline is None:
+            return None
+        return max(0.0, tree_deadline - perf_counter())
+
     if run_b2_root_diagnostic is None:
         run_b2_root_diagnostic = len(data.task_ids) <= 10
     if run_b2_root_diagnostic:
@@ -106,7 +123,7 @@ def solve_b3_branch_price_tree_baseline(
             data,
             max_direct_tasks=max_direct_tasks,
             max_rounds=max_rounds_per_node,
-            wall_time_limit_sec=wall_time_limit_sec,
+            wall_time_limit_sec=remaining_tree_time(),
             negative_eps=negative_eps,
             max_columns_per_round=max_columns_per_round,
             mode=B2B_R3_MODE,
@@ -125,7 +142,7 @@ def solve_b3_branch_price_tree_baseline(
         b0_direct = solve_direct_journey_baseline(
             data,
             max_exact_tasks=int(max_direct_tasks),
-            wall_time_limit_sec=wall_time_limit_sec,
+            wall_time_limit_sec=remaining_tree_time(),
         )
     elif b0_direct is None:
         b0_direct = _bpc_tree_placeholder_direct(data)
@@ -165,9 +182,7 @@ def solve_b3_branch_price_tree_baseline(
     elif use_complete_universe_audit:
         deadline = None
         if wall_time_limit_sec is not None:
-            from time import perf_counter
-
-            deadline = perf_counter() + max(0.001, float(wall_time_limit_sec))
+            deadline = perf_counter() + max(0.001, float(remaining_tree_time() or 0.0))
         try:
             complete_universe = enumerate_direct_journey_columns(
                 data,
@@ -213,12 +228,68 @@ def solve_b3_branch_price_tree_baseline(
     incumbent_source = "B0_DIRECT_DP_FEASIBLE_INCUMBENT" if incumbent_objective is not None else ""
     incumbent_columns: tuple[JourneyColumn, ...] = tuple(b0_direct.journeys)
     node_limit_hit = False
+    tree_deadline_hit = False
+    global_columns_by_signature = {
+        column_signature_from_journey(column): column
+        for column in complete_universe_columns
+    }
+    globally_shared_column_count = 0
+    restricted_mip = _restricted_column_mip_incumbent(
+        data,
+        tuple(global_columns_by_signature.values()),
+        wall_time_limit_sec=(
+            10.0
+            if remaining_tree_time() is None
+            else min(10.0, float(remaining_tree_time()))
+        ),
+    )
+    restricted_mip_objective = _float_or_none(restricted_mip.get("objective"))
+    if restricted_mip_objective is not None and (
+        incumbent_objective is None
+        or restricted_mip_objective < incumbent_objective - abs(float(negative_eps))
+    ):
+        incumbent_objective = restricted_mip_objective
+        incumbent_source = "RESTRICTED_COLUMN_MIP_FEASIBLE_INCUMBENT"
+        incumbent_columns = tuple(restricted_mip.get("_columns") or tuple())
+    restricted_mip_attempts: list[dict] = [
+        {
+            "trigger": "initial_pool",
+            **{key: value for key, value in restricted_mip.items() if key != "_columns"},
+            "improved_incumbent": bool(
+                restricted_mip_objective is not None
+                and incumbent_source == "RESTRICTED_COLUMN_MIP_FEASIBLE_INCUMBENT"
+            ),
+        }
+    ]
 
     while queue and len(nodes) < max(1, int(max_tree_nodes)):
-        queued = queue.pop(0)
+        remaining = remaining_tree_time()
+        if remaining is not None and remaining <= 1.0e-6:
+            tree_deadline_hit = True
+            break
+        # Process the subtree with the smallest certified inherited bound.
+        # This is the standard proof-oriented best-bound policy: an incumbent
+        # is already supplied/refreshed by the restricted-column MIP, so
+        # spending the whole deadline down one higher-bound DFS branch can
+        # leave the true global lower-bound subtree untouched.  Prefer depth
+        # only when bounds tie; insertion order then keeps same/different child
+        # ordering deterministic.
+        queue_index = min(
+            range(len(queue)),
+            key=lambda index: (
+                float("-inf")
+                if queue[index].inherited_lower_bound is None
+                else float(queue[index].inherited_lower_bound),
+                -int(queue[index].depth),
+                index,
+            ),
+        )
+        queued = queue.pop(queue_index)
+        node_started_at = perf_counter()
+        global_count_before = len(global_columns_by_signature)
         node = _solve_b3_node(
             data,
-            complete_universe_columns,
+            tuple(global_columns_by_signature.values()),
             queued,
             b0_direct=b0_direct,
             complete_universe_counts=complete_universe_counts,
@@ -226,7 +297,7 @@ def solve_b3_branch_price_tree_baseline(
             incumbent_objective_at_entry=incumbent_objective,
             max_direct_tasks=max_direct_tasks,
             max_rounds=max_rounds_per_node,
-            wall_time_limit_sec=wall_time_limit_sec,
+            wall_time_limit_sec=remaining,
             negative_eps=negative_eps,
             max_columns_per_round=max_columns_per_round,
             tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
@@ -237,6 +308,62 @@ def solve_b3_branch_price_tree_baseline(
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
             labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
+        node_priced_columns = tuple(node.pop("_all_priced_columns", tuple()) or tuple())
+        shared_from_node = 0
+        for column in node_priced_columns:
+            signature = column_signature_from_journey(column)
+            current = global_columns_by_signature.get(signature)
+            if current is None:
+                global_columns_by_signature[signature] = column
+                shared_from_node += 1
+            elif column.objective < current.objective - 1.0e-12:
+                global_columns_by_signature[signature] = column
+        globally_shared_column_count += shared_from_node
+        if shared_from_node:
+            # Every reconstructed/audited pricing column is a globally feasible
+            # physical journey even when it was discovered below a branch node.
+            # Re-solving the small restricted set-partition MIP can therefore
+            # improve the global upper bound early.  It remains upper-bound
+            # only and never participates in node LP or certificate logic.
+            mip_remaining = remaining_tree_time()
+            periodic_mip = _restricted_column_mip_incumbent(
+                data,
+                tuple(global_columns_by_signature.values()),
+                wall_time_limit_sec=(
+                    2.0
+                    if mip_remaining is None
+                    else min(2.0, float(mip_remaining))
+                ),
+            )
+            periodic_objective = _float_or_none(periodic_mip.get("objective"))
+            mip_improved = bool(
+                periodic_objective is not None
+                and (
+                    incumbent_objective is None
+                    or periodic_objective
+                    < incumbent_objective - abs(float(negative_eps))
+                )
+            )
+            if mip_improved:
+                incumbent_objective = periodic_objective
+                incumbent_source = f"RESTRICTED_COLUMN_MIP_FEASIBLE_INCUMBENT:{queued.node_id}"
+                incumbent_columns = tuple(periodic_mip.get("_columns") or tuple())
+            restricted_mip_attempts.append(
+                {
+                    "trigger": f"after_node:{queued.node_id}",
+                    **{
+                        key: value
+                        for key, value in periodic_mip.items()
+                        if key != "_columns"
+                    },
+                    "improved_incumbent": mip_improved,
+                }
+            )
+        node["tree_node_wall_time_sec"] = round(perf_counter() - node_started_at, 6)
+        node["tree_elapsed_sec_at_exit"] = round(perf_counter() - tree_started_at, 6)
+        node["tree_global_column_count_at_entry"] = global_count_before
+        node["tree_global_column_count_at_exit"] = len(global_columns_by_signature)
+        node["tree_globally_shared_new_column_count"] = shared_from_node
         status = str(node["node_status"])
         if status == "NODE_LP_CERTIFIED":
             integer_candidate = node.get("integer_incumbent") or {}
@@ -288,10 +415,16 @@ def solve_b3_branch_price_tree_baseline(
                                     "task_b": str(candidate["task_b"]),
                                 },
                                 branch_sense=branch_sense,
+                                inherited_lower_bound=node_bound,
                             )
                         )
                         node["child_node_ids"].append(child_id)
                     node["selected_branch_candidate_source"] = "ryan_foster_fractional_mass"
+        # The pricing-tail engine uses NODE_INCOMPLETE while the tree payload
+        # uses INCOMPLETE.  Normalize it here so incomplete-node accounting and
+        # certificate telemetry cannot silently omit a timed-out leaf.
+        if status == "NODE_INCOMPLETE":
+            status = "INCOMPLETE"
         node["node_status"] = status
         node["incumbent_objective_at_exit"] = incumbent_objective
         node["integer_incumbent_source_at_exit"] = incumbent_source
@@ -303,7 +436,7 @@ def solve_b3_branch_price_tree_baseline(
             }
         nodes.append(node)
 
-    if queue:
+    if queue and not tree_deadline_hit:
         node_limit_hit = True
 
     payload = _tree_payload(
@@ -311,7 +444,7 @@ def solve_b3_branch_price_tree_baseline(
         b2=b2,
         b0_direct=b0_direct,
         nodes=nodes,
-        open_node_count=len(queue),
+        open_nodes=tuple(queue),
         incumbent_objective=incumbent_objective,
         incumbent_source=incumbent_source,
         incumbent_columns=incumbent_columns,
@@ -331,7 +464,160 @@ def solve_b3_branch_price_tree_baseline(
     payload["initial_tree_seed_column_count"] = len(provided_initial_columns)
     payload["tree_seed_source"] = "provided_initial_columns" if provided_initial_columns else "b3_internal_seed"
     payload["solve_b0_direct_first"] = bool(solve_b0_direct_first)
+    payload["tree_deadline_hit"] = bool(tree_deadline_hit)
+    payload["tree_wall_time_sec"] = round(perf_counter() - tree_started_at, 6)
+    payload["tree_global_initial_column_count"] = len(complete_universe_columns)
+    payload["tree_global_final_column_count"] = len(global_columns_by_signature)
+    payload["tree_globally_shared_new_column_count"] = int(globally_shared_column_count)
+    payload["tree_node_selection"] = "best_bound_depth_tiebreak"
+    payload["restricted_column_mip"] = {
+        key: value for key, value in restricted_mip.items() if key != "_columns"
+    }
+    payload["restricted_column_mip_attempts"] = restricted_mip_attempts
+    payload["restricted_column_mip_attempt_count"] = len(restricted_mip_attempts)
     return payload
+
+
+def _restricted_column_mip_incumbent(
+    data: LunarIceData,
+    columns: tuple[JourneyColumn, ...],
+    *,
+    wall_time_limit_sec: float,
+) -> dict:
+    """Find an audited feasible set-partition incumbent over known columns.
+
+    This MIP is only an upper-bound heuristic.  It never contributes a lower
+    bound or certificate, and every returned selection is rechecked against
+    exact task-cover and fleet constraints before it can prune a B&B node.
+    """
+
+    started_at = perf_counter()
+    if not columns or wall_time_limit_sec <= 0.0:
+        return {
+            "status": "NOT_RUN",
+            "objective": None,
+            "selected_column_count": 0,
+            "wall_time_sec": round(perf_counter() - started_at, 6),
+            "note": "No columns or time remained for the incumbent MIP.",
+            "_columns": tuple(),
+        }
+    try:
+        import highspy  # type: ignore[import-not-found]
+    except Exception as exc:
+        return {
+            "status": "BACKEND_UNAVAILABLE",
+            "objective": None,
+            "selected_column_count": 0,
+            "wall_time_sec": round(perf_counter() - started_at, 6),
+            "note": repr(exc),
+            "_columns": tuple(),
+        }
+
+    try:
+        task_ids = tuple(str(task_id) for task_id in data.task_ids)
+        task_index = {task_id: index for index, task_id in enumerate(task_ids)}
+        supports: list[list[int]] = [[] for _ in task_ids]
+        for column_index, column in enumerate(columns):
+            for task_id in column.task_set:
+                supports[task_index[str(task_id)]].append(column_index)
+        if any(not support for support in supports):
+            return {
+                "status": "INFEASIBLE_KNOWN_COLUMN_UNIVERSE",
+                "objective": None,
+                "selected_column_count": 0,
+                "wall_time_sec": round(perf_counter() - started_at, 6),
+                "note": "At least one task has no known supporting column.",
+                "_columns": tuple(),
+            }
+
+        solver = highspy.Highs()
+        solver.setOptionValue("output_flag", False)
+        solver.setOptionValue("threads", 1)
+        solver.setOptionValue("time_limit", max(0.05, float(wall_time_limit_sec)))
+        solver.setOptionValue("mip_rel_gap", 0.0)
+        column_count = len(columns)
+        indices = list(range(column_count))
+        status = solver.addCols(
+            column_count,
+            [float(column.objective) for column in columns],
+            [0.0 for _ in columns],
+            [1.0 for _ in columns],
+            0,
+            [],
+            [],
+            [],
+        )
+        if str(status) != "HighsStatus.kOk":
+            raise RuntimeError(f"addCols failed: {status}")
+        status = solver.changeColsIntegrality(
+            column_count,
+            indices,
+            [highspy.HighsVarType.kInteger for _ in columns],
+        )
+        if str(status) != "HighsStatus.kOk":
+            raise RuntimeError(f"changeColsIntegrality failed: {status}")
+        for support in supports:
+            status = solver.addRow(
+                1.0,
+                1.0,
+                len(support),
+                support,
+                [1.0 for _ in support],
+            )
+            if str(status) != "HighsStatus.kOk":
+                raise RuntimeError(f"task-cover addRow failed: {status}")
+        status = solver.addRow(
+            -solver.getInfinity(),
+            float(data.fleet_size),
+            column_count,
+            indices,
+            [1.0 for _ in columns],
+        )
+        if str(status) != "HighsStatus.kOk":
+            raise RuntimeError(f"fleet addRow failed: {status}")
+        solver.run()
+        model_status = solver.modelStatusToString(solver.getModelStatus()).upper()
+        values = tuple(float(value) for value in solver.getSolution().col_value[:column_count])
+        selected_indices = tuple(index for index, value in enumerate(values) if value >= 0.5)
+        selected = tuple(columns[index] for index in selected_indices)
+
+        cover = {task_id: 0 for task_id in task_ids}
+        for column in selected:
+            for task_id in column.task_set:
+                cover[str(task_id)] += 1
+        feasible = bool(
+            selected
+            and len(selected) <= int(data.fleet_size)
+            and all(value == 1 for value in cover.values())
+            and all(abs(values[index] - 1.0) <= 1.0e-6 for index in selected_indices)
+            and all(
+                abs(value) <= 1.0e-6 or abs(value - 1.0) <= 1.0e-6
+                for value in values
+            )
+        )
+        objective = (
+            round(sum(float(column.objective) for column in selected), 9)
+            if feasible
+            else None
+        )
+        return {
+            "status": f"{model_status}_FEASIBLE" if feasible else model_status,
+            "objective": objective,
+            "selected_column_count": len(selected) if feasible else 0,
+            "known_column_count": column_count,
+            "wall_time_sec": round(perf_counter() - started_at, 6),
+            "used_as_upper_bound_only": True,
+            "_columns": selected if feasible else tuple(),
+        }
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "objective": None,
+            "selected_column_count": 0,
+            "wall_time_sec": round(perf_counter() - started_at, 6),
+            "note": repr(exc),
+            "_columns": tuple(),
+        }
 
 
 def _solve_b3_node(
@@ -393,7 +679,7 @@ def _solve_b3_node(
         labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
         labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
     )
-    return _node_payload(
+    node = _node_payload(
         data=data,
         queued=queued,
         loaded_count=int(engine.get("loaded_column_count") or 0),
@@ -411,6 +697,8 @@ def _solve_b3_node(
         note=str(engine.get("note") or "B2B_R3 node pricing did not close; fail closed."),
         integer_candidate_columns=None,
     )
+    node["_all_priced_columns"] = tuple(engine.get("_all_priced_columns") or tuple())
+    return node
 
 
 def _solve_b3_node_with_complete_universe_audit(
@@ -988,6 +1276,7 @@ def _node_payload(
         "branch_filtered_column_count": int(filtered_count),
         "node_lp_bound": root_bound,
         "node_lp_bound_official": node_bound_official,
+        "inherited_parent_lower_bound": queued.inherited_lower_bound,
         "round_count": int(round_count),
         "pricing_round_count": int(round_count),
         "added_column_count": int(added_column_count),
@@ -1029,7 +1318,7 @@ def _tree_payload(
     b2: dict,
     b0_direct,
     nodes: list[dict],
-    open_node_count: int,
+    open_nodes: tuple[_QueuedNode, ...],
     incumbent_objective: float | None,
     incumbent_source: str,
     incumbent_columns: tuple[JourneyColumn, ...],
@@ -1039,6 +1328,7 @@ def _tree_payload(
     max_branch_depth: int,
     negative_eps: float,
 ) -> dict:
+    open_node_count = len(open_nodes)
     root = nodes[0] if nodes else {}
     leaf_nodes = _leaf_nodes(nodes)
     incomplete_nodes = [node for node in nodes if node.get("node_status") == "INCOMPLETE"]
@@ -1059,7 +1349,27 @@ def _tree_payload(
         for node in leaf_nodes
         if node.get("node_lp_bound_official") and node.get("node_lp_bound") is not None
     ]
-    global_lower_bound = round(min(leaf_bounds), 9) if leaf_bounds else None
+    unresolved_inherited_bounds = [
+        float(node["inherited_parent_lower_bound"])
+        for node in incomplete_nodes
+        if not node.get("node_lp_bound_official")
+        and node.get("inherited_parent_lower_bound") is not None
+    ] + [
+        float(queued.inherited_lower_bound)
+        for queued in open_nodes
+        if queued.inherited_lower_bound is not None
+    ]
+    unresolved_bound_missing = any(
+        not node.get("node_lp_bound_official")
+        and node.get("inherited_parent_lower_bound") is None
+        for node in incomplete_nodes
+    ) or any(queued.inherited_lower_bound is None for queued in open_nodes)
+    all_valid_bounds = leaf_bounds + unresolved_inherited_bounds
+    global_lower_bound = (
+        None
+        if unresolved_bound_missing or not all_valid_bounds
+        else round(min(all_valid_bounds), 9)
+    )
     if incumbent_objective is None or global_lower_bound is None:
         global_gap = None
     else:

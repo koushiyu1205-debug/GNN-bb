@@ -12,6 +12,7 @@ labeling.  It deliberately separates candidate search from certification:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from time import perf_counter
 from typing import Iterable
 
@@ -58,6 +59,12 @@ CERTIFYING_PROOF_KINDS = frozenset(
     }
 )
 STATUS_SEMANTICS_CONTRACT_VERSION = "bpc_future_pricing_status_semantics_20260606"
+NATIVE_EXACT_BACKEND_ENV = "LUNAR_ICE_SPPRC_EXACT_BACKEND"
+NATIVE_MEMORY_LIMIT_GB_ENV = "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB"
+NATIVE_SHADOW_BACKEND_ENV = "LUNAR_ICE_SPPRC_SHADOW_BACKEND"
+NATIVE_COMPLETION_BOUND_ENV = "LUNAR_ICE_SPPRC_COMPLETION_BOUND"
+NATIVE_SUBSET_DOMINANCE_ENV = "LUNAR_ICE_SPPRC_SUBSET_DOMINANCE"
+NATIVE_CUT_STATE_ENV = "LUNAR_ICE_SPPRC_CUT_STATE"
 
 
 @dataclass(frozen=True)
@@ -203,7 +210,71 @@ def run_bpc_labeling_pricer(
     branch = branch_context or BranchContext()
     cuts = cut_context or CutContext()
     started_at = perf_counter()
-    if cfg.exact_mode:
+    native_fallback_payload: dict = {}
+    native_shadow_payload: dict = {}
+    native_backend_id = str(os.getenv(NATIVE_EXACT_BACKEND_ENV, "python_reference"))
+    native_result = None
+    native_shadow_backend_id = str(os.getenv(NATIVE_SHADOW_BACKEND_ENV, "") or "")
+    if (
+        cfg.exact_mode
+        and native_backend_id == "python_reference"
+        and native_shadow_backend_id
+        and native_shadow_backend_id != "python_reference"
+    ):
+        shadow_started = perf_counter()
+        try:
+            shadow_result = _run_native_exact_backend(
+                data,
+                true_duals,
+                cfg,
+                branch_context=branch,
+                cut_context=cuts,
+                backend_id=native_shadow_backend_id,
+            )
+            native_shadow_payload = {
+                "native_shadow_enabled": True,
+                "native_shadow_backend_id": native_shadow_backend_id,
+                "native_shadow_wall_time_sec": round(perf_counter() - shadow_started, 6),
+                "native_shadow_result": shadow_result.to_payload(),
+                "native_shadow_mutates_official_result": False,
+            }
+        except Exception as exc:
+            native_shadow_payload = {
+                "native_shadow_enabled": True,
+                "native_shadow_backend_id": native_shadow_backend_id,
+                "native_shadow_wall_time_sec": round(perf_counter() - shadow_started, 6),
+                "native_shadow_error": repr(exc),
+                "native_shadow_mutates_official_result": False,
+            }
+    if cfg.exact_mode and native_backend_id != "python_reference":
+        native_result = _run_native_exact_backend(
+            data,
+            true_duals,
+            cfg,
+            branch_context=branch,
+            cut_context=cuts,
+            backend_id=native_backend_id,
+        )
+        if native_result.engine_status in {
+            "UNSUPPORTED_FEATURE",
+            "BACKEND_UNAVAILABLE",
+            "BACKEND_ERROR",
+            "BACKEND_CRASH",
+        }:
+            native_fallback_payload = {
+                "native_backend_requested": native_backend_id,
+                "native_backend_fallback_to_python": True,
+                "native_backend_fallback_status": native_result.engine_status,
+                "native_backend_fallback_blockers": list(native_result.certificate_blockers),
+            }
+            native_result = None
+    if native_result is not None:
+        payload, columns = _native_exact_backend_payload(
+            native_result,
+            cfg,
+            backend_id=native_backend_id,
+        )
+    elif cfg.exact_mode:
         payload, columns = _run_exact_elementary_labeling(
             data,
             true_duals,
@@ -259,8 +330,177 @@ def run_bpc_labeling_pricer(
     )
     payload["official_pricing_dual_source"] = "current_true_rmp_dual"
     payload["stabilized_dual_no_column_can_certify"] = False
+    payload.update(native_fallback_payload)
+    payload.update(native_shadow_payload)
     payload.update(_status_semantics_contract(payload, exact_mode=cfg.exact_mode))
     return payload, columns
+
+
+def _run_native_exact_backend(
+    data: LunarIceData,
+    true_duals: JourneyDuals,
+    cfg: LabelingPricingConfig,
+    *,
+    branch_context: BranchContext,
+    cut_context: CutContext,
+    backend_id: str,
+):
+    from lunar_ice_bpc.exact.bpc.pricing.backends import (
+        BACKEND_MODE_EXACT_PROOF,
+        BACKEND_MODE_NEGATIVE_HARVEST,
+        BackendPricingRequest,
+        BackendRegistry,
+    )
+
+    try:
+        memory_limit_gb = max(0.0, float(os.getenv(NATIVE_MEMORY_LIMIT_GB_ENV, "0") or 0.0))
+    except ValueError:
+        memory_limit_gb = 0.0
+    return BackendRegistry.create(backend_id).solve(
+        BackendPricingRequest(
+            data=data,
+            true_duals=true_duals,
+            mode=(
+                BACKEND_MODE_NEGATIVE_HARVEST
+                if cfg.stop_at_first_negative
+                else BACKEND_MODE_EXACT_PROOF
+            ),
+            branch_context=branch_context,
+            cut_context=cut_context,
+            harvest_target=cfg.exact_negative_harvest_target,
+            wall_time_limit_sec=cfg.wall_time_limit_sec,
+            memory_limit_gb=memory_limit_gb,
+            negative_eps=cfg.negative_eps,
+            completion_bound_enabled=bool(cfg.completion_bound_enabled)
+            and str(os.getenv(NATIVE_COMPLETION_BOUND_ENV, "0")).strip().lower()
+            in {"1", "true", "yes", "on"},
+            subset_dominance_enabled=str(
+                os.getenv(NATIVE_SUBSET_DOMINANCE_ENV, "0")
+            ).strip().lower()
+            in {"1", "true", "yes", "on"},
+            cut_state_enabled=str(os.getenv(NATIVE_CUT_STATE_ENV, "0")).strip().lower()
+            in {"1", "true", "yes", "on"},
+        )
+    )
+
+
+def _native_exact_backend_payload(
+    result,
+    cfg: LabelingPricingConfig,
+    *,
+    backend_id: str,
+) -> tuple[dict, tuple[JourneyColumn, ...]]:
+    negative_columns = tuple(result.columns)
+    proof_only_blockers = {
+        "native_exact_search_incomplete",
+        "native_frontier_not_empty",
+    }
+    column_audit_blockers = tuple(
+        blocker
+        for blocker in result.certificate_blockers
+        if blocker not in proof_only_blockers
+    )
+    column_audit_pass = not column_audit_blockers
+    has_negative = bool(
+        result.best_found_rc is not None and result.best_found_rc < -cfg.negative_eps
+    )
+    certified = bool(
+        not has_negative
+        and result.can_enter_certificate_audit
+        and result.proved_no_rc_below is not None
+        and result.proved_no_rc_below >= -cfg.negative_eps
+    )
+    state = (
+        PricingState.FOUND_NEGATIVE
+        if has_negative
+        else PricingState.CERTIFIED_NO_NEGATIVE
+        if certified
+        else PricingState.INCOMPLETE_LIMIT
+    )
+    proof_kind = (
+        PROOF_KIND_EXHAUSTIVE_FOUND_NEGATIVE
+        if has_negative and result.search_exhaustive
+        else PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE
+        if certified
+        else PROOF_KIND_EXHAUSTIVE_INCOMPLETE
+    )
+    payload = result.to_payload()
+    payload.update(
+        {
+            "status": result.engine_status,
+            "native_backend_id": backend_id,
+            "native_backend_result": result.to_payload(),
+            "labeling_algorithm": "native_rcspp_forward_elementary_multi_sortie",
+            "resource_label_algorithm": "lab_core_rcspp_project_local_journey_resource",
+            "resource_label_core_mode": "native_exact_elementary_full_space",
+            "resource_dimensions": [
+                "global_time",
+                "sortie_demand",
+                "sortie_energy",
+                "sortie_shadow",
+                "visited_bitset",
+                "raw_operating_cost",
+                "raw_risk",
+                "raw_weighted_completion",
+                "task_dual_reward",
+            ],
+            "dominance_policy": "same_visited_conservative_resource_and_true_rc",
+            "elementarity_policy": "global_journey_visited_bitset_not_reset_between_sorties",
+            "pricing_state": state.value,
+            "pricing_proof_kind": proof_kind,
+            "can_certify_no_negative": certified,
+            "uses_true_dual_bpc_certificate": certified,
+            "pricing_complete_for_all_task_subsets": bool(result.search_exhaustive),
+            "pricing_complete_for_all_tasks": bool(result.search_exhaustive),
+            "pricing_complete_for_branch_context": bool(result.search_exhaustive),
+            "global_min_proof_complete": bool(result.search_exhaustive),
+            "global_min_reduced_cost_source": (
+                "native_exact_global_min"
+                if result.global_min_rc_is_exact
+                else "native_proved_no_rc_below_threshold"
+                if result.proved_no_rc_below is not None
+                else ""
+            ),
+            "global_min_reduced_cost_scope": "full_elementary_multi_sortie_journey_space",
+            "global_remaining_rc_lb": (
+                result.global_min_rc
+                if result.global_min_rc_is_exact
+                else result.proved_no_rc_below
+            ),
+            "global_remaining_rc_lb_valid": certified,
+            "global_remaining_rc_lb_coverage_complete": bool(result.search_exhaustive),
+            "proved_no_rc_below": result.proved_no_rc_below,
+            "true_best_reduced_cost": result.best_found_rc,
+            "pricing_best_reduced_cost": result.best_found_rc,
+            "true_audited_column_count": len(negative_columns),
+            "true_negative_column_count": len(negative_columns),
+            "returned_column_count": len(negative_columns),
+            "returned_column_policy": "audited_true_rc_negative_columns_only",
+            "returned_columns_are_complete_universe": False,
+            "true_dual_reaudit_pass": bool(result.partial_columns_valid or not negative_columns),
+            "branch_context_audit_pass": True,
+            # Incomplete proof is a certificate blocker, not an RC-audit
+            # failure for columns that were fully reconstructed and manually
+            # checked before the stop condition.
+            "pricing_rc_audit_pass": column_audit_pass,
+            "manual_rc_audit_pass": column_audit_pass,
+            "completion_bound": {"enabled": False, "can_certify_no_negative": False},
+            "completion_bound_certificate_safe": True,
+            "native_partial_negative_columns_retained": bool(
+                negative_columns and not result.search_exhaustive
+            ),
+            "label_queue_push_count": int(result.telemetry.get("extended_labels") or 0),
+            "dominance_pruned": int(result.telemetry.get("dominated_labels") or 0),
+            "note": (
+                "Native exact engine exhausted the full frontier and proved the configured threshold."
+                if certified
+                else "Native search returned true-dual audited negative columns."
+                if negative_columns
+                else "Native search is incomplete; fail closed for no-negative proof."
+            ),
+        }
+    )
+    return payload, negative_columns
 
 
 def _run_exact_elementary_labeling(

@@ -1,0 +1,4 @@
+/build/native-spprc/
+/build/native-spprc-asan/
+/.venv-native-spprc/
+/src/*.egg-info/

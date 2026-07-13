@@ -61,6 +61,32 @@ class _SimplexResult:
     iterations: int
 
 
+@dataclass(frozen=True)
+class PhaseOneRMPResult:
+    status: str
+    artificial_objective: float | None
+    artificial_values: Mapping[str, float]
+    duals: JourneyDuals
+    real_primal_columns: tuple[dict, ...]
+    real_fleet_usage: float | None
+    branch_context: dict
+    branch_filtered_column_count: int
+    iteration_count: int
+    note: str
+
+    @property
+    def artificial_positive_count(self) -> int:
+        return sum(1 for value in self.artificial_values.values() if value > 1.0e-8)
+
+    @property
+    def feasible_without_artificials(self) -> bool:
+        return bool(
+            self.status == "PHASE_ONE_OPTIMAL"
+            and self.artificial_objective is not None
+            and self.artificial_objective <= 1.0e-8
+        )
+
+
 def manual_journey_reduced_cost(
     journey: JourneyColumn,
     duals: JourneyDuals,
@@ -284,6 +310,94 @@ def solve_restricted_journey_rmp(
     )
 
 
+def solve_phase_one_journey_rmp(
+    task_ids: Iterable[str],
+    columns: Iterable[JourneyColumn],
+    *,
+    fleet_size: int,
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+) -> PhaseOneRMPResult:
+    """Minimize uncovered-task artificials for a restricted branch master.
+
+    Real journey columns have zero Phase-I cost and task artificials have unit
+    cost and do not consume fleet.  The resulting dual is therefore the exact
+    pricing context ``0 - sum(pi_i) - mu`` used to restore RMP feasibility or
+    certify that the full branch master is infeasible.
+    """
+
+    ordered_tasks = tuple(str(task_id) for task_id in task_ids)
+    raw_columns = tuple(columns)
+    active_columns = filter_journey_columns_by_branch_context(raw_columns, branch_context)
+    filtered_count = len(raw_columns) - len(active_columns)
+    branch_payload = (branch_context or BranchContext()).to_payload()
+    active_cuts = cut_context or CutContext()
+    if not active_cuts.empty:
+        return PhaseOneRMPResult(
+            status="UNSUPPORTED_CUT_CONTEXT",
+            artificial_objective=None,
+            artificial_values={},
+            duals=JourneyDuals(cover={}, fleet_limit=0.0),
+            real_primal_columns=tuple(),
+            real_fleet_usage=None,
+            branch_context=branch_payload,
+            branch_filtered_column_count=filtered_count,
+            iteration_count=0,
+            note="Phase-I v1 requires empty CutContext.",
+        )
+    simplex = _solve_dual_lp(
+        ordered_tasks,
+        active_columns,
+        fleet_size=int(fleet_size),
+        cut_context=active_cuts,
+        phase_one=True,
+    )
+    if simplex.status != "OPTIMAL" or simplex.objective is None:
+        return PhaseOneRMPResult(
+            status=f"PHASE_ONE_{simplex.status}",
+            artificial_objective=None,
+            artificial_values={},
+            duals=JourneyDuals(cover={}, fleet_limit=0.0),
+            real_primal_columns=tuple(),
+            real_fleet_usage=None,
+            branch_context=branch_payload,
+            branch_filtered_column_count=filtered_count,
+            iteration_count=simplex.iterations,
+            note="Phase-I restricted master did not solve to optimality.",
+        )
+    real_count = len(active_columns)
+    artificial_values = {
+        task_id: round(float(simplex.row_duals[real_count + index]), 9)
+        for index, task_id in enumerate(ordered_tasks)
+    }
+    real_primal = _primal_columns_payload(
+        active_columns,
+        simplex.row_duals[:real_count],
+        active_cuts,
+    )
+    real_fleet_usage = round(
+        sum(float(row.get("lambda_value") or 0.0) for row in real_primal),
+        9,
+    )
+    artificial_objective = round(sum(artificial_values.values()), 9)
+    return PhaseOneRMPResult(
+        status="PHASE_ONE_OPTIMAL",
+        artificial_objective=artificial_objective,
+        artificial_values=artificial_values,
+        duals=_solution_to_duals(ordered_tasks, simplex.solution, active_cuts),
+        real_primal_columns=real_primal,
+        real_fleet_usage=real_fleet_usage,
+        branch_context=branch_payload,
+        branch_filtered_column_count=filtered_count,
+        iteration_count=simplex.iterations,
+        note=(
+            "Restricted branch master is feasible without artificials."
+            if artificial_objective <= 1.0e-8
+            else "Positive artificials remain; exact Phase-I pricing is required."
+        ),
+    )
+
+
 def _column_key(column: JourneyColumn) -> tuple[str, ...]:
     return tuple(sorted(str(task_id) for task_id in column.task_set))
 
@@ -412,9 +526,12 @@ def _solve_dual_lp(
     *,
     fleet_size: int,
     cut_context: CutContext | None = None,
+    phase_one: bool = False,
 ) -> _SimplexResult:
     n = len(task_ids)
     context = cut_context or CutContext()
+    if phase_one and not context.empty:
+        raise ValueError("Phase-I dual currently requires empty CutContext")
     task_index = {task_id: index for index, task_id in enumerate(task_ids)}
     cut_start = 2 * n + 1
     objective = [0.0 for _ in range(cut_start + len(context.cuts))]
@@ -450,7 +567,18 @@ def _solve_dual_lp(
             else:
                 raise ValueError(f"unsupported cut_type {cut.cut_type!r}")
         rows.append(row)
-        rhs.append(float(column.objective))
+        rhs.append(0.0 if phase_one else float(column.objective))
+    if phase_one:
+        # One unit-cost artificial y_i per task-cover equality.  Artificial
+        # variables do not consume fleet, hence their dual rows contain only
+        # the free cover dual pi_i = pi_i^+ - pi_i^-.
+        for task_id in task_ids:
+            row = [0.0 for _ in range(len(objective))]
+            index = task_index[task_id]
+            row[index] = 1.0
+            row[n + index] = -1.0
+            rows.append(row)
+            rhs.append(1.0)
     solver = os.environ.get("LUNAR_ICE_RMP_SOLVER", "highs").strip().lower()
     if solver not in {"simplex", "python"}:
         highs = _highs_max_leq(objective, rows, rhs)

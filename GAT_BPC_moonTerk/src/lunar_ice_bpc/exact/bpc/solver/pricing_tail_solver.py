@@ -8,7 +8,7 @@ diagnostics.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import combinations
 import os
 import signal
@@ -24,6 +24,12 @@ from lunar_ice_bpc.exact.bpc.cuts.cut_audit import cut_aware_column_signature_fr
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
 from lunar_ice_bpc.exact.bpc.pricing.completion_bounds import build_completion_bound_tail_policy
+from lunar_ice_bpc.exact.bpc.pricing.backends import (
+    BACKEND_MODE_EXACT_PROOF,
+    BACKEND_OBJECTIVE_PHASE_ONE,
+    BackendPricingRequest,
+    BackendRegistry,
+)
 from lunar_ice_bpc.exact.bpc.pricing.duplicate_only_audit import build_duplicate_only_audit
 from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
     build_tail_dual_center,
@@ -50,13 +56,20 @@ from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (
     dense_rmp_memory_precheck,
     representative_universe_column_count,
 )
-from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
+from lunar_ice_bpc.exact.core.branching import (
+    SAME_JOURNEY,
+    BranchContext,
+    journey_satisfies_branch_context,
+)
 from lunar_ice_bpc.exact.core.columns import build_timed_sortie
 from lunar_ice_bpc.exact.core.cuts import CutContext
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn, build_journey_column
-from lunar_ice_bpc.exact.master.journey_rmp import manual_journey_reduced_cost
-from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals
+from lunar_ice_bpc.exact.master.journey_rmp import (
+    JourneyDuals,
+    manual_journey_reduced_cost,
+    solve_phase_one_journey_rmp,
+)
 from lunar_ice_bpc.exact.pricing.journey_pricing import (
     DirectPricingCache,
     price_direct_journey_columns,
@@ -437,6 +450,23 @@ def solve_node_pricing_with_b2b_r3(
             "full_universe_preloaded": False,
         }
 
+    branch_seed_columns, branch_seed_report = _build_same_journey_seed_columns(
+        data,
+        branch_context=active_context,
+        max_direct_tasks=max_direct_tasks,
+        wall_time_limit_sec=_remaining_wall_time_limit(
+            wall_time_limit_sec,
+            started_at=started_at,
+        ),
+    )
+    if branch_seed_columns:
+        seed_columns = tuple(seed_columns) + tuple(branch_seed_columns)
+    seed_report = {
+        **seed_report,
+        "same_journey_seed": branch_seed_report,
+        "same_journey_seed_column_count": len(branch_seed_columns),
+    }
+
     pool = ColumnPool()
     view = MasterColumnView()
     loaded_count, seed_branch_filtered_count = _load_columns_for_node(
@@ -459,6 +489,11 @@ def solve_node_pricing_with_b2b_r3(
     added_total = 0
     last_master = None
     last_judge_payload: dict | None = None
+    # Journey columns are globally valid objects; branch contexts only decide
+    # whether a column is admitted at a particular node.  Preserve every
+    # audited column discovered across rounds so the tree can share them with
+    # sibling and descendant nodes instead of rediscovering them.
+    all_final_judge_columns: dict[tuple, JourneyColumn] = {}
     last_final_judge_columns: tuple[JourneyColumn, ...] = tuple()
     last_duplicate_audit: dict | None = None
     last_hidden_audit: dict | None = None
@@ -519,6 +554,102 @@ def solve_node_pricing_with_b2b_r3(
         profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
         last_master = master
         if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
+            phase_one = _recover_branch_rmp_with_phase_one(
+                data,
+                pool=pool,
+                view=view,
+                node_id=active_node_id,
+                branch_context=active_context,
+                cut_context=active_cut_context,
+                max_rounds=max_rounds,
+                max_columns_per_round=max_columns_per_round,
+                negative_eps=negative_eps,
+                wall_time_limit_sec=_remaining_wall_time_limit(
+                    wall_time_limit_sec,
+                    started_at=started_at,
+                ),
+            )
+            phase_added = sum(
+                int(row.get("added_column_count") or 0)
+                for row in phase_one.get("history", [])
+            )
+            added_total += phase_added
+            profile_totals["phase_one_wall_time"] = round(
+                sum(
+                    float((row.get("telemetry") or {}).get("wall_time_seconds") or 0.0)
+                    for row in phase_one.get("history", [])
+                ),
+                6,
+            )
+            profile_totals["phase_one_added_column_count"] = phase_added
+            history.append(
+                {
+                    "round": round_index,
+                    "node_id": active_node_id,
+                    "pricing_state": (
+                        PricingState.CERTIFIED_NO_NEGATIVE.value
+                        if phase_one.get("status") == "NODE_INFEASIBLE_CERTIFIED"
+                        else PricingState.FOUND_NEGATIVE.value
+                        if phase_one.get("status") == "RMP_FEASIBILITY_RESTORED"
+                        else PricingState.INCOMPLETE_LIMIT.value
+                    ),
+                    "phase_one": phase_one,
+                    "branch_context_active": not active_context.empty,
+                    "added_column_count": phase_added,
+                }
+            )
+            if phase_one.get("status") == "RMP_FEASIBILITY_RESTORED":
+                profile_totals["exit_reason"] = "PHASE_ONE_RMP_FEASIBILITY_RESTORED"
+                continue
+            if phase_one.get("status") == "NODE_INFEASIBLE_CERTIFIED":
+                profile_totals["exit_reason"] = "PHASE_ONE_NODE_INFEASIBLE_CERTIFIED"
+                phase_final_judge = {
+                    "status": "PHASE_ONE_NODE_INFEASIBLE_CERTIFIED",
+                    "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
+                    "pricing_proof_kind": "EXHAUSTIVE_NO_NEGATIVE",
+                    "can_certify_no_negative": True,
+                    "uses_true_dual_bpc_certificate": True,
+                    "pricing_rc_audit_pass": True,
+                    "manual_rc_audit_pass": True,
+                    "all_priced_columns_satisfy_branch_context": True,
+                    "pricing_complete_for_branch_context": True,
+                    "branch_context_active": not active_context.empty,
+                    "branch_context": active_context.to_payload(),
+                    "phase_one": phase_one,
+                    "note": phase_one.get("note"),
+                }
+                return _node_engine_payload(
+                    data=data,
+                    node_id=active_node_id,
+                    branch_context=active_context,
+                    cut_context=active_cut_context,
+                    incumbent_objective=incumbent_objective,
+                    completion_policy=completion_policy,
+                    proof_debt=proof_debt,
+                    profiling=profiling,
+                    history=history,
+                    harvest_totals=harvest_totals,
+                    profile_totals=profile_totals,
+                    seed_report=seed_report,
+                    loaded_column_count=loaded_count,
+                    seed_branch_filtered_column_count=seed_branch_filtered_count,
+                    master=master,
+                    final_judge=phase_final_judge,
+                    final_judge_columns=tuple(),
+                    final_judge_call_count=final_judge_call_count + 1,
+                    duplicate_only_count=duplicate_only_count,
+                    hidden_negative_count=hidden_negative_count,
+                    replacement_only_round_count=replacement_only_round_count,
+                    added_to_master_count=added_total,
+                    algorithm_status=AlgorithmStatus.BPC_INFEASIBLE,
+                    certificate_scope=CertificateScope.BPC_INFEASIBLE_CERTIFIED,
+                    pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
+                    node_status="INFEASIBLE_CERTIFIED",
+                    note=str(phase_one.get("note") or "Phase-I certified node infeasibility."),
+                    active_columns=export_active_columns(),
+                    hidden_audit=last_hidden_audit,
+                    seed_catalog=seed_catalog,
+                )
             profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL"
             return _node_engine_payload(
                 data=data,
@@ -547,7 +678,10 @@ def solve_node_pricing_with_b2b_r3(
                 certificate_scope=CertificateScope.DIAGNOSTIC_RMP_BOUND,
                 pricing_state=PricingState.INCOMPLETE_LIMIT,
                 node_status="NODE_RMP_INFEASIBLE_UNCERTIFIED",
-                note="Node RMP did not solve to optimality; restricted-pool no-cover is not an infeasibility certificate.",
+                note=(
+                    "Node RMP did not solve to optimality and Phase-I did not close the proof: "
+                    f"{phase_one.get('status')} - {phase_one.get('note')}"
+                ),
                 active_columns=export_active_columns(),
                 hidden_audit=last_hidden_audit,
                 seed_catalog=seed_catalog,
@@ -738,7 +872,12 @@ def solve_node_pricing_with_b2b_r3(
         profile_totals["final_judge_call_count_profiled"] += 1
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
-        last_final_judge_columns = judge.all_priced_columns
+        for column in judge.all_priced_columns:
+            signature = column_signature_from_journey(column)
+            current = all_final_judge_columns.get(signature)
+            if current is None or column.objective < current.objective - 1.0e-12:
+                all_final_judge_columns[signature] = column
+        last_final_judge_columns = tuple(all_final_judge_columns.values())
         profiling.merge_completion_payload(judge.pricing_payload)
         _accumulate_pricing_profile(profile_totals, judge.pricing_payload)
         negative_pairs = _manual_negative_pairs(
@@ -943,7 +1082,7 @@ def solve_node_pricing_with_b2b_r3(
                 seed_branch_filtered_column_count=seed_branch_filtered_count,
                 master=master,
                 final_judge=judge.pricing_payload,
-                final_judge_columns=judge.all_priced_columns,
+                final_judge_columns=last_final_judge_columns,
                 final_judge_call_count=final_judge_call_count,
                 duplicate_only_count=duplicate_only_count,
                 hidden_negative_count=hidden_negative_count,
@@ -977,7 +1116,7 @@ def solve_node_pricing_with_b2b_r3(
                 seed_branch_filtered_column_count=seed_branch_filtered_count,
                 master=master,
                 final_judge=judge.pricing_payload,
-                final_judge_columns=judge.all_priced_columns,
+                final_judge_columns=last_final_judge_columns,
                 final_judge_call_count=final_judge_call_count,
                 duplicate_only_count=duplicate_only_count,
                 hidden_negative_count=hidden_negative_count,
@@ -1010,7 +1149,7 @@ def solve_node_pricing_with_b2b_r3(
                 seed_branch_filtered_column_count=seed_branch_filtered_count,
                 master=master,
                 final_judge=judge.pricing_payload,
-                final_judge_columns=judge.all_priced_columns,
+                final_judge_columns=last_final_judge_columns,
                 final_judge_call_count=final_judge_call_count,
                 duplicate_only_count=duplicate_only_count,
                 hidden_negative_count=hidden_negative_count,
@@ -2737,6 +2876,11 @@ def _exact_final_judge_first_skipped_worker_result(
         "can_certify_no_negative": False,
         "uses_true_dual_bpc_certificate": False,
         "worker_dual_used_for_candidate_search": False,
+        # Safety-redline consumers require candidate workers to be marked as
+        # worker-only.  A skipped worker is the degenerate worker-only case;
+        # it contributes neither a dual nor a certificate.
+        "worker_dual_only": True,
+        "official_dual_source": "current_true_rmp_dual",
         "candidate_search_rc_recomputed_under_true_dual": True,
         "candidate_search_dual_matches_true_dual": True,
         "pricing_proof_kind": "WORKER_SKIPPED_FOR_EXACT_FINAL_JUDGE_FIRST",
@@ -2745,6 +2889,7 @@ def _exact_final_judge_first_skipped_worker_result(
         "worker_uses_true_dual_bpc_certificate": False,
         "worker_root_lp_bound_official": False,
         "worker_certificate_leak": False,
+        "worker_true_dual_candidate_audit_pass": True,
         "true_dual_rc_recomputed": True,
         "tail_dual_no_column_can_certify": False,
         "tail_dual_certificate_leak": False,
@@ -4956,6 +5101,340 @@ def _load_columns(
     cut_context: CutContext | None = None,
 ) -> None:
     _load_columns_for_node(pool, view, columns, node_id="root", branch_context=None, cut_context=cut_context)
+
+
+def _recover_branch_rmp_with_phase_one(
+    data: LunarIceData,
+    *,
+    pool: ColumnPool,
+    view: MasterColumnView,
+    node_id: str,
+    branch_context: BranchContext,
+    cut_context: CutContext,
+    max_rounds: int,
+    max_columns_per_round: int,
+    negative_eps: float,
+    wall_time_limit_sec: float | None,
+) -> dict:
+    """Restore a branch RMP basis or prove full-master infeasibility."""
+
+    started_at = perf_counter()
+    history: list[dict] = []
+    backend_id = str(os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", "python_reference"))
+    if backend_id == "python_reference":
+        return {
+            "status": "UNSUPPORTED_BACKEND",
+            "backend_id": backend_id,
+            "history": history,
+            "certificate_valid": False,
+            "note": "Python reference Phase-I objective is not implemented; fail closed.",
+        }
+    if not cut_context.empty:
+        return {
+            "status": "UNSUPPORTED_CUT_CONTEXT",
+            "backend_id": backend_id,
+            "history": history,
+            "certificate_valid": False,
+            "note": "Native Phase-I v1 requires empty CutContext.",
+        }
+
+    last_phase = None
+    phase_one_negative_eps = min(abs(float(negative_eps)), 1.0e-9)
+    for phase_round in range(1, max(1, int(max_rounds)) + 1):
+        remaining = _remaining_wall_time_limit(
+            wall_time_limit_sec,
+            started_at=started_at,
+        )
+        if remaining is not None and remaining <= 0.0:
+            return {
+                "status": "TIME_LIMIT",
+                "backend_id": backend_id,
+                "history": history,
+                "certificate_valid": False,
+                "note": "Phase-I exhausted the node wall-time budget.",
+            }
+        master_columns = _master_columns(pool, view, node_id=node_id)
+        phase = solve_phase_one_journey_rmp(
+            data.task_ids,
+            master_columns,
+            fleet_size=data.fleet_size,
+            branch_context=branch_context,
+            cut_context=cut_context,
+        )
+        last_phase = phase
+        phase_row = {
+            "round": phase_round,
+            "phase_one_status": phase.status,
+            "artificial_objective": phase.artificial_objective,
+            "artificial_positive_count": phase.artificial_positive_count,
+            "active_column_count": len(master_columns),
+            "pricing_called": False,
+            "added_column_count": 0,
+        }
+        if phase.status != "PHASE_ONE_OPTIMAL":
+            history.append(phase_row)
+            return {
+                "status": "RMP_NOT_OPTIMAL",
+                "backend_id": backend_id,
+                "history": history,
+                "certificate_valid": False,
+                "note": phase.note,
+            }
+        if phase.feasible_without_artificials:
+            history.append(phase_row)
+            return {
+                "status": "RMP_FEASIBILITY_RESTORED",
+                "backend_id": backend_id,
+                "history": history,
+                "certificate_valid": False,
+                "artificial_objective": phase.artificial_objective,
+                "note": "Phase-I artificial objective reached zero; solve the official RMP next.",
+            }
+
+        result = BackendRegistry.create(backend_id).solve(
+            BackendPricingRequest(
+                data=data,
+                true_duals=phase.duals,
+                mode=BACKEND_MODE_EXACT_PROOF,
+                objective_mode=BACKEND_OBJECTIVE_PHASE_ONE,
+                branch_context=branch_context,
+                cut_context=cut_context,
+                harvest_target=max(1, int(max_columns_per_round)),
+                wall_time_limit_sec=remaining,
+                negative_eps=phase_one_negative_eps,
+            )
+        )
+        phase_row.update(
+            {
+                "pricing_called": True,
+                "engine_status": result.engine_status,
+                "search_exhaustive": result.search_exhaustive,
+                "frontier_empty": result.frontier_empty,
+                "labels_dropped": result.labels_dropped,
+                "best_found_rc": result.best_found_rc,
+                "proved_no_rc_below": result.proved_no_rc_below,
+                "certificate_blockers": list(result.certificate_blockers),
+                "candidate_column_count": len(result.columns),
+                "telemetry": result.telemetry,
+            }
+        )
+        if result.columns:
+            priced = sorted(
+                (
+                    (
+                        -float(phase.duals.fleet_limit)
+                        - sum(
+                            float(phase.duals.cover.get(str(task_id), 0.0))
+                            for task_id in column.task_set
+                        ),
+                        column,
+                    )
+                    for column in result.columns
+                ),
+                key=lambda row: (row[0], row[1].objective, tuple(sorted(row[1].task_set))),
+            )
+            selected = tuple(
+                column
+                for rc, column in priced
+                if rc < -phase_one_negative_eps
+            )[: max(1, int(max_columns_per_round))]
+            added = _add_selected_to_pool_and_master(
+                pool,
+                view,
+                selected,
+                node_id=node_id,
+                branch_context=branch_context,
+                cut_context=cut_context,
+            )
+            phase_row["selected_column_count"] = len(selected)
+            phase_row["added_column_count"] = int(added)
+            history.append(phase_row)
+            if added > 0:
+                continue
+            return {
+                "status": "DUPLICATE_ONLY_INCOMPLETE",
+                "backend_id": backend_id,
+                "history": history,
+                "certificate_valid": False,
+                "note": "Phase-I found negative real columns but none were addable; fail closed.",
+            }
+        history.append(phase_row)
+        if result.proved_no_rc_below is not None and result.can_enter_certificate_audit:
+            return {
+                "status": "NODE_INFEASIBLE_CERTIFIED",
+                "backend_id": backend_id,
+                "history": history,
+                "certificate_valid": True,
+                "artificial_objective": phase.artificial_objective,
+                "artificial_positive_count": phase.artificial_positive_count,
+                "phase_one_negative_eps": phase_one_negative_eps,
+                "pricing_result": result.to_payload(),
+                "note": (
+                    "Positive Phase-I artificial objective remains and exhaustive branch-aware "
+                    "pricing proved no negative real column."
+                ),
+            }
+        return {
+            "status": "PRICING_INCOMPLETE",
+            "backend_id": backend_id,
+            "history": history,
+            "certificate_valid": False,
+            "pricing_result": result.to_payload(),
+            "note": "Phase-I pricing did not produce a valid no-negative certificate.",
+        }
+
+    return {
+        "status": "ROUND_LIMIT",
+        "backend_id": backend_id,
+        "history": history,
+        "certificate_valid": False,
+        "artificial_objective": (
+            None if last_phase is None else last_phase.artificial_objective
+        ),
+        "note": "Phase-I reached its round limit before restoring feasibility or proving infeasibility.",
+    }
+
+
+def _build_same_journey_seed_columns(
+    data: LunarIceData,
+    *,
+    branch_context: BranchContext,
+    max_direct_tasks: int,
+    wall_time_limit_sec: float | None,
+) -> tuple[tuple[JourneyColumn, ...], dict]:
+    """Build real, audited seed columns for Ryan--Foster same components.
+
+    A child RMP can become temporarily infeasible after inherited singleton
+    columns are filtered by a same-journey decision.  This helper restores only
+    a starting basis.  It never certifies feasibility or infeasibility; the
+    regular branch-aware exact pricer remains the sole certificate source.
+    """
+
+    started_at = perf_counter()
+    components: list[set[str]] = []
+    for decision in branch_context.pair_decisions:
+        if decision.sense != SAME_JOURNEY:
+            continue
+        merged = {str(decision.task_a), str(decision.task_b)}
+        remaining: list[set[str]] = []
+        for component in components:
+            if component & merged:
+                merged.update(component)
+            else:
+                remaining.append(component)
+        remaining.append(merged)
+        components = remaining
+
+    normalized_components = tuple(
+        sorted((tuple(sorted(component)) for component in components), key=lambda row: row)
+    )
+    structurally_conflicting = []
+    for component in normalized_components:
+        task_set = set(component)
+        for decision in branch_context.pair_decisions:
+            if (
+                decision.sense != SAME_JOURNEY
+                and str(decision.task_a) in task_set
+                and str(decision.task_b) in task_set
+            ):
+                structurally_conflicting.append(component)
+                break
+
+    columns: list[JourneyColumn] = []
+    component_rows: list[dict] = []
+    for component in normalized_components:
+        if component in structurally_conflicting:
+            component_rows.append(
+                {
+                    "tasks": list(component),
+                    "status": "STRUCTURAL_BRANCH_CONFLICT",
+                    "column_count": 0,
+                }
+            )
+            continue
+        known_tasks = tuple(task_id for task_id in component if task_id in data.tasks)
+        if len(known_tasks) != len(component) or len(known_tasks) < 2:
+            component_rows.append(
+                {
+                    "tasks": list(component),
+                    "status": "UNKNOWN_OR_DEGENERATE_COMPONENT",
+                    "column_count": 0,
+                }
+            )
+            continue
+        if len(known_tasks) > int(max_direct_tasks):
+            component_rows.append(
+                {
+                    "tasks": list(component),
+                    "status": "COMPONENT_ABOVE_DIRECT_LIMIT",
+                    "column_count": 0,
+                }
+            )
+            continue
+        remaining = _remaining_wall_time_limit(
+            wall_time_limit_sec,
+            started_at=started_at,
+        )
+        if remaining is not None and remaining <= 0.0:
+            component_rows.append(
+                {
+                    "tasks": list(component),
+                    "status": "TIME_LIMIT",
+                    "column_count": 0,
+                }
+            )
+            continue
+        restricted_data = replace(
+            data,
+            scale=len(known_tasks),
+            tasks={task_id: data.tasks[task_id] for task_id in known_tasks},
+        )
+        pricing_payload, candidates = price_direct_journey_columns(
+            restricted_data,
+            JourneyDuals(cover={}),
+            negative_eps=1.0e-6,
+            max_direct_tasks=len(known_tasks),
+            allow_partial=False,
+            max_candidate_sets=1,
+            wall_time_limit_sec=remaining,
+            completion_bound_enabled=False,
+            branch_context=branch_context,
+        )
+        rebuilt = []
+        required = frozenset(known_tasks)
+        for candidate in candidates:
+            if frozenset(candidate.task_set) != required:
+                continue
+            column = build_journey_column(data, candidate.sorties)
+            if journey_satisfies_branch_context(column, branch_context):
+                rebuilt.append(column)
+        if rebuilt:
+            best = min(rebuilt, key=lambda column: (column.objective, column.end_time))
+            columns.append(best)
+        component_rows.append(
+            {
+                "tasks": list(component),
+                "status": pricing_payload.get("status"),
+                "column_count": int(bool(rebuilt)),
+                "candidate_count": len(candidates),
+            }
+        )
+
+    return tuple(columns), {
+        "status": (
+            "SAME_JOURNEY_SEEDS_READY"
+            if columns
+            else "NO_SAME_JOURNEY_SEED_REQUIRED"
+            if not normalized_components
+            else "SAME_JOURNEY_SEED_INCOMPLETE"
+        ),
+        "component_count": len(normalized_components),
+        "seed_column_count": len(columns),
+        "structural_conflict_count": len(structurally_conflicting),
+        "components": component_rows,
+        "wall_time_sec": round(perf_counter() - started_at, 6),
+        "certificate_role": "starting_basis_only",
+    }
 
 
 def _load_columns_for_node(

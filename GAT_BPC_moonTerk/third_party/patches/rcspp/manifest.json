@@ -1,0 +1,8 @@
+{
+  "schema_version": "lunar_ice_bpc.rcspp_patch_queue.v1",
+  "upstream_repository": "https://github.com/lab-core/rcspp.git",
+  "upstream_commit": "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79",
+  "patches": [],
+  "fork_required": false,
+  "decision": "Project-local resource extension and exact-mode parameters are sufficient for v1."
+}

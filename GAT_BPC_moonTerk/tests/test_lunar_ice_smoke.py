@@ -13616,6 +13616,35 @@ class LunarIceSmokeTests(unittest.TestCase):
         changed_large_worker = dict(config)
         changed_large_worker["large_task_direct_worker_max_tasks"] = 10
         self.assertNotEqual(first_hash, module._config_hash(changed_large_worker))
+        with patch.dict(
+            os.environ,
+            {
+                "LUNAR_ICE_SPPRC_EXACT_BACKEND": "native_rcspp_inprocess",
+                "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB": "8.0",
+                "LUNAR_ICE_SPPRC_GRAPH_CACHE_ENTRIES": "1",
+                "LUNAR_ICE_SPPRC_COMPLETION_BOUND": "0",
+                "LUNAR_ICE_SPPRC_SUBSET_DOMINANCE": "1",
+                "LUNAR_ICE_SPPRC_CUT_STATE": "0",
+                "LUNAR_ICE_LABELING_WORKER_NG_SIZES": "6,10,14,20",
+                "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST": "1",
+            },
+            clear=False,
+        ):
+            native_config = module._official_config(args)
+        binding = native_config["native_runtime_binding"]
+        self.assertEqual(binding["exact_backend"], "native_rcspp_inprocess")
+        self.assertTrue(binding["subset_dominance_enabled"])
+        self.assertFalse(binding["completion_bound_enabled"])
+        self.assertEqual(binding["worker_ng_sizes"], [6, 10, 14, 20])
+        self.assertTrue(binding["engine_build_hash"])
+        self.assertNotEqual(first_hash, module._config_hash(native_config))
+        without_subset = dict(native_config)
+        without_subset["native_runtime_binding"] = dict(binding)
+        without_subset["native_runtime_binding"]["subset_dominance_enabled"] = False
+        self.assertNotEqual(
+            module._config_hash(native_config),
+            module._config_hash(without_subset),
+        )
         changed_partition_order = dict(config)
         changed_partition_order["partition_k_order"] = "ascending"
         self.assertNotEqual(first_hash, module._config_hash(changed_partition_order))

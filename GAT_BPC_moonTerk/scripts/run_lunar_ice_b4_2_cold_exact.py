@@ -38,6 +38,7 @@ from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     RELAXED_NG_ROUTE_MODE,
     LabelingPricingConfig,
 )
+from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_engine_build_hash
 from lunar_ice_bpc.exact.solver.gurobi_compact import _safe_sortie_slot_bound
 from lunar_ice_bpc.io.instance_io import read_json
 import run_lunar_ice_compact_pricing_staged_resume as staged_resume
@@ -388,8 +389,36 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _official_config(args: argparse.Namespace) -> dict:
+    exact_backend = str(os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", "python_reference"))
+    native_runtime_binding = {
+        "exact_backend": exact_backend,
+        "engine_build_hash": spprc_engine_build_hash(exact_backend),
+        "memory_limit_gb": float(
+            os.getenv("LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB", "0") or 0.0
+        ),
+        "graph_cache_entries": int(
+            os.getenv("LUNAR_ICE_SPPRC_GRAPH_CACHE_ENTRIES", "1") or 1
+        ),
+        "completion_bound_enabled": _environment_flag(
+            "LUNAR_ICE_SPPRC_COMPLETION_BOUND"
+        ),
+        "subset_dominance_enabled": _environment_flag(
+            "LUNAR_ICE_SPPRC_SUBSET_DOMINANCE"
+        ),
+        "cut_state_enabled": _environment_flag("LUNAR_ICE_SPPRC_CUT_STATE"),
+        "worker_ng_sizes": [
+            int(value)
+            for value in str(
+                os.getenv("LUNAR_ICE_LABELING_WORKER_NG_SIZES", "")
+            ).split(",")
+            if value.strip()
+        ],
+        "exact_final_judge_first": _environment_flag(
+            "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST"
+        ),
+    }
     return {
-        "schema_version": "lunar_ice_bpc.b4_2_cold_exact_config.v1",
+        "schema_version": "lunar_ice_bpc.b4_2_cold_exact_config.v2",
         "model_id": str(args.model_id),
         "official_objective": "normalized_cost + normalized_risk + 0.4 * normalized_weighted_completion",
         "makespan_scope": "metric_only",
@@ -406,6 +435,7 @@ def _official_config(args: argparse.Namespace) -> dict:
         "profile": str(args.profile),
         "seed_mode": str(args.seed_mode),
         "root_engine": str(args.root_engine),
+        "native_runtime_binding": native_runtime_binding,
         "worker_pricer_kind": str(args.worker_pricer_kind),
         "labeling_worker_max_task_cap": int(args.labeling_worker_max_task_cap),
         "tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
@@ -487,6 +517,10 @@ def _official_config(args: argparse.Namespace) -> dict:
         "live_master_cuts": False,
         "partition_ledger_official": bool(args.root_partition_proof),
     }
+
+
+def _environment_flag(name: str) -> bool:
+    return str(os.getenv(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _config_hash(config: dict) -> str:
@@ -1195,15 +1229,55 @@ def _run_tree_closure(
     env = _solver_env(args)
     env["LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE"] = "proof_only"
     started = perf_counter()
-    completed = subprocess.run(
-        command,
-        cwd=str(ROOT),
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=max(10.0, float(time_limit_sec) + 5.0),
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(ROOT),
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=max(10.0, float(time_limit_sec) + 5.0),
+        )
+    except subprocess.TimeoutExpired as exc:
+        wall = perf_counter() - started
+        stdout = _timeout_stream_to_text(exc.stdout)
+        stderr = _timeout_stream_to_text(exc.stderr)
+        (output_dir / "b4_2_tree_stdout.txt").write_text(stdout, encoding="utf-8")
+        (output_dir / "b4_2_tree_stderr.txt").write_text(stderr, encoding="utf-8")
+        return {
+            "algorithm_status": "BPC_INCOMPLETE_PRICING",
+            "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+            "pricing_state": "INCOMPLETE_LIMIT",
+            "exact_certificate": False,
+            "bpc_tree_optimal": False,
+            "under_300": False,
+            "under_acceptance_limit": False,
+            "under_500": False,
+            "tree_sec": round(wall, 6),
+            "pricing_proof_sec": None,
+            "tree_closure_worker_pricer_kind": str(args.worker_pricer_kind),
+            "tree_closure_tail_dual_stabilization_enabled": bool(
+                args.tail_dual_stabilization_enabled
+            ),
+            "tree_closure_labeling_final_judge_mode": str(
+                args.labeling_final_judge_mode
+            ),
+            "tree_closure_labeling_final_judge_max_exact_tasks": int(
+                args.labeling_final_judge_max_exact_tasks
+            ),
+            "tree_closure_labeling_final_judge_exact_harvest_target": int(
+                args.labeling_final_judge_exact_harvest_target
+            ),
+            "tree_result_json": "",
+            "tree_subprocess_timeout": True,
+            "tree_subprocess_partial_stdout_present": bool(stdout),
+            "tree_subprocess_partial_stderr_present": bool(stderr),
+            "fail_reason": (
+                "tree closure subprocess reached its inherited row deadline; "
+                "partial proof state was discarded and no certificate was issued"
+            ),
+        }
     wall = perf_counter() - started
     (output_dir / "b4_2_tree_stdout.txt").write_text(completed.stdout, encoding="utf-8")
     (output_dir / "b4_2_tree_stderr.txt").write_text(completed.stderr, encoding="utf-8")
