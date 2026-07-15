@@ -216,6 +216,16 @@ class NativeSpprcBackendTests(unittest.TestCase):
                         accelerated.telemetry["subset_dominance_candidate_checks"],
                         accelerated.telemetry["subset_dominance_rejected_labels"],
                     )
+                    self.assertGreaterEqual(
+                        accelerated.telemetry["subset_dominance_key_lookups"],
+                        accelerated.telemetry["subset_dominance_nonempty_buckets"],
+                    )
+                    self.assertGreaterEqual(
+                        accelerated.telemetry["subset_dominance_nonempty_buckets"],
+                        accelerated.telemetry[
+                            "subset_dominance_summary_skipped_buckets"
+                        ],
+                    )
 
         for duals in (
             JourneyDuals(cover={}),
@@ -679,6 +689,48 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertIsNone(result.proved_no_rc_below)
         self.assertFalse(result.can_enter_certificate_audit)
 
+    def test_failed_route_audit_blocks_exact_global_min_semantics(self) -> None:
+        import lunar_spprc_native
+        from lunar_ice_bpc.exact.bpc.pricing.backends.native_rcspp import (
+            _native_request_payload,
+        )
+
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={task_id: 10.0 for task_id in self.data.task_ids}
+            ),
+        )
+        raw = dict(lunar_spprc_native.solve(_native_request_payload(request)))
+        self.assertTrue(raw["routes"])
+        raw["routes"] = [
+            raw["routes"][0],
+            {
+                "reduced_cost": -999.0,
+                "sorties": [{"tasks": [], "path_types": []}],
+            },
+        ]
+        raw.update(
+            {
+                "status": "COMPLETE",
+                "search_exhaustive": True,
+                "frontier_empty": True,
+                "labels_dropped": False,
+            }
+        )
+
+        with patch("lunar_spprc_native.solve", return_value=raw):
+            result = NativeRcsppInprocessBackend().solve(request)
+
+        self.assertIsNotNone(result.best_found_rc)
+        self.assertIsNone(result.global_min_rc)
+        self.assertFalse(result.global_min_rc_is_exact)
+        self.assertIn(
+            "native_route_reconstruction_failed",
+            result.certificate_blockers,
+        )
+        self.assertFalse(result.can_enter_certificate_audit)
+
     def test_incomplete_exact_search_keeps_audited_negative_columns_without_rc_redline(self) -> None:
         import lunar_spprc_native
         from lunar_ice_bpc.exact.bpc.pricing.backends.native_rcspp import (
@@ -736,15 +788,20 @@ class NativeSpprcBackendTests(unittest.TestCase):
 
         config = LabelingPricingConfig(mode=EXACT_ELEMENTARY_MODE, max_exact_tasks=5)
         duals = JourneyDuals(cover={})
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("LUNAR_ICE_SPPRC_EXACT_BACKEND", None)
+        with patch.dict(
+            os.environ,
+            {"LUNAR_ICE_SPPRC_EXACT_BACKEND": "python_reference"},
+        ):
             os.environ.pop("LUNAR_ICE_SPPRC_SHADOW_BACKEND", None)
             official_payload, official_columns = run_bpc_labeling_pricer(
                 self.data, duals, config=config
             )
         with patch.dict(
             os.environ,
-            {"LUNAR_ICE_SPPRC_SHADOW_BACKEND": "native_rcspp_inprocess"},
+            {
+                "LUNAR_ICE_SPPRC_EXACT_BACKEND": "python_reference",
+                "LUNAR_ICE_SPPRC_SHADOW_BACKEND": "native_rcspp_inprocess",
+            },
         ):
             shadow_payload, shadow_columns = run_bpc_labeling_pricer(
                 self.data, duals, config=config
@@ -755,6 +812,81 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertEqual(shadow_columns, official_columns)
         self.assertTrue(shadow_payload["native_shadow_enabled"])
         self.assertFalse(shadow_payload["native_shadow_mutates_official_result"])
+
+    def test_default_native_backend_and_explicit_python_rollback_match(self) -> None:
+        from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+            EXACT_ELEMENTARY_MODE,
+            LabelingPricingConfig,
+            run_bpc_labeling_pricer,
+        )
+
+        config = LabelingPricingConfig(mode=EXACT_ELEMENTARY_MODE, max_exact_tasks=5)
+        duals = JourneyDuals(cover={})
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("LUNAR_ICE_SPPRC_EXACT_BACKEND", None)
+            default_payload, default_columns = run_bpc_labeling_pricer(
+                self.data, duals, config=config
+            )
+        with patch.dict(
+            os.environ,
+            {"LUNAR_ICE_SPPRC_EXACT_BACKEND": "python_reference"},
+        ):
+            rollback_payload, rollback_columns = run_bpc_labeling_pricer(
+                self.data, duals, config=config
+            )
+
+        self.assertEqual(default_payload["native_backend_id"], "native_rcspp_inprocess")
+        self.assertTrue(default_payload["can_certify_no_negative"])
+        self.assertTrue(rollback_payload["can_certify_no_negative"])
+        self.assertNotIn("native_backend_result", rollback_payload)
+        self.assertEqual(default_payload["pricing_state"], rollback_payload["pricing_state"])
+        default_negative = {
+            frozenset(column.task_set)
+            for column in default_columns
+            if manual_journey_reduced_cost(column, duals) < -1.0e-6
+        }
+        rollback_negative = {
+            frozenset(column.task_set)
+            for column in rollback_columns
+            if manual_journey_reduced_cost(column, duals) < -1.0e-6
+        }
+        self.assertEqual(default_negative, rollback_negative)
+        self.assertFalse(default_negative)
+
+    def test_unsupported_native_cut_falls_back_to_python_fail_closed_safe(self) -> None:
+        from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+            EXACT_ELEMENTARY_MODE,
+            LabelingPricingConfig,
+            run_bpc_labeling_pricer,
+        )
+
+        cut_context = CutContext(
+            cuts=(subset_row_cut("fallback-sri", self.data.task_ids[:3]),)
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "LUNAR_ICE_SPPRC_EXACT_BACKEND": "native_rcspp_inprocess",
+                "LUNAR_ICE_SPPRC_CUT_STATE": "0",
+            },
+        ):
+            payload, _ = run_bpc_labeling_pricer(
+                self.data,
+                JourneyDuals(cover={}),
+                config=LabelingPricingConfig(
+                    mode=EXACT_ELEMENTARY_MODE,
+                    max_exact_tasks=5,
+                ),
+                cut_context=cut_context,
+            )
+
+        self.assertTrue(payload["native_backend_fallback_to_python"])
+        self.assertEqual(payload["native_backend_fallback_status"], "UNSUPPORTED_FEATURE")
+        self.assertIn(
+            "native_nonempty_cut_context_not_promoted",
+            payload["native_backend_fallback_blockers"],
+        )
+        self.assertTrue(payload["can_certify_no_negative"])
 
     def test_facade_uses_native_for_nonempty_branch(self) -> None:
         branch = BranchContext(
@@ -955,7 +1087,14 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
         self.assertEqual(profiles[3].tree_max_branch_depth, 12)
 
     def test_acceptance_runner_dry_run_parameterizes_available_scales(self) -> None:
-        from lunar_ice_bpc.runners.native_spprc_acceptance import run_native_spprc_acceptance
+        from lunar_ice_bpc.runners.native_spprc_acceptance import (
+            _acceptance_metrics,
+            _adaptive_harvest_cap_for_scale,
+            _engine_binding_audit,
+            _final_judge_pass_policy_for_scale,
+            _profile_gate_metrics,
+            run_native_spprc_acceptance,
+        )
 
         project_root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as directory:
@@ -970,6 +1109,8 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
 
         by_scale = {row["scale"]: row for row in summary["rows"]}
         self.assertEqual(by_scale[5]["status"], "DRY_RUN")
+        self.assertEqual(by_scale[5]["final_judge_pass_policy"], "harvest_then_proof")
+        self.assertIsNone(by_scale[5]["adaptive_harvest_cap_sec"])
         self.assertIn("--labeling-worker-max-task-cap", by_scale[30]["command"])
         depth_index = by_scale[30]["command"].index("--tree-closure-max-branch-depth")
         self.assertEqual(by_scale[30]["command"][depth_index + 1], "12")
@@ -977,6 +1118,97 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
             by_scale[50]["status"],
             "DRY_RUN" if by_scale[50]["instance_count"] else "NO_INSTANCES_AVAILABLE",
         )
+        configured = {
+            "native_final_judge_pass_policy": "harvest_then_proof",
+            "native_final_judge_pass_policy_by_scale": {
+                "30": "branch_adaptive_sparse_harvest_v1"
+            },
+            "native_adaptive_harvest_cap_sec_by_scale": {"30": 2.0},
+        }
+        self.assertEqual(
+            _final_judge_pass_policy_for_scale(configured, 20),
+            "harvest_then_proof",
+        )
+        self.assertEqual(
+            _final_judge_pass_policy_for_scale(configured, 30),
+            "branch_adaptive_sparse_harvest_v1",
+        )
+        self.assertIsNone(_adaptive_harvest_cap_for_scale(configured, 20))
+        self.assertEqual(_adaptive_harvest_cap_for_scale(configured, 30), 2.0)
+        for invalid in (0, -1, float("nan"), float("inf"), "invalid"):
+            with self.subTest(invalid_cap=invalid):
+                with self.assertRaises(ValueError):
+                    _adaptive_harvest_cap_for_scale(
+                        {"native_adaptive_harvest_cap_sec_by_scale": {"30": invalid}},
+                        30,
+                    )
+        binding = _engine_binding_audit(
+            expected_hash="engine-a",
+            end_hash="engine-a",
+            b42_summary={
+                "config": {
+                    "native_runtime_binding": {"engine_build_hash": "engine-a"}
+                }
+            },
+        )
+        self.assertTrue(binding["valid"])
+
+        profile = native_spprc_scale_profile(30)
+        state = {
+            "rows": [
+                {
+                    "algorithm_status": "BPC_OPTIMAL",
+                    "bpc_tree_optimal": True,
+                    "no_cheat_pass": True,
+                    "cold_start_total_sec": float(100 + index),
+                }
+                for index in range(20)
+            ]
+        }
+        profile_gate = _profile_gate_metrics(
+            profile,
+            b42_state=state,
+            expected_count=20,
+        )
+        self.assertTrue(profile_gate["all_exact"])
+        self.assertTrue(profile_gate["all_no_cheat"])
+        self.assertTrue(profile_gate["all_under_profile_time_limit"])
+        self.assertEqual(profile_gate["p50_cold_start_total_sec"], 109.5)
+        acceptance = _acceptance_metrics(
+            [
+                {
+                    "scale": 30,
+                    "instance_count": 20,
+                    "status": "EXACT_CLOSED",
+                    "profile_gate": profile_gate,
+                    "redlines_zero": True,
+                    "engine_binding": {"valid": True},
+                }
+            ]
+        )
+        self.assertTrue(acceptance["scale30_full20_exact"])
+        self.assertTrue(acceptance["scale30_all_under_1800"])
+        self.assertTrue(acceptance["scale30_phase11_release_gate"])
+
+    def test_acceptance_engine_binding_detects_mid_run_source_drift(self) -> None:
+        from lunar_ice_bpc.runners.native_spprc_acceptance import (
+            _engine_binding_audit,
+        )
+
+        binding = _engine_binding_audit(
+            expected_hash="engine-at-start",
+            end_hash="engine-after-edit",
+            b42_summary={
+                "config": {
+                    "native_runtime_binding": {
+                        "engine_build_hash": "engine-at-start"
+                    }
+                }
+            },
+        )
+
+        self.assertFalse(binding["valid"])
+        self.assertIn("engine_build_hash_changed_during_run", binding["issues"])
 
     def test_tree_subprocess_timeout_is_a_legal_fail_closed_row(self) -> None:
         project_root = Path(__file__).resolve().parents[2]

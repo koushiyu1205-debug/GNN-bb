@@ -20,6 +20,33 @@ PATH_STYLE = {
     "low_risk": {"color": "#ffb84c", "lw": 0.70, "alpha": 0.30},
 }
 
+BASEMAP_LAYER_STYLE = {
+    "elevation_m": {
+        "title": "DEM elevation",
+        "cmap": "terrain",
+        "colorbar": "elevation (m)",
+        "limits": None,
+    },
+    "risk_index": {
+        "title": "Deterministic traversal risk",
+        "cmap": "magma",
+        "colorbar": "risk index",
+        "limits": (0.0, 1.0),
+    },
+    "resource_index": {
+        "title": "Water-ice resource potential",
+        "cmap": "cividis_r",
+        "colorbar": "resource index",
+        "limits": (0.0, 1.0),
+    },
+    "illumination_index": {
+        "title": "Average solar visibility",
+        "cmap": "gray",
+        "colorbar": "illumination index",
+        "limits": (0.0, 1.0),
+    },
+}
+
 
 def configure_scientific_style() -> None:
     mpl.rcParams.update(
@@ -39,6 +66,150 @@ def configure_scientific_style() -> None:
             "ps.fonttype": 42,
         }
     )
+
+
+def draw_real_map_basemaps(
+    preview_path: str | Path,
+    output_dir: str | Path,
+    *,
+    prefix: str | None = None,
+) -> dict[str, Path]:
+    """Draw publication-style base maps without task, graph, or route overlays."""
+    preview = read_json(preview_path)
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    configure_scientific_style()
+
+    roi = preview.get("roi") or {}
+    extent_km = float(roi.get("extent_km", 0.0))
+    if extent_km <= 0.0:
+        raise ValueError("preview ROI must define a positive extent_km")
+    layers = preview.get("preview_layers") or {}
+    available = _available_basemap_layers(layers)
+    if not available:
+        raise ValueError("preview does not contain any supported base-map layers")
+
+    stem = prefix or Path(preview_path).stem
+    title_prefix = f"Lunar south-pole {extent_km:g} km x {extent_km:g} km"
+    extent = (0.0, extent_km, 0.0, extent_km)
+    written: dict[str, Path] = {}
+
+    columns = 2 if len(available) > 1 else 1
+    rows = (len(available) + columns - 1) // columns
+    fig, axes = plt.subplots(
+        rows,
+        columns,
+        figsize=(10.2, 4.4 * rows),
+        constrained_layout=True,
+        squeeze=False,
+    )
+    flat_axes = list(axes.flat)
+    for ax, layer_name in zip(flat_axes, available):
+        image = _draw_preview_layer(ax, layers[layer_name], extent, layer_name)
+        _format_preview_axes(ax, BASEMAP_LAYER_STYLE[layer_name]["title"], extent_km)
+        _add_scale_bar(ax, extent)
+        cbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.03)
+        cbar.set_label(BASEMAP_LAYER_STYLE[layer_name]["colorbar"])
+    for ax in flat_axes[len(available) :]:
+        ax.set_visible(False)
+    fig.suptitle(f"{title_prefix} real-raster terrain atlas", fontsize=11)
+    atlas_path = output / f"{stem}_terrain_atlas.png"
+    _save_png_pdf(fig, atlas_path)
+    written["terrain_atlas_png"] = atlas_path
+    written["terrain_atlas_pdf"] = atlas_path.with_suffix(".pdf")
+
+    for layer_name in available:
+        style = BASEMAP_LAYER_STYLE[layer_name]
+        fig, ax = plt.subplots(figsize=(8.2, 7.4), constrained_layout=True)
+        image = _draw_preview_layer(ax, layers[layer_name], extent, layer_name)
+        _format_preview_axes(ax, f"{title_prefix} {style['title'].lower()}", extent_km)
+        _add_scale_bar(ax, extent)
+        cbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.03)
+        cbar.set_label(style["colorbar"])
+        suffix = {
+            "elevation_m": "dem_basemap",
+            "risk_index": "risk_basemap",
+            "resource_index": "resource_basemap",
+            "illumination_index": "illumination_basemap",
+        }[layer_name]
+        layer_path = output / f"{stem}_{suffix}.png"
+        _save_png_pdf(fig, layer_path)
+        written[f"{suffix}_png"] = layer_path
+        written[f"{suffix}_pdf"] = layer_path.with_suffix(".pdf")
+    return written
+
+
+def draw_task_site_map(
+    instance_path: str | Path,
+    output_path: str | Path,
+    *,
+    preview_path: str | Path | None = None,
+    label_tasks: bool = False,
+) -> Path:
+    """Draw task sites and the depot over the water-ice resource base map."""
+    instance = read_json(instance_path)
+    preview = read_json(preview_path) if preview_path else None
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    configure_scientific_style()
+
+    extent = _extent(instance)
+    extent_km = extent[1] - extent[0]
+    resource = _resource_preview_matrix(instance, preview)
+    tasks = list((instance.get("tasks") or {}).values())
+    if not tasks:
+        raise ValueError("instance does not contain any tasks")
+
+    fig, ax = plt.subplots(figsize=(8.2, 7.4), constrained_layout=True)
+    image = _draw_preview_layer(ax, resource, extent, "resource_index")
+    ax.scatter(
+        [float(task["xy_km"][0]) for task in tasks],
+        [float(task["xy_km"][1]) for task in tasks],
+        s=34,
+        c="#f6e85f",
+        edgecolors="black",
+        linewidths=0.48,
+        marker="o",
+        label=f"task sites (n={len(tasks)})",
+        zorder=6,
+    )
+    depot = instance["depot"]
+    depot_xy = depot["xy_km"]
+    ax.scatter(
+        [float(depot_xy[0])],
+        [float(depot_xy[1])],
+        s=125,
+        c="#53d7a3",
+        edgecolors="black",
+        linewidths=0.9,
+        marker="*",
+        label="depot",
+        zorder=8,
+    )
+    if label_tasks:
+        for task in tasks:
+            task_id = str(task.get("id", ""))
+            ax.text(
+                float(task["xy_km"][0]) + 0.18,
+                float(task["xy_km"][1]) + 0.18,
+                task_id.rsplit("_", 1)[-1],
+                fontsize=6.5,
+                color="white",
+                bbox={"facecolor": "black", "alpha": 0.45, "edgecolor": "none", "pad": 0.9},
+                zorder=9,
+            )
+    seed = instance.get("seed", "unknown")
+    _format_preview_axes(
+        ax,
+        f"Lunar south-pole {len(tasks)}-task operational instance, seed={seed}",
+        extent_km,
+    )
+    _add_scale_bar(ax, extent)
+    ax.legend(loc="upper right", frameon=True, framealpha=0.88)
+    cbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.03)
+    cbar.set_label("resource index")
+    _save_png_pdf(fig, output)
+    return output
 
 
 def draw_logical_task_graph(
@@ -161,6 +332,55 @@ def _draw_resource_background(
         vmin=0.0,
         vmax=1.0,
     )
+
+
+def _available_basemap_layers(layers: dict[str, Any]) -> list[str]:
+    order = ("elevation_m", "risk_index", "resource_index", "illumination_index")
+    available: list[str] = []
+    expected_shape: tuple[int, int] | None = None
+    for name in order:
+        matrix = np.asarray(layers.get(name, []), dtype="float64")
+        if matrix.ndim != 2 or matrix.size == 0:
+            continue
+        if expected_shape is None:
+            expected_shape = matrix.shape
+        elif matrix.shape != expected_shape:
+            raise ValueError(
+                f"base-map layer {name} has shape {matrix.shape}, expected {expected_shape}"
+            )
+        available.append(name)
+    return available
+
+
+def _draw_preview_layer(
+    ax: plt.Axes,
+    values: Any,
+    extent: tuple[float, float, float, float],
+    layer_name: str,
+) -> mpl.image.AxesImage:
+    style = BASEMAP_LAYER_STYLE[layer_name]
+    matrix = np.asarray(values, dtype="float64")
+    limits = style["limits"]
+    vmin, vmax = limits if limits is not None else (None, None)
+    return ax.imshow(
+        np.flipud(np.ma.masked_invalid(matrix)),
+        extent=extent,
+        origin="lower",
+        cmap=style["cmap"],
+        interpolation="nearest",
+        vmin=vmin,
+        vmax=vmax,
+    )
+
+
+def _format_preview_axes(ax: plt.Axes, title: str, extent_km: float) -> None:
+    ax.set_title(title)
+    ax.set_xlabel("east-west distance (km)")
+    ax.set_ylabel("south-north distance (km)")
+    ax.set_xlim(0.0, extent_km)
+    ax.set_ylim(0.0, extent_km)
+    ax.set_aspect("equal")
+    ax.grid(color="white", alpha=0.12, linewidth=0.4)
 
 
 def _resource_preview_matrix(instance: dict[str, Any], preview: dict[str, Any] | None) -> np.ndarray:

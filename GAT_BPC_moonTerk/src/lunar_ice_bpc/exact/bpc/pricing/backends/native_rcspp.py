@@ -724,7 +724,16 @@ def _audit_native_result(
         columns = [row[1] for row in selected]
 
     best_found = min(audited_rcs) if audited_rcs else None
-    global_min = best_found if exhaustive and best_found is not None else None
+    # Exhausting the native frontier is not sufficient to claim an exact
+    # global value when any returned route failed reconstruction/RC audit (or
+    # the engine supplied another certificate blocker).  The accepted
+    # negatives remain useful as best-found columns, but the global-min field
+    # must fail closed independently of the certificate gate.
+    global_min = (
+        best_found
+        if exhaustive and best_found is not None and not blockers
+        else None
+    )
     proved_threshold = (
         -request.negative_eps
         if exhaustive and frontier_empty and not audited_rcs and not blockers

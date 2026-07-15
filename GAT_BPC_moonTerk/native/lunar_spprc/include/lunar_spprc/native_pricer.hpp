@@ -120,6 +120,9 @@ struct Telemetry {
     std::size_t graph_cache_hit_count = 0;
     std::size_t completion_bound_evaluated_labels = 0;
     std::size_t completion_bound_pruned_labels = 0;
+    std::size_t subset_dominance_key_lookups = 0;
+    std::size_t subset_dominance_nonempty_buckets = 0;
+    std::size_t subset_dominance_summary_skipped_buckets = 0;
     std::size_t subset_dominance_candidate_checks = 0;
     std::size_t subset_dominance_rejected_labels = 0;
     double extension_wall_time_seconds = 0.0;

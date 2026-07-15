@@ -1,6 +1,7 @@
 #include "lunar_spprc/native_pricer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <bit>
 #include <chrono>
@@ -20,6 +21,12 @@
 namespace lunar_spprc {
 namespace {
 
+// Native v1 accepts at most 100 tasks, so the elementary visited set always
+// fits in two machine words.  Keep it inline in every label: State is copied on
+// each arc extension, and a heap-backed vector here would turn the hottest
+// exact-search operation into an allocation/copy/deallocation cycle.
+using VisitedMask = std::array<std::uint64_t, 2>;
+
 struct Action {
     ActionKind kind = ActionKind::Terminate;
     std::size_t task_index = 0;
@@ -34,7 +41,7 @@ struct Action {
 struct State {
     bool valid = true;
     bool at_depot = true;
-    std::vector<std::uint64_t> visited;
+    VisitedMask visited{};
     std::size_t visited_count = 0;
     std::size_t sortie_task_count = 0;
     std::size_t sortie_count = 0;
@@ -91,9 +98,6 @@ bool visited(const State& state, std::size_t task_index) {
 }
 
 bool visited_subset(const State& lhs, const State& rhs) {
-    if (lhs.visited.size() != rhs.visited.size()) {
-        return false;
-    }
     for (std::size_t index = 0; index < lhs.visited.size(); ++index) {
         if ((lhs.visited[index] & ~rhs.visited[index]) != 0U) {
             return false;
@@ -152,9 +156,6 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         const auto& current_value = resource.get_value();
         const auto& action_value = extender.get_value();
         State next = current_value.state;
-        if (next.visited.empty()) {
-            next.visited.assign((model_->tasks.size() + 63U) / 64U, 0U);
-        }
         if (next.cut_overlap_counts.empty() && !model_->cuts.empty()) {
             next.cut_overlap_counts.assign(model_->cuts.size(), 0U);
         }
@@ -424,7 +425,7 @@ class JourneyDominance final : public rcspp::DominanceFunction<JourneyResource> 
 using Composition = rcspp::ResourceTypeComposition<JourneyResource, rcspp::RealResource>;
 
 struct VisitedKeyHash {
-    std::size_t operator()(const std::vector<std::uint64_t>& value) const noexcept {
+    std::size_t operator()(const VisitedMask& value) const noexcept {
         std::size_t seed = value.size();
         for (const auto word : value) {
             seed ^= std::hash<std::uint64_t>{}(word) + 0x9e3779b97f4a7c15ULL +
@@ -438,22 +439,29 @@ class VisitedLabelList {
   public:
     using Label = rcspp::Label<Composition>;
     using LabelPosition = std::list<Label*>::iterator;
-    using VisitedKey = std::vector<std::uint64_t>;
+    using VisitedKey = VisitedMask;
 
     explicit VisitedLabelList(std::shared_ptr<const Model> model = nullptr,
-                              std::size_t subset_enumeration_limit = 10)
+                              std::size_t subset_enumeration_limit = 10,
+                              double dominance_epsilon = 1.0e-12,
+                              double resource_epsilon = 1.0e-9)
         : model_(std::move(model)),
-          subset_enumeration_limit_(subset_enumeration_limit) {}
+          subset_enumeration_limit_(subset_enumeration_limit),
+          dominance_epsilon_(dominance_epsilon),
+          resource_epsilon_(resource_epsilon) {}
     // AlgorithmParams only copies the empty prototype container. Runtime
     // containers are created through copy(), so iterator-bearing state is
     // never copied.
     VisitedLabelList(const VisitedLabelList& other)
         : model_(other.model_),
-          subset_enumeration_limit_(other.subset_enumeration_limit_) {}
+          subset_enumeration_limit_(other.subset_enumeration_limit_),
+          dominance_epsilon_(other.dominance_epsilon_),
+          resource_epsilon_(other.resource_epsilon_) {}
     VisitedLabelList& operator=(const VisitedLabelList&) = delete;
 
     [[nodiscard]] VisitedLabelList copy() const {
-        return VisitedLabelList{model_, subset_enumeration_limit_};
+        return VisitedLabelList{model_, subset_enumeration_limit_, dominance_epsilon_,
+                                resource_epsilon_};
     }
 
     [[nodiscard]] const std::list<Label*>& get_labels() const { return labels_; }
@@ -462,13 +470,14 @@ class VisitedLabelList {
         auto position = labels_.insert(labels_.end(), label);
         auto key = visited_key(*label);
         auto& bucket = buckets_[key];
-        const auto bucket_index = bucket.size();
-        bucket.push_back(label);
+        const auto bucket_index = bucket.labels.size();
+        bucket.labels.push_back(label);
+        update_summary(&bucket, *label);
         locations_.emplace(label,
                            Location{.key = std::move(key),
                                     .bucket_index = bucket_index,
                                     .position = position});
-        max_bucket_size_ = std::max(max_bucket_size_, bucket.size());
+        max_bucket_size_ = std::max(max_bucket_size_, bucket.labels.size());
         return position;
     }
 
@@ -485,8 +494,8 @@ class VisitedLabelList {
         }
         std::size_t removed = 0;
         std::size_t index = 0;
-        while (bucket_it != buckets_.end() && index < bucket_it->second.size()) {
-            Label* candidate = bucket_it->second[index];
+        while (bucket_it != buckets_.end() && index < bucket_it->second.labels.size()) {
+            Label* candidate = bucket_it->second.labels[index];
             if (&label == candidate) {
                 ++index;
                 continue;
@@ -507,7 +516,7 @@ class VisitedLabelList {
     [[nodiscard]] bool is_dominated(const Label& label) const {
         const auto bucket_it = buckets_.find(visited_key(label));
         if (bucket_it != buckets_.end()) {
-            for (const auto* candidate : bucket_it->second) {
+            for (const auto* candidate : bucket_it->second.labels) {
                 if (&label == candidate) {
                     continue;
                 }
@@ -536,23 +545,42 @@ class VisitedLabelList {
             }
         }
         const std::size_t subset_count = std::size_t{1} << set_bits.size();
-        for (std::size_t mask = 1; mask + 1 < subset_count; ++mask) {
-            VisitedKey key(rhs.visited.size(), 0U);
-            for (std::size_t index = 0; index < set_bits.size(); ++index) {
-                if (((mask >> index) & 1U) == 0U) {
-                    continue;
-                }
-                const auto task_index = set_bits[index];
-                key[task_index / 64U] |= std::uint64_t{1} << (task_index % 64U);
+        const std::size_t full_mask = subset_count - 1U;
+        VisitedKey key{};
+        std::size_t previous_gray = 0U;
+        for (std::size_t ordinal = 1; ordinal < subset_count; ++ordinal) {
+            const std::size_t gray = ordinal ^ (ordinal >> 1U);
+            const std::size_t changed = gray ^ previous_gray;
+            const auto changed_index = static_cast<std::size_t>(std::countr_zero(changed));
+            const auto task_index = set_bits[changed_index];
+            const auto word = task_index / 64U;
+            const auto bit = task_index % 64U;
+            key[word] ^= std::uint64_t{1} << bit;
+            previous_gray = gray;
+            if (gray == full_mask) {
+                continue;
             }
+            ++subset_dominance_key_lookups_;
             const auto subset_bucket = buckets_.find(key);
             if (subset_bucket == buckets_.end()) {
                 continue;
             }
-            for (const auto* candidate : subset_bucket->second) {
+            ++subset_dominance_nonempty_buckets_;
+            const auto& bucket = subset_bucket->second;
+            if (!summary_can_contain_dominator(bucket, rhs)) {
+                ++subset_dominance_summary_skipped_buckets_;
+                continue;
+            }
+            // The bucket key already proves the proper-subset relation.  Same-journey
+            // compatibility depends only on the two visited masks, so audit it once per
+            // bucket instead of once per candidate label.
+            if (!branch_subset_dominance_compatible(*model_, state(*bucket.labels.front()), rhs)) {
+                continue;
+            }
+            for (const auto* candidate : bucket.labels) {
                 ++dominance_candidate_checks_;
                 ++subset_dominance_candidate_checks_;
-                if (*candidate <= label) {
+                if (known_subset_candidate_dominates(*candidate, label)) {
                     ++subset_dominance_rejected_labels_;
                     return true;
                 }
@@ -577,11 +605,30 @@ class VisitedLabelList {
     [[nodiscard]] std::size_t subset_dominance_candidate_checks() const {
         return subset_dominance_candidate_checks_;
     }
+    [[nodiscard]] std::size_t subset_dominance_key_lookups() const {
+        return subset_dominance_key_lookups_;
+    }
+    [[nodiscard]] std::size_t subset_dominance_nonempty_buckets() const {
+        return subset_dominance_nonempty_buckets_;
+    }
+    [[nodiscard]] std::size_t subset_dominance_summary_skipped_buckets() const {
+        return subset_dominance_summary_skipped_buckets_;
+    }
     [[nodiscard]] std::size_t subset_dominance_rejected_labels() const {
         return subset_dominance_rejected_labels_;
     }
 
   private:
+    struct Bucket {
+        std::vector<Label*> labels;
+        double min_global_time = std::numeric_limits<double>::infinity();
+        double min_sortie_demand = std::numeric_limits<double>::infinity();
+        double min_sortie_energy = std::numeric_limits<double>::infinity();
+        double min_sortie_shadow = std::numeric_limits<double>::infinity();
+        std::size_t min_sortie_task_count = std::numeric_limits<std::size_t>::max();
+        double min_reduced_cost = std::numeric_limits<double>::infinity();
+    };
+
     struct Location {
         VisitedKey key;
         std::size_t bucket_index = 0;
@@ -598,6 +645,61 @@ class VisitedLabelList {
 
     static VisitedKey visited_key(const Label& label) { return state(label).visited; }
 
+    void update_summary(Bucket* bucket, const Label& label) const {
+        const auto& value = state(label);
+        bucket->min_global_time = std::min(bucket->min_global_time, value.global_time);
+        bucket->min_sortie_demand = std::min(bucket->min_sortie_demand, value.sortie_demand);
+        bucket->min_sortie_energy = std::min(bucket->min_sortie_energy, value.sortie_energy);
+        bucket->min_sortie_shadow = std::min(bucket->min_sortie_shadow, value.sortie_shadow);
+        bucket->min_sortie_task_count =
+            std::min(bucket->min_sortie_task_count, value.sortie_task_count);
+        bucket->min_reduced_cost =
+            std::min(bucket->min_reduced_cost, reduced_cost(*model_, value));
+    }
+
+    [[nodiscard]] bool summary_can_contain_dominator(const Bucket& bucket,
+                                                     const State& rhs) const {
+        // These are independent optimistic minima.  A stale minimum after a label
+        // deletion can only admit an unnecessary bucket scan; it can never suppress
+        // a real dominator, so no exactness or certificate assumption is introduced.
+        return bucket.min_global_time <= rhs.global_time + resource_epsilon_ &&
+               bucket.min_sortie_demand <= rhs.sortie_demand + resource_epsilon_ &&
+               bucket.min_sortie_energy <= rhs.sortie_energy + resource_epsilon_ &&
+               bucket.min_sortie_shadow <= rhs.sortie_shadow + resource_epsilon_ &&
+               bucket.min_sortie_task_count <= rhs.sortie_task_count &&
+               bucket.min_reduced_cost <=
+                   reduced_cost(*model_, rhs) + dominance_epsilon_;
+    }
+
+    [[nodiscard]] bool known_subset_candidate_dominates(const Label& lhs_label,
+                                                         const Label& rhs_label) const {
+        const auto& lhs = state(lhs_label);
+        const auto& rhs = state(rhs_label);
+        if (!lhs.valid || !rhs.valid || lhs.at_depot != rhs.at_depot ||
+            lhs.cut_overlap_counts != rhs.cut_overlap_counts) {
+            return false;
+        }
+        if (lhs.global_time > rhs.global_time + resource_epsilon_ ||
+            lhs.sortie_demand > rhs.sortie_demand + resource_epsilon_ ||
+            lhs.sortie_energy > rhs.sortie_energy + resource_epsilon_ ||
+            lhs.sortie_shadow > rhs.sortie_shadow + resource_epsilon_ ||
+            lhs.sortie_task_count > rhs.sortie_task_count ||
+            reduced_cost(*model_, lhs) >
+                reduced_cost(*model_, rhs) + dominance_epsilon_) {
+            return false;
+        }
+        // The composed graph currently carries one auxiliary RealResource.  Mirror
+        // its component-wise dominance check explicitly so this hot-path shortcut
+        // remains equivalent to Label::operator<= if that resource becomes nonzero.
+        const auto& lhs_aux = lhs_label.get_resource()
+                                  .template get_component<rcspp::RealResource>(0)
+                                  .get_value();
+        const auto& rhs_aux = rhs_label.get_resource()
+                                  .template get_component<rcspp::RealResource>(0)
+                                  .get_value();
+        return lhs_aux.leq(rhs_aux);
+    }
+
     void remove_location(Label* label, bool erase_from_master) {
         const auto location_it = locations_.find(label);
         if (location_it == locations_.end()) {
@@ -609,15 +711,15 @@ class VisitedLabelList {
         auto bucket_it = buckets_.find(key);
         assert(bucket_it != buckets_.end());
         auto& bucket = bucket_it->second;
-        assert(index < bucket.size() && bucket[index] == label);
-        Label* moved = bucket.back();
-        bucket[index] = moved;
-        bucket.pop_back();
+        assert(index < bucket.labels.size() && bucket.labels[index] == label);
+        Label* moved = bucket.labels.back();
+        bucket.labels[index] = moved;
+        bucket.labels.pop_back();
         if (moved != label) {
             locations_.at(moved).bucket_index = index;
         }
         locations_.erase(location_it);
-        if (bucket.empty()) {
+        if (bucket.labels.empty()) {
             buckets_.erase(bucket_it);
         }
         if (erase_from_master) {
@@ -626,14 +728,19 @@ class VisitedLabelList {
     }
 
     std::list<Label*> labels_;
-    std::unordered_map<VisitedKey, std::vector<Label*>, VisitedKeyHash> buckets_;
+    std::unordered_map<VisitedKey, Bucket, VisitedKeyHash> buckets_;
     std::unordered_map<Label*, Location> locations_;
     mutable std::size_t dominance_candidate_checks_ = 0;
+    mutable std::size_t subset_dominance_key_lookups_ = 0;
+    mutable std::size_t subset_dominance_nonempty_buckets_ = 0;
+    mutable std::size_t subset_dominance_summary_skipped_buckets_ = 0;
     mutable std::size_t subset_dominance_candidate_checks_ = 0;
     mutable std::size_t subset_dominance_rejected_labels_ = 0;
     std::size_t max_bucket_size_ = 0;
     std::shared_ptr<const Model> model_;
     std::size_t subset_enumeration_limit_ = 10;
+    double dominance_epsilon_ = 1.0e-12;
+    double resource_epsilon_ = 1.0e-9;
 };
 
 using LabelList = VisitedLabelList;
@@ -671,6 +778,27 @@ class AuditedBestFirstDominance final
         std::size_t total = 0;
         for (const auto& labels : this->non_dominated_labels_by_node_pos_) {
             total += labels.subset_dominance_candidate_checks();
+        }
+        return total;
+    }
+    [[nodiscard]] std::size_t subset_dominance_key_lookups() const {
+        std::size_t total = 0;
+        for (const auto& labels : this->non_dominated_labels_by_node_pos_) {
+            total += labels.subset_dominance_key_lookups();
+        }
+        return total;
+    }
+    [[nodiscard]] std::size_t subset_dominance_nonempty_buckets() const {
+        std::size_t total = 0;
+        for (const auto& labels : this->non_dominated_labels_by_node_pos_) {
+            total += labels.subset_dominance_nonempty_buckets();
+        }
+        return total;
+    }
+    [[nodiscard]] std::size_t subset_dominance_summary_skipped_buckets() const {
+        std::size_t total = 0;
+        for (const auto& labels : this->non_dominated_labels_by_node_pos_) {
+            total += labels.subset_dominance_summary_skipped_buckets();
         }
         return total;
     }
@@ -806,7 +934,6 @@ BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& pa
     const std::size_t sink_id = task_count + 1;
     auto graph = std::make_unique<rcspp::ResourceGraph<JourneyResource, rcspp::RealResource>>();
     JourneyValue initial;
-    initial.state.visited.assign((task_count + 63U) / 64U, 0U);
     graph->add_resource<JourneyResource>(
         std::make_unique<JourneyExtension>(model),
         std::make_unique<JourneyFeasibility>(model, sink_id),
@@ -1030,7 +1157,8 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     base.release_after_solve = false;
     base.tolerance = params.dominance_epsilon;
 
-    rcspp::AlgorithmParams<LabelList> algorithm_params(base, LabelList{model});
+    rcspp::AlgorithmParams<LabelList> algorithm_params(
+        base, LabelList{model, 10, params.dominance_epsilon, params.resource_epsilon});
     AuditedBestFirstDominance algorithm(&built.graph->get_resource_factory(),
                                         std::move(algorithm_params));
     const auto started = std::chrono::steady_clock::now();
@@ -1057,6 +1185,12 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
         model->completion_bound_evaluated_labels;
     output.telemetry.completion_bound_pruned_labels =
         model->completion_bound_pruned_labels;
+    output.telemetry.subset_dominance_key_lookups =
+        algorithm.subset_dominance_key_lookups();
+    output.telemetry.subset_dominance_nonempty_buckets =
+        algorithm.subset_dominance_nonempty_buckets();
+    output.telemetry.subset_dominance_summary_skipped_buckets =
+        algorithm.subset_dominance_summary_skipped_buckets();
     output.telemetry.subset_dominance_candidate_checks =
         algorithm.subset_dominance_candidate_checks();
     output.telemetry.subset_dominance_rejected_labels =

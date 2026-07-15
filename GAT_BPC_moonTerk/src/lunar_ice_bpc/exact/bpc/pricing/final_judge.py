@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 import os
 from time import perf_counter
 
@@ -43,6 +44,14 @@ LABELING_FINAL_JUDGE_ENV = "LUNAR_ICE_LABELING_FINAL_JUDGE"
 LABELING_FINAL_JUDGE_MAX_TASKS_ENV = "LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS"
 LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET_ENV = (
     "LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET"
+)
+LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF = "harvest_then_proof"
+LABELING_FINAL_JUDGE_PASS_PROOF_ONLY = "proof_only"
+LABELING_FINAL_JUDGE_PASS_STRATEGIES = frozenset(
+    {
+        LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
+        LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
+    }
 )
 LABELING_FINAL_JUDGE_AUTO_VALUES = {"auto", "adaptive"}
 COMPACT_SINGLE_JOURNEY_NEGATIVE_SEARCH_CAP_SEC = 60.0
@@ -538,6 +547,8 @@ def run_true_dual_root_final_judge(
     labeling_final_judge_enabled: bool | None = None,
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
+    labeling_final_judge_pass_strategy: str = LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
+    labeling_final_judge_harvest_time_cap_sec: float | None = None,
 ) -> FinalJudgeResult:
     """Run exhaustive fixed-graph pricing with fail-closed proof semantics.
 
@@ -585,6 +596,8 @@ def run_true_dual_root_final_judge(
             explicit_opt_in=labeling_final_judge_enabled is not None,
             selection_reason=labeling_selection_reason,
             active_task_sets=active_task_sets,
+            pass_strategy=labeling_final_judge_pass_strategy,
+            harvest_time_cap_sec=labeling_final_judge_harvest_time_cap_sec,
         )
         if labeling_mode == "auto":
             result.pricing_payload.update(
@@ -743,6 +756,8 @@ def _run_labeling_pricer_final_judge(
     explicit_opt_in: bool = False,
     selection_reason: str = "",
     active_task_sets: set[frozenset[str]] | None = None,
+    pass_strategy: str = LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
+    harvest_time_cap_sec: float | None = None,
 ) -> FinalJudgeResult:
     start = perf_counter()
     max_exact_tasks = (
@@ -762,6 +777,20 @@ def _run_labeling_pricer_final_judge(
         tuple(sorted(str(task_id) for task_id in row))
         for row in (active_task_sets or set())
     )
+    normalized_pass_strategy = str(pass_strategy or "").strip().lower()
+    if normalized_pass_strategy not in LABELING_FINAL_JUDGE_PASS_STRATEGIES:
+        raise ValueError(
+            "unsupported labeling final-judge pass strategy "
+            f"{pass_strategy!r}; expected one of {sorted(LABELING_FINAL_JUDGE_PASS_STRATEGIES)!r}"
+        )
+    proof_only = normalized_pass_strategy == LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+    normalized_harvest_cap = None
+    if harvest_time_cap_sec is not None:
+        normalized_harvest_cap = float(harvest_time_cap_sec)
+        if not isfinite(normalized_harvest_cap) or normalized_harvest_cap <= 0.0:
+            raise ValueError(
+                "labeling_final_judge_harvest_time_cap_sec must be a finite positive number"
+            )
 
     def run_labeling_pass(
         *,
@@ -841,24 +870,51 @@ def _run_labeling_pricer_final_judge(
             pass_manual_branch_feasible_best,
         )
 
-    payload, columns, harvest_pass_wall = run_labeling_pass(
-        stop_at_first_negative=True,
-        pass_wall_time_limit_sec=wall_time_limit_sec,
-    )
-    harvest_pass_payload = dict(payload)
-    (
-        manual_rc_rows,
-        manual_negative_rows,
-        branch_feasible_negative_rows,
-        branch_filtered_negative_count,
-        negative_columns,
-        manual_branch_feasible_best,
-    ) = audit_pass_columns(columns)
-    proof_pass_attempted = False
+    harvest_pass_attempted = not proof_only
+    harvest_pass_payload: dict = {}
+    harvest_pass_wall = 0.0
+    proof_pass_attempted = proof_only
     proof_pass_skip_reason = ""
     proof_pass_payload: dict = {}
     proof_pass_wall = 0.0
-    if not negative_columns and _pricing_state_from_payload(payload.get("pricing_state")) != PricingState.CERTIFIED_NO_NEGATIVE:
+    if proof_only:
+        payload, columns, proof_pass_wall = run_labeling_pass(
+            stop_at_first_negative=False,
+            pass_wall_time_limit_sec=wall_time_limit_sec,
+        )
+        proof_pass_payload = dict(payload)
+        (
+            manual_rc_rows,
+            manual_negative_rows,
+            branch_feasible_negative_rows,
+            branch_filtered_negative_count,
+            negative_columns,
+            manual_branch_feasible_best,
+        ) = audit_pass_columns(columns)
+    else:
+        harvest_pass_limit = _smaller_optional_time_limit(
+            wall_time_limit_sec,
+            normalized_harvest_cap,
+        )
+        payload, columns, harvest_pass_wall = run_labeling_pass(
+            stop_at_first_negative=True,
+            pass_wall_time_limit_sec=harvest_pass_limit,
+        )
+        harvest_pass_payload = dict(payload)
+        (
+            manual_rc_rows,
+            manual_negative_rows,
+            branch_feasible_negative_rows,
+            branch_filtered_negative_count,
+            negative_columns,
+            manual_branch_feasible_best,
+        ) = audit_pass_columns(columns)
+    if (
+        not proof_only
+        and not negative_columns
+        and _pricing_state_from_payload(payload.get("pricing_state"))
+        != PricingState.CERTIFIED_NO_NEGATIVE
+    ):
         remaining_for_proof = (
             None
             if wall_time_limit_sec is None
@@ -957,9 +1013,12 @@ def _run_labeling_pricer_final_judge(
             "labeling_final_judge_exact_harvest_target_source": (
                 "explicit_parameter" if exact_harvest_target_override is not None else "environment_or_default"
             ),
-            "labeling_final_judge_early_negative_stop_enabled": True,
+            "labeling_final_judge_pass_strategy": normalized_pass_strategy,
+            "labeling_final_judge_early_negative_stop_enabled": not proof_only,
             "labeling_final_judge_early_negative_stop_can_certify_no_negative": False,
-            "labeling_final_judge_two_phase_enabled": True,
+            "labeling_final_judge_two_phase_enabled": not proof_only,
+            "labeling_final_judge_harvest_pass_attempted": bool(harvest_pass_attempted),
+            "labeling_final_judge_harvest_time_cap_sec": normalized_harvest_cap,
             "labeling_final_judge_harvest_pass_status": harvest_pass_payload.get("status"),
             "labeling_final_judge_harvest_pass_pricing_state": harvest_pass_payload.get("pricing_state"),
             "labeling_final_judge_harvest_pass_pricing_proof_kind": harvest_pass_payload.get(
@@ -1019,6 +1078,17 @@ def _run_labeling_pricer_final_judge(
         negative_columns=negative_columns,
         all_priced_columns=tuple(columns),
     )
+
+
+def _smaller_optional_time_limit(
+    total_limit_sec: float | None,
+    pass_cap_sec: float | None,
+) -> float | None:
+    if total_limit_sec is None:
+        return pass_cap_sec
+    if pass_cap_sec is None:
+        return max(0.0, float(total_limit_sec))
+    return max(0.0, min(float(total_limit_sec), float(pass_cap_sec)))
 
 
 def _labeling_final_judge_downgrade_reason(

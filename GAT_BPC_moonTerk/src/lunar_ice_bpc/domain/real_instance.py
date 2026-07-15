@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,7 @@ def generate_real_map_instance(
     extent_km: float | None = None,
     output_cells: int | None = None,
     time_window_mode: str | None = None,
+    edge_checkpoint_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Generate one fixed three-path logical graph from real LOLA raster layers."""
 
@@ -106,6 +108,22 @@ def generate_real_map_instance(
 
     depot_xy = tuple(float(value) for value in preview["depot"]["xy_km"])
     sampled_targets = _sample_targets_with_mission_screen(preview["targets"], scale, rng, depot_xy)
+    missing_roles = _missing_required_candidate_roles(sampled_targets)
+    if missing_roles:
+        return {
+            "schema_version": "lunar_ice_bpc.instance.v1",
+            "instance_id": f"lunar_ice_sp50_{label}_{index:03d}_seed{int(seed)}",
+            "scale": scale,
+            "seed": int(seed),
+            "validation": {
+                "accepted": False,
+                "reason": "sampled_candidate_roles_missing",
+                "missing_candidate_roles": missing_roles,
+                "sampled_candidate_role_counts": dict(
+                    sorted(Counter(str(target.get("candidate_role", "")) for target in sampled_targets).items())
+                ),
+            },
+        }
     tasks = _real_task_payloads(sampled_targets, scale, rng)
     nodes = {"depot": depot_xy}
     nodes.update({task_id: tuple(task["xy_km"]) for task_id, task in tasks.items()})
@@ -116,6 +134,7 @@ def generate_real_map_instance(
         center_y_km=center_y,
         extent_km=extent,
         output_cells=cells,
+        checkpoint_dir=edge_checkpoint_dir,
     )
     task_order = _task_order_for_time_window_mode(tasks, depot_xy, time_mode)
     reference = _build_reference_solution(tasks, _edge_lookup(edges), config, scale, task_order=task_order)
@@ -388,7 +407,25 @@ def _hotspot_directional_sample(
         selected_ids.add(str(choice["id"]))
         if len(selected) >= int(scale):
             break
-    exploration_pool = [target for target in targets if str(target["id"]) not in selected_ids and _is_exploration_candidate(target)]
+    # ``_is_exploration_candidate`` intentionally admits promising non-labelled
+    # candidates.  Pick one literal exploration site first so the formal role
+    # invariant cannot be lost to weighted selection from that broader pool.
+    literal_exploration_pool = [
+        target
+        for target in targets
+        if str(target["id"]) not in selected_ids and str(target.get("candidate_role", "")) == "exploration"
+    ]
+    selected_has_exploration = any(str(target.get("candidate_role", "")) == "exploration" for target in selected)
+    if literal_exploration_pool and not selected_has_exploration and len(selected) < int(scale) and exploration_quota > 0:
+        choice = _choose_exploration_target(literal_exploration_pool, selected, scale, rng, depot_xy)
+        selected.append(choice)
+        selected_ids.add(str(choice["id"]))
+        exploration_quota -= 1
+    exploration_pool = [
+        target
+        for target in targets
+        if str(target["id"]) not in selected_ids and _is_exploration_candidate(target)
+    ]
     while exploration_pool and len(selected) < int(scale) and exploration_quota > 0:
         choice = _choose_exploration_target(exploration_pool, selected, scale, rng, depot_xy)
         selected.append(choice)
@@ -403,6 +440,11 @@ def _hotspot_directional_sample(
         remaining = [target for target in remaining if str(target["id"]) != str(choice["id"])]
     selected.sort(key=lambda item: (int(item.get("hotspot_rank", 9999)), str(item["id"])))
     return selected
+
+
+def _missing_required_candidate_roles(targets: list[dict[str, Any]]) -> list[str]:
+    roles = {str(target.get("candidate_role", "")) for target in targets}
+    return [role for role in ("hotspot_edge", "exploration") if role not in roles]
 
 
 def _targets_by_hotspot(targets: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:

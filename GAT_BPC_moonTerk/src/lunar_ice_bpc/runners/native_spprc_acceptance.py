@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 import hashlib
 import json
+from math import isfinite
 import os
 from pathlib import Path
 import platform
+import statistics
 import subprocess
 import sys
 from time import perf_counter
@@ -20,7 +22,7 @@ from lunar_ice_bpc.exact.bpc.pricing.backends.scale_profiles import (
 from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_engine_build_hash
 
 
-SCHEMA_VERSION = "lunar_ice_bpc.native_spprc_acceptance.v1"
+SCHEMA_VERSION = "lunar_ice_bpc.native_spprc_acceptance.v2"
 MODEL_ID = "NATIVE_SPPRC_ACCEPTANCE_V1"
 
 
@@ -42,9 +44,13 @@ def run_native_spprc_acceptance(
     selected_instances = _group_instances_by_scale(root, instances)
     rows = []
     started = perf_counter()
+    baseline_commit_at_start = _git_head(root)
     for scale in scales:
         profile = _profile_from_config(int(scale), config)
         backend_id = str(backend_override or profile.backend_id)
+        engine_build_hash_at_start = spprc_engine_build_hash(backend_id)
+        final_judge_pass_policy = _final_judge_pass_policy_for_scale(config, int(scale))
+        adaptive_harvest_cap_sec = _adaptive_harvest_cap_for_scale(config, int(scale))
         scale_instances = selected_instances.get(int(scale), tuple())
         if not scale_instances:
             scale_instances = tuple(
@@ -60,6 +66,9 @@ def run_native_spprc_acceptance(
         row = {
             "scale": int(scale),
             "backend_id": backend_id,
+            "engine_build_hash_at_start": engine_build_hash_at_start,
+            "final_judge_pass_policy": final_judge_pass_policy,
+            "adaptive_harvest_cap_sec": adaptive_harvest_cap_sec,
             "profile": asdict(profile),
             "effective_memory_limit_gb": round(effective_memory_limit_gb(profile.memory_limit_gb), 6),
             "instance_count": len(scale_instances),
@@ -111,6 +120,7 @@ def run_native_spprc_acceptance(
             continue
         scale_output.mkdir(parents=True, exist_ok=True)
         environment = dict(os.environ)
+        environment.pop("LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC", None)
         environment.update(
             {
                 "PYTHONPATH": _prepend_pythonpath(environment.get("PYTHONPATH"), root / "src"),
@@ -136,8 +146,13 @@ def run_native_spprc_acceptance(
                     profile.worker_time_limit_sec
                 ),
                 "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST": "1",
+                "LUNAR_ICE_LABELING_FINAL_JUDGE_PASS_POLICY": final_judge_pass_policy,
             }
         )
+        if adaptive_harvest_cap_sec is not None:
+            environment[
+                "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC"
+            ] = str(adaptive_harvest_cap_sec)
         scale_started = perf_counter()
         completed = subprocess.run(
             command,
@@ -150,50 +165,80 @@ def run_native_spprc_acceptance(
         (scale_output / "native_acceptance_stdout.log").write_text(completed.stdout, encoding="utf-8")
         (scale_output / "native_acceptance_stderr.log").write_text(completed.stderr, encoding="utf-8")
         b42_summary = _read_json(scale_output / "b4_2_cold_exact_summary.json")
+        b42_state = _read_json(scale_output / "b4_2_cold_exact_state.json")
+        engine_build_hash_at_end = spprc_engine_build_hash(backend_id)
+        engine_binding = _engine_binding_audit(
+            expected_hash=engine_build_hash_at_start,
+            end_hash=engine_build_hash_at_end,
+            b42_summary=b42_summary,
+        )
         scale_summary = (b42_summary.get("by_scale") or {}).get(str(scale), {})
         exact_count = int(scale_summary.get("exact_count") or 0)
         row_count = int(scale_summary.get("row_count") or 0)
         redlines = b42_summary.get("redlines") or {}
         redlines_zero = bool(redlines) and all(int(value or 0) == 0 for value in redlines.values())
+        profile_gate = _profile_gate_metrics(
+            profile,
+            b42_state=b42_state,
+            expected_count=len(scale_instances),
+        )
         exact_closed = bool(
             completed.returncode == 0
+            and engine_binding["valid"]
             and row_count == len(scale_instances)
             and exact_count == row_count
             and redlines_zero
+            and profile_gate["all_exact"]
+            and profile_gate["all_no_cheat"]
+            and profile_gate["all_under_profile_time_limit"]
         )
         row.update(
             {
                 "status": (
-                    "EXACT_CLOSED"
+                    "RUNNER_FAILED"
+                    if completed.returncode != 0
+                    else "HASH_DRIFT"
+                    if not engine_binding["valid"]
+                    else "EXACT_CLOSED"
                     if exact_closed
                     else "FAIL_CLOSED"
-                    if completed.returncode == 0
-                    else "RUNNER_FAILED"
                 ),
                 "returncode": int(completed.returncode),
                 "wall_time_sec": round(perf_counter() - scale_started, 6),
                 "exact_count": exact_count,
                 "fail_closed_count": int(scale_summary.get("fail_closed_count") or 0),
                 "redlines_zero": redlines_zero,
+                "engine_build_hash_at_end": engine_build_hash_at_end,
+                "engine_binding": engine_binding,
+                "profile_gate": profile_gate,
                 "b42_summary": b42_summary,
             }
         )
         rows.append(row)
 
+    acceptance = _acceptance_metrics(rows)
     summary = {
         "schema_version": SCHEMA_VERSION,
         "model_id": MODEL_ID,
         "cold_start": True,
         "resume_enabled": bool(resume),
         "dry_run": bool(dry_run),
-        "baseline_commit": _git_head(root),
+        "baseline_commit": baseline_commit_at_start,
+        "baseline_commit_at_end": _git_head(root),
         "config_hash": hashlib.sha256(
             json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest(),
         "engine_build_hashes": {
-            backend_id: spprc_engine_build_hash(backend_id)
+            backend_id: next(
+                row["engine_build_hash_at_start"]
+                for row in rows
+                if row["backend_id"] == backend_id
+            )
             for backend_id in sorted({row["backend_id"] for row in rows})
         },
+        "engine_hash_drift_count": sum(
+            1 for row in rows if row.get("engine_binding", {}).get("valid") is False
+        ),
         "environment": {
             "python": sys.version,
             "platform": platform.platform(),
@@ -208,6 +253,7 @@ def run_native_spprc_acceptance(
         },
         "scales": list(scales),
         "rows": rows,
+        "acceptance": acceptance,
         "wall_time_sec": round(perf_counter() - started, 6),
         "all_available_runs_succeeded": all(
             row["status"] in {"EXACT_CLOSED", "DRY_RUN"}
@@ -224,6 +270,112 @@ def run_native_spprc_acceptance(
         encoding="utf-8",
     )
     return summary
+
+
+def _profile_gate_metrics(
+    profile: NativeSpprcScaleProfile,
+    *,
+    b42_state: dict,
+    expected_count: int,
+) -> dict:
+    rows = list(b42_state.get("rows") or [])
+    total_seconds = [
+        float(row["cold_start_total_sec"])
+        for row in rows
+        if row.get("cold_start_total_sec") is not None
+    ]
+    exact_count = sum(
+        bool(row.get("bpc_tree_optimal"))
+        and str(row.get("algorithm_status") or "") == "BPC_OPTIMAL"
+        for row in rows
+    )
+    no_cheat_count = sum(bool(row.get("no_cheat_pass")) for row in rows)
+    under_limit_count = sum(
+        float(row.get("cold_start_total_sec") or float("inf"))
+        <= float(profile.row_time_limit_sec)
+        for row in rows
+    )
+    complete = len(rows) == int(expected_count) and len(total_seconds) == len(rows)
+    return {
+        "profile_time_limit_sec": float(profile.row_time_limit_sec),
+        "expected_count": int(expected_count),
+        "row_count": len(rows),
+        "exact_count": exact_count,
+        "no_cheat_count": no_cheat_count,
+        "under_profile_time_limit_count": under_limit_count,
+        "all_exact": bool(complete and exact_count == len(rows)),
+        "all_no_cheat": bool(complete and no_cheat_count == len(rows)),
+        "all_under_profile_time_limit": bool(
+            complete and under_limit_count == len(rows)
+        ),
+        "mean_cold_start_total_sec": (
+            round(statistics.fmean(total_seconds), 6) if total_seconds else None
+        ),
+        "p50_cold_start_total_sec": (
+            round(statistics.median(total_seconds), 6) if total_seconds else None
+        ),
+        "max_cold_start_total_sec": (
+            round(max(total_seconds), 6) if total_seconds else None
+        ),
+    }
+
+
+def _acceptance_metrics(rows: list[dict]) -> dict:
+    available = [
+        row for row in rows if row.get("status") != "NO_INSTANCES_AVAILABLE"
+    ]
+    all_profile_gates = bool(available) and all(
+        bool((row.get("profile_gate") or {}).get("all_exact"))
+        and bool((row.get("profile_gate") or {}).get("all_no_cheat"))
+        and bool(
+            (row.get("profile_gate") or {}).get("all_under_profile_time_limit")
+        )
+        and bool(row.get("redlines_zero"))
+        and bool((row.get("engine_binding") or {}).get("valid"))
+        for row in available
+    )
+    scale30 = next((row for row in rows if int(row.get("scale") or 0) == 30), None)
+    scale30_gate = (scale30 or {}).get("profile_gate") or {}
+    scale30_full20 = bool(
+        scale30
+        and int(scale30.get("instance_count") or 0) == 20
+        and int(scale30_gate.get("row_count") or 0) == 20
+        and int(scale30_gate.get("exact_count") or 0) == 20
+    )
+    scale30_p50 = scale30_gate.get("p50_cold_start_total_sec")
+    scale30_max = scale30_gate.get("max_cold_start_total_sec")
+    scale30_release = bool(
+        scale30_full20
+        and scale30_gate.get("all_no_cheat")
+        and scale30_gate.get("all_under_profile_time_limit")
+        and scale30
+        and scale30.get("redlines_zero")
+        and (scale30.get("engine_binding") or {}).get("valid")
+        and scale30_p50 is not None
+        and float(scale30_p50) <= 900.0
+        and scale30_max is not None
+        and float(scale30_max) <= 1800.0
+    )
+    return {
+        "all_available_profile_gates_pass": all_profile_gates,
+        "scale30_full20_exact": scale30_full20,
+        "scale30_all_under_1800": bool(
+            scale30_full20
+            and scale30_gate.get("all_under_profile_time_limit")
+            and float(scale30_gate.get("profile_time_limit_sec") or 0.0) == 1800.0
+        ),
+        "scale30_p50_le_900": bool(
+            scale30_full20
+            and scale30_p50 is not None
+            and float(scale30_p50) <= 900.0
+        ),
+        "scale30_stretch_p50_le_600": bool(
+            scale30_full20
+            and scale30_p50 is not None
+            and float(scale30_p50) <= 600.0
+        ),
+        "scale30_phase11_release_gate": scale30_release,
+    }
 
 
 def _profile_from_config(scale: int, config: dict) -> NativeSpprcScaleProfile:
@@ -324,6 +476,72 @@ def _b42_command(
     return command
 
 
+def _final_judge_pass_policy_for_scale(config: dict, scale: int) -> str:
+    default = str(config.get("native_final_judge_pass_policy", "harvest_then_proof"))
+    overrides = config.get("native_final_judge_pass_policy_by_scale") or {}
+    if not isinstance(overrides, dict):
+        raise ValueError("native_final_judge_pass_policy_by_scale must be a mapping")
+    value = str(overrides.get(str(int(scale)), overrides.get(int(scale), default))).strip().lower()
+    allowed = {
+        "harvest_then_proof",
+        "adaptive_sparse_harvest_v1",
+        "branch_adaptive_sparse_harvest_v1",
+        "proof_only",
+    }
+    if value not in allowed:
+        raise ValueError(
+            f"unsupported native final-judge pass policy for scale {scale}: {value!r}; "
+            f"expected one of {sorted(allowed)!r}"
+        )
+    return value
+
+
+def _adaptive_harvest_cap_for_scale(config: dict, scale: int) -> float | None:
+    overrides = config.get("native_adaptive_harvest_cap_sec_by_scale") or {}
+    if not isinstance(overrides, dict):
+        raise ValueError("native_adaptive_harvest_cap_sec_by_scale must be a mapping")
+    raw = overrides.get(str(int(scale)), overrides.get(int(scale)))
+    if raw is None or not str(raw).strip():
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"invalid native adaptive harvest cap for scale {scale}: {raw!r}"
+        ) from exc
+    if not isfinite(value) or value <= 0.0:
+        raise ValueError(
+            f"native adaptive harvest cap for scale {scale} must be a finite positive number"
+        )
+    return value
+
+
+def _engine_binding_audit(
+    *,
+    expected_hash: str,
+    end_hash: str,
+    b42_summary: dict,
+) -> dict:
+    runtime_binding = (
+        (b42_summary.get("config") or {}).get("native_runtime_binding") or {}
+    )
+    observed_hash = str(runtime_binding.get("engine_build_hash") or "")
+    issues = []
+    if not observed_hash:
+        issues.append("child_engine_build_hash_missing")
+    elif observed_hash != str(expected_hash):
+        issues.append("child_engine_build_hash_mismatch")
+    if str(end_hash) != str(expected_hash):
+        issues.append("engine_build_hash_changed_during_run")
+    return {
+        "expected_hash": str(expected_hash),
+        "child_observed_hash": observed_hash,
+        "end_hash": str(end_hash),
+        "valid": not issues,
+        "issues": issues,
+    }
+
+
 def _group_instances_by_scale(root: Path, instances: tuple[str, ...]) -> dict[int, tuple[Path, ...]]:
     grouped: dict[int, list[Path]] = {}
     for value in instances:
@@ -384,14 +602,19 @@ def _render_report(summary: dict) -> str:
         f"- config_hash: `{summary['config_hash']}`",
         f"- engine_build_hashes: `{summary['engine_build_hashes']}`",
         f"- missing_scales: `{summary['missing_scales']}`",
+        f"- acceptance: `{summary.get('acceptance', {})}`",
         "",
-        "| scale | backend | instances | exact | redlines-zero | status | wall_sec |",
-        "|---:|---|---:|---:|---|---|---:|",
+        "| scale | backend | instances | exact | limit-sec | p50-sec | max-sec | redlines-zero | status | wall-sec |",
+        "|---:|---|---:|---:|---:|---:|---:|---|---|---:|",
     ]
     for row in summary["rows"]:
+        gate = row.get("profile_gate") or {}
         lines.append(
             f"| {row['scale']} | {row['backend_id']} | {row['instance_count']} | "
-            f"{row.get('exact_count', 0)} | {row.get('redlines_zero', False)} | "
+            f"{row.get('exact_count', 0)} | {gate.get('profile_time_limit_sec', '')} | "
+            f"{gate.get('p50_cold_start_total_sec', '')} | "
+            f"{gate.get('max_cold_start_total_sec', '')} | "
+            f"{row.get('redlines_zero', False)} | "
             f"{row['status']} | {row.get('wall_time_sec', 0)} |"
         )
     lines.extend(
@@ -400,6 +623,7 @@ def _render_report(summary: dict) -> str:
             "`NO_INSTANCES_AVAILABLE` 表示当前 checkout 缺少对应 scale 数据，不是 exact closure。",
             "`FAIL_CLOSED` 表示命令本身完成但 exact closure gate 未通过。",
             "`RESOURCE_INSUFFICIENT` 在启动 solver 前 fail closed，不会降低搜索语义。",
+            "native gate 使用各 scale profile 的 row time limit；child B4.2 报告中的旧 300/500 秒展示字段不参与 native release 判定。",
             "任何 timeout、memory limit 或 runner failure 均不得提升为 certificate。",
             "",
         ]

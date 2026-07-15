@@ -17,6 +17,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import csv
 import hashlib
 import json
+from math import isfinite
 import os
 from pathlib import Path
 import shutil
@@ -35,6 +36,7 @@ if str(SCRIPTS) not in sys.path:
 
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+    DEFAULT_EXACT_BACKEND_ID,
     RELAXED_NG_ROUTE_MODE,
     LabelingPricingConfig,
 )
@@ -389,7 +391,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _official_config(args: argparse.Namespace) -> dict:
-    exact_backend = str(os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", "python_reference"))
+    exact_backend = str(
+        os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", DEFAULT_EXACT_BACKEND_ID)
+    )
     native_runtime_binding = {
         "exact_backend": exact_backend,
         "engine_build_hash": spprc_engine_build_hash(exact_backend),
@@ -415,6 +419,16 @@ def _official_config(args: argparse.Namespace) -> dict:
         ],
         "exact_final_judge_first": _environment_flag(
             "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST"
+        ),
+        "final_judge_pass_policy": str(
+            os.getenv(
+                "LUNAR_ICE_LABELING_FINAL_JUDGE_PASS_POLICY",
+                "harvest_then_proof",
+            )
+            or "harvest_then_proof"
+        ),
+        "adaptive_harvest_cap_sec": _environment_optional_float(
+            "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC"
         ),
     }
     return {
@@ -521,6 +535,16 @@ def _official_config(args: argparse.Namespace) -> dict:
 
 def _environment_flag(name: str) -> bool:
     return str(os.getenv(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _environment_optional_float(name: str) -> float | None:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return None
+    value = float(raw)
+    if not isfinite(value) or value <= 0.0:
+        raise ValueError(f"{name} must be a finite positive number")
+    return value
 
 
 def _config_hash(config: dict) -> str:

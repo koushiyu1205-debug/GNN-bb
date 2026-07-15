@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import resource
 import signal
+import shutil
 import subprocess
 import sys
 from time import perf_counter
@@ -217,6 +218,7 @@ def _generate_scale(
         index = accepted_count + 1
         seed = int(seed_base) + int(scale) * 10000 + attempt_index
         output_path = scale_dir / f"instance_{index:03d}_logical_graph.json"
+        edge_checkpoint_dir = _edge_checkpoint_dir(scale_dir, index=index, seed=seed)
         start = perf_counter()
         start_rss_mb = _max_rss_mb()
         try:
@@ -227,6 +229,7 @@ def _generate_scale(
                     seed=seed,
                     index=index,
                     time_window_mode=_time_window_mode_for_index(index),
+                    edge_checkpoint_dir=edge_checkpoint_dir,
                 )
             elapsed = perf_counter() - start
             issues = validate_instance(instance)
@@ -237,6 +240,7 @@ def _generate_scale(
             _record_skip(manifest, label, reason, attempt_index=attempt_index, seed=seed, elapsed_sec=elapsed)
             _refresh_manifest_summary(manifest, scales=[scale], per_scale=per_scale)
             write_json(manifest_path, manifest)
+            _remove_edge_checkpoint(edge_checkpoint_dir)
             print(f"[scale {label}] attempt={attempt_index} seed={seed} timeout after {elapsed:.1f}s", flush=True)
             if not continue_after_timeout:
                 _mark_scale_stopped(manifest, label, reason)
@@ -257,6 +261,7 @@ def _generate_scale(
             )
             _refresh_manifest_summary(manifest, scales=[scale], per_scale=per_scale)
             write_json(manifest_path, manifest)
+            _remove_edge_checkpoint(edge_checkpoint_dir)
             print(f"[scale {label}] attempt={attempt_index} seed={seed} failed {reason}: {exc}", flush=True)
             continue
         if acceptance_issues:
@@ -272,6 +277,7 @@ def _generate_scale(
             )
             _refresh_manifest_summary(manifest, scales=[scale], per_scale=per_scale)
             write_json(manifest_path, manifest)
+            _remove_edge_checkpoint(edge_checkpoint_dir)
             print(f"[scale {label}] attempt={attempt_index} seed={seed} rejected {reason} in {elapsed:.1f}s", flush=True)
             continue
         write_json(output_path, instance)
@@ -289,6 +295,7 @@ def _generate_scale(
         accepted_count += 1
         _refresh_manifest_summary(manifest, scales=[scale], per_scale=per_scale)
         write_json(manifest_path, manifest)
+        _remove_edge_checkpoint(edge_checkpoint_dir)
         print(
             "[scale {label}] accepted {accepted}/{target} index={index:03d} seed={seed} "
             "elapsed={elapsed:.1f}s roles={roles} modes={modes}".format(
@@ -439,6 +446,7 @@ def _generate_one_index_worker(payload: dict[str, Any]) -> dict[str, Any]:
     for attempt_round in range(max_attempts):
         current_attempt = attempt_index + attempt_round * stride
         seed = int(seed_base) + scale * 10000 + current_attempt
+        edge_checkpoint_dir = _edge_checkpoint_dir(output_path.parent, index=index, seed=seed)
         start = perf_counter()
         start_rss_mb = _max_rss_mb()
         try:
@@ -449,6 +457,7 @@ def _generate_one_index_worker(payload: dict[str, Any]) -> dict[str, Any]:
                     seed=seed,
                     index=index,
                     time_window_mode=_time_window_mode_for_index(index),
+                    edge_checkpoint_dir=edge_checkpoint_dir,
                 )
             elapsed = perf_counter() - start
             issues = validate_instance(instance)
@@ -464,6 +473,7 @@ def _generate_one_index_worker(payload: dict[str, Any]) -> dict[str, Any]:
                     elapsed_sec=elapsed,
                 )
             )
+            _remove_edge_checkpoint(edge_checkpoint_dir)
             return {"status": "timeout", "index": index, "skips": skips}
         except Exception as exc:
             elapsed = perf_counter() - start
@@ -477,6 +487,7 @@ def _generate_one_index_worker(payload: dict[str, Any]) -> dict[str, Any]:
                     detail=str(exc),
                 )
             )
+            _remove_edge_checkpoint(edge_checkpoint_dir)
             continue
         if acceptance_issues:
             skips.append(
@@ -489,6 +500,7 @@ def _generate_one_index_worker(payload: dict[str, Any]) -> dict[str, Any]:
                     detail="; ".join(acceptance_issues[:8]),
                 )
             )
+            _remove_edge_checkpoint(edge_checkpoint_dir)
             continue
         write_json(output_path, instance)
         row = _manifest_row(
@@ -501,6 +513,7 @@ def _generate_one_index_worker(payload: dict[str, Any]) -> dict[str, Any]:
             elapsed_sec=elapsed,
             max_rss_mb=max(start_rss_mb, _max_rss_mb()),
         )
+        _remove_edge_checkpoint(edge_checkpoint_dir)
         return {"status": "accepted", "index": index, "row": row, "skips": skips}
     return {"status": "exhausted", "index": index, "skips": skips}
 
@@ -525,6 +538,15 @@ def _run_preflight(raw_map_dir: Path) -> dict[str, Any]:
     )
     print(f"preflight status: {preview.get('status')} center_xy_km={DEFAULT_SP50_DEPOT_CENTER_KM}", flush=True)
     return preview
+
+
+def _edge_checkpoint_dir(scale_dir: Path, *, index: int, seed: int) -> Path:
+    return scale_dir / ".generation_checkpoints" / f"index_{int(index):03d}_seed_{int(seed)}"
+
+
+def _remove_edge_checkpoint(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
 
 
 def _acceptance_issues(instance: dict[str, Any], schema_issues: list[str], scale: int) -> list[str]:

@@ -60,6 +60,7 @@ CERTIFYING_PROOF_KINDS = frozenset(
 )
 STATUS_SEMANTICS_CONTRACT_VERSION = "bpc_future_pricing_status_semantics_20260606"
 NATIVE_EXACT_BACKEND_ENV = "LUNAR_ICE_SPPRC_EXACT_BACKEND"
+DEFAULT_EXACT_BACKEND_ID = "native_rcspp_inprocess"
 NATIVE_MEMORY_LIMIT_GB_ENV = "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB"
 NATIVE_SHADOW_BACKEND_ENV = "LUNAR_ICE_SPPRC_SHADOW_BACKEND"
 NATIVE_COMPLETION_BOUND_ENV = "LUNAR_ICE_SPPRC_COMPLETION_BOUND"
@@ -212,7 +213,9 @@ def run_bpc_labeling_pricer(
     started_at = perf_counter()
     native_fallback_payload: dict = {}
     native_shadow_payload: dict = {}
-    native_backend_id = str(os.getenv(NATIVE_EXACT_BACKEND_ENV, "python_reference"))
+    native_backend_id = str(
+        os.getenv(NATIVE_EXACT_BACKEND_ENV, DEFAULT_EXACT_BACKEND_ID)
+    )
     native_result = None
     native_shadow_backend_id = str(os.getenv(NATIVE_SHADOW_BACKEND_ENV, "") or "")
     if (

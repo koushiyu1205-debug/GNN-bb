@@ -4,6 +4,11 @@ minimum_runtime_memory_gb: 1
 native_completion_bound_enabled: false
 native_subset_dominance_enabled: true
 native_cut_state_enabled: false
+native_final_judge_pass_policy: "harvest_then_proof"
+native_final_judge_pass_policy_by_scale:
+  "30": "branch_adaptive_sparse_harvest_v1"
+native_adaptive_harvest_cap_sec_by_scale:
+  "30": 2.0
 profiles:
   "5":
     worker_max_tasks: 5

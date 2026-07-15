@@ -634,13 +634,13 @@ def _solve_b3_node(
     wall_time_limit_sec: float | None,
     negative_eps: float,
     max_columns_per_round: int,
-    tail_dual_stabilization_enabled: bool,
-    tail_dual_stabilization_alpha: float,
-    tail_dual_stabilization_window: int,
-    worker_pricer_kind: str,
-    labeling_final_judge_enabled: bool | None,
-    labeling_final_judge_max_exact_tasks: int | None,
-    labeling_final_judge_exact_harvest_target: int | None,
+    tail_dual_stabilization_enabled: bool = False,
+    tail_dual_stabilization_alpha: float = 0.7,
+    tail_dual_stabilization_window: int = 5,
+    worker_pricer_kind: str = DIRECT_LABEL_WORKER,
+    labeling_final_judge_enabled: bool | None = None,
+    labeling_final_judge_max_exact_tasks: int | None = None,
+    labeling_final_judge_exact_harvest_target: int | None = None,
 ) -> dict:
     if use_complete_universe_audit and universe:
         return _solve_b3_node_with_complete_universe_audit(
@@ -1318,7 +1318,8 @@ def _tree_payload(
     b2: dict,
     b0_direct,
     nodes: list[dict],
-    open_nodes: tuple[_QueuedNode, ...],
+    open_nodes: tuple[_QueuedNode, ...] = tuple(),
+    open_node_count: int | None = None,
     incumbent_objective: float | None,
     incumbent_source: str,
     incumbent_columns: tuple[JourneyColumn, ...],
@@ -1328,7 +1329,14 @@ def _tree_payload(
     max_branch_depth: int,
     negative_eps: float,
 ) -> dict:
-    open_node_count = len(open_nodes)
+    if open_node_count is None:
+        open_node_count = len(open_nodes)
+    elif open_nodes and int(open_node_count) != len(open_nodes):
+        raise ValueError(
+            "open_node_count does not match the supplied open_nodes payload: "
+            f"{open_node_count} != {len(open_nodes)}"
+        )
+    open_node_count = max(0, int(open_node_count))
     root = nodes[0] if nodes else {}
     leaf_nodes = _leaf_nodes(nodes)
     incomplete_nodes = [node for node in nodes if node.get("node_status") == "INCOMPLETE"]

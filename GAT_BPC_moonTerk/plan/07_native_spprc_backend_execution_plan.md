@@ -15,11 +15,19 @@ feasibility/correctness evidence 和补丁生命周期的结论，不能是 spik
 - Phase 0–8 已实现并通过 technical promotion；
 - 5/10 differential、20-task 20/20 exact closure、30-instance001 和 001–005
   correctness/fail-closed contract 均已验证；
-- `native_rcspp_inprocess` 可显式 opt-in，Python reference 仍是默认与 fallback；
-- Phase 9 persistent host 已实现，scale50 已完成合法 incomplete/RSS gate，scale100
-  实例与 bounded gate 仍在生成/执行；
-- Phase 10 的 cut state、completion bound、visited-subset dominance 均有独立 feature flag；
-- Phase 11 未通过：30-scale 004/005 仍会在 1800 秒边界合法 incomplete，尚不能默认切换。
+- `native_rcspp_inprocess` 已通过 default-release gate，现为 production exact 默认；
+  `LUNAR_ICE_SPPRC_EXACT_BACKEND=python_reference` 仍提供显式 rollback，unsupported
+  branch/cut capability 仍自动走 Python exact fallback；
+- Phase 9 persistent host 已实现，scale50/100 均已完成合法 incomplete、RSS、resume/hash gate；
+- Phase 10 部分完成：cut state、completion bound、visited-subset dominance 均有独立
+  feature flag；当前 acceptance 只启用 exact-proof visited-subset dominance，completion
+  bound 与 cut state 关闭，resource partition/bidirectional join 尚未实现；visited-subset
+  hot path 已加入 Gray-code key 复用、bucket optimistic-min 筛选和等价 state comparator；
+  visited mask 进一步改为任务上限 100 对应的 inline 128-bit fixed storage，消除了每个
+  label 的 heap-backed bitset 分配且不改变 elementarity/dominance 语义；
+- Phase 11 已通过：当前 hash 的完整 30-scale batch 为 20/20 exact、p50
+  `327.598609s`、最大 `1679.705969s`、zero redline、engine drift 0；默认 exact backend
+  已切为 native，Python reference/fallback/rollback 保留。
 
 完整实测证据见 `runs/native_spprc_implementation_report_zh.md`，upstream spike 见
 `runs/native_spprc_feasibility_spike_report_zh.md`。
@@ -111,14 +119,14 @@ inner loop 不做六位 rounding。Python 重建 `JourneyColumn` 后执行现有
 - reconstruction `2e-6`。
 
 branch context 只影响 label feasibility/terminal acceptance，不产生 branch dual；cut dual
-只通过受支持的 cut coefficient 进入 RC。v1 默认 official native 只支持：
+只通过受支持的 cut coefficient 进入 RC。Phase 8 promotion 后，official native 支持空 context
+以及 Ryan–Foster `same_journey/different_journey` 非空 branch context；cut 的默认边界仍是：
 
 ```text
-BranchContext.empty
 CutContext.empty
 ```
 
-非空 context 返回 `UNSUPPORTED_FEATURE` 并走 Python exact fallback。subset-row 的
+尚未 promotion 的非空 cut context 返回 `UNSUPPORTED_FEATURE` 并走 Python exact fallback。subset-row 的
 `floor(overlap/divisor)` threshold crossing、fleet coefficient 和 cut-aware state 已在
 Phase 10 feature flag 下实现并通过 5-task differential，但 `native_cut_state_enabled`
 默认关闭；Phase-I + 非空 cut 始终 fail closed。
@@ -147,7 +155,35 @@ visited 在 recharge 后不清空、每个 cycle 的 visited cardinality 和 glo
 effective RSS 是 `min(nominal, 70% physical RAM)`。资源 preflight 不满足最低内存时返回
 `RESOURCE_INSUFFICIENT`，不静默降低 exact 语义。proof 继承 row absolute deadline，预算
 等于 row deadline 减实际 worker elapsed，不启动第二个完整时钟。v1 root gate 使用
-exact-first，因此 worker actual elapsed 为 0。
+exact-first，因此 worker actual elapsed 为 0。runner 在每个 scale 启动前、child official
+config 和结束后核对 engine build hash；运行中源码/二进制漂移返回 `HASH_DRIFT`，不得作为
+acceptance evidence。
+
+scale-30 额外绑定 `branch_adaptive_sparse_harvest_v1` 与 2 秒 candidate-harvest cap。该 cap
+只在非空 Ryan–Foster branch context 的 adaptive pass 生效；root 仍使用未截断的 legacy
+harvest，proof pass 始终继承同一 row/node absolute deadline 的剩余时间。runner 会先清除
+继承环境中的 cap，再按 scale 配置显式注入，并把它写入 acceptance row 与 official config
+hash。固定 instance012 节点 A/B 保持相同官方 LP 下界和 no-negative certificate：node002
+由 63.93 秒降至 55.94 秒，node004 由 114.48 秒降至 110.30 秒。
+
+visited-subset dominance 的实现级优化不改变 dominance 关系：proper-subset keys 通过
+Gray code 原地更新，bucket 的各资源/RC 独立最小值只用于必要条件筛选（删除后的 stale
+minimum 只会多扫 bucket，不会漏掉 dominator），命中后使用与 composition dominance 等价的
+state comparator。固定 instance012/node016 最终 true-dual 快照保持 `188,738,767` 个 extended
+labels、`5,590,737` 个 dominated labels、`2,487,928` 个 subset rejects 和相同 no-negative
+certificate；核心时间由 `129.624s` 降到 `39.288s`。严格整例保持逐节点状态、轮数、新增列和
+LP bound 完全相同，总时间由 `3326.290682s` 降至 `1474.584039s`。
+
+随后将 `task_count <= 100` 的 visited state 从 `std::vector<uint64_t>` 改为 inline
+`std::array<uint64_t, 2>`。固定 instance014/node011 的同一 true-dual threshold proof 保持
+`COMPLETE`、frontier empty 和 `proved_no_rc_below=-1e-6`，native core 由
+`53.650985s` 降至 `40.646477s`。最终 instance014 在 strict cold-start、1800 秒 profile 下
+以 `1679.304927s` 独立 exact closure；完整 20-instance batch 中再次以
+`1679.705969s` closure。
+
+acceptance report schema v2 按 native scale profile 判断 exact/no-cheat/row-limit gate，并显式
+报告 mean/p50/max。child B4.2 内部沿用的历史 300/500 秒诊断字段不再被误当成 native
+release gate；它们仍保留用于旧报告兼容性。
 
 ## 6. 分阶段 gate
 
@@ -161,10 +197,11 @@ exact-first，因此 worker actual elapsed 为 0。
 8. Phase 7：30-scale 001–005 correctness 后才允许 technical opt-in promotion；
 9. Phase 8：Ryan–Foster feasibility/terminal state 和 child differential；
 10. Phase 9：persistent host、50/100 RSS guard/cancel/stale hash/round resume；
-11. Phase 10：subset-row、fleet cut、completion bound、bucket、bidirectional 逐项 gate；
-12. Phase 11：30-scale 20/20、每例 ≤1800、median ≤900 后才切默认。
+11. Phase 10：subset-row、fleet cut、completion bound、bucket、bidirectional 逐项 gate（当前仅
+    cut state differential、completion-bound differential 和 visited-subset dominance 完成）；
+12. Phase 11：30-scale 20/20、每例 ≤1800、median ≤900 后才切默认（已通过）。
 
-当前 technical promotion 已通过，Phase 11 default release 未通过。PathWyse、DSSR、NG worker 在 v1
+当前 technical promotion 与 Phase 11 default release 均已通过。PathWyse、DSSR、NG worker 在 v1
 只可作候选列；未来只有模型表达、license 和 certificate differential 完成后才重评 exact
 role。BALDES 只记录为构建、资源扩展和 certificate 适配尚未审计，不宣称 correctness defect。
 
@@ -184,7 +221,7 @@ python scripts/run_lunar_ice_native_spprc_acceptance.py \
   --no-resume
 ```
 
-Technical promotion 需要 5/10 differential、20 gate、30-instance001 ≤1800、001–005
-correctness 和零 certificate leak。Default release 还需要 30-scale 20/20、median ≤900、
+Technical promotion 的 5/10 differential、20 gate、30-instance001 ≤1800、001–005
+correctness 和零 certificate leak 已通过。Default release 的 30-scale 20/20、median ≤900、
 5/10/20 performance gate、50/100 bounded stability、Ryan–Foster child differential、
-fallback/rollback/hash/resume 和许可证材料全部通过。
+fallback/rollback/hash/resume 和许可证材料也已全部通过。

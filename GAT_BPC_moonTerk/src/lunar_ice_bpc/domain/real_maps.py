@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import heapq
+import json
 import math
+import os
 from pathlib import Path
+import tempfile
 from typing import Any
 
-from lunar_ice_bpc.domain.scenario import LunarIceConfig
+from lunar_ice_bpc.domain.scenario import LunarIceConfig, PATH_OPTION_POLICY_ID
 
 
 REAL_MAP_PREVIEW_SCHEMA_VERSION = "lunar_ice_bpc.real_map_preview.v1"
@@ -24,6 +28,8 @@ WONG_GREEN = "#359B73"
 WONG_ORANGE = "#D55E00"
 WONG_GOLD = "#E69F00"
 WONG_YELLOW = "#F0E442"
+REAL_MAP_EDGE_CHECKPOINT_SCHEMA_VERSION = "lunar_ice_bpc.real_map_edge_checkpoint.v1"
+REAL_MAP_EDGE_CHECKPOINT_ALGORITHM_ID = "directed_three_path_per_source_v1"
 
 
 @dataclass(frozen=True)
@@ -345,6 +351,7 @@ def build_real_map_edge_options(
     extent_km: float = 30.0,
     output_cells: int = 300,
     allow_remote: bool = False,
+    checkpoint_dir: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     """Build fixed three-path logical edges from real raster cost surfaces."""
 
@@ -367,7 +374,40 @@ def build_real_map_edge_options(
         node_id: _xy_to_cell([xy[0], xy[1]], cells, extent_km)
         for node_id, xy in nodes.items()
     }
-    for source_id, start in node_cells.items():
+    checkpoint_root = Path(checkpoint_dir) if checkpoint_dir is not None else None
+    checkpoint_fingerprint = _real_map_edge_checkpoint_fingerprint(
+        raw_map_dir=raw_map_dir,
+        nodes=nodes,
+        center_x_km=center_x_km,
+        center_y_km=center_y_km,
+        extent_km=extent_km,
+        output_cells=output_cells,
+        allow_remote=allow_remote,
+    )
+    source_items = list(node_cells.items())
+    for source_index, (source_id, start) in enumerate(source_items):
+        source_checkpoint = (
+            checkpoint_root / f"source_{source_index:03d}.json"
+            if checkpoint_root is not None
+            else None
+        )
+        source_edges = _load_real_map_edge_source_checkpoint(
+            source_checkpoint,
+            fingerprint=checkpoint_fingerprint,
+            source_id=source_id,
+            target_ids=[target_id for target_id in node_cells if target_id != source_id],
+        )
+        checkpoint_status = "reused"
+        if source_edges is not None:
+            edges.extend(source_edges)
+            _log_real_map_edge_checkpoint_progress(
+                checkpoint_root,
+                completed=source_index + 1,
+                total=len(source_items),
+                source_id=source_id,
+                status=checkpoint_status,
+            )
+            continue
         low_time_paths = _dijkstra_grid_paths_to_goals(
             cost_surfaces["low_time"],
             start,
@@ -377,6 +417,7 @@ def build_real_map_edge_options(
             path_type="low_time",
             extent_km=extent_km,
         )
+        source_edges = []
         for target_id, goal in node_cells.items():
             if source_id == target_id:
                 continue
@@ -389,8 +430,136 @@ def build_real_map_edge_options(
                 extent_km=extent_km,
                 first_path_override=low_time_paths.get(goal),
             )
-            edges.append({"from": source_id, "to": target_id, "path_options": options})
+            source_edges.append({"from": source_id, "to": target_id, "path_options": options})
+        edges.extend(source_edges)
+        if source_checkpoint is not None:
+            _write_real_map_edge_source_checkpoint(
+                source_checkpoint,
+                fingerprint=checkpoint_fingerprint,
+                source_id=source_id,
+                edges=source_edges,
+            )
+        _log_real_map_edge_checkpoint_progress(
+            checkpoint_root,
+            completed=source_index + 1,
+            total=len(source_items),
+            source_id=source_id,
+            status="generated",
+        )
     return edges
+
+
+def _real_map_edge_checkpoint_fingerprint(
+    *,
+    raw_map_dir: str | Path,
+    nodes: dict[str, tuple[float, float]],
+    center_x_km: float,
+    center_y_km: float,
+    extent_km: float,
+    output_cells: int,
+    allow_remote: bool,
+) -> str:
+    raw_dir = Path(raw_map_dir)
+    raw_files: list[list[Any]] = []
+    if raw_dir.exists():
+        for path in sorted((item for item in raw_dir.iterdir() if item.is_file()), key=lambda item: item.name):
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            raw_files.append([path.name, int(stat.st_size), int(stat.st_mtime_ns)])
+    payload = {
+        "schema_version": REAL_MAP_EDGE_CHECKPOINT_SCHEMA_VERSION,
+        "algorithm_id": REAL_MAP_EDGE_CHECKPOINT_ALGORITHM_ID,
+        "path_option_policy_id": PATH_OPTION_POLICY_ID,
+        "raw_files": raw_files,
+        "nodes": [[str(node_id), [float(xy[0]), float(xy[1])]] for node_id, xy in nodes.items()],
+        "center_x_km": float(center_x_km),
+        "center_y_km": float(center_y_km),
+        "extent_km": float(extent_km),
+        "output_cells": int(output_cells),
+        "allow_remote": bool(allow_remote),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _load_real_map_edge_source_checkpoint(
+    path: Path | None,
+    *,
+    fingerprint: str,
+    source_id: str,
+    target_ids: list[str],
+) -> list[dict[str, Any]] | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if payload.get("schema_version") != REAL_MAP_EDGE_CHECKPOINT_SCHEMA_VERSION:
+        return None
+    if payload.get("fingerprint") != fingerprint or payload.get("source_id") != source_id:
+        return None
+    edges = payload.get("edges")
+    if not isinstance(edges, list) or len(edges) != len(target_ids):
+        return None
+    if {str(edge.get("to")) for edge in edges if isinstance(edge, dict)} != set(target_ids):
+        return None
+    for edge in edges:
+        if not isinstance(edge, dict) or str(edge.get("from")) != source_id:
+            return None
+        options = edge.get("path_options")
+        if not isinstance(options, list) or len(options) != 3:
+            return None
+        if tuple(str(option.get("path_type")) for option in options if isinstance(option, dict)) != PATH_TYPES:
+            return None
+    return edges
+
+
+def _write_real_map_edge_source_checkpoint(
+    path: Path,
+    *,
+    fingerprint: str,
+    source_id: str,
+    edges: list[dict[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": REAL_MAP_EDGE_CHECKPOINT_SCHEMA_VERSION,
+        "fingerprint": fingerprint,
+        "source_id": source_id,
+        "edges": edges,
+    }
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+
+def _log_real_map_edge_checkpoint_progress(
+    checkpoint_root: Path | None,
+    *,
+    completed: int,
+    total: int,
+    source_id: str,
+    status: str,
+) -> None:
+    if checkpoint_root is None:
+        return
+    if completed == 1 or completed == total or completed % 5 == 0:
+        print(
+            f"[real-map edge checkpoint] {completed}/{total} source={source_id} status={status}",
+            flush=True,
+        )
 
 
 def build_real_map_preview(

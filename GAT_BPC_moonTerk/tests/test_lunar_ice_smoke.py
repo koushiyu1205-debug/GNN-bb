@@ -13627,6 +13627,8 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "LUNAR_ICE_SPPRC_CUT_STATE": "0",
                 "LUNAR_ICE_LABELING_WORKER_NG_SIZES": "6,10,14,20",
                 "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST": "1",
+                "LUNAR_ICE_LABELING_FINAL_JUDGE_PASS_POLICY": "adaptive_sparse_harvest_v1",
+                "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC": "2.0",
             },
             clear=False,
         ):
@@ -13636,6 +13638,11 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertTrue(binding["subset_dominance_enabled"])
         self.assertFalse(binding["completion_bound_enabled"])
         self.assertEqual(binding["worker_ng_sizes"], [6, 10, 14, 20])
+        self.assertEqual(
+            binding["final_judge_pass_policy"],
+            "adaptive_sparse_harvest_v1",
+        )
+        self.assertEqual(binding["adaptive_harvest_cap_sec"], 2.0)
         self.assertTrue(binding["engine_build_hash"])
         self.assertNotEqual(first_hash, module._config_hash(native_config))
         without_subset = dict(native_config)
@@ -13644,6 +13651,22 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertNotEqual(
             module._config_hash(native_config),
             module._config_hash(without_subset),
+        )
+        without_adaptive_pass = dict(native_config)
+        without_adaptive_pass["native_runtime_binding"] = dict(binding)
+        without_adaptive_pass["native_runtime_binding"][
+            "final_judge_pass_policy"
+        ] = "harvest_then_proof"
+        self.assertNotEqual(
+            module._config_hash(native_config),
+            module._config_hash(without_adaptive_pass),
+        )
+        without_adaptive_cap = dict(native_config)
+        without_adaptive_cap["native_runtime_binding"] = dict(binding)
+        without_adaptive_cap["native_runtime_binding"]["adaptive_harvest_cap_sec"] = None
+        self.assertNotEqual(
+            module._config_hash(native_config),
+            module._config_hash(without_adaptive_cap),
         )
         changed_partition_order = dict(config)
         changed_partition_order["partition_k_order"] = "ascending"

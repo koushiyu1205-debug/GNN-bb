@@ -2934,6 +2934,7 @@ def solve_highs_compact_fixed_graph(
         "sortie_count": 0,
         "objective": None,
         "source": "",
+        "sort_indices": _compact_mip_start_sort_indices_enabled(),
         "note": "",
     }
 
@@ -6909,6 +6910,7 @@ def _set_highs_singleton_mip_start(
         "sortie_count": 0,
         "objective": None,
         "source": "",
+        "sort_indices": _compact_mip_start_sort_indices_enabled(),
         "note": "",
     }
     source = "singleton_sortie_greedy"

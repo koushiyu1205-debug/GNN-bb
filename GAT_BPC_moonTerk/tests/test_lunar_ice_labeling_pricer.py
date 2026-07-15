@@ -13,7 +13,9 @@ from lunar_ice_bpc.domain.scheduling import generate_instance
 from lunar_ice_bpc.exact.bpc.master.reduced_cost import ReducedCostContext
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import (
     FinalJudgeResult,
+    LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
     _labeling_final_judge_exact_harvest_target,
+    _smaller_optional_time_limit,
     run_true_dual_root_final_judge,
 )
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
@@ -66,14 +68,20 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     LARGE_TASK_DIRECT_WORKER_MAX_TASKS_ENV,
     LARGE_TASK_DIRECT_WORKER_TIME_CAP_SEC_ENV,
     LABELING_WORKER_MAX_TASK_CAP_ENV,
+    LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE,
+    LABELING_FINAL_JUDGE_PASS_POLICY_BRANCH_ADAPTIVE,
+    LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV,
     RELAXED_LABELING_WORKER,
     _catalog_physical_seed_columns,
     _catalog_refinement_neighborhood_seed_task_sets,
     _catalog_refinement_seed_portfolio,
     _catalog_refinement_seed_task_sets,
     _hidden_negative_refinement_summary,
+    _effective_labeling_final_judge_pass_policy,
+    _adaptive_final_judge_harvest_cap_sec,
     _large_task_direct_worker_seed_task_sets,
     _negative_worker_seed_task_sets,
+    _next_labeling_final_judge_pass_strategy,
     _refinement_seed_source_rows,
     _run_large_task_direct_worker,
     _worker_task_cap,
@@ -108,6 +116,18 @@ from lunar_ice_bpc.runners.labeling_worker_diagnostic import run_labeling_worker
 
 
 class LunarIceLabelingPricerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # This legacy suite audits the Python reference pricer's detailed payload
+        # and monkey-patches its resource-label core.  Keep that implementation
+        # explicit now that the production exact default is native; native-default,
+        # rollback, and fallback contracts have dedicated backend tests.
+        self._reference_backend_env = patch.dict(
+            os.environ,
+            {"LUNAR_ICE_SPPRC_EXACT_BACKEND": "python_reference"},
+        )
+        self._reference_backend_env.start()
+        self.addCleanup(self._reference_backend_env.stop)
+
     def test_status_semantics_contract_rejects_worker_certificate_leak(self) -> None:
         contract = _status_semantics_contract(
             {
@@ -3216,6 +3236,222 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
             PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
         )
 
+    def test_labeling_final_judge_proof_only_skips_harvest_and_can_certify(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        universe = enumerate_direct_journey_columns(data, max_exact_tasks=5)
+        rmp = solve_restricted_journey_rmp(
+            data.task_ids,
+            universe.columns,
+            fleet_size=data.fleet_size,
+        )
+        context = ReducedCostContext(
+            task_duals=rmp.duals.cover,
+            fleet_dual=rmp.duals.fleet_limit,
+            cut_duals=rmp.duals.cuts or {},
+            dual_fingerprint="labeling-proof-only-test",
+            rmp_iteration_id="root-1",
+        )
+        proof_payload = {
+            "status": "FULL_UNIVERSE_INCREMENTAL_LABEL_PRICED",
+            "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
+            "pricing_proof_kind": PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+            "can_certify_no_negative": True,
+            "uses_true_dual_bpc_certificate": True,
+            "true_best_reduced_cost": None,
+            "pricing_best_reduced_cost": None,
+            "returned_column_count": 0,
+            "true_audited_column_count": 0,
+            "pricing_complete_for_all_task_subsets": True,
+            "global_remaining_rc_lb": -1.0e-6,
+            "global_remaining_rc_lb_valid": True,
+            "global_remaining_rc_lb_coverage_complete": True,
+            "completion_bound": {"enabled": False, "can_certify_no_negative": False},
+        }
+
+        with patch(
+            "lunar_ice_bpc.exact.bpc.pricing.final_judge.run_bpc_labeling_pricer",
+            return_value=(proof_payload, tuple()),
+        ) as mocked:
+            result = run_true_dual_root_final_judge(
+                data,
+                context,
+                max_direct_tasks=5,
+                labeling_final_judge_enabled=True,
+                labeling_final_judge_max_exact_tasks=5,
+                labeling_final_judge_pass_strategy=LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
+            )
+
+        self.assertEqual(mocked.call_count, 1)
+        self.assertFalse(mocked.call_args.kwargs["config"].stop_at_first_negative)
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+        self.assertTrue(result.pricing_payload["can_certify_no_negative"])
+        self.assertEqual(
+            result.pricing_payload["labeling_final_judge_pass_strategy"],
+            LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
+        )
+        self.assertFalse(result.pricing_payload["labeling_final_judge_two_phase_enabled"])
+        self.assertFalse(result.pricing_payload["labeling_final_judge_harvest_pass_attempted"])
+        self.assertTrue(result.pricing_payload["labeling_final_judge_proof_pass_attempted"])
+
+    def test_adaptive_final_judge_pass_policy_switches_only_on_sparse_results(self) -> None:
+        policy = LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE
+        self.assertEqual(
+            _next_labeling_final_judge_pass_strategy(
+                policy,
+                {
+                    "labeling_final_judge_proof_pass_attempted": False,
+                    "labeling_final_judge_harvest_pass_column_count": 64,
+                },
+                max_columns_per_round=128,
+                effective_harvest_target=64,
+            ),
+            "harvest_then_proof",
+        )
+        self.assertEqual(
+            _next_labeling_final_judge_pass_strategy(
+                policy,
+                {
+                    "labeling_final_judge_proof_pass_attempted": False,
+                    "labeling_final_judge_harvest_pass_column_count": 7,
+                },
+                max_columns_per_round=128,
+                effective_harvest_target=64,
+            ),
+            "proof_only",
+        )
+        self.assertEqual(
+            _effective_labeling_final_judge_pass_policy(
+                LABELING_FINAL_JUDGE_PASS_POLICY_BRANCH_ADAPTIVE,
+                branch_context_active=False,
+            ),
+            "harvest_then_proof",
+        )
+        self.assertEqual(
+            _effective_labeling_final_judge_pass_policy(
+                LABELING_FINAL_JUDGE_PASS_POLICY_BRANCH_ADAPTIVE,
+                branch_context_active=True,
+            ),
+            "adaptive_sparse_harvest_v1",
+        )
+        self.assertEqual(
+            _next_labeling_final_judge_pass_strategy(
+                policy,
+                {
+                    "labeling_final_judge_proof_pass_attempted": True,
+                    "manual_branch_feasible_negative_count": 128,
+                },
+                max_columns_per_round=128,
+                effective_harvest_target=64,
+            ),
+            "harvest_then_proof",
+        )
+        self.assertEqual(
+            _next_labeling_final_judge_pass_strategy(
+                policy,
+                {
+                    "labeling_final_judge_proof_pass_attempted": True,
+                    "manual_branch_feasible_negative_count": 3,
+                },
+                max_columns_per_round=128,
+                effective_harvest_target=64,
+            ),
+            "proof_only",
+        )
+
+    def test_adaptive_final_judge_harvest_cap_is_policy_scoped_and_fails_closed(self) -> None:
+        env_name = LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV
+        with patch.dict(os.environ, {env_name: "2.5"}, clear=False):
+            self.assertEqual(
+                _adaptive_final_judge_harvest_cap_sec(
+                    LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE
+                ),
+                2.5,
+            )
+            self.assertIsNone(
+                _adaptive_final_judge_harvest_cap_sec("harvest_then_proof")
+            )
+
+        for invalid in ("0", "-1", "nan", "inf", "not-a-number"):
+            with self.subTest(invalid=invalid):
+                with patch.dict(os.environ, {env_name: invalid}, clear=False):
+                    with self.assertRaises(ValueError):
+                        _adaptive_final_judge_harvest_cap_sec(
+                            LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE
+                        )
+
+    def test_labeling_final_judge_harvest_cap_preserves_total_proof_budget(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        context = ReducedCostContext(
+            task_duals={task_id: 0.0 for task_id in data.task_ids},
+            fleet_dual=0.0,
+            cut_duals={},
+            dual_fingerprint="labeling-harvest-cap-test",
+            rmp_iteration_id="branch-1",
+        )
+        incomplete_payload = {
+            "status": "TIME_LIMIT",
+            "pricing_state": PricingState.INCOMPLETE_LIMIT.value,
+            "pricing_proof_kind": PROOF_KIND_EXHAUSTIVE_INCOMPLETE,
+            "can_certify_no_negative": False,
+            "true_best_reduced_cost": None,
+            "returned_column_count": 0,
+            "true_audited_column_count": 0,
+        }
+        proof_payload = {
+            "status": "FULL_UNIVERSE_INCREMENTAL_LABEL_PRICED",
+            "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value,
+            "pricing_proof_kind": PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE,
+            "can_certify_no_negative": True,
+            "uses_true_dual_bpc_certificate": True,
+            "true_best_reduced_cost": None,
+            "returned_column_count": 0,
+            "true_audited_column_count": 0,
+            "pricing_complete_for_all_task_subsets": True,
+            "global_remaining_rc_lb": -1.0e-6,
+            "global_remaining_rc_lb_valid": True,
+            "global_remaining_rc_lb_coverage_complete": True,
+            "completion_bound": {"enabled": False, "can_certify_no_negative": False},
+        }
+
+        with (
+            patch(
+                "lunar_ice_bpc.exact.bpc.pricing.final_judge.run_bpc_labeling_pricer",
+                side_effect=((incomplete_payload, tuple()), (proof_payload, tuple())),
+            ) as mocked,
+            patch(
+                "lunar_ice_bpc.exact.bpc.pricing.final_judge.perf_counter",
+                side_effect=(100.0, 100.0, 102.0, 102.0, 102.0, 105.0, 105.0),
+            ),
+        ):
+            result = run_true_dual_root_final_judge(
+                data,
+                context,
+                max_direct_tasks=5,
+                wall_time_limit_sec=10.0,
+                labeling_final_judge_enabled=True,
+                labeling_final_judge_max_exact_tasks=5,
+                labeling_final_judge_harvest_time_cap_sec=2.0,
+            )
+
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(mocked.call_args_list[0].kwargs["config"].wall_time_limit_sec, 2.0)
+        self.assertEqual(mocked.call_args_list[1].kwargs["config"].wall_time_limit_sec, 8.0)
+        self.assertEqual(result.pricing_state, PricingState.CERTIFIED_NO_NEGATIVE)
+        self.assertEqual(result.pricing_payload["labeling_final_judge_harvest_time_cap_sec"], 2.0)
+        self.assertTrue(result.pricing_payload["labeling_final_judge_proof_pass_attempted"])
+        self.assertEqual(_smaller_optional_time_limit(None, 2.0), 2.0)
+        self.assertEqual(_smaller_optional_time_limit(1.5, 2.0), 1.5)
+        with self.assertRaises(ValueError):
+            run_true_dual_root_final_judge(
+                data,
+                context,
+                max_direct_tasks=5,
+                labeling_final_judge_enabled=True,
+                labeling_final_judge_harvest_time_cap_sec=float("nan"),
+            )
+
     def test_labeling_pricer_final_judge_wall_time_limit_fails_closed(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
@@ -3570,6 +3806,7 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
             "labeling_final_judge_task_count": 5,
             "labeling_final_judge_exact_harvest_target": 4,
             "labeling_final_judge_exact_harvest_target_source": "explicit_parameter",
+            "labeling_final_judge_harvest_time_cap_sec": 2.0,
             "exact_negative_harvest_target": 4,
             "exact_negative_harvest_candidate_count": 0,
             "exact_negative_harvest_selected_count": 0,
@@ -3584,10 +3821,22 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
             all_priced_columns=tuple(initial_columns),
         )
 
-        with patch(
-            "lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver.run_true_dual_root_final_judge",
-            return_value=mock_result,
-        ) as mocked_judge:
+        with (
+            patch(
+                "lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver.run_true_dual_root_final_judge",
+                return_value=mock_result,
+            ) as mocked_judge,
+            patch.dict(
+                os.environ,
+                {
+                    "LUNAR_ICE_LABELING_FINAL_JUDGE_PASS_POLICY": (
+                        LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE
+                    ),
+                    LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV: "2.0",
+                },
+                clear=False,
+            ),
+        ):
             result = solve_node_pricing_with_b2b_r3(
                 data,
                 initial_columns=initial_columns,
@@ -3603,6 +3852,14 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
         self.assertTrue(mocked_judge.call_args.kwargs["labeling_final_judge_enabled"])
         self.assertEqual(mocked_judge.call_args.kwargs["labeling_final_judge_max_exact_tasks"], 5)
         self.assertEqual(mocked_judge.call_args.kwargs["labeling_final_judge_exact_harvest_target"], 4)
+        self.assertEqual(
+            mocked_judge.call_args.kwargs["labeling_final_judge_harvest_time_cap_sec"],
+            2.0,
+        )
+        self.assertEqual(
+            result["history"][0]["labeling_final_judge_harvest_time_cap_sec"],
+            2.0,
+        )
         self.assertEqual(result["final_judge"]["labeling_final_judge_opt_in_source"], "explicit_parameter")
         self.assertEqual(result["final_judge_status"], "LABELING_FINAL_JUDGE_PRICED")
         self.assertEqual(result["final_judge_exact_status"], "BPC_NO_NEGATIVE_CERTIFIED")

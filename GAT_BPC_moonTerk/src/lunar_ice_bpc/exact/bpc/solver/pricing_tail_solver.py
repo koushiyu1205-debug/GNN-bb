@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from itertools import combinations
+from math import isfinite
 import os
 import signal
 import threading
@@ -35,10 +36,15 @@ from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
     build_tail_dual_center,
     build_worker_duals_with_tail_center,
 )
-from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
+from lunar_ice_bpc.exact.bpc.pricing.final_judge import (
+    LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
+    LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
+    run_true_dual_root_final_judge,
+)
 from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
 from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+    DEFAULT_EXACT_BACKEND_ID,
     RELAXED_NG_ROUTE_MODE,
     LabelingPricingConfig,
     run_bpc_labeling_pricer,
@@ -115,6 +121,22 @@ LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE_ENV = (
     "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE"
 )
 EXACT_FINAL_JUDGE_FIRST_ENV = "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST"
+LABELING_FINAL_JUDGE_PASS_POLICY_ENV = "LUNAR_ICE_LABELING_FINAL_JUDGE_PASS_POLICY"
+LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV = (
+    "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC"
+)
+LABELING_FINAL_JUDGE_PASS_POLICY_LEGACY = "harvest_then_proof"
+LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE = "adaptive_sparse_harvest_v1"
+LABELING_FINAL_JUDGE_PASS_POLICY_BRANCH_ADAPTIVE = "branch_adaptive_sparse_harvest_v1"
+LABELING_FINAL_JUDGE_PASS_POLICY_PROOF_ONLY = "proof_only"
+LABELING_FINAL_JUDGE_PASS_POLICIES = frozenset(
+    {
+        LABELING_FINAL_JUDGE_PASS_POLICY_LEGACY,
+        LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE,
+        LABELING_FINAL_JUDGE_PASS_POLICY_BRANCH_ADAPTIVE,
+        LABELING_FINAL_JUDGE_PASS_POLICY_PROOF_ONLY,
+    }
+)
 LARGE_TASK_DIRECT_WORKER_ENV = "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER"
 LARGE_TASK_DIRECT_WORKER_MAX_TASKS_ENV = "LUNAR_ICE_LARGE_TASK_DIRECT_WORKER_MAX_TASKS"
 LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS_ENV = (
@@ -500,6 +522,17 @@ def solve_node_pricing_with_b2b_r3(
     worker_only_success_count = 0
     tail_dual_history: list[JourneyDuals] = []
     exact_final_judge_first = _env_bool(EXACT_FINAL_JUDGE_FIRST_ENV, default=False)
+    configured_final_judge_pass_policy = _labeling_final_judge_pass_policy()
+    final_judge_pass_policy = _effective_labeling_final_judge_pass_policy(
+        configured_final_judge_pass_policy,
+        branch_context_active=not active_context.empty,
+    )
+    next_final_judge_pass_strategy = _initial_labeling_final_judge_pass_strategy(
+        final_judge_pass_policy
+    )
+    final_judge_harvest_time_cap_sec = _adaptive_final_judge_harvest_cap_sec(
+        final_judge_pass_policy
+    )
 
     def export_active_columns() -> tuple[JourneyColumn, ...] | None:
         if not return_active_columns_payload:
@@ -866,12 +899,21 @@ def solve_node_pricing_with_b2b_r3(
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
             labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
+            labeling_final_judge_pass_strategy=next_final_judge_pass_strategy,
+            labeling_final_judge_harvest_time_cap_sec=final_judge_harvest_time_cap_sec,
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
         profile_totals["final_judge_call_count_profiled"] += 1
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
+        current_final_judge_pass_strategy = next_final_judge_pass_strategy
+        next_final_judge_pass_strategy = _next_labeling_final_judge_pass_strategy(
+            final_judge_pass_policy,
+            judge.pricing_payload,
+            max_columns_per_round=max_columns_per_round,
+            effective_harvest_target=effective_exact_harvest_target,
+        )
         for column in judge.all_priced_columns:
             signature = column_signature_from_journey(column)
             current = all_final_judge_columns.get(signature)
@@ -1006,6 +1048,22 @@ def solve_node_pricing_with_b2b_r3(
                 ),
                 "labeling_final_judge_two_phase_enabled": judge.pricing_payload.get(
                     "labeling_final_judge_two_phase_enabled"
+                ),
+                "labeling_final_judge_pass_policy": final_judge_pass_policy,
+                "labeling_final_judge_configured_pass_policy": configured_final_judge_pass_policy,
+                "labeling_final_judge_pass_strategy": current_final_judge_pass_strategy,
+                "labeling_final_judge_next_pass_strategy": next_final_judge_pass_strategy,
+                "labeling_final_judge_harvest_time_cap_sec": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_time_cap_sec"
+                ),
+                "labeling_final_judge_harvest_pass_attempted": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_attempted"
+                ),
+                "labeling_final_judge_harvest_pass_wall_time": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_wall_time"
+                ),
+                "labeling_final_judge_harvest_pass_column_count": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_column_count"
                 ),
                 "labeling_final_judge_proof_pass_attempted": judge.pricing_payload.get(
                     "labeling_final_judge_proof_pass_attempted"
@@ -1467,6 +1525,12 @@ def _solve_b2a_full_universe_audit(
     final_judge_payload = {
         "status": "FULL_UNIVERSE_MEMBERSHIP_RC_AUDIT",
         "pricing_state": PricingState.CERTIFIED_NO_NEGATIVE.value if certified else PricingState.INCOMPLETE_LIMIT.value,
+        "pricing_proof_kind": (
+            "EXHAUSTIVE_NO_NEGATIVE" if certified else "EXHAUSTIVE_INCOMPLETE"
+        ),
+        "underlying_pricing_proof_kind": (
+            "EXHAUSTIVE_NO_NEGATIVE" if certified else "EXHAUSTIVE_INCOMPLETE"
+        ),
         "can_certify_no_negative": bool(certified),
         "uses_true_dual_bpc_certificate": bool(certified),
         "pricing_rc_audit_pass": bool(certified),
@@ -1556,6 +1620,17 @@ def _solve_b2b_seeded_tail_cg(
     last_judge_payload: dict | None = None
     last_duplicate_audit: dict | None = None
     last_hidden_audit: dict | None = None
+    configured_final_judge_pass_policy = _labeling_final_judge_pass_policy()
+    final_judge_pass_policy = _effective_labeling_final_judge_pass_policy(
+        configured_final_judge_pass_policy,
+        branch_context_active=False,
+    )
+    next_final_judge_pass_strategy = _initial_labeling_final_judge_pass_strategy(
+        final_judge_pass_policy
+    )
+    final_judge_harvest_time_cap_sec = _adaptive_final_judge_harvest_cap_sec(
+        final_judge_pass_policy
+    )
 
     for round_index in range(1, max(1, int(max_rounds)) + 1):
         master_columns = _master_columns(pool, view)
@@ -1613,9 +1688,18 @@ def _solve_b2b_seeded_tail_cg(
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
             labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
+            labeling_final_judge_pass_strategy=next_final_judge_pass_strategy,
+            labeling_final_judge_harvest_time_cap_sec=final_judge_harvest_time_cap_sec,
         )
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
+        current_final_judge_pass_strategy = next_final_judge_pass_strategy
+        next_final_judge_pass_strategy = _next_labeling_final_judge_pass_strategy(
+            final_judge_pass_policy,
+            judge.pricing_payload,
+            max_columns_per_round=max_columns_per_round,
+            effective_harvest_target=effective_exact_harvest_target,
+        )
         profiling.merge_completion_payload(judge.pricing_payload)
         negative_pairs = _manual_negative_pairs(
             judge.all_priced_columns,
@@ -1813,6 +1897,17 @@ def _solve_b2b_r2_worker_before_final_judge(
     worker_only_success_count = 0
     tail_dual_history: list[JourneyDuals] = []
     exact_final_judge_first = _env_bool(EXACT_FINAL_JUDGE_FIRST_ENV, default=False)
+    configured_final_judge_pass_policy = _labeling_final_judge_pass_policy()
+    final_judge_pass_policy = _effective_labeling_final_judge_pass_policy(
+        configured_final_judge_pass_policy,
+        branch_context_active=False,
+    )
+    next_final_judge_pass_strategy = _initial_labeling_final_judge_pass_strategy(
+        final_judge_pass_policy
+    )
+    final_judge_harvest_time_cap_sec = _adaptive_final_judge_harvest_cap_sec(
+        final_judge_pass_policy
+    )
 
     for round_index in range(1, max(1, int(max_rounds)) + 1):
         if _wall_time_limit_exceeded(wall_time_limit_sec, started_at=started_at):
@@ -2060,12 +2155,21 @@ def _solve_b2b_r2_worker_before_final_judge(
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
             labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
+            labeling_final_judge_pass_strategy=next_final_judge_pass_strategy,
+            labeling_final_judge_harvest_time_cap_sec=final_judge_harvest_time_cap_sec,
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
         profile_totals["final_judge_call_count_profiled"] += 1
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
+        current_final_judge_pass_strategy = next_final_judge_pass_strategy
+        next_final_judge_pass_strategy = _next_labeling_final_judge_pass_strategy(
+            final_judge_pass_policy,
+            judge.pricing_payload,
+            max_columns_per_round=max_columns_per_round,
+            effective_harvest_target=effective_exact_harvest_target,
+        )
         profiling.merge_completion_payload(judge.pricing_payload)
         _accumulate_pricing_profile(profile_totals, judge.pricing_payload)
         negative_pairs = _manual_negative_pairs(
@@ -2179,6 +2283,22 @@ def _solve_b2b_r2_worker_before_final_judge(
                 ),
                 "labeling_final_judge_two_phase_enabled": judge.pricing_payload.get(
                     "labeling_final_judge_two_phase_enabled"
+                ),
+                "labeling_final_judge_pass_policy": final_judge_pass_policy,
+                "labeling_final_judge_configured_pass_policy": configured_final_judge_pass_policy,
+                "labeling_final_judge_pass_strategy": current_final_judge_pass_strategy,
+                "labeling_final_judge_next_pass_strategy": next_final_judge_pass_strategy,
+                "labeling_final_judge_harvest_time_cap_sec": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_time_cap_sec"
+                ),
+                "labeling_final_judge_harvest_pass_attempted": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_attempted"
+                ),
+                "labeling_final_judge_harvest_pass_wall_time": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_wall_time"
+                ),
+                "labeling_final_judge_harvest_pass_column_count": judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_column_count"
                 ),
                 "labeling_final_judge_proof_pass_attempted": judge.pricing_payload.get(
                     "labeling_final_judge_proof_pass_attempted"
@@ -4355,6 +4475,116 @@ def _adaptive_labeling_final_judge_exact_harvest_target(
     return value
 
 
+def _labeling_final_judge_pass_policy() -> str:
+    value = str(
+        os.environ.get(
+            LABELING_FINAL_JUDGE_PASS_POLICY_ENV,
+            LABELING_FINAL_JUDGE_PASS_POLICY_LEGACY,
+        )
+        or ""
+    ).strip().lower()
+    if value not in LABELING_FINAL_JUDGE_PASS_POLICIES:
+        raise ValueError(
+            f"unsupported {LABELING_FINAL_JUDGE_PASS_POLICY_ENV}={value!r}; "
+            f"expected one of {sorted(LABELING_FINAL_JUDGE_PASS_POLICIES)!r}"
+        )
+    return value
+
+
+def _effective_labeling_final_judge_pass_policy(
+    configured_policy: str,
+    *,
+    branch_context_active: bool,
+) -> str:
+    if str(configured_policy) == LABELING_FINAL_JUDGE_PASS_POLICY_BRANCH_ADAPTIVE:
+        return (
+            LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE
+            if branch_context_active
+            else LABELING_FINAL_JUDGE_PASS_POLICY_LEGACY
+        )
+    return str(configured_policy)
+
+
+def _initial_labeling_final_judge_pass_strategy(policy: str) -> str:
+    if str(policy) == LABELING_FINAL_JUDGE_PASS_POLICY_PROOF_ONLY:
+        return LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+    return LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF
+
+
+def _adaptive_final_judge_harvest_cap_sec(policy: str) -> float | None:
+    if str(policy) != LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE:
+        return None
+    raw = os.environ.get(LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV)
+    if raw is None or not str(raw).strip():
+        return None
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"invalid {LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV}={raw!r}"
+        ) from exc
+    if not isfinite(value) or value <= 0.0:
+        raise ValueError(
+            f"{LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV} "
+            "must be a finite positive number"
+        )
+    return value
+
+
+def _next_labeling_final_judge_pass_strategy(
+    policy: str,
+    judge_payload: Mapping[str, object],
+    *,
+    max_columns_per_round: int,
+    effective_harvest_target: int | None,
+) -> str:
+    """Choose the next pass without changing proof or column-audit semantics.
+
+    The native harvest pass is valuable while it fills its requested batch.
+    Once it returns a sparse batch, the next RMP dual is sent directly to the
+    exhaustive proof pass, avoiding another bounded harvest that is unlikely
+    to fill.  A proof pass that exposes at least one full master batch switches
+    back to harvest for the next dual; a sparse proof stays proof-only.
+    """
+
+    normalized_policy = str(policy)
+    if normalized_policy == LABELING_FINAL_JUDGE_PASS_POLICY_PROOF_ONLY:
+        return LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+    if normalized_policy != LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE:
+        return LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF
+
+    proof_attempted = bool(judge_payload.get("labeling_final_judge_proof_pass_attempted"))
+    negative_count = int(
+        judge_payload.get("manual_branch_feasible_negative_count")
+        or judge_payload.get("true_negative_column_count")
+        or 0
+    )
+    if proof_attempted:
+        return (
+            LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF
+            if negative_count >= max(1, int(max_columns_per_round))
+            else LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+        )
+
+    harvest_count = int(
+        judge_payload.get("labeling_final_judge_harvest_pass_column_count") or 0
+    )
+    target = max(
+        1,
+        int(
+            effective_harvest_target
+            if effective_harvest_target is not None
+            else judge_payload.get("labeling_final_judge_exact_harvest_target")
+            or 1
+        ),
+    )
+    return (
+        LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF
+        if harvest_count >= target
+        else LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+    )
+
+
 def _labeling_final_judge_adaptive_harvest_schedule() -> tuple[tuple[int, int], ...]:
     raw = os.environ.get(LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE_ENV)
     if raw is not None:
@@ -5120,7 +5350,9 @@ def _recover_branch_rmp_with_phase_one(
 
     started_at = perf_counter()
     history: list[dict] = []
-    backend_id = str(os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", "python_reference"))
+    backend_id = str(
+        os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", DEFAULT_EXACT_BACKEND_ID)
+    )
     if backend_id == "python_reference":
         return {
             "status": "UNSUPPORTED_BACKEND",

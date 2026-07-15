@@ -171,6 +171,12 @@ py::dict solve_payload(const py::dict& payload) {
         output.telemetry.completion_bound_pruned_labels;
     telemetry["completion_bound_enabled"] =
         output.telemetry.completion_bound_evaluated_labels > 0;
+    telemetry["subset_dominance_key_lookups"] =
+        output.telemetry.subset_dominance_key_lookups;
+    telemetry["subset_dominance_nonempty_buckets"] =
+        output.telemetry.subset_dominance_nonempty_buckets;
+    telemetry["subset_dominance_summary_skipped_buckets"] =
+        output.telemetry.subset_dominance_summary_skipped_buckets;
     telemetry["subset_dominance_candidate_checks"] =
         output.telemetry.subset_dominance_candidate_checks;
     telemetry["subset_dominance_rejected_labels"] =
