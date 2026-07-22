@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+import os
 import random
 from collections import Counter
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from lunar_ice_bpc.domain.real_maps import (
@@ -13,6 +17,7 @@ from lunar_ice_bpc.domain.real_maps import (
     REAL_MAP_GENERATOR_ID,
     build_real_map_edge_options,
     build_real_map_preview,
+    _real_map_edge_checkpoint_fingerprint,
 )
 from lunar_ice_bpc.domain.scenario import (
     ACTIVE_FOOTPRINT_BY_SCALE,
@@ -29,6 +34,9 @@ from lunar_ice_bpc.domain.scenario import (
     scale_label,
     snap_up,
 )
+
+
+REAL_MAP_INSTANCE_INPUT_CHECKPOINT_SCHEMA_VERSION = "lunar_ice_bpc.real_map_instance_input_checkpoint.v1"
 from lunar_ice_bpc.domain.scheduling import (
     _apply_time_windows,
     _build_reference_solution,
@@ -107,7 +115,36 @@ def generate_real_map_instance(
         }
 
     depot_xy = tuple(float(value) for value in preview["depot"]["xy_km"])
-    sampled_targets = _sample_targets_with_mission_screen(preview["targets"], scale, rng, depot_xy)
+    checkpoint_root = Path(edge_checkpoint_dir) if edge_checkpoint_dir is not None else None
+    input_checkpoint = checkpoint_root / "instance_input.json" if checkpoint_root is not None else None
+    checkpoint_payload = _load_real_instance_input_checkpoint(
+        input_checkpoint,
+        scale=scale,
+        seed=seed,
+        index=index,
+        time_window_mode=time_mode,
+        preview_targets=preview["targets"],
+        depot_xy=depot_xy,
+    )
+    checkpoint_status = "reused"
+    if checkpoint_payload is None:
+        sampled_targets = _recover_targets_from_edge_checkpoints(
+            checkpoint_root,
+            preview_targets=preview["targets"],
+            scale=scale,
+            raw_map_dir=raw_map_dir,
+            depot_xy=depot_xy,
+            center_x_km=center_x,
+            center_y_km=center_y,
+            extent_km=extent,
+            output_cells=cells,
+        )
+        checkpoint_status = "recovered" if sampled_targets is not None else "generated"
+        if sampled_targets is None:
+            sampled_targets = _sample_targets_with_mission_screen(preview["targets"], scale, rng, depot_xy)
+    else:
+        sampled_by_id = {str(target["id"]): target for target in preview["targets"]}
+        sampled_targets = [sampled_by_id[target_id] for target_id in checkpoint_payload["sampled_target_ids"]]
     missing_roles = _missing_required_candidate_roles(sampled_targets)
     if missing_roles:
         return {
@@ -124,7 +161,26 @@ def generate_real_map_instance(
                 ),
             },
         }
-    tasks = _real_task_payloads(sampled_targets, scale, rng)
+    if checkpoint_payload is None:
+        tasks = _real_task_payloads(sampled_targets, scale, rng)
+        _write_real_instance_input_checkpoint(
+            input_checkpoint,
+            scale=scale,
+            seed=seed,
+            index=index,
+            time_window_mode=time_mode,
+            preview_targets=preview["targets"],
+            depot_xy=depot_xy,
+            sampled_targets=sampled_targets,
+            tasks=tasks,
+        )
+    else:
+        tasks = checkpoint_payload["tasks"]
+    if input_checkpoint is not None:
+        print(
+            f"[real-map instance checkpoint] status={checkpoint_status} path={input_checkpoint}",
+            flush=True,
+        )
     nodes = {"depot": depot_xy}
     nodes.update({task_id: tuple(task["xy_km"]) for task_id, task in tasks.items()})
     edges = build_real_map_edge_options(
@@ -275,6 +331,166 @@ def _real_task_payloads(targets: list[dict[str, Any]], scale: int, rng: random.R
         norm_ice = float(task["expected_ice_kg"]) / max_ice
         task["science_weight"] = round(0.6 * float(task["ice_confidence"]) + 0.4 * norm_ice, 6)
     return {task["id"]: task for task in raw_tasks}
+
+
+def _preview_target_signature(targets: list[dict[str, Any]]) -> str:
+    payload = [
+        [str(target["id"]), [round(float(target["xy_km"][0]), 6), round(float(target["xy_km"][1]), 6)]]
+        for target in targets
+    ]
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _load_real_instance_input_checkpoint(
+    path: Path | None,
+    *,
+    scale: int,
+    seed: int,
+    index: int,
+    time_window_mode: str,
+    preview_targets: list[dict[str, Any]],
+    depot_xy: tuple[float, float],
+) -> dict[str, Any] | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    expected = {
+        "schema_version": REAL_MAP_INSTANCE_INPUT_CHECKPOINT_SCHEMA_VERSION,
+        "scale": int(scale),
+        "seed": int(seed),
+        "index": int(index),
+        "time_window_mode": str(time_window_mode),
+        "preview_target_signature": _preview_target_signature(preview_targets),
+        "depot_xy": [round(float(depot_xy[0]), 6), round(float(depot_xy[1]), 6)],
+    }
+    if any(payload.get(key) != value for key, value in expected.items()):
+        return None
+    target_ids = payload.get("sampled_target_ids")
+    tasks = payload.get("tasks")
+    if not isinstance(target_ids, list) or len(target_ids) != int(scale) or len(set(target_ids)) != int(scale):
+        return None
+    available_ids = {str(target["id"]) for target in preview_targets}
+    if any(not isinstance(target_id, str) or target_id not in available_ids for target_id in target_ids):
+        return None
+    if not isinstance(tasks, dict) or list(tasks) != [f"ice_site_{offset:03d}" for offset in range(1, int(scale) + 1)]:
+        return None
+    return payload
+
+
+def _write_real_instance_input_checkpoint(
+    path: Path | None,
+    *,
+    scale: int,
+    seed: int,
+    index: int,
+    time_window_mode: str,
+    preview_targets: list[dict[str, Any]],
+    depot_xy: tuple[float, float],
+    sampled_targets: list[dict[str, Any]],
+    tasks: dict[str, dict[str, Any]],
+) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": REAL_MAP_INSTANCE_INPUT_CHECKPOINT_SCHEMA_VERSION,
+        "scale": int(scale),
+        "seed": int(seed),
+        "index": int(index),
+        "time_window_mode": str(time_window_mode),
+        "preview_target_signature": _preview_target_signature(preview_targets),
+        "depot_xy": [round(float(depot_xy[0]), 6), round(float(depot_xy[1]), 6)],
+        "sampled_target_ids": [str(target["id"]) for target in sampled_targets],
+        "tasks": tasks,
+    }
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+
+def _recover_targets_from_edge_checkpoints(
+    checkpoint_root: Path | None,
+    *,
+    preview_targets: list[dict[str, Any]],
+    scale: int,
+    raw_map_dir: str | Path,
+    depot_xy: tuple[float, float],
+    center_x_km: float,
+    center_y_km: float,
+    extent_km: float,
+    output_cells: int,
+) -> list[dict[str, Any]] | None:
+    if checkpoint_root is None or not checkpoint_root.is_dir():
+        return None
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for path in sorted(checkpoint_root.glob("source_*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        fingerprint = payload.get("fingerprint")
+        if isinstance(fingerprint, str) and isinstance(payload.get("edges"), list):
+            groups.setdefault(fingerprint, []).append(payload)
+    if not groups:
+        return None
+    fingerprint, payloads = max(groups.items(), key=lambda item: (len(item[1]), item[0]))
+    if len(payloads) < 2:
+        return None
+    payload = payloads[0]
+    source_id = str(payload.get("source_id", ""))
+    coordinates: dict[str, tuple[float, float]] = {}
+    for edge in payload["edges"]:
+        if not isinstance(edge, dict) or str(edge.get("from")) != source_id:
+            return None
+        options = edge.get("path_options")
+        if not isinstance(options, list) or not options or not isinstance(options[0], dict):
+            return None
+        path_xy = options[0].get("path_xy")
+        if not isinstance(path_xy, list) or len(path_xy) < 2:
+            return None
+        coordinates[source_id] = (round(float(path_xy[0][0]), 6), round(float(path_xy[0][1]), 6))
+        coordinates[str(edge.get("to"))] = (round(float(path_xy[-1][0]), 6), round(float(path_xy[-1][1]), 6))
+    expected_ids = {"depot", *(f"ice_site_{offset:03d}" for offset in range(1, int(scale) + 1))}
+    if set(coordinates) != expected_ids:
+        return None
+    targets_by_xy: dict[tuple[float, float], list[dict[str, Any]]] = {}
+    for target in preview_targets:
+        xy = tuple(round(float(value), 6) for value in target["xy_km"])
+        targets_by_xy.setdefault(xy, []).append(target)
+    recovered: list[dict[str, Any]] = []
+    for offset in range(1, int(scale) + 1):
+        matches = targets_by_xy.get(coordinates[f"ice_site_{offset:03d}"], [])
+        if len(matches) != 1:
+            return None
+        recovered.append(matches[0])
+    # Path endpoints are raster-cell centres.  The logical depot may be a
+    # continuous ROI coordinate (for SP50 it is [25.0, 25.0]), so retain the
+    # preview coordinate rather than replacing it with the snapped path point.
+    nodes = {"depot": depot_xy}
+    nodes.update({f"ice_site_{offset:03d}": coordinates[f"ice_site_{offset:03d}"] for offset in range(1, int(scale) + 1)})
+    recovered_fingerprint = _real_map_edge_checkpoint_fingerprint(
+        raw_map_dir=raw_map_dir,
+        nodes=nodes,
+        center_x_km=center_x_km,
+        center_y_km=center_y_km,
+        extent_km=extent_km,
+        output_cells=output_cells,
+        allow_remote=False,
+    )
+    return recovered if recovered_fingerprint == fingerprint else None
 
 
 def _real_validation_payload(instance: dict[str, Any], config: LunarIceConfig, scale: int) -> dict[str, Any]:
@@ -469,7 +685,7 @@ def _select_hotspot_ids_for_instance(
     desired = min(int(desired_count), len(groups))
     while len(selected) < desired and remaining:
         best: tuple[float, float, float, float, str] | None = None
-        for hotspot_id in remaining:
+        for hotspot_id in sorted(remaining):
             representative = groups[hotspot_id][0]
             sector = int(representative.get("direction_sector", -1))
             diversity = _sector_diversity_for_instance(sector, selected_sectors)

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
 import random
+import subprocess
+import sys
 
 from lunar_ice_bpc.domain import real_instance
 
@@ -55,3 +59,34 @@ def test_missing_role_guard_runs_before_expensive_edge_build(monkeypatch) -> Non
     assert instance["validation"]["accepted"] is False
     assert instance["validation"]["reason"] == "sampled_candidate_roles_missing"
     assert instance["validation"]["missing_candidate_roles"] == ["hotspot_edge", "exploration"]
+
+
+def test_hotspot_selection_is_independent_of_python_hash_seed() -> None:
+    script = r'''
+import json, random
+from lunar_ice_bpc.domain import real_instance
+targets = []
+for index in range(24):
+    role = "hotspot_edge" if index % 5 == 0 else "hotspot_core"
+    targets.append({
+        "id": f"candidate_{index:03d}", "candidate_role": role,
+        "hotspot_id": f"hotspot_{index:03d}", "hotspot_rank": index,
+        "direction_sector": index % 8, "xy_km": [float(index % 8), float(index // 8)],
+        "selection_score": 0.7, "resource_score": 0.7,
+        "psr_interior_score": 0.6, "psr_boundary_score": 0.4,
+        "local_terrain_risk": 0.2, "local_shadow_score": 0.5,
+    })
+print(json.dumps([item["id"] for item in real_instance._hotspot_directional_sample(targets, 10, random.Random(19), (0.0, 0.0))]))
+'''
+    outputs = []
+    for hash_seed in ("1", "2"):
+        environment = dict(os.environ, PYTHONHASHSEED=hash_seed)
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        outputs.append(json.loads(completed.stdout))
+    assert outputs[0] == outputs[1]
