@@ -26,6 +26,24 @@ namespace {
 // each arc extension, and a heap-backed vector here would turn the hottest
 // exact-search operation into an allocation/copy/deallocation cycle.
 using VisitedMask = std::array<std::uint64_t, 2>;
+constexpr std::size_t kMaxActiveCuts = 16;
+
+struct CutState {
+    std::array<std::uint8_t, kMaxActiveCuts> overlap{};
+    std::uint8_t active_count = 0;
+};
+
+bool same_active_cut_state(const CutState& lhs, const CutState& rhs) {
+    if (lhs.active_count != rhs.active_count) {
+        return false;
+    }
+    for (std::size_t index = 0; index < lhs.active_count; ++index) {
+        if (lhs.overlap[index] != rhs.overlap[index]) {
+            return false;
+        }
+    }
+    return true;
+}
 
 struct Action {
     ActionKind kind = ActionKind::Terminate;
@@ -57,7 +75,7 @@ struct State {
     double task_dual_reward = 0.0;
     double positive_task_dual_reward = 0.0;
     double cut_dual_reward = 0.0;
-    std::vector<std::size_t> cut_overlap_counts;
+    CutState cut_state;
 };
 
 struct JourneyValue {
@@ -156,8 +174,11 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         const auto& current_value = resource.get_value();
         const auto& action_value = extender.get_value();
         State next = current_value.state;
-        if (next.cut_overlap_counts.empty() && !model_->cuts.empty()) {
-            next.cut_overlap_counts.assign(model_->cuts.size(), 0U);
+        if (next.cut_state.active_count == 0 && !model_->cuts.empty()) {
+            if (model_->cuts.size() > kMaxActiveCuts) {
+                throw std::invalid_argument("native active cut count exceeds 16");
+            }
+            next.cut_state.active_count = static_cast<std::uint8_t>(model_->cuts.size());
         }
         if (!next.valid || !action_value.is_action) {
             next.valid = false;
@@ -237,8 +258,12 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                 ((cut.task_mask[word] >> bit) & 1U) == 0U) {
                 continue;
             }
-            auto& overlap = state->cut_overlap_counts.at(cut_index);
+            auto& overlap = state->cut_state.overlap.at(cut_index);
             const auto old_coefficient = overlap / cut.divisor;
+            if (overlap == std::numeric_limits<std::uint8_t>::max()) {
+                state->valid = false;
+                return;
+            }
             ++overlap;
             const auto new_coefficient = overlap / cut.divisor;
             if (new_coefficient > old_coefficient) {
@@ -404,7 +429,7 @@ class JourneyDominance final : public rcspp::DominanceFunction<JourneyResource> 
         if (lhs.visited != rhs.visited) {
             if (!model_->subset_dominance_enabled || lhs.visited_count == 0 ||
                 !visited_subset(lhs, rhs) ||
-                lhs.cut_overlap_counts != rhs.cut_overlap_counts ||
+                !same_active_cut_state(lhs.cut_state, rhs.cut_state) ||
                 !branch_subset_dominance_compatible(*model_, lhs, rhs)) {
                 return false;
             }
@@ -676,7 +701,7 @@ class VisitedLabelList {
         const auto& lhs = state(lhs_label);
         const auto& rhs = state(rhs_label);
         if (!lhs.valid || !rhs.valid || lhs.at_depot != rhs.at_depot ||
-            lhs.cut_overlap_counts != rhs.cut_overlap_counts) {
+            !same_active_cut_state(lhs.cut_state, rhs.cut_state)) {
             return false;
         }
         if (lhs.global_time > rhs.global_time + resource_epsilon_ ||
@@ -1071,6 +1096,14 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
         throw std::invalid_argument(
             "native v1 requires non-negative objective coefficients and positive recharge power");
     }
+    if (input_model.cuts.size() > kMaxActiveCuts) {
+        throw std::invalid_argument("native v1 supports at most 16 active cuts");
+    }
+    for (const auto& cut : input_model.cuts) {
+        if (cut.kind != CutKind::SubsetRow || cut.divisor != 2U) {
+            throw std::invalid_argument("native live-cut v1 supports divisor-2 subset-row cuts only");
+        }
+    }
     std::unique_lock cache_lock(graph_cache_mutex());
     auto& cache = graph_cache();
     const auto capacity = params.graph_cache_entries;
@@ -1214,7 +1247,9 @@ std::unordered_map<std::string, std::string> build_info() {
         {"cxx_standard", "23"},
         {"memory_pressure_policy", "disabled_for_exact_hard_limit_only"},
         {"branch_support", "ryan_foster_same_different_feasibility"},
-        {"cut_support", "subset_row_threshold_crossing_and_fleet_v1"},
+        {"cut_support", "sri3_sri5_divisor2_threshold_crossing_v1"},
+        {"cut_state_schema", "uint8_overlap_x16_active_prefix_v1"},
+        {"max_active_cuts", "16"},
         {"completion_bound", "positive_cover_dual_threshold_pruning_v1"},
     };
 }

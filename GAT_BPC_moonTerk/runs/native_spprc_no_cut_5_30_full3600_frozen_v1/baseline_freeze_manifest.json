@@ -1,0 +1,480 @@
+{
+  "schema_version": "lunar_ice_bpc.baseline_freeze_manifest.v1",
+  "freeze_id": "FROZEN_NATIVE_NO_CUT_BASELINE_V1",
+  "created_at_utc": "2026-07-22T06:13:58.293189+00:00",
+  "project_root": "/home/kai/work/GAT_BPC_moonTerk",
+  "git_commit": "ee2f853c003589cb717399209fe232dc793a854b",
+  "git_status_short": "",
+  "python_executable": "/home/kai/miniconda3/bin/python",
+  "python_version": "Python 3.13.13",
+  "config_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+  "config_sha256": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a",
+  "native_module_path": "build/native-spprc/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "native_module_sha256": "61ab915afd4d55f3791e2971c3ab3833b4d88419fdbd26f3cd0afe123cf85f63",
+  "native_engine_hash": "66ab52c9b33b4551",
+  "scales": [
+    5,
+    10,
+    20,
+    30
+  ],
+  "instance_count": 80,
+  "instances": {
+    "5": [
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+        "sha256": "57aaf574b91093ab9e20cc43e0e3722434b7b92e3f21679d65d26507ec5e3bb3"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_002_logical_graph.json",
+        "sha256": "6f77bb709f66b582da19acdf134f23b4b1f726319bc8c170a43a5dbd7f3bc3a4"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_003_logical_graph.json",
+        "sha256": "84dcaf3305bd849c21cb83e8d30d6cc2f342dd79e1499c4a8d5535b2296aa0ce"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_004_logical_graph.json",
+        "sha256": "1fad2e53fe15bc9b8fbcf1ec963d162a1da4ee85e82222a6337dcf6b3a1ee247"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_005_logical_graph.json",
+        "sha256": "23357aefbbe0120dd582e106386924faced068c8024d109ea5f872a5e2552abf"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_006_logical_graph.json",
+        "sha256": "341e1ceb101304d005de3a5b54aa094682f433c2737451b56d11796cf955f35a"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_007_logical_graph.json",
+        "sha256": "55801cd403ff0f374cf1adf41836a48c803bb8d022d1a4e95f2ae0b4c34f277d"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_008_logical_graph.json",
+        "sha256": "eaf2b88eb2f777214bff13d38f36d9a37f29e302b76cfdd11730b653dd872acc"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_009_logical_graph.json",
+        "sha256": "95268d5ddd97e9fbbf58157fe80fddddef9f941feeef6b47e56c629693956f91"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_010_logical_graph.json",
+        "sha256": "acd79c9b1b7fcb9ca8f91f917219d8604a99547b1d9354fbfce1ffc159e91bb8"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_011_logical_graph.json",
+        "sha256": "6859b95190517f37058130de6be2a79e518ca4d9c278efc3fcbca0f0a7996efc"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_012_logical_graph.json",
+        "sha256": "b34e1a62b4418a5dd2a84205792d7b91b323a22d28c29fbb85c01a914f5bf5a4"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_013_logical_graph.json",
+        "sha256": "3a53214a017aff830b99720d7d281d47148c9cd457998446aa3e4b32d5224e94"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_014_logical_graph.json",
+        "sha256": "efc4dbb2f3004bf2d0181c60914154a5a1032f15110a88910fd9c83f23c5250f"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_015_logical_graph.json",
+        "sha256": "34d491c3fca0ff888a63efed640a4eb482e23ab64b9d3acb663b4c4531b96941"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_016_logical_graph.json",
+        "sha256": "59506f246ae65284cf98eabd5ad6866c03b7de9eb52f8d12de78acd2f3130191"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_017_logical_graph.json",
+        "sha256": "197c30a430a87d9a58c26c6d51b2e99cd1519008e0ca1c8cebc1998fce0945ce"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_018_logical_graph.json",
+        "sha256": "fa9ee0f595dd2709ab36cfa1d7bb1af2ac452e3081778ed868149ab364d8ee91"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_019_logical_graph.json",
+        "sha256": "bf14f3028660427e3f768704dd1e89e6e54a936fabdb6be946ca2bba04af2de6"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_005/instance_020_logical_graph.json",
+        "sha256": "c54d473a69c98b23f1077cca79110d822b41ca975557ffefb80f037ab1f9691b"
+      }
+    ],
+    "10": [
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_001_logical_graph.json",
+        "sha256": "e68a67715e39f179b0edf2e97bab4ba393fba143c17a9e9a12a4c71c8ec73945"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+        "sha256": "621d300843837ea4200038ac2c75e7c1635d0af016ea3762fe0e2979c0b3e7db"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_003_logical_graph.json",
+        "sha256": "284651095e8afb59ecd091bcf1436b4078b6b426f2ad66f5f6f5f478df7c2c46"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_004_logical_graph.json",
+        "sha256": "d252e4a6dce9cc0a1f0170c352670af5b77da5b03256e66f5c6192f4d4ef7dcf"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_005_logical_graph.json",
+        "sha256": "7521864a1f815bd337ae840ca47b5f66b82365541d953e9a9c6eb428425e86c4"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_006_logical_graph.json",
+        "sha256": "cf38f2c7e566da8ecdcc1add84ecc32e8c0106b97c15c637f4970a430d6a0b31"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_007_logical_graph.json",
+        "sha256": "1440bce9de044190073500dc8c116f77d6ff582721aa2f56ec006fa03c32fb68"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_008_logical_graph.json",
+        "sha256": "446ddbd1a4de69d24efdbc148ae4194f1acebaebfaf1a2a258a766a1f98318ab"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_009_logical_graph.json",
+        "sha256": "c75db2eba9586abee92c5ea7bbbf23982cb6e399e3fe1521a220a536f6b2bdf4"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_010_logical_graph.json",
+        "sha256": "89035b25228cc4d783bf9db27589feea5585762237887a189383a362b36d33c1"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_011_logical_graph.json",
+        "sha256": "397fc7c99a6847cdc1222ca2d0635da1c46034bb024a58314b719c07b15a056e"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_012_logical_graph.json",
+        "sha256": "da053cf9ae9c42feaac18ac3489bbe1d299cdc40d021d1731d75e4be13424765"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_013_logical_graph.json",
+        "sha256": "3401b0700e4fef4e58bdadab8b6a7d685469f287c1437543241d82b1321a91d5"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_014_logical_graph.json",
+        "sha256": "5927c3520e88f9cc13bc8a11ee8c09be747987a46792b96aac943d46744e0505"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_015_logical_graph.json",
+        "sha256": "5d5f7a769b80d33547ceebb0172533173728ca55f616ff3f478db7d33cf8381e"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_016_logical_graph.json",
+        "sha256": "24161c3b711baf1f3f0c25ccf8b82e96b85b2c969ef005e630d2d905ee383f2a"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_017_logical_graph.json",
+        "sha256": "c3812cac268c6c1180d915cb4b3f3c79bbfafb45111d99b04ba6d2443b59e58f"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_018_logical_graph.json",
+        "sha256": "b785dfdc92ff104cf2c3ae0903c6bcfd8a5675a670158f16cefa9cf53dc1c671"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_019_logical_graph.json",
+        "sha256": "d9b090269a7914aab7a2aa068cf3226444532f35f481055d2437adf9856ca38f"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_010/instance_020_logical_graph.json",
+        "sha256": "4e9324c17863054e62900186d8889bd460148c13393b0c4d99da962d0ef0000b"
+      }
+    ],
+    "20": [
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_001_logical_graph.json",
+        "sha256": "63562f67604a6128d61fb459fee569ba40165712fc575d3a8fbca871056750e3"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_002_logical_graph.json",
+        "sha256": "b28e3dfda432551a79529e6786b90d06687a9caeb0dca68f4b7767cf39fb522b"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_003_logical_graph.json",
+        "sha256": "055b017cf32bb205887dc00958ef713a8798890c6b06e953b2c4e4a87a82709e"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_004_logical_graph.json",
+        "sha256": "38f5de6a1ed04e0f21a15a452e8b143932ef1427f087c68182d2c49bca915b3a"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_005_logical_graph.json",
+        "sha256": "8b204ae86551872f7404bc40eabacac2f2f175fec54c37438203cd8c64f2b0c1"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_006_logical_graph.json",
+        "sha256": "23082590e610955875ac80b12dbafcc06c51ebd08d5f3e88086d80870ddaa4eb"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_007_logical_graph.json",
+        "sha256": "990e6d0a292062d26b05506e4637686f3e1b5d24845631dcedd895ba62b6bef2"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_008_logical_graph.json",
+        "sha256": "878ea9cde3a3e1ad373e814282dbfa7a8fb7af69150ce7b91b35ed6eeb437596"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_009_logical_graph.json",
+        "sha256": "17fe47eee3dff509a6cf50ef6d07852438bfe488107a71a8dc70be2ce9c9143b"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_010_logical_graph.json",
+        "sha256": "9712d86cd1e7404f6bebb4ddb0157531041c50be6b7bb0f4c49e76e9e1d21731"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_011_logical_graph.json",
+        "sha256": "9055df1b71bcee1a1d8a3846ee185e7a76bdfb6b34858888244259a151896901"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_012_logical_graph.json",
+        "sha256": "46159bb440dc3b00823b92501255c23df78ebf20013791a54ae744c9fdde16f2"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_013_logical_graph.json",
+        "sha256": "4fe07cbb443fc554e4e802c4a48cd0a843f948943dee8c4e5a7d185cfaa75ae3"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_014_logical_graph.json",
+        "sha256": "acad636ee9c85f17ab38beb42dd6f82b99673b6ef1700b326f7af1ae15dcde68"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_015_logical_graph.json",
+        "sha256": "ed13c96e782042dcefb0ee8760537b77238af7cf96c11f6517c95690d2f01219"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_016_logical_graph.json",
+        "sha256": "a309c73d68b24d77816f4dff79a6bb6cbca071a295a0eb4e87e9e848562cca4e"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_017_logical_graph.json",
+        "sha256": "96cdff648879e6f8e8b4cf2d814c0bb0dcb43d0beab7a2109368b3caf22db117"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_018_logical_graph.json",
+        "sha256": "baaa475347c136740d75d2a04df1b0b3465275f0ce5fb95ddfa230401f932e55"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_019_logical_graph.json",
+        "sha256": "2a0916e6c749ae1c6cfb47e77e469b4aeca19e037169be0c02edc39d3fd4eb48"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_020/instance_020_logical_graph.json",
+        "sha256": "a9628b5ca629f0aaf2bc922acf93e859aae28222a86aa6c5a1384ff285b8df1e"
+      }
+    ],
+    "30": [
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+        "sha256": "8d84d12aecf8d421fd0078bd18d1c4b7a1525012f4247089c3b29194ed646f9e"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_002_logical_graph.json",
+        "sha256": "d9a5890eb39d1c184c9ef43cfb96a5ddc45081742f0c50b5f23335d2c191bd6e"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_003_logical_graph.json",
+        "sha256": "9df4ffb241ae368a03c3d5ec4ab2675ee32a46916be901afb7096cf3e34544bb"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_004_logical_graph.json",
+        "sha256": "bdd334456d4c80a8a731db28ed4258e1e94603b76e4aad317d6f5bab28df716d"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_005_logical_graph.json",
+        "sha256": "b2172e6764cdf0ea6ff30d7c0c20765ec6ccd1856fc658e7cde0f749088a0fed"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_006_logical_graph.json",
+        "sha256": "1926462298e8f30ced01df6f2a825350c3c99c1017bc357158daeb2a1a51c95a"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_007_logical_graph.json",
+        "sha256": "042a75476e35bc1e6314ca70df36df6731ce8d919f7d4423778c96b9b60eae16"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_008_logical_graph.json",
+        "sha256": "b85e77e0f1109ade30e5e1eb48c4b6cf63e2ddcf39f767219e527a0033f146a2"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_009_logical_graph.json",
+        "sha256": "ee59571832598aa7e57b10108b77d4a929b4bf3669495e0db254ffe636dbc301"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_010_logical_graph.json",
+        "sha256": "2e3949cf8332866475ebddcdf56ee086958bec4e00ecc99dfe7c9c36b49eb3b6"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_011_logical_graph.json",
+        "sha256": "1ac456be2edbf99b1a6cbe0e4f77d869b2c2770c0c5fa42df46281f36160da43"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_012_logical_graph.json",
+        "sha256": "406f85ae9cdee4a848b9f245f255ff954d518bb7f8217251feee46c2bf080a57"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_013_logical_graph.json",
+        "sha256": "8cce1ed2050a393e65aad64fad84f718769a40831795461d400ec519f8318f8d"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_014_logical_graph.json",
+        "sha256": "691e624c62bbf1a5c0145d0f1b695faac27e9ce813a541b78020b3447a69bd23"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_015_logical_graph.json",
+        "sha256": "837be98f3e20eb85ad3055eb6267ba979f8189d68a4f70a280b3ff851a6e08cf"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_016_logical_graph.json",
+        "sha256": "26a36322e3302780bee4bea91879e5a28aa885f07de36b4f9a7c8dd261569cc8"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_017_logical_graph.json",
+        "sha256": "3b6cc26e7bba9af09c7693249e82d85f5dba444fbc65f2e57b26fe0949359eb9"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_018_logical_graph.json",
+        "sha256": "0535967b4d18e418388825ebba5d4e5391338fd923237f4043ef45c88862e5d0"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_019_logical_graph.json",
+        "sha256": "a30538a90c0d9788a5356a00a2d9c92788428bb7dbf5d51750741b7076fff253"
+      },
+      {
+        "path": "data/instances/lunar_ice_sp50_030/instance_020_logical_graph.json",
+        "sha256": "0c09d4120a867782531149ef77f006dd866725ef3068643bd295975bfb457b42"
+      }
+    ]
+  },
+  "pip_freeze": {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "-m",
+      "pip",
+      "freeze"
+    ],
+    "returncode": 2,
+    "stdout": [],
+    "stderr": [
+      "ERROR: Exception:",
+      "Traceback (most recent call last):",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/metadata/importlib/_dists.py\", line 174, in version",
+      "    return parse_version(version)",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_vendor/packaging/version.py\", line 103, in parse",
+      "    return Version(version)",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_vendor/packaging/version.py\", line 359, in __init__",
+      "    match = self._regex.fullmatch(version)",
+      "TypeError: expected string or bytes-like object, got 'NoneType'",
+      "",
+      "During handling of the above exception, another exception occurred:",
+      "",
+      "Traceback (most recent call last):",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/cli/base_command.py\", line 107, in _run_wrapper",
+      "    status = _inner_run()",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/cli/base_command.py\", line 98, in _inner_run",
+      "    return self.run(options, args)",
+      "           ~~~~~~~~^^^^^^^^^^^^^^^",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/commands/freeze.py\", line 97, in run",
+      "    for line in freeze(",
+      "                ~~~~~~^",
+      "        requirement=options.requirements,",
+      "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "    ...<5 lines>...",
+      "        exclude_editable=options.exclude_editable,",
+      "        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "    ):",
+      "    ^",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/operations/freeze.py\", line 47, in freeze",
+      "    req = FrozenRequirement.from_dist(dist)",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/operations/freeze.py\", line 251, in from_dist",
+      "    req = _format_as_name_version(dist)",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/operations/freeze.py\", line 153, in _format_as_name_version",
+      "    dist_version = dist.version",
+      "                   ^^^^^^^^^^^^",
+      "  File \"/home/kai/miniconda3/lib/python3.13/site-packages/pip/_internal/metadata/importlib/_dists.py\", line 176, in version",
+      "    raise BadMetadata(self._dist, reason=\"invalid metadata entry `version`\")",
+      "pip._internal.metadata.importlib._compat.BadMetadata: Bad metadata in <importlib.metadata.PathDistribution object at 0x7c5c96c84440> (invalid metadata entry `version`)"
+    ]
+  },
+  "package_inventory_fallback": {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "-c",
+      "import importlib.metadata as m,json;rows=[];[(rows.append({'name':d.metadata.get('Name') or '','version':d.metadata.get('Version') or ''})) for d in m.distributions()];print(json.dumps(sorted(rows,key=lambda r:(r['name'].lower(),r['version']))))"
+    ],
+    "returncode": 0,
+    "stdout": [
+      "[{\"name\": \"\", \"version\": \"\"}, {\"name\": \"affine\", \"version\": \"2.4.0\"}, {\"name\": \"aiohappyeyeballs\", \"version\": \"2.6.2\"}, {\"name\": \"aiohttp\", \"version\": \"3.14.0\"}, {\"name\": \"aiosignal\", \"version\": \"1.4.0\"}, {\"name\": \"anaconda-anon-usage\", \"version\": \"0.7.6\"}, {\"name\": \"anaconda-auth\", \"version\": \"0.14.2\"}, {\"name\": \"anaconda-cli-base\", \"version\": \"0.8.2\"}, {\"name\": \"annotated-types\", \"version\": \"0.6.0\"}, {\"name\": \"anyio\", \"version\": \"4.12.1\"}, {\"name\": \"archspec\", \"version\": \"0.2.5\"}, {\"name\": \"attrs\", \"version\": \"26.1.0\"}, {\"name\": \"boltons\", \"version\": \"25.0.0\"}, {\"name\": \"brotlicffi\", \"version\": \"1.2.0.0\"}, {\"name\": \"certifi\", \"version\": \"2026.4.22\"}, {\"name\": \"cffi\", \"version\": \"1.17.1\"}, {\"name\": \"charset-normalizer\", \"version\": \"3.4.4\"}, {\"name\": \"click\", \"version\": \"8.4.1\"}, {\"name\": \"cligj\", \"version\": \"0.7.2\"}, {\"name\": \"conda\", \"version\": \"26.3.2\"}, {\"name\": \"conda-anaconda-telemetry\", \"version\": \"0.3.0\"}, {\"name\": \"conda-anaconda-tos\", \"version\": \"0.2.2\"}, {\"name\": \"conda-content-trust\", \"version\": \"0.3.1\"}, {\"name\": \"conda-libmamba-solver\", \"version\": \"26.4.0\"}, {\"name\": \"conda-package-handling\", \"version\": \"2.4.0\"}, {\"name\": \"conda_package_streaming\", \"version\": \"0.12.0\"}, {\"name\": \"contourpy\", \"version\": \"1.3.3\"}, {\"name\": \"cryptography\", \"version\": \"45.0.7\"}, {\"name\": \"cuda-bindings\", \"version\": \"13.0.3\"}, {\"name\": \"cuda-pathfinder\", \"version\": \"1.2.2\"}, {\"name\": \"cuda-toolkit\", \"version\": \"13.0.2\"}, {\"name\": \"cycler\", \"version\": \"0.12.1\"}, {\"name\": \"distro\", \"version\": \"1.9.0\"}, {\"name\": \"filelock\", \"version\": \"3.29.0\"}, {\"name\": \"fonttools\", \"version\": \"4.63.0\"}, {\"name\": \"frozendict\", \"version\": \"2.4.6\"}, {\"name\": \"frozenlist\", \"version\": \"1.8.0\"}, {\"name\": \"fsspec\", \"version\": \"2026.4.0\"}, {\"name\": \"gurobipy\", \"version\": \"13.0.2\"}, {\"name\": \"h11\", \"version\": \"0.16.0\"}, {\"name\": \"highspy\", \"version\": \"1.15.1\"}, {\"name\": \"httpcore\", \"version\": \"1.0.9\"}, {\"name\": \"httpx\", \"version\": \"0.28.1\"}, {\"name\": \"idna\", \"version\": \"3.11\"}, {\"name\": \"iniconfig\", \"version\": \"2.3.0\"}, {\"name\": \"jaraco.classes\", \"version\": \"3.4.0\"}, {\"name\": \"jaraco.context\", \"version\": \"6.1.0\"}, {\"name\": \"jaraco.functools\", \"version\": \"4.4.0\"}, {\"name\": \"jeepney\", \"version\": \"0.7.1\"}, {\"name\": \"Jinja2\", \"version\": \"3.1.6\"}, {\"name\": \"jsonpatch\", \"version\": \"1.33\"}, {\"name\": \"jsonpointer\", \"version\": \"3.1.1\"}, {\"name\": \"keyring\", \"version\": \"25.7.0\"}, {\"name\": \"kiwisolver\", \"version\": \"1.5.0\"}, {\"name\": \"libmambapy\", \"version\": \"2.3.2\"}, {\"name\": \"lunar-ice-bpc\", \"version\": \"0.1.0\"}, {\"name\": \"markdown-it-py\", \"version\": \"4.0.0\"}, {\"name\": \"MarkupSafe\", \"version\": \"3.0.3\"}, {\"name\": \"matplotlib\", \"version\": \"3.10.9\"}, {\"name\": \"mdurl\", \"version\": \"0.1.2\"}, {\"name\": \"menuinst\", \"version\": \"2.4.2\"}, {\"name\": \"more-itertools\", \"version\": \"11.0.2\"}, {\"name\": \"mpmath\", \"version\": \"1.3.0\"}, {\"name\": \"msgpack\", \"version\": \"1.1.1\"}, {\"name\": \"multidict\", \"version\": \"6.7.1\"}, {\"name\": \"networkx\", \"version\": \"3.6.1\"}, {\"name\": \"ninja\", \"version\": \"1.13.0\"}, {\"name\": \"numpy\", \"version\": \"2.4.6\"}, {\"name\": \"nvidia-cublas\", \"version\": \"13.1.1.3\"}, {\"name\": \"nvidia-cuda-cupti\", \"version\": \"13.0.85\"}, {\"name\": \"nvidia-cuda-nvrtc\", \"version\": \"13.0.88\"}, {\"name\": \"nvidia-cuda-runtime\", \"version\": \"13.0.96\"}, {\"name\": \"nvidia-cudnn-cu13\", \"version\": \"9.20.0.48\"}, {\"name\": \"nvidia-cufft\", \"version\": \"12.0.0.61\"}, {\"name\": \"nvidia-cufile\", \"version\": \"1.15.1.6\"}, {\"name\": \"nvidia-curand\", \"version\": \"10.4.0.35\"}, {\"name\": \"nvidia-cusolver\", \"version\": \"12.0.4.66\"}, {\"name\": \"nvidia-cusparse\", \"version\": \"12.6.3.3\"}, {\"name\": \"nvidia-cusparselt-cu13\", \"version\": \"0.8.1\"}, {\"name\": \"nvidia-nccl-cu13\", \"version\": \"2.29.7\"}, {\"name\": \"nvidia-nvjitlink\", \"version\": \"13.0.88\"}, {\"name\": \"nvidia-nvshmem-cu13\", \"version\": \"3.4.5\"}, {\"name\": \"nvidia-nvtx\", \"version\": \"13.0.85\"}, {\"name\": \"packaging\", \"version\": \"26.0\"}, {\"name\": \"pillow\", \"version\": \"12.2.0\"}, {\"name\": \"pip\", \"version\": \"26.0.1\"}, {\"name\": \"pkce\", \"version\": \"1.0.3\"}, {\"name\": \"platformdirs\", \"version\": \"4.9.4\"}, {\"name\": \"pluggy\", \"version\": \"1.6.0\"}, {\"name\": \"propcache\", \"version\": \"0.5.2\"}, {\"name\": \"psutil\", \"version\": \"7.2.2\"}, {\"name\": \"pybind11\", \"version\": \"3.0.4\"}, {\"name\": \"pycosat\", \"version\": \"0.6.6\"}, {\"name\": \"pycparser\", \"version\": \"3.0\"}, {\"name\": \"pydantic\", \"version\": \"2.13.2\"}, {\"name\": \"pydantic-settings\", \"version\": \"2.12.0\"}, {\"name\": \"pydantic_core\", \"version\": \"2.46.2\"}, {\"name\": \"Pygments\", \"version\": \"2.20.0\"}, {\"name\": \"PyJWT\", \"version\": \"2.12.1\"}, {\"name\": \"pyparsing\", \"version\": \"3.3.2\"}, {\"name\": \"PySCIPOpt\", \"version\": \"6.2.1\"}, {\"name\": \"PySocks\", \"version\": \"1.7.1\"}, {\"name\": \"pytest\", \"version\": \"9.1.1\"}, {\"name\": \"python-dateutil\", \"version\": \"2.9.0.post0\"}, {\"name\": \"python-dotenv\", \"version\": \"1.2.1\"}, {\"name\": \"PyYAML\", \"version\": \"6.0.3\"}, {\"name\": \"rasterio\", \"version\": \"1.5.0\"}, {\"name\": \"readchar\", \"version\": \"4.2.1\"}, {\"name\": \"requests\", \"version\": \"2.33.1\"}, {\"name\": \"rich\", \"version\": \"14.2.0\"}, {\"name\": \"ruamel.yaml\", \"version\": \"0.18.16\"}, {\"name\": \"ruamel.yaml.clib\", \"version\": \"0.2.14\"}, {\"name\": \"SecretStorage\", \"version\": \"3.5.0\"}, {\"name\": \"semver\", \"version\": \"3.0.4\"}, {\"name\": \"setuptools\", \"version\": \"70.2.0\"}, {\"name\": \"shellingham\", \"version\": \"1.5.4\"}, {\"name\": \"six\", \"version\": \"1.17.0\"}, {\"name\": \"sympy\", \"version\": \"1.14.0\"}, {\"name\": \"tomli\", \"version\": \"2.4.0\"}, {\"name\": \"tomlkit\", \"version\": \"0.13.3\"}, {\"name\": \"torch\", \"version\": \"2.12.0+cu130\"}, {\"name\": \"torch-geometric\", \"version\": \"2.7.0\"}, {\"name\": \"torch_scatter\", \"version\": \"2.1.2+pt212cu130\"}, {\"name\": \"tqdm\", \"version\": \"4.67.3\"}, {\"name\": \"triton\", \"version\": \"3.7.0\"}, {\"name\": \"truststore\", \"version\": \"0.10.1\"}, {\"name\": \"typer\", \"version\": \"0.20.0\"}, {\"name\": \"typer-slim\", \"version\": \"0.20.0\"}, {\"name\": \"typing-inspection\", \"version\": \"0.4.2\"}, {\"name\": \"typing_extensions\", \"version\": \"4.15.0\"}, {\"name\": \"urllib3\", \"version\": \"2.6.3\"}, {\"name\": \"wheel\", \"version\": \"0.46.3\"}, {\"name\": \"xxhash\", \"version\": \"3.7.0\"}, {\"name\": \"yarl\", \"version\": \"1.24.2\"}, {\"name\": \"zstandard\", \"version\": \"0.25.0\"}]"
+    ],
+    "stderr": []
+  },
+  "build_reproduction": {
+    "cmake_version": "cmake version 3.28.3",
+    "cxx_version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "cmake_cache_path": "build/native-spprc/CMakeCache.txt",
+    "cmake_cache_sha256": "66054e83a3b1fd3cc223c249e06bfc8148358d3025ded2ad25f7f301d7e1fdc4",
+    "cmake_build_type": "RelWithDebInfo",
+    "cmake_source_dir": "native/lunar_spprc",
+    "cmake_build_dir": "build/native-spprc",
+    "build_command": [
+      "cmake",
+      "--build",
+      "build/native-spprc",
+      "-j2"
+    ],
+    "test_command": [
+      "ctest",
+      "--test-dir",
+      "build/native-spprc",
+      "--output-on-failure"
+    ]
+  },
+  "uname": "Linux PC-20260508TFBC 6.6.114.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Mon Dec  1 20:46:23 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+  "lscpu": [
+    "Architecture:                            x86_64",
+    "CPU op-mode(s):                          32-bit, 64-bit",
+    "Address sizes:                           39 bits physical, 48 bits virtual",
+    "Byte Order:                              Little Endian",
+    "CPU(s):                                  20",
+    "On-line CPU(s) list:                     0-19",
+    "Vendor ID:                               GenuineIntel",
+    "Model name:                              13th Gen Intel(R) Core(TM) i5-13600KF",
+    "CPU family:                              6",
+    "Model:                                   183",
+    "Thread(s) per core:                      2",
+    "Core(s) per socket:                      10",
+    "Socket(s):                               1",
+    "Stepping:                                1",
+    "BogoMIPS:                                6988.79",
+    "Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm serialize flush_l1d arch_capabilities",
+    "Virtualization:                          VT-x",
+    "Hypervisor vendor:                       Microsoft",
+    "Virtualization type:                     full",
+    "L1d cache:                               480 KiB (10 instances)",
+    "L1i cache:                               320 KiB (10 instances)",
+    "L2 cache:                                20 MiB (10 instances)",
+    "L3 cache:                                24 MiB (1 instance)",
+    "NUMA node(s):                            1",
+    "NUMA node0 CPU(s):                       0-19",
+    "Vulnerability Gather data sampling:      Not affected",
+    "Vulnerability Indirect target selection: Mitigation; Aligned branch/return thunks",
+    "Vulnerability Itlb multihit:             Not affected",
+    "Vulnerability L1tf:                      Not affected",
+    "Vulnerability Mds:                       Not affected",
+    "Vulnerability Meltdown:                  Not affected",
+    "Vulnerability Mmio stale data:           Not affected",
+    "Vulnerability Reg file data sampling:    Vulnerable: No microcode",
+    "Vulnerability Retbleed:                  Mitigation; Enhanced IBRS",
+    "Vulnerability Spec rstack overflow:      Not affected",
+    "Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl",
+    "Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization",
+    "Vulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop",
+    "Vulnerability Srbds:                     Not affected",
+    "Vulnerability Tsa:                       Not affected",
+    "Vulnerability Tsx async abort:           Not affected",
+    "Vulnerability Vmscape:                   Not affected"
+  ]
+}

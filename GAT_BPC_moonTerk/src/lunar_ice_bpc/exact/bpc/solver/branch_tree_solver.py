@@ -13,6 +13,7 @@ from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
+from lunar_ice_bpc.exact.bpc.cuts.live_sri import LiveSriPolicy
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
@@ -22,6 +23,7 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     solve_b2_pricing_tail_baseline,
     solve_node_pricing_with_b2b_r3,
 )
+from lunar_ice_bpc.exact.bpc.solver.live_sri_solver import solve_node_pricing_with_live_sri
 from lunar_ice_bpc.exact.core.branching import (
     DIFFERENT_JOURNEY,
     SAME_JOURNEY,
@@ -30,6 +32,7 @@ from lunar_ice_bpc.exact.core.branching import (
     journey_satisfies_branch_context,
 )
 from lunar_ice_bpc.exact.core.data import LunarIceData
+from lunar_ice_bpc.exact.core.cuts import CutContext, CutLineage
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.core.objective import aggregate_journey_objective_breakdown
 from lunar_ice_bpc.exact.master.journey_rmp import manual_journey_reduced_cost
@@ -67,6 +70,8 @@ class _QueuedNode:
     # including a child that has not yet been processed or whose own pricing
     # search ends incomplete.
     inherited_lower_bound: float | None = None
+    cut_context: CutContext = CutContext()
+    cut_lineage: CutLineage = CutLineage()
 
 
 def solve_b3_branch_price_tree_baseline(
@@ -91,6 +96,7 @@ def solve_b3_branch_price_tree_baseline(
     labeling_final_judge_enabled: bool | None = None,
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
+    live_sri_policy: LiveSriPolicy | str | None = None,
 ) -> dict:
     """Run B3 = B2 plus a proof-gated branch-and-price tree.
 
@@ -105,6 +111,16 @@ def solve_b3_branch_price_tree_baseline(
     """
 
     tree_started_at = perf_counter()
+    active_live_policy = (
+        live_sri_policy
+        if isinstance(live_sri_policy, LiveSriPolicy)
+        else LiveSriPolicy.named(str(live_sri_policy or "no_cut"))
+    )
+    if active_live_policy.enabled:
+        # The legacy representative-universe branch audit does not run the
+        # required live separation/repricing loop; use the production pricing
+        # path whenever a live policy is selected.
+        use_complete_universe_audit = False
     tree_deadline = (
         None
         if wall_time_limit_sec is None
@@ -307,8 +323,11 @@ def solve_b3_branch_price_tree_baseline(
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
             labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
+            live_sri_policy=active_live_policy,
         )
         node_priced_columns = tuple(node.pop("_all_priced_columns", tuple()) or tuple())
+        node_cut_context = node.pop("_active_cut_context", queued.cut_context)
+        node_cut_lineage = node.pop("_cut_lineage", queued.cut_lineage)
         shared_from_node = 0
         for column in node_priced_columns:
             signature = column_signature_from_journey(column)
@@ -416,6 +435,8 @@ def solve_b3_branch_price_tree_baseline(
                                 },
                                 branch_sense=branch_sense,
                                 inherited_lower_bound=node_bound,
+                                cut_context=node_cut_context,
+                                cut_lineage=node_cut_lineage,
                             )
                         )
                         node["child_node_ids"].append(child_id)
@@ -461,6 +482,9 @@ def solve_b3_branch_price_tree_baseline(
     payload["labeling_final_judge_enabled"] = labeling_final_judge_enabled
     payload["labeling_final_judge_max_exact_tasks"] = labeling_final_judge_max_exact_tasks
     payload["labeling_final_judge_exact_harvest_target"] = labeling_final_judge_exact_harvest_target
+    payload["live_sri_policy"] = active_live_policy.to_payload()
+    payload["live_cut_policy_hash"] = active_live_policy.policy_hash
+    payload["live_sri_enabled"] = active_live_policy.enabled
     payload["initial_tree_seed_column_count"] = len(provided_initial_columns)
     payload["tree_seed_source"] = "provided_initial_columns" if provided_initial_columns else "b3_internal_seed"
     payload["solve_b0_direct_first"] = bool(solve_b0_direct_first)
@@ -641,8 +665,10 @@ def _solve_b3_node(
     labeling_final_judge_enabled: bool | None = None,
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
+    live_sri_policy: LiveSriPolicy | None = None,
 ) -> dict:
-    if use_complete_universe_audit and universe:
+    active_live_policy = live_sri_policy or LiveSriPolicy.named("no_cut")
+    if use_complete_universe_audit and universe and not active_live_policy.enabled:
         return _solve_b3_node_with_complete_universe_audit(
             data,
             universe,
@@ -659,26 +685,37 @@ def _solve_b3_node(
             labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         )
     initial_columns = tuple(universe) if universe else None
-    engine = solve_node_pricing_with_b2b_r3(
-        data,
-        branch_context=queued.context,
-        node_id=queued.node_id,
-        initial_columns=initial_columns,
-        incumbent_objective=incumbent_objective_at_entry,
-        max_direct_tasks=max_direct_tasks,
-        max_rounds=max_rounds,
-        wall_time_limit_sec=wall_time_limit_sec,
-        negative_eps=negative_eps,
-        max_columns_per_round=max_columns_per_round,
-        b0_direct=b0_direct,
-        tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
-        tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
-        tail_dual_stabilization_window=tail_dual_stabilization_window,
-        worker_pricer_kind=worker_pricer_kind,
-        labeling_final_judge_enabled=labeling_final_judge_enabled,
-        labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
-        labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
-    )
+    node_kwargs = {
+        "branch_context": queued.context,
+        "cut_context": queued.cut_context,
+        "cut_lineage": queued.cut_lineage,
+        "node_id": queued.node_id,
+        "initial_columns": initial_columns,
+        "incumbent_objective": incumbent_objective_at_entry,
+        "max_direct_tasks": max_direct_tasks,
+        "max_rounds": max_rounds,
+        "wall_time_limit_sec": wall_time_limit_sec,
+        "negative_eps": negative_eps,
+        "max_columns_per_round": max_columns_per_round,
+        "b0_direct": b0_direct,
+        "tail_dual_stabilization_enabled": tail_dual_stabilization_enabled,
+        "tail_dual_stabilization_alpha": tail_dual_stabilization_alpha,
+        "tail_dual_stabilization_window": tail_dual_stabilization_window,
+        "worker_pricer_kind": worker_pricer_kind,
+        "labeling_final_judge_enabled": labeling_final_judge_enabled,
+        "labeling_final_judge_max_exact_tasks": labeling_final_judge_max_exact_tasks,
+        "labeling_final_judge_exact_harvest_target": labeling_final_judge_exact_harvest_target,
+    }
+    if active_live_policy.enabled:
+        engine = solve_node_pricing_with_live_sri(
+            data,
+            policy=active_live_policy,
+            depth=queued.depth,
+            ancestor_path=_queued_ancestor_path(queued),
+            **node_kwargs,
+        )
+    else:
+        engine = solve_node_pricing_with_b2b_r3(data, **node_kwargs)
     node = _node_payload(
         data=data,
         queued=queued,
@@ -698,7 +735,34 @@ def _solve_b3_node(
         integer_candidate_columns=None,
     )
     node["_all_priced_columns"] = tuple(engine.get("_all_priced_columns") or tuple())
+    node["cut_context"] = engine.get("cut_context") or queued.cut_context.to_payload()
+    node["cut_count"] = int(engine.get("cut_count") or 0)
+    node["active_cut_context_hash"] = str(
+        engine.get("active_cut_context_hash") or queued.cut_context.active_cut_context_hash
+    )
+    node["cut_lineage"] = engine.get("cut_lineage") or queued.cut_lineage.to_payload()
+    node["cut_lineage_hash"] = str(
+        engine.get("cut_lineage_hash") or queued.cut_lineage.cut_lineage_hash
+    )
+    node["live_sri"] = engine.get("live_sri") or {
+        "policy": active_live_policy.to_payload(),
+        "terminal_reason": "NO_CUT_ROLLBACK_PATH",
+    }
+    node["_active_cut_context"] = engine.get("_active_cut_context", queued.cut_context)
+    node["_cut_lineage"] = engine.get("_cut_lineage", queued.cut_lineage)
     return node
+
+
+def _queued_ancestor_path(queued: _QueuedNode) -> tuple[str, ...]:
+    """Return the stable path prefix carried by inherited cut lineage."""
+
+    paths = [entry.ancestor_path for entry in queued.cut_lineage.entries]
+    longest = max(paths, key=len, default=tuple())
+    if queued.parent_node_id is None:
+        return tuple()
+    if not longest or longest[-1] != queued.parent_node_id:
+        return (*longest, queued.parent_node_id)
+    return tuple(longest)
 
 
 def _solve_b3_node_with_complete_universe_audit(

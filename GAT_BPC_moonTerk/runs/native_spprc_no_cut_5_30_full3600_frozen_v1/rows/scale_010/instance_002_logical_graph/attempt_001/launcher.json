@@ -1,0 +1,21 @@
+{
+  "started_at_utc": "2026-07-22T02:55:10.448814+00:00",
+  "command": [
+    "/home/kai/miniconda3/bin/python",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+    "--config",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+    "--scales",
+    "10",
+    "--backend",
+    "native_rcspp_inprocess",
+    "--instance",
+    "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_010/instance_002_logical_graph.json",
+    "--output-dir",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/rows/scale_010/instance_002_logical_graph/attempt_001",
+    "--no-resume"
+  ],
+  "finished_at_utc": "2026-07-22T02:55:11.453367+00:00",
+  "returncode": 0,
+  "abort_reason": ""
+}

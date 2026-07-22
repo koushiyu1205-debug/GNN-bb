@@ -1,0 +1,42 @@
+{
+  "ab_ba_alternation": true,
+  "created_at_utc": "2026-07-22T07:31:18.639624+00:00",
+  "fresh_python_native_runtime_per_slot": true,
+  "scales": [
+    5
+  ],
+  "schema_version": "lunar_ice_bpc.live_sri_promotion_schedule.v2",
+  "slot_count": 2,
+  "slots": [
+    {
+      "config": "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+      "config_sha256": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+      "instance_key": "instance_001",
+      "instance_sha256": "57aaf574b91093ab9e20cc43e0e3722434b7b92e3f21679d65d26507ec5e3bb3",
+      "mode": "no_cut",
+      "order": "no_cut/live",
+      "order_index": 1,
+      "repetition": 1,
+      "scale": 5,
+      "slot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_runner_smoke_v2_fixed/raw/scale_005/instance_001_logical_graph/repeat_01/1_no_cut",
+      "slot_id": "s005:instance_001:r01:o1:no_cut"
+    },
+    {
+      "config": "/home/kai/work/GAT_BPC_moonTerk/configs/native_live_sri_p0_pilot_v1.yaml",
+      "config_sha256": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+      "instance_key": "instance_001",
+      "instance_sha256": "57aaf574b91093ab9e20cc43e0e3722434b7b92e3f21679d65d26507ec5e3bb3",
+      "mode": "live",
+      "order": "no_cut/live",
+      "order_index": 2,
+      "repetition": 1,
+      "scale": 5,
+      "slot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_runner_smoke_v2_fixed/raw/scale_005/instance_001_logical_graph/repeat_01/2_live",
+      "slot_id": "s005:instance_001:r01:o2:live"
+    }
+  ],
+  "solver_resume": false,
+  "strict_cold_start": true
+}

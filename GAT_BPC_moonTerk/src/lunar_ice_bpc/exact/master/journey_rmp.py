@@ -73,6 +73,11 @@ class PhaseOneRMPResult:
     branch_filtered_column_count: int
     iteration_count: int
     note: str
+    cut_context: dict | None = None
+    cut_count: int = 0
+    primal_cut_activities: tuple[dict, ...] = tuple()
+    primal_cut_violation_max: float | None = None
+    artificial_cut_coefficients_zero: bool = True
 
     @property
     def artificial_positive_count(self) -> int:
@@ -101,6 +106,28 @@ def manual_journey_reduced_cost(
     if duals.cuts and cut_coefficients:
         for cut_id, coefficient in cut_coefficients.items():
             value -= float(duals.cuts.get(str(cut_id), 0.0)) * float(coefficient)
+    return round(value, 9)
+
+
+def manual_phase_one_journey_reduced_cost(
+    journey: JourneyColumn,
+    duals: JourneyDuals,
+    *,
+    cut_context: CutContext | None = None,
+) -> float:
+    """Return Phase-I RC with zero real-journey objective.
+
+    V1 task artificials have coefficient one only in their cover equality and
+    coefficient zero in fleet and ``<=`` SRI rows. Real columns retain their
+    cover, fleet, and active-cut coefficients.
+    """
+
+    context = cut_context or CutContext()
+    value = -float(duals.fleet_limit)
+    for task_id in journey.task_set:
+        value -= float(duals.cover.get(str(task_id), 0.0))
+    for cut_id, coefficient in context.coefficients_for(journey).items():
+        value -= float((duals.cuts or {}).get(str(cut_id), 0.0)) * float(coefficient)
     return round(value, 9)
 
 
@@ -321,9 +348,10 @@ def solve_phase_one_journey_rmp(
     """Minimize uncovered-task artificials for a restricted branch master.
 
     Real journey columns have zero Phase-I cost and task artificials have unit
-    cost and do not consume fleet.  The resulting dual is therefore the exact
-    pricing context ``0 - sum(pi_i) - mu`` used to restore RMP feasibility or
-    certify that the full branch master is infeasible.
+    cost and do not consume fleet. Task artificials also have zero coefficient
+    in V1 ``<=`` SRI rows. The resulting dual is the exact pricing context
+    ``0 - sum(pi_i) - mu - sum(gamma_k c_kj)`` used to restore RMP feasibility
+    or certify that the full branch+cut master is infeasible.
     """
 
     ordered_tasks = tuple(str(task_id) for task_id in task_ids)
@@ -332,19 +360,7 @@ def solve_phase_one_journey_rmp(
     filtered_count = len(raw_columns) - len(active_columns)
     branch_payload = (branch_context or BranchContext()).to_payload()
     active_cuts = cut_context or CutContext()
-    if not active_cuts.empty:
-        return PhaseOneRMPResult(
-            status="UNSUPPORTED_CUT_CONTEXT",
-            artificial_objective=None,
-            artificial_values={},
-            duals=JourneyDuals(cover={}, fleet_limit=0.0),
-            real_primal_columns=tuple(),
-            real_fleet_usage=None,
-            branch_context=branch_payload,
-            branch_filtered_column_count=filtered_count,
-            iteration_count=0,
-            note="Phase-I v1 requires empty CutContext.",
-        )
+    cut_payload = active_cuts.to_payload()
     simplex = _solve_dual_lp(
         ordered_tasks,
         active_columns,
@@ -364,6 +380,8 @@ def solve_phase_one_journey_rmp(
             branch_filtered_column_count=filtered_count,
             iteration_count=simplex.iterations,
             note="Phase-I restricted master did not solve to optimality.",
+            cut_context=cut_payload,
+            cut_count=len(active_cuts.cuts),
         )
     real_count = len(active_columns)
     artificial_values = {
@@ -380,6 +398,7 @@ def solve_phase_one_journey_rmp(
         9,
     )
     artificial_objective = round(sum(artificial_values.values()), 9)
+    cut_activities = _primal_cut_activities_payload(active_cuts, real_primal)
     return PhaseOneRMPResult(
         status="PHASE_ONE_OPTIMAL",
         artificial_objective=artificial_objective,
@@ -395,6 +414,11 @@ def solve_phase_one_journey_rmp(
             if artificial_objective <= 1.0e-8
             else "Positive artificials remain; exact Phase-I pricing is required."
         ),
+        cut_context=cut_payload,
+        cut_count=len(active_cuts.cuts),
+        primal_cut_activities=cut_activities,
+        primal_cut_violation_max=_max_cut_violation(cut_activities),
+        artificial_cut_coefficients_zero=True,
     )
 
 
@@ -530,8 +554,6 @@ def _solve_dual_lp(
 ) -> _SimplexResult:
     n = len(task_ids)
     context = cut_context or CutContext()
-    if phase_one and not context.empty:
-        raise ValueError("Phase-I dual currently requires empty CutContext")
     task_index = {task_id: index for index, task_id in enumerate(task_ids)}
     cut_start = 2 * n + 1
     objective = [0.0 for _ in range(cut_start + len(context.cuts))]

@@ -1,0 +1,56 @@
+[
+  {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+      "--config",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+      "--scales",
+      "5",
+      "--instance",
+      "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_dry_run/raw/scale_005/instance_001_logical_graph/repeat_01/1_no_cut",
+      "--no-resume"
+    ],
+    "config": "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+    "config_sha256": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a",
+    "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+    "instance_key": "instance_001_logical_graph",
+    "mode": "no_cut",
+    "order": "no_cut/live",
+    "order_index": 1,
+    "repetition": 1,
+    "returncode": 0,
+    "run_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_dry_run/raw/scale_005/instance_001_logical_graph/repeat_01/1_no_cut",
+    "scale": 5,
+    "status": "DRY_RUN"
+  },
+  {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+      "--config",
+      "/home/kai/work/GAT_BPC_moonTerk/configs/native_live_sri_p0_pilot_v1.yaml",
+      "--scales",
+      "5",
+      "--instance",
+      "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_dry_run/raw/scale_005/instance_001_logical_graph/repeat_01/2_live",
+      "--no-resume"
+    ],
+    "config": "/home/kai/work/GAT_BPC_moonTerk/configs/native_live_sri_p0_pilot_v1.yaml",
+    "config_sha256": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+    "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+    "instance_key": "instance_001_logical_graph",
+    "mode": "live",
+    "order": "no_cut/live",
+    "order_index": 2,
+    "repetition": 1,
+    "returncode": 0,
+    "run_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_dry_run/raw/scale_005/instance_001_logical_graph/repeat_01/2_live",
+    "scale": 5,
+    "status": "DRY_RUN"
+  }
+]

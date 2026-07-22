@@ -35,7 +35,11 @@ from lunar_ice_bpc.exact.bpc.pricing.resource_label_core import (
 )
 from lunar_ice_bpc.exact.bpc.pricing.status import PricingState
 from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
-from lunar_ice_bpc.exact.core.cuts import CutContext
+from lunar_ice_bpc.exact.core.cuts import (
+    CutContext,
+    stable_payload_hash,
+    true_dual_binding_hash,
+)
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
@@ -105,6 +109,10 @@ class LabelingPricingConfig:
     support_continuation_protected_seed_count: int = 8
     resource_extension_seed_enabled: bool = True
     active_task_sets_for_exact_harvest: tuple[tuple[str, ...], ...] = tuple()
+    rmp_iteration_id: str = ""
+    cut_lineage_hash: str = ""
+    live_cut_policy_hash: str = ""
+    separator_policy_version: str = ""
 
     def __post_init__(self) -> None:
         mode = str(self.mode)
@@ -276,6 +284,8 @@ def run_bpc_labeling_pricer(
             native_result,
             cfg,
             backend_id=native_backend_id,
+            true_duals=true_duals,
+            cut_context=cuts,
         )
     elif cfg.exact_mode:
         payload, columns = _run_exact_elementary_labeling(
@@ -354,6 +364,7 @@ def _run_native_exact_backend(
         BackendPricingRequest,
         BackendRegistry,
     )
+    from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_instance_hash
 
     try:
         memory_limit_gb = max(0.0, float(os.getenv(NATIVE_MEMORY_LIMIT_GB_ENV, "0") or 0.0))
@@ -381,8 +392,19 @@ def _run_native_exact_backend(
                 os.getenv(NATIVE_SUBSET_DOMINANCE_ENV, "0")
             ).strip().lower()
             in {"1", "true", "yes", "on"},
-            cut_state_enabled=str(os.getenv(NATIVE_CUT_STATE_ENV, "0")).strip().lower()
-            in {"1", "true", "yes", "on"},
+            instance_hash=spprc_instance_hash(data),
+            config_hash=stable_payload_hash(cfg.__dict__),
+            dual_binding_hash=true_dual_binding_hash(
+                true_duals.cover,
+                fleet_limit=true_duals.fleet_limit,
+                cuts=true_duals.cuts,
+            ),
+            branch_context_hash=stable_payload_hash(branch_context.to_payload()),
+            cut_context_hash=cut_context.active_cut_context_hash,
+            cut_lineage_hash=cfg.cut_lineage_hash,
+            live_cut_policy_hash=cfg.live_cut_policy_hash,
+            rmp_iteration_id=cfg.rmp_iteration_id,
+            separator_policy_version=cfg.separator_policy_version,
         )
     )
 
@@ -392,6 +414,8 @@ def _native_exact_backend_payload(
     cfg: LabelingPricingConfig,
     *,
     backend_id: str,
+    true_duals: JourneyDuals,
+    cut_context: CutContext,
 ) -> tuple[dict, tuple[JourneyColumn, ...]]:
     negative_columns = tuple(result.columns)
     proof_only_blockers = {
@@ -402,6 +426,8 @@ def _native_exact_backend_payload(
         blocker
         for blocker in result.certificate_blockers
         if blocker not in proof_only_blockers
+        and not str(blocker).startswith("native_result_binding_mismatch:")
+        and blocker != "native_engine_build_hash_missing"
     )
     column_audit_pass = not column_audit_blockers
     has_negative = bool(
@@ -474,6 +500,7 @@ def _native_exact_backend_payload(
             "global_remaining_rc_lb_coverage_complete": bool(result.search_exhaustive),
             "proved_no_rc_below": result.proved_no_rc_below,
             "true_best_reduced_cost": result.best_found_rc,
+            "best_reduced_cost": result.best_found_rc,
             "pricing_best_reduced_cost": result.best_found_rc,
             "true_audited_column_count": len(negative_columns),
             "true_negative_column_count": len(negative_columns),
@@ -503,6 +530,35 @@ def _native_exact_backend_payload(
             ),
         }
     )
+    cut_certificate_support = _cut_certificate_support_report(
+        negative_columns,
+        true_duals,
+        cut_context,
+        payload,
+        negative_eps=cfg.negative_eps,
+    )
+    live_cut_supported = bool(
+        cut_context.empty or cut_certificate_support["live_cut_certificate_supported"]
+    )
+    payload.update(
+        {
+            "cut_context_active": not cut_context.empty,
+            "cut_count": len(cut_context.cuts),
+            "live_cut_certificate_supported": live_cut_supported,
+            "cut_certificate_support": cut_certificate_support,
+        }
+    )
+    if certified and not live_cut_supported:
+        payload.update(
+            {
+                "pricing_state": PricingState.INCOMPLETE_LIMIT.value,
+                "pricing_proof_kind": PROOF_KIND_EXHAUSTIVE_INCOMPLETE,
+                "can_certify_no_negative": False,
+                "uses_true_dual_bpc_certificate": False,
+                "global_remaining_rc_lb_valid": False,
+                "note": "Native search exhausted, but the active cut certificate audit failed; fail closed.",
+            }
+        )
     return payload, negative_columns
 
 

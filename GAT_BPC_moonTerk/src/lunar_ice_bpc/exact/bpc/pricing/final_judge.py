@@ -22,7 +22,13 @@ from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
 )
 from lunar_ice_bpc.exact.bpc.pricing.status import PricingState
 from lunar_ice_bpc.exact.core.branching import BranchContext, branch_context_from_payload, journey_satisfies_branch_context
-from lunar_ice_bpc.exact.core.cuts import CutContext, cut_coefficients_for_journey, cut_context_from_payload
+from lunar_ice_bpc.exact.core.cuts import (
+    CUT_STATE_SCHEMA_VERSION,
+    CutContext,
+    cut_coefficients_for_journey,
+    cut_context_from_payload,
+    stable_payload_hash,
+)
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
@@ -809,6 +815,10 @@ def _run_labeling_pricer_final_judge(
                 exact_negative_harvest_target=exact_harvest_target,
                 stop_at_first_negative=bool(stop_at_first_negative),
                 active_task_sets_for_exact_harvest=active_task_sets_for_exact_harvest,
+                rmp_iteration_id=context.rmp_iteration_id,
+                cut_lineage_hash=context.cut_lineage_hash,
+                live_cut_policy_hash=context.live_cut_policy_hash,
+                separator_policy_version=context.separator_policy_version,
             ),
             branch_context=branch_context,
             cut_context=cut_context,
@@ -1043,6 +1053,19 @@ def _run_labeling_pricer_final_judge(
                 proof_pass_payload.get("can_certify_no_negative")
             ),
             "dual_fingerprint": context.dual_fingerprint,
+            "objective_mode": context.objective_mode,
+            "rmp_iteration_id": context.rmp_iteration_id,
+            "true_dual_binding_hash": context.true_dual_binding_hash,
+            "branch_context_hash": context.branch_context_hash
+            or stable_payload_hash(branch_context.to_payload()),
+            "active_cut_context_hash": context.active_cut_context_hash
+            or cut_context.active_cut_context_hash,
+            "cut_lineage_hash": context.cut_lineage_hash,
+            "live_cut_policy_hash": context.live_cut_policy_hash,
+            "separator_policy_version": context.separator_policy_version,
+            "cut_state_schema_version": CUT_STATE_SCHEMA_VERSION,
+            "negative_epsilon": float(negative_eps),
+            "active_cut_count": len(cut_context.cuts),
             "branch_context": branch_context.to_payload(),
             "cut_context": cut_context.to_payload(),
             "manual_best_reduced_cost": payload.get("true_best_reduced_cost"),

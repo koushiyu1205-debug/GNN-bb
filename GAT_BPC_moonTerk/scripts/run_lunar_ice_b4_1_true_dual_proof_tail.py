@@ -119,6 +119,11 @@ def main() -> int:
     )
     parser.add_argument("--tree-closure-labeling-final-judge-max-exact-tasks", type=int)
     parser.add_argument("--tree-closure-labeling-final-judge-exact-harvest-target", type=int)
+    parser.add_argument(
+        "--tree-closure-live-sri-policy",
+        choices=("no_cut", "P0", "P1", "P2"),
+        default="no_cut",
+    )
     parser.add_argument("--tree-closure-result-subdir", default="tree_closure_results")
     parser.add_argument("--history-round", type=int, default=-1)
     parser.add_argument("--negative-feasibility-time-limit-sec", type=float, default=600.0)
@@ -592,6 +597,7 @@ def main() -> int:
                     if args.tree_closure_labeling_final_judge_exact_harvest_target is not None
                     else args.labeling_final_judge_exact_harvest_target
                 ),
+                live_sri_policy=str(args.tree_closure_live_sri_policy),
             )
             raw_results = report.get("tree_closure_raw_results") or []
             if raw_results:

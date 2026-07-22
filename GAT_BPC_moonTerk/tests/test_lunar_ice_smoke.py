@@ -7587,11 +7587,13 @@ class LunarIceSmokeTests(unittest.TestCase):
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
         journey = solve_small_journey_baseline(data).journeys[0]
-        tasks = tuple(sorted(journey.task_set))[:3]
+        ordered_tasks = tuple(sorted(journey.task_set))
+        tasks = ordered_tasks[:3]
+        other_tasks = ordered_tasks[-3:]
         context = CutContext(
             (
                 subset_row_cut("z_cut", tasks, divisor=2),
-                subset_row_cut("a_cut", tasks, divisor=2),
+                subset_row_cut("a_cut", other_tasks, divisor=2),
             )
         )
 
@@ -7687,7 +7689,7 @@ class LunarIceSmokeTests(unittest.TestCase):
 
         self.assertTrue(signature.cut_coefficient_vector_hash)
 
-    def test_pricing_tail_column_pool_uses_cut_aware_signature_when_cut_active(self) -> None:
+    def test_pricing_tail_column_pool_keeps_physical_signature_under_cuts(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)
         data = load_lunar_ice_data(instance)
         journey = solve_small_journey_baseline(data).journeys[0]
@@ -7716,10 +7718,10 @@ class LunarIceSmokeTests(unittest.TestCase):
         cut_signature = next(iter(cut_signatures))
         self.assertEqual((loaded_root, filtered_root), (1, 0))
         self.assertEqual((loaded_cut, filtered_cut), (1, 0))
-        self.assertNotEqual(root_signature, cut_signature)
+        self.assertEqual(root_signature, cut_signature)
         self.assertFalse(root_signature.cut_coefficient_vector_hash)
-        self.assertTrue(cut_signature.cut_coefficient_vector_hash)
-        self.assertEqual(len(pool.columns_by_signature), 2)
+        self.assertFalse(cut_signature.cut_coefficient_vector_hash)
+        self.assertEqual(len(pool.columns_by_signature), 1)
 
     def test_root_master_view_keeps_best_task_set_representative(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)

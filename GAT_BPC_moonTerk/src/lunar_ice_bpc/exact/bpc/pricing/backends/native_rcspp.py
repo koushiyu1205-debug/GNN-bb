@@ -23,12 +23,24 @@ from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
     BackendPricingRequest,
     BackendResult,
 )
+from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.core.branching import branch_context_from_payload
-from lunar_ice_bpc.exact.core.cuts import cut_context_from_payload
+from lunar_ice_bpc.exact.core.cuts import (
+    CUT_STATE_SCHEMA_VERSION,
+    MAX_NATIVE_ACTIVE_CUTS,
+    cut_context_from_payload,
+    stable_payload_hash,
+    true_dual_binding_hash,
+    validate_live_sri_context,
+)
 from lunar_ice_bpc.exact.core.columns import build_timed_sortie
 from lunar_ice_bpc.exact.core.journey import build_journey_column
 from lunar_ice_bpc.exact.core.objective import objective_references
-from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
+from lunar_ice_bpc.exact.master.journey_rmp import (
+    JourneyDuals,
+    manual_journey_reduced_cost,
+    manual_phase_one_journey_reduced_cost,
+)
 
 
 NATIVE_INPROCESS_BACKEND_ID = "native_rcspp_inprocess"
@@ -482,13 +494,16 @@ atexit.register(NativeRcsppHostBackend.close)
 
 def _capability_blockers(request: BackendPricingRequest) -> tuple[str, ...]:
     blockers: list[str] = []
-    if not request.cut_context.empty and not request.cut_state_enabled:
-        blockers.append("native_nonempty_cut_context_not_promoted")
-    if request.objective_mode == BACKEND_OBJECTIVE_PHASE_ONE and not request.cut_context.empty:
-        blockers.append("native_phase_one_nonempty_cut_context_unsupported")
+    if request.cut_state_required and not request.cut_state_enabled:
+        blockers.append("native_required_cut_state_disabled")
+    if request.cut_state_required and request.cut_state_schema_version != CUT_STATE_SCHEMA_VERSION:
+        blockers.append("native_cut_state_schema_mismatch")
+    blockers.extend(validate_live_sri_context(request.cut_context))
+    if len(request.cut_context.cuts) > MAX_NATIVE_ACTIVE_CUTS:
+        blockers.append("native_active_cut_count_above_16")
     if len(request.data.task_ids) > 100:
         blockers.append("native_v1_task_count_above_100")
-    return tuple(blockers)
+    return tuple(dict.fromkeys(blockers))
 
 
 def _binding_blockers(request: BackendPricingRequest) -> tuple[str, ...]:
@@ -497,26 +512,39 @@ def _binding_blockers(request: BackendPricingRequest) -> tuple[str, ...]:
     blockers = []
     if request.instance_hash and request.instance_hash != spprc_instance_hash(request.data):
         blockers.append("native_instance_hash_mismatch")
-    if request.dual_binding_hash and request.dual_binding_hash != _stable_hash(
-        {
-            "cover": sorted(
-                (str(key), float(value)) for key, value in request.true_duals.cover.items()
-            ),
-            "fleet_limit": float(request.true_duals.fleet_limit),
-            "cuts": sorted(
-                (str(key), float(value))
-                for key, value in (request.true_duals.cuts or {}).items()
-            ),
-        }
-    ):
+    dual_payload = {
+        "cover": sorted(
+            (str(key), float(value)) for key, value in request.true_duals.cover.items()
+        ),
+        "fleet_limit": float(request.true_duals.fleet_limit),
+        "cuts": sorted(
+            (str(key), float(value))
+            for key, value in (request.true_duals.cuts or {}).items()
+        ),
+    }
+    expected_dual_hashes = {
+        _stable_hash(dual_payload),
+        true_dual_binding_hash(
+            request.true_duals.cover,
+            fleet_limit=request.true_duals.fleet_limit,
+            cuts=request.true_duals.cuts,
+        ),
+    }
+    if request.dual_binding_hash and request.dual_binding_hash not in expected_dual_hashes:
         blockers.append("native_dual_binding_hash_mismatch")
-    if request.branch_context_hash not in {"", "empty"} and request.branch_context_hash != _stable_hash(
-        request.branch_context.to_payload()
+    branch_payload = request.branch_context.to_payload()
+    expected_branch_hashes = {
+        _stable_hash(branch_payload),
+        stable_payload_hash(branch_payload),
+    }
+    if (
+        request.branch_context_hash not in {"", "empty"}
+        and request.branch_context_hash not in expected_branch_hashes
     ):
         blockers.append("native_branch_context_hash_mismatch")
     if request.cut_context_hash not in {"", "empty"} and request.cut_context_hash != _stable_hash(
         request.cut_context.to_payload()
-    ):
+    ) and request.cut_context_hash != request.cut_context.active_cut_context_hash:
         blockers.append("native_cut_context_hash_mismatch")
     return tuple(blockers)
 
@@ -595,6 +623,14 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         ),
         "config_hash": request.config_hash,
         "dual_binding_hash": request.dual_binding_hash,
+        "branch_context_hash": request.branch_context_hash,
+        "cut_state_schema_version": request.cut_state_schema_version,
+        "active_cut_context_hash": request.cut_context.active_cut_context_hash,
+        "active_cut_count": len(request.cut_context.cuts),
+        "cut_lineage_hash": request.cut_lineage_hash,
+        "live_cut_policy_hash": request.live_cut_policy_hash,
+        "rmp_iteration_id": request.rmp_iteration_id,
+        "separator_policy_version": request.separator_policy_version,
     }
 
 
@@ -674,6 +710,31 @@ def _audit_native_result(
     backend_id: str,
 ) -> BackendResult:
     blockers = [str(item) for item in raw.get("certificate_blockers", [])]
+    raw_bindings = dict(raw.get("request_bindings") or {})
+    expected_bindings = {
+        "instance_hash": request.instance_hash or _native_static_payload(request.data)["instance_hash"],
+        "config_hash": request.config_hash,
+        "dual_binding_hash": request.dual_binding_hash,
+        "branch_context_hash": request.branch_context_hash,
+        "objective_mode": request.objective_mode,
+        "rmp_iteration_id": request.rmp_iteration_id,
+        "active_cut_context_hash": request.cut_context.active_cut_context_hash,
+        "active_cut_count": len(request.cut_context.cuts),
+        "cut_lineage_hash": request.cut_lineage_hash,
+        "live_cut_policy_hash": request.live_cut_policy_hash,
+        "cut_state_schema_version": request.cut_state_schema_version,
+        "separator_policy_version": request.separator_policy_version,
+        "negative_eps": request.negative_eps,
+    }
+    binding_mismatches = []
+    for key, expected in expected_bindings.items():
+        if key not in raw_bindings or raw_bindings.get(key) != expected:
+            binding_mismatches.append(key)
+            blockers.append(f"native_result_binding_mismatch:{key}")
+    build_info = dict(raw.get("build_info") or {})
+    native_engine_build_hash = _stable_hash(build_info) if build_info else ""
+    if not native_engine_build_hash:
+        blockers.append("native_engine_build_hash_missing")
     columns = []
     audited_rcs = []
     reconstruction_rows = []
@@ -683,15 +744,39 @@ def _audit_native_result(
             manual_rc = float(_manual_backend_reduced_cost(column, request))
             native_rc = float(route["reduced_cost"])
             rc_delta = abs(native_rc - manual_rc)
+            signature = column_signature_from_journey(column)
+            signature_hash = hashlib.sha256(repr(signature).encode("utf-8")).hexdigest()
+            cover_contribution = sum(
+                float(request.true_duals.cover.get(str(task_id), 0.0))
+                for task_id in column.task_set
+            )
+            cut_coefficients = request.cut_context.coefficients_for(column)
+            cut_contribution = sum(
+                float((request.true_duals.cuts or {}).get(str(cut_id), 0.0))
+                * float(coefficient)
+                for cut_id, coefficient in cut_coefficients.items()
+            )
+            audit_row = {
+                "column_signature": signature_hash,
+                "task_set": sorted(str(task_id) for task_id in column.task_set),
+                "native_rc": native_rc,
+                "python_manual_rc": manual_rc,
+                "rmp_real_objective_contribution": (
+                    0.0
+                    if request.objective_mode == BACKEND_OBJECTIVE_PHASE_ONE
+                    else float(column.objective)
+                ),
+                "rmp_cover_dual_contribution": cover_contribution,
+                "rmp_fleet_dual_contribution": float(request.true_duals.fleet_limit),
+                "rmp_cut_dual_contribution": cut_contribution,
+                "cut_coefficients": dict(sorted(cut_coefficients.items())),
+                "absolute_delta": rc_delta,
+            }
             if rc_delta > request.reconstruction_eps:
                 blockers.append("native_python_reduced_cost_mismatch")
-                reconstruction_rows.append(
-                    {"native_rc": native_rc, "manual_rc": manual_rc, "delta": rc_delta, "accepted": False}
-                )
+                reconstruction_rows.append({**audit_row, "accepted": False})
                 continue
-            reconstruction_rows.append(
-                {"native_rc": native_rc, "manual_rc": manual_rc, "delta": rc_delta, "accepted": True}
-            )
+            reconstruction_rows.append({**audit_row, "accepted": True})
             if manual_rc < -request.negative_eps:
                 columns.append(column)
                 audited_rcs.append(manual_rc)
@@ -745,6 +830,38 @@ def _audit_native_result(
             "native_raw_best_found_rc": raw.get("best_found_rc"),
             "native_build_info": raw.get("build_info") or {},
             "reconstruction_audit": reconstruction_rows,
+            "rc_mismatch_count": sum(
+                not bool(row.get("accepted")) for row in reconstruction_rows
+            ),
+            "max_abs_rc_delta": max(
+                (float(row.get("absolute_delta") or 0.0) for row in reconstruction_rows),
+                default=0.0,
+            ),
+            "cut_state_required": request.cut_state_required,
+            "cut_state_effective": request.cut_state_enabled,
+            "cut_state_schema_version": request.cut_state_schema_version,
+            "active_cut_count": len(request.cut_context.cuts),
+            "active_cut_context_hash": request.cut_context.active_cut_context_hash,
+            "cut_lineage_hash": request.cut_lineage_hash,
+            "true_dual_binding_hash": request.dual_binding_hash,
+            "objective_mode": request.objective_mode,
+            "rmp_iteration_id": request.rmp_iteration_id,
+            "completion_bound_requested": request.completion_bound_enabled,
+            "completion_bound_effective": bool(
+                request.completion_bound_enabled and request.cut_context.empty
+            ),
+            "completion_bound_forced_off": bool(
+                request.completion_bound_enabled and not request.cut_context.empty
+            ),
+            "completion_bound_forced_off_reason": (
+                "active_cut_context"
+                if request.completion_bound_enabled and not request.cut_context.empty
+                else ""
+            ),
+            "request_bindings": raw_bindings,
+            "request_binding_mismatches": binding_mismatches,
+            "request_bindings_match": not binding_mismatches,
+            "native_engine_build_hash": native_engine_build_hash,
         }
     )
     return BackendResult(
@@ -790,15 +907,11 @@ def _manual_backend_reduced_cost(column, request: BackendPricingRequest) -> floa
             request.true_duals,
             cut_coefficients=request.cut_context.coefficients_for(column),
         )
-    value = -float(request.true_duals.fleet_limit)
-    for task_id in column.task_set:
-        value -= float(request.true_duals.cover.get(str(task_id), 0.0))
-    # Phase-I is promoted only for empty CutContext.  Keep this assertion at
-    # the final audit boundary so a future cut integration cannot silently
-    # reuse official-objective arithmetic.
-    if not request.cut_context.empty or request.true_duals.cuts:
-        raise ValueError("phase-one native reduced cost requires empty cut context")
-    return round(value, 9)
+    return manual_phase_one_journey_reduced_cost(
+        column,
+        request.true_duals,
+        cut_context=request.cut_context,
+    )
 
 
 def _empty_result(

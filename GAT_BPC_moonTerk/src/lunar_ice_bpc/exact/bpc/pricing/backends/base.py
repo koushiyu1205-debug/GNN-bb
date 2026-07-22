@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from lunar_ice_bpc.exact.core.branching import BranchContext
-from lunar_ice_bpc.exact.core.cuts import CutContext
+from lunar_ice_bpc.exact.core.cuts import CUT_STATE_SCHEMA_VERSION, CutContext
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals
@@ -45,6 +45,11 @@ class BackendPricingRequest:
     dual_binding_hash: str = ""
     branch_context_hash: str = ""
     cut_context_hash: str = ""
+    cut_lineage_hash: str = ""
+    live_cut_policy_hash: str = ""
+    rmp_iteration_id: str = ""
+    cut_state_schema_version: str = CUT_STATE_SCHEMA_VERSION
+    separator_policy_version: str = ""
 
     def __post_init__(self) -> None:
         mode = str(self.mode)
@@ -65,11 +70,18 @@ class BackendPricingRequest:
         object.__setattr__(self, "reconstruction_eps", abs(float(self.reconstruction_eps)))
         object.__setattr__(self, "completion_bound_enabled", bool(self.completion_bound_enabled))
         object.__setattr__(self, "subset_dominance_enabled", bool(self.subset_dominance_enabled))
-        object.__setattr__(self, "cut_state_enabled", bool(self.cut_state_enabled))
+        # Cut state is a mathematical request requirement, not an independent
+        # performance toggle. Empty-context calls remain on the no-cut path.
+        object.__setattr__(self, "cut_state_enabled", not self.cut_context.empty)
+        object.__setattr__(self, "cut_state_schema_version", str(self.cut_state_schema_version))
 
     @property
     def exact_proof_mode(self) -> bool:
         return self.mode == BACKEND_MODE_EXACT_PROOF
+
+    @property
+    def cut_state_required(self) -> bool:
+        return not self.cut_context.empty
 
 
 @dataclass(frozen=True)

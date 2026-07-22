@@ -9,7 +9,12 @@ from typing import Iterable
 
 from lunar_ice_bpc.exact.bpc.master.reduced_cost import ReducedCostContext
 from lunar_ice_bpc.exact.core.branching import BranchContext
-from lunar_ice_bpc.exact.core.cuts import CutContext
+from lunar_ice_bpc.exact.core.cuts import (
+    CutContext,
+    CutLineage,
+    stable_payload_hash,
+    true_dual_binding_hash,
+)
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import (
@@ -34,6 +39,9 @@ def solve_root_journey_master(
     rmp_iteration_id: str = "root-0",
     branch_context: BranchContext | None = None,
     cut_context: CutContext | None = None,
+    cut_lineage: CutLineage | None = None,
+    live_cut_policy_hash: str = "",
+    separator_policy_version: str = "",
 ) -> JourneyMasterSolve:
     """Solve a journey RMP and bind its exact context into reduced costs."""
 
@@ -47,7 +55,13 @@ def solve_root_journey_master(
         branch_context=branch_context,
         cut_context=active_cut_context,
     )
-    context = reduced_cost_context_from_rmp(rmp, rmp_iteration_id=rmp_iteration_id)
+    context = reduced_cost_context_from_rmp(
+        rmp,
+        rmp_iteration_id=rmp_iteration_id,
+        cut_lineage=cut_lineage,
+        live_cut_policy_hash=live_cut_policy_hash,
+        separator_policy_version=separator_policy_version,
+    )
     return JourneyMasterSolve(
         rmp=rmp,
         reduced_cost_context=context,
@@ -63,6 +77,9 @@ def reduced_cost_context_from_rmp(
     rmp: RestrictedRMPResult,
     *,
     rmp_iteration_id: str,
+    cut_lineage: CutLineage | None = None,
+    live_cut_policy_hash: str = "",
+    separator_policy_version: str = "",
 ) -> ReducedCostContext:
     payload = {
         "cover": {str(key): round(float(value), 9) for key, value in rmp.duals.cover.items()},
@@ -71,6 +88,8 @@ def reduced_cost_context_from_rmp(
         "rmp_iteration_id": str(rmp_iteration_id),
     }
     fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    active_cut_context = CutContext() if not rmp.cut_context else _cut_context_from_rmp_payload(rmp.cut_context)
+    lineage = cut_lineage or CutLineage()
     return ReducedCostContext(
         task_duals=rmp.duals.cover,
         fleet_dual=rmp.duals.fleet_limit,
@@ -79,7 +98,24 @@ def reduced_cost_context_from_rmp(
         cut_context=rmp.cut_context,
         dual_fingerprint=fingerprint,
         rmp_iteration_id=str(rmp_iteration_id),
+        objective_mode="official",
+        true_dual_binding_hash=true_dual_binding_hash(
+            rmp.duals.cover,
+            fleet_limit=rmp.duals.fleet_limit,
+            cuts=rmp.duals.cuts,
+        ),
+        branch_context_hash=stable_payload_hash(rmp.branch_context),
+        active_cut_context_hash=active_cut_context.active_cut_context_hash,
+        cut_lineage_hash=lineage.cut_lineage_hash,
+        live_cut_policy_hash=str(live_cut_policy_hash),
+        separator_policy_version=str(separator_policy_version),
     )
+
+
+def _cut_context_from_rmp_payload(payload: dict) -> CutContext:
+    from lunar_ice_bpc.exact.core.cuts import cut_context_from_payload
+
+    return cut_context_from_payload(payload)
 
 
 def audit_master_column_reduced_costs(

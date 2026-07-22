@@ -1,0 +1,17 @@
+{
+  "candidate_id": "FROZEN_NATIVE_LIVE_SRI_P0_CANDIDATE_V1",
+  "candidate_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_candidate_freeze_20260722/candidate_freeze_manifest.json",
+  "checked_at_utc": "2026-07-22T07:33:31.666890+00:00",
+  "config_hashes": {
+    "live": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+    "no_cut": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a"
+  },
+  "expected_engine_hash": "dfaedf6d273c5c56",
+  "expected_no_cut_policy_hash": "37c44c29594e0b8b0ba429e5dd3cf7422c07ae17222bb31e16e31e57030d5e63",
+  "expected_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+  "frozen_baseline_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+  "issues": [],
+  "passed": true,
+  "schema_version": "lunar_ice_bpc.live_sri_promotion_preflight.v2",
+  "source_bundle_hash": "a17622e0b3486da30156d9fc3f464daeeb555b9157fa4956d014cde15c05b5e1"
+}

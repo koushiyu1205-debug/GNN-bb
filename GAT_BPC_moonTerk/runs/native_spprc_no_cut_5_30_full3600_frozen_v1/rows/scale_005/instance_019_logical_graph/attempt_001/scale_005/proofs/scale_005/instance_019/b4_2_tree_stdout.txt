@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/rows/scale_005/instance_019_logical_graph/attempt_001/scale_005/proofs/scale_005/instance_019/b4_1_report_zh.md

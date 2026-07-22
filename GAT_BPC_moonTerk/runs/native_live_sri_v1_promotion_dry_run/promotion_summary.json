@@ -1,0 +1,17 @@
+{
+  "ab_ba_alternation": true,
+  "all_scales_promoted": false,
+  "config_hashes": {
+    "live": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+    "no_cut": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a"
+  },
+  "fresh_python_native_runtime_per_repeat": true,
+  "live_config": "/home/kai/work/GAT_BPC_moonTerk/configs/native_live_sri_p0_pilot_v1.yaml",
+  "no_cut_config": "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+  "resume": false,
+  "scale_summary": {},
+  "schema_version": "lunar_ice_bpc.live_sri_paired_promotion.v1",
+  "status": "DRY_RUN",
+  "strict_cold_start": true,
+  "wall_time_sec": 0.000325
+}

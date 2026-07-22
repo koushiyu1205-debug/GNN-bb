@@ -376,6 +376,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tree-closure-max-columns-per-round", type=int, default=128)
     parser.add_argument("--tree-closure-max-nodes", type=int, default=31)
     parser.add_argument("--tree-closure-max-branch-depth", type=int, default=4)
+    parser.add_argument(
+        "--live-sri-policy",
+        choices=("no_cut", "P0", "P1", "P2"),
+        default="no_cut",
+    )
     parser.add_argument("--route-template-pre-harvest-target", type=int, default=32)
     parser.add_argument("--route-template-pre-harvest-time-cap-sec", type=float, default=20.0)
     parser.add_argument("--route-template-pre-harvest-max-direct-tasks", type=int, default=12)
@@ -519,6 +524,7 @@ def _official_config(args: argparse.Namespace) -> dict:
         "tree_closure_max_columns_per_round": int(args.tree_closure_max_columns_per_round),
         "tree_closure_max_nodes": int(args.tree_closure_max_nodes),
         "tree_closure_max_branch_depth": int(args.tree_closure_max_branch_depth),
+        "live_sri_policy": str(args.live_sri_policy),
         "route_template_pre_harvest_target": int(args.route_template_pre_harvest_target),
         "route_template_pre_harvest_time_cap_sec": float(args.route_template_pre_harvest_time_cap_sec),
         "route_template_pre_harvest_max_direct_tasks": int(args.route_template_pre_harvest_max_direct_tasks),
@@ -528,7 +534,7 @@ def _official_config(args: argparse.Namespace) -> dict:
         ),
         "route_template_pre_harvest_max_candidate_sets": int(args.route_template_pre_harvest_max_candidate_sets),
         "root_tree_pricing_oracle": "b2b_r3_worker_candidate_search_with_true_dual_final_judge",
-        "live_master_cuts": False,
+        "live_master_cuts": str(args.live_sri_policy) != "no_cut",
         "partition_ledger_official": bool(args.root_partition_proof),
     }
 
@@ -1237,6 +1243,8 @@ def _run_tree_closure(
         str(int(args.labeling_final_judge_max_exact_tasks)),
         "--tree-closure-labeling-final-judge-exact-harvest-target",
         str(int(args.labeling_final_judge_exact_harvest_target)),
+        "--tree-closure-live-sri-policy",
+        str(args.live_sri_policy),
         "--threads",
         str(int(args.threads)),
         "--min-available-mem-gb",

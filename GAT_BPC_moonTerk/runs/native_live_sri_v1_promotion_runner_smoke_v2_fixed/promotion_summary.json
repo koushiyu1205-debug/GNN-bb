@@ -1,0 +1,61 @@
+{
+  "ab_ba_alternation": true,
+  "all_scales_promoted": false,
+  "candidate_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_candidate_freeze_20260722/candidate_freeze_manifest.json",
+  "completed_slot_count": 2,
+  "config_hashes": {
+    "live": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+    "no_cut": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a"
+  },
+  "default_switch_allowed": false,
+  "expected_engine_hash": "dfaedf6d273c5c56",
+  "expected_no_cut_policy_hash": "37c44c29594e0b8b0ba429e5dd3cf7422c07ae17222bb31e16e31e57030d5e63",
+  "expected_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+  "expected_slot_count": 2,
+  "final_binding_issues": [],
+  "formal_design_complete": false,
+  "fresh_python_native_runtime_per_slot": true,
+  "frozen_baseline_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+  "harness_recovery_enabled": false,
+  "live_config": "/home/kai/work/GAT_BPC_moonTerk/configs/native_live_sri_p0_pilot_v1.yaml",
+  "no_cut_config": "/home/kai/work/GAT_BPC_moonTerk/runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+  "recovered_slot_count": 0,
+  "scale_summary": {
+    "5": {
+      "base_mean_sec": null,
+      "base_p50_sec": null,
+      "completed_slot_count": 2,
+      "correctness_gate": false,
+      "degraded_instance_count": 0,
+      "equal_instance_count": 0,
+      "expected_instance_count": 1,
+      "expected_slot_count": 2,
+      "formal_design_complete": false,
+      "improved_instance_count": 0,
+      "live_base_mean_ratio": null,
+      "live_base_p50_ratio": null,
+      "live_mean_sec": null,
+      "live_p50_sec": null,
+      "paired_bootstrap_95_ci_geometric_mean": [
+        null,
+        null
+      ],
+      "paired_instance_count": 0,
+      "paired_ratio_geometric_mean": null,
+      "paired_ratio_median": null,
+      "paired_ratio_point_estimate": null,
+      "pairs": [],
+      "performance_gate": false,
+      "promotion_gate": false,
+      "schedule_complete": true
+    }
+  },
+  "schedule_complete": true,
+  "schema_version": "lunar_ice_bpc.live_sri_paired_promotion.v2",
+  "solver_resume": false,
+  "source_bundle_hash": "a17622e0b3486da30156d9fc3f464daeeb555b9157fa4956d014cde15c05b5e1",
+  "status": "FORMAL_INCOMPLETE",
+  "stopped_reason": "",
+  "strict_cold_start": true,
+  "wall_time_sec": 1.234652
+}

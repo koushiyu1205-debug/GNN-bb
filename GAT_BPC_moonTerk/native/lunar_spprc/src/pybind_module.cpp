@@ -75,21 +75,30 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
                          : lunar_spprc::BranchSense::DifferentJourney,
         });
     }
-    for (const auto item : py::cast<py::list>(payload["cuts"])) {
+    const auto cut_rows = py::cast<py::list>(payload["cuts"]);
+    if (cut_rows.size() > 16U) {
+        throw std::invalid_argument("native active cut count exceeds 16");
+    }
+    for (const auto item : cut_rows) {
         const auto row = py::cast<py::dict>(item);
         const auto cut_type = py::cast<std::string>(row["cut_type"]);
-        if (cut_type != "subset_row" && cut_type != "fleet_lower_bound") {
-            throw std::invalid_argument("unsupported native cut type");
+        if (cut_type != "subset_row") {
+            throw std::invalid_argument("native live-cut v1 supports subset_row only");
         }
         lunar_spprc::CutDefinition cut;
         cut.id = py::cast<std::string>(row["cut_id"]);
-        cut.kind = cut_type == "subset_row"
-                       ? lunar_spprc::CutKind::SubsetRow
-                       : lunar_spprc::CutKind::FleetLowerBound;
+        cut.kind = lunar_spprc::CutKind::SubsetRow;
         cut.divisor = py::cast<std::size_t>(row["divisor"]);
+        if (cut.divisor != 2U) {
+            throw std::invalid_argument("native live-cut v1 supports divisor 2 only");
+        }
         cut.dual = py::cast<double>(row["dual"]);
         cut.task_mask.assign((model.tasks.size() + 63U) / 64U, 0U);
-        for (const auto task_value : py::cast<py::list>(row["tasks"])) {
+        const auto cut_tasks = py::cast<py::list>(row["tasks"]);
+        if (cut_tasks.size() != 3U && cut_tasks.size() != 5U) {
+            throw std::invalid_argument("native live-cut v1 supports SRI-3 and SRI-5 only");
+        }
+        for (const auto task_value : cut_tasks) {
             const auto task_id = py::cast<std::string>(task_value);
             const auto found = task_index_by_id.find(task_id);
             if (found == task_index_by_id.end()) {
@@ -198,6 +207,25 @@ py::dict solve_payload(const py::dict& payload) {
     result["certificate_blockers"] = py::list();
     result["telemetry"] = std::move(telemetry);
     result["build_info"] = lunar_spprc::build_info();
+    py::dict bindings;
+    for (const auto* key : {
+             "instance_hash",
+             "config_hash",
+             "dual_binding_hash",
+             "branch_context_hash",
+             "objective_mode",
+             "rmp_iteration_id",
+             "active_cut_context_hash",
+             "active_cut_count",
+             "cut_lineage_hash",
+             "live_cut_policy_hash",
+             "cut_state_schema_version",
+             "separator_policy_version",
+             "negative_eps",
+         }) {
+        bindings[py::str(key)] = payload[py::str(key)];
+    }
+    result["request_bindings"] = std::move(bindings);
     return result;
 }
 

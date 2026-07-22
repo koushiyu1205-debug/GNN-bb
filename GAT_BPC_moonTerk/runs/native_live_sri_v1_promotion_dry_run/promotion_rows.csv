@@ -1,0 +1,3 @@
+scale,instance_key,repetition,order,order_index,mode,status,returncode,cold_start_total_sec,exact,redlines_zero,engine_hash_valid,engine_build_hash,objective,certificate_scope,run_dir
+5,instance_001_logical_graph,1,no_cut/live,1,no_cut,DRY_RUN,0,,,,,,,,/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_dry_run/raw/scale_005/instance_001_logical_graph/repeat_01/1_no_cut
+5,instance_001_logical_graph,1,no_cut/live,2,live,DRY_RUN,0,,,,,,,,/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_promotion_dry_run/raw/scale_005/instance_001_logical_graph/repeat_01/2_live

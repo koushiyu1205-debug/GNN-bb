@@ -69,6 +69,7 @@ def run_native_spprc_acceptance(
             "engine_build_hash_at_start": engine_build_hash_at_start,
             "final_judge_pass_policy": final_judge_pass_policy,
             "adaptive_harvest_cap_sec": adaptive_harvest_cap_sec,
+            "live_sri_policy": str(config.get("live_sri_policy", "no_cut")),
             "profile": asdict(profile),
             "effective_memory_limit_gb": round(effective_memory_limit_gb(profile.memory_limit_gb), 6),
             "instance_count": len(scale_instances),
@@ -112,6 +113,7 @@ def run_native_spprc_acceptance(
             scale_output=scale_output,
             instances=scale_instances,
             resume=resume,
+            live_sri_policy=str(config.get("live_sri_policy", "no_cut")),
         )
         row["command"] = command
         if dry_run:
@@ -415,7 +417,10 @@ def _b42_command(
     scale_output: Path,
     instances: tuple[Path, ...],
     resume: bool,
+    live_sri_policy: str = "no_cut",
 ) -> list[str]:
+    if str(live_sri_policy) not in {"no_cut", "P0", "P1", "P2"}:
+        raise ValueError(f"unsupported live_sri_policy {live_sri_policy!r}")
     command = [
         sys.executable,
         str(root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py"),
@@ -463,6 +468,8 @@ def _b42_command(
         str(profile.tree_max_nodes),
         "--tree-closure-max-branch-depth",
         str(profile.tree_max_branch_depth),
+        "--live-sri-policy",
+        str(live_sri_policy),
         "--no-root-partition-proof",
         "--partition-feedback-rounds",
         "0",

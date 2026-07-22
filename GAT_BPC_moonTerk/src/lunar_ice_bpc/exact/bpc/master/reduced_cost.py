@@ -20,9 +20,16 @@ class ReducedCostContext:
     cut_context: object | None = None
     dual_fingerprint: str = ""
     rmp_iteration_id: str = ""
+    objective_mode: str = "official"
+    true_dual_binding_hash: str = ""
+    branch_context_hash: str = ""
+    active_cut_context_hash: str = ""
+    cut_lineage_hash: str = ""
+    live_cut_policy_hash: str = ""
+    separator_policy_version: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "task_duals", _freeze_float_mapping(self.task_duals))
         object.__setattr__(self, "fleet_dual", float(self.fleet_dual))
         object.__setattr__(self, "cut_duals", _freeze_float_mapping(self.cut_duals))
-
+        object.__setattr__(self, "objective_mode", str(self.objective_mode))

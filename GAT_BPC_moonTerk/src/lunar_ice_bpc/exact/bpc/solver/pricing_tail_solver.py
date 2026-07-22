@@ -21,7 +21,6 @@ from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateL
 from lunar_ice_bpc.exact.bpc.certificates.proof_debt_queue import ProofDebtQueue
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
-from lunar_ice_bpc.exact.bpc.cuts.cut_audit import cut_aware_column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
 from lunar_ice_bpc.exact.bpc.pricing.completion_bounds import build_completion_bound_tail_policy
@@ -68,12 +67,19 @@ from lunar_ice_bpc.exact.core.branching import (
     journey_satisfies_branch_context,
 )
 from lunar_ice_bpc.exact.core.columns import build_timed_sortie
-from lunar_ice_bpc.exact.core.cuts import CutContext
+from lunar_ice_bpc.exact.core.cuts import (
+    CutContext,
+    CutLineage,
+    CutLineageEntry,
+    stable_payload_hash,
+    true_dual_binding_hash,
+)
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn, build_journey_column
 from lunar_ice_bpc.exact.master.journey_rmp import (
     JourneyDuals,
     manual_journey_reduced_cost,
+    manual_phase_one_journey_reduced_cost,
     solve_phase_one_journey_rmp,
 )
 from lunar_ice_bpc.exact.pricing.journey_pricing import (
@@ -376,6 +382,9 @@ def solve_node_pricing_with_b2b_r3(
     *,
     branch_context: BranchContext | None = None,
     cut_context: CutContext | None = None,
+    cut_lineage: CutLineage | None = None,
+    live_cut_policy_hash: str = "",
+    separator_policy_version: str = "",
     node_id: str = "root",
     initial_columns: Iterable[JourneyColumn] | None = None,
     incumbent_objective: float | None = None,
@@ -400,6 +409,25 @@ def solve_node_pricing_with_b2b_r3(
     active_context = branch_context or BranchContext()
     active_cut_context = cut_context or CutContext()
     active_node_id = str(node_id)
+    active_cut_lineage = (
+        cut_lineage
+        if cut_lineage is not None
+        else CutLineage(
+            entries=tuple(
+                CutLineageEntry(
+                    cut_id=cut.cut_id,
+                    scope="global" if active_node_id == "root" else "local",
+                    origin_node_id=active_node_id,
+                    policy_version="explicit_cut_context_v1",
+                )
+                for cut in active_cut_context.cuts
+            ),
+            policy_version="explicit_cut_context_v1",
+        )
+    )
+    lineage_issues = active_cut_lineage.validate_context(active_cut_context)
+    if lineage_issues:
+        raise ValueError(",".join(lineage_issues))
     started_at = perf_counter()
     completion_policy = build_completion_bound_tail_policy(
         pruning_opt_in=False,
@@ -583,6 +611,9 @@ def solve_node_pricing_with_b2b_r3(
             rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}",
             branch_context=active_context,
             cut_context=active_cut_context,
+            cut_lineage=active_cut_lineage,
+            live_cut_policy_hash=live_cut_policy_hash,
+            separator_policy_version=separator_policy_version,
         )
         profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
         last_master = master
@@ -594,6 +625,9 @@ def solve_node_pricing_with_b2b_r3(
                 node_id=active_node_id,
                 branch_context=active_context,
                 cut_context=active_cut_context,
+                cut_lineage=active_cut_lineage,
+                live_cut_policy_hash=live_cut_policy_hash,
+                separator_policy_version=separator_policy_version,
                 max_rounds=max_rounds,
                 max_columns_per_round=max_columns_per_round,
                 negative_eps=negative_eps,
@@ -835,6 +869,9 @@ def solve_node_pricing_with_b2b_r3(
                 rmp_iteration_id=f"{B2B_R3_MODE}-{active_node_id}-{round_index}-closure",
                 branch_context=active_context,
                 cut_context=active_cut_context,
+                cut_lineage=active_cut_lineage,
+                live_cut_policy_hash=live_cut_policy_hash,
+                separator_policy_version=separator_policy_version,
             )
             profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
             last_master = master
@@ -5341,6 +5378,9 @@ def _recover_branch_rmp_with_phase_one(
     node_id: str,
     branch_context: BranchContext,
     cut_context: CutContext,
+    cut_lineage: CutLineage,
+    live_cut_policy_hash: str,
+    separator_policy_version: str,
     max_rounds: int,
     max_columns_per_round: int,
     negative_eps: float,
@@ -5361,15 +5401,6 @@ def _recover_branch_rmp_with_phase_one(
             "certificate_valid": False,
             "note": "Python reference Phase-I objective is not implemented; fail closed.",
         }
-    if not cut_context.empty:
-        return {
-            "status": "UNSUPPORTED_CUT_CONTEXT",
-            "backend_id": backend_id,
-            "history": history,
-            "certificate_valid": False,
-            "note": "Native Phase-I v1 requires empty CutContext.",
-        }
-
     last_phase = None
     phase_one_negative_eps = min(abs(float(negative_eps)), 1.0e-9)
     for phase_round in range(1, max(1, int(max_rounds)) + 1):
@@ -5434,6 +5465,17 @@ def _recover_branch_rmp_with_phase_one(
                 harvest_target=max(1, int(max_columns_per_round)),
                 wall_time_limit_sec=remaining,
                 negative_eps=phase_one_negative_eps,
+                dual_binding_hash=true_dual_binding_hash(
+                    phase.duals.cover,
+                    fleet_limit=phase.duals.fleet_limit,
+                    cuts=phase.duals.cuts,
+                ),
+                branch_context_hash=stable_payload_hash(branch_context.to_payload()),
+                cut_context_hash=cut_context.active_cut_context_hash,
+                cut_lineage_hash=cut_lineage.cut_lineage_hash,
+                live_cut_policy_hash=str(live_cut_policy_hash),
+                rmp_iteration_id=f"phase-one-{node_id}-{phase_round}",
+                separator_policy_version=str(separator_policy_version),
             )
         )
         phase_row.update(
@@ -5454,10 +5496,10 @@ def _recover_branch_rmp_with_phase_one(
             priced = sorted(
                 (
                     (
-                        -float(phase.duals.fleet_limit)
-                        - sum(
-                            float(phase.duals.cover.get(str(task_id), 0.0))
-                            for task_id in column.task_set
+                        manual_phase_one_journey_reduced_cost(
+                            column,
+                            phase.duals,
+                            cut_context=cut_context,
                         ),
                         column,
                     )
@@ -5986,25 +6028,13 @@ def _column_signature_for_active_context(
     branch_context: BranchContext | None = None,
     cut_context: CutContext | None = None,
 ):
-    context = cut_context or CutContext()
-    if context.empty and (branch_context is None or branch_context.empty):
-        return column_signature_from_journey(column)
-    return cut_aware_column_signature_from_journey(
-        column,
-        cut_context=context,
-        branch_context=branch_context,
-    )
+    # Physical journey identity is independent of branch/cut state. Pricing
+    # state uses a separate cut-aware signature for audits and certificates.
+    return column_signature_from_journey(column)
 
 
 def _column_dominance_key_for_active_context(signature) -> tuple:
-    key = tuple(signature.task_set)
-    if signature.branch_signature or signature.cut_coefficient_vector_hash:
-        return (
-            tuple(signature.task_set),
-            tuple(signature.branch_signature),
-            str(signature.cut_coefficient_vector_hash),
-        )
-    return key
+    return tuple(signature.task_set)
 
 
 def _node_engine_payload(
@@ -6180,6 +6210,7 @@ def _node_engine_payload(
             column.to_solution_payload(vehicle_id=f"active_column_{index:06d}")
             for index, column in enumerate(active_columns_tuple, start=1)
         ]
+        payload["_active_columns"] = active_columns_tuple
     return payload
 
 

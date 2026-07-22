@@ -401,11 +401,8 @@ class NativeSpprcBackendTests(unittest.TestCase):
                     )
                 )
 
-    def test_subset_row_and_fleet_cut_reduced_costs_match_python(self) -> None:
-        for cut in (
-            subset_row_cut("sri-1", self.data.task_ids[:3]),
-            fleet_lower_bound_cut("fleet-1", min_vehicles=2),
-        ):
+    def test_subset_row_cut_reduced_costs_match_python(self) -> None:
+        for cut in (subset_row_cut("sri-1", self.data.task_ids[:3]),):
             with self.subTest(cut_type=cut.cut_type):
                 cut_context = CutContext(cuts=(cut,))
                 duals = JourneyDuals(
@@ -455,26 +452,32 @@ class NativeSpprcBackendTests(unittest.TestCase):
                     python_negative_task_sets,
                 )
 
-    def test_phase_one_with_nonempty_cut_fails_closed(self) -> None:
+    def test_phase_one_with_nonempty_cut_matches_manual_rc(self) -> None:
         cut_context = CutContext(
             cuts=(subset_row_cut("sri-1", self.data.task_ids[:3]),)
+        )
+        phase_one = solve_phase_one_journey_rmp(
+            self.data.task_ids,
+            tuple(),
+            fleet_size=self.data.fleet_size,
+            cut_context=cut_context,
         )
         result = NativeRcsppInprocessBackend().solve(
             BackendPricingRequest(
                 data=self.data,
-                true_duals=JourneyDuals(cover={}),
+                true_duals=phase_one.duals,
                 objective_mode=BACKEND_OBJECTIVE_PHASE_ONE,
                 cut_context=cut_context,
             )
         )
 
-        self.assertEqual(result.engine_status, "UNSUPPORTED_FEATURE")
-        self.assertIn(
-            "native_phase_one_nonempty_cut_context_unsupported",
-            result.certificate_blockers,
-        )
+        self.assertEqual(result.engine_status, "COMPLETE")
+        self.assertFalse(result.certificate_blockers)
+        self.assertTrue(result.columns)
+        self.assertEqual(result.telemetry["rc_mismatch_count"], 0)
+        self.assertTrue(result.telemetry["cut_state_required"])
 
-    def test_nonempty_cut_state_requires_explicit_promotion_flag(self) -> None:
+    def test_nonempty_cut_state_is_derived_from_context(self) -> None:
         cut_context = CutContext(
             cuts=(subset_row_cut("sri-1", self.data.task_ids[:3]),)
         )
@@ -486,9 +489,26 @@ class NativeSpprcBackendTests(unittest.TestCase):
             )
         )
 
+        self.assertEqual(result.engine_status, "COMPLETE")
+        self.assertFalse(result.certificate_blockers)
+        self.assertTrue(result.telemetry["cut_state_required"])
+        self.assertTrue(result.telemetry["cut_state_effective"])
+
+    def test_fleet_cut_is_diagnostic_only_for_native_live_v1(self) -> None:
+        cut_context = CutContext(
+            cuts=(fleet_lower_bound_cut("fleet-1", min_vehicles=2),)
+        )
+        result = NativeRcsppInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(cover={}),
+                cut_context=cut_context,
+            )
+        )
+
         self.assertEqual(result.engine_status, "UNSUPPORTED_FEATURE")
         self.assertIn(
-            "native_nonempty_cut_context_not_promoted",
+            "unsupported_live_cut_type:fleet_lower_bound",
             result.certificate_blockers,
         )
 
@@ -860,14 +880,16 @@ class NativeSpprcBackendTests(unittest.TestCase):
             run_bpc_labeling_pricer,
         )
 
+        # Fleet lower-bound cuts remain diagnostic-only in Live SRI V1, so
+        # asking the Native V1 backend to price one must fail closed and use
+        # the exact Python reference rollback path.
         cut_context = CutContext(
-            cuts=(subset_row_cut("fallback-sri", self.data.task_ids[:3]),)
+            cuts=(fleet_lower_bound_cut("fallback-fleet", min_vehicles=2),)
         )
         with patch.dict(
             os.environ,
             {
                 "LUNAR_ICE_SPPRC_EXACT_BACKEND": "native_rcspp_inprocess",
-                "LUNAR_ICE_SPPRC_CUT_STATE": "0",
             },
         ):
             payload, _ = run_bpc_labeling_pricer(
@@ -883,10 +905,13 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertTrue(payload["native_backend_fallback_to_python"])
         self.assertEqual(payload["native_backend_fallback_status"], "UNSUPPORTED_FEATURE")
         self.assertIn(
-            "native_nonempty_cut_context_not_promoted",
+            "unsupported_live_cut_type:fleet_lower_bound",
             payload["native_backend_fallback_blockers"],
         )
-        self.assertTrue(payload["can_certify_no_negative"])
+        # The diagnostic-only family is not allowed to manufacture a proof on
+        # rollback; it stays explicitly incomplete/fail-closed.
+        self.assertFalse(payload["can_certify_no_negative"])
+        self.assertEqual(payload["pricing_state"], "INCOMPLETE_LIMIT")
 
     def test_facade_uses_native_for_nonempty_branch(self) -> None:
         branch = BranchContext(

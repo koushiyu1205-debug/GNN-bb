@@ -1,0 +1,37 @@
+model_id: "NATIVE_NO_CUT_50_100_BOUNDED_REGRESSION_V1"
+live_sri_policy: "no_cut"
+cold_start: true
+minimum_runtime_memory_gb: 1
+native_completion_bound_enabled: false
+native_subset_dominance_enabled: true
+native_cut_state_enabled: false
+native_final_judge_pass_policy: "proof_only"
+profiles:
+  "50":
+    worker_max_tasks: 50
+    exact_max_tasks: 50
+    ng_sizes: [8, 16, 32, 50]
+    harvest_target: 96
+    row_time_limit_sec: 600
+    worker_time_limit_sec: 300
+    memory_limit_gb: 8
+    backend_id: "native_rcspp_host"
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 1
+    tree_max_branch_depth: 0
+  "100":
+    worker_max_tasks: 100
+    exact_max_tasks: 100
+    ng_sizes: [10, 20, 40, 70, 100]
+    harvest_target: 128
+    row_time_limit_sec: 600
+    worker_time_limit_sec: 300
+    memory_limit_gb: 8
+    backend_id: "native_rcspp_host"
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 1
+    tree_max_branch_depth: 0
